@@ -34,6 +34,7 @@ import secrets
 import time
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
@@ -71,6 +72,7 @@ from sqlalchemy import (
     desc,
     or_,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -118,6 +120,17 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         ("agentic_backend.core.agents.v2.contracts.context", "ToolContentKind"),
     )
 
+    # Default lease duration for the 'claimed' (pre-invocation) state only
+    # (#2216) — a 'started' row is never subject to this TTL, see
+    # `aclaim_hitl_resume`'s docstring. `agent_app._claim_hitl_resume_before_invocation`
+    # claims immediately before invoking the graph, with nothing but one
+    # more DB round trip (`astart_hitl_resume`) in between, so this only
+    # needs to cover that gap plus a generous margin for transient slowness
+    # — not a full turn's duration. Overridable per instance — tests use a
+    # much shorter value to exercise expiry deterministically without a
+    # real wall-clock wait.
+    _HITL_CLAIM_TTL_SECONDS: float = 60.0
+
     def __init__(
         self,
         engine: AsyncEngine,
@@ -125,6 +138,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         prefix: str = "v2_",
         kpi: BaseKPIWriter | None = None,
         extra_msgpack_allowlist: Sequence[tuple[str, str]] = (),
+        hitl_claim_ttl_seconds: float | None = None,
     ) -> None:
         # Pass the allowlist directly to the constructor.
         # with_msgpack_allowlist() is a no-op when the default serde starts with
@@ -219,6 +233,54 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             ),
             keep_existing=True,
         )
+        # Atomic single-use claim for a HITL resume occurrence (#2216 P1 fix).
+        # Deliberately NOT the langgraph_checkpoint_write table above: that
+        # table is LangGraph-owned semantic storage (its rows are returned as
+        # `pending_writes` and drive the pregel scratchpad/resume-map
+        # matching); an artificial claim row there would show up as a
+        # phantom pending write, corrupting `pending_write_count`
+        # administration and risking interference with LangGraph's own
+        # resume-matching internals. This is a side table, same doctrine as
+        # `thread_owner_table` just above: self-inits via create_all,
+        # deliberately not alembic-tracked, keyed by thread_id so a full
+        # thread erasure removes it too (see `adelete_thread`).
+        #
+        # Key is (thread_id, checkpoint_ns, interrupt_id) — NOT the storage
+        # checkpoint_id: `interrupt_id` is LangGraph's own `Interrupt.id`, an
+        # xxh3-128 hash of the interrupted task's checkpoint namespace
+        # (`langgraph.types.Interrupt.from_ns`, `pregel/_algo.py`'s
+        # `namespace_hash`). This id is NOT universally occurrence-unique —
+        # two `interrupt()` calls within the SAME LangGraph task share it,
+        # matched by call order instead (`test_langgraph_interrupt_id_semantics.py`
+        # pins this against the installed LangGraph version). The narrower
+        # fact this key relies on is FRED-specific: `FredHitlMiddleware`
+        # has exactly one `interrupt()` call site, invoked at most once per
+        # task, so two DISTINCT FRED HITL occurrences always land in
+        # different tasks and always get different ids (proven by
+        # `test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`).
+        # See RUNTIME-EXECUTION-CONTRACT.md §8.39 for the full identity model.
+        #
+        # `claim_token` fences every operation on a row: acquiring, starting,
+        # consuming, and releasing all require `WHERE claim_token = :token`,
+        # so a caller that has lost ownership (its claim was superseded) can
+        # never affect the current owner's row — see `aclaim_hitl_resume`'s
+        # docstring for the full claimed -> started -> consumed lifecycle
+        # and exactly which properties it does and does not guarantee.
+        self.hitl_claim_table = Table(
+            self.store.prefixed("checkpoint_hitl_claim"),
+            metadata,
+            Column("thread_id", String, primary_key=True),
+            Column("checkpoint_ns", String, primary_key=True, default=""),
+            Column("interrupt_id", String, primary_key=True),
+            Column("claim_token", String, nullable=False),
+            Column("status", String, nullable=False),
+            Column(
+                "claimed_at",
+                DateTime(timezone=True),
+                nullable=False,
+            ),
+            keep_existing=True,
+        )
         Index(
             f"{self.checkpoints_table.name}_thread_created_idx",
             self.checkpoints_table.c.thread_id,
@@ -238,6 +300,11 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         self._tables_ready = False
         self._logger = logging.getLogger(__name__)
         self._kpi = kpi
+        self._hitl_claim_ttl_seconds = (
+            hitl_claim_ttl_seconds
+            if hitl_claim_ttl_seconds is not None
+            else self._HITL_CLAIM_TTL_SECONDS
+        )
 
     @asynccontextmanager
     async def phase(self, phase_name: str):
@@ -608,6 +675,290 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     sql_ms=(time.monotonic() - sql_start) * 1000.0,
                 )
 
+    # Claim lifecycle states (#2216). See `aclaim_hitl_resume`'s docstring
+    # for the full state machine and exactly which properties each
+    # transition guarantees.
+    _HITL_CLAIM_CLAIMED = "claimed"
+    _HITL_CLAIM_STARTED = "started"
+    _HITL_CLAIM_CONSUMED = "consumed"
+
+    def _hitl_claim_insert(self, dialect: str):
+        if dialect == "postgresql":
+            return pg_insert(self.hitl_claim_table)
+        if dialect == "sqlite":
+            return sqlite_insert(self.hitl_claim_table)
+        raise ValueError(f"Unsupported dialect for HITL claim: {dialect}")
+
+    async def _db_now(self, conn: AsyncConnection) -> datetime:
+        """
+        Read the DATABASE's own current time, not this process's system
+        clock (#2216 item 6). `aclaim_hitl_resume`'s staleness check
+        compares `claimed_at` against a value derived from this — using the
+        local clock instead would let skew between fred-agents replicas
+        (each with its own idea of "now") incorrectly steal or fail to
+        steal a lease. One extra round trip, in the SAME transaction as the
+        claim write that follows, keeps both values sourced from one
+        authoritative clock: the single database all replicas share.
+
+        SQLite-specific branch: plain `func.now()` compiles to
+        `CURRENT_TIMESTAMP`, which SQLite only resolves to whole-second
+        precision — too coarse to exercise a sub-second TTL deterministically
+        in tests, and needlessly imprecise for the default TTL too.
+        `strftime('%Y-%m-%d %H:%M:%f', 'now')` gets millisecond resolution.
+        Postgres's `now()` is already microsecond-precision.
+        """
+        if conn.dialect.name == "sqlite":
+            raw = (
+                await conn.execute(select(func.strftime("%Y-%m-%d %H:%M:%f", "now")))
+            ).scalar_one()
+            return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S.%f").replace(
+                tzinfo=timezone.utc
+            )
+        return (await conn.execute(select(func.now()))).scalar_one()
+
+    async def aclaim_hitl_resume(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        interrupt_id: str,
+    ) -> str | None:
+        """
+        Atomically claim one HITL resume occurrence, returning an opaque
+        `claim_token` on success (#2216).
+
+        Why this exists:
+        - a stale-response gate (`agent_app._validate_session_checkpoint_access`)
+          proves a resume request's `interrupt_id` matches the currently
+          pending interrupt, but two concurrent requests carrying that SAME
+          valid id (a network retry, a double click, or a deliberate
+          replay) would both pass that check — `Command(resume=...)` gives
+          no mutual exclusion, and an in-process lock would not hold across
+          fred-agents replicas
+        - this claim is the durable, cross-replica arbiter: an
+          `INSERT ... ON CONFLICT DO UPDATE ... WHERE <stale>` against
+          `hitl_claim_table` has exactly one winner per (thread_id,
+          checkpoint_ns, interrupt_id) — every other caller gets `None` and
+          must reject the request
+
+        State machine — 'claimed' -> 'started' -> 'consumed':
+        - this method mints a fresh `claim_token` and moves the row to
+          'claimed'. The caller must then call `astart_hitl_resume` with
+          that token, immediately before invoking the graph, to confirm
+          ownership and move to 'started'.
+        - ONLY a 'claimed' row past `self._hitl_claim_ttl_seconds` is
+          eligible to be superseded here. A 'started' row is NEVER
+          superseded by this method, regardless of age — a genuinely
+          long-running turn is not stolen merely because wall-clock time
+          passed. Superseding always mints a brand-new `claim_token`, so
+          the old owner's token stops matching this row immediately: its
+          later `astart_hitl_resume`/`arelease_hitl_resume` calls become
+          no-ops (fenced by `WHERE claim_token = :token`), and it can
+          neither act on nor accidentally release the new owner's claim.
+
+        Guaranteed:
+        - no two healthy callers can both hold a live claim (`claimed` or
+          `started`) for the same occurrence at once
+        - an abandoned 'claimed' row (setup failed or the owning process
+          died before calling `astart_hitl_resume`) is recoverable after
+          the TTL — the HITL dialog is not stuck forever
+        - a 'started' row is held for the life of that invocation attempt,
+          with no time-based reclaim
+
+        Explicitly NOT guaranteed:
+        - exactly-once EXTERNAL tool side effects once a row reaches
+          'started' (mid-invocation). A 'started' row has no automatic
+          recovery in this patch, for ANY of these real causes — not only
+          "the process crashed":
+            - pod/process crash
+            - task cancellation (e.g. the ASGI request task is cancelled)
+            - SSE/browser disconnect (the client goes away mid-stream)
+            - `AbortController` cancellation from the frontend
+            - cancellation landing after the graph invocation has started
+              but before the claim is marked 'consumed'
+          Every one of these leaves the occurrence permanently claimed:
+          resuming that specific stuck dialog requires operational
+          intervention today — concretely, purging or deleting the thread
+          (`adelete_thread`, which also removes its `checkpoint_hitl_claim`
+          rows) or direct database intervention. There is no in-app
+          "unstick this dialog" surface in this patch; reload/rehydration
+          and automatic recovery are tracked follow-up work, not solved
+          here. Tool-level idempotency remains the caller's own
+          responsibility for true crash-safety of side effects, same as any
+          distributed system without a two-phase-commit external resource
+          manager.
+
+        Returns:
+        - a fresh, opaque `claim_token` the first time (or first time after
+          TTL expiry) this occurrence is claimed — pass it to
+          `astart_hitl_resume` next.
+        - `None` when a live claim already exists — the caller must treat
+          this as "already being resumed" and reject the request.
+        """
+        await self._ensure_tables()
+        token = secrets.token_urlsafe(16)
+        pool_wait_start = time.monotonic()
+        async with self.store.begin() as conn:
+            pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+            sql_start = time.monotonic()
+            now = await self._db_now(conn)
+            stale_cutoff = now - timedelta(seconds=self._hitl_claim_ttl_seconds)
+            stmt = self._hitl_claim_insert(conn.dialect.name).values(
+                thread_id=thread_id,
+                checkpoint_ns=checkpoint_ns,
+                interrupt_id=interrupt_id,
+                claim_token=token,
+                status=self._HITL_CLAIM_CLAIMED,
+                claimed_at=now,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["thread_id", "checkpoint_ns", "interrupt_id"],
+                set_={
+                    "claim_token": token,
+                    "status": self._HITL_CLAIM_CLAIMED,
+                    "claimed_at": now,
+                },
+                where=(
+                    (self.hitl_claim_table.c.status == self._HITL_CLAIM_CLAIMED)
+                    & (self.hitl_claim_table.c.claimed_at < stale_cutoff)
+                ),
+            ).returning(self.hitl_claim_table.c.claim_token)
+            result = await conn.execute(stmt)
+            row = result.first()
+            record_persist_metrics(
+                self._kpi,
+                store="checkpoint",
+                op="hitl_claim",
+                pool_wait_ms=pool_wait_ms,
+                sql_ms=(time.monotonic() - sql_start) * 1000.0,
+            )
+            return token if row is not None else None
+
+    async def astart_hitl_resume(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        interrupt_id: str,
+        claim_token: str,
+    ) -> bool:
+        """
+        Confirm the caller still owns a 'claimed' occurrence and move it to
+        'started', immediately before invoking the graph (#2216).
+
+        Fenced by `claim_token`: an `UPDATE ... WHERE claim_token = :token
+        AND status = 'claimed'`. Returns `False` (0 rows matched) if this
+        token no longer owns the row — either it was never the owner, or
+        `aclaim_hitl_resume` superseded it after the TTL expired. The
+        caller MUST NOT invoke the graph when this returns `False`.
+
+        Once 'started', `aclaim_hitl_resume` will never supersede this row
+        again regardless of elapsed time (see its docstring) — this is the
+        transition that makes a long-running turn immune to lease expiry.
+        """
+        await self._ensure_tables()
+        pool_wait_start = time.monotonic()
+        async with self.store.begin() as conn:
+            pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+            sql_start = time.monotonic()
+            result = await conn.execute(
+                update(self.hitl_claim_table)
+                .where(
+                    and_(
+                        self.hitl_claim_table.c.thread_id == thread_id,
+                        self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
+                        self.hitl_claim_table.c.interrupt_id == interrupt_id,
+                        self.hitl_claim_table.c.claim_token == claim_token,
+                        self.hitl_claim_table.c.status == self._HITL_CLAIM_CLAIMED,
+                    )
+                )
+                .values(status=self._HITL_CLAIM_STARTED)
+            )
+            record_persist_metrics(
+                self._kpi,
+                store="checkpoint",
+                op="hitl_claim_start",
+                pool_wait_ms=pool_wait_ms,
+                sql_ms=(time.monotonic() - sql_start) * 1000.0,
+            )
+            return (result.rowcount or 0) > 0
+
+    async def aconsume_hitl_resume(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        interrupt_id: str,
+        claim_token: str,
+    ) -> None:
+        """
+        Mark a 'started' occurrence terminally 'consumed' after a
+        successful turn (#2216). Best-effort, purely for observability/audit
+        — 'started' alone already permanently blocks any future duplicate
+        resume of this occurrence (see `aclaim_hitl_resume`'s docstring),
+        so a failed call here does not reopen the invariant. Fenced by
+        `claim_token`, same as every other claim operation. Never raises.
+        """
+        try:
+            await self._ensure_tables()
+            async with self.store.begin() as conn:
+                await conn.execute(
+                    update(self.hitl_claim_table)
+                    .where(
+                        and_(
+                            self.hitl_claim_table.c.thread_id == thread_id,
+                            self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
+                            self.hitl_claim_table.c.interrupt_id == interrupt_id,
+                            self.hitl_claim_table.c.claim_token == claim_token,
+                        )
+                    )
+                    .values(status=self._HITL_CLAIM_CONSUMED)
+                )
+        except Exception:
+            self._logger.warning(
+                "hitl_claim consume failed (best-effort, audit only)",
+                exc_info=True,
+            )
+
+    async def arelease_hitl_resume(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        interrupt_id: str,
+        claim_token: str,
+    ) -> None:
+        """
+        Best-effort release of a still-'claimed' (pre-start) occurrence,
+        fenced by `claim_token` so a stale/superseded owner can never
+        delete a newer owner's row. Never releases a 'started' row — once
+        execution has actually begun, tool side effects may already have
+        happened, and there is deliberately no automatic recovery for that
+        case in this patch (see `aclaim_hitl_resume`'s docstring). Never
+        raises — a failed release just means the claim expires via the
+        normal TTL instead of being freed immediately.
+        """
+        try:
+            await self._ensure_tables()
+            async with self.store.begin() as conn:
+                await conn.execute(
+                    delete(self.hitl_claim_table).where(
+                        and_(
+                            self.hitl_claim_table.c.thread_id == thread_id,
+                            self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
+                            self.hitl_claim_table.c.interrupt_id == interrupt_id,
+                            self.hitl_claim_table.c.claim_token == claim_token,
+                            self.hitl_claim_table.c.status == self._HITL_CLAIM_CLAIMED,
+                        )
+                    )
+                )
+        except Exception:
+            self._logger.warning(
+                "hitl_claim release failed (best-effort); claim will expire "
+                "via TTL instead",
+                exc_info=True,
+            )
+
     def delete_thread(self, thread_id: str) -> None:  # type: ignore[override]
         raise _sync_checkpointer_error("delete_thread")
 
@@ -650,6 +1001,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                 await conn.execute(
                     delete(self.thread_owner_table).where(
                         self.thread_owner_table.c.thread_id == thread_id
+                    )
+                )
+                # A live or expired HITL claim must not outlive the thread it
+                # was minted for (#2216).
+                await conn.execute(
+                    delete(self.hitl_claim_table).where(
+                        self.hitl_claim_table.c.thread_id == thread_id
                     )
                 )
                 return result.rowcount or 0

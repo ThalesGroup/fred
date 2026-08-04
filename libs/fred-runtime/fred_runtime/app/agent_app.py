@@ -144,6 +144,7 @@ from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import load_checkpoint
+from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
@@ -861,6 +862,7 @@ class _AgentExecuteRequest(BaseModel):
     message: str = Field(default="")
     context: dict[str, Any] | None = None
     checkpoint_id: str | None = Field(default=None, min_length=1)
+    interrupt_id: str | None = Field(default=None, min_length=1)
     resume_payload: Any | None = Field(
         default=None,
         description=(
@@ -930,6 +932,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         message=r.input,
         context=r.to_legacy_context() or None,
         checkpoint_id=r.checkpoint_id,
+        interrupt_id=r.interrupt_id,
         resume_payload=r.resume_payload,
         invocation_turns=r.invocation_turns,
         inline_tuning=r.inline_tuning,
@@ -1703,6 +1706,69 @@ def _validate_resolved_team(
 _REACT_V2_INTERRUPT_CHANNEL = "__interrupt__"
 
 
+def _pending_react_v2_interrupt_ids(
+    pending_writes: Sequence[tuple[str, str, Any]],
+) -> frozenset[str]:
+    """
+    Extract LangGraph's own `Interrupt.id` for every currently pending
+    `"__interrupt__"` write on a ReAct V2 checkpoint (#2216).
+
+    Collects ALL matching ids rather than the first one found: FRED's own
+    `FredHitlMiddleware` never raises more than one interrupt per task
+    (`test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`),
+    but this function does not assume that — it proves the caller's
+    `interrupt_id` matches *some* currently pending occurrence, not merely
+    "a" pending write chosen arbitrarily.
+
+    Why `pending_writes` is read directly instead of going through
+    LangGraph's supported `compiled_graph.aget_state(...).tasks[*].interrupts`:
+    that API only exists on a COMPILED graph instance, and internally it
+    still starts from `checkpointer.aget_tuple(config).pending_writes` (the
+    exact same field this function reads) before overlaying graph-topology
+    bookkeeping (`pregel/main.py::_aprepare_state_snapshot`, which needs
+    `self.nodes`/`self.channels`/`self.trigger_to_nodes` — recomputing
+    `prepare_next_tasks(...)` for the whole graph) to resolve subgraphs and
+    "which task runs next". This function runs BEFORE the target agent's
+    definition is even resolved (`_authorize_and_resolve` calls it ahead of
+    authorization and runtime construction — see `_validate_session_checkpoint_access`'s
+    docstring for why that ordering matters), so no compiled graph exists
+    yet to call `aget_state` on; building one this early would mean doing
+    the full, expensive agent/capability/model-routing resolution BEFORE the
+    request is even authorized — a disproportionate architectural inversion
+    for what is otherwise a cheap, read-only pre-check. `pending_writes` is
+    itself `CheckpointTuple.pending_writes`, a public field of LangGraph's
+    own checkpointer contract (`langgraph.checkpoint.base`), not a private
+    representation — this function only forgoes the topology-aware "which
+    task is next" resolution `aget_state` layers on top of it, which FRED
+    does not need: a checkpoint carrying a pending `"__interrupt__"` write
+    is unambiguously "paused on this interrupt" regardless of graph
+    topology, and the ReAct V2 loop never has more than one gated task
+    live at a time.
+
+    Shape handled:
+    - the real production write: `Interrupt` dataclass instance(s), wrapped
+      in a 1-tuple (`GraphInterrupt.args[0]`, `pregel/_runner.py::commit`)
+    - a bare dict (`{"value": ..., "id": ...}`), as used by test doubles
+      that don't round-trip through LangGraph's own serde
+    """
+
+    ids: set[str] = set()
+    for _task_id, channel, value in pending_writes:
+        if channel != _REACT_V2_INTERRUPT_CHANNEL:
+            continue
+        candidate: object = value
+        if isinstance(candidate, (list, tuple)):
+            if not candidate:
+                continue
+            candidate = candidate[0]
+        interrupt_id = getattr(candidate, "id", None)
+        if interrupt_id is None and isinstance(candidate, dict):
+            interrupt_id = candidate.get("id")
+        if isinstance(interrupt_id, str) and interrupt_id:
+            ids.add(interrupt_id)
+    return frozenset(ids)
+
+
 async def _validate_session_checkpoint_access(
     request: RuntimeExecuteRequest,
 ) -> None:
@@ -1715,6 +1781,17 @@ async def _validate_session_checkpoint_access(
     - this is the smallest backend-completeness guard we can enforce locally
       without inventing new control-plane session authority models
 
+    Read-only, deliberately (#2216): this function proves the request
+    TARGETS a real, currently-pending occurrence — it never mutates
+    anything, and in particular never acquires the atomic single-use claim
+    (`FredSqlCheckpointer.aclaim_hitl_resume`). It runs from
+    `_authorize_and_resolve`, BEFORE session-ownership, OpenFGA
+    authorization, control-plane target resolution, and capability/runtime
+    construction — an unauthorized or malformed request must never leave a
+    claim behind. The claim is acquired much later, in
+    `_iterate_runtime_event_payloads`, immediately before the graph is
+    actually invoked (see that function's docstring for the full lifecycle).
+
     How to use it:
     - call from `/agents/execute` and `/agents/execute/stream` after grant
       validation and before target resolution
@@ -1724,25 +1801,34 @@ async def _validate_session_checkpoint_access(
     Example:
     - `await _validate_session_checkpoint_access(request)`
 
-    ReAct V2 vs legacy Graph runtime:
+    ReAct V2 vs legacy Graph runtime — two distinct identifiers, never
+    aliased (#2216). `RuntimeExecuteRequest`'s own validator already
+    guarantees `checkpoint_id`/`interrupt_id` are never both set on the same
+    request (see its docstring) — that is what lets the primary lookup
+    below double as "the thread's latest checkpoint" for every ReAct V2
+    request without this function needing to special-case it:
     - the legacy hand-rolled Graph runtime stamps `channel_values` with
       `runtime_kind: "graph_v2"` / `pending` / `pending_checkpoint_id`
-      (`graph_runtime.py::_store_pending_checkpoint`) and its own
-      `checkpoint_id` is a real checkpointer-storage id, so it is validated
-      by exact lookup + exact id match, unchanged below.
+      (`graph_runtime.py::_store_pending_checkpoint`) and resumes via
+      `request.checkpoint_id`, a real checkpointer-storage id — validated
+      by exact lookup + exact id match, UNCHANGED by #2216.
     - ReAct V2 (`create_agent()` + native `interrupt()`) never stamps those
-      markers, and the `checkpoint_id` its frontend echoes back is actually
-      LangGraph's `Interrupt.id` (a routing hash, not a storage id) — a
-      lookup by that id never matches a stored checkpoint. When the primary
-      lookup misses on a genuine resume attempt, fall back to the thread's
-      latest checkpoint (exactly what LangGraph's own `Command(resume=...)`
-      resolves against — see `react_message_codec.py`, which never passes a
-      `checkpoint_id` either) and confirm it is actually paused via the
-      `_REACT_V2_INTERRUPT_CHANNEL` pending-write signal.
+      markers and never populates `checkpoint_id` at all. It resumes via
+      `request.interrupt_id`, LangGraph's own `Interrupt.id` — this
+      function requires it to exactly match one of the ids currently
+      pending on the thread's latest checkpoint
+      (`_pending_react_v2_interrupt_ids`) — a stale response for an earlier
+      interrupt must never be accepted for a later one (#2216 P1).
+      `react_message_codec.py` threads the same id into LangGraph's own
+      targeted `Command(resume={id: ...})` form as defense in depth, so the
+      graph itself also refuses to apply a decision to a task whose
+      `Interrupt.id` doesn't match.
     """
 
     needs_checkpoint_validation = (
-        request.checkpoint_id is not None or request.resume_payload is not None
+        request.checkpoint_id is not None
+        or request.interrupt_id is not None
+        or request.resume_payload is not None
     )
     if not needs_checkpoint_validation:
         return
@@ -1751,7 +1837,8 @@ async def _validate_session_checkpoint_access(
     if not session_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id is required when checkpoint_id or resume_payload is set.",
+            detail="session_id is required when checkpoint_id, interrupt_id, "
+            "or resume_payload is set.",
         )
 
     checkpointer = get_runtime_context().config.checkpointer
@@ -1771,10 +1858,13 @@ async def _validate_session_checkpoint_access(
         # The exact-id lookup above is the only path the legacy Graph runtime
         # ever needs (its checkpoint_id is real). Retry against the thread's
         # latest checkpoint only once that has failed, on a genuine resume
-        # attempt — this never changes behavior for the legacy runtime (its
-        # checkpoint_id always resolves on the first try) and is the only
-        # way a ReAct V2 resume (whose checkpoint_id can never resolve here)
-        # can be validated at all.
+        # attempt. ReAct V2 never populates checkpoint_id at all, so its
+        # requests already resolve to "latest checkpoint" on the primary
+        # lookup above (checkpoint_id=None) and never reach this branch —
+        # kept for the legacy Graph runtime's own unknown-checkpoint_id
+        # recovery path (a clean "does not match pending" 409 instead of a
+        # blunt "unknown checkpoint" one), preserving its exact prior
+        # behavior.
         loaded = await load_checkpoint(checkpointer, thread_id=session_id)
 
     if loaded is None:
@@ -1816,16 +1906,24 @@ async def _validate_session_checkpoint_access(
         return
 
     # Not the legacy Graph runtime (ReAct V2, or the fallback lookup landed on
-    # some other non-graph_v2 checkpoint kind): the only local proof of a
-    # paused interrupt is a pending write on the fixed interrupt channel.
-    has_pending_interrupt = any(
-        channel == _REACT_V2_INTERRUPT_CHANNEL
-        for _task_id, channel, _value in pending_writes
-    )
-    if not has_pending_interrupt:
+    # some other non-graph_v2 checkpoint kind). #2216 P1: a checkpoint being
+    # merely "paused on some interrupt" is not enough — a stale response for
+    # an EARLIER interrupt on this same thread must never be allowed to
+    # resume a LATER one. `request.interrupt_id` must exactly match one of
+    # the ids currently pending on this checkpoint.
+    pending_interrupt_ids = _pending_react_v2_interrupt_ids(pending_writes)
+    if not pending_interrupt_ids:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="checkpoint is not waiting for resume.",
+        )
+    if (
+        request.interrupt_id is None
+        or request.interrupt_id not in pending_interrupt_ids
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="interrupt_id does not match the pending HITL request for this session.",
         )
 
 
@@ -2773,6 +2871,142 @@ def _build_capability_block(
     return build_capability_agent_block(capability_registry, contexts)
 
 
+@dataclass(slots=True)
+class _HitlResumeClaim:
+    """
+    Live handle on one acquired-and-started HITL resume claim (#2216).
+
+    Returned by `_claim_hitl_resume_before_invocation` once the caller has
+    proven it owns the claim and is about to invoke the graph. `consume()`
+    marks the occurrence terminally resolved after a successful turn —
+    best-effort, purely for observability/audit: the 'started' state alone
+    already permanently blocks any future duplicate resume of this
+    occurrence regardless of whether `consume()` ever runs (see
+    `FredSqlCheckpointer.aclaim_hitl_resume`'s docstring for why).
+    """
+
+    _checkpointer: FredSqlCheckpointer
+    _thread_id: str
+    _interrupt_id: str
+    _claim_token: str
+
+    async def consume(self) -> None:
+        await self._checkpointer.aconsume_hitl_resume(
+            thread_id=self._thread_id,
+            checkpoint_ns="",
+            interrupt_id=self._interrupt_id,
+            claim_token=self._claim_token,
+        )
+
+
+async def _claim_hitl_resume_before_invocation(
+    *, session_id: str | None, interrupt_id: str
+) -> _HitlResumeClaim | None:
+    """
+    Acquire and confirm the durable single-use HITL resume claim,
+    immediately before invoking the graph (#2216).
+
+    Why this late (see `_validate_session_checkpoint_access`'s docstring
+    for the read-only guarantee this preserves): the early gate proves
+    `interrupt_id` targets a real pending occurrence but must never mutate
+    anything, so an unauthorized, misrouted, or setup-failing request never
+    leaves a claim behind. By the time this function runs, session
+    ownership, OpenFGA authorization, control-plane target resolution, and
+    capability/runtime construction have all already succeeded.
+
+    Two-step lifecycle, both fenced by an opaque `claim_token` so a stale
+    owner's later calls can never affect a newer claim:
+    1. `aclaim_hitl_resume` — mint a fresh token and move the occurrence to
+       'claimed'. Returns `None` if a LIVE claim already exists for this
+       occurrence (a concurrent duplicate resume).
+    2. `astart_hitl_resume` — atomically confirm THIS token still owns the
+       row and move it to 'started', via `WHERE claim_token = :token`. This
+       is the "prove the caller still owns the claim before invoking the
+       graph" check: if another request superseded a stale claim in the
+       window between steps 1 and 2, this returns `False` and the caller
+       aborts BEFORE ever calling `executor.stream(...)`.
+
+    Once 'started', the claim is held for the life of this invocation with
+    NO further time-based expiry — a genuinely long-running turn is never
+    superseded merely because wall-clock time passed. See
+    `FredSqlCheckpointer.aclaim_hitl_resume`'s docstring for the complete
+    set of guaranteed — and explicitly NOT guaranteed — properties.
+
+    Raises `RuntimeError` on any failure to claim. If we still legitimately
+    hold 'claimed' status when `astart_hitl_resume` fails or raises, the
+    row is released (fenced, so a no-op if ownership was already lost) so
+    an immediate retry does not have to wait out the TTL. There is no
+    clean HTTP 409 at this point: for the streaming endpoint the response
+    has already started, and reaching this call at all means authorization,
+    target resolution, and runtime construction already succeeded — a
+    direct consequence of acquiring the claim as late as possible, not an
+    oversight. The caller (`_iterate_runtime_event_payloads`'s own outer
+    `except Exception`) turns this into a `RuntimeErrorEvent`.
+    """
+
+    if not session_id:
+        raise RuntimeError(
+            "Cannot claim a HITL resume occurrence without a session_id."
+        )
+    checkpointer = get_runtime_context().config.checkpointer
+    if not isinstance(checkpointer, FredSqlCheckpointer):
+        logger.warning(
+            "[fred-runtime][HITL] checkpointer %r does not support atomic "
+            "resume claims; concurrent duplicate resumes are not guarded "
+            "for session_id=%s",
+            type(checkpointer).__name__,
+            session_id,
+        )
+        return None
+    claim_token = await checkpointer.aclaim_hitl_resume(
+        thread_id=session_id, checkpoint_ns="", interrupt_id=interrupt_id
+    )
+    if claim_token is None:
+        raise RuntimeError("This HITL request is already being resumed.")
+    try:
+        started = await checkpointer.astart_hitl_resume(
+            thread_id=session_id,
+            checkpoint_ns="",
+            interrupt_id=interrupt_id,
+            claim_token=claim_token,
+        )
+    except Exception:
+        # Still the legitimate 'claimed' owner (fenced by our own token) —
+        # an unexpected failure confirming that ownership must not strand
+        # the row for the full TTL when we can safely free it right now.
+        # A no-op if we in fact already lost ownership (our token no
+        # longer matches). Either way, re-raise: this attempt still fails.
+        await checkpointer.arelease_hitl_resume(
+            thread_id=session_id,
+            checkpoint_ns="",
+            interrupt_id=interrupt_id,
+            claim_token=claim_token,
+        )
+        raise
+    if not started:
+        # Lost the race: another attempt superseded our stale 'claimed' row
+        # before we could confirm ownership. Release is a safe no-op here
+        # (our token no longer matches the row) — called anyway so the
+        # (rare, non-ownership-loss) case of a transient failure on our own
+        # still-legitimate claim doesn't wait out the TTL either.
+        await checkpointer.arelease_hitl_resume(
+            thread_id=session_id,
+            checkpoint_ns="",
+            interrupt_id=interrupt_id,
+            claim_token=claim_token,
+        )
+        raise RuntimeError(
+            "Lost ownership of the HITL resume claim before invocation "
+            "(superseded by a later attempt after this one went stale)."
+        )
+    return _HitlResumeClaim(
+        _checkpointer=checkpointer,
+        _thread_id=session_id,
+        _interrupt_id=interrupt_id,
+        _claim_token=claim_token,
+    )
+
+
 async def _iterate_runtime_event_payloads(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
@@ -2830,6 +3064,7 @@ async def _iterate_runtime_event_payloads(
         else ExecutionGrantAction.EXECUTE.value
     )
     resolved_checkpoint_id = request.checkpoint_id or ctx.get("checkpoint_id")
+    resolved_interrupt_id = request.interrupt_id or ctx.get("interrupt_id")
 
     portable_context = PortableContext(
         request_id=request_id,
@@ -2849,6 +3084,7 @@ async def _iterate_runtime_event_payloads(
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "checkpoint_id": resolved_checkpoint_id,
+                "interrupt_id": resolved_interrupt_id,
                 "execution_action": execution_action,
                 "exchange_id": exchange_id,
                 "is_service_agent": ctx.get("is_service_agent"),
@@ -2861,6 +3097,10 @@ async def _iterate_runtime_event_payloads(
         session_id=ctx.get("session_id"),
         exchange_id=exchange_id,
         checkpoint_id=resolved_checkpoint_id,
+        # interrupt_id (#2216) is NOT a RuntimeContext field — no consumer
+        # ever read it there; PortableContext.baggage above already carries
+        # it for trace/log correlation, the same purpose this would have
+        # served.
         user_id=ctx.get("user_id"),
         team_id=resolved_team_id,
         language=ctx.get("language"),
@@ -2956,6 +3196,7 @@ async def _iterate_runtime_event_payloads(
     execution_config = ExecutionConfig(
         session_id=ctx.get("session_id") or request_id,
         checkpoint_id=request.checkpoint_id,
+        interrupt_id=request.interrupt_id,
         resume_payload=request.resume_payload,
         invocation_turns=getattr(request, "invocation_turns", ()),
     )
@@ -3046,6 +3287,24 @@ async def _iterate_runtime_event_payloads(
                         ),
                     ),
                 )
+
+            # #2216: the durable single-use claim is acquired HERE — as late
+            # as possible, immediately before the graph is actually invoked
+            # — never earlier. `_validate_session_checkpoint_access` (the
+            # early gate) only proved `request.interrupt_id` targets a real
+            # pending occurrence; it never mutates anything, so an
+            # unauthorized request, a failed control-plane resolution, or a
+            # capability/runtime construction error above never leaves a
+            # claim behind. See `_claim_hitl_resume_before_invocation`'s
+            # docstring for the full claimed → started lifecycle and the
+            # guarantees it does and does not provide.
+            hitl_claim: _HitlResumeClaim | None = None
+            if request.resume_payload is not None and request.interrupt_id:
+                hitl_claim = await _claim_hitl_resume_before_invocation(
+                    session_id=ctx.get("session_id"),
+                    interrupt_id=request.interrupt_id,
+                )
+
             async for event in executor.stream(react_input, execution_config):
                 payload = event.model_dump(mode="json")
                 if not isinstance(payload, dict):
@@ -3053,6 +3312,9 @@ async def _iterate_runtime_event_payloads(
                         "RuntimeEvent payload must serialize to a JSON object."
                     )
                 yield payload
+
+            if hitl_claim is not None:
+                await hitl_claim.consume()
     except Exception as exc:
         logger.exception(
             "[fred-runtime] agent execution error agent_id=%s", definition.agent_id

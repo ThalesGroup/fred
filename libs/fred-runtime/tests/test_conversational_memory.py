@@ -128,6 +128,9 @@ def test_graph_input_skips_injection_on_resume() -> None:
         session_id="s-1",
         invocation_turns=(t,),
         resume_payload={"approved": True},
+        # #2216: a ReAct V2 resume requires interrupt_id — the codec fails
+        # closed without it (no scalar Command(resume=...) fallback).
+        interrupt_id="interrupt-a",
     )
     result = _graph_input(_react_input("n/a"), cfg)
     # On resume, _graph_input returns a LangGraph Command object (not a dict).

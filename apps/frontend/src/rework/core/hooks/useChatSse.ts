@@ -19,13 +19,14 @@ import { v4 as uuidv4 } from "uuid";
 
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type { AwaitingHumanEvent, ChatMessage, FinishReason } from "../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, FinishReason } from "../../../slices/agentic/agenticOpenApi";
 import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
   AwaitingHumanRuntimeEvent,
   FinalRuntimeEvent,
+  HumanInputRequest,
   NodeErrorRuntimeEvent,
   RuntimeContext,
   RuntimeErrorEvent,
@@ -72,12 +73,30 @@ type AnyRuntimeEvent =
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
   | ({ kind: "execution_error" } & RuntimeErrorEvent);
 
+// ── HITL event/payload (#2216) ──────────────────────────────────────────────
+//
+// Explicit types based on the generated runtime `HumanInputRequest`
+// contract — NOT the legacy agentic-backend `AwaitingHumanEvent`/`HitlPayload`
+// (`slices/agentic/agenticOpenApi.ts`), whose open `[key: string]: any` index
+// signature let `checkpoint_id`/`interrupt_id` round-trip untyped. Both ids
+// stay independently typed here too, exactly one populated per runtime
+// (legacy Graph V2 vs ReAct V2) — never aliased for each other.
+
+export type RuntimeHitlPayload = HumanInputRequest;
+
+export type RuntimeAwaitingHumanEvent = {
+  type?: "awaiting_human";
+  session_id: string;
+  exchange_id: string;
+  payload: RuntimeHitlPayload;
+};
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
-  onAwaitingHuman?: (event: AwaitingHumanEvent) => void;
+  onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
    * Fires the instant this turn actually starts — right before the
@@ -363,28 +382,28 @@ export function useChatSse(
         }
 
         case "awaiting_human": {
-          const hitl: AwaitingHumanEvent = {
+          const hitl: RuntimeAwaitingHumanEvent = {
             type: "awaiting_human",
             session_id: sessionId,
             exchange_id: exchangeId,
             payload: {
               title: event.request.title ?? null,
               question: event.request.question ?? null,
-              choices:
-                event.request.choices?.map((c) => ({
-                  id: c.id,
-                  label: c.label,
-                  description: c.description ?? null,
-                  default: c.default ?? null,
-                })) ?? null,
+              choices: event.request.choices ?? [],
               free_text: event.request.free_text ?? false,
               stage: event.request.stage ?? null,
+              // ReAct V2's occurrence identity (#2216) — LangGraph's own
+              // Interrupt.id, required back on resume so the backend can
+              // reject a stale/duplicate response. checkpoint_id is a
+              // DIFFERENT field (legacy Graph V2's real storage id); never
+              // aliased. Both are explicitly typed on `RuntimeHitlPayload`.
+              interrupt_id: event.request.interrupt_id ?? null,
               checkpoint_id: event.request.checkpoint_id ?? null,
-              metadata: event.request.metadata ?? null,
+              metadata: event.request.metadata,
               // Tool calls this prompt gates (#2177 batching — one combined
               // interrupt can cover several calls at once). Lets the trace
               // correlate every one of them, not just a single call_id.
-              pending_calls: event.request.pending_calls ?? null,
+              pending_calls: event.request.pending_calls ?? [],
             },
           };
           onAwaitingHuman?.(hitl);
@@ -777,7 +796,7 @@ export function useChatSse(
   );
 
   const sendHitlResume = useCallback(
-    async (pending: AwaitingHumanEvent, answer: string | boolean | undefined, freeText?: string) => {
+    async (pending: RuntimeAwaitingHumanEvent, answer: string | boolean | undefined, freeText?: string) => {
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
@@ -824,8 +843,8 @@ export function useChatSse(
 
       const sessionId = pending.session_id;
       // Reuse the interrupted turn's exchange_id straight from the event that
-      // reported it — `pending` is the exact `AwaitingHumanEvent` this resume
-      // answers, so its own `exchange_id` is authoritative by construction,
+      // reported it — `pending` is the exact `RuntimeAwaitingHumanEvent` this
+      // resume answers, so its own `exchange_id` is authoritative by construction,
       // unlike a ref that a later, unrelated send() could have overwritten
       // (or that a stale closure could read before it was ever set). A HITL
       // resume continues the same exchange as the interrupted turn, not a
@@ -836,10 +855,7 @@ export function useChatSse(
       // exchange_id before groupTraceEntries can pair a call with its result
       // by call_id).
       const exchangeId = pending.exchange_id;
-      const hitlPayload = pending.payload as {
-        choices?: { id: string }[];
-        checkpoint_id?: string | null;
-      };
+      const hitlPayload = pending.payload;
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
       const normalizedFreeText = typeof freeText === "string" ? freeText.trim() || undefined : undefined;
       const answerValue = !hasChoices && normalizedFreeText ? normalizedFreeText : answer;
@@ -851,6 +867,11 @@ export function useChatSse(
           {
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
+            // #2216: ReAct V2 resumes must echo interrupt_id (LangGraph's
+            // Interrupt.id, validated against the currently pending
+            // occurrence backend-side) — checkpoint_id is the unrelated
+            // legacy Graph V2 field and is forwarded only for that runtime.
+            interrupt_id: hitlPayload?.interrupt_id ?? null,
             checkpoint_id: hitlPayload?.checkpoint_id ?? null,
             // `language` matters here too: a resumed turn can reach a fresh
             // gated tool call of its own (the model replans and requests more

@@ -238,9 +238,10 @@ _EXPECTED_PAYLOAD_EN: dict[str, Any] = {
             "default": False,
         },
     ],
-    "free_text": True,
+    "free_text": False,
     "metadata": {},
     "checkpoint_id": None,
+    "interrupt_id": None,
     "pending_calls": [
         {
             "tool_call_id": "c-1",
@@ -272,9 +273,10 @@ _EXPECTED_PAYLOAD_FR: dict[str, Any] = {
             "default": False,
         },
     ],
-    "free_text": True,
+    "free_text": False,
     "metadata": {},
     "checkpoint_id": None,
+    "interrupt_id": None,
     "pending_calls": [
         {
             "tool_call_id": "c-1",
@@ -822,3 +824,63 @@ async def test_latest_tool_outputs_attached_to_response_metadata() -> None:
     final = result["messages"][-1]
     assert isinstance(final, AIMessage)
     assert final.response_metadata["tools"]["get_info"] == "info about fred"
+
+
+# ---------------------------------------------------------------------------
+# FRED narrow Interrupt.id invariant (#2216 P1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids() -> None:
+    """
+    LangGraph's `Interrupt.id` is NOT universally occurrence-unique — two
+    `interrupt()` calls within the SAME task share an id, matched by call
+    order instead (`test_langgraph_interrupt_id_semantics.py` pins that
+    upstream fact directly). #2216's fix relies on a narrower, FRED-specific
+    claim instead: `FredHitlMiddleware.aafter_model` never raises more than
+    one `interrupt()` per task (exactly one call site, gated by `if not
+    gated: return None` — no loop), so two DISTINCT FRED HITL occurrences —
+    reached via two separate resumes on the same thread — always land in
+    different tasks and therefore always get different ids.
+
+    Proven here against FRED's real, supported HITL flow
+    (`build_tool_loop_compiled_react_agent`, the same production tool loop
+    `_compile_agent` wraps for every other test in this file), not a toy
+    graph: interrupt A (approve ticket INC-1), resume A, interrupt B
+    (approve ticket INC-2) — B's id must differ from A's.
+    """
+
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("update_ticket", {"ticket_id": "INC-1"}, "c-1")],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("update_ticket", {"ticket_id": "INC-2"}, "c-2")],
+            ),
+            AIMessage(content="both done"),
+        ]
+    )
+    agent = _compile_agent(model, always_require_tools=("update_ticket",))
+
+    first = await _drive(
+        agent, {"messages": [HumanMessage("update INC-1 then INC-2")]}, "t-two-ids"
+    )
+
+    def _interrupt_id(updates: list[object]) -> str:
+        for update in updates:
+            if isinstance(update, dict) and "__interrupt__" in update:
+                raw = update["__interrupt__"]
+                first_entry = raw[0] if isinstance(raw, (list, tuple)) else raw
+                return getattr(first_entry, "id")
+        raise AssertionError("no interrupt found in updates")
+
+    interrupt_id_a = _interrupt_id(first)
+
+    second = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-two-ids")
+    interrupt_id_b = _interrupt_id(second)
+
+    assert interrupt_id_a != interrupt_id_b

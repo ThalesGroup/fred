@@ -447,7 +447,7 @@ export type RuntimeExecuteRequest = {
   agent_id?: string | null;
   /** Managed agent instance ID (preferred). The pod authorizes the caller (Keycloak JWT + OpenFGA) on runtime_context.team_id. */
   agent_instance_id?: string | null;
-  /** Checkpoint identifier for precise graph-state resume. */
+  /** Real checkpointer-storage identifier for precise graph-state resume. Legacy Graph V2 runtime only — see interrupt_id for ReAct V2 HITL resume. */
   checkpoint_id?: string | null;
   /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
   inline_tuning?: {
@@ -463,6 +463,8 @@ export type RuntimeExecuteRequest = {
   } | null;
   /** User turn input. Ignored when resume_payload is set (HITL resume). */
   input?: string;
+  /** LangGraph's own Interrupt.id for the ReAct V2 HITL occurrence being resumed (#2216). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received. Required (and validated against the currently pending interrupt) whenever resume_payload targets a ReAct V2 agent — never used for the legacy Graph V2 runtime, which uses checkpoint_id instead. */
+  interrupt_id?: string | null;
   /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
   invocation_turns?: ConversationTurn[];
   /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
@@ -498,6 +500,7 @@ export type HumanInputRequest = {
   checkpoint_id?: string | null;
   choices?: HumanChoiceOption[];
   free_text?: boolean;
+  interrupt_id?: string | null;
   metadata?: {
     [key: string]: string | number | number | boolean | null;
   };

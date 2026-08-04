@@ -39,7 +39,9 @@ How to use:
 - Prefer managed execution: set agent_instance_id (team comes from runtime_context).
 - Use agent_id (direct template) only for internal/dev compatibility.
 - session_id is the primary continuity key across normal turns and HITL resumes.
-- checkpoint_id enables precise resume from a specific graph snapshot.
+- checkpoint_id enables precise resume from a specific graph snapshot (legacy
+  Graph V2 only); interrupt_id is the ReAct V2 equivalent — mutually
+  exclusive, never both set (see RuntimeExecuteRequest's own docstring).
 
 Example::
 
@@ -219,7 +221,9 @@ class RuntimeExecuteRequest(BaseModel):
 
     Session/checkpoint semantics:
     - session_id is the primary continuity key — keep stable across turns and resumes
-    - checkpoint_id enables precise resume from a specific graph snapshot
+    - checkpoint_id enables precise resume from a specific graph snapshot (legacy
+      Graph V2 only) — interrupt_id is the ReAct V2 equivalent, mutually
+      exclusive with checkpoint_id and only meaningful with resume_payload set
     - resume_payload carries HITL answer data; when present, input is ignored
 
     Architectural constraint:
@@ -255,7 +259,23 @@ class RuntimeExecuteRequest(BaseModel):
     )
     checkpoint_id: str | None = Field(
         default=None,
-        description="Checkpoint identifier for precise graph-state resume.",
+        description=(
+            "Real checkpointer-storage identifier for precise graph-state "
+            "resume. Legacy Graph V2 runtime only — see interrupt_id for "
+            "ReAct V2 HITL resume."
+        ),
+    )
+    interrupt_id: str | None = Field(
+        default=None,
+        description=(
+            "LangGraph's own Interrupt.id for the ReAct V2 HITL occurrence "
+            "being resumed (#2216). Echoed back verbatim from the "
+            "AwaitingHumanRuntimeEvent.request.interrupt_id the frontend "
+            "received. Required (and validated against the currently "
+            "pending interrupt) whenever resume_payload targets a ReAct V2 "
+            "agent — never used for the legacy Graph V2 runtime, which uses "
+            "checkpoint_id instead."
+        ),
     )
 
     # HITL resume
@@ -323,6 +343,18 @@ class RuntimeExecuteRequest(BaseModel):
         - When resume_payload is absent, input must have non-empty content.
         - For managed (agent_instance_id) execution the pod authorizes the caller
           against OpenFGA on runtime_context.team_id (enforced at the runtime).
+        - checkpoint_id (legacy Graph V2) and interrupt_id (ReAct V2) are
+          mutually exclusive — never both set on the same request (#2216).
+          Rejecting this at the wire boundary closes the gap where a runtime
+          resume-validation lookup could otherwise be steered at a
+          client-chosen checkpoint_id instead of the thread's actual latest
+          checkpoint: with the two fields exclusive, a request carrying
+          interrupt_id can never also carry checkpoint_id, so the runtime's
+          checkpoint lookup always falls through to "the thread's latest
+          checkpoint" for a ReAct V2 resume.
+        - interrupt_id is only meaningful alongside resume_payload — it
+          identifies WHICH pending interrupt a resume answers, so it has no
+          purpose without a resume in flight.
         """
         has_instance = bool(self.agent_instance_id)
         has_template = bool(self.agent_id)
@@ -330,6 +362,15 @@ class RuntimeExecuteRequest(BaseModel):
             raise ValueError("Provide exactly one of agent_id or agent_instance_id.")
         if self.resume_payload is None and not self.input.strip():
             raise ValueError("input is required when resume_payload is not set.")
+        if self.checkpoint_id is not None and self.interrupt_id is not None:
+            raise ValueError(
+                "checkpoint_id and interrupt_id are mutually exclusive: "
+                "checkpoint_id identifies a legacy Graph V2 resume, "
+                "interrupt_id identifies a ReAct V2 resume — never both at "
+                "once."
+            )
+        if self.interrupt_id is not None and self.resume_payload is None:
+            raise ValueError("interrupt_id is only valid together with resume_payload.")
         return self
 
     # ------------------------------------------------------------------
@@ -377,6 +418,8 @@ class RuntimeExecuteRequest(BaseModel):
             ctx["session_id"] = self.session_id
         if self.checkpoint_id is not None:
             ctx["checkpoint_id"] = self.checkpoint_id
+        if self.interrupt_id is not None:
+            ctx["interrupt_id"] = self.interrupt_id
         user_id = self.effective_user_id()
         if user_id:
             ctx["user_id"] = user_id

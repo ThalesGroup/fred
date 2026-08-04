@@ -325,6 +325,8 @@ def run_single_turn(
     verbose: bool,
     stream: bool,
     color_enabled: bool,
+    checkpoint_id: str | None = None,
+    interrupt_id: str | None = None,
     resume_payload: Any = None,
     inline_tuning: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, Any] | None]:
@@ -333,6 +335,13 @@ def run_single_turn(
 
     Returns (exit_code, hitl_request) where hitl_request is set when the agent
     is paused at a HITL gate, or None when the turn completed normally.
+
+    checkpoint_id / interrupt_id (#2216):
+    - forwarded verbatim to the pod, never aliased for each other — the
+      legacy Graph V2 runtime resumes via checkpoint_id, ReAct V2 resumes
+      via interrupt_id (LangGraph's own `Interrupt.id`). The caller extracts
+      whichever one the pending `AwaitingHumanRuntimeEvent.request` actually
+      carries; only one is ever set per resume.
     """
     if not stream:
         payload = client.execute(
@@ -341,6 +350,8 @@ def run_single_turn(
             session_id=session_id,
             user_id=user_id,
             team_id=team_id,
+            checkpoint_id=checkpoint_id,
+            interrupt_id=interrupt_id,
             resume_payload=resume_payload,
             inline_tuning=inline_tuning,
         )
@@ -377,6 +388,8 @@ def run_single_turn(
         session_id=session_id,
         user_id=user_id,
         team_id=team_id,
+        checkpoint_id=checkpoint_id,
+        interrupt_id=interrupt_id,
         resume_payload=resume_payload,
         inline_tuning=inline_tuning,
     ):

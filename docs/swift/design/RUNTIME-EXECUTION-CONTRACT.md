@@ -659,6 +659,13 @@ Runtime must validate before resuming:
 - `checkpoint_id` (when provided) belongs to the authorized `session_id`
 - `checkpoint_id` is in a resumable state (not already consumed)
 - For HITL resume: checkpoint is in a waiting state compatible with `resume_payload`
+- For ReAct V2 HITL resume specifically (#2216, see §8.39): `interrupt_id`
+  (a field distinct from `checkpoint_id` — see §8.39 for why) must exactly
+  match LangGraph's own `Interrupt.id` for one of the interrupts currently
+  pending on that thread, not merely prove that *some* interrupt is
+  pending. That occurrence is then atomically claimed, immediately before
+  graph invocation, so a concurrent duplicate response can never resume it
+  a second time
 
 Separation of concerns:
 
@@ -2182,6 +2189,184 @@ needed there). The trace-status derivation
 string[]` instead of a single id, so every call in a batch reads "awaiting
 confirmation" simultaneously, not just the first. See `COMPONENT-UX.md`'s
 `TraceEntryRow` entry for the UI side.
+
+---
+
+### 8.39 ✅ HITL resume bound to a unique interrupt occurrence — #2216 P1 (2026-08-04)
+
+**Current behavior.** A ReAct V2 HITL resume is authorized and executed
+through four independent layers, each closing the same class of bug — a
+stale or duplicate resume response silently landing on the wrong, or an
+already-resumed, HITL prompt:
+
+1. **Wire contract.** `RuntimeExecuteRequest.checkpoint_id` (legacy Graph V2
+   — a real checkpointer-storage id) and `.interrupt_id` (ReAct V2 —
+   LangGraph's own `Interrupt.id`) are mutually exclusive, enforced by a
+   pydantic validator (`fred_sdk.contracts.execution._validate_execution_target`)
+   — never both set, and `interrupt_id` is meaningless without
+   `resume_payload`. This is what lets layer 2's checkpoint lookup double
+   as "the thread's latest checkpoint" for every ReAct V2 request, never a
+   client-chosen historical one.
+2. **Read-only admission gate** (`agent_app._validate_session_checkpoint_access`,
+   runs before session ownership, OpenFGA, and target resolution): extracts
+   every currently pending `"__interrupt__"` id on the thread's latest
+   checkpoint (`_pending_react_v2_interrupt_ids` — collects ALL matching
+   ids, not just the first) and requires the client's `interrupt_id` to
+   match one of them exactly — missing, empty, malformed, unknown,
+   cross-thread, or stale all fail closed with `409 Conflict`. Never
+   mutates anything.
+3. **Targeted LangGraph resume, mandatory** (`react_message_codec.graph_input_from_react_input`):
+   `Command(resume={interrupt_id: payload})`, never the scalar
+   `Command(resume=payload)` form. LangGraph resolves the map key against
+   the pending task's own `Interrupt.id` and simply re-raises the SAME
+   interrupt when no task matches, so even if the pending interrupt
+   changed between layer 2 and layer 3 (two separate operations) a
+   decision can never land on the wrong occurrence. A resume without
+   `interrupt_id` raises — no scalar fallback exists.
+4. **Durable, atomic, fenced claim** (`FredSqlCheckpointer`'s
+   `checkpoint_hitl_claim` table, key `(thread_id, checkpoint_ns,
+   interrupt_id)`), acquired as LATE as possible — inside
+   `agent_app._iterate_runtime_event_payloads`, immediately before
+   `executor.stream(...)`, never in the read-only gate. State machine
+   `claimed -> started -> consumed`, every operation fenced by an opaque
+   `claim_token` so a caller that lost ownership can never affect the
+   current owner's row:
+   - `aclaim_hitl_resume` — `INSERT ... ON CONFLICT DO UPDATE ... WHERE
+     <stale>`, mints a fresh token, moves to `claimed`. Only a `claimed`
+     row past `_HITL_CLAIM_TTL_SECONDS` (default 60s) is eligible to be
+     superseded.
+   - `astart_hitl_resume` — atomically confirms the caller still owns the
+     row and moves to `started`, immediately before graph invocation.
+     `started` has **no time-based expiry** — a long-running turn is never
+     superseded merely because wall-clock time passed.
+   - `aconsume_hitl_resume` — best-effort, audit-only terminal marker after
+     a successful turn; `started` alone already permanently blocks a
+     duplicate regardless of whether this ever runs.
+   - `arelease_hitl_resume` — frees a still-`claimed` row on a
+     pre-invocation failure only; never releases a `started` row.
+   - Claim timestamps use the DATABASE's own clock (`_db_now`), not the
+     calling process's, so replica clock skew cannot incorrectly steal or
+     fail to steal a lease.
+   Deliberately a separate table from `langgraph_checkpoint_write`: that
+   table is LangGraph-owned semantic storage read back as `pending_writes`,
+   and an artificial row there would corrupt `pending_write_count` /
+   checkpoint-administration semantics
+   (`test_hitl_claim_rows_never_appear_in_pending_writes`). `adelete_thread`
+   also purges `checkpoint_hitl_claim` rows for the deleted thread.
+
+**Native LangGraph ownership vs FRED's admission boundary.** LangGraph owns
+`Interrupt.id`, interrupt persistence, pending graph state, and targeted
+resume routing (layer 3). FRED owns exactly three things: HTTP-layer
+authorization (layer 2), cross-stack transport of `interrupt_id` (CLI,
+frontend, OpenAPI contract), and the minimum durable multi-replica
+admission guard LangGraph itself has no opinion on (layer 4) — FRED never
+mints a parallel occurrence identity of its own. `Interrupt.id` is
+`xxh3_128_hexdigest(task_checkpoint_ns)` and is **NOT universally
+occurrence-unique**: two `interrupt()` calls within the SAME LangGraph task
+share it, matched by call order instead
+(`test_langgraph_interrupt_id_semantics.py` pins this against the installed
+LangGraph version). #2216 relies on a narrower, FRED-specific fact instead:
+`FredHitlMiddleware.aafter_model` has exactly one `interrupt()` call site,
+invoked at most once per task, so two DISTINCT FRED HITL occurrences
+always land in different tasks and always get different ids — proven
+against FRED's real tool loop
+(`test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`)
+and, end to end against a real compiled agent + `FredSqlCheckpointer` +
+the actual emitted `Interrupt.id` + `graph_input_from_react_input`, by
+`test_hitl_resume_langgraph_integration.py`.
+
+**Guaranteed properties** (see `FredSqlCheckpointer.aclaim_hitl_resume`'s
+docstring for the authoritative version):
+
+- a stale response for an earlier interrupt (A) can never resume a later
+  one (B) — enforced independently by layer 2's exact-id match and layer
+  3's targeted resume-map matching
+- no two healthy requests can both hold a live claim (`claimed` or
+  `started`) for the same occurrence at once — proven same-process (N-way
+  race via `asyncio.gather`), cross-replica (two independently created
+  `AsyncEngine`s sharing one file-backed SQLite database —
+  `test_concurrent_claims_across_separate_checkpointer_instances_have_one_winner`),
+  and end-to-end through real concurrent HTTP requests with a tool-call
+  counter (`test_concurrent_duplicate_resumes_execute_the_tool_at_most_once`)
+- an abandoned `claimed` row (setup failed, or the owning process died
+  before confirming start) is recoverable after the short TTL
+- a `started` row is held for the life of that invocation attempt with no
+  time-based reclaim; a stale owner (superseded after TTL expiry) can never
+  delete, restart, or consume a newer owner's row
+
+**Cancellation / crash limitations.** Exactly-once EXTERNAL tool side
+effects are explicitly NOT guaranteed once a claim reaches `started`, for
+ANY of: pod/process crash, task cancellation, an SSE/browser disconnect,
+the frontend's `AbortController` firing, or cancellation landing after
+graph invocation started but before the claim is marked `consumed`
+(`test_cancellation_after_start_leaves_the_claim_stuck_not_released`
+proves the row is left untouched — not released, not stolen — and a
+duplicate is rejected, under a real cancellation exercised through the
+same code path a client disconnect uses). There is **no automatic
+recovery** for a `started` row in this patch, for any of those causes: the
+occurrence stays permanently claimed. The only recovery today is
+deleting/purging the thread (`adelete_thread`) or direct database
+intervention — there is no in-app "unstick this dialog" surface. Reload /
+rehydration and automatic recovery are tracked follow-up work, not solved
+here. Tool-level idempotency remains the caller's own responsibility, same
+as any distributed system without a two-phase-commit external resource
+manager.
+
+**PostgreSQL test limitation.** The Postgres path uses the identical
+`pg_insert(...).on_conflict_do_update(...)` construct already proven in
+production by `aput_writes`/`AsyncBaseSqlStore.upsert`, but this claim's
+specific `WHERE` + `RETURNING` combination is exercised only against
+SQLite by the offline suite
+(`test_sql_checkpointer_hitl_claim.py`), plus one offline
+dialect-compilation assertion
+(`test_hitl_claim_insert_compiles_the_expected_postgresql_statement`) that
+proves the statement is well-formed Postgres SQL — this is NOT a
+substitute for a real PostgreSQL concurrency integration test, which this
+repo does not have. True multi-process/multi-replica testing (spawning
+separate OS processes) was not attempted either:
+`fred_runtime.runtime_context.get_runtime_context()` is a single
+process-wide global, so two live `create_agent_app` instances cannot
+safely coexist within one test process — the cross-replica test targets
+the checkpointer layer directly instead, the layer that constraint
+actually allows testing honestly.
+
+**Metrics.** `aclaim_hitl_resume`/`astart_hitl_resume` emit the same
+`persist_pool_wait_ms`/`persist_sql_ms` timers `aput`/`aput_writes` use
+(`store="checkpoint"`, `op="hitl_claim"`/`"hitl_claim_start"`) —
+`pool_wait_ms` measured before the connection is acquired, `sql_ms`
+covering the whole transaction including the `_db_now` round trip.
+`aconsume_hitl_resume`/`arelease_hitl_resume` are best-effort side
+operations and are deliberately NOT instrumented, matching the existing
+convention for `adelete_thread`/`aget_tuple`. `store`/`op` are NOT in
+`PROMETHEUS_ALLOWED_LABELS` (`prometheus_kpi_store.py`) — they are not
+independently visible as Grafana label dimensions; only the aggregate
+`persist_pool_wait_ms`/`persist_sql_ms` series are.
+
+**Scope.** ReAct V2 only. The legacy Graph runtime's `graph_v2` checkpoint
+path (`graph_runtime.py::_store_pending_checkpoint`) already validates
+against a real checkpointer-storage `checkpoint_id` and is unchanged; it
+has no equivalent atomic claim.
+
+**Cross-stack transport.** `fred-agents-cli` (`pod_client.py`,
+`history_display.py`, `repl.py`) forwards `interrupt_id` end to end —
+`execute()`/`stream_events()`/`iter_stream_events()` accept it,
+`run_single_turn()` forwards both `checkpoint_id` and `interrupt_id`, and
+the interactive REPL extracts both from the pending
+`AwaitingHumanRuntimeEvent.request`. The frontend (`useChatSse.ts`) carries
+it through an explicit `RuntimeHitlPayload`/`RuntimeAwaitingHumanEvent`
+type pair based on the generated `HumanInputRequest` contract, replacing
+the legacy agentic-backend `HitlPayload`'s open index signature for this
+purpose.
+
+**Immediate follow-up (tracked, not in this patch).** `FredHitlMiddleware`
+stays a hand-rolled `AgentMiddleware` with FRED's own `interrupt()` call
+site and the claim table described above. The immediate next step is
+migrating it onto LangChain's native `HumanInTheLoopMiddleware`, letting
+FRED delegate more of the interrupt/resume lifecycle to the upstream
+library instead of layering a bespoke claim table underneath it. That
+migration is out of scope here — this patch is deliberately the smallest
+safe fix for the identity/duplication bug, not a rewrite of the HITL
+middleware.
 
 ---
 

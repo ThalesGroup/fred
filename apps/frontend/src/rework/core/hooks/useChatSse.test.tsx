@@ -104,8 +104,8 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   ],
 }));
 
-import type { AwaitingHumanEvent } from "../../../slices/agentic/agenticOpenApi";
 import { useChatSse } from "./useChatSse";
+import type { RuntimeAwaitingHumanEvent } from "./useChatSse";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>) => void }) {
   const hook = useChatSse({
@@ -393,7 +393,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     mount();
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
 
-    const pendingHitl: AwaitingHumanEvent = {
+    const pendingHitl: RuntimeAwaitingHumanEvent = {
       type: "awaiting_human",
       session_id: "session-1",
       exchange_id: "exch-1",
@@ -555,7 +555,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("sendHitlResume() forwards the UI language into runtime_context", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
     mount();
-    const pendingHitl: AwaitingHumanEvent = {
+    const pendingHitl: RuntimeAwaitingHumanEvent = {
       type: "awaiting_human",
       session_id: "session-1",
       exchange_id: "exch-1",
@@ -569,6 +569,31 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
     expect(body.runtime_context.language).toBe("fr");
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() round-trips interrupt_id from the awaiting_human event into the resume request body (#2216)", async () => {
+    // ReAct V2 resume identity: the id received on the awaiting_human SSE
+    // event (LangGraph's own Interrupt.id) must be echoed back verbatim on
+    // resume — the backend rejects a resume without it. checkpoint_id is
+    // the unrelated legacy Graph V2 field and must round-trip independently.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+    const pendingHitl: RuntimeAwaitingHumanEvent = {
+      type: "awaiting_human",
+      session_id: "session-1",
+      exchange_id: "exch-1",
+      payload: { interrupt_id: "interrupt-a", checkpoint_id: null },
+    };
+
+    await act(async () => {
+      await latest.sendHitlResume(pendingHitl, "proceed");
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body.interrupt_id).toBe("interrupt-a");
+    expect(body.checkpoint_id).toBeNull();
     fetchSpy.mockRestore();
   });
 });

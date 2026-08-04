@@ -284,7 +284,15 @@ def build_tool_approval_request(
         title=title,
         question=question,
         choices=choices,
-        free_text=True,
+        # Deliberately False (P1): a free-text answer here has nowhere to go
+        # — this gate only distinguishes cancel vs not-cancel
+        # (_is_cancelled_human_decision), and the legacy free-text/"notes"
+        # injection into the graph was already dead code before ReAct V2
+        # (see this function's docstring). Showing the box anyway silently
+        # discarded whatever the human typed and treated it as an implicit
+        # "proceed" — confusing, not a real second input path. Revisit once
+        # there is an actual consumer for free-text tool-approval answers.
+        free_text=False,
         pending_calls=pending_calls,
     )
 
