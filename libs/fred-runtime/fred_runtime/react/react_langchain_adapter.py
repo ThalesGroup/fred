@@ -70,6 +70,7 @@ from .react_stream_adapter import (
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,
     split_stream_event_mode,
+    sum_token_usage,
 )
 
 __all__ = [
@@ -96,6 +97,7 @@ __all__ = [
     "runtime_metadata_from_stream_event",
     "split_stream_event_mode",
     "stringify_langchain_content",
+    "sum_token_usage",
     "to_langchain_message",
     "to_runnable_config",
 ]

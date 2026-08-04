@@ -1,6 +1,6 @@
 # Per-step token usage in the chat trace
 
-**Status:** Implemented 2026-08-04 — see `RUNTIME-EXECUTION-CONTRACT.md` §8.38. Tracked in [GitHub issue #2217](https://github.com/ThalesGroup/fred/issues/2217)
+**Status:** Implemented 2026-08-04 — see `RUNTIME-EXECUTION-CONTRACT.md` §8.38. The deferred rolling-overwrite undercount (§2.1) was also fixed the same day — see §8.39. Tracked in [GitHub issue #2217](https://github.com/ThalesGroup/fred/issues/2217)
 **ID:** `TRACE-01` (informal)
 **Author:** Maxime Daragon / Claude Code
 **Date:** 2026-08-04
@@ -89,12 +89,15 @@ to fix in the same change or track separately.
     distinct from the `ChatMessage` history above) is still intentionally
     left untouched — genuinely a different, larger change, and not needed
     for the chat UI to work correctly.
-- **The rolling-overwrite undercount (see §1) is explicitly out of scope
-  here — tracked separately, not bundled into this change.** It changes the
-  *meaning* of `FinalRuntimeEvent.token_usage` for existing consumers (CLI
-  `tokens` field, eval trace `usage`, the top-bar total badge), so it
-  deserves its own explicitly-scoped follow-up rather than riding along with
-  an additive UI feature. No decision yet on whether/when to fix it.
+- **The rolling-overwrite undercount (see §1) was explicitly out of scope
+  for the initial change — tracked separately, not bundled in.** It changes
+  the *meaning* of `FinalRuntimeEvent.token_usage` for existing consumers
+  (CLI `tokens` field, eval trace `usage`, the top-bar total badge), so it
+  got its own explicitly-scoped follow-up rather than riding along with an
+  additive UI feature. **Fixed the same day**, once the shipped per-step
+  feature made the discrepancy directly observable (summing the trace's
+  per-step tokens gave a larger number than the top-bar total) — see
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.39.
 
 ---
 

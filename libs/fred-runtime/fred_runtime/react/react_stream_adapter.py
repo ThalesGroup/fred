@@ -53,6 +53,7 @@ from fred_runtime.runtime_support.model_metadata import (  # noqa: F401
     normalize_token_usage,
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,
+    sum_token_usage,
 )
 from fred_runtime.support.thinking import content_to_text
 

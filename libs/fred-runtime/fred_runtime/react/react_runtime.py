@@ -133,6 +133,9 @@ from .react_langchain_adapter import (
     split_stream_event_mode as _split_stream_event_mode,
 )
 from .react_langchain_adapter import (
+    sum_token_usage as _sum_token_usage,
+)
+from .react_langchain_adapter import (
     to_runnable_config as _to_runnable_config,
 )
 from .react_prompting import (
@@ -336,7 +339,12 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         collected_sources: tuple[VectorSearchHit, ...] = ()
         collected_ui_parts: tuple[UiPart, ...] = ()
         last_model_name: str | None = None
-        last_token_usage: dict[str, int] | None = None
+        # Summed across every model call in the turn (tool-deciding calls plus
+        # the final answer), not the last call's usage alone — a ReAct turn
+        # commonly makes several calls, and each provider's usage_metadata is
+        # per-call, not cumulative (TRACE-01 follow-up: the previous
+        # last-write-wins variable silently undercounted any multi-call turn).
+        total_token_usage: dict[str, int] | None = None
         last_finish_reason: str | None = None
         # When any tool returns is_error=True, the error is surfaced directly as
         # the final response.  The LLM is NOT trusted to relay it: its subsequent
@@ -365,13 +373,16 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 mode, update = _split_stream_event_mode(raw_event)
 
                 if mode == "messages":
-                    model_name, token_usage, finish_reason = (
-                        _runtime_metadata_from_stream_event(update)
+                    # Token usage is deliberately not read here: "updates" mode
+                    # (below) delivers the same completed AIMessage exactly
+                    # once per model call and is the sole accumulation point —
+                    # also reading it from these streaming chunks would double
+                    # -count every call into total_token_usage.
+                    model_name, _, finish_reason = _runtime_metadata_from_stream_event(
+                        update
                     )
                     if model_name is not None:
                         last_model_name = model_name
-                    if token_usage is not None:
-                        last_token_usage = token_usage
                     if finish_reason is not None:
                         last_finish_reason = finish_reason
                     decoded = _decode_stream_chunk(update)
@@ -486,17 +497,19 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     if isinstance(message, AIMessage) and message.tool_calls:
                         # The usage of the model call that decided to make these
                         # tool calls — attached per-call to ToolCallRuntimeEvent
-                        # (TRACE-01) so the trace UI can show tokens per step.
-                        # When one AIMessage requests several tools in parallel,
-                        # every one of them gets this same total: it is the cost
-                        # of the one decision that produced them, not a per-tool
-                        # split (providers don't expose a per-tool breakdown).
-                        # Deliberately not folded into `last_token_usage`: that
-                        # rolling variable feeds FinalRuntimeEvent and changing
-                        # its semantics is a separate, explicitly out-of-scope
-                        # follow-up (see TRACE-TOKEN-USAGE-RFC.md §2.1).
+                        # (TRACE-01) so the trace UI can show tokens per step,
+                        # AND folded into the turn's running total. When one
+                        # AIMessage requests several tools in parallel, every
+                        # one of them gets this same per-step total (it is the
+                        # cost of the one decision that produced them, not a
+                        # per-tool split — providers don't expose that
+                        # breakdown), but it is only added to the turn total
+                        # once, here, not once per parallel tool call.
                         _, tool_call_token_usage, _ = _runtime_metadata_from_message(
                             message
+                        )
+                        total_token_usage = _sum_token_usage(
+                            total_token_usage, tool_call_token_usage
                         )
                         for tool_call in message.tool_calls:
                             name = str(tool_call.get("name") or "")
@@ -529,8 +542,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         )
                         if model_name is not None:
                             last_model_name = model_name
-                        if token_usage is not None:
-                            last_token_usage = token_usage
+                        total_token_usage = _sum_token_usage(
+                            total_token_usage, token_usage
+                        )
                         if finish_reason is not None:
                             last_finish_reason = finish_reason
                         last_assistant_message = _from_langchain_message_adapter(
@@ -564,7 +578,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     sources=collected_sources,
                     ui_parts=collected_ui_parts,
                     model_name=last_model_name,
-                    token_usage=last_token_usage,
+                    token_usage=total_token_usage,
                     finish_reason=last_finish_reason,
                 )
         except Exception:
