@@ -1,3 +1,13 @@
+**v2.1.29** — 2026-08-04
+
+- **Bug Fixes**
+
+  - You can now delete files you attached to a chat session — deletion was
+    previously blocked for everyone, including the person who uploaded the
+    file (#2223, #2224)
+  - A failed attachment deletion now shows an error message instead of
+    silently doing nothing (#2223, #2224)
+
 **v2.1.28** — 2026-08-04
 
 - **Summary**
