@@ -2105,6 +2105,7 @@ async def _write_turn_history(
                     call_id=payload["call_id"],
                     name=payload["tool_name"],
                     args=payload.get("arguments", {}),
+                    token_usage=payload.get("token_usage"),
                 )
             )
             rank += 1

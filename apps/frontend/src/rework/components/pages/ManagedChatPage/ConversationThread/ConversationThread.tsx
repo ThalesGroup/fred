@@ -58,7 +58,6 @@ export function ConversationThread({
       emptyState={emptyState}
       scrollContainerRef={scrollContainerRef}
       turnKey={turnKey}
-      isStreaming={isStreaming}
     >
       {messages.map((msg) => {
         if (msg.role === "user" || msg.role === "hitl_response") {

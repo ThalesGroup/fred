@@ -193,6 +193,10 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     tool_name: str = Field(..., min_length=1)
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
+    # Usage of the model call that decided to make this tool call — the
+    # runtime's per-call `usage_metadata`, captured just before this event is
+    # emitted. None when the provider didn't report usage for that call.
+    token_usage: dict[str, int] | None = None
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):

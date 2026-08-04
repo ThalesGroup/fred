@@ -214,3 +214,37 @@ def normalize_token_usage(raw: object) -> dict[str, int] | None:
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
     }
+
+
+def sum_token_usage(
+    a: dict[str, int] | None, b: dict[str, int] | None
+) -> dict[str, int] | None:
+    """
+    Add two normalized token-usage maps together.
+
+    Why this exists:
+    - a turn can make several model calls (tool-deciding calls, then the
+      final answer, or several calls inside one Graph node) — the turn's
+      real total is their sum, not whichever call happened to run last
+    - a caller tracking a running total across a loop needs one place to
+      combine the accumulator with each newly observed call
+
+    How to use:
+    - `total = sum_token_usage(total, newly_observed_usage)` inside a loop;
+      either side may be `None` (treated as zero) — the result is `None`
+      only when both sides are `None`
+
+    Example:
+    - `sum_token_usage({"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}, {"input_tokens": 3, "output_tokens": 1, "total_tokens": 4})`
+      -> `{"input_tokens": 13, "output_tokens": 6, "total_tokens": 19}`
+    """
+
+    if a is None and b is None:
+        return None
+    left = a or {}
+    right = b or {}
+    return {
+        "input_tokens": left.get("input_tokens", 0) + right.get("input_tokens", 0),
+        "output_tokens": left.get("output_tokens", 0) + right.get("output_tokens", 0),
+        "total_tokens": left.get("total_tokens", 0) + right.get("total_tokens", 0),
+    }

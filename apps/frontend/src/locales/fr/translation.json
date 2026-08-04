@@ -300,6 +300,10 @@
       "geoSummary_other": "Données cartographiques ({{count}} entités)"
     },
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
+    "conversationTokenUsage": {
+      "total_one": "Total : {{count}} token",
+      "total_other": "Total : {{count}} tokens"
+    },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
       "ariaLabel": "Fichiers joints",

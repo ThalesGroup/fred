@@ -98,7 +98,10 @@ from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
 )
-from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
+from fred_runtime.runtime_support.model_metadata import (
+    runtime_metadata_from_message,
+    sum_token_usage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +225,14 @@ class _GraphNodeExecutionContext:
     # being buffered in _events, so the caller receives tokens in real time.
     _live_emit: Callable[[RuntimeEvent], None] | None = None
     _last_model_name: str | None = None
+    # Usage of the single most recent model call in this node — used for
+    # per-step attribution (TRACE-01: attached to each ToolCallRuntimeEvent
+    # a node emits, so a step shows only the call that triggered it).
     _last_token_usage: dict[str, int] | None = None
+    # Summed across every model call this node makes — a node can call the
+    # model more than once (e.g. planning then acting) before invoking a
+    # tool, and the node's real total is their sum, not just the last one.
+    _total_token_usage: dict[str, int] | None = None
     _last_finish_reason: str | None = None
 
     @property
@@ -245,7 +255,9 @@ class _GraphNodeExecutionContext:
 
         Why this exists:
         - graph nodes can invoke multiple model calls across one turn
-        - the runtime needs one reliable place to record the latest token usage
+        - the runtime needs one reliable place to record the latest token
+          usage for per-step attribution, and the summed usage for the
+          node's contribution to the turn total
 
         How to use:
         - call after a model invocation returns or streams its final chunk
@@ -258,6 +270,9 @@ class _GraphNodeExecutionContext:
             self._last_model_name = model_name
         if token_usage:
             self._last_token_usage = token_usage
+            self._total_token_usage = sum_token_usage(
+                self._total_token_usage, token_usage
+            )
         if finish_reason:
             self._last_finish_reason = finish_reason
 
@@ -266,10 +281,15 @@ class _GraphNodeExecutionContext:
         self,
     ) -> tuple[str | None, dict[str, int] | None, str | None]:
         """
-        Return the latest model metadata recorded by this node.
+        Return this node's model metadata, ready for the executor to fold
+        into the turn-level total.
 
         Why this exists:
         - the executor needs a stable readout after the node completes
+        - the token_usage slot is this node's *summed* usage across every
+          model call it made (`_total_token_usage`), not just its last call
+          (`_last_token_usage`, used instead for TRACE-01 per-step display)
+          — the executor sums this across nodes for the turn's real total
 
         How to use:
         - read after the node handler finishes
@@ -280,7 +300,7 @@ class _GraphNodeExecutionContext:
 
         return (
             self._last_model_name,
-            self._last_token_usage,
+            self._total_token_usage,
             self._last_finish_reason,
         )
 
@@ -629,6 +649,11 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_ref,
                 call_id=call_id,
                 arguments=payload,
+                # Usage of the most recent model call recorded on this node
+                # (TRACE-01) — the same value `last_model_metadata` reads, not
+                # necessarily this specific call's own usage: a graph node can
+                # invoke several models before invoking a tool.
+                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -703,6 +728,8 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_name,
                 call_id=call_id,
                 arguments=arguments,
+                # See invoke_tool() above — same caveat applies.
+                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -1040,7 +1067,11 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             group[0]: (group[1], group[2:]) for group in self._graph.parallel_groups
         }
         self._last_model_name: str | None = None
-        self._last_token_usage: dict[str, int] | None = None
+        # Summed across every node's contribution to this turn — a Graph turn
+        # commonly visits several nodes, each possibly calling the model more
+        # than once, and the turn's real total is their sum, not whichever
+        # node happened to finish last (TRACE-01 follow-up).
+        self._total_token_usage: dict[str, int] | None = None
         self._last_finish_reason: str | None = None
         self._thought_records: list[ThoughtRecord] = []
 
@@ -1060,7 +1091,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         """
 
         self._last_model_name = None
-        self._last_token_usage = None
+        self._total_token_usage = None
         self._last_finish_reason = None
         self._thought_records = []
 
@@ -1072,11 +1103,14 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         finish_reason: str | None,
     ) -> None:
         """
-        Capture the latest model metadata observed in the graph run.
+        Fold one node's model metadata into the turn-level total.
 
         Why this exists:
-        - the final graph event should expose the most recent model usage data
-        - graph nodes can call multiple models; we keep the latest non-empty view
+        - the final graph event should expose the turn's real total usage
+        - graph nodes can call multiple models; `token_usage` here is already
+          that node's own summed usage (`_GraphNodeExecutionContext.last_model_metadata`),
+          so summing it in gives the whole turn's total, not just the last
+          node's contribution
 
         How to use:
         - call after a node finishes executing
@@ -1088,7 +1122,9 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         if model_name:
             self._last_model_name = model_name
         if token_usage:
-            self._last_token_usage = token_usage
+            self._total_token_usage = sum_token_usage(
+                self._total_token_usage, token_usage
+            )
         if finish_reason:
             self._last_finish_reason = finish_reason
 
@@ -1386,7 +1422,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 _final_event_from_output(
                     output_model,
                     model_name=self._last_model_name,
-                    token_usage=self._last_token_usage,
+                    token_usage=self._total_token_usage,
                     finish_reason=self._last_finish_reason,
                 )
             )

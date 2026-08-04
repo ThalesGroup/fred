@@ -79,7 +79,6 @@
   padding-right: var(--spacing-xs);
   padding-left: var(--spacing-xs);
   width: 100%;
-  min-height: 36px;
   max-height: 200px;
   overflow-y: hidden; /* JS switches to auto at maxHeight */
   resize: none;
@@ -111,6 +110,7 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
+  gap: var(--spacing-2xs);
 }
 
 .rightSlot {

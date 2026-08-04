@@ -20,9 +20,11 @@ import {
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
+  tokenUsageForEntry,
   toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
+import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import phaseStyles from "../phaseBadge.module.css";
 import styles from "./TraceEntryRow.module.css";
 
@@ -46,6 +48,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   const phase = phaseKeyForEntry(entry);
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
+  const tokenUsage = tokenUsageForEntry(entry);
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";
 
@@ -58,20 +61,24 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
 
   return (
     <div
-      className={`${styles.row} ${styles[`row_${status}`]}`}
+      className={styles.row}
       role="button"
       tabIndex={0}
       aria-label={`${index !== null ? `${index}. ` : ""}${label}${primary ? `: ${primary}` : ""}`}
       onClick={() => openTrace(entry)}
       onKeyDown={(e) => e.key === "Enter" && openTrace(entry)}
     >
-      {/* Always rendered, empty for unnumbered notes, so the status dots of every
-          row stay on the same vertical line as the timeline guideline. */}
-      <span className={styles.index} aria-hidden="true">
-        {index ?? ""}
-      </span>
+      {/* Own gap from .row's, so the marker cluster (dot + number) can sit
+          closer together than the wider spacing before the label. */}
+      <div className={styles.marker}>
+        <DotStatus status={status} />
 
-      <DotStatus status={status} />
+        {/* Always rendered, empty for unnumbered notes, so the label of every
+            row starts at the same x whether or not it carries a step number. */}
+        <span className={styles.index} aria-hidden="true">
+          {index ?? ""}
+        </span>
+      </div>
 
       <span
         className={phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label}
@@ -92,6 +99,8 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
       </span>
 
       {secondary && <span className={styles.secondary}>{secondary}</span>}
+
+      {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
     </div>
   );
 }

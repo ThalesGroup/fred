@@ -300,6 +300,10 @@
       "geoSummary_other": "Map data ({{count}} features)"
     },
     "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
+    "conversationTokenUsage": {
+      "total_one": "Total: {{count}} token",
+      "total_other": "Total: {{count}} tokens"
+    },
     "attachFiles": "Attach files",
     "attachmentChip": {
       "ariaLabel": "Attached files",

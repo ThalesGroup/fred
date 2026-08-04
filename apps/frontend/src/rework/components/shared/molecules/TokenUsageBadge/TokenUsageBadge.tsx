@@ -12,19 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useTranslation } from "react-i18next";
 import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./TokenUsageBadge.module.css";
 
 interface TokenUsageBadgeProps {
   usage: TokenUsage;
+  /** "inline" (default): single row, used next to a message. "stacked": total on its
+   *  own line above the in/out breakdown, used for conversation-level aggregates. */
+  variant?: "inline" | "stacked";
 }
 
-export function TokenUsageBadge({ usage }: TokenUsageBadgeProps) {
-  return (
-    <div className={styles.root}>
+export function TokenUsageBadge({ usage, variant = "inline" }: TokenUsageBadgeProps) {
+  const { t } = useTranslation();
+
+  const breakdown = (
+    <>
       <span className={styles.segment}>↑{usage.input_tokens.toLocaleString()}</span>
       <span className={styles.sep}>·</span>
       <span className={styles.segment}>↓{usage.output_tokens.toLocaleString()}</span>
+    </>
+  );
+
+  if (variant === "stacked") {
+    return (
+      <div className={`${styles.tokensUsage} ${styles.stacked}`}>
+        <span className={styles.total}>{t("chatbot.conversationTokenUsage.total", { count: usage.total_tokens })}</span>
+        <div className={styles.breakdownRow}>{breakdown}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.tokensUsage}>
+      {breakdown}
       <span className={styles.sep}>·</span>
       <span className={styles.total}>{usage.total_tokens.toLocaleString()} tokens</span>
     </div>

@@ -1,4 +1,4 @@
-/* One tool step of the trace: [n] ● label · discriminator ....... latency */
+/* One tool step of the trace: ● [n] label · discriminator ....... latency */
 .row {
   display: flex;
   position: relative;
@@ -7,22 +7,24 @@
   transition: background 150ms ease;
   cursor: pointer;
   border-radius: var(--radius-xs);
-  padding: var(--spacing-2xs) var(--spacing-xs) var(--spacing-2xs) 0;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  height: 32px;
   user-select: none;
 }
 
 /* Timeline rail — drawn per row rather than as one absolute line, so each
-   segment is exactly as tall as its own row and the segment of the step that is
-   still running can pulse on its own (that blink IS the "tool in progress"
-   signal). Rows are gapless, so the segments read as one continuous line. */
+   segment is exactly as tall as its own row. Static regardless of step status
+   — "tool in progress" is signalled by the dot alone, never by the rail
+   blinking or changing colour. Rows are gapless, so the segments read as one
+   continuous line. */
 .row::before {
   position: absolute;
   top: 0;
   bottom: 0;
   left: var(--trace-rail-x, 0);
   transform: translateX(-50%);
-  background: var(--outline-variant);
-  width: 2px;
+  background: var(--outline-retreat);
+  width: 1px;
   content: "";
 }
 
@@ -31,44 +33,31 @@
   bottom: 50%;
 }
 
-/* Running step: the segment ARRIVING at its marker runs an indeterminate flow —
-   a highlight travelling down the rail — for exactly as long as the call is in
-   flight (status `pending` = a tool_call with no tool_result yet). It stops by
-   itself the moment the result lands and the row flips to ok/error.
-
-   The segment still stops at the marker (`.row:last-child` rule above): a tail
-   hanging below the last dot read as a broken line, not as progress. */
-.row_pending::before,
-.row_awaiting_confirmation::before {
-  animation: railFlow 1.2s linear infinite;
-  background: linear-gradient(to bottom, var(--outline-variant) 0%, var(--primary) 50%, var(--outline-variant) 100%);
-  background-size: 100% 200%;
-}
-
-@keyframes railFlow {
-  from {
-    background-position: 0 100%;
-  }
-  to {
-    background-position: 0 0%;
-  }
-}
-
 .row:hover,
 .row:focus-visible {
   outline: none;
   background: var(--surface-container);
 }
 
+/* Status dot + step number cluster — its own gap, wider than the gap before
+   the label, so the two read as one marker distinct from the row's content. */
+.marker {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 /* Step number — the only thing that tells two identical tool labels apart at
-   a glance; always visible (a hover-reveal index was too subtle). */
+   a glance; always visible (a hover-reveal index was too subtle). Fixed width
+   keeps the label column aligned whether or not the row carries a number. */
 .index {
   flex-shrink: 0;
   width: 18px;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: left;
 }
 
 /* Status dot */
@@ -81,8 +70,8 @@
      the timeline into dashes instead of one line threading the dots. */
   box-shadow: 0 0 0 1.5px var(--surface-container-lowest);
   border-radius: 50%;
-  width: 6px;
-  height: 6px;
+  width: 9px;
+  height: 9px;
 }
 
 .dot_ok {
@@ -91,12 +80,17 @@
 .dot_error {
   background: var(--error);
 }
+/* In-progress dots pulse by fading their own colour toward
+   surface-container-low, never through opacity — opacity would let the
+   timeline rail show through the dot underneath it. */
 .dot_pending,
 .dot_awaiting_confirmation {
+  --pulse-color: var(--warning);
   animation: pulse 1.2s ease-in-out infinite;
   background: var(--warning);
 }
 .dot_streaming {
+  --pulse-color: var(--primary);
   animation: pulse 1.2s ease-in-out infinite;
   background: var(--primary);
 }
@@ -104,10 +98,10 @@
 @keyframes pulse {
   0%,
   100% {
-    opacity: 1;
+    background-color: var(--pulse-color);
   }
   50% {
-    opacity: 0.25;
+    background-color: var(--surface-container-low);
   }
 }
 

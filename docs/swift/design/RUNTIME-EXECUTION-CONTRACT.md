@@ -2370,6 +2370,98 @@ middleware.
 
 ---
 
+### 8.40 ✅ `ToolCallRuntimeEvent.token_usage` — per-step token usage in the chat trace (TRACE-01, issue #2217, 2026-08-04)
+
+**New optional field.** `ToolCallRuntimeEvent` (`fred_sdk.contracts.runtime`)
+gains `token_usage: dict[str, int] | None = None` — the usage of the model
+call that decided to make that tool call, not a per-tool split. Additive,
+backward-compatible: only ever *constructed* with kwargs by the two
+producers (`react_runtime.py`, `graph_runtime.py`); no consumer in the
+monorepo re-parses it via `.model_validate()`, so `FrozenModel`'s
+`extra="forbid"` never gets a chance to reject it.
+
+**Both execution engines, symmetric fix:**
+
+- ReAct (`react_runtime.py:486-518`): captured directly off the
+  tool-deciding `AIMessage` via `_runtime_metadata_from_message`, once per
+  message (not per parallel tool call).
+- Graph (`graph_runtime.py:627-636`, `701-710`): the node's own
+  `_last_token_usage` (whatever `record_model_metadata` last recorded on
+  that node) is attached at `invoke_tool`/`invoke_runtime_tool` time — a
+  graph node can call several models before invoking a tool, so this is the
+  most recent one, not necessarily that exact call's own usage.
+
+**Live stream and persisted history both carry it — deliberately, not just
+the SSE payload.** Every turn is written to the history store at the end of
+the exchange (`_write_turn_history` → `make_tool_call`,
+`fred_core.history.history_schema`); that persisted `ChatMessage.metadata`
+is what a page refresh or session reopen reads (`useSessionHistory.ts`), a
+different path from the live SSE stream. Wiring only the live event would
+have made the figure vanish on refresh for a conversation created the same
+day — corrected during implementation, see
+`docs/swift/rfc/TRACE-TOKEN-USAGE-RFC.md` §2.1.
+
+**Out of scope (unchanged by this entry):** conversations whose history was
+already persisted *before* this shipped — no retroactive backfill; the
+separate `ThoughtRecord` eval-harness format; and a pre-existing,
+independently-tracked bug where `FinalRuntimeEvent.token_usage` (and
+anything summing it, e.g. the chat top-bar total) reflects only the
+**last** model call of a multi-tool-round-trip exchange, not the true sum
+(per-provider `usage_metadata` is per-call, not cumulative) — see the RFC's
+§1 for detail. **Fixed same day, see §8.41.**
+
+---
+
+### 8.41 ✅ `FinalRuntimeEvent.token_usage` now sums every model call in the turn, not just the last (2026-08-04)
+
+**Closes the gap §8.40 explicitly deferred.** Confirmed live: with §8.40
+shipped, summing a turn's per-step token figures in the chat trace gave a
+larger number than the chat top-bar total — the top bar sums each
+exchange's `FinalRuntimeEvent.token_usage`, and that value was a
+last-write-wins rolling variable (`last_token_usage` in `react_runtime.py`;
+`_last_token_usage` on both `_GraphNodeExecutionContext` and
+`_DeterministicGraphExecutor` in `graph_runtime.py`), overwritten by every
+model call rather than summed. A ReAct/Graph turn commonly makes several
+model calls (tool-deciding calls, then the final answer — or several calls
+inside one Graph node) and each provider's `usage_metadata` is per-call, not
+cumulative, so only the last call's tokens ever reached the final event.
+
+**Fix — sum instead of overwrite, at exactly one point per model call.**
+New shared helper `sum_token_usage(a, b)`
+(`fred_runtime/runtime_support/model_metadata.py`, re-exported through
+`react_stream_adapter.py` → `react_langchain_adapter.py` for ReAct).
+Accumulation happens once per model call, not once per observation of it:
+
+- **ReAct** (`react_runtime.py`): the `"messages"` streaming mode no longer
+  writes into the accumulator — it observes the same AIMessage the
+  `"updates"` mode later delivers as a complete message, and summing both
+  would double-count every call. `total_token_usage` is now folded in
+  exactly at the two `"updates"`-mode capture points: the tool-deciding
+  `AIMessage` branch and the final-answer `AIMessage` branch.
+- **Graph** (`graph_runtime.py`), two layers, same shape of fix:
+  - Node level (`_GraphNodeExecutionContext`): a new `_total_token_usage`
+    field sums every model call the node makes; the pre-existing
+    `_last_token_usage` (last call only) is kept **unchanged** and still
+    feeds `ToolCallRuntimeEvent.token_usage` (TRACE-01 per-step display) —
+    summing there would have turned each step's figure into a running
+    total instead of "the cost of the call that decided this step".
+    `last_model_metadata` (the property the executor reads) now returns
+    the node's *summed* usage, not its last call.
+  - Turn level (`_DeterministicGraphExecutor`): `_last_token_usage` renamed
+    `_total_token_usage`, `_record_model_metadata` now sums each node's
+    (already-summed) contribution instead of overwriting.
+
+**Verified non-breaking** the same way as §8.40: nothing re-parses these
+events strictly. Regression tests added: `test_react_token_usage_totals.py`
+(turn sums every call; a step still shows only its own triggering call, not
+a running total) and `test_graph_runtime_token_usage_totals.py` (same two
+properties at the node level).
+
+**Still out of scope:** backfilling this corrected total into history
+persisted before this fix.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

@@ -72,11 +72,14 @@
 }
 
 /* Capped to the composer field width and centered, so title + actions sit
-   directly above the composer field at every viewport width. */
+   directly above the composer field at every viewport width. Gap is a hard
+   flex minimum (not padding on either side), so even a maxed-out truncated
+   title always leaves room for the absolutely-positioned rename button
+   (editButtonSlot) to pop out without overlapping topBarRight. */
 .topBarInner {
   display: flex;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-2xl);
   margin: 0 auto;
   width: 100%;
   min-width: 0;
@@ -134,6 +137,12 @@
   font: var(--font-body-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.topBarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
 }
 
 .topBarActions {
@@ -216,6 +225,7 @@
 
 .initialComposer {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   padding: 0 var(--spacing-l);
   width: 100%;
