@@ -1,3 +1,51 @@
+**v2.1.28** — 2026-08-04
+
+- **Summary**
+
+  The chat page gets a broad refresh — a new top bar, composer, and message
+  bubbles — plus visible token usage for each reasoning step and for the
+  whole conversation. Document summarization now asks for confirmation
+  before it runs. Several reliability fixes address tool-approval requests
+  getting stuck, slow typing in long conversations, and a sluggish admin
+  Features page.
+
+- **Features**
+
+  - Chat page redesign: a new top bar with the conversation title and agent
+    name, a redesigned composer, and clearer confirmation dialogs (#2207,
+    #2214, #2218)
+  - The top bar now shows the conversation's total token usage, and each
+    reasoning step shows the tokens it used (#2217, #2218)
+  - Picking a prompt from the library now inserts its full text into your
+    message instead of attaching it as a separate chip (#2207)
+  - The composer's "+" menu is now two buttons: one for attachments and
+    prompts, one for the agent's tool controls (#2207)
+  - A copy button appears on your own messages (#2214)
+  - Summarizing a document now asks for confirmation by default before it
+    runs; administrators can turn this off per agent (#2177, #2179)
+
+- **Improvements**
+
+  - The chat message list no longer jumps to follow new text while the
+    assistant is still responding — it only follows a new turn or your own
+    scrolling (#2218)
+  - Reasoning steps (chain of thought) have a cleaner, easier-to-scan design
+    (#2218)
+  - Broad visual refresh of the chat page and its menus to match the rest of
+    the app (#2207, #2214)
+
+- **Bug Fixes**
+
+  - Typing in the message box no longer lags in long conversations (#2222)
+  - The conversation's total token usage now adds up every model call in a
+    turn, instead of only the last one (#2218)
+  - Approving or rejecting a tool request could get stuck showing "in
+    progress" forever, or fail outright — both are fixed, and duplicate
+    approvals are now prevented (#2177, #2179, #2216)
+  - Editing a prompt or an agent now updates it immediately everywhere it's
+    used, instead of waiting up to a minute (#2207)
+  - The admin Features (capabilities) page loads noticeably faster (#2181)
+
 **v2.1.27** — 2026-08-03
 
 - **Summary**
