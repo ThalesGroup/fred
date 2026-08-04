@@ -2372,18 +2372,34 @@ async def _delete_knowledge_flow_attachment(
                 params=params,
                 headers={"Authorization": authorization},
             )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        detail = exc.response.text.strip() or str(exc)
-        raise SessionAttachmentRequestError(
-            f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: {detail}",
-            http_status=502,
-        ) from exc
     except httpx.RequestError as exc:
         raise SessionAttachmentRequestError(
             f"Knowledge Flow cleanup request failed for attachment document {document_uid!r}: {exc}",
             http_status=502,
         ) from exc
+
+    if 400 <= response.status_code < 500:
+        # Relay the downstream client-error status (401/403/404/422/...) verbatim
+        # so the frontend sees the real reason instead of a generic gateway error.
+        try:
+            detail = response.json().get("detail") or response.text
+        except ValueError:
+            detail = response.text
+        detail = (
+            str(detail).strip()
+            or response.reason_phrase
+            or f"HTTP {response.status_code}"
+        )
+        raise SessionAttachmentRequestError(
+            f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: {detail}",
+            http_status=response.status_code,
+        )
+    if response.status_code >= 500:
+        raise SessionAttachmentRequestError(
+            f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: "
+            f"Knowledge Flow returned {response.status_code}.",
+            http_status=502,
+        )
 
 
 async def enroll_agent_instance(

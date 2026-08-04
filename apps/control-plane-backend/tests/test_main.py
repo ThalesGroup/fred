@@ -39,6 +39,7 @@ from control_plane_backend.product.dependencies import (
 )
 from control_plane_backend.product.schemas import CreateSessionRequest
 from control_plane_backend.product.service import (
+    SessionAttachmentRequestError,
     _delete_knowledge_flow_attachment,
     _RuntimeTemplatePayload,
 )
@@ -4774,6 +4775,79 @@ async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
         "storage_key": "uploads/notes.md",
     }
     assert captured["headers"] == {"Authorization": "Bearer test-token"}
+
+
+def _fake_async_client_returning(status_code: int, *, detail: str) -> type:
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
+
+        async def delete(
+            self, url: str, *, params: dict[str, str], headers: dict[str, str]
+        ) -> httpx.Response:
+            request = httpx.Request("DELETE", url, params=params, headers=headers)
+            return httpx.Response(status_code, json={"detail": detail}, request=request)
+
+    return _FakeAsyncClient
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_relays_downstream_403(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2223: a ReBAC denial from Knowledge Flow must surface as a 403 with the
+    real reason, not a generic 502 that hides the failure from the frontend."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient",
+        _fake_async_client_returning(
+            403, detail="Not authorized to delete document doc-1"
+        ),
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
+
+    with pytest.raises(SessionAttachmentRequestError) as excinfo:
+        await _delete_knowledge_flow_attachment(
+            authorization="Bearer test-token",
+            document_uid="doc-1",
+            storage_key=None,
+            session_id="session-1",
+            deps=deps,
+        )
+
+    assert excinfo.value.http_status == 403
+    assert "Not authorized to delete document doc-1" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_maps_downstream_5xx_to_502(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient",
+        _fake_async_client_returning(500, detail="internal error"),
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
+
+    with pytest.raises(SessionAttachmentRequestError) as excinfo:
+        await _delete_knowledge_flow_attachment(
+            authorization="Bearer test-token",
+            document_uid="doc-1",
+            storage_key=None,
+            session_id="session-1",
+            deps=deps,
+        )
+
+    assert excinfo.value.http_status == 502
 
 
 @pytest.mark.asyncio

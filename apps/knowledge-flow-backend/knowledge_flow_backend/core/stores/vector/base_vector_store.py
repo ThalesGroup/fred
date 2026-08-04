@@ -22,6 +22,19 @@ from pydantic import BaseModel
 CHUNK_ID_FIELD = "chunk_uid"  # your canonical per-chunk id in metadata
 
 
+def is_own_session_chunk(chunk: Dict[str, Any], user_id: str) -> bool:
+    """True if a vector chunk is a session-scoped attachment chunk owned by `user_id`.
+
+    Session attachments (fast-ingest) carry no ReBAC tuple and no metadata-store
+    record — this chunk-level marker (`scope`, `user_id`) is the only ownership
+    signal that exists for them, so every authorization decision over that scope
+    (read reconstruction, delete) must go through this same check rather than a
+    document-level ReBAC lookup, which can never resolve for an untagged document.
+    """
+    metadata = chunk.get("metadata") or {}
+    return metadata.get("scope") == "session" and metadata.get("user_id") == user_id
+
+
 @dataclass(frozen=True)
 class SearchFilter:
     """
@@ -92,6 +105,19 @@ class BaseVectorStore(ABC):
     def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
         """Optional capability: fetch raw chunk data for all chunks of a document."""
         raise NotImplementedError("This vector store does not support fetching raw chunks.")
+
+    def owns_session_document(self, document_uid: str, user_id: str) -> bool:
+        """True if `document_uid` has at least one session-scoped chunk owned by `user_id`.
+
+        Backed by `get_chunks_for_document`; fails closed (returns False rather
+        than raising) when the store can't fetch chunks by document, so callers
+        that gate access on this treat an unsupported backend as "not owned".
+        """
+        try:
+            chunks = self.get_chunks_for_document(document_uid)
+        except NotImplementedError:
+            return False
+        return any(is_own_session_chunk(c, user_id) for c in chunks)
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         """Optional capability: fetch raw chunk data for all chunks of a document."""
