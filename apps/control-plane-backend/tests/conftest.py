@@ -53,7 +53,7 @@ def _clear_module_level_caches() -> None:
     module-level singletons with a real TTL (45s / 5min) — without this, a
     test asserting a real fan-out call count (e.g.
     `test_teams_bulk_membership_call_count.py`,
-    `test_capability_relations_cache.py`) could silently pass fewer calls
+    `test_capability_relations_cache_2181.py`) could silently pass fewer calls
     than expected because an earlier test in the same session already warmed
     the cache for an overlapping team/capability id (both use predictable ids
     like `team-0`, `corp_drive`, ...).

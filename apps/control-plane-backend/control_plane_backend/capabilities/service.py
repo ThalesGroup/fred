@@ -43,6 +43,7 @@ from fred_sdk.contracts.capability.manifest import (
 
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
+    ORG_REF,
     CapabilityNotFound,
     ReasoningNotSupported,
     cap_ref,
@@ -184,9 +185,15 @@ async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> Person
     read-only listing path, which never calls this). Still `list_direct_
     relations` (a `Read`), not `lookup_subjects` (`ListUsers`) — cheaper per
     call even uncached.
+
+    Codex review (#2181 PR): narrowed to `subject=ORG_REF`, same reasoning as
+    `has_org_relation` — this only ever needs the org-subject tuples, not
+    every team's grant on the capability.
     """
 
-    relations = await rebac.list_direct_relations(cap_ref(capability_id))
+    relations = await rebac.list_direct_relations(
+        cap_ref(capability_id), subject=ORG_REF
+    )
     return _fold_personal_scope(relations)
 
 
