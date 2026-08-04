@@ -94,13 +94,19 @@ const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
 let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
 let capturedOnTurnStarted: (() => void) | undefined;
+let capturedOnError: ((msg: string) => void) | undefined;
+let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     flushPendingWrites?: (sid: string | null) => Promise<boolean>;
     onTurnStarted?: () => void;
+    onError?: (msg: string) => void;
+    onAwaitingHuman?: (event: unknown) => void;
   }) => {
     capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
+    capturedOnError = params.onError;
+    capturedOnAwaitingHuman = params.onAwaitingHuman;
     return {
       messages: [],
       waitResponse: false,
@@ -277,6 +283,39 @@ describe("useManagedChat — session write reliability", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  // #2221: ConversationThread is React.memo'd to stop it re-rendering (and
+  // re-parsing every historical message's markdown) on every composer
+  // keystroke. That memo only holds if the callbacks useManagedChat hands
+  // to useChatSse — and everything derived from them, like handleHitlAnswer
+  // — keep a stable identity across a keystroke-only render. An inline
+  // arrow at the useChatSse() call site would defeat this silently (no
+  // test failure anywhere else would catch it, since behavior stays
+  // correct — only the render count regresses).
+  it("callbacks passed to useChatSse, and handleHitlAnswer, keep referential identity across a composer keystroke", async () => {
+    mount();
+    const firstOnError = capturedOnError;
+    const firstOnAwaitingHuman = capturedOnAwaitingHuman;
+    const firstOnTurnStarted = capturedOnTurnStarted;
+    const firstHandleHitlAnswer = latest.handleHitlAnswer;
+    expect(firstOnError).toBeDefined();
+    expect(firstOnAwaitingHuman).toBeDefined();
+    expect(firstOnTurnStarted).toBeDefined();
+
+    act(() => {
+      latest.setInput("o");
+    });
+    rerender();
+    act(() => {
+      latest.setInput("ok");
+    });
+    rerender();
+
+    expect(capturedOnError).toBe(firstOnError);
+    expect(capturedOnAwaitingHuman).toBe(firstOnAwaitingHuman);
+    expect(capturedOnTurnStarted).toBe(firstOnTurnStarted);
+    expect(latest.handleHitlAnswer).toBe(firstHandleHitlAnswer);
   });
 
   it("selecting a context prompt persists it and a send proceeds", async () => {
