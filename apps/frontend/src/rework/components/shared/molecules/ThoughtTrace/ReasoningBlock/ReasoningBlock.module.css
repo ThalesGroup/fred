@@ -30,8 +30,8 @@
   bottom: 0;
   left: var(--trace-rail-x, 0);
   transform: translateX(-50%);
-  background: var(--outline-variant);
-  width: 2px;
+  background: var(--outline-retreat);
+  width: 1px;
   content: "";
 }
 
