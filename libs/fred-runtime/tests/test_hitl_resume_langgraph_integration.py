@@ -196,7 +196,7 @@ async def test_hitl_resume_identity_model_against_real_langgraph_and_sql_checkpo
                 enabled=True, always_require_tools=("update_ticket",)
             ),
             checkpointer=cast(Checkpointer, checkpointer),
-            chat_model_factory=cast("ChatModelFactoryPort | None", None),
+            chat_model_factory=cast(ChatModelFactoryPort | None, None),
             definition=cast(ReActAgentDefinition, _FakeDefinition()),
             infer_operation_from_messages=infer_react_model_operation_from_messages,
             default_operation=REACT_MODEL_OPERATION_ROUTING,
