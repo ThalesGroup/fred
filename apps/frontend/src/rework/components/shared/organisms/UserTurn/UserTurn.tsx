@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback } from "react";
+import { memo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -26,7 +26,8 @@ interface UserTurnProps {
   onEdit?: (text: string) => void;
 }
 
-export function UserTurn({ text, onEdit }: UserTurnProps) {
+// Memoized alongside AssistantTurn — see #2221.
+export const UserTurn = memo(function UserTurn({ text, onEdit }: UserTurnProps) {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
 
@@ -67,4 +68,4 @@ export function UserTurn({ text, onEdit }: UserTurnProps) {
       <UserMessage text={text} />
     </div>
   );
-}
+});

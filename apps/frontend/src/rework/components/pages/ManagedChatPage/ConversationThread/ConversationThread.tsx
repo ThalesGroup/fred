@@ -15,7 +15,7 @@
 // Page-local composition of organisms for ManagedChatPage.
 // Lives under pages/ so it may import from shared/organisms freely.
 
-import type { ReactNode, RefObject } from "react";
+import { memo, type ReactNode, type RefObject } from "react";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
@@ -33,7 +33,11 @@ interface ConversationThreadProps {
   onHitlAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
 }
 
-export function ConversationThread({
+// Memoized: ManagedChatPage re-renders on every composer keystroke (the input
+// state lives above this tree). Without this boundary, every historical
+// message — including its full markdown re-parse — re-rendered on every
+// character typed, with cost scaling with conversation length (#2221).
+export const ConversationThread = memo(function ConversationThread({
   messages,
   pendingHitl,
   isLoading,
@@ -87,4 +91,4 @@ export function ConversationThread({
       {pendingHitl && <HitlPrompt event={pendingHitl} onAnswer={onHitlAnswer} />}
     </ChatMessagesArea>
   );
-}
+});
