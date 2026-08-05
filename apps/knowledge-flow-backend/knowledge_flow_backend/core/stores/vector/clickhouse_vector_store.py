@@ -36,11 +36,6 @@ DEBUG = True
 
 _SAFE_SQL_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SAFE_METADATA_FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_RETRIEVABLE_COLUMN = "retrievable"
-_SCOPE_COLUMN = "scope"
-_USER_COLUMN = "user_id"
-_SESSION_COLUMN = "session_id"
-_DOC_UID_COLUMN = "document_uid"
 
 T = TypeVar("T", bound=BaseVectorHit)
 

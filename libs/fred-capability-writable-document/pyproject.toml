@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-writable-document"
-version = "0.1.1"
+version = "0.1.2"
 description = "Fred agent capability: co-author a session-scoped Markdown document from chat (writable_document)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -25,7 +25,7 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Operating System :: OS Independent",
 ]
-urls = { Homepage = "https://fredk8.dev", Repository = "https://github.com/ThalesGroup/fred" }
+urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com/ThalesGroup/fred" }
 
 # Installing this package IS the registration (AGENT-CAPABILITY-RFC §4/§7):
 # the fred-agents pod auto-discovers the capability at boot via this entry point.

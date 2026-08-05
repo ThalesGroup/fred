@@ -2372,18 +2372,46 @@ async def _delete_knowledge_flow_attachment(
                 params=params,
                 headers={"Authorization": authorization},
             )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        detail = exc.response.text.strip() or str(exc)
-        raise SessionAttachmentRequestError(
-            f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: {detail}",
-            http_status=502,
-        ) from exc
     except httpx.RequestError as exc:
         raise SessionAttachmentRequestError(
             f"Knowledge Flow cleanup request failed for attachment document {document_uid!r}: {exc}",
             http_status=502,
         ) from exc
+
+    if 200 <= response.status_code < 300:
+        return
+
+    if 400 <= response.status_code < 500:
+        # Relay the downstream client-error status (401/403/404/422/...) verbatim
+        # so the frontend sees the real reason instead of a generic gateway error.
+        try:
+            parsed = response.json()
+            detail = parsed.get("detail") if isinstance(parsed, dict) else None
+        except ValueError:
+            detail = None
+        detail = (
+            str(detail).strip()
+            if detail
+            else (
+                response.text.strip()
+                or response.reason_phrase
+                or f"HTTP {response.status_code}"
+            )
+        )
+        raise SessionAttachmentRequestError(
+            f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: {detail}",
+            http_status=response.status_code,
+        )
+
+    # Anything else -- 5xx, or a 1xx/3xx this client never asked for (it does not
+    # follow redirects) -- is not a client error to relay; a redirect in particular
+    # must not be read as success, or a misconfigured/canonicalizing Knowledge Flow
+    # URL could make control-plane believe cleanup succeeded when it never ran.
+    raise SessionAttachmentRequestError(
+        f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: "
+        f"Knowledge Flow returned {response.status_code}.",
+        http_status=502,
+    )
 
 
 async def enroll_agent_instance(

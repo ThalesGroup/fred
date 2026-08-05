@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useClickOutside } from "../../hooks/UseClickOutside";
 import { TaskCard } from "../../molecules/TaskCard/TaskCard";
 import { Portal } from "../../utils/Portal";
+import { viewportHeight, viewportWidth } from "../../utils/viewport";
 import {
   EVICTION_DELAY_MS,
   selectVisibleTasks,
@@ -47,8 +48,8 @@ export function TaskTray() {
     if (!isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       setPanelPos({
-        bottom: window.innerHeight - rect.top + 8,
-        left: Math.min(rect.left, window.innerWidth - 296),
+        bottom: viewportHeight() - rect.top + 8,
+        left: Math.min(rect.left, viewportWidth() - 296),
       });
     }
     setIsOpen((v) => !v);

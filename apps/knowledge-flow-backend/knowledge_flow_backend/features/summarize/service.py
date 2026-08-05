@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
+from knowledge_flow_backend.core.stores.vector.base_vector_store import is_own_session_chunk
 
 logger = logging.getLogger(__name__)
 
@@ -122,11 +123,7 @@ class SummarizeService:
             # Backend can't fetch chunks by document -- nothing we can do here.
             return ""
 
-        def _is_own_session_chunk(chunk: dict) -> bool:
-            metadata = chunk.get("metadata") or {}
-            return metadata.get("scope") == "session" and metadata.get("user_id") == user.uid
-
-        owned = [c for c in chunks if _is_own_session_chunk(c)]
+        owned = [c for c in chunks if is_own_session_chunk(c, user.uid)]
         if not owned:
             return ""
 

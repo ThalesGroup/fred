@@ -39,6 +39,7 @@ from control_plane_backend.product.dependencies import (
 )
 from control_plane_backend.product.schemas import CreateSessionRequest
 from control_plane_backend.product.service import (
+    SessionAttachmentRequestError,
     _delete_knowledge_flow_attachment,
     _RuntimeTemplatePayload,
 )
@@ -4776,6 +4777,156 @@ async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
     assert captured["headers"] == {"Authorization": "Bearer test-token"}
 
 
+def _fake_async_client_returning(status_code: int, *, detail: str) -> type:
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
+
+        async def delete(
+            self, url: str, *, params: dict[str, str], headers: dict[str, str]
+        ) -> httpx.Response:
+            request = httpx.Request("DELETE", url, params=params, headers=headers)
+            return httpx.Response(status_code, json={"detail": detail}, request=request)
+
+    return _FakeAsyncClient
+
+
+def _fake_async_client_returning_raw(
+    status_code: int, *, content: bytes = b"", json_body: Any = None
+) -> type:
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "_FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
+
+        async def delete(
+            self, url: str, *, params: dict[str, str], headers: dict[str, str]
+        ) -> httpx.Response:
+            request = httpx.Request("DELETE", url, params=params, headers=headers)
+            if json_body is not None:
+                return httpx.Response(status_code, json=json_body, request=request)
+            return httpx.Response(status_code, content=content, request=request)
+
+    return _FakeAsyncClient
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_relays_downstream_403(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2223: a ReBAC denial from Knowledge Flow must surface as a 403 with the
+    real reason, not a generic 502 that hides the failure from the frontend."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient",
+        _fake_async_client_returning(
+            403, detail="Not authorized to delete document doc-1"
+        ),
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
+
+    with pytest.raises(SessionAttachmentRequestError) as excinfo:
+        await _delete_knowledge_flow_attachment(
+            authorization="Bearer test-token",
+            document_uid="doc-1",
+            storage_key=None,
+            session_id="session-1",
+            deps=deps,
+        )
+
+    assert excinfo.value.http_status == 403
+    assert "Not authorized to delete document doc-1" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_maps_downstream_5xx_to_502(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient",
+        _fake_async_client_returning(500, detail="internal error"),
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
+
+    with pytest.raises(SessionAttachmentRequestError) as excinfo:
+        await _delete_knowledge_flow_attachment(
+            authorization="Bearer test-token",
+            document_uid="doc-1",
+            storage_key=None,
+            session_id="session-1",
+            deps=deps,
+        )
+
+    assert excinfo.value.http_status == 502
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_maps_downstream_redirect_to_502(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 3xx from Knowledge Flow (e.g. gateway canonicalization) must not be read
+    as success -- this client never follows redirects, so cleanup never actually
+    ran and control-plane must not delete its own attachment metadata."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient",
+        _fake_async_client_returning_raw(307),
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
+
+    with pytest.raises(SessionAttachmentRequestError) as excinfo:
+        await _delete_knowledge_flow_attachment(
+            authorization="Bearer test-token",
+            document_uid="doc-1",
+            storage_key=None,
+            session_id="session-1",
+            deps=deps,
+        )
+
+    assert excinfo.value.http_status == 502
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_relays_403_with_non_dict_json_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-dict JSON error body (e.g. a bare list/string) must not crash detail
+    extraction and turn a relayable 4xx into an opaque 500."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient",
+        _fake_async_client_returning_raw(403, json_body=["not", "a", "dict"]),
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
+
+    with pytest.raises(SessionAttachmentRequestError) as excinfo:
+        await _delete_knowledge_flow_attachment(
+            authorization="Bearer test-token",
+            document_uid="doc-1",
+            storage_key=None,
+            session_id="session-1",
+            deps=deps,
+        )
+
+    assert excinfo.value.http_status == 403
+
+
 @pytest.mark.asyncio
 async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
     monkeypatch: pytest.MonkeyPatch,
@@ -5259,9 +5410,9 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
-        get_session_store=cast(Any, lambda: object()),
-        get_purge_queue_store=cast(Any, lambda: object()),
-        get_policy_catalog=cast(Any, lambda: object()),
+        get_session_store=cast(Any, object),
+        get_purge_queue_store=cast(Any, object),
+        get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
@@ -5336,9 +5487,9 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
-        get_session_store=cast(Any, lambda: object()),
-        get_purge_queue_store=cast(Any, lambda: object()),
-        get_policy_catalog=cast(Any, lambda: object()),
+        get_session_store=cast(Any, object),
+        get_purge_queue_store=cast(Any, object),
+        get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
@@ -5658,7 +5809,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         get_content_store=lambda: cast(Any, object()),
         get_session_store=cast(Any, lambda: fake_session_store),
         get_purge_queue_store=cast(Any, lambda: fake_queue_store),
-        get_policy_catalog=cast(Any, lambda: object()),
+        get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=_fake_run_lifecycle_manager_once_in_memory,
