@@ -71,7 +71,7 @@ def _deps(
         return bearer
 
     return LifecycleActionDependencies(
-        get_session_store=cast(Any, lambda: object()),
+        get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, lambda: queue_store),
         erase_session=erase_session,
         get_service_bearer=_get_bearer,
@@ -96,7 +96,7 @@ async def test_list_due_conversation_candidates_threads_user_id() -> None:
             return [_QueueItem()]
 
     deps = LifecycleActionDependencies(
-        get_session_store=cast(Any, lambda: object()),
+        get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, lambda: _QueueStore()),
         erase_session=cast(Any, None),
         get_service_bearer=cast(Any, None),
@@ -180,11 +180,11 @@ async def test_erase_at_expiry_retryable_when_bearer_mint_fails() -> None:
 
     queue = _FakeQueueStore()
     deps = LifecycleActionDependencies(
-        get_session_store=cast(Any, lambda: object()),
+        get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, lambda: queue),
         erase_session=cast(Any, _erase),
         get_service_bearer=_failing_bearer,
-        get_task_service=cast(Any, lambda: _NoopTaskService()),
+        get_task_service=cast(Any, _NoopTaskService),
     )
 
     result = await delete_conversation_and_mark_done(event=_event(), deps=deps)

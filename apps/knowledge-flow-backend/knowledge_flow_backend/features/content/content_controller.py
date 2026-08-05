@@ -62,7 +62,6 @@ def parse_range_header(range_str: Optional[str]) -> Optional[tuple[int | None, i
     """
     if not range_str or not range_str.startswith("bytes="):
         return None
-    import re
 
     m = re.match(r"bytes=(\d*)-(\d*)$", range_str.strip())
     if not m:

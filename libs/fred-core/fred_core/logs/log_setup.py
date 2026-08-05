@@ -66,8 +66,6 @@ class CompactJsonFormatter(logging.Formatter):
         self.service = service_name
 
     def format(self, record: logging.LogRecord) -> str:
-        import json
-
         base = {
             "ts": record.created,
             "level": record.levelname,
