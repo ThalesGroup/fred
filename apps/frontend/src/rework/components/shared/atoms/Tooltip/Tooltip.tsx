@@ -26,6 +26,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { viewportWidth } from "@shared/utils/viewport.ts";
 import styles from "./Tooltip.module.scss";
 
 interface TooltipProps {
@@ -155,7 +156,7 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
 
     const idealLeft = triggerRect.left + triggerRect.width / 2;
     const minLeft = VIEWPORT_MARGIN_PX + width / 2;
-    const maxLeft = window.innerWidth - VIEWPORT_MARGIN_PX - width / 2;
+    const maxLeft = viewportWidth() - VIEWPORT_MARGIN_PX - width / 2;
     const left = Math.min(Math.max(idealLeft, minLeft), maxLeft);
 
     setContentStyle({ top, left, transform: `translate(-50%, ${translateY})` });

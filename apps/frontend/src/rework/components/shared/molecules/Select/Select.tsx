@@ -28,6 +28,7 @@ import { OptionModel } from "@models/Option.model.ts";
 import Menu from "@shared/molecules/Menu/Menu.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { ComponentSize } from "@shared/utils/Type.ts";
+import { viewportHeight } from "@shared/utils/viewport.ts";
 
 // Gap between the trigger and the popover (matches --spacing-3xs).
 const MENU_GAP = 4;
@@ -76,13 +77,13 @@ export default function Select<T>({
     const anchor = containerRef.current;
     if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceBelow = viewportHeight() - rect.bottom;
     const openUp = spaceBelow < MIN_MENU_SPACE && rect.top > spaceBelow;
     setPopoverStyle({
       position: "fixed",
       left: rect.left,
       width: rect.width,
-      ...(openUp ? { bottom: window.innerHeight - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
+      ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
     });
   }, []);
 

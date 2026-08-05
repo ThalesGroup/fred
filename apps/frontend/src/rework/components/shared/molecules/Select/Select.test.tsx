@@ -142,6 +142,39 @@ describe("Select keyboard navigation — disabled options", () => {
     expect(onChange).toHaveBeenCalledWith("b");
   });
 
+  it("popover flipped upward anchors to the layout viewport, not window.innerHeight", () => {
+    // Windows/Edge regression: with classic scrollbars, window.innerHeight
+    // includes the horizontal scrollbar while position:fixed offsets exclude
+    // it — computing `bottom` from innerHeight floats the menu ~17px above
+    // the trigger. The popover must use documentElement.clientHeight.
+    const options: OptionModel<string>[] = [
+      { key: "20", value: "20", label: "20" },
+      { key: "50", value: "50", label: "50" },
+    ];
+    render(<Select options={options} value="50" onChange={() => {}} size="small" />);
+
+    const originalClientHeight = Object.getOwnPropertyDescriptor(Element.prototype, "clientHeight");
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 700, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 717, configurable: true, writable: true });
+
+    const anchor = container.querySelector("div") as HTMLDivElement;
+    anchor.getBoundingClientRect = () =>
+      ({ top: 650, bottom: 690, left: 100, right: 180, width: 80, height: 40, x: 100, y: 650 }) as DOMRect;
+
+    try {
+      pressKey("ArrowDown"); // open — only 10px below the trigger, so the menu flips upward
+
+      const popover = document.querySelector('[id$="-menu"]') as HTMLDivElement;
+      expect(popover).not.toBeNull();
+      // 700 (layout viewport) − 650 (trigger top) + 4 (gap); the buggy
+      // innerHeight-based math would yield 71px.
+      expect(popover.style.bottom).toBe("54px");
+    } finally {
+      delete (document.documentElement as { clientHeight?: number }).clientHeight;
+      if (originalClientHeight) Object.defineProperty(Element.prototype, "clientHeight", originalClientHeight);
+    }
+  });
+
   it("Arrow navigation wraps around while skipping disabled options", () => {
     const options: OptionModel<string>[] = [
       { key: "a", value: "a", label: "A" },
