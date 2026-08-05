@@ -238,6 +238,36 @@ class MyAgent(ReActAgent):
 
 ---
 
+## Testing your nodes offline
+
+Graph nodes reach the platform through two calls: `context.invoke_agent(...)`
+and `context.invoke_structured_model(...)` (used by `structured_model_step`).
+`fred_sdk.testing` ships `FakeGraphNodeContext`, a double covering exactly
+those two, so a node's business logic can be tested without a real model or a
+real sub-agent.
+
+```python
+from typing import cast
+from fred_sdk import AgentInvocationResult, GraphNodeContext
+from fred_sdk.testing import FakeGraphNodeContext
+
+context = FakeGraphNodeContext(
+    agent_result=AgentInvocationResult(
+        agent_id="my.specialist.agent", structured={"trust": "high"}
+    ),
+    structured_by_operation={"classify": {"intent": "question_cloud_general"}},
+)
+result = await my_node(state, cast(GraphNodeContext, context))
+
+assert context.agent_calls[0]["agent_id"] == "my.specialist.agent"
+```
+
+A call you did not configure raises `AssertionError` immediately, so an
+under-specified test fails loudly instead of silently returning `None` into
+your node's logic.
+
+---
+
 ## Running an agent
 
 `fred-sdk` defines agents; `fred-runtime` executes them. A minimal pod:

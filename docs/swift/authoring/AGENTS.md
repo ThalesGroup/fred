@@ -257,6 +257,12 @@ Real, currently shipping examples:
   every SSE event type — read it to see every event path a graph agent can
   emit, not as a business-logic template.
 
+**Testing a node without a real model or sub-agent:** use
+`fred_sdk.testing.FakeGraphNodeContext` — a double covering `invoke_agent`
+and `invoke_structured_model` (the two calls every graph node reaches the
+platform through), fails loudly on any call you didn't configure. See
+`libs/fred-sdk/README.md` § Testing your nodes offline for the full example.
+
 ---
 
 ## Shape 5 — Team agent (multi-agent composition)
