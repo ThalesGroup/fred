@@ -122,19 +122,6 @@ export function derivePackChecked(pack: ToolPack, state: CapabilitySelectionStat
   );
 }
 
-/** Can the user turn this pack on at all — i.e. did the admin enable the
- *  capability the pack needs to function? Individual included capabilities may
- *  still be unavailable (shown with an error badge, skipped on activation). */
-export function derivePackAvailable(
-  pack: ToolPack,
-  availableIds: ReadonlySet<string>,
-  reasoningAvailable = true,
-): boolean {
-  if (pack.kind === "reasoning") return reasoningAvailable;
-  if (pack.requiresCapabilityId) return availableIds.has(pack.requiresCapabilityId);
-  return pack.enablesCapabilityIds.some((id) => availableIds.has(id));
-}
-
 /** Compute the new selection state when a pack switch is flipped. Only touches
  *  what the pack owns; everything else is preserved. */
 export function applyPackToggle(
@@ -165,8 +152,23 @@ export function applyPackToggle(
   return { ...state, selectedCapabilityIds: [...ids] };
 }
 
-/** Whether an included capability is enabled by the platform admin for the team
- *  (drives the success/error badge in the pack card). */
-export function isCapabilityAdminEnabled(capabilityId: string, availableIds: ReadonlySet<string>): boolean {
-  return availableIds.has(capabilityId);
+/** Tri-state of an included capability, driving its badge in the pack card. */
+export type IncludedCapabilityStatus = "active" | "inactive" | "unavailable";
+
+/**
+ * Status of one included capability:
+ * - `unavailable`: the platform admin has not enabled it for the team (can't be
+ *   activated) — feeds the pack's "missing capabilities" flag;
+ * - `active`: admin-enabled AND currently selected on the agent;
+ * - `inactive`: admin-enabled but not selected (e.g. turned off in the Advanced
+ *   view) — available, just not on. This is why the badge reads the live
+ *   selection, not only admin availability.
+ */
+export function includedCapabilityStatus(
+  capabilityId: string,
+  availableIds: ReadonlySet<string>,
+  activeIds: ReadonlySet<string>,
+): IncludedCapabilityStatus {
+  if (!availableIds.has(capabilityId)) return "unavailable";
+  return activeIds.has(capabilityId) ? "active" : "inactive";
 }

@@ -81,12 +81,6 @@ export interface ToolPack {
   enablesCapabilityIds: string[];
   /** Contribution to the shared `document_access` tool, if any. */
   documentAccessIntent?: DocumentAccessIntent;
-  /**
-   * Capability id whose admin-availability gates the whole pack. Set when the
-   * gating capability isn't simply the pack's own `enablesCapabilityIds` — e.g.
-   * both resource packs are gated on `document_access` being admin-enabled.
-   */
-  requiresCapabilityId?: string;
 }
 
 export interface ToolPackSection {
@@ -136,7 +130,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         // the rest are plain on/off.
         enablesCapabilityIds: [CAP_FILESYSTEM, CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE],
         documentAccessIntent: "corpus",
-        requiresCapabilityId: CAP_DOCUMENT_ACCESS,
       },
       {
         id: PACK_CONVERSATION_ATTACHMENTS,
@@ -145,11 +138,10 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         titleKey: "rework.teams.formAgent.capabilities.packs.conversationAttachments.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.conversationAttachments.description",
         // Visible included list is summarize only (per spec); the attach-files
-        // control is delivered by document_access, so the pack is gated on it.
+        // control is delivered by document_access (via documentAccessIntent).
         includes: [{ capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" }],
         enablesCapabilityIds: [CAP_DOCUMENT_SUMMARIZE],
         documentAccessIntent: "attachments",
-        requiresCapabilityId: CAP_DOCUMENT_ACCESS,
       },
     ],
   },

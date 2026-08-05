@@ -2013,15 +2013,15 @@
         "capabilities": {
           "header": "Select your agent's capabilities",
           "viewToggle": {
-            "simple": "Simple",
             "advanced": "Advanced",
-            "aria": "Capabilities display level"
+            "aria": "Advanced capabilities view"
           },
           "included": {
-            "show": "Show included capabilities",
-            "hide": "Hide included capabilities",
-            "enabledTooltip": "Enabled by the platform administrator for your team.",
-            "disabledTooltip": "Not enabled by the platform administrator for your team."
+            "label": "Included capabilities",
+            "missing": "Missing capabilities",
+            "activeTooltip": "Active on this agent.",
+            "inactiveTooltip": "Available, but not active on this agent.",
+            "unavailableTooltip": "Not enabled by the platform administrator for your team."
           },
           "sections": {
             "dataKnowledge": "Data and knowledge",

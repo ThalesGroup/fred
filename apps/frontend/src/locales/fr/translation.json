@@ -2013,15 +2013,15 @@
         "capabilities": {
           "header": "Sélectionnez les capacités de votre agent",
           "viewToggle": {
-            "simple": "Simple",
             "advanced": "Avancé",
-            "aria": "Niveau d'affichage des capacités"
+            "aria": "Affichage avancé des capacités"
           },
           "included": {
-            "show": "Voir les capacités incluses",
-            "hide": "Masquer les capacités incluses",
-            "enabledTooltip": "Activée par l'administrateur de la plateforme pour votre équipe.",
-            "disabledTooltip": "Non activée par l'administrateur de la plateforme pour votre équipe."
+            "label": "Capacités incluses",
+            "missing": "Capacités manquantes",
+            "activeTooltip": "Activée pour cet agent.",
+            "inactiveTooltip": "Disponible, mais non activée pour cet agent.",
+            "unavailableTooltip": "Non activée par l'administrateur de la plateforme pour votre équipe."
           },
           "sections": {
             "dataKnowledge": "Données et connaissances",

@@ -14,12 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import { ToolPackCard } from "../ToolPackCard/ToolPackCard.tsx";
-import {
-  applyPackToggle,
-  derivePackAvailable,
-  derivePackChecked,
-  type CapabilitySelectionState,
-} from "../toolPackLogic.ts";
+import { applyPackToggle, derivePackChecked, type CapabilitySelectionState } from "../toolPackLogic.ts";
 import { TOOL_PACK_SECTIONS } from "../toolPacks.ts";
 import styles from "./SimpleCapabilitiesView.module.css";
 
@@ -28,9 +23,6 @@ interface SimpleCapabilitiesViewProps {
   availableIds: ReadonlySet<string>;
   selection: CapabilitySelectionState;
   disabled: boolean;
-  /** Whether the reasoning offer is available (always true today — the reasoning
-   *  card is offered regardless of template, matching the Advanced view). */
-  reasoningAvailable?: boolean;
   onSelectionChange: (next: CapabilitySelectionState) => void;
 }
 
@@ -45,10 +37,10 @@ export function SimpleCapabilitiesView({
   availableIds,
   selection,
   disabled,
-  reasoningAvailable = true,
   onSelectionChange,
 }: SimpleCapabilitiesViewProps) {
   const { t } = useTranslation();
+  const activeIds = new Set(selection.selectedCapabilityIds);
 
   return (
     <div className={styles.view}>
@@ -64,9 +56,9 @@ export function SimpleCapabilitiesView({
                   key={pack.id}
                   pack={pack}
                   checked={derivePackChecked(pack, selection)}
-                  available={derivePackAvailable(pack, availableIds, reasoningAvailable)}
                   disabled={disabled}
                   availableIds={availableIds}
+                  activeIds={activeIds}
                   onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
                 />
               ))}

@@ -15,6 +15,7 @@
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -342,18 +343,15 @@ export function AgentFormBody({
                 <CapabilitiesInfoBanner />
                 <div className={styles.capabilitiesHeader}>
                   <h2 className={styles.capabilitiesTitle}>{t("rework.teams.formAgent.capabilities.header")}</h2>
-                  <ButtonGroup
-                    size="small"
-                    color="primary"
-                    variant="radio"
-                    aria-label={t("rework.teams.formAgent.capabilities.viewToggle.aria")}
-                    selectedIndex={capabilityView === "simple" ? 0 : 1}
-                    onSelectedIndexChange={(i) => setCapabilityView(i === 0 ? "simple" : "advanced")}
-                    items={[
-                      { label: t("rework.teams.formAgent.capabilities.viewToggle.simple") },
-                      { label: t("rework.teams.formAgent.capabilities.viewToggle.advanced") },
-                    ]}
-                  />
+                  <label className={styles.advancedToggle}>
+                    <span>{t("rework.teams.formAgent.capabilities.viewToggle.advanced")}</span>
+                    <Switch
+                      checked={capabilityView === "advanced"}
+                      onChange={() => setCapabilityView(capabilityView === "advanced" ? "simple" : "advanced")}
+                      disabled={isSubmitting}
+                      aria-label={t("rework.teams.formAgent.capabilities.viewToggle.aria")}
+                    />
+                  </label>
                 </div>
                 {capabilityView === "simple" ? (
                   <SimpleCapabilitiesView

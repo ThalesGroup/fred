@@ -18,7 +18,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { isCapabilityAdminEnabled } from "../toolPackLogic.ts";
+import { includedCapabilityStatus, type IncludedCapabilityStatus } from "../toolPackLogic.ts";
 import type { ToolPack } from "../toolPacks.ts";
 import styles from "./ToolPackCard.module.css";
 
@@ -26,15 +26,26 @@ interface ToolPackCardProps {
   pack: ToolPack;
   /** Whether the pack is currently active (derived from the form selection). */
   checked: boolean;
-  /** Whether the admin enabled the capability the pack needs to function. When
-   *  false the switch is locked off. */
-  available: boolean;
   /** Form-level disable (submitting). */
   disabled: boolean;
-  /** Team's admin-enabled capability ids, for the included-capability badges. */
+  /** Team's admin-enabled capability ids (drives the included-capability badges). */
   availableIds: ReadonlySet<string>;
+  /** Capability ids currently active on the agent (drives active vs. inactive). */
+  activeIds: ReadonlySet<string>;
   onToggle: (nextOn: boolean) => void;
 }
+
+const STATUS_ICON: Record<IncludedCapabilityStatus, IconType> = {
+  active: "check_circle",
+  inactive: "radio_button_unchecked",
+  unavailable: "error",
+};
+
+const STATUS_TOOLTIP_KEY: Record<IncludedCapabilityStatus, string> = {
+  active: "rework.teams.formAgent.capabilities.included.activeTooltip",
+  inactive: "rework.teams.formAgent.capabilities.included.inactiveTooltip",
+  unavailable: "rework.teams.formAgent.capabilities.included.unavailableTooltip",
+};
 
 /**
  * One "capability pack" card for the agent form's Simple capabilities view
@@ -43,14 +54,20 @@ interface ToolPackCardProps {
  * the platform admin enabled it for the team. Shape mirrors the app's other
  * organism cards (AgentCard/CapabilityCard) so the form reads as one system.
  */
-export function ToolPackCard({ pack, checked, available, disabled, availableIds, onToggle }: ToolPackCardProps) {
+export function ToolPackCard({ pack, checked, disabled, availableIds, activeIds, onToggle }: ToolPackCardProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const hasIncluded = pack.includes.length > 0;
-  const switchDisabled = disabled || !available;
+  const includedStatuses = pack.includes.map((entry) => ({
+    entry,
+    status: includedCapabilityStatus(entry.capabilityId, availableIds, activeIds),
+  }));
+  // Some included capability the admin hasn't enabled — the pack still works
+  // with whatever IS available; we just flag it (never disable the pack).
+  const hasMissing = includedStatuses.some(({ status }) => status === "unavailable");
 
   return (
-    <li className={styles.card} data-checked={checked} data-available={available}>
+    <li className={styles.card} data-checked={checked}>
       {/* Whole header is the click target (padding included) — same <label>
           pattern as CapabilityCard, so clicks near the edges still toggle. */}
       <label className={styles.header}>
@@ -65,7 +82,7 @@ export function ToolPackCard({ pack, checked, available, disabled, availableIds,
           <Switch
             checked={checked}
             onChange={() => onToggle(!checked)}
-            disabled={switchDisabled}
+            disabled={disabled}
             aria-label={t(pack.titleKey)}
           />
         </span>
@@ -79,37 +96,45 @@ export function ToolPackCard({ pack, checked, available, disabled, availableIds,
             aria-expanded={expanded}
             onClick={() => setExpanded((o) => !o)}
           >
-            <span>
-              {expanded
-                ? t("rework.teams.formAgent.capabilities.included.hide")
-                : t("rework.teams.formAgent.capabilities.included.show")}
+            <span className={styles.expanderStart}>
+              <span>{t("rework.teams.formAgent.capabilities.included.label")}</span>
+              {/* At-a-glance status summary: one mini icon per included capability,
+                  reusing the detailed list's icons/colors. Decorative — the
+                  detailed list below carries the per-item accessible labels. */}
+              <span className={styles.summary} aria-hidden>
+                {includedStatuses.map(({ entry, status }) => (
+                  <span key={entry.capabilityId} className={`${styles.summaryIcon} ${styles[`status_${status}`]}`}>
+                    <Icon category="outlined" type={STATUS_ICON[status]} />
+                  </span>
+                ))}
+              </span>
             </span>
-            <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
+            <span className={styles.expanderEnd}>
+              {hasMissing && (
+                <span className={styles.missing}>
+                  <Icon category="outlined" type="error_outline" />
+                  <span>{t("rework.teams.formAgent.capabilities.included.missing")}</span>
+                </span>
+              )}
+              <span className={styles.chevron}>
+                <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
+              </span>
+            </span>
           </button>
 
           {expanded && (
             <ul className={styles.included}>
-              {pack.includes.map((entry) => {
-                const enabled = isCapabilityAdminEnabled(entry.capabilityId, availableIds);
+              {includedStatuses.map(({ entry, status }) => {
+                const tooltip = t(STATUS_TOOLTIP_KEY[status]);
                 return (
                   <li key={entry.capabilityId} className={styles.includedRow}>
-                    <Tooltip
-                      text={t(
-                        enabled
-                          ? "rework.teams.formAgent.capabilities.included.enabledTooltip"
-                          : "rework.teams.formAgent.capabilities.included.disabledTooltip",
-                      )}
-                    >
+                    <Tooltip text={tooltip}>
                       <span
-                        className={enabled ? styles.statusOk : styles.statusOff}
+                        className={`${styles.statusIcon} ${styles[`status_${status}`]}`}
                         role="img"
-                        aria-label={t(
-                          enabled
-                            ? "rework.teams.formAgent.capabilities.included.enabledTooltip"
-                            : "rework.teams.formAgent.capabilities.included.disabledTooltip",
-                        )}
+                        aria-label={tooltip}
                       >
-                        <Icon category="outlined" type={enabled ? "check_circle" : "error"} />
+                        <Icon category="outlined" type={STATUS_ICON[status]} />
                       </span>
                     </Tooltip>
                     <span className={styles.includedLabel}>{t(entry.labelKey, { defaultValue: entry.labelKey })}</span>

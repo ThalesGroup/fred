@@ -83,6 +83,18 @@
   font: var(--font-title-medium);
 }
 
+/* "Avancé" label + toggle on the right of the capabilities header. */
+.advancedToggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  user-select: none;
+}
+
 .tabStrip {
   display: flex;
 }

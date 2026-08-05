@@ -15,8 +15,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyPackToggle,
-  derivePackAvailable,
   derivePackChecked,
+  includedCapabilityStatus,
   type CapabilitySelectionState,
 } from "./toolPackLogic";
 import {
@@ -143,15 +143,21 @@ describe("admin availability — activate available, ignore the rest", () => {
     expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR); // admin-disabled, skipped
     expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(true);
   });
+});
 
-  it("derivePackAvailable follows the gating capability", () => {
-    expect(derivePackAvailable(TEAM_RESOURCES, ALL_IDS)).toBe(true);
-    expect(derivePackAvailable(TEAM_RESOURCES, new Set())).toBe(false); // document_access missing
-    expect(derivePackAvailable(ATTACHMENTS, new Set([CAP_DOCUMENT_ACCESS]))).toBe(true);
-    expect(derivePackAvailable(WORD, new Set([CAP_WRITABLE_DOCUMENT]))).toBe(true);
-    expect(derivePackAvailable(WORD, new Set())).toBe(false);
-    expect(derivePackAvailable(REASONING, new Set())).toBe(true); // always offered
-    expect(derivePackAvailable(REASONING, new Set(), false)).toBe(false);
+describe("includedCapabilityStatus — badge tri-state reflects live selection", () => {
+  it("unavailable when the admin has not enabled it, regardless of selection", () => {
+    expect(includedCapabilityStatus(CAP_TABULAR, new Set(), new Set([CAP_TABULAR]))).toBe("unavailable");
+  });
+
+  it("active when admin-enabled AND selected", () => {
+    expect(includedCapabilityStatus(CAP_DOCUMENT_SUMMARIZE, ALL_IDS, new Set([CAP_DOCUMENT_SUMMARIZE]))).toBe("active");
+  });
+
+  it("inactive when admin-enabled but NOT selected (e.g. turned off in Advanced)", () => {
+    // The reported case: summarize is admin-enabled but the user deselected it,
+    // so it must read inactive (grey), never active (green).
+    expect(includedCapabilityStatus(CAP_DOCUMENT_SUMMARIZE, ALL_IDS, new Set([CAP_DOCUMENT_ACCESS]))).toBe("inactive");
   });
 });
 
