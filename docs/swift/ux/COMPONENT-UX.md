@@ -186,6 +186,13 @@ sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface
   `groups` entry; a `pickerSurface` className adds internal scroll for tall content. Applied to
   `ComposerControlSlot` (prompt library) and `DocumentScopeControl` (document/library picker).
 
+- **Pickers stop below the session top bar (2026-08-05, #2245)** — `usePickerMenuMaxHeight`
+  clamped the upward-growing pickers against the viewport top, so once the session top bar
+  landed (#2214/#2218) an expanded document tree slid under it and got clipped. The hook now
+  honors an optional boundary element marked `data-picker-top-boundary` (measured from its
+  bottom edge, tracked with a `ResizeObserver` while open); `ManagedChatPage` marks its
+  `.topBar`. Pages without a marked boundary keep the viewport-top clamp.
+
 ---
 
 ### `SearchConfig`
