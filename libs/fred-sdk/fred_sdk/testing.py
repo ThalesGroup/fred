@@ -16,7 +16,8 @@
 Test doubles for the fred-sdk graph authoring surface.
 
 Why this module exists:
-- every fred-sdk graph node reaches the platform through the same two calls:
+- every fred-sdk graph node reaches the model and sub-agents through the same
+  two calls:
   `context.invoke_agent(...)` (directly, or via `invoke_agent`) and
   `context.invoke_structured_model(...)` (via `structured_model_step`)
 - testing a node offline means faking exactly those two calls, nothing else

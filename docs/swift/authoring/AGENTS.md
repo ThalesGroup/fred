@@ -259,8 +259,8 @@ Real, currently shipping examples:
 
 **Testing a node without a real model or sub-agent:** use
 `fred_sdk.testing.FakeGraphNodeContext` — a double covering `invoke_agent`
-and `invoke_structured_model` (the two calls every graph node reaches the
-platform through), fails loudly on any call you didn't configure. See
+and `invoke_structured_model` (the two calls every graph node uses to reach
+the model and sub-agents), fails loudly on any call you didn't configure. See
 `libs/fred-sdk/README.md` § Testing your nodes offline for the full example.
 
 ---
