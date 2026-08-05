@@ -18,6 +18,7 @@ import { CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useRef, 
 import { createPortal } from "react-dom";
 import Menu from "@shared/molecules/Menu/Menu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
+import { viewportHeight, viewportWidth } from "@shared/utils/viewport.ts";
 
 // Gap between the button and the popover (matches --spacing-3xs).
 const MENU_GAP = 4;
@@ -45,12 +46,12 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
     const anchor = containerRef.current;
     if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceBelow = viewportHeight() - rect.bottom;
     const openUp = spaceBelow < MIN_MENU_SPACE && rect.top > spaceBelow;
     setPopoverStyle({
       position: "fixed",
-      right: window.innerWidth - rect.right,
-      ...(openUp ? { bottom: window.innerHeight - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
+      right: viewportWidth() - rect.right,
+      ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
     });
   }, []);
 
