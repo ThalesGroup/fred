@@ -42,6 +42,7 @@ export const materialIcons = [
   "database",
   "settings",
   "widgets",
+  "neurology",
   "folder",
   "delete",
   "infos",

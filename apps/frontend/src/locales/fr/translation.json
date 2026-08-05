@@ -2010,6 +2010,49 @@
           "title": "À quoi servent ces capacités ?",
           "body": "Les capacités sont les outils que votre agent peut utiliser pendant une conversation : rechercher dans vos documents, résumer un fichier, ou encore générer une présentation. Activez uniquement celles dont votre agent a besoin, puis ajustez leurs réglages si nécessaire. Vous pourrez toujours modifier cette sélection après la création de l'agent.\nPour les utiliser, pour la plupart, il suffit de le demander en langage naturel à votre agent (ex : \"Fais un résumé du document attaché à cette conversation.\")."
         },
+        "capabilities": {
+          "header": "Sélectionnez les capacités de votre agent",
+          "viewToggle": {
+            "simple": "Simple",
+            "advanced": "Avancé",
+            "aria": "Niveau d'affichage des capacités"
+          },
+          "included": {
+            "show": "Voir les capacités incluses",
+            "hide": "Masquer les capacités incluses",
+            "enabledTooltip": "Activée par l'administrateur de la plateforme pour votre équipe.",
+            "disabledTooltip": "Non activée par l'administrateur de la plateforme pour votre équipe."
+          },
+          "sections": {
+            "dataKnowledge": "Données et connaissances",
+            "documentProduction": "Production de documents",
+            "intelligenceOrchestration": "Intelligence et orchestration",
+            "actionsIntegration": "Actions et intégration"
+          },
+          "actionsIntegrationEmpty": "Aucune capacité dans cette section pour le moment.",
+          "packs": {
+            "teamResources": {
+              "title": "Accès aux ressources de l'équipe",
+              "description": "Permet à l'agent d'exploiter les ressources de l'équipe pour remplir sa mission."
+            },
+            "conversationAttachments": {
+              "title": "Pièces jointes à une conversation",
+              "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
+            },
+            "wordDocument": {
+              "title": "Générer un document Word",
+              "description": "Capacité d'éditer et de générer un document texte téléchargeable."
+            },
+            "powerpointDocument": {
+              "title": "Remplir un document PowerPoint",
+              "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
+            },
+            "reasoning": {
+              "title": "Raisonnement",
+              "description": "Accès au mode \"raisonnement\" dans les options du chat."
+            }
+          }
+        },
         "createdBy": "Créé par {{user}}",
         "updatedBy": "Modifié par {{user}}",
         "fields": {

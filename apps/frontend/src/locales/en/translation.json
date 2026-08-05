@@ -2010,6 +2010,49 @@
           "title": "What are these capabilities for?",
           "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
         },
+        "capabilities": {
+          "header": "Select your agent's capabilities",
+          "viewToggle": {
+            "simple": "Simple",
+            "advanced": "Advanced",
+            "aria": "Capabilities display level"
+          },
+          "included": {
+            "show": "Show included capabilities",
+            "hide": "Hide included capabilities",
+            "enabledTooltip": "Enabled by the platform administrator for your team.",
+            "disabledTooltip": "Not enabled by the platform administrator for your team."
+          },
+          "sections": {
+            "dataKnowledge": "Data and knowledge",
+            "documentProduction": "Document production",
+            "intelligenceOrchestration": "Intelligence and orchestration",
+            "actionsIntegration": "Actions and integration"
+          },
+          "actionsIntegrationEmpty": "No capability in this section yet.",
+          "packs": {
+            "teamResources": {
+              "title": "Access to team resources",
+              "description": "Lets the agent use the team's resources to carry out its mission."
+            },
+            "conversationAttachments": {
+              "title": "Attachments in a conversation",
+              "description": "Allows adding documents to a conversation to use their information."
+            },
+            "wordDocument": {
+              "title": "Generate a Word document",
+              "description": "Ability to edit and generate a downloadable text document."
+            },
+            "powerpointDocument": {
+              "title": "Fill in a PowerPoint document",
+              "description": "Ability to fill a PPT file from a detailed template."
+            },
+            "reasoning": {
+              "title": "Reasoning",
+              "description": "Access to \"reasoning\" mode in the chat options."
+            }
+          }
+        },
         "createdBy": "Created by {{user}}",
         "updatedBy": "Updated by {{user}}",
         "fields": {

@@ -1,0 +1,142 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  overflow: hidden;
+  color: var(--on-surface);
+  --pack-icon-bg: var(--surface-container-high);
+}
+
+/* A pack whose gating capability the admin has not enabled reads as muted and
+   its switch is locked off (handled in the component). */
+.card[data-available="false"] {
+  --pack-icon-color: var(--on-surface-muted);
+  --pack-title-color: var(--on-surface-muted);
+  --pack-description-color: var(--on-surface-muted);
+}
+
+.card[data-available="true"] {
+  --pack-icon-color: var(--on-surface-retreat);
+  --pack-title-color: var(--on-surface);
+  --pack-description-color: var(--on-surface-retreat);
+}
+
+/* Active pack: the title picks up the primary role, same cue CapabilityCard
+   uses for a ticked capability. */
+.card[data-available="true"][data-checked="true"] {
+  --pack-title-color: var(--primary);
+  --pack-icon-color: var(--on-primary);
+  --pack-icon-bg: var(--primary);
+}
+
+/* Whole header is the click target (padding included), matching CapabilityCard. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  cursor: pointer;
+  padding: var(--spacing-m);
+  user-select: none;
+}
+
+.header:hover {
+  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-s);
+  background: var(--pack-icon-bg);
+  width: 3rem;
+  height: 3rem;
+  color: var(--pack-icon-color);
+  font-size: 1.75rem;
+}
+
+.meta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.title {
+  color: var(--pack-title-color);
+  font: var(--font-title-medium);
+}
+
+.description {
+  color: var(--pack-description-color);
+  font: var(--font-body-medium);
+}
+
+.switch {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* Expander row: reveals the included-capabilities list. Full-width, left-aligned
+   label + chevron, separated from the header by a thin divider. */
+.expander {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  cursor: pointer;
+  border: none;
+  border-top: 1px solid var(--outline-muted);
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-m);
+  width: 100%;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.expander:hover {
+  color: var(--on-surface);
+}
+
+.expander:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.included {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-m);
+  list-style: none;
+}
+
+.includedRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.statusOk,
+.statusOff {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 1.125rem;
+}
+
+.statusOk {
+  color: var(--success);
+}
+
+.statusOff {
+  color: var(--error);
+}
+
+.includedLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}

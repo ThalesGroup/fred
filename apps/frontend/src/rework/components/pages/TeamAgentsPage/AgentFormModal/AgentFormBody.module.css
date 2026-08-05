@@ -68,6 +68,21 @@
   list-style: none;
 }
 
+/* Capabilities tab header: title on the left, Simple/Advanced view toggle on
+   the right (#2220). */
+.capabilitiesHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.capabilitiesTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
 .tabStrip {
   display: flex;
 }
