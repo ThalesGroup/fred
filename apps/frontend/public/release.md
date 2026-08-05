@@ -1,3 +1,34 @@
+**v2.1.30** — 2026-08-05
+
+- **Summary**
+
+  Switching back to a conversation you already opened now renders instantly,
+  and reopens just as fast after a page refresh. Fixes stop the document and
+  prompt pickers from sliding under the chat top bar, re-anchor drop-down
+  menus that drifted on Windows, and clarify the agents page when no agent
+  capability is enabled.
+
+- **Improvements**
+
+  - Switching back to a previously opened conversation is now instant, and
+    stays instant after a page refresh in the same tab (#2239, #2241)
+
+- **Security**
+
+  - Routine dependency updates: cryptography and aiohttp (Python), fast-uri
+    (frontend) (#2225, #2231, #2243)
+
+- **Bug Fixes**
+
+  - The document and prompt pickers no longer slide under the chat top bar
+    and get clipped when expanded (#2245, #2246)
+  - Switching conversations while one is still loading can no longer briefly
+    show the wrong conversation's messages (#2239, #2241)
+  - Drop-down menus no longer appear detached from their button on Windows,
+    where a visible scrollbar shifted them sideways (#2233, #2235)
+  - The agents page now explains that no agent capability is enabled instead
+    of showing a bare empty list (#2238, #2242)
+
 **v2.1.29** — 2026-08-04
 
 - **Bug Fixes**
