@@ -1636,8 +1636,8 @@
     "save": "Sauvegarder",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Démarrez un pod runtime pour inscrire des agents.",
-        "title": "Aucun runtime d'agents disponible"
+        "description": "Demandez à un administrateur d'activer une capability d'agent, ou vérifiez qu'un runtime d'agents est connecté.",
+        "title": "Aucun agent disponible pour le moment"
       },
       "controlPlane": {
         "description": "Vérifiez que le service de contrôle est en cours d'exécution.",
@@ -2042,7 +2042,7 @@
             "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
           }
         },
-        "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
+        "noTemplates": "Aucun modèle d'agent disponible — demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",
         "templateBrowser": {
           "title": "Sélectionner un template d'agent",
           "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."
