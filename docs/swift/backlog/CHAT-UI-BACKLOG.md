@@ -191,6 +191,20 @@ It is populated from two sources:
 It is not sourced from control-plane message-history APIs because none should
 exist in the managed path.
 
+**Session-history cache (2026-08-05, #2239).** A module-level, bounded LRU
+(`sessionHistoryCache.ts`, ~20 sessions) makes switching back to a previously
+opened conversation instant: on re-entry the thread renders synchronously from
+the cache (no spinner, composer stays enabled) while `useSessionHistory`
+revalidates against the runtime in the background and swaps in the fresh
+history (serve-then-revalidate — the runtime stays the source of truth). The
+cache is written when a history fetch succeeds and when the user leaves a
+session (a snapshot of the displayed thread, which folds live-streamed turns
+in without an extra fetch). A history response is applied — and cached — only
+if its session is still the active one, no turn is streaming, and it is
+non-empty. This is still a client-side presentation-model cache only; §0.4
+holds unchanged: the control-plane never proxies, caches, or serves message
+history.
+
 ```typescript
 // Internal shape — not exported
 interface ConversationMessage {
