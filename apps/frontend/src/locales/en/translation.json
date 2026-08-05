@@ -1636,8 +1636,8 @@
     "save": "Save",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Start a runtime pod to enroll managed agents.",
-        "title": "No agent runtime available"
+        "description": "Ask a platform admin to enable an agent capability, or check that an agent runtime is connected.",
+        "title": "No agents available yet"
       },
       "controlPlane": {
         "description": "Check that the control-plane service is running.",
@@ -2042,7 +2042,7 @@
             "hint": "Every new conversation with this agent starts with the composer's reasoning toggle already on. Users can still switch it off per question. Reasoning is slower and, on agents that call tools, can make the model repeat calls."
           }
         },
-        "noTemplates": "No agent templates available — start a runtime pod.",
+        "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
         "templateBrowser": {
           "title": "Select an agent template",
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
