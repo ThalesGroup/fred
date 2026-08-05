@@ -14,14 +14,16 @@
 
 // ---------------------------------------------------------------------------
 // KEA MIGRATION (one-shot, throwaway-on-kea).
-// Warns every user, once per session (i.e. once per login), that the content
-// they create now will not survive the switch to the new version.
+// Announces, once per session (i.e. once per login), that the new version is
+// available. Color, texts and links come from the platform-managed
+// frontend_settings.properties.migrationBanner; without it, nothing renders.
 // Rendered as an overlay over the page content only — never over the sidebar.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import styles from "./MigrationBanner.module.css";
 
 const DISMISSED_KEY = "kea-migration-banner-dismissed";
@@ -43,8 +45,12 @@ const markDismissed = () => {
   }
 };
 
+const resolveLocalized = (map: { [key: string]: string } | undefined | null, lang: string): string | null =>
+  map ? (map[lang] ?? map["en"] ?? null) : null;
+
 export default function MigrationBanner() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { migrationBanner } = useFrontendProperties();
   const [open, setOpen] = useState(() => !wasDismissed());
 
   useEffect(() => {
@@ -56,7 +62,11 @@ export default function MigrationBanner() {
     return () => window.clearTimeout(timer);
   }, [open]);
 
-  if (!open) return null;
+  const lang = i18n.language?.split("-")[0] ?? "en";
+  const title = resolveLocalized(migrationBanner?.titles, lang);
+  const message = resolveLocalized(migrationBanner?.messages, lang);
+
+  if (!open || !migrationBanner || (!title && !message)) return null;
 
   const close = () => {
     markDismissed();
@@ -64,16 +74,34 @@ export default function MigrationBanner() {
   };
 
   return (
-    <div className={styles.banner} role="status" aria-live="polite">
-      <p className={styles.message}>{t("migrationBanner.message")}</p>
-      <IconButton
-        color="on-surface"
-        variant="icon"
-        size="xs"
-        icon={{ category: "outlined", type: "close" }}
-        onClick={close}
-        aria-label={t("common.close")}
-      />
+    <div className={styles.banner} style={{ backgroundColor: migrationBanner.color }} role="status" aria-live="polite">
+      <p className={styles.message}>
+        {title && <strong>{title}</strong>}
+        {title && message ? " " : null}
+        {message}
+      </p>
+      <div className={styles.actions}>
+        {(migrationBanner.links ?? []).map((link, index) => (
+          <Fragment key={link.url}>
+            {index > 0 && (
+              <span className={styles.separator} aria-hidden="true">
+                ·
+              </span>
+            )}
+            <a className={styles.link} href={link.url} target="_blank" rel="noopener noreferrer">
+              {resolveLocalized(link.labels, lang) ?? link.url}
+            </a>
+          </Fragment>
+        ))}
+        <IconButton
+          color="on-surface"
+          variant="icon"
+          size="xs"
+          icon={{ category: "outlined", type: "close" }}
+          onClick={close}
+          aria-label={t("common.close")}
+        />
+      </div>
     </div>
   );
 }

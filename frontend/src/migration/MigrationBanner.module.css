@@ -1,6 +1,11 @@
 /* KEA MIGRATION (throwaway) — overlay banner, see MigrationBanner.tsx */
 
+/* Background color comes from configuration (inline style); the fixed dark
+   text assumes the configured color stays light, like the default #00BBDD. */
+
 .banner {
+  --banner-text: #00222c;
+
   display: flex;
   position: absolute;
   top: var(--spacing-m);
@@ -14,23 +19,44 @@
   margin: 0 auto;
   box-shadow: var(--shadow-s);
   border-radius: var(--radius-s);
-  background-color: var(--red-40);
   padding: var(--spacing-s) var(--spacing-s) var(--spacing-s) var(--spacing-m);
   max-width: 1100px;
 }
 
 .message {
   margin: 0;
-  color: var(--red-99);
+  color: var(--banner-text);
+  font: var(--font-body-medium);
+}
+
+.message strong {
   font: var(--font-body-medium-emphasized);
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.link {
+  color: var(--banner-text);
+  font: var(--font-body-medium-emphasized);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.separator {
+  color: var(--banner-text);
 }
 
 /* IconButton sets --main-color on the button itself via [data-color], so the
    override has to target the button too — inheriting from .banner would lose. */
 .banner button {
-  --main-color: var(--red-99);
-  --state-on-surface-hover: rgb(255 255 255 / 20%);
-  --state-on-surface-pressed: rgb(255 255 255 / 30%);
+  --main-color: var(--banner-text);
+  --state-on-surface-hover: rgb(0 0 0 / 10%);
+  --state-on-surface-pressed: rgb(0 0 0 / 20%);
 }
 
 @keyframes slide-in {

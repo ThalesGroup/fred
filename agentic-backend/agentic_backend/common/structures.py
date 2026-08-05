@@ -385,6 +385,33 @@ class UploadWarning(BaseModel):
     )
 
 
+class MigrationBannerLink(BaseModel):
+    url: str = Field(description="Link target URL.")
+    labels: Dict[str, str] = Field(
+        default_factory=dict,
+        description='Locale → label map (e.g. {"en": "...", "fr": "..."}).',
+    )
+
+
+class MigrationBanner(BaseModel):
+    color: str = Field(
+        default="#00BBDD",
+        description="Banner background CSS color.",
+    )
+    titles: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Locale → emphasized lead sentence map, rendered in bold before the message.",
+    )
+    messages: Dict[str, str] = Field(
+        default_factory=dict,
+        description='Locale → message map (e.g. {"en": "...", "fr": "..."}).',
+    )
+    links: List[MigrationBannerLink] = Field(
+        default_factory=list,
+        description="Links rendered on the right side of the banner.",
+    )
+
+
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
@@ -421,6 +448,10 @@ class Properties(BaseModel):
     uploadWarning: Optional[UploadWarning] = Field(
         default=None,
         description="Optional alert shown in the document upload drawer. Omit to show nothing.",
+    )
+    migrationBanner: Optional[MigrationBanner] = Field(
+        default=None,
+        description="Optional new-version banner overlaid on the page content. Omit to show nothing.",
     )
 
 
