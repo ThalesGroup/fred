@@ -1581,8 +1581,5 @@
       "title": "Privacy policy",
       "backToApp": "Back to app"
     }
-  },
-  "migrationBanner": {
-    "message": "From now on, the files and agents you create will not be kept when we switch to the new version."
   }
 }
