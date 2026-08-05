@@ -2742,6 +2742,30 @@ GraphNodeContext.invoke_agent(
 `output_schema` and `scope` are optional and additive — every caller that
 never sets them keeps working unchanged.
 
+### Requesting several facts in one call — compose the schema, don't ask for a new primitive
+
+`output_schema` is deliberately one schema per call. There is no separate
+mechanism for requesting several independently-named structured facts from
+one `invoke_agent` exchange, and none is planned — this matches every
+comparable contract (MCP tool results, OpenAI/Anthropic structured outputs,
+LangGraph sub-graph calls): richness comes from the shape of the schema, not
+from the call protocol.
+
+When a caller needs several related facts from one callee turn, the
+canonical pattern is to compose one Pydantic model with multiple fields and
+pass that as `output_schema` — not to invent a multi-schema call, and not to
+make several sequential calls for facts that belong together. The
+CMDB-trust-signals call below (Eva → Tessa) is the reference example: Eva
+defines one combined `CmdbTrustSignalsOutput` schema covering every signal it
+needs from that exchange, and gets them all back from a single `invoke_agent`
+call.
+
+Reach for several separate `invoke_agent` calls (run concurrently with
+`asyncio.gather` if latency matters) only when the facts genuinely come from
+independent callee turns — e.g. two different sub-agents, or two calls that
+need a different `scope`/`prior_turns`. Do not reach for it just to avoid
+defining a combined schema.
+
 ### Invariants — what is shared, what is not
 
 Every `AgentInvokerPort` implementation (today only `LocalRegistryAgentInvoker`)
