@@ -205,6 +205,7 @@ async def test_slot_is_released_after_a_timeout_so_capacity_recovers():
         try:
             connection.execute("SELECT count(*) FROM range(50000000000) t1").fetchone()
         except duckdb.InterruptException:
+            # Expected: the timeout mechanism aborts this query from another thread.
             pass
         finally:
             close_duckdb_connection(handle, connection)

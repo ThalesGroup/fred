@@ -119,6 +119,7 @@ def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
         if parsed > 0:
             return parsed
     except (TypeError, ValueError):
+        # Missing/invalid input: fall through to default_seconds below.
         pass
     return default_seconds
 

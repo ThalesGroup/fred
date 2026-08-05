@@ -66,6 +66,7 @@ def _parse_down_revision(raw: str) -> list[str]:
         if isinstance(val, str):
             return [val] if val else []
     except (ValueError, SyntaxError):
+        # Not a Python literal; fall through to the regex extraction below.
         pass
     # Bare string on multiple lines (pragma comments etc.)
     ids = re.findall(r'["\']([a-f0-9]{12})["\']', raw)
