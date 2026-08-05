@@ -86,6 +86,7 @@ def shutdown_app_context(app_dir: Path) -> None:
             elif hasattr(ctx, "shutdown_io_executor"):
                 ctx.shutdown_io_executor()
     except Exception:
+        # Best-effort cleanup only; a failed shutdown must not fail the security check.
         pass
 
 
@@ -112,8 +113,9 @@ def get_route_function_info(app, path: str, method: str) -> Optional[tuple[str, 
                             # If we can't make it relative, return absolute path
                             return source_file, line_number
     except Exception:
+        # Route introspection is best-effort; fall through to "unknown" below.
         pass
-    
+
     return None
 
 
@@ -141,8 +143,9 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
                             if param.default and 'get_current_user' in str(param.default):
                                 return True
     except Exception:
+        # Signature/dependency introspection is best-effort; treat failures as "no auth found" below.
         pass
-    
+
     return False
 
 
