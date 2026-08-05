@@ -16,32 +16,63 @@ import { useEffect, useRef, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { getCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
 
 interface UseSessionHistoryArgs {
   sessionId: string | null;
   teamId: string | undefined;
   agentInstanceId: string | undefined;
   onLoaded: (messages: ChatMessage[]) => void;
+  // True while a streamed turn is in progress. A history response — cached or
+  // fetched — must never replace a live turn: history necessarily lacks the
+  // in-flight exchange, so applying it would visibly eat the user's message.
+  isTurnActive: () => boolean;
 }
 
 function expandMessagesUrl(template: string, sessionId: string): string {
   return template.replace("{session_id}", encodeURIComponent(sessionId));
 }
 
-export function useSessionHistory({ sessionId, teamId, agentInstanceId, onLoaded }: UseSessionHistoryArgs) {
+export function useSessionHistory({
+  sessionId,
+  teamId,
+  agentInstanceId,
+  onLoaded,
+  isTurnActive,
+}: UseSessionHistoryArgs) {
   const [isLoading, setIsLoading] = useState(false);
-  const loadedRef = useRef<string | null>(null);
+  // Session whose fetch this mount has already started — keeps an effect
+  // re-fire (a dep identity change, not a genuine switch) from re-fetching.
+  const startedForRef = useRef<string | null>(null);
+  // Always the CURRENTLY active session id, refreshed every render. A fetch
+  // that resolves after the user switched away must neither render its
+  // messages under the new session nor overwrite the new session's cache
+  // entry — the async closure's own `sessionId` is frozen at call time, so
+  // staleness can only be detected against a ref.
+  const activeSessionIdRef = useRef(sessionId);
+  activeSessionIdRef.current = sessionId;
 
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
 
   useEffect(() => {
     if (!sessionId || !teamId || !agentInstanceId) return;
-    if (loadedRef.current === sessionId) return;
-    loadedRef.current = sessionId;
+
+    // #2239 instant switch: a previously opened conversation renders straight
+    // from the cache — synchronously, no spinner, composer stays enabled —
+    // while the fetch below revalidates against the runtime (the source of
+    // truth) in the background and swaps in the fresh history when it lands.
+    const cached = getCachedSessionHistory(sessionId);
+    if (cached !== undefined && cached.length > 0 && !isTurnActive()) onLoaded(cached);
+
+    if (startedForRef.current === sessionId) return;
+    startedForRef.current = sessionId;
 
     const load = async () => {
-      setIsLoading(true);
+      // A cache hit downgrades the fetch to a silent background revalidation:
+      // isLoading stays false so the UI never regresses to a spinner over an
+      // already-rendered thread.
+      if (cached === undefined) setIsLoading(true);
       try {
         await KeyCloakService.ensureFreshToken(30);
         const token = KeyCloakService.GetToken() ?? "";
@@ -50,16 +81,29 @@ export function useSessionHistory({ sessionId, teamId, agentInstanceId, onLoaded
         const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
         if (!resp.ok) return;
         const msgs: ChatMessage[] = await resp.json();
-        if (msgs.length > 0) onLoaded(msgs);
+        // Guards, in order:
+        // - stale response: the user switched sessions while this fetch was
+        //   in flight — applying would render session A's history under
+        //   session B and poison the cache;
+        // - live turn: see `isTurnActive` above;
+        // - empty history: a brand-new session bound at send time has no
+        //   persisted history yet — applying [] would wipe the optimistic
+        //   first message.
+        if (activeSessionIdRef.current !== sessionId) return;
+        if (isTurnActive()) return;
+        if (msgs.length === 0) return;
+        setCachedSessionHistory(sessionId, msgs);
+        onLoaded(msgs);
       } catch {
-        // History load failure is non-fatal — user continues with empty view.
+        // History load failure is non-fatal — user continues with the cached
+        // (or empty) view.
       } finally {
         setIsLoading(false);
       }
     };
 
-    load();
-  }, [sessionId, teamId, agentInstanceId, prepareExecution, onLoaded]);
+    void load();
+  }, [sessionId, teamId, agentInstanceId, prepareExecution, onLoaded, isTurnActive]);
 
   return { isLoading };
 }
