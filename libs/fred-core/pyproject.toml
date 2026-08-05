@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "3.8.0"
+version = "3.8.1"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,7 +12,7 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Operating System :: OS Independent",
 ]
-urls = { Homepage = "https://fredk8.dev", Repository = "https://github.com/ThalesGroup/fred" }
+urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com/ThalesGroup/fred" }
 dependencies = [
     "fastapi==0.139.0",
     # Security floor: FastAPI 0.139 only requires starlette>=0.46, which still

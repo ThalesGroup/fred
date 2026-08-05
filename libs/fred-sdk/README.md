@@ -73,7 +73,7 @@ class MyState(BaseModel):
 
 @typed_node(MyState)
 async def process(state: MyState, ctx) -> StepResult:
-    return StepResult(update={"result": f"processed: {state.message}"})
+    return StepResult(state_update={"result": f"processed: {state.message}"})
 
 class MyGraphAgent(GraphAgent):
     agent_id = "my.graph.agent"
@@ -238,6 +238,36 @@ class MyAgent(ReActAgent):
 
 ---
 
+## Testing your nodes offline
+
+Graph nodes reach the model and sub-agents through two calls: `context.invoke_agent(...)`
+and `context.invoke_structured_model(...)` (used by `structured_model_step`).
+`fred_sdk.testing` ships `FakeGraphNodeContext`, a double covering exactly
+those two, so a node's business logic can be tested without a real model or a
+real sub-agent.
+
+```python
+from typing import cast
+from fred_sdk import AgentInvocationResult, GraphNodeContext
+from fred_sdk.testing import FakeGraphNodeContext
+
+context = FakeGraphNodeContext(
+    agent_result=AgentInvocationResult(
+        agent_id="my.specialist.agent", structured={"trust": "high"}
+    ),
+    structured_by_operation={"classify": {"intent": "question_cloud_general"}},
+)
+result = await my_node(state, cast(GraphNodeContext, context))
+
+assert context.agent_calls[0]["agent_id"] == "my.specialist.agent"
+```
+
+A call you did not configure raises `AssertionError` immediately, so an
+under-specified test fails loudly instead of silently returning `None` into
+your node's logic.
+
+---
+
 ## Running an agent
 
 `fred-sdk` defines agents; `fred-runtime` executes them. A minimal pod:
@@ -252,7 +282,8 @@ app = create_agent_app(registry=REGISTRY, config=config)
 ```
 
 See [fred-runtime on PyPI](https://pypi.org/project/fred-runtime/) for the full
-pod setup guide.
+pod setup guide, and [fred-samples](https://github.com/ThalesGroup/fred-samples)
+for a working reference pod.
 
 ---
 
@@ -268,4 +299,4 @@ pod setup guide.
 
 ## License
 
-Apache 2.0 — see [LICENSE](./LICENSE).
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
