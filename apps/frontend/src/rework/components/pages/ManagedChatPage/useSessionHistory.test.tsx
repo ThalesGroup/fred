@@ -29,7 +29,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
-import { clearSessionHistoryCache, getCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
+import {
+  clearSessionHistoryCache,
+  dropInMemorySessionHistoryForTests,
+  getCachedSessionHistory,
+  setCachedSessionHistory,
+} from "./sessionHistoryCache";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -247,5 +252,50 @@ describe("sessionHistoryCache — bounded LRU", () => {
     setCachedSessionHistory("session-extra", [msg("extra")]);
     expect(getCachedSessionHistory("session-0")).toEqual([msg("m0")]); // survived
     expect(getCachedSessionHistory("session-1")).toBeUndefined(); // evicted instead
+  });
+});
+
+describe("sessionHistoryCache — per-tab persistence across a page refresh", () => {
+  beforeEach(() => clearSessionHistoryCache());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("an entry survives a reload: JS heap gone, sessionStorage kept", () => {
+    setCachedSessionHistory("session-a", [msg("m1")]);
+    dropInMemorySessionHistoryForTests(); // simulates F5
+    expect(getCachedSessionHistory("session-a")).toEqual([msg("m1")]);
+  });
+
+  it("eviction removes the persisted copy too — the cap holds across reloads", () => {
+    for (let i = 0; i < 21; i++) setCachedSessionHistory(`session-${i}`, [msg(`m${i}`)]);
+    dropInMemorySessionHistoryForTests();
+    expect(getCachedSessionHistory("session-0")).toBeUndefined(); // evicted from storage as well
+    expect(getCachedSessionHistory("session-20")).toEqual([msg("m20")]);
+  });
+
+  it("a blocked or full sessionStorage degrades to in-memory only, without throwing", () => {
+    // Patch the instance, not Storage.prototype — happy-dom's sessionStorage
+    // does not route calls through the prototype.
+    const originalSetItem = sessionStorage.setItem.bind(sessionStorage);
+    Object.defineProperty(sessionStorage, "setItem", {
+      configurable: true,
+      value: () => {
+        throw new Error("QuotaExceededError");
+      },
+    });
+    try {
+      setCachedSessionHistory("session-a", [msg("m1")]); // must not throw
+      expect(getCachedSessionHistory("session-a")).toEqual([msg("m1")]); // memory still serves it
+    } finally {
+      Object.defineProperty(sessionStorage, "setItem", { configurable: true, value: originalSetItem });
+    }
+
+    dropInMemorySessionHistoryForTests();
+    expect(getCachedSessionHistory("session-a")).toBeUndefined(); // nothing was persisted
+  });
+
+  it("a corrupted persisted entry is ignored, not thrown", () => {
+    sessionStorage.setItem("chat.history.session-a", "{not json");
+    sessionStorage.setItem("chat.history#index", JSON.stringify(["session-a"]));
+    expect(getCachedSessionHistory("session-a")).toBeUndefined();
   });
 });

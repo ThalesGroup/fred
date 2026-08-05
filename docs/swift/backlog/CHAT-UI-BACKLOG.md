@@ -201,9 +201,14 @@ cache is written when a history fetch succeeds and when the user leaves a
 session (a snapshot of the displayed thread, which folds live-streamed turns
 in without an extra fetch). A history response is applied — and cached — only
 if its session is still the active one, no turn is streaming, and it is
-non-empty. This is still a client-side presentation-model cache only; §0.4
-holds unchanged: the control-plane never proxies, caches, or serves message
-history.
+non-empty. The LRU is mirrored (best-effort, quota-safe) into
+`sessionStorage` (`chat.history.<session_id>` + `chat.history#index`) so the
+cache also survives a page refresh — `sessionStorage` deliberately, not
+`localStorage`: per-tab and cleared on tab close, the same lifetime already
+accepted for `chat.composer.<sessionId>`, so conversation content never
+outlives the user's tab on a shared machine. This is still a client-side
+presentation-model cache only; §0.4 holds unchanged: the control-plane never
+proxies, caches, or serves message history.
 
 ```typescript
 // Internal shape — not exported
