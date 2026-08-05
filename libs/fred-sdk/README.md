@@ -282,7 +282,8 @@ app = create_agent_app(registry=REGISTRY, config=config)
 ```
 
 See [fred-runtime on PyPI](https://pypi.org/project/fred-runtime/) for the full
-pod setup guide.
+pod setup guide, and [fred-samples](https://github.com/ThalesGroup/fred-samples)
+for a working reference pod.
 
 ---
 
@@ -298,4 +299,4 @@ pod setup guide.
 
 ## License
 
-Apache 2.0 — see [LICENSE](./LICENSE).
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).

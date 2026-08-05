@@ -240,7 +240,7 @@ class MyAgent(ReActAgentDefinition):
 REGISTRY = {MyAgent.agent_id: MyAgent()}
 ```
 
-See [fred-samples](https://github.com/ThalesGroup/fred) for a working reference pod.
+See [fred-samples](https://github.com/ThalesGroup/fred-samples) for a working reference pod.
 
 ---
 
@@ -256,4 +256,4 @@ See [fred-samples](https://github.com/ThalesGroup/fred) for a working reference 
 
 ## License
 
-Apache 2.0 — see [LICENSE](./LICENSE).
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
