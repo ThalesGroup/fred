@@ -2333,7 +2333,11 @@
           "upload": "Import",
           "manual": "Manuel",
           "capture": "Capture"
-        }
+        },
+        "deleteTitle": "Supprimer l'évaluation",
+        "deleteMessage": "Supprimer l'évaluation {{id}} ? Cela supprime définitivement l'évaluation ainsi que toutes ses exécutions, cas, métriques et événements.",
+        "deleteSuccess": "Évaluation supprimée",
+        "deleteError": "Échec de la suppression de l'évaluation"
       },
       "evaluationCreate": {
         "title": "Nouvelle évaluation",

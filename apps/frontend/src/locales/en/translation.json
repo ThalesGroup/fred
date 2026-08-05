@@ -2333,7 +2333,11 @@
           "upload": "Import",
           "manual": "Manual",
           "capture": "Capture"
-        }
+        },
+        "deleteTitle": "Delete evaluation",
+        "deleteMessage": "Delete evaluation {{id}}? This permanently removes it and every one of its runs, cases, metrics and events.",
+        "deleteSuccess": "Evaluation deleted",
+        "deleteError": "Failed to delete evaluation"
       },
       "evaluationCreate": {
         "title": "New evaluation",

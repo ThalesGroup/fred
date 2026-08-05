@@ -23,9 +23,15 @@ import TextInput from "@shared/atoms/TextInput/TextInput";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import Select from "@shared/molecules/Select/Select";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { OptionModel } from "@models/Option.model.ts";
 import { StatusPill } from "./EvaluationShared";
-import { useListEvaluationsQuery } from "../../../../../../../slices/evaluation/evaluationApiEnhancements";
+import {
+  useDeleteEvaluationMutation,
+  useListEvaluationsQuery,
+} from "../../../../../../../slices/evaluation/evaluationApiEnhancements";
+import type { EvaluationSummaryResponse } from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./Evaluations.module.css";
 
 interface EvaluationsProps {
@@ -42,11 +48,13 @@ type SortValue = "created_at:desc" | "created_at:asc" | "name:asc";
 
 export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation }: EvaluationsProps) {
   const { t } = useTranslation();
+  const { showSuccess, showError } = useToast();
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortValue>("created_at:desc");
   const [offset, setOffset] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<EvaluationSummaryResponse | null>(null);
 
   // Debounce the search box so each keystroke doesn't fire a request.
   useEffect(() => {
@@ -64,11 +72,26 @@ export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation 
     { teamId, q: debouncedSearch || undefined, sort, offset, limit: PAGE_SIZE },
     { skip: !teamId },
   );
+  const [deleteEvaluation, { isLoading: isDeleting }] = useDeleteEvaluationMutation();
 
   const evaluations = data?.evaluations ?? [];
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteEvaluation({ evaluationId: deleteTarget.evaluation_id }).unwrap();
+      showSuccess({ summary: t("rework.evaluation.evaluations.deleteSuccess") });
+      setDeleteTarget(null);
+    } catch (e) {
+      const detail = (e as { data?: { detail?: unknown } })?.data?.detail;
+      showError({
+        summary: typeof detail === "string" ? detail : t("rework.evaluation.evaluations.deleteError"),
+      });
+    }
+  };
 
   const sortOptions: OptionModel<SortValue>[] = [
     { value: "created_at:desc", key: "newest", label: t("rework.evaluation.controls.sort.newest") },
@@ -166,6 +189,9 @@ export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation 
                 >
                   {t("rework.evaluation.evaluations.openRuns")}
                 </Button>
+                <Button color="error" variant="outlined" size="small" onClick={() => setDeleteTarget(evaluation)}>
+                  {t("common.delete")}
+                </Button>
               </div>
             </div>
           ))}
@@ -195,6 +221,19 @@ export default function Evaluations({ teamId, onNewEvaluation, onOpenEvaluation 
           </Button>
         </div>
       )}
+
+      <ConfirmationDialog
+        open={!!deleteTarget}
+        title={t("rework.evaluation.evaluations.deleteTitle")}
+        message={t("rework.evaluation.evaluations.deleteMessage", {
+          id: deleteTarget?.evaluation_id.slice(0, 12) ?? "",
+        })}
+        confirmLabel={isDeleting ? t("common.deleting") : t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        criticalAction
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
