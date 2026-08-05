@@ -26,11 +26,10 @@ import asyncio
 from typing import cast
 
 import pytest
-from pydantic import BaseModel
-
 from fred_sdk import AgentInvocationResult, GraphNodeContext
 from fred_sdk.graph.authoring.api import structured_model_step
 from fred_sdk.testing import FakeGraphNodeContext
+from pydantic import BaseModel
 
 
 class _Decision(BaseModel):
