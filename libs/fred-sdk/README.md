@@ -73,7 +73,7 @@ class MyState(BaseModel):
 
 @typed_node(MyState)
 async def process(state: MyState, ctx) -> StepResult:
-    return StepResult(update={"result": f"processed: {state.message}"})
+    return StepResult(state_update={"result": f"processed: {state.message}"})
 
 class MyGraphAgent(GraphAgent):
     agent_id = "my.graph.agent"
