@@ -1,3 +1,28 @@
+**v2.1.31** — 2026-08-06
+
+- **Summary**
+
+  The Kea-to-Swift migration tooling gains a new repair action for documents
+  that already have their content and search index in place but were still
+  shown as unprocessed after migrating — it fixes just that mismatch without
+  reprocessing anything, and leaves documents with a genuine error untouched.
+  The migration page also shows real error messages instead of a generic
+  object error.
+
+- **Features**
+
+  - Kea-to-Swift migration: a new "Repair only" action fixes documents that
+    already have their content and search index but were still marked
+    unprocessed after migration, without re-running any other step (#2234,
+    #2254)
+  - The repair action skips documents that are still failing or in progress,
+    so it never clears a genuine processing error (#2234, #2254)
+
+- **Bug Fixes**
+
+  - The Kea-to-Swift migration page now shows the actual error message
+    instead of a generic "[object Object]" error (#2234, #2254)
+
 **v2.1.30** — 2026-08-05
 
 - **Summary**
