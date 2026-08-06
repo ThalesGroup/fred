@@ -164,6 +164,7 @@ export function ContextualPicker<T extends string>({
                   role="option"
                   label={option.label}
                   selected={option.value === value}
+                  accentSelected
                   trailingIcon={option.value === value ? "check_circle" : undefined}
                   tabIndex={index === focusedIndex ? 0 : -1}
                   onClick={() => selectOption(option.value)}

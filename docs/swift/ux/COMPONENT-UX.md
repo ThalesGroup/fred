@@ -772,13 +772,14 @@ state (`useComposerSettings`) — no new backend concept.
 - `SearchPolicyControl`/`RagScopeControl` (the `EnumSelectRow`-based stock-kit rows) stay
   registered in `stockChatTurnControlKit` regardless of chip/row placement — only excluded from
   `ComposerControlSlot`'s `"tools"` render while chipped, never deleted.
-- **Search-mode active-choice accent (2026-08-06)** — in the search-mode submenu (the only
-  `EnumSelectRow` still in the tune popover), the picked option renders its label + trailing check
-  in `--primary` over a `--state-primary-selected` (primary-tinted 16%) background layer, instead
-  of the neutral on-surface selected layer. Opt-in via a new `accentSelected` prop threaded
-  `SearchPolicyControl` → `EnumSelectRow` → `MenuPopoverItem` (`data-accent-selected` +
-  `data-selected` gate the CSS), so other `MenuPopoverItem` selected states (the scope chip's
-  options, profile menu, …) are unaffected.
+- **Active-choice accent (2026-08-06)** — in the search-mode submenu (the only `EnumSelectRow`
+  still in the tune popover) and the scope chip's options popover (`ContextualPicker`), the picked
+  option renders its label + trailing check in `--primary` over a `--state-primary-selected`
+  (primary-tinted 16%) background layer, instead of the neutral on-surface selected layer. Opt-in
+  via a new `accentSelected` prop threaded `SearchPolicyControl` → `EnumSelectRow` →
+  `MenuPopoverItem`, and set directly by `ContextualPicker` on its own options
+  (`data-accent-selected` + `data-selected` gate the CSS) — every other `MenuPopoverItem` selected
+  state (RagScopeControl's tune-menu row, profile menu, …) is unaffected.
 
 ---
 
