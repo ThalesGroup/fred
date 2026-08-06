@@ -270,7 +270,7 @@ def scan_document_uids_composite(
             if after is not None:
                 composite["after"] = after
             body = {"size": 0, "aggs": {"by_doc": {"composite": composite}}}
-            resp = client.search(index=index, body=body, request_timeout=request_timeout)
+            resp = client.search(index=index, body=body, request_timeout=request_timeout)  # type: ignore[call-arg]  # opensearch-py's @query_params decorator accepts this at runtime; its type stub doesn't reflect that
             agg = resp.get("aggregations", {}).get("by_doc", {})  # type: ignore[dict-item]
             buckets = agg.get("buckets", [])
             if not buckets:
