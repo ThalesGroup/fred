@@ -156,18 +156,21 @@ class MetadataService:
         """
         Return all metadata entries associated with a specific tag.
         """
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-
         try:
             docs = await self.metadata_store.get_metadata_in_tag(tag_id)
 
-            if isinstance(authorized_doc_ref, RebacDisabledResult):
-                # if rebac is disabled, do not filter
-                return docs
-
-            # Filter by permission (todo: use rebac ids to filter at store (DB) level)
-            authorized_doc_ids = [d.id for d in authorized_doc_ref]
-            return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+            # Scoped per-document checks over just this tag's candidates, not a
+            # platform-wide lookup_user_resources() ListObjects enumeration: that
+            # call is capped at OpenFGA's default listObjectsMaxResults (1000) and
+            # is not scoped to this tag, so once a user's total readable-document
+            # count crosses that cap, a folder can silently come back partial or
+            # empty depending on which arbitrary objects OpenFGA returned -- with
+            # no error anywhere. filter_readable_document_uids checks exactly the
+            # tag's own documents, so correctness never depends on platform-wide
+            # document count. Mirrors vector_search_service's use of the same
+            # helper for the same reason.
+            authorized_doc_uids = await self.filter_readable_document_uids(user, [d.identity.document_uid for d in docs])
+            return [d for d in docs if d.identity.document_uid in authorized_doc_uids]
         except Exception as e:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
@@ -268,8 +271,6 @@ class MetadataService:
         """
         Paginated fetch of documents in a given tag.
         """
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-
         docs, total = await self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
         logger.debug(
             "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
@@ -280,11 +281,18 @@ class MetadataService:
             total,
         )
 
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            return docs, total
-
-        authorized_doc_ids = {d.id for d in authorized_doc_ref}
-        filtered = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+        # Scoped per-document checks over just this page's candidates (<= limit),
+        # not a platform-wide lookup_user_resources() ListObjects enumeration:
+        # that call is capped at OpenFGA's default listObjectsMaxResults (1000)
+        # and is not scoped to this tag, so once a user's total readable-document
+        # count crosses that cap, this page could silently come back partial or
+        # empty depending on which arbitrary objects OpenFGA returned -- with no
+        # error anywhere. filter_readable_document_uids checks exactly this
+        # page's documents, so correctness never depends on platform-wide
+        # document count. Mirrors vector_search_service's use of the same
+        # helper for the same reason.
+        authorized_doc_uids = await self.filter_readable_document_uids(user, [d.identity.document_uid for d in docs])
+        filtered = [d for d in docs if d.identity.document_uid in authorized_doc_uids]
 
         # Total reflects store count; computing an authorized-only total would require
         # scanning all authorized documents. We keep store total to preserve pagination hints.

@@ -50,6 +50,10 @@ class _FakeRebac:
         del user, permission
         return RebacDisabledResult()
 
+    async def has_user_permission(self, user, permission, document_uid):
+        del user, permission, document_uid
+        return True
+
 
 class _FakeMetadataStore:
     def __init__(self, doc: DocumentMetadata | None, siblings: list[DocumentMetadata] | None = None) -> None:
