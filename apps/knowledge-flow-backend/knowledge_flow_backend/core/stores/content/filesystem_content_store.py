@@ -424,15 +424,24 @@ class FileSystemContentStore(BaseContentStore):
         """
         raise NotImplementedError("Presigned URLs are not supported by local filesystem storage. Use MinIO storage backend instead.")
 
-    def list_document_uids(self) -> List[str]:
+    def list_document_uids(self, *, strict: bool = False) -> List[str]:
         """
         Return the list of document UIDs represented as directories in the document root.
+
+        `strict=False` (default): a listing failure logs and returns an empty list
+        (existing best-effort behavior, relied on by `audit_stores`). `strict=True`
+        (the vector-metadata repair path, #2234) never does that -- it re-raises, so
+        a real filesystem error can never be mistaken for "no documents have content".
         """
         if not self.document_root.exists():
+            if strict:
+                raise FileNotFoundError(f"Document root does not exist: {self.document_root}")
             return []
 
         try:
             return sorted([p.name for p in self.document_root.iterdir() if p.is_dir()])
         except Exception as e:
             logger.warning("Failed to list document directories in %s: %s", self.document_root, e)
+            if strict:
+                raise
             return []

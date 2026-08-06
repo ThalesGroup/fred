@@ -23,6 +23,7 @@ import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { viewportWidth } from "@shared/utils/viewport.ts";
 import styles from "./TaskDetailPopover.module.css";
 
 interface TaskDetailPopoverProps {
@@ -52,7 +53,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     const top = rect.bottom + 6;
     // Prefer left-aligned; flip to right-aligned when it would overflow the viewport.
     const left =
-      rect.left + POPOVER_WIDTH + MARGIN > window.innerWidth ? Math.max(MARGIN, rect.right - POPOVER_WIDTH) : rect.left;
+      rect.left + POPOVER_WIDTH + MARGIN > viewportWidth() ? Math.max(MARGIN, rect.right - POPOVER_WIDTH) : rect.left;
     setPos({ top, left });
   }, [open, anchorEl]);
 

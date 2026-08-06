@@ -899,6 +899,7 @@ class AgentConfigAssetsAdapter(AgentAssetPort):
         try:
             await self._client.fs_delete(self._config_path(key))
         except WorkspaceRetrievalError:
+            # Idempotent: deleting an asset that's already gone is a no-op, not an error.
             pass
 
 

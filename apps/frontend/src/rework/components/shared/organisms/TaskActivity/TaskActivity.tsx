@@ -52,7 +52,11 @@ import {
   type MigrationResult,
   type TaskSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useListTasksKnowledgeFlowV1TasksGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useListTasksKnowledgeFlowV1TasksGetQuery,
+  type IngestionDetail,
+  type RepairVectorMetadataResult,
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useListTasksEvaluationV1TasksGetQuery } from "../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./TaskActivity.module.css";
 
@@ -101,6 +105,59 @@ function migrationResult(task: TaskSummary): MigrationResult | null {
 function hasMigrationWarnings(task: TaskSummary): boolean {
   const result = migrationResult(task);
   return !!result && (result.warnings?.length ?? 0) > 0;
+}
+
+// Counters shown in the vector-metadata repair disclosure ("3a — Réparer
+// uniquement", #2234), in display order. Zero-valued counters are omitted —
+// same filtering spirit as MIGRATION_COUNTER_KEYS above.
+const REPAIR_COUNTER_KEYS = [
+  "metadata_documents",
+  "already_done",
+  "eligible_with_vectors_and_content",
+  "repaired",
+  "missing_vectors",
+  "missing_content",
+  "tabular_excluded",
+  "failed_or_running_excluded",
+  "errors",
+] as const satisfies readonly (keyof RepairVectorMetadataResult)[];
+
+/** Narrow a generic `TaskSummary.detail` to `IngestionDetail` — only valid for
+ *  the vector-metadata repair task specifically (`target.type`), since other
+ *  `kind === "ingestion"` tasks never populate `detail.result`. */
+function repairResult(task: TaskSummary): RepairVectorMetadataResult | null {
+  if (task.kind !== "ingestion" || task.target?.type !== "corpus-repair-vector-metadata" || task.detail == null) {
+    return null;
+  }
+  return (task.detail as IngestionDetail).result ?? null;
+}
+
+function RepairResultDetails({ result, t }: { result: RepairVectorMetadataResult; t: TFunction }) {
+  const counters = REPAIR_COUNTER_KEYS.map((key) => [key, result[key]] as const).filter(
+    ([, value]) => typeof value === "number" && value > 0,
+  );
+
+  return (
+    <Disclosure
+      title={t("rework.taskActivity.repair.detailsTitle")}
+      defaultOpen={
+        (result.missing_vectors ?? 0) +
+          (result.missing_content ?? 0) +
+          (result.failed_or_running_excluded ?? 0) +
+          (result.errors ?? 0) >
+        0
+      }
+    >
+      <dl className={styles.counterList}>
+        {counters.map(([key, value]) => (
+          <div key={key} className={styles.counterRow}>
+            <dt className={styles.counterLabel}>{t(`rework.taskActivity.repair.counter.${key}`)}</dt>
+            <dd className={styles.counterValue}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Disclosure>
+  );
 }
 
 function MigrationResultDetails({ result, t }: { result: MigrationResult; t: TFunction }) {
@@ -223,6 +280,7 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
 
   const row = (task: TaskSummary, meta: React.ReactNode, showBadgeLabel = false) => {
     const result = migrationResult(task);
+    const repair = repairResult(task);
     const withWarnings = hasMigrationWarnings(task);
     // Same gate TaskCard/TaskDetailPopover use for the session-local Redux
     // view of this task — the persisted server-side record (this component's
@@ -263,6 +321,11 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
         {result && (
           <div className={styles.rowDisclosure}>
             <MigrationResultDetails result={result} t={t} />
+          </div>
+        )}
+        {repair && (
+          <div className={styles.rowDisclosure}>
+            <RepairResultDetails result={repair} t={t} />
           </div>
         )}
       </li>

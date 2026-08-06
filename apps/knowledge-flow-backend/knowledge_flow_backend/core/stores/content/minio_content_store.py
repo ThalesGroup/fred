@@ -191,9 +191,14 @@ class MinioStorageBackend(BaseContentStore):
             logger.error(f"[CONTENT] Failed to delete objects document_uid={document_uid}: {e}")
             raise ValueError(f"Failed to delete document content from MinIO: {e}")
 
-    def list_document_uids(self) -> List[str]:
+    def list_document_uids(self, *, strict: bool = False) -> List[str]:
         """
         Return the set of top-level prefixes (document_uids) stored in the document bucket.
+
+        `strict=False` (default): a listing failure logs and returns an empty list
+        (existing best-effort behavior, relied on by `audit_stores`). `strict=True`
+        (the vector-metadata repair path, #2234) never does that -- it re-raises, so
+        a real S3/MinIO error can never be mistaken for "no documents have content".
         """
         try:
             objects = self.client.list_objects(self.document_bucket, recursive=True)
@@ -207,6 +212,8 @@ class MinioStorageBackend(BaseContentStore):
             return sorted(doc_uids)
         except S3Error as e:
             logger.warning(f"[CONTENT][MINIO] Failed to list document prefixes in bucket '{self.document_bucket}': {e}")
+            if strict:
+                raise
             return []
 
     def get_preview_bytes(self, doc_path: str) -> bytes:

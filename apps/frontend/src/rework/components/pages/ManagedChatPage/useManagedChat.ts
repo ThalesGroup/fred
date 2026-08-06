@@ -29,6 +29,7 @@ import {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useSessionHistory } from "./useSessionHistory";
+import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 import { toThreadMessages } from "./toThreadMessages";
@@ -228,6 +229,22 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     }
   }, []);
 
+  // Stabilized (not inlined at the useChatSse call site below): useChatSse's
+  // own send()/sendHitlResume() memoize around these callbacks, so an inline
+  // arrow here — recreated on every useManagedChat render, including every
+  // composer keystroke — would silently invalidate that memoization on every
+  // keystroke too, cascading into handleHitlAnswer below and defeating
+  // ConversationThread's React.memo (#2221).
+  const handleAwaitingHuman = useCallback((event: RuntimeAwaitingHumanEvent) => setPendingHitl(event), []);
+  const handleChatError = useCallback((msg: string) => showError({ summary: "Agent error", detail: msg }), [showError]);
+  // Fires only once prepare-execution has actually succeeded and the turn is
+  // really starting — clearing the composer any earlier would lose the
+  // user's text/attachments on a prepare-execution failure (404/503/network).
+  const handleTurnStarted = useCallback(() => {
+    setInput("");
+    attachments.clearReadyAttachments();
+  }, [attachments.clearReadyAttachments]);
+
   const {
     messages,
     waitResponse,
@@ -244,15 +261,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
     onTurnPersisted: touchSessionActivity,
-    onAwaitingHuman: (event) => setPendingHitl(event),
-    onError: (msg) => showError({ summary: "Agent error", detail: msg }),
-    // Fires only once prepare-execution has actually succeeded and the turn
-    // is really starting — clearing the composer any earlier would lose the
-    // user's text/attachments on a prepare-execution failure (404/503/network).
-    onTurnStarted: () => {
-      setInput("");
-      attachments.clearReadyAttachments();
-    },
+    onAwaitingHuman: handleAwaitingHuman,
+    onError: handleChatError,
+    onTurnStarted: handleTurnStarted,
   });
 
   // Chat controls are resolved per agent instance/config, not per session — a
@@ -261,6 +272,34 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // old agentChatOptionsRef pattern this replaces.
   const chatControlsRef = useRef(chatControls);
   chatControlsRef.current = chatControls;
+
+  // Live-turn indicator handed to useSessionHistory — its async closures need
+  // the CURRENT streaming state at response-arrival time, not the render-time
+  // value a plain boolean capture would freeze.
+  const waitResponseRef = useRef(waitResponse);
+  waitResponseRef.current = waitResponse;
+  const isTurnActive = useCallback(() => waitResponseRef.current, []);
+
+  // Mirrors read by the departure-snapshot cleanup below: a cleanup closure
+  // captures its own render's values, but must snapshot what is on screen at
+  // DEPARTURE time.
+  const displayedMessagesRef = useRef(messages);
+  displayedMessagesRef.current = messages;
+  const isLoadingHistoryRef = useRef(false);
+
+  // #2239: on leaving a session (switch or unmount), snapshot the displayed
+  // thread into the session-history cache — this cleanup runs BEFORE the next
+  // session's reset effect wipes the state, and it is what folds
+  // live-streamed turns into the cache without any extra fetch. Skipped while
+  // the initial history load is still in flight: caching a half-loaded thread
+  // would make the next visit render it as if it were complete.
+  useEffect(() => {
+    if (!sessionId) return;
+    return () => {
+      if (isLoadingHistoryRef.current) return;
+      setCachedSessionHistory(sessionId, displayedMessagesRef.current);
+    };
+  }, [sessionId]);
 
   const composer = useComposerSettings(sessionId, chatControls);
 
@@ -274,6 +313,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     }
     console.debug(`[useManagedChat] sessionId changed → reset() — sessionId=${sessionId ?? "null"}`);
     reset();
+    // reset() aborts any in-flight turn synchronously, but the waitResponse
+    // STATE only flips false on the next render — too late for the history
+    // effect running later in this same commit, whose isTurnActive() must
+    // already see "no live turn" or a cached thread would refuse to render.
+    waitResponseRef.current = false;
     setPendingHitl(null);
     setInput("");
     setSessionTitle(null);
@@ -320,7 +364,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     teamId,
     agentInstanceId,
     onLoaded: replaceAllMessages,
+    isTurnActive,
   });
+  isLoadingHistoryRef.current = isLoadingHistory;
 
   const notifySessionSaveFailed = useCallback(
     (error: unknown) =>

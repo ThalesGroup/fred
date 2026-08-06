@@ -384,7 +384,10 @@
       "sessionSaveFailedSummary": "Conversation non enregistrée",
       "sessionSaveFailedDetail": "Impossible d'enregistrer cette conversation. Veuillez réessayer.",
       "contextPromptSaveFailedSummary": "Sélection de prompts non enregistrée",
-      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer."
+      "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer.",
+      "attachmentDeleteFailedSummary": "Fichier non supprimé",
+      "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
+      "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier."
     },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
@@ -1633,8 +1636,8 @@
     "save": "Sauvegarder",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Démarrez un pod runtime pour inscrire des agents.",
-        "title": "Aucun runtime d'agents disponible"
+        "description": "Demandez à un administrateur d'activer une capability d'agent, ou vérifiez qu'un runtime d'agents est connecté.",
+        "title": "Aucun agent disponible pour le moment"
       },
       "controlPlane": {
         "description": "Vérifiez que le service de contrôle est en cours d'exécution.",
@@ -2082,7 +2085,7 @@
             "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement approfondi déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement approfondi est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
           }
         },
-        "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
+        "noTemplates": "Aucun modèle d'agent disponible — demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",
         "templateBrowser": {
           "title": "Sélectionner un template d'agent",
           "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."
@@ -2373,7 +2376,11 @@
           "upload": "Import",
           "manual": "Manuel",
           "capture": "Capture"
-        }
+        },
+        "deleteTitle": "Supprimer l'évaluation",
+        "deleteMessage": "Supprimer l'évaluation {{id}} ? Cela supprime définitivement l'évaluation ainsi que toutes ses exécutions, cas, métriques et événements.",
+        "deleteSuccess": "Évaluation supprimée",
+        "deleteError": "Échec de la suppression de l'évaluation"
       },
       "evaluationCreate": {
         "title": "Nouvelle évaluation",
@@ -2489,6 +2496,20 @@
           "tags_skipped": "Tags ignorés",
           "docs_imported": "Documents importés",
           "docs_skipped": "Documents ignorés"
+        }
+      },
+      "repair": {
+        "detailsTitle": "Rapport de réparation",
+        "counter": {
+          "metadata_documents": "Documents correspondant à ce source_tag",
+          "already_done": "Déjà marqués terminés",
+          "eligible_with_vectors_and_content": "Vecteurs et contenu confirmés",
+          "repaired": "Réparés",
+          "missing_vectors": "Vecteurs manquants (non touchés)",
+          "missing_content": "Contenu manquant (non touché)",
+          "tabular_excluded": "Documents tabulaires exclus (sql, hors périmètre)",
+          "failed_or_running_excluded": "En échec ou en cours (non touchés)",
+          "errors": "Erreurs"
         }
       }
     }

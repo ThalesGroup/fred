@@ -384,7 +384,10 @@
       "sessionSaveFailedSummary": "Conversation not saved",
       "sessionSaveFailedDetail": "Could not save this conversation. Please try again.",
       "contextPromptSaveFailedSummary": "Prompt selection not saved",
-      "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again."
+      "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again.",
+      "attachmentDeleteFailedSummary": "File not deleted",
+      "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
+      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file."
     },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
@@ -1633,8 +1636,8 @@
     "save": "Save",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Start a runtime pod to enroll managed agents.",
-        "title": "No agent runtime available"
+        "description": "Ask a platform admin to enable an agent capability, or check that an agent runtime is connected.",
+        "title": "No agents available yet"
       },
       "controlPlane": {
         "description": "Check that the control-plane service is running.",
@@ -2082,7 +2085,7 @@
             "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
           }
         },
-        "noTemplates": "No agent templates available — start a runtime pod.",
+        "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
         "templateBrowser": {
           "title": "Select an agent template",
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
@@ -2373,7 +2376,11 @@
           "upload": "Import",
           "manual": "Manual",
           "capture": "Capture"
-        }
+        },
+        "deleteTitle": "Delete evaluation",
+        "deleteMessage": "Delete evaluation {{id}}? This permanently removes it and every one of its runs, cases, metrics and events.",
+        "deleteSuccess": "Evaluation deleted",
+        "deleteError": "Failed to delete evaluation"
       },
       "evaluationCreate": {
         "title": "New evaluation",
@@ -2489,6 +2496,20 @@
           "tags_skipped": "Tags skipped",
           "docs_imported": "Documents imported",
           "docs_skipped": "Documents skipped"
+        }
+      },
+      "repair": {
+        "detailsTitle": "Repair report",
+        "counter": {
+          "metadata_documents": "Documents matching this source_tag",
+          "already_done": "Already marked done",
+          "eligible_with_vectors_and_content": "Vectors and content confirmed",
+          "repaired": "Repaired",
+          "missing_vectors": "Missing vectors (left untouched)",
+          "missing_content": "Missing content (left untouched)",
+          "tabular_excluded": "Tabular documents excluded (sql, out of scope)",
+          "failed_or_running_excluded": "Failed or running (left untouched)",
+          "errors": "Errors"
         }
       }
     }

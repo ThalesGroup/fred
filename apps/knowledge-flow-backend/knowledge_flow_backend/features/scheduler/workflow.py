@@ -119,6 +119,7 @@ def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
         if parsed > 0:
             return parsed
     except (TypeError, ValueError):
+        # Missing/invalid input: fall through to default_seconds below.
         pass
     return default_seconds
 
@@ -193,6 +194,23 @@ def _wf_should_skip_revectorize(*, mode: Any, force: bool, chunk_count: int) -> 
     decision matrix is directly unit-testable.
     """
     return mode == "incremental" and not force and chunk_count > 0
+
+
+def _wf_scope_resolution_failed_event_args(exc: BaseException, task_id: str) -> list[Any]:
+    """Build the `emit_ingestion_task_event` args for a hard failure while resolving
+    `payload.scope` to document_uids in `RevectorizeCorpusWorkflow.run` -- the one
+    call made before any task event exists yet.
+
+    Without this, a `list_documents_in_scope` failure (e.g. Postgres retries
+    exhausted) leaves the workflow to die with no operator-visible signal until the
+    generic stale-task reconcile sweeper eventually marks it failed with a bare
+    "Execution failed" and no detail (`fred_core.tasks.service.TaskService.
+    _reconciled_terminal`, on a multi-minute sweep interval). Emitting this
+    immediately, with the real exception text, gives the same fast, specific signal
+    a per-document failure already gets from `RevectorizeDocument`.
+    """
+    error_str = str(exc).strip() or "Failed to resolve revectorize scope"
+    return [task_id, "failed", "listed", None, error_str, 0, 0, 0, None, None]
 
 
 def _wf_final_revectorize_state(*, failed: int, total: int) -> tuple[str, str | None]:
@@ -730,6 +748,13 @@ class RevectorizeCorpusWorkflow:
         children (same bounded-parallelism shape as `_wf_run_parent_pipeline`), and
         emit one running/succeeded overall event carrying processed/total/failed
         counts. Never raises for per-document failures — see `RevectorizeDocument`.
+
+        Scope resolution itself (the `list_documents_in_scope` call, before any
+        child workflow exists) is the one failure this workflow does still raise
+        for — after emitting an immediate, specific `failed` task event
+        (`_wf_scope_resolution_failed_event_args`) so the operator doesn't have to
+        wait for the generic stale-task reconcile sweeper's multi-minute, detail-free
+        fallback.
         """
         scope = _wf_get(payload, "scope", {}) or {}
         options = _wf_get(payload, "options", {}) or {}
@@ -737,12 +762,22 @@ class RevectorizeCorpusWorkflow:
         task_id = _wf_get(payload, "task_id", None)
         max_parallelism = max(1, int(_wf_get(payload, "max_parallelism", 1) or 1))
 
-        document_uids = await workflow.execute_activity(
-            "list_documents_in_scope",
-            args=[scope],
-            schedule_to_close_timeout=timedelta(minutes=10),
-            retry_policy=RetryPolicy(maximum_attempts=3),
-        )
+        try:
+            document_uids = await workflow.execute_activity(
+                "list_documents_in_scope",
+                args=[scope],
+                schedule_to_close_timeout=timedelta(minutes=10),
+                retry_policy=RetryPolicy(maximum_attempts=3),
+            )
+        except Exception as exc:
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=_wf_scope_resolution_failed_event_args(exc, task_id),
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+            raise
         total = len(document_uids)
 
         if task_id:

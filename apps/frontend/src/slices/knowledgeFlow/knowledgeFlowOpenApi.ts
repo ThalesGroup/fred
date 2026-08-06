@@ -605,6 +605,15 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.revectorizeCorpusRequestV1,
       }),
     }),
+    corpusRepairVectorMetadata: build.mutation<CorpusRepairVectorMetadataApiResponse, CorpusRepairVectorMetadataApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/knowledge-flow/v1/corpus/repair-vector-metadata`,
+          method: "POST",
+          body: queryArg.repairVectorMetadataRequestV1,
+        }),
+      },
+    ),
     corpusPurgeVectors: build.mutation<CorpusPurgeVectorsApiResponse, CorpusPurgeVectorsApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/corpus/purge-vectors`,
@@ -1380,6 +1389,10 @@ export type CorpusRevectorizeApiResponse = /** status 200 Successful Response */
 export type CorpusRevectorizeApiArg = {
   revectorizeCorpusRequestV1: RevectorizeCorpusRequestV1;
 };
+export type CorpusRepairVectorMetadataApiResponse = /** status 200 Successful Response */ StartTaskResponse;
+export type CorpusRepairVectorMetadataApiArg = {
+  repairVectorMetadataRequestV1: RepairVectorMetadataRequestV1;
+};
 export type CorpusPurgeVectorsApiResponse = /** status 200 Successful Response */ any;
 export type CorpusPurgeVectorsApiArg = {
   purgeVectorsRequestV1: PurgeVectorsRequestV1;
@@ -1705,6 +1718,18 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
+export type RepairVectorMetadataResult = {
+  source_tag: string;
+  metadata_documents?: number;
+  already_done?: number;
+  eligible_with_vectors_and_content?: number;
+  repaired?: number;
+  missing_vectors?: number;
+  missing_content?: number;
+  tabular_excluded?: number;
+  failed_or_running_excluded?: number;
+  errors?: number;
+};
 export type IngestionDetail = {
   processed: number;
   total: number;
@@ -1712,6 +1737,7 @@ export type IngestionDetail = {
   preview: number;
   vectorized: number;
   sql_indexed: number;
+  result?: RepairVectorMetadataResult | null;
 };
 export type EvaluationDetail = {
   campaign_id: string;
@@ -2413,6 +2439,11 @@ export type RevectorizeCorpusRequestV1 = {
   thread_id?: string | null;
   exchange_id?: string | null;
 };
+export type RepairVectorMetadataRequestV1 = {
+  version?: "v1";
+  source_tag: string;
+  team_id: string;
+};
 export type PurgeVectorsOptionsV1 = {
   purge_scope?: "vectors_only" | "vectors_and_chunks";
   dry_run?: boolean;
@@ -2788,6 +2819,7 @@ export const {
   useLazyCorpusCapabilitiesQuery,
   useCorpusBuildTocMutation,
   useCorpusRevectorizeMutation,
+  useCorpusRepairVectorMetadataMutation,
   useCorpusPurgeVectorsMutation,
   useCorpusTasksGetMutation,
   useCorpusTasksResultMutation,

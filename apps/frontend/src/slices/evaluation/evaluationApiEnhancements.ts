@@ -9,10 +9,14 @@ export const enhancedEvaluationApi = api.enhanceEndpoints({
     createEvaluationEvaluationV1EvaluationsPost: {
       invalidatesTags: [{ type: "Evaluation", id: "LIST" }],
     },
+    deleteEvaluationEvaluationV1EvaluationsEvaluationIdDelete: {
+      invalidatesTags: [{ type: "Evaluation", id: "LIST" }],
+    },
   },
 });
 
 export const {
   useListEvaluationsEvaluationV1EvaluationsGetQuery: useListEvaluationsQuery,
   useCreateEvaluationEvaluationV1EvaluationsPostMutation: useCreateEvaluationMutation,
+  useDeleteEvaluationEvaluationV1EvaluationsEvaluationIdDeleteMutation: useDeleteEvaluationMutation,
 } = enhancedEvaluationApi;

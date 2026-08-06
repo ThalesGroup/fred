@@ -577,6 +577,11 @@ operations:
     required_permission: pending_review
   - service: knowledge-flow
     method: POST
+    path: /knowledge-flow/v1/corpus/repair-vector-metadata
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
     path: /knowledge-flow/v1/corpus/revectorize
     review_status: pending_review
     required_permission: pending_review

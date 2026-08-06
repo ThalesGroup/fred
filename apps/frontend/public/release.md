@@ -1,3 +1,117 @@
+**v2.1.31** — 2026-08-06
+
+- **Summary**
+
+  The Kea-to-Swift migration tooling gains a new repair action for documents
+  that already have their content and search index in place but were still
+  shown as unprocessed after migrating — it fixes just that mismatch without
+  reprocessing anything, and leaves documents with a genuine error untouched.
+  The migration page also shows real error messages instead of a generic
+  object error.
+
+- **Features**
+
+  - Kea-to-Swift migration: a new "Repair only" action fixes documents that
+    already have their content and search index but were still marked
+    unprocessed after migration, without re-running any other step (#2234,
+    #2254)
+  - The repair action skips documents that are still failing or in progress,
+    so it never clears a genuine processing error (#2234, #2254)
+
+- **Bug Fixes**
+
+  - The Kea-to-Swift migration page now shows the actual error message
+    instead of a generic "[object Object]" error (#2234, #2254)
+
+**v2.1.30** — 2026-08-05
+
+- **Summary**
+
+  Switching back to a conversation you already opened now renders instantly,
+  and reopens just as fast after a page refresh. Fixes stop the document and
+  prompt pickers from sliding under the chat top bar, re-anchor drop-down
+  menus that drifted on Windows, and clarify the agents page when no agent
+  capability is enabled.
+
+- **Improvements**
+
+  - Switching back to a previously opened conversation is now instant, and
+    stays instant after a page refresh in the same tab (#2239, #2241)
+
+- **Security**
+
+  - Routine dependency updates: cryptography and aiohttp (Python), fast-uri
+    (frontend) (#2225, #2231, #2243)
+
+- **Bug Fixes**
+
+  - The document and prompt pickers no longer slide under the chat top bar
+    and get clipped when expanded (#2245, #2246)
+  - Switching conversations while one is still loading can no longer briefly
+    show the wrong conversation's messages (#2239, #2241)
+  - Drop-down menus no longer appear detached from their button on Windows,
+    where a visible scrollbar shifted them sideways (#2233, #2235)
+  - The agents page now explains that no agent capability is enabled instead
+    of showing a bare empty list (#2238, #2242)
+
+**v2.1.29** — 2026-08-04
+
+- **Bug Fixes**
+
+  - You can now delete files you attached to a chat session — deletion was
+    previously blocked for everyone, including the person who uploaded the
+    file (#2223, #2224)
+  - A failed attachment deletion now shows an error message instead of
+    silently doing nothing (#2223, #2224)
+
+**v2.1.28** — 2026-08-04
+
+- **Summary**
+
+  The chat page gets a broad refresh — a new top bar, composer, and message
+  bubbles — plus visible token usage for each reasoning step and for the
+  whole conversation. Document summarization now asks for confirmation
+  before it runs. Several reliability fixes address tool-approval requests
+  getting stuck, slow typing in long conversations, and a sluggish admin
+  Features page.
+
+- **Features**
+
+  - Chat page redesign: a new top bar with the conversation title and agent
+    name, a redesigned composer, and clearer confirmation dialogs (#2207,
+    #2214, #2218)
+  - The top bar now shows the conversation's total token usage, and each
+    reasoning step shows the tokens it used (#2217, #2218)
+  - Picking a prompt from the library now inserts its full text into your
+    message instead of attaching it as a separate chip (#2207)
+  - The composer's "+" menu is now two buttons: one for attachments and
+    prompts, one for the agent's tool controls (#2207)
+  - A copy button appears on your own messages (#2214)
+  - Summarizing a document now asks for confirmation by default before it
+    runs; administrators can turn this off per agent (#2177, #2179)
+
+- **Improvements**
+
+  - The chat message list no longer jumps to follow new text while the
+    assistant is still responding — it only follows a new turn or your own
+    scrolling (#2218)
+  - Reasoning steps (chain of thought) have a cleaner, easier-to-scan design
+    (#2218)
+  - Broad visual refresh of the chat page and its menus to match the rest of
+    the app (#2207, #2214)
+
+- **Bug Fixes**
+
+  - Typing in the message box no longer lags in long conversations (#2222)
+  - The conversation's total token usage now adds up every model call in a
+    turn, instead of only the last one (#2218)
+  - Approving or rejecting a tool request could get stuck showing "in
+    progress" forever, or fail outright — both are fixed, and duplicate
+    approvals are now prevented (#2177, #2179, #2216)
+  - Editing a prompt or an agent now updates it immediately everywhere it's
+    used, instead of waiting up to a minute (#2207)
+  - The admin Features (capabilities) page loads noticeably faster (#2181)
+
 **v2.1.27** — 2026-08-03
 
 - **Summary**

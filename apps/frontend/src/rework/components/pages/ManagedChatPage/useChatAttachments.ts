@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useFastIngestKnowledgeFlowV1FastIngestPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
@@ -137,6 +138,7 @@ interface UseChatAttachmentsParams {
 export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
   const { t } = useTranslation();
+  const { notifyApiError } = useApiErrorToast();
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<ReadonlySet<string>>(new Set());
 
@@ -199,10 +201,18 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           next.delete(attachmentId);
           return next;
         });
-        throw error;
+        notifyApiError(error, {
+          summary: t("chatbot.errors.attachmentDeleteFailedSummary"),
+          fallbackDetail: t("chatbot.errors.attachmentDeleteFailedDetail"),
+          forbiddenDetail: t("chatbot.errors.attachmentDeleteForbiddenDetail"),
+        });
+        // Both call sites (chip removal, drawer delete) invoke this with `void`
+        // and don't await it -- the error is already surfaced via the toast
+        // above and local state is already rolled back, so don't rethrow: an
+        // unawaited rejection here becomes an unhandled promise rejection.
       }
     },
-    [deletePersistedAttachmentMutation, sessionId, teamId],
+    [deletePersistedAttachmentMutation, notifyApiError, sessionId, t, teamId],
   );
 
   const addFiles = useCallback(

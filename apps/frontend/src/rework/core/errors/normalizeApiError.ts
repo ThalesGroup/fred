@@ -36,6 +36,19 @@ const getDetailFromData = (data: unknown): string | undefined => {
   const directDetail = asString(data.detail);
   if (directDetail) return directDetail;
 
+  // FastAPI's own default validation-error body (any route whose request model
+  // is validated by FastAPI itself, not re-raised by app code as a plain-string
+  // HTTPException) puts a list of pydantic error objects under `detail` --
+  // distinct from the app-level `errors` shape below. Report the first one
+  // rather than falling back to a generic message.
+  if (Array.isArray(data.detail)) {
+    for (const entry of data.detail) {
+      if (!isRecord(entry)) continue;
+      const message = asString(entry.msg) || asString(entry.message);
+      if (message) return message;
+    }
+  }
+
   const errors = data.errors;
   if (!Array.isArray(errors)) return undefined;
 

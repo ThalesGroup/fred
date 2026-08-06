@@ -146,6 +146,7 @@ def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
                     logger.debug(f"[SEARCH] Field '{k}': String '{v}' restored to List {loaded}")
                     continue
             except (json.JSONDecodeError, TypeError):
+                # Not a JSON-encoded list; fall through and keep it as a plain string.
                 pass
             restored[k] = v
         elif v == "":

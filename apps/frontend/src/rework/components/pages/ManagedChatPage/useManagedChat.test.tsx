@@ -92,17 +92,26 @@ const chatSseResetMock = vi.fn();
 const sendHitlResumeMock = vi.fn();
 const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
+// Mutable so the #2239 departure-snapshot test below can put a displayed
+// thread on screen; reset to [] in beforeEach.
+let chatSseMessages: unknown[] = [];
 let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
 let capturedOnTurnStarted: (() => void) | undefined;
+let capturedOnError: ((msg: string) => void) | undefined;
+let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     flushPendingWrites?: (sid: string | null) => Promise<boolean>;
     onTurnStarted?: () => void;
+    onError?: (msg: string) => void;
+    onAwaitingHuman?: (event: unknown) => void;
   }) => {
     capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
+    capturedOnError = params.onError;
+    capturedOnAwaitingHuman = params.onAwaitingHuman;
     return {
-      messages: [],
+      messages: chatSseMessages,
       waitResponse: false,
       chatControls: [],
       prepareChatControls: prepareChatControlsMock,
@@ -213,6 +222,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 import { useManagedChat } from "./useManagedChat";
+import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHistoryCache";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
   const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1" });
@@ -258,6 +268,8 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    clearSessionHistoryCache();
+    chatSseMessages = [];
     registerSessionImpl = async () => ({});
     patchSessionImpl = async () => ({});
     registerSessionCalls.length = 0;
@@ -277,6 +289,39 @@ describe("useManagedChat — session write reliability", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  // #2221: ConversationThread is React.memo'd to stop it re-rendering (and
+  // re-parsing every historical message's markdown) on every composer
+  // keystroke. That memo only holds if the callbacks useManagedChat hands
+  // to useChatSse — and everything derived from them, like handleHitlAnswer
+  // — keep a stable identity across a keystroke-only render. An inline
+  // arrow at the useChatSse() call site would defeat this silently (no
+  // test failure anywhere else would catch it, since behavior stays
+  // correct — only the render count regresses).
+  it("callbacks passed to useChatSse, and handleHitlAnswer, keep referential identity across a composer keystroke", async () => {
+    mount();
+    const firstOnError = capturedOnError;
+    const firstOnAwaitingHuman = capturedOnAwaitingHuman;
+    const firstOnTurnStarted = capturedOnTurnStarted;
+    const firstHandleHitlAnswer = latest.handleHitlAnswer;
+    expect(firstOnError).toBeDefined();
+    expect(firstOnAwaitingHuman).toBeDefined();
+    expect(firstOnTurnStarted).toBeDefined();
+
+    act(() => {
+      latest.setInput("o");
+    });
+    rerender();
+    act(() => {
+      latest.setInput("ok");
+    });
+    rerender();
+
+    expect(capturedOnError).toBe(firstOnError);
+    expect(capturedOnAwaitingHuman).toBe(firstOnAwaitingHuman);
+    expect(capturedOnTurnStarted).toBe(firstOnTurnStarted);
+    expect(latest.handleHitlAnswer).toBe(firstHandleHitlAnswer);
   });
 
   it("selecting a context prompt persists it and a send proceeds", async () => {
@@ -1042,5 +1087,30 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     rerender();
     expect(latest.sessionId).not.toBeNull();
+  });
+
+  it("leaving a session snapshots the displayed thread into the session-history cache (#2239)", async () => {
+    mount();
+    // Bind session A without a send (attachment-drop path).
+    act(() => {
+      latest.handleAddAttachments([], "picker");
+    });
+    rerender();
+    const sidA = latest.sessionId;
+    expect(sidA).not.toBeNull();
+
+    // The thread as displayed at departure time — streamed live into
+    // useChatSse's state, so no history fetch ever saw it. Only the
+    // departure snapshot can fold it into the cache.
+    const displayed = [{ id: "x:1" }];
+    chatSseMessages = displayed;
+    rerender();
+
+    act(() => {
+      latest.startNewConversation();
+    });
+
+    // The exact displayed array was snapshotted under A's session id.
+    expect(getCachedSessionHistory(sidA!)).toBe(displayed);
   });
 });

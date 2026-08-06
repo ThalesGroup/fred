@@ -349,8 +349,11 @@ export default function ManagedChatPage() {
             </div>
           )}
           {/* Session title bar — full-width surface; the inner row is capped to
-              the composer field width so title and composer stay aligned. */}
-          <div className={styles.topBar}>
+              the composer field width so title and composer stay aligned.
+              data-picker-top-boundary: the composer's anchored pickers
+              (usePickerMenuMaxHeight) stop just below this bar instead of
+              sliding under it. */}
+          <div className={styles.topBar} data-picker-top-boundary>
             <div className={styles.topBarInner}>
               <div className={styles.topBarTitle}>
                 {chat.sessionId && chat.sessionTitle != null && (

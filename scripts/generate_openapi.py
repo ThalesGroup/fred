@@ -74,6 +74,7 @@ def main():
                     except RuntimeError:
                         pass  # Context might not be initialized
         except Exception:
+            # Best-effort cleanup only; a failed context lookup/shutdown must not fail spec generation.
             pass
 
         return 0

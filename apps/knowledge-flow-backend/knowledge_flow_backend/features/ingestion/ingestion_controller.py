@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import dataclasses
 import json
 import json as _json
@@ -25,7 +26,7 @@ from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, RebacEngine, TagPermission, TeamMetadataStore, get_current_user
+from fred_core import ORGANIZATION_ID, AuthorizationError, DocumentPermission, KeycloakUser, OrganizationPermission, RebacEngine, Resource, TagPermission, TeamMetadataStore, get_current_user
 from fred_core.common.team_id import TeamId
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.scheduler import SchedulerBackend
@@ -86,20 +87,32 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 logger = logging.getLogger(__name__)
 
 
-async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, document_uid: str) -> None:
-    """Authorize a fast-ingest artifact delete (CTRLP-12 C1 admin branch).
+async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, document_uid: str, vector_store: BaseVectorStore) -> None:
+    """Authorize a fast-ingest artifact delete.
 
     A platform service principal holding org-level ``can_manage_platform`` — e.g.
     the control-plane lifecycle worker erasing a session's fast-ingest attachments
     at window expiry — bypasses the per-document ownership check. Authentication is
     still enforced by the endpoint dependency (``get_current_user``); only the
-    ``DocumentPermission.DELETE`` ownership check is waived. Everyone else must own
-    the document. Reuses the AUTHZ-01 ``can_manage_platform`` permission — no second
-    bypass is forked.
+    ownership check is waived for that principal. Reuses the AUTHZ-01
+    ``can_manage_platform`` permission — no second bypass is forked.
+
+    Everyone else must own the document. Fast-ingested (session-scoped) documents
+    carry no ``parent`` tag and no ReBAC tuple at all — they were deliberately left
+    "resource-less" and authentication-gated, so a ``DocumentPermission.DELETE``
+    ReBAC check can never resolve to True for them, denying even the uploader.
+    Ownership is instead proven the same way ``summarize_document`` already
+    proves it for reads on this same document class: via the chunk's own
+    ``scope``/``user_id`` metadata (``base_vector_store.may_delete_session_document``),
+    which also allows a document with no chunks left at all — so a retry after
+    an earlier attempt already deleted the vectors but failed on a later
+    cleanup step can still converge instead of being denied forever.
     """
     if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
         return
-    await rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+    if await asyncio.to_thread(vector_store.may_delete_session_document, document_uid, user.uid):
+        return
+    raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
 
 
 STEP_UPLOAD_PREPARATION = "upload preparation"
@@ -1141,7 +1154,7 @@ class IngestionController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await _authorize_fast_ingest_delete(get_rebac_engine(), user, document_uid)
+            await _authorize_fast_ingest_delete(get_rebac_engine(), user, document_uid, self.vector_store)
             try:
                 logger.info(
                     "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s storage_key=%s backend=%s",
