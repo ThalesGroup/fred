@@ -2035,7 +2035,7 @@
           },
           "reasoning": {
             "label": "Raisonnement",
-            "hint": "Permet aux utilisateurs d'activer le raisonnement du modèle pour une seule question, depuis le composeur de chat. N'apparaît que si le modèle le supporte et qu'un administrateur l'a activé."
+            "hint": "Offre aux utilisateurs de cet agent un bouton dans le composeur de chat pour activer le raisonnement du modèle, question par question. Nécessite un modèle prenant en charge le raisonnement."
           },
           "reasoningDefaultOn": {
             "label": "Raisonnement activé par défaut",
