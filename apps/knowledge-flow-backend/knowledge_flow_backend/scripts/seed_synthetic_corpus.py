@@ -81,6 +81,8 @@ from opensearchpy.helpers import bulk
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.config_loader import load_configuration
+from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
+from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 logger = logging.getLogger("seed_synthetic_corpus")
@@ -114,7 +116,7 @@ def _build_document(tag: Tag, index: int) -> DocumentMetadata:
             modified=now,
             uploaded_by=SEED_UPLOADED_BY,
         ),
-        source=SourceInfo(
+        source=SourceInfo(  # type: ignore[reportCallIssue]  # basedpyright doesn't recognize Field(None, ...) positional defaults (only Field(default=...)) as satisfying SourceInfo's synthesized __init__; pull_location genuinely defaults to None (document_structures.py) -- same false positive on every SourceInfo(...) call omitting it, e.g. test_repair_vector_metadata_activities.py:75
             source_type=SourceType.PUSH,
             # "fred" (not a seed-specific marker) on purpose: it's the same source_tag
             # every real manual upload gets (IngestionInput.source_tag default,
@@ -295,6 +297,16 @@ async def _purge(app_context: ApplicationContext, concurrency: int) -> None:
     tag_store = app_context.get_tag_store()
     rebac = app_context.get_rebac_engine()
     vector_store = app_context.get_create_vector_store(app_context.get_embedder())
+    # This script is explicitly OpenSearch/Minio-only (see module docstring): it writes
+    # fake vector chunks and content objects straight to those backends' low-level
+    # clients for bulk-seeding/purging performance, bypassing the abstract
+    # BaseVectorStore/BaseContentStore interface on purpose. Narrowing with isinstance
+    # (instead of a blanket type:ignore on every attribute access below) gives real type
+    # safety and a clear failure if this is ever run against a differently configured
+    # local stack (e.g. Chroma or filesystem content storage) instead of a cryptic
+    # AttributeError mid-purge.
+    if not isinstance(vector_store, OpenSearchVectorStoreAdapter):
+        raise RuntimeError(f"seed_synthetic_corpus.py only supports the OpenSearch-backed vector store; configured backend is {type(vector_store).__name__}.")
 
     # Matched on identity.uploaded_by, not source_tag: seeded documents deliberately
     # carry source_tag="fred" (the same value every real upload gets) so repair
@@ -318,6 +330,8 @@ async def _purge(app_context: ApplicationContext, concurrency: int) -> None:
         # object orphaned by an earlier run that died between these two steps
         # would not be caught here; that's a known gap, not a bug in this pass.
         content_store = app_context.get_content_store()
+        if not isinstance(content_store, MinioStorageBackend):
+            raise RuntimeError(f"seed_synthetic_corpus.py only supports the MinIO/S3-backed content store; configured backend is {type(content_store).__name__}.")
         logger.info("Purging %d fake content object(s) from bucket=%s ...", len(docs), content_store.document_bucket)
         delete_list = [DeleteObject(_content_object_key(doc)) for doc in docs]
         errors = list(content_store.client.remove_objects(content_store.document_bucket, delete_list))
@@ -456,6 +470,8 @@ async def run(args: argparse.Namespace) -> None:
 
     if not args.skip_content:
         content_store = app_context.get_content_store()
+        if not isinstance(content_store, MinioStorageBackend):
+            raise RuntimeError(f"seed_synthetic_corpus.py only supports the MinIO/S3-backed content store; configured backend is {type(content_store).__name__}.")
         logger.info("Writing %d small fake content object(s) to bucket=%s ...", len(docs), content_store.document_bucket)
         t0 = time.monotonic()
         await _seed_content(content_store, docs, args.concurrency)
@@ -463,20 +479,25 @@ async def run(args: argparse.Namespace) -> None:
 
     logger.info("Resolving the real embedder once to learn the configured vector dimension (one real API call) ...")
     vector_store = app_context.get_create_vector_store(app_context.get_embedder())
-    mapping = vector_store.client.indices.get_mapping(index=vector_store.index_name)
-    dim = mapping[vector_store.index_name]["mappings"]["properties"]["vector_field"]["dimension"]
-    logger.info("Vector index=%s dimension=%d -- indexing %d fake vector chunk(s) ...", vector_store.index_name, dim, len(docs))
+    if not isinstance(vector_store, OpenSearchVectorStoreAdapter):
+        raise RuntimeError(f"seed_synthetic_corpus.py only supports the OpenSearch-backed vector store; configured backend is {type(vector_store).__name__}.")
+    index_name = vector_store.index_name
+    if index_name is None:
+        raise RuntimeError("OpenSearch vector store has no configured index_name.")
+    mapping = vector_store.client.indices.get_mapping(index=index_name)
+    dim = mapping[index_name]["mappings"]["properties"]["vector_field"]["dimension"]
+    logger.info("Vector index=%s dimension=%d -- indexing %d fake vector chunk(s) ...", index_name, dim, len(docs))
 
     t0 = time.monotonic()
     rng = np.random.default_rng(args.seed)
     success, errors = bulk(
         vector_store.client,
-        _vector_actions(docs, vector_store.index_name, dim, rng),
+        _vector_actions(docs, index_name, dim, rng),
         chunk_size=1000,
         request_timeout=120,
         raise_on_error=False,
     )
-    vector_store.client.indices.refresh(index=vector_store.index_name)
+    vector_store.client.indices.refresh(index=index_name)
     logger.info(
         "Indexed %d fake vector chunk(s) in %.1fs (errors=%d)",
         success,
