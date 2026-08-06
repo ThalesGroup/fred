@@ -2488,6 +2488,18 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
+export type RepairVectorMetadataResult = {
+  source_tag: string;
+  metadata_documents?: number;
+  already_done?: number;
+  eligible_with_vectors_and_content?: number;
+  repaired?: number;
+  missing_vectors?: number;
+  missing_content?: number;
+  tabular_excluded?: number;
+  failed_or_running_excluded?: number;
+  errors?: number;
+};
 export type IngestionDetail = {
   processed: number;
   total: number;
@@ -2495,6 +2507,7 @@ export type IngestionDetail = {
   preview: number;
   vectorized: number;
   sql_indexed: number;
+  result?: RepairVectorMetadataResult | null;
 };
 export type EvaluationDetail = {
   campaign_id: string;

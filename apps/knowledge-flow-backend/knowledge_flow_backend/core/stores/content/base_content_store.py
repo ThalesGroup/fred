@@ -199,13 +199,17 @@ class BaseContentStore(ABC):
         Return a *flat* list of objects under 'prefix' (recursive).
         """
 
-    def list_document_uids(self) -> List[str]:  # pragma: no cover - optional capability
+    def list_document_uids(self, *, strict: bool = False) -> List[str]:  # pragma: no cover - optional capability
         """
         Optional helper: return the list of document_uids known to the content store.
 
         Default implementation returns an empty list so callers can rely on hasattr()
-        or simply call and handle the empty result.
+        or simply call and handle the empty result -- unless `strict=True`, in which
+        case a caller that must never mistake "not implemented" for "genuinely empty"
+        (the vector-metadata repair path, #2234) gets a hard error instead.
         """
+        if strict:
+            raise NotImplementedError(f"{type(self).__name__} does not support strict document_uid listing")
         return []
 
     @abstractmethod

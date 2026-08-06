@@ -2450,6 +2450,20 @@
           "docs_imported": "Documents imported",
           "docs_skipped": "Documents skipped"
         }
+      },
+      "repair": {
+        "detailsTitle": "Repair report",
+        "counter": {
+          "metadata_documents": "Documents matching this source_tag",
+          "already_done": "Already marked done",
+          "eligible_with_vectors_and_content": "Vectors and content confirmed",
+          "repaired": "Repaired",
+          "missing_vectors": "Missing vectors (left untouched)",
+          "missing_content": "Missing content (left untouched)",
+          "tabular_excluded": "Tabular documents excluded (sql, out of scope)",
+          "failed_or_running_excluded": "Failed or running (left untouched)",
+          "errors": "Errors"
+        }
       }
     }
   },

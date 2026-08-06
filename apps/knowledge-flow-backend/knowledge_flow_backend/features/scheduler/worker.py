@@ -48,6 +48,14 @@ from knowledge_flow_backend.features.scheduler.push_files_activities import (
     get_push_file_metadata,
     push_input_process,
 )
+from knowledge_flow_backend.features.scheduler.repair_vector_metadata_activities import (
+    bulk_repair_vector_metadata,
+    emit_repair_vector_metadata_task_event,
+    list_repair_candidates_for_source_tag,
+    list_strict_content_document_uids,
+    list_strict_vector_document_uids,
+)
+from knowledge_flow_backend.features.scheduler.repair_vector_metadata_workflow import RepairVectorMetadataWorkflow
 from knowledge_flow_backend.features.scheduler.workflow import (
     CreatePullFileMetadata,
     FastDeleteVectors,
@@ -120,6 +128,7 @@ async def run_worker(
             FastDeleteVectors,
             RevectorizeCorpusWorkflow,
             RevectorizeDocument,
+            RepairVectorMetadataWorkflow,
         ],
         activities=[
             create_pull_file_metadata,
@@ -136,6 +145,11 @@ async def run_worker(
             delete_vectors,
             prepare_revectorize_file,
             mark_document_vectorized,
+            list_repair_candidates_for_source_tag,
+            list_strict_vector_document_uids,
+            list_strict_content_document_uids,
+            bulk_repair_vector_metadata,
+            emit_repair_vector_metadata_task_event,
         ],
         activity_executor=executor,
         max_concurrent_workflow_tasks=workflow_task_concurrency,

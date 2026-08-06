@@ -27,6 +27,7 @@ import pytest
 
 from knowledge_flow_backend.features.scheduler.workflow import (
     _wf_final_revectorize_state,
+    _wf_scope_resolution_failed_event_args,
     _wf_should_skip_revectorize,
 )
 
@@ -68,3 +69,16 @@ def test_final_revectorize_state_failed_even_when_every_document_failed() -> Non
     state, error = _wf_final_revectorize_state(failed=5, total=5)
     assert state == "failed"
     assert error == "5 of 5 document(s) failed to re-vectorize"
+
+
+def test_scope_resolution_failed_event_args_carries_the_real_exception_text() -> None:
+    """`RevectorizeCorpusWorkflow.run` emits this immediately, with the real error,
+    instead of waiting on the generic stale-task reconcile sweeper's detail-free
+    "Execution failed" (fred_core.tasks.service.TaskService._reconciled_terminal)."""
+    args = _wf_scope_resolution_failed_event_args(RuntimeError("Postgres unavailable"), "task-1")
+    assert args == ["task-1", "failed", "listed", None, "Postgres unavailable", 0, 0, 0, None, None]
+
+
+def test_scope_resolution_failed_event_args_falls_back_when_exception_has_no_message() -> None:
+    args = _wf_scope_resolution_failed_event_args(RuntimeError(), "task-1")
+    assert args[4] == "Failed to resolve revectorize scope"
