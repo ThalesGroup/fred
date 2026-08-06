@@ -26,6 +26,9 @@ interface ComposerActionsMenuProps {
   openAriaLabel?: string;
   /** aria-label for the opened popover; defaults to the add-menu string. */
   dialogAriaLabel?: string;
+  /** Small red dot over the trigger, signalling an active per-turn override
+   * (e.g. a ponctual document scope, #2259). */
+  badge?: boolean;
   children?: ReactNode | ((controls: { closeMenu: () => void }) => ReactNode);
 }
 
@@ -34,6 +37,7 @@ export function ComposerActionsMenu({
   icon = { category: "outlined", type: "add" },
   openAriaLabel,
   dialogAriaLabel,
+  badge = false,
   children,
 }: ComposerActionsMenuProps) {
   const { t } = useTranslation();
@@ -75,6 +79,7 @@ export function ComposerActionsMenu({
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       />
+      {badge && <span className={styles.badge} aria-hidden />}
       {open && (
         <div
           className={styles.menu}

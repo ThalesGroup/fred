@@ -171,16 +171,20 @@ export function DocumentLibraryScopePicker({
         return (
           <li key={child.full} className={styles.node}>
             <div className={styles.nodeRow}>
+              {/* Full-tile expand trigger — absolutely fills the whole tile
+                  (padding included) so a click anywhere on the tile expands,
+                  and doubles as the hover state-layer. The checkbox and any
+                  other real controls sit above it and keep their own clicks. */}
               <button
                 type="button"
-                className={styles.expandButton}
+                className={styles.nodeTrigger}
                 onClick={() => toggleExpand(child.full)}
                 aria-label={isExpanded ? t("rework.collapse") : t("rework.expand")}
-              >
-                <span className="material-symbols-outlined" aria-hidden>
-                  {isExpanded ? "expand_more" : "chevron_right"}
-                </span>
-              </button>
+                aria-expanded={isExpanded}
+              />
+              <span className={`${styles.expandIcon} material-symbols-outlined`} aria-hidden>
+                {isExpanded ? "expand_more" : "chevron_right"}
+              </span>
               <input
                 type="checkbox"
                 className={styles.checkbox}

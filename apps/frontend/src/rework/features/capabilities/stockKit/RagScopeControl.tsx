@@ -42,7 +42,7 @@ export function RagScopeControl({ composer, open, onToggleOpen }: CapabilityChat
 
   return (
     <EnumSelectRow
-      icon={{ category: "outlined", type: "hub" }}
+      icon={{ category: "outlined", type: "book_2" }}
       label={t("chatbot.composerSettings.scopeRowLabel")}
       title={t("chatbot.composerSettings.scopeTitle")}
       value={composer.ragScope}

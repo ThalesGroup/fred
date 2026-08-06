@@ -1,17 +1,31 @@
 /* ── Page shell ────────────────────────────────────────────────────────── */
-/* Row layout: [ main column (flex) ][ push drawer ]. The attachments drawer
-   takes layout space on the right so the chat column shifts left when open. */
+/* Column layout: [ full-width header ] on top, [ content row ] below. The
+   header always spans the whole page and stays put; only the content row
+   reflows when a push drawer opens, so the panel slides UNDER the header
+   instead of shrinking it. */
 .page {
   /* Single source of truth for the composer field width — the RichInputField
      .field and the top bar's inner row both read it so they stay aligned. */
   --composer-max-width: 720px;
   display: flex;
   position: relative;
-  flex-direction: row;
+  flex-direction: column;
   background: var(--surface-main);
   height: 100%;
   overflow: hidden;
   color: var(--on-surface);
+}
+
+/* ── Content row — [ main column (flex) ][ push drawer ] ─────────────────── */
+/* Sits below the full-width header. A push drawer (attachments / capability /
+   document-scope) takes layout space on the right so the chat column shifts
+   left when open, while the header above is untouched. */
+.contentRow {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: row;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ── Main column — holds the whole conversation surface ────────────────── */

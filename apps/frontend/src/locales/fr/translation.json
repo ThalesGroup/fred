@@ -346,6 +346,10 @@
       "tuneDialogAria": "Réglages de conversation",
       "tuneOpenAria": "Ouvrir les réglages de conversation"
     },
+    "documentScopePanel": {
+      "title": "Définir les ressources accessibles",
+      "resetTooltip": "Réinitialiser"
+    },
     "composerSettings": {
       "attachFile": "Joindre un fichier",
       "boundLibrariesTitle": "Bibliothèques liées",
@@ -354,16 +358,16 @@
       "documentsLoadError": "Impossible de charger les documents.",
       "documentsNoScope": "La sélection de documents est activée, mais aucun sélecteur de bibliothèque ni aucune bibliothèque liée n'est configuré.",
       "documentsTitle": "Documents",
-      "librariesCount": "{{count}} bibliothèques",
+      "librariesCount": "{{count}} dossiers",
       "librariesTitle": "Bibliothèques",
       "loading": "Chargement...",
       "loadingDocuments": "Chargement des documents...",
       "noDocumentsAvailable": "Aucun document disponible.",
       "noDocumentsSelected": "Aucun document sélectionné",
       "noLibrariesAvailable": "Aucune bibliothèque disponible.",
-      "scopeCorpus": "Corpus",
-      "scopeCorpusAndWeb": "Corpus + web",
-      "scopeGeneral": "Général",
+      "scopeCorpus": "Ressources",
+      "scopeCorpusAndWeb": "Modèle + Ressources",
+      "scopeGeneral": "Modèle",
       "scopeRowLabel": "Portée",
       "scopeTitle": "Portée de recherche",
       "searchPolicyRowLabel": "Recherche",

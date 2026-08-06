@@ -81,6 +81,37 @@
   width: var(--drawer-width);
 }
 
+/* ── Floating-card variant (opt-in, push layout) ──────────────────────────
+ * The panel detaches into a rounded, bordered, elevated card inset from every
+ * edge instead of a full-height flush panel. The drawer's own flush edge
+ * border and the header divider are dropped — the card carries the only
+ * border. Width stays fixed (not `auto`) so content doesn't reflow while the
+ * drawer animates its width from 0, matching the flush panel's behaviour. */
+.drawer[data-floating="true"] {
+  background: transparent;
+}
+
+.drawer[data-floating="true"][data-layout="push"][data-open="true"] {
+  border-left-color: transparent;
+}
+
+.drawer[data-floating="true"][data-layout="push"] .panel {
+  top: var(--spacing-s);
+  right: var(--spacing-s);
+  bottom: var(--spacing-s);
+  left: auto;
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--drawer-background, var(--surface-container));
+  width: calc(var(--drawer-width) - 2 * var(--spacing-s));
+  overflow: hidden;
+}
+
+.drawer[data-floating="true"] .header {
+  border-bottom: none;
+}
+
 /* ── Drag-to-resize handle (push + `resizable`) ───────────────────────────
  * The grip idiom ported from the legacy chat's ResizablePaneShell: a slim
  * col-resize strip hugging the drawer's left edge, with a small rounded bar

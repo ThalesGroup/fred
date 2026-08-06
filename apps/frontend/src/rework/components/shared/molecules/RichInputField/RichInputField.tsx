@@ -42,8 +42,6 @@ interface RichInputFieldProps {
   rightSlot?: ReactNode;
   /** When true, shows send/stop buttons based on state (ignored if rightSlot is provided). */
   showSendButton?: boolean;
-  /** Renders the command slot inline with the text cursor for compact composer layouts. */
-  compactLayout?: boolean;
   enableVoiceInput?: boolean;
   onTranscribeAudio?: (file: File) => Promise<string>;
   voiceInputDisabled?: boolean;
@@ -81,7 +79,6 @@ export function RichInputField({
   leftSlot,
   rightSlot,
   showSendButton = false,
-  compactLayout = false,
   enableVoiceInput = false,
   onTranscribeAudio,
   voiceInputDisabled = false,
@@ -333,50 +330,27 @@ export function RichInputField({
     <div className={styles.bar}>
       <div className={styles.field}>
         {aboveTextSlot && <div className={styles.aboveTextSlot}>{aboveTextSlot}</div>}
-        {compactLayout ? (
-          <div className={styles.inlineRow}>
-            {leftSlot && <div className={styles.commandSlot}>{leftSlot}</div>}
-            <textarea
-              ref={textareaRef}
-              className={styles.textarea}
-              value={value}
-              rows={1}
-              disabled={disabled}
-              placeholder={placeholder}
-              onChange={(e) => {
-                onChange(e.target.value);
-                resize();
-              }}
-              onKeyDown={handleKeyDown}
-            />
-            {actionSlot && <div className={styles.rightSlot}>{actionSlot}</div>}
-          </div>
-        ) : (
-          <textarea
-            ref={textareaRef}
-            className={styles.textarea}
-            value={value}
-            rows={1}
-            disabled={disabled}
-            placeholder={placeholder}
-            onChange={(e) => {
-              onChange(e.target.value);
-              resize();
-            }}
-            onKeyDown={handleKeyDown}
-          />
-        )}
+        <textarea
+          ref={textareaRef}
+          className={styles.textarea}
+          value={value}
+          rows={1}
+          disabled={disabled}
+          placeholder={placeholder}
+          onChange={(e) => {
+            onChange(e.target.value);
+            resize();
+          }}
+          onKeyDown={handleKeyDown}
+        />
 
-        {showBottomRow && !compactLayout && (
+        {showBottomRow && (
           <div className={styles.bottomRow}>
             {leftSlot && <div className={styles.commandSlot}>{leftSlot}</div>}
             {topSlot && <div className={styles.bottomLeft}>{topSlot}</div>}
 
             {actionSlot && <div className={styles.rightSlot}>{actionSlot}</div>}
           </div>
-        )}
-        {compactLayout && topSlot && (
-          <div className={styles.bottomRow}>{<div className={styles.bottomLeft}>{topSlot}</div>}</div>
         )}
       </div>
     </div>

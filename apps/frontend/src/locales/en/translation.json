@@ -346,6 +346,10 @@
       "tuneDialogAria": "Chat settings",
       "tuneOpenAria": "Open chat settings"
     },
+    "documentScopePanel": {
+      "title": "Define accessible resources",
+      "resetTooltip": "Reset"
+    },
     "composerSettings": {
       "attachFile": "Attach file",
       "boundLibrariesTitle": "Bound libraries",
@@ -354,16 +358,16 @@
       "documentsLoadError": "Unable to load documents.",
       "documentsNoScope": "Document selection is enabled, but no library picker or bound library is configured.",
       "documentsTitle": "Documents",
-      "librariesCount": "{{count}} libraries",
+      "librariesCount": "{{count}} folders",
       "librariesTitle": "Libraries",
       "loading": "Loading...",
       "loadingDocuments": "Loading documents...",
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
-      "scopeCorpus": "Corpus",
-      "scopeCorpusAndWeb": "Corpus + web",
-      "scopeGeneral": "General",
+      "scopeCorpus": "Resources",
+      "scopeCorpusAndWeb": "Model + Resources",
+      "scopeGeneral": "Model",
       "scopeRowLabel": "Scope",
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",

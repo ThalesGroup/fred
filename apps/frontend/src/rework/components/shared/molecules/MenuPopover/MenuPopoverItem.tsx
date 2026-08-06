@@ -43,6 +43,10 @@ export interface MenuPopoverItemProps {
   danger?: boolean;
   disabled?: boolean;
   selected?: boolean;
+  /** When set, a `selected` row renders its label + trailing icon in `primary`
+   * (a stronger "this is the active choice" accent than the neutral selected
+   * state layer). Opt-in per caller — e.g. the search-mode picker. */
+  accentSelected?: boolean;
   onClick?: () => void;
   role?: "menuitem" | "option";
   /** Roving-tabindex support for consumers driving keyboard nav across rows (e.g. `EnumSelectRow`). */
@@ -70,6 +74,7 @@ export default function MenuPopoverItem({
   danger = false,
   disabled = false,
   selected = false,
+  accentSelected = false,
   onClick,
   role = "menuitem",
   ref,
@@ -89,6 +94,7 @@ export default function MenuPopoverItem({
       // stays in the menu either way, so highlighting it as chosen would read
       // as a selection. `aria-checked` carries the state instead.
       data-selected={trailingToggle ? undefined : selected}
+      data-accent-selected={accentSelected ? "true" : undefined}
       aria-selected={role === "option" && !trailingToggle ? selected : undefined}
       aria-checked={trailingToggle ? selected : undefined}
       onClick={onClick}

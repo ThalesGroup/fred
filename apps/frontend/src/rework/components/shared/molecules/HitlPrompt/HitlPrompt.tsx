@@ -30,19 +30,25 @@ export function HitlPrompt({ event, onAnswer, readonly = false }: HitlPromptProp
   const [freeText, setFreeText] = useState("");
 
   return (
-    <div className={styles.card} role="group" aria-label="Agent is waiting for your input">
+    <div
+      className={`${styles.card} ${!readonly ? styles.active : ""}`}
+      role="group"
+      aria-label="Agent is waiting for your input"
+    >
       {payload.title && <p className={styles.title}>{payload.title}</p>}
       {payload.question && <p className={styles.question}>{payload.question}</p>}
 
-      {payload.choices && payload.choices.length > 0 && (
+      {/* Answered questions hide their choices — the answer is already written into the
+          chat as the turn right after this card, so a disabled button row would be redundant. */}
+      {!readonly && payload.choices && payload.choices.length > 0 && (
         <div className={styles.choices}>
           {payload.choices.map((c) => (
             <Button
               key={c.id}
-              color="secondary"
-              variant="outlined"
+              color={c.default ? "primary" : "on-surface-retreat"}
+              variant={c.default ? "filled" : "text"}
               size="small"
-              disabled={readonly}
+              style={{ order: c.default ? 2 : 1 }}
               onClick={() => onAnswer(c.id)}
             >
               {c.label}

@@ -1,0 +1,8 @@
+/* flushBody drops InlineDrawer's own body padding so this wrapper can apply the
+   requested left/right/bottom 16px insets while leaving the top flush under the
+   header (the header already carries its own bottom spacing). The InlineDrawer
+   body is the scroll container, so the tree grows and scrolls within it and the
+   bottom inset stays visible below the last row. */
+.body {
+  padding: 0 var(--spacing-m) var(--spacing-m);
+}

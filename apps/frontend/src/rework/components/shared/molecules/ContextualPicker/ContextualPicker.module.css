@@ -1,0 +1,59 @@
+.wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--surface-container-low);
+  padding: 0 var(--spacing-s);
+  height: 32px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
+.chip:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.chip[data-open="true"] {
+  background: var(--state-primary-selected);
+  color: var(--primary);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.icon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+.value {
+  line-height: 1;
+}
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + var(--spacing-xs));
+  left: 0;
+  /* Above Tooltip's z-index (1500, Tooltip.module.scss) — the trigger's
+     tooltip can still be technically visible for a moment right after a
+     click (the pointer hasn't left the chip yet), so the options popover
+     must win the stack whenever both are present. */
+  z-index: 1600;
+  min-width: 160px;
+}
