@@ -270,4 +270,64 @@ describe("TeamSettingsRouting", () => {
     const rules = calls[calls.length - 1][0].updateTeamRoutingPolicyRequest.operation_rules;
     expect(rules[0].agent_id).toBe("rico");
   });
+
+  it("renders a 422 array-shaped detail as a readable message, not [object Object]", async () => {
+    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = ONE_MODEL;
+    h.updateRoutingPolicy.mockReturnValue({
+      unwrap: () =>
+        Promise.reject({
+          data: {
+            detail: [
+              {
+                loc: ["body", "operation_rules", 0, "rule_id"],
+                msg: "String should have at least 1 character",
+                type: "string_too_short",
+              },
+            ],
+          },
+        }),
+    } as never);
+    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "rework.teamSettings.routing.save",
+    )!;
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("String should have at least 1 character");
+    expect(container.textContent).not.toContain("[object Object]");
+  });
+
+  it("assigns a non-empty rule_id to a newly added override rule on save", async () => {
+    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = ONE_MODEL;
+    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
+    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+
+    const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
+    act(() => {
+      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "rework.teamSettings.routing.save",
+    )!;
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const calls = h.updateRoutingPolicy.mock.calls as unknown as Array<
+      [{ updateTeamRoutingPolicyRequest: { operation_rules: { rule_id: string }[] } }]
+    >;
+    const lastCall = calls[calls.length - 1][0];
+    const rules = lastCall.updateTeamRoutingPolicyRequest.operation_rules;
+    expect(rules).toHaveLength(1);
+    expect(rules[0].rule_id.length).toBeGreaterThan(0);
+  });
 });
