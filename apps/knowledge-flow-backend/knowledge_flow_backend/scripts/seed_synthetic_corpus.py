@@ -129,7 +129,7 @@ def _build_document(tag: Tag, index: int) -> DocumentMetadata:
         file=FileInfo(
             file_type=FileType.TXT,
             mime_type="text/plain",
-            file_size_bytes=random.randint(2_000, 200_000),
+            file_size_bytes=random.randint(2_000, 200_000),  # nosec B311: synthetic fixture size, not security-sensitive
             page_count=1,
         ),
         tags=Tagging(tag_ids=[tag.id], tag_names=[tag.name]),
@@ -380,7 +380,7 @@ async def _mark_stuck_pending(metadata_store, n: int, seed: int, concurrency: in
     logger.info("Synthetic pool=%d, eligible (currently vector=done)=%d", len(pool), len(eligible))
     if n > len(eligible):
         logger.warning("Requested %d but only %d eligible -- marking all of them.", n, len(eligible))
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # nosec B311: deterministic sampling for test-corpus reproducibility, not security-sensitive
     chosen = rng.sample(eligible, min(n, len(eligible)))
 
     sem = asyncio.Semaphore(concurrency)
