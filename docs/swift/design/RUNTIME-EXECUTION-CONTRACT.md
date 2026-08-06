@@ -2462,6 +2462,45 @@ persisted before this fix.
 
 ---
 
+### 8.42 ✅ Tool error claims the final response only when the whole round failed (issue #2244, 2026-08-05)
+
+**Refines §8.27's runtime half.** Since the v2 loop shipped, any
+`is_error=True` tool result made the ReAct stream surface that error text
+verbatim as the `FinalRuntimeEvent` content and discard the LLM's own
+synthesis ("the LLM is NOT trusted to relay it", `react_runtime.py`).
+Observed live (mistral-small, 2026-08-05): a "summarize all my docs" turn
+made six parallel `summarize_document` calls — five succeeded, one 403'd
+(the model had passed a folder's tag id from `list_document_tree` as a
+`document_uid`) — and the user got only the raw 403 text while five good
+summaries were thrown away. This also actively contradicted §8.27's
+tool-failure-recovery prompt suffix, which instructs the model to answer
+from what succeeded: the model complied, and the runtime then discarded
+that answer.
+
+**New policy** (`react_runtime.py`, `round_had_tool_success`): an error
+claims the final response only while no tool call of the same round (the
+batch requested by one tool-calling `AIMessage`) has succeeded. Any
+success — a parallel sibling arriving before or after the error, or a
+later round's recovery retry — revokes the claim and restores the LLM's
+synthesis as the final response; the failed call itself still reports
+`is_error=True` in the trace. A wholly-failed round keeps the pre-existing
+guarantee: the error text is the final response and assistant deltas stay
+suppressed. A success in an *earlier* round does not shield a later
+wholly-failed round — each round is judged on its own results.
+
+**Companion fixes in the same change (issue #2244):** Knowledge Flow's
+tree rendering now prefixes folder tag ids (`name [folder:tag-id]/`,
+`tree_builder.py`) so they are no longer visually identical to document
+uids; `list_document_tree`'s docstring warns folder ids are never
+`document_uid`s; `summarize_document`'s 403/404 recovery hint covers the
+folder-id cause; the frontend's `stripDocumentUids` redaction also strips
+the `folder:` form. Regression tests:
+`test_react_tool_error_final_2244.py` (all four round shapes),
+`test_tree_builder.py`, `test_capability_document_summarize.py`,
+`traceUtils.test.ts`.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

@@ -312,11 +312,12 @@ export function isDocumentTreeTool(name: string): boolean {
   return name === "list_document_tree";
 }
 
-/** Strips list_document_tree's bracketed internal document uids before display —
+/** Strips list_document_tree's bracketed internal ids before display — document
+ *  uids on leaves and `[folder:tag-id]` ids on folder lines (issue #2244) —
  *  same "never show this id to the user" rule the tool's docstring imposes on the
  *  model's own answers (identifier hygiene, shared with summarize_document). */
 export function stripDocumentUids(tree: string): string {
-  return tree.replace(/\s*\[[\w-]+\]/g, "");
+  return tree.replace(/\s*\[[\w:-]+\]/g, "");
 }
 
 /** Curated {action, status, latency} payload for tool results with no recognized richer shape. */

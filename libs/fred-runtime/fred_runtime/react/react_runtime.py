@@ -346,11 +346,25 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # last-write-wins variable silently undercounted any multi-call turn).
         total_token_usage: dict[str, int] | None = None
         last_finish_reason: str | None = None
-        # When any tool returns is_error=True, the error is surfaced directly as
-        # the final response.  The LLM is NOT trusted to relay it: its subsequent
-        # turn is consumed but discarded, and its streaming deltas are suppressed.
+        # When a whole round of tool calls fails (every call errored, no
+        # success anywhere in the batch), the error is surfaced directly as the
+        # final response. The LLM is NOT trusted to relay a bare failure: its
+        # subsequent turn is consumed but discarded, and its streaming deltas
+        # are suppressed. But a PARTIAL failure — some calls of the round
+        # succeeded, or a later call recovered — hands the turn back to the
+        # LLM: it has real results to synthesize, and discarding them for one
+        # failed sibling call threw away 5/6 good summaries live (issue #2244;
+        # also contradicted the §8.27 tool-failure-recovery prompt suffix that
+        # tells the model to answer from what succeeded).
         last_tool_error: str | None = None
         suppress_assistant_deltas: bool = False
+        # Tracks whether the current round (the batch of tool calls requested
+        # by the latest AIMessage) has produced at least one successful result.
+        # Reset on every new tool-calling AIMessage; parallel results within a
+        # round arrive in arbitrary order, so an error only claims the final
+        # response while no sibling has succeeded, and any success revokes a
+        # claim an earlier-arriving error already made.
+        round_had_tool_success: bool = False
         # Maps tool call_id → thought_id so THOUGHT_END can close the block
         # opened by THOUGHT_START before the corresponding TOOL_CALL event.
         active_thought_ids: dict[str, str] = {}
@@ -454,16 +468,31 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         )
                         is_error = artifact.is_error if artifact is not None else False
                         if is_error:
-                            # Strip the "Tool error:\n" prefix added for the LLM's
-                            # benefit — the user-facing message should be clean.
-                            raw = _stringify_content(message.content)
-                            last_tool_error = raw.removeprefix("Tool error:\n")
-                            suppress_assistant_deltas = True
-                            logger.debug(
-                                "[V2][REACT] tool error intercepted tool=%s — "
-                                "suppressing LLM turn, surfacing error directly",
-                                message.name,
-                            )
+                            if not round_had_tool_success:
+                                # Strip the "Tool error:\n" prefix added for the LLM's
+                                # benefit — the user-facing message should be clean.
+                                raw = _stringify_content(message.content)
+                                last_tool_error = raw.removeprefix("Tool error:\n")
+                                suppress_assistant_deltas = True
+                                logger.debug(
+                                    "[V2][REACT] tool error intercepted tool=%s — "
+                                    "suppressing LLM turn, surfacing error directly",
+                                    message.name,
+                                )
+                        else:
+                            round_had_tool_success = True
+                            if last_tool_error is not None:
+                                # A sibling (or later round's) call succeeded:
+                                # the turn is a partial failure, not a dead
+                                # end — the LLM's synthesis is the final
+                                # answer again, with the error visible to it
+                                # as an ordinary tool result.
+                                last_tool_error = None
+                                suppress_assistant_deltas = False
+                                logger.debug(
+                                    "[V2][REACT] tool success after error — "
+                                    "restoring LLM synthesis as final response",
+                                )
                         thought_id = active_thought_ids.pop(message.tool_call_id, None)
                         thought_started_at = active_thought_started_at.pop(
                             message.tool_call_id, None
@@ -495,6 +524,12 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         continue
 
                     if isinstance(message, AIMessage) and message.tool_calls:
+                        # A new round of tool calls begins: its outcome is
+                        # judged on its own results. A prior round's error
+                        # stays claimed (sticky) until one of THIS round's
+                        # calls succeeds — success anywhere hands the final
+                        # response back to the LLM's synthesis.
+                        round_had_tool_success = False
                         # The usage of the model call that decided to make these
                         # tool calls — attached per-call to ToolCallRuntimeEvent
                         # (TRACE-01) so the trace UI can show tokens per step,
