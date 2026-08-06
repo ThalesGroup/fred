@@ -29,7 +29,10 @@ Fred rationale:
 - The bracketed ids in the rendering (tag ids on folders, document uids on
   leaves) are internal working identifiers for the agent's own tool calls
   (e.g. summarize by uid). They are agent-facing only — agents are instructed
-  never to repeat them to the end user.
+  never to repeat them to the end user. Folder ids carry a ``folder:`` prefix
+  so a model cannot mistake them for document uids (issue #2244); leaf uids
+  stay bare because they are the value passed verbatim to summarize/search
+  tools.
 """
 
 from __future__ import annotations
@@ -123,10 +126,16 @@ def _format_leaf(doc: DocLeaf) -> str:
 
 
 def _format_folder(node: TreeNode) -> str:
-    """Folder line: ``name/`` for synthetic grouping nodes, ``name [tag_id]/``
-    for real tags -- the id is what a caller passes back as a tag filter."""
+    """Folder line: ``name/`` for synthetic grouping nodes, ``name [folder:tag_id]/``
+    for real tags -- the id is what a caller passes back as a tag filter.
+
+    The ``folder:`` prefix is load-bearing: without it, folder lines look
+    exactly like document leaves (``name [uid] (uploaded ...)``) and models
+    pass the folder's tag id to ``summarize_document`` as a ``document_uid``,
+    which 403s (observed live, issue #2244). The prefix keeps the id available
+    for tag filters while making it unmistakably not-a-document-uid."""
     if node.tag_id:
-        return f"{node.name} [{node.tag_id}]/"
+        return f"{node.name} [folder:{node.tag_id}]/"
     return f"{node.name}/"
 
 
