@@ -33,6 +33,9 @@ import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInf
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
+import { CAP_DOCUMENT_ACCESS, CAP_PPT_FILLER, type ToolPack } from "./toolPacks.ts";
+import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
+import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./AgentFormBody.module.css";
 
@@ -250,6 +253,40 @@ export function AgentFormBody({
       />
     ));
 
+  // Per-pack options for the Simple capabilities view — each wired to the same
+  // capability config/asset state the Advanced view writes, so the two stay in
+  // sync. Only offered when the team can actually use the backing capability.
+  const renderPackOptions = (pack: ToolPack) => {
+    // Team resources → document_access folder scoping: the "restrict to specific
+    // folders" switch + the folder tree, same labels as Advanced but a leaner
+    // visual (see DocumentAccessPackOptions). The corpus intent uniquely
+    // identifies the team-resources pack.
+    if (pack.documentAccessIntent === "corpus" && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
+      return (
+        <DocumentAccessPackOptions
+          configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+          teamId={teamId}
+        />
+      );
+    }
+    // PowerPoint → the same mandatory-template upload as the Advanced ppt_filler
+    // card, wired to the same config/asset/blocking-error state so Save is gated
+    // identically.
+    if (pack.enablesCapabilityIds.includes(CAP_PPT_FILLER) && availableCapabilityIds.has(CAP_PPT_FILLER)) {
+      return (
+        <PptFillerPackOptions
+          disabled={isSubmitting}
+          configValues={capabilityConfigValues[CAP_PPT_FILLER] ?? {}}
+          assetFiles={capabilityAssetFiles[CAP_PPT_FILLER] ?? {}}
+          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_FILLER, slotKey, file)}
+          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_FILLER, message)}
+        />
+      );
+    }
+    return undefined;
+  };
+
   return (
     <div className={styles.body}>
       {/* Absorbs Chrome's username+password credential heuristic away from real form fields */}
@@ -355,10 +392,11 @@ export function AgentFormBody({
                 </div>
                 {capabilityView === "simple" ? (
                   <SimpleCapabilitiesView
-                    availableIds={new Set(capabilities.map((c) => c.id))}
+                    availableIds={availableCapabilityIds}
                     selection={{ selectedCapabilityIds, capabilityConfigValues, reasoningEnabled }}
                     disabled={isSubmitting}
                     onSelectionChange={onCapabilitySelectionReplace}
+                    renderPackOptions={renderPackOptions}
                   />
                 ) : (
                   <ul className={styles.toolsList}>

@@ -17,6 +17,15 @@
   font: var(--font-title-large-emphasized);
 }
 
+// No `width` here on purpose — the header is a flex row with
+// justify-content: space-between, so a shrink-to-fit box capped by
+// max-width keeps the field right-aligned and compact instead of growing
+// to fill the row (which is what SearchInput's own wrapper: width: 100%
+// would otherwise force).
+.marketplaceTeamsSearch {
+  max-width: 260px;
+}
+
 .marketplaceTeamsContent {
   padding-bottom: var(--spacing-s);
 }
@@ -33,6 +42,16 @@
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
+  align-items: stretch;
   gap: var(--spacing-m);
   padding-bottom: var(--spacing-m);
+}
+
+// Wraps a card only when it's navigable (member teams) — must stay a flex
+// container itself so the stretched row height reaches TeamCard's
+// height: 100%, and must not restyle the link (no underline/color change).
+.marketplaceTeamsCardLink {
+  display: flex;
+  color: inherit;
+  text-decoration: none;
 }

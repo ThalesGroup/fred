@@ -14,6 +14,8 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import { buildTree, type TagNode } from "../../../../../shared/utils/tagTree";
 import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -195,8 +197,11 @@ export function DocumentLibraryScopePicker({
                 }}
                 onChange={() => toggleNodeSelection(child)}
               />
-              <span className={`${styles.folderIcon} material-symbols-outlined`} aria-hidden>
-                {isExpanded ? "folder_open" : "folder"}
+              {/* Same folder icon/color as the Resources table (shared
+                  fileIconSpec) — the chevron already carries the expand state,
+                  so no folder_open swap here. */}
+              <span className={styles.folderIcon} style={{ color: FOLDER_ICON.color }} aria-hidden>
+                <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
               </span>
               <div className={styles.nodeMeta}>
                 <span className={styles.nodeLabel}>{child.name}</span>
@@ -213,6 +218,14 @@ export function DocumentLibraryScopePicker({
                     {docs.map((doc) => {
                       const documentUid = doc.identity.document_uid;
                       const checked = selectedDocumentUids?.includes(documentUid) ?? false;
+                      // Same file-type icon/color as the Resources table (shared
+                      // fileIconSpec), so a given extension reads identically here.
+                      const docSpec = fileIconSpec(doc.file?.file_type);
+                      const docIcon = (
+                        <span className={styles.documentIcon} style={{ color: docSpec.color }} aria-hidden>
+                          <Icon category="outlined" type={docSpec.type} filled={docSpec.filled} />
+                        </span>
+                      );
                       return (
                         <li key={documentUid} className={styles.documentItem}>
                           {documentSelectionEnabled ? (
@@ -223,16 +236,12 @@ export function DocumentLibraryScopePicker({
                                 checked={checked}
                                 onChange={(event) => toggleDocumentSelection(documentUid, event.target.checked)}
                               />
-                              <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
-                                description
-                              </span>
+                              {docIcon}
                               <span className={styles.documentName}>{doc.identity.document_name}</span>
                             </label>
                           ) : (
                             <>
-                              <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
-                                description
-                              </span>
+                              {docIcon}
                               <span className={styles.documentName}>{doc.identity.document_name}</span>
                             </>
                           )}

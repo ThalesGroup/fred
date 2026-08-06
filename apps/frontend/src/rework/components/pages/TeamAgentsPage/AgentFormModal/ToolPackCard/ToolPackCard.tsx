@@ -16,7 +16,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { includedCapabilityStatus, type IncludedCapabilityStatus } from "../toolPackLogic.ts";
 import type { ToolPack } from "../toolPacks.ts";
@@ -33,6 +33,39 @@ interface ToolPackCardProps {
   /** Capability ids currently active on the agent (drives active vs. inactive). */
   activeIds: ReadonlySet<string>;
   onToggle: (nextOn: boolean) => void;
+  /** Optional per-pack configuration UI (e.g. the PowerPoint template upload),
+   *  revealed with a smooth open animation while the pack is active. Only some
+   *  packs supply one; omit for packs with nothing to configure. */
+  options?: ReactNode;
+}
+
+/**
+ * Height-animated reveal for a pack's options, mounted only while the pack is
+ * active — so the entrance animates once (max-height, the design-system's
+ * chosen technique over grid-rows). The cap is lifted to `none` after the
+ * open transition so async-growing content (the template's per-slide error
+ * list) is never clipped.
+ */
+function PackOptionsReveal({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [capLifted, setCapLifted] = useState(false);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setOpen(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  return (
+    <div
+      className={`${styles.optionsReveal} ${open ? styles.optionsRevealOpen : ""}`}
+      style={capLifted ? { maxHeight: "none" } : undefined}
+      onTransitionEnd={(e) => {
+        if (e.propertyName === "max-height" && open) setCapLifted(true);
+      }}
+    >
+      <div className={styles.optionsInner}>{children}</div>
+    </div>
+  );
 }
 
 const STATUS_ICON: Record<IncludedCapabilityStatus, IconType> = {
@@ -54,7 +87,15 @@ const STATUS_TOOLTIP_KEY: Record<IncludedCapabilityStatus, string> = {
  * the platform admin enabled it for the team. Shape mirrors the app's other
  * organism cards (AgentCard/CapabilityCard) so the form reads as one system.
  */
-export function ToolPackCard({ pack, checked, disabled, availableIds, activeIds, onToggle }: ToolPackCardProps) {
+export function ToolPackCard({
+  pack,
+  checked,
+  disabled,
+  availableIds,
+  activeIds,
+  onToggle,
+  options,
+}: ToolPackCardProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const hasIncluded = pack.includes.length > 0;
@@ -87,6 +128,8 @@ export function ToolPackCard({ pack, checked, disabled, availableIds, activeIds,
           />
         </span>
       </label>
+
+      {checked && options && <PackOptionsReveal>{options}</PackOptionsReveal>}
 
       {hasIncluded && (
         <>

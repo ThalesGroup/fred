@@ -147,8 +147,8 @@
           "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
         },
         "bind_libraries": {
-          "title": "Lier à des bibliothèques spécifiques",
-          "description": "Restreindre cet agent à un ensemble fixe de bibliothèques de documents choisies lors de la configuration."
+          "title": "Restreindre à des dossiers spécifiques",
+          "description": "Restreindre la connaissance et la recherche de l'agent à certains dossiers."
         },
         "library_tag_ids": {
           "title": "Bibliothèques de documents liées",
@@ -248,6 +248,7 @@
         "templateInvalid": "Corrigez les erreurs du modèle ci-dessous avant d'enregistrer.",
         "analyzing": "Analyse du modèle…",
         "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
+        "uploadSuccessToast": "Modèle PowerPoint validé.",
         "schemaTitle": "Champs que l'agent remplira",
         "learnMore": "Comment ça marche ? Que dois-je uploader ?",
         "slide": "Diapositive {{number}}",
@@ -1402,6 +1403,11 @@
     "marketplace": {
       "teams": {
         "otherTeams": "Découvrez d'autres équipes",
+        "search": {
+          "ariaLabel": "Rechercher une équipe",
+          "clearAriaLabel": "Effacer la recherche",
+          "placeholder": "Rechercher une équipe"
+        },
         "title": "Équipes de la communauté",
         "yourTeams": "Vos équipes"
       }

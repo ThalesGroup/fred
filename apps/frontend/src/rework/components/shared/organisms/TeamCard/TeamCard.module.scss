@@ -5,6 +5,11 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 290px;
+  /* Fills whatever height the row gives it (flex `align-items: stretch` on
+   * the parent list, and — when wrapped for navigation — the flex Link
+   * wrapper), so cards in the same row line up on their footer regardless of
+   * description length. */
+  height: 100%;
   /* No overflow: hidden here — an admin-avatar tooltip in the footer must be
    * able to escape the card bounds. The banner below clips its own square
    * corners to match the card's rounded top instead. */

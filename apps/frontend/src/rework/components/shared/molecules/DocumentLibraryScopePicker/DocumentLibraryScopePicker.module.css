@@ -18,6 +18,7 @@
   position: relative;
   align-items: center;
   gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-main);
   padding: var(--spacing-xs) var(--spacing-s);
@@ -72,9 +73,12 @@
   accent-color: var(--primary);
 }
 
+/* Color comes from the shared fileIconSpec (inline style), matching the
+   Resources table; only the glyph size is fixed here. */
 .folderIcon,
 .documentIcon {
-  color: var(--on-surface-retreat);
+  display: inline-flex;
+  align-items: center;
   font-size: 18px;
 }
 
