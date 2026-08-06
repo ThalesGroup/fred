@@ -98,6 +98,9 @@ class FakeOpenSearchClient:
         self.search_pipeline = FakeSearchPipeline(exists=pipeline_exists)
         self.update_by_query_calls: list[tuple[str, dict]] = []
         self.update_by_query_response: dict = {"updated": 1}
+        self.search_calls: list[dict] = []
+        self.search_responses: list[dict] = []
+        self.search_request_timeouts: list[int | None] = []
 
     def close(self) -> None:
         return None
@@ -105,6 +108,13 @@ class FakeOpenSearchClient:
     def update_by_query(self, *, index: str, body: dict, params: dict | None = None) -> dict:
         self.update_by_query_calls.append((index, deepcopy(body)))
         return self.update_by_query_response
+
+    def search(self, *, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        self.search_calls.append(deepcopy(body))
+        self.search_request_timeouts.append(request_timeout)
+        if self.search_responses:
+            return self.search_responses.pop(0)
+        return {"aggregations": {}}
 
 
 def test_opensearch_vector_store_creates_missing_index(monkeypatch):
@@ -538,3 +548,153 @@ def test_opensearch_vector_store_retries_transient_embedding_failure_without_spl
         (4, ["cid-0", "cid-1", "cid-2", "cid-3"]),
     ]
     assert sleep_calls == [ovs.EMBEDDING_RETRY_BASE_DELAY_SECONDS]
+
+
+def test_list_document_uids_pages_past_a_single_page_via_composite_aggregation(monkeypatch):
+    """A one-shot `terms` agg silently truncates once an index holds more distinct
+    document_uids than its `size`. This must page through `after_key` until
+    exhausted instead, or a real deployment's own audit tool (`MetadataService.
+    audit_stores`) would eventually treat correctly-vectorized documents that fell
+    off the truncated list as `missing_vectors` and reset them (#2234)."""
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.search_responses = [
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-2"},
+                    "buckets": [
+                        {"key": {"doc_uid": "doc-1"}, "doc_count": 5},
+                        {"key": {"doc_uid": "doc-2"}, "doc_count": 3},
+                    ],
+                }
+            }
+        },
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-3"},
+                    "buckets": [{"key": {"doc_uid": "doc-3"}, "doc_count": 1}],
+                }
+            }
+        },
+        {"aggregations": {"by_doc": {"buckets": []}}},
+    ]
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    result = store.list_document_uids(page_size=2)
+
+    assert result == ["doc-1", "doc-2", "doc-3"]
+    assert len(fake_client.search_calls) == 3
+    assert fake_client.search_calls[0]["aggs"]["by_doc"]["composite"]["size"] == 2
+    assert "after" not in fake_client.search_calls[0]["aggs"]["by_doc"]["composite"]
+    assert fake_client.search_calls[1]["aggs"]["by_doc"]["composite"]["after"] == {"doc_uid": "doc-2"}
+    assert fake_client.search_calls[2]["aggs"]["by_doc"]["composite"]["after"] == {"doc_uid": "doc-3"}
+
+
+def test_list_document_uids_returns_empty_list_when_store_raises(monkeypatch):
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+
+    def _raise(*, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        raise RuntimeError("boom")
+
+    fake_client.search = _raise  # type: ignore[method-assign]
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    assert store.list_document_uids() == []
+
+
+# ── scan_document_uids_composite (module-level, pure) -- #2234 3a repair path ─
+# Extracted so the repair action's `list_strict_vector_document_uids` activity
+# can page through document_uids using only a raw, already-configured
+# `OpenSearch` client (`ApplicationContext.get_opensearch_client()`) -- never an
+# `OpenSearchVectorStoreAdapter` instance, whose `__init__` calls `ensure_ready()`
+# (embedder call, possible index/pipeline creation). These tests exercise the
+# helper directly, the same way the activity does, independent of the adapter.
+
+
+def test_scan_document_uids_composite_pages_multiple_times_via_after_key():
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.search_responses = [
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-2"},
+                    "buckets": [
+                        {"key": {"doc_uid": "doc-1"}, "doc_count": 5},
+                        {"key": {"doc_uid": "doc-2"}, "doc_count": 3},
+                    ],
+                }
+            }
+        },
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-3"},
+                    "buckets": [{"key": {"doc_uid": "doc-3"}, "doc_count": 1}],
+                }
+            }
+        },
+        {"aggregations": {"by_doc": {"buckets": []}}},
+    ]
+
+    result = ovs.scan_document_uids_composite(fake_client, "fred-vectors", page_size=2, strict=True)
+
+    assert result == ["doc-1", "doc-2", "doc-3"]
+    assert len(fake_client.search_calls) == 3
+
+
+def test_scan_document_uids_composite_passes_a_bounded_request_timeout():
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.search_responses = [{"aggregations": {"by_doc": {"buckets": []}}}]
+
+    ovs.scan_document_uids_composite(fake_client, "fred-vectors", request_timeout=7)
+
+    assert fake_client.search_request_timeouts == [7]
+
+
+def test_scan_document_uids_composite_strict_raises_when_an_intermediate_page_fails():
+    """The failure happens on page 2, *after* page 1 already returned real
+    document_uids -- strict mode must still raise (never return the partial
+    list collected so far), so a caller that must never treat "scan failed" as
+    "these N document_uids are the complete answer" gets a hard error."""
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    call_count = {"n": 0}
+    first_page = {
+        "aggregations": {
+            "by_doc": {
+                "after_key": {"doc_uid": "doc-1"},
+                "buckets": [{"key": {"doc_uid": "doc-1"}, "doc_count": 5}],
+            }
+        }
+    }
+
+    def _search(*, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        call_count["n"] += 1
+        fake_client.search_calls.append(deepcopy(body))
+        if call_count["n"] == 1:
+            return first_page
+        raise RuntimeError("boom on page 2")
+
+    fake_client.search = _search  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="boom on page 2"):
+        ovs.scan_document_uids_composite(fake_client, "fred-vectors", page_size=1, strict=True)
+
+    assert call_count["n"] == 2
+
+
+def test_scan_document_uids_composite_non_strict_swallows_and_returns_empty_on_first_page_failure():
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+
+    def _raise(*, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        raise RuntimeError("boom")
+
+    fake_client.search = _raise  # type: ignore[method-assign]
+
+    assert ovs.scan_document_uids_composite(fake_client, "fred-vectors", strict=False) == []

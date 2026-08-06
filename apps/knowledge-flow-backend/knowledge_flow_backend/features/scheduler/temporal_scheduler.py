@@ -28,6 +28,7 @@ from knowledge_flow_backend.common.structures import SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
+from knowledge_flow_backend.features.scheduler.repair_vector_metadata_workflow import RepairVectorMetadataWorkflow
 from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPull, ProcessPush, RevectorizeCorpusWorkflow
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,23 @@ class TemporalScheduler(BaseScheduler):
             rpc_timeout=_rpc_timeout(self._scheduler_config.temporal.rpc_timeout_seconds),
         )
         logger.info("🛠️ started temporal revectorize workflow=%s", workflow_handle.id)
+        return WorkflowHandle(workflow_id=workflow_handle.id, run_id=workflow_handle.first_execution_run_id)
+
+    async def start_repair_vector_metadata(self, *, payload: dict, task_id: str) -> WorkflowHandle:
+        """
+        Start a `RepairVectorMetadataWorkflow` ("3a — Réparer uniquement", #2234).
+        `payload` is just `{source_tag, task_id}` plain data -- scope resolution and
+        the vector/content scans all happen inside the workflow's own activities.
+        """
+        client: Client = await self._client_provider.get_client()
+        workflow_handle = await client.start_workflow(
+            RepairVectorMetadataWorkflow.run,
+            payload,
+            id=f"repair-vector-metadata-{task_id}",
+            task_queue=self._scheduler_config.temporal.task_queue,
+            rpc_timeout=_rpc_timeout(self._scheduler_config.temporal.rpc_timeout_seconds),
+        )
+        logger.info("🛠️ started temporal repair-vector-metadata workflow=%s", workflow_handle.id)
         return WorkflowHandle(workflow_id=workflow_handle.id, run_id=workflow_handle.first_execution_run_id)
 
     async def get_workflow_execution_status(self, workflow_id: str) -> Optional[WorkflowExecutionStatus]:

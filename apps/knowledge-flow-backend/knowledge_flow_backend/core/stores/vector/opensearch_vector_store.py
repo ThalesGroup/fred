@@ -219,6 +219,74 @@ class EmbeddingRequestFailure:
     exception_type: str
 
 
+def scan_document_uids_composite(
+    client: OpenSearch,
+    index: str,
+    *,
+    page_size: int = 1000,
+    strict: bool = False,
+    request_timeout: int = 30,
+) -> List[str]:
+    """
+    Page through every distinct `metadata.document_uid` in `index` via a
+    `composite` aggregation (`after_key`), using `client` as given.
+
+    Pure and side-effect-free: takes an already-constructed client and index
+    name and issues only `search` calls -- never touches indices, mappings, or
+    pipelines, and never needs an embedder. This is what lets the
+    vector-metadata repair action (#2234, 3a) list real vector document_uids
+    without ever constructing an `OpenSearchVectorStoreAdapter` (whose
+    `__init__` calls `ensure_ready()`, which calls the embedder and can create
+    or update the index/pipeline/mapping -- forbidden for a metadata-only
+    repair). `OpenSearchVectorStoreAdapter.list_document_uids` delegates here
+    too, so there is exactly one paging implementation.
+
+    Pages through a `composite` aggregation instead of a single `terms`
+    aggregation capped at a fixed bucket count. A one-shot `terms` agg
+    silently truncates once the index holds more distinct document_uids than
+    its `size`, ordered by descending chunk count -- so once a deployment's
+    real document count crosses that cap, correctly-vectorized documents with
+    fewer chunks silently drop out of the list. `page_size` bounds each
+    round-trip only, never the total result. `request_timeout` bounds each
+    individual `search` call so a stuck OpenSearch node fails this scan
+    instead of hanging it indefinitely.
+
+    `strict=False` (default, used by `OpenSearchVectorStoreAdapter.
+    list_document_uids`'s existing callers, e.g. `audit_stores`) is
+    best-effort: any failure -- on the first page or midway through paging --
+    logs and returns whatever was collected so far. `strict=True` (the
+    vector-metadata repair path) never does that: a failure on any page
+    raises instead, so a caller that must never treat "scan failed" as "0
+    vectors" gets a hard error instead of a silently incomplete list.
+    """
+    doc_uids: list[str] = []
+    after: dict[str, object] | None = None
+    try:
+        while True:
+            composite: dict[str, object] = {
+                "size": page_size,
+                "sources": [{"doc_uid": {"terms": {"field": "metadata.document_uid"}}}],
+            }
+            if after is not None:
+                composite["after"] = after
+            body = {"size": 0, "aggs": {"by_doc": {"composite": composite}}}
+            resp = client.search(index=index, body=body, request_timeout=request_timeout)
+            agg = resp.get("aggregations", {}).get("by_doc", {})  # type: ignore[dict-item]
+            buckets = agg.get("buckets", [])
+            if not buckets:
+                break
+            doc_uids.extend(str(b["key"]["doc_uid"]) for b in buckets if b.get("key", {}).get("doc_uid"))
+            after = agg.get("after_key")
+            if after is None:
+                break
+        return doc_uids
+    except Exception:
+        if strict:
+            raise
+        logger.warning("[VECTOR][OPENSEARCH] Could not list document_uids from index=%s", index, exc_info=True)
+        return []
+
+
 class OpenSearchVectorStoreAdapter(BaseVectorStore):
     """
     Fred — OpenSearch-backed Vector Store (LangChain for ANN + OS client for lexical/phrase).
@@ -897,21 +965,26 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
             return 0
 
-    def list_document_uids(self, *, max_buckets: int = 10000) -> List[str]:
+    def list_document_uids(self, *, page_size: int = 1000, strict: bool = False) -> List[str]:
         """
-        Return distinct document_uids known to this vector index (best effort).
+        Return every distinct document_uid known to this vector index.
+
+        `strict=False` (default, used by `audit_stores`) is best-effort: any
+        failure -- on the first page or midway through paging -- logs and
+        returns whatever was collected so far. `strict=True` (used by the
+        vector-metadata repair path, #2234) never does that: a failure on any
+        page raises instead, so a caller that must never treat "scan failed"
+        as "0 vectors" gets a hard error instead of a silently incomplete list.
+
+        Delegates to `scan_document_uids_composite` (module-level, pure) so the
+        same paging logic is available to callers that must never construct a
+        full `OpenSearchVectorStoreAdapter` (whose `__init__` calls
+        `ensure_ready()` -> an embedder call and possible index/pipeline
+        creation) just to page through document_uids -- see that function's
+        docstring, and the repair action's `list_strict_vector_document_uids`
+        activity, which uses it directly against a raw client instead.
         """
-        try:
-            body = {
-                "size": 0,
-                "aggs": {"by_doc": {"terms": {"field": "metadata.document_uid", "size": max_buckets}}},
-            }
-            resp = self._client.search(index=self._index, body=body)
-            buckets = resp.get("aggregations", {}).get("by_doc", {}).get("buckets", [])  # type: ignore[dict-item]
-            return [str(b.get("key")) for b in buckets if b.get("key")]
-        except Exception:
-            logger.warning("[VECTOR][OPENSEARCH] Could not list document_uids from index=%s", self._index, exc_info=True)
-            return []
+        return scan_document_uids_composite(self._client, self._index, page_size=page_size, strict=strict)
 
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """

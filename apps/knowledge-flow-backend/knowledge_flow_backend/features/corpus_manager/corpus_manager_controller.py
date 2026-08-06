@@ -17,6 +17,7 @@ from .corpus_manager_service import (
     CorpusManagerService,
     CorpusScopeV1,
     PurgeVectorsRequestV1,
+    RepairVectorMetadataRequestV1,
     RevectorizeCorpusRequestV1,
     TaskGetRequestV1,
     TaskListRequestV1,
@@ -89,6 +90,18 @@ class CorpusManagerController:
         for document_uid in scope.document_uids:
             await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
 
+    async def _authorize_repair_vector_metadata(self, user: KeycloakUser, team_id: str) -> None:
+        """
+        3a's scope is always a bare `source_tag` spanning arbitrary teams (#2234) --
+        the same "no single team to check membership against" situation
+        `_authorize_scope` handles for a source_tag-only `CorpusScopeV1`. Requires
+        both real membership on the filing team (same IDOR protection as
+        `build_toc`/`revectorize`, see `_authorize_team`) and platform-admin (the
+        actual authority to repair documents across arbitrary teams).
+        """
+        await self._authorize_team(user, team_id)
+        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+
     def _handle_exception(self, e: Exception, context: str) -> NoReturn:
         logger.exception("[CORPUS] %s failed", context)
         raise HTTPException(500, "Internal server error")
@@ -153,6 +166,23 @@ class CorpusManagerController:
                 return await self.service.revectorize_corpus(payload, user)
             except Exception as e:
                 return self._handle_exception(e, "revectorize")
+
+        @router.post(
+            "/corpus/repair-vector-metadata",
+            tags=["CorpusManager"],
+            summary="Repair the vector processing status for documents whose vectors and content already exist",
+            operation_id="corpus_repair_vector_metadata",
+            response_model=StartTaskResponse,
+        )
+        async def repair_vector_metadata(
+            payload: RepairVectorMetadataRequestV1,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            await self._authorize_repair_vector_metadata(user, payload.team_id)
+            try:
+                return await self.service.repair_vector_metadata(payload, user)
+            except Exception as e:
+                return self._handle_exception(e, "repair_vector_metadata")
 
         @router.post(
             "/corpus/purge-vectors",

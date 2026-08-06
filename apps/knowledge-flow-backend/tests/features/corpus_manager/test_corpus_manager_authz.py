@@ -56,11 +56,19 @@ async def _fake_revectorize_corpus(self, req, user) -> StartTaskResponse:
     return StartTaskResponse(task_id="fake-task-id")
 
 
+async def _fake_repair_vector_metadata(self, req, user) -> StartTaskResponse:
+    """Stub for CorpusManagerService.repair_vector_metadata (#2234, 3a): same
+    reasoning as `_fake_revectorize_corpus` -- these tests exercise
+    `_authorize_repair_vector_metadata`, not the real Temporal wiring."""
+    return StartTaskResponse(task_id="fake-repair-task-id")
+
+
 @pytest.fixture
 def corpus_client(monkeypatch):
     fake_rebac = _FakeRebac()
     monkeypatch.setattr(corpus_module, "get_rebac_engine", lambda: fake_rebac)
     monkeypatch.setattr(CorpusManagerService, "revectorize_corpus", _fake_revectorize_corpus)
+    monkeypatch.setattr(CorpusManagerService, "repair_vector_metadata", _fake_repair_vector_metadata)
 
     app = FastAPI()
     router = APIRouter(prefix="/knowledge-flow/v1")
@@ -337,3 +345,121 @@ def test_build_toc_source_tag_only_scope_also_requires_platform_admin(corpus_cli
         (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
         (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
     ]
+
+
+# ── #2234 (3a): repair-vector-metadata authorization + input validation ──────
+# Always a bare source_tag scope (no tag_ids/document_uids variant exists on
+# RepairVectorMetadataRequestV1) -- so, unlike revectorize, it always requires
+# BOTH real membership on the filing team AND platform-admin, every time
+# (`_authorize_repair_vector_metadata`), never just the narrower tag/document
+# check revectorize falls back to for a non-source_tag scope.
+
+
+def test_repair_vector_metadata_checks_team_and_platform_admin_permission(corpus_client) -> None:
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/repair-vector-metadata",
+        json={"team_id": "team-a", "source_tag": "kea-import"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"task_id": "fake-repair-task-id"}
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
+    ]
+
+
+def test_repair_vector_metadata_rejects_non_platform_admin(monkeypatch) -> None:
+    """A team member without CAN_MANAGE_PLATFORM must be denied -- this action
+    always spans arbitrary teams, so team membership alone is never enough."""
+
+    class _DenyingPlatformAdminRebac(_FakeRebac):
+        async def check_user_permission_or_raise(self, user, permission, resource_id, **_kw) -> None:
+            self.calls.append((permission, resource_id))
+            if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+                raise HTTPException(403, "not a platform admin")
+
+    fake_rebac = _DenyingPlatformAdminRebac()
+    monkeypatch.setattr(corpus_module, "get_rebac_engine", lambda: fake_rebac)
+    monkeypatch.setattr(CorpusManagerService, "repair_vector_metadata", _fake_repair_vector_metadata)
+
+    app = FastAPI()
+    router = APIRouter(prefix="/knowledge-flow/v1")
+    CorpusManagerController(router)
+    app.include_router(router)
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="alice", username="alice", email=None, roles=[])
+    with TestClient(app) as client:
+        response = client.post(
+            "/knowledge-flow/v1/corpus/repair-vector-metadata",
+            json={"team_id": "team-a", "source_tag": "kea-import"},
+        )
+
+    assert response.status_code == 403
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ_MEMEBERS, "team-a"),
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
+    ]
+
+
+def test_repair_vector_metadata_rejects_empty_source_tag(corpus_client) -> None:
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/repair-vector-metadata",
+        json={"team_id": "team-a", "source_tag": ""},
+    )
+
+    assert response.status_code == 422
+    assert fake_rebac.calls == []
+
+
+def test_repair_vector_metadata_rejects_whitespace_only_source_tag(corpus_client) -> None:
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/repair-vector-metadata",
+        json={"team_id": "team-a", "source_tag": "   "},
+    )
+
+    assert response.status_code == 422
+    assert fake_rebac.calls == []
+
+
+def test_repair_vector_metadata_rejects_whitespace_only_team_id(corpus_client) -> None:
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/repair-vector-metadata",
+        json={"team_id": "   ", "source_tag": "kea-import"},
+    )
+
+    assert response.status_code == 422
+    assert fake_rebac.calls == []
+
+
+def test_repair_vector_metadata_strips_surrounding_whitespace() -> None:
+    """A valid but padded source_tag/team_id must be usable, not rejected --
+    only the pure-whitespace/empty case is invalid."""
+    from knowledge_flow_backend.features.corpus_manager.corpus_manager_service import RepairVectorMetadataRequestV1
+
+    req = RepairVectorMetadataRequestV1(source_tag="  kea-import  ", team_id=" team-a ")
+
+    assert req.source_tag == "kea-import"
+    assert req.team_id == "team-a"
+
+
+def test_repair_vector_metadata_rejects_unknown_fields(corpus_client) -> None:
+    """`extra="forbid"` must still hold after adding the strip/non-empty
+    validator -- e.g. a stray `options`/`scope` field on the payload must 422,
+    not be silently ignored."""
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/repair-vector-metadata",
+        json={"team_id": "team-a", "source_tag": "kea-import", "options": {"force": True}},
+    )
+
+    assert response.status_code == 422
+    assert fake_rebac.calls == []
