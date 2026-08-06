@@ -721,6 +721,13 @@ describe("stripDocumentUids", () => {
   it("leaves text with no bracketed uid unchanged", () => {
     expect(stripDocumentUids("Sales\n  HR")).toBe("Sales\n  HR");
   });
+
+  it("strips folder tag ids rendered as [folder:tag-id] (issue #2244)", () => {
+    const tree = ["docs [folder:8e0927eb-3650-4696-a21c-47e78d48f54f]/", "  report.pdf [doc-1] (2026-01-01)"].join(
+      "\n",
+    );
+    expect(stripDocumentUids(tree)).toBe(["docs/", "  report.pdf (2026-01-01)"].join("\n"));
+  });
 });
 
 describe("toolCopyText", () => {
