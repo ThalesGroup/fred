@@ -155,6 +155,7 @@ export const materialIcons = [
   "login",
   "mic",
   "stop",
+  "book_2",
 ] as const;
 
 export type MaterialIconType = (typeof materialIcons)[number];

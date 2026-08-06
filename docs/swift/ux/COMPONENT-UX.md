@@ -716,14 +716,60 @@ chat input** instead of attaching it as a session-context chip.
 The composer now shows two trigger buttons side by side instead of one:
 
 - **Add** (`add` icon) — the attach action + the always-on prompt-library row.
-- **Tune** (`tune` icon, to its right) — the tool controls (document scope, search policy, RAG
-  scope, reasoning). It only renders when the agent exposes at least one such control.
+- **Tune** (`tune` icon, to its right) — the remaining tool controls (search policy, document
+  scope, reasoning). It only renders when the agent exposes at least one such control. RAG scope
+  moved out to an always-visible chip (2026-08-05) — see below. Which specific controls sit in
+  the tune menu vs. a standalone chip is expected to keep changing as positioning is iterated on;
+  check `COMPOSER_CHIP_WIDGETS` in `ComposerOptionChips.tsx` for the current split rather than
+  trusting this bullet to stay exhaustive.
 
 Both open the same `MenuPopover`-based popover. `ComposerActionsMenu` gained `icon` /
 `openAriaLabel` / `dialogAriaLabel` props (defaulting to the add-menu values), and
 `ComposerControlSlot` gained a `part: "primary" | "tools"` prop selecting which control groups it
 renders — so the two buttons reuse the same component. The two triggers are spaced by the
 composer's `commandSlot` gap.
+
+---
+
+### Composer option chips — scope (2026-08-05, iterated 2026-08-06)
+
+**Location:** `src/rework/components/shared/molecules/ContextualPicker/`,
+`src/rework/features/capabilities/ComposerOptionChips.tsx`,
+`src/rework/features/capabilities/ComposerControlSlot.tsx`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+A row of `ContextualPicker` chips sits in the composer's bottom row, right after the add/tune
+buttons (`RichInputField`'s `topSlot`) — one chip per closed-set chat-turn setting currently
+promoted out of the tune menu, each showing an icon + its current value and opening a popover
+above itself to change it. Visual reference: Gemini's "Deep Search" chip. Reuses existing composer
+state (`useComposerSettings`) — no new backend concept.
+
+- `ComposerOptionChips` (host) resolves `chat_controls` the same way `ComposerControlSlot` does
+  and renders a chip only when the corresponding widget is actually present for the active agent —
+  an agent without RAG scope enabled shows no scope chip, exactly like the tune-menu row it
+  replaces.
+- `COMPOSER_CHIP_WIDGETS`, exported from `ComposerOptionChips.tsx`, is the single source of truth
+  for which widgets are promoted to a chip right now: `ComposerControlSlot` excludes them from its
+  `part="tools"` render (avoids the same setting living in two places), and `ManagedChatPage`'s
+  `hasToolControls` guard excludes them too — otherwise an agent exposing only chip-promoted
+  controls would show a "tune" button opening onto an empty popover. **This set is expected to
+  change often** as the developer iterates on where each control reads best — to move a widget
+  back into the tune menu, remove it from the set and delete its chip JSX in
+  `ComposerOptionChips.tsx`; its `EnumSelectRow`-based row in `stockKit/` was never deleted, so it
+  reappears in the tune popover with no other change needed (see `SearchPolicyControl`, which did
+  exactly this round-trip: chip 2026-08-05 → back in the tune menu 2026-08-06).
+- Currently chipped: **scope** only (`rag_scope`, `book_2` icon — `hub` until 2026-08-06). Search
+  mode (`search_policy`) is back in the tune menu as of 2026-08-06.
+- RAG scope's value labels changed for readability outside the tune-menu row's fuller context:
+  "Corpus" / "Corpus + web" / "Général" → **"Ressources" / "Modèle + Ressources" / "Modèle"**
+  (`chatbot.composerSettings.scopeCorpus`/`scopeCorpusAndWeb`/`scopeGeneral` — same i18n keys, new
+  values, fr and en) — this relabel stuck through the search-policy round-trip since it's
+  independent of chip-vs-row placement.
+- `SearchPolicyControl`/`RagScopeControl` (the `EnumSelectRow`-based stock-kit rows) stay
+  registered in `stockChatTurnControlKit` regardless of chip/row placement — only excluded from
+  `ComposerControlSlot`'s `"tools"` render while chipped, never deleted.
 
 ---
 
@@ -1946,16 +1992,29 @@ _(none yet)_
 **Location:** `src/rework/components/shared/molecules/ContextualPicker/ContextualPicker.tsx`
 **Status:** `Functional`
 
-Generic `<T extends string>` trigger button + dropdown listbox. Full ARIA: `role="listbox"`, `role="option"`, `aria-selected`, `aria-expanded`. Mousedown-outside + ESC close. `useId()` for listbox association.
+Generic `<T extends string>` pill-chip trigger + `MenuPopover`/`MenuPopoverItem` options popover anchored above the chip (`position: absolute; bottom: calc(100% + spacing-xs)`, same "opens above" grammar as `ComposerActionsMenu`). Chip: 32px height, fully rounded (`--radius-full`), `--surface-container-low` background, `--font-label-medium` in `--on-surface-retreat`, 18×18px icon; hover lightens via `--state-on-surface-hover`; open state (`data-open`) shows `--primary` text/icon over a `--state-primary-selected` background layer (a `primary`-tinted 16%-opacity overlay — the same token vocabulary as every other state layer in the app, not a one-off value). Self-contained `open` state (unlike `EnumSelectRow`'s externally-coordinated `open`/`onToggle`): each chip closes itself on outside mousedown or Escape, so multiple chips can sit side by side without a shared "one open at a time" coordinator — clicking a sibling chip already lands outside the first one's container. Full ARIA: `role="listbox"`/`role="option"` on the popover, `aria-haspopup`/`aria-expanded`/`aria-label` (`"{title}: {current value}"`) on the trigger. `ArrowUp`/`ArrowDown`/`Home`/`End` roving-tabindex navigation across options, mirroring `EnumSelectRow`'s pattern.
+
+The trigger is wrapped in the shared `Tooltip` atom (`text={title}`) — the chip itself only shows
+the current *value* ("Hybride"), the setting's *name* ("Recherche") shows on hover/focus via the
+tooltip. `Tooltip` has no built-in show delay (toggles on `onMouseEnter`/focus immediately), so
+this is an instant tooltip with no extra wiring needed. The wrapper stays mounted unconditionally
+(not gated on `open`) — swapping it in/out based on `open` would remount the trigger `<button>`
+and drop the focus `triggerRef.current?.focus()` restores after Escape/selection. Because the
+tooltip can technically still be visible for a moment right after a click (pointer hasn't left the
+chip yet), `.menu`'s `z-index` (1600) sits above `Tooltip`'s (1500, `Tooltip.module.scss`) so the
+options popover always wins the stack when both are present.
+
+First consumer: the composer's option chips (`ComposerOptionChips`, `features/capabilities/`) — see "Composer option chips" above for which chat-turn settings are currently chipped vs. shown as a tune-menu row instead (`ComposerControlSlot`); that split is iterated on regularly.
 
 #### Open UX issues
 
-- **Keyboard navigation** — `ArrowUp`/`ArrowDown` through options not yet implemented. Currently Tab-stops on each option but no `aria-activedescendant` tracking.
-- **Multi-select variant** — not implemented; single-value only. If RAG scope needs multi-select, a new variant is needed.
+- **Multi-select variant** — not implemented; single-value only. If a future control needs multi-select, a new variant is needed.
 
 #### Resolved
 
-_(none yet)_
+- **Implemented (2026-08-05)** — this entry described `ContextualPicker` as already built since the CAPAB-01 chat-turn-control extraction, but the path never existed on disk; the composer instead reused `SettingChip`/`EnumSelectRow`/`MenuPopover` directly. This is the first real implementation, built for the composer option chips (search mode / scope).
+- **Instant tooltip for the setting name (2026-08-06)** — added so the chip can stay compact
+  (value only) without losing discoverability of which setting it controls.
 
 ---
 
@@ -2023,8 +2082,9 @@ admin diagnostics.
 
 - **Re-click after reply** (2026-05-24) — textarea lost focus when `disabled` transitioned `true → false` at end of streaming. Fixed with `useEffect` on `disabled` that calls `textareaRef.current?.focus()`.
 - **Square background on input bar** (2026-05-24) — `.bar` had a solid rectangular background making the field look trapped in a box. Replaced with a gradient fade and added `box-shadow` on `.field` for a floating appearance.
-- **Routine options moved to composer topSlot** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Libraries, search policy, and RAG scope are now `ComposerSettingsControls` chips in `RichInputField`'s `topSlot`, with anchored popovers per chip. No full-height drawer for routine controls.
-- **Settings cluster no longer compresses textarea** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated settings row above textarea). Textarea now has full composer width.
+- **Routine options moved to composer topSlot** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Libraries, search policy, and RAG scope moved into the composer instead of a full-height drawer. This entry originally named the destination `ComposerSettingsControls`, which was never built under that name — libraries went to a document-scope row in the "tune" popover (`ComposerControlSlot`), and search policy/RAG scope landed as `topSlot` rows there too until 2026-08-05, when they moved again into standalone `ContextualPicker` chips (`ComposerOptionChips`) — see the "Composer option chips" entry above.
+- **Settings cluster no longer compresses textarea** (2026-05-24) — the settings controls moved from `leftSlot` to `topSlot` (dedicated row above/alongside the textarea). Textarea now has full composer width.
+- **`compactLayout` removed (2026-08-06)** — `RichInputField` had a `compactLayout` prop that rendered a single-line inline row (textarea beside `leftSlot`) instead of the full multi-line layout, used only by `ManagedChatPage` for the empty "new conversation" state. Removed at the developer's request so the composer has the exact same structure (multi-line textarea + full `bottomRow`) in both the empty and mid-conversation states — `ManagedChatPage` now reuses the same `composer` element unconditionally. The now-unused `.inlineRow` CSS class was deleted with it.
 - **Documents chip stays interactive on empty scope** (2026-06-12) — when `documents_selection` is enabled, the Documents chip must always open. Empty scope messaging is explicit: "Select a library first." when the library picker is visible but empty, and a configuration warning when documents are enabled without any library picker or bound library.
 - **IME composition guard** (2026-05-24) — `handleKeyDown` now checks `!e.nativeEvent.isComposing` before calling `onSend`. CJK composition Enter no longer triggers send.
 
@@ -2095,8 +2155,14 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 
 Page composition: floating `topBar` (`position: absolute`) holding `SessionTitleEditor`;
 single `chatArea` scroll container (`overflow-y: auto`) containing page-local
-`ConversationThread` and sticky `RichInputField` with `ComposerSettingsControls` in
-`topSlot`. No `AgentOptionsPanel`, no `ConversationHeader`.
+`ConversationThread` and sticky `RichInputField`. The composer is built once (a single
+`composer` element) and placed either centered in the empty "new conversation" state or in the
+sticky `inputOverlay` mid-conversation — same structure both times (2026-08-06, see
+`RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` — currently just RAG
+scope, see "Composer option chips" (`COMPOSER_CHIP_WIDGETS` changes as placement is iterated on);
+`leftSlot` holds the add/tune `ComposerActionsMenu` buttons (search policy, document scope,
+reasoning, library selection, when the agent exposes them). No `AgentOptionsPanel`, no
+`ConversationHeader`.
 
 #### Open UX issues
 
@@ -2104,11 +2170,12 @@ _(none — all prior issues resolved below)_
 
 #### Resolved
 
-- **Options drawer retired** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Search policy, RAG scope, and library selection are now `ComposerSettingsControls` chips in `RichInputField` `topSlot` with anchored popovers per chip.
-- **Composer settings placement** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated row above textarea). Textarea has full composer width.
-- **Persistent setting summary** (2026-05-24) — active search policy, RAG scope, and library count are always visible as chips in the `topSlot` settings row, even while reading a reply.
+- **Options drawer retired** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Search policy, RAG scope, and library selection moved into the composer instead (see `RichInputField`'s "Resolved" entry for exactly where each landed and when).
+- **Composer settings placement** (2026-05-24) — settings controls moved from `leftSlot` to `topSlot` (dedicated row above/alongside textarea). Textarea has full composer width.
+- **Persistent setting summary** (2026-05-24) — active search policy and RAG scope are always visible as chips in the `topSlot` settings row, even while reading a reply.
 - **Drawer role narrowing** (2026-05-24) — right-side drawers reserved for deep inspection only (source detail, debug, admin diagnostics). Routine controls do not use drawers.
 - **Conversation files drawer** (2026-06-11) — attachment chips remain the transient per-turn affordance above the textarea, while persisted conversation files now live in a dedicated right drawer opened from a badge button next to the paperclip. This keeps routine composer controls lightweight while still exposing reload-safe file preview/delete flows.
+- **Same composer structure in the empty and mid-conversation states** (2026-08-06) — the empty "new conversation" state used to render the composer with `compactLayout` (single-line, buttons inline with the textarea); it now renders identically to the mid-conversation composer (multi-line textarea + full `bottomRow`) per the developer's request. See `RichInputField`'s "Resolved" entry.
 
 ---
 
@@ -2553,4 +2620,4 @@ _Priority order for the next UX session. Update before each session._
 21. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
-24. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)
+24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
