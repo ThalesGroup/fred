@@ -40,7 +40,6 @@ from control_plane_backend.capabilities.authz import (
 )
 from control_plane_backend.capabilities.catalog import (
     aggregate_capability_catalog,
-    has_unreachable_enabled_model_source,
     universally_available_model_profile_ids,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -265,7 +264,6 @@ async def list_available_model_profiles(
     with _pod_catalog_fetch_scope():
         catalog = await aggregate_capability_catalog(deps)
         universal = await universally_available_model_profile_ids(deps)
-        has_unreachable_source = await has_unreachable_enabled_model_source(deps)
     usable = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
     profiles = [
         AvailableModelProfile(
@@ -277,12 +275,7 @@ async def list_available_model_profiles(
         if profile_id in universal
     ]
     profiles.sort(key=lambda p: p.profile_id)
-    return AvailableModelProfileList(
-        profiles=profiles,
-        empty_reason="runtime_source_unreachable"
-        if len(profiles) == 0 and has_unreachable_source
-        else None,
-    )
+    return AvailableModelProfileList(profiles=profiles)
 
 
 async def update_team_routing_policy(

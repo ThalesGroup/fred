@@ -230,28 +230,3 @@ async def universally_available_model_profile_ids(
     if not per_pod_profile_ids:
         return frozenset()
     return frozenset(set.intersection(*per_pod_profile_ids))
-
-
-async def has_unreachable_enabled_model_source(
-    deps: ProductServiceDependencies,
-) -> bool:
-    """Whether any enabled runtime source was unreachable while checking model
-    availability for routing-policy pickers.
-
-    This distinguishes the "no models are granted" empty state from the
-    fail-closed "some enabled pod is unreachable, so no profile is certified
-    universal right now" case. Kept separate from
-    `universally_available_model_profile_ids` so callers can surface the cause
-    without weakening the fail-closed intersection contract.
-    """
-
-    # Lazy import for the same reason as `aggregate_capability_catalog` above
-    # — breaks the product.service <-> capabilities import cycle.
-    from control_plane_backend.product.service import _model_capabilities_for_source
-
-    for source in deps.configuration.platform.runtime_catalog_sources:
-        if not source.enabled:
-            continue
-        if await _model_capabilities_for_source(source.base_url) is None:
-            return True
-    return False

@@ -17,7 +17,6 @@ from __future__ import annotations
 from fred_core.common import TeamId
 from fred_sdk.contracts.context import TeamOperationRouteRule
 from pydantic import BaseModel, Field
-from typing import Literal
 
 
 class TeamRoutingPolicy(BaseModel):
@@ -55,15 +54,6 @@ class AvailableModelProfile(BaseModel):
 
 class AvailableModelProfileList(BaseModel):
     profiles: list[AvailableModelProfile] = Field(default_factory=list)
-    empty_reason: Literal["runtime_source_unreachable"] | None = Field(
-        default=None,
-        description=(
-            "Why the list is empty, when known. "
-            "`runtime_source_unreachable` means at least one enabled runtime "
-            "source was unreachable, so the deployment-global profile "
-            "intersection failed closed."
-        ),
-    )
 
 
 class ProfileNotUsableError(Exception):

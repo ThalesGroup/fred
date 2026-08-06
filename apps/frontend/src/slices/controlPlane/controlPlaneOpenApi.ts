@@ -2453,7 +2453,6 @@ export type AvailableModelProfile = {
   name: string;
 };
 export type AvailableModelProfileList = {
-  empty_reason?: "runtime_source_unreachable" | null;
   profiles?: AvailableModelProfile[];
 };
 export type StartTaskResponse = {
