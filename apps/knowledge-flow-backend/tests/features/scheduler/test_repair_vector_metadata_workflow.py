@@ -227,7 +227,13 @@ class TestConstantActivitySurface:
         """`worker.py`'s activity list for this feature must be the module's own
         `@activity.defn` functions -- not a per-document list built at runtime."""
         worker_source = inspect.getsource(worker_module)
-        for name in ("list_repair_candidates_for_source_tag", "list_strict_vector_document_uids", "list_strict_content_document_uids", "bulk_repair_vector_metadata", "emit_repair_vector_metadata_task_event"):
+        for name in (
+            "list_repair_candidates_for_source_tag",
+            "list_strict_vector_document_uids",
+            "list_strict_content_document_uids",
+            "bulk_repair_vector_metadata",
+            "emit_repair_vector_metadata_task_event",
+        ):
             assert name in worker_source, f"{name} must be registered in worker.py"
         assert "RepairVectorMetadataWorkflow" in worker_source
 

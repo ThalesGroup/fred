@@ -137,7 +137,10 @@ function RepairResultDetails({ result, t }: { result: RepairVectorMetadataResult
   );
 
   return (
-    <Disclosure title={t("rework.taskActivity.repair.detailsTitle")} defaultOpen={(result.missing_vectors ?? 0) + (result.missing_content ?? 0) + (result.errors ?? 0) > 0}>
+    <Disclosure
+      title={t("rework.taskActivity.repair.detailsTitle")}
+      defaultOpen={(result.missing_vectors ?? 0) + (result.missing_content ?? 0) + (result.errors ?? 0) > 0}
+    >
       <dl className={styles.counterList}>
         {counters.map(([key, value]) => (
           <div key={key} className={styles.counterRow}>

@@ -111,7 +111,14 @@ describe("normalizeApiError", () => {
       const error = {
         status: 422,
         data: {
-          detail: [{ type: "value_error", loc: ["body", "source_tag"], msg: "Value error, must not be empty or whitespace-only", input: "" }],
+          detail: [
+            {
+              type: "value_error",
+              loc: ["body", "source_tag"],
+              msg: "Value error, must not be empty or whitespace-only",
+              input: "",
+            },
+          ],
         },
       };
       expect(normalizeApiError(error).detail).toBe("Value error, must not be empty or whitespace-only");

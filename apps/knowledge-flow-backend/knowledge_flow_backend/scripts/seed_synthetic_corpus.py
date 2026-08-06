@@ -43,8 +43,9 @@ Usage (against your local stack's own config, same as the API/worker):
     uv run python -m knowledge_flow_backend.scripts.seed_synthetic_corpus \
     --team-id fredlab --libraries 100 --documents 20000
 
-  # Remove everything this script previously created (matched by source_tag),
-  # before re-seeding a fresh run:
+  # Remove everything this script previously created (matched by identity.uploaded_by,
+  # never by source_tag -- see the note on source_tag="fred" below), before
+  # re-seeding a fresh run:
   CONFIG_FILE=/path/to/local-configuration.yaml \
     uv run python -m knowledge_flow_backend.scripts.seed_synthetic_corpus --purge
 """
@@ -62,8 +63,7 @@ from datetime import datetime, timezone
 from typing import Iterator
 
 import numpy as np
-from fred_core import Relation, RebacReference, RelationType, Resource
-from minio.deleteobjects import DeleteObject
+from fred_core import RebacReference, Relation, RelationType, Resource
 from fred_core.documents.document_structures import (
     AccessInfo,
     DocumentMetadata,
@@ -75,6 +75,7 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
+from minio.deleteobjects import DeleteObject
 from opensearchpy.helpers import bulk
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -83,7 +84,7 @@ from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 logger = logging.getLogger("seed_synthetic_corpus")
 
-SEED_SOURCE_TAG = "seed-synthetic-corpus"
+SEED_UPLOADED_BY = "seed-synthetic-corpus"
 SEED_CHUNK_SUFFIX = "::seed-chunk-0"
 
 
@@ -110,11 +111,17 @@ def _build_document(tag: Tag, index: int) -> DocumentMetadata:
             title=name,
             created=now,
             modified=now,
-            uploaded_by="seed-synthetic-corpus",
+            uploaded_by=SEED_UPLOADED_BY,
         ),
         source=SourceInfo(
             source_type=SourceType.PUSH,
-            source_tag=SEED_SOURCE_TAG,
+            # "fred" (not a seed-specific marker) on purpose: it's the same source_tag
+            # every real manual upload gets (IngestionInput.source_tag default,
+            # ingestion_controller.py) -- repair tooling like 3a filters candidates by
+            # source_tag, so a synthetic-only marker here would make seeded documents
+            # invisible to exactly the workflows this corpus exists to load-test.
+            # `identity.uploaded_by` above is the safe marker `_purge` matches on instead.
+            source_tag="fred",
             retrievable=True,
             date_added_to_kb=now,
         ),
@@ -288,7 +295,11 @@ async def _purge(app_context: ApplicationContext, concurrency: int) -> None:
     rebac = app_context.get_rebac_engine()
     vector_store = app_context.get_create_vector_store(app_context.get_embedder())
 
-    docs = await metadata_store.list_by_source_tag(SEED_SOURCE_TAG)
+    # Matched on identity.uploaded_by, not source_tag: seeded documents deliberately
+    # carry source_tag="fred" (the same value every real upload gets) so repair
+    # tooling that filters by source_tag actually sees them -- uploaded_by is the
+    # marker no real document shares, so this is still exact and safe.
+    docs = await metadata_store.get_all_metadata({"identity": {"uploaded_by": SEED_UPLOADED_BY}})
     logger.info("Purging %d previously seeded document(s) (ReBAC parent tuple + Postgres row) ...", len(docs))
     if docs:
         await _purge_document_parent_relations(rebac, docs, concurrency)
@@ -328,7 +339,7 @@ async def _purge(app_context: ApplicationContext, concurrency: int) -> None:
             logger.warning("Could not delete ReBAC ownership tuple for tag=%s (may already be absent): %s", tag.id, exc)
         await tag_store.delete_tag_by_id(tag.id)
 
-    # Match on *both* document_uid (docs found via source_tag above) and tag_ids
+    # Match on *both* document_uid (docs found via uploaded_by above) and tag_ids
     # (covers a prior interrupted run that deleted the Postgres row but not the
     # vector chunk, or vice versa) -- either signal alone can miss a partial run.
     seed_tag_id_list = [t.id for t in seed_tags]
@@ -418,7 +429,9 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42, help="Random seed for fake vectors/sizes (reproducible runs).")
     parser.add_argument("--skip-content", action="store_true", help="Skip writing small fake content objects to the content store (Minio/S3) -- Postgres+OpenSearch only, faster.")
     parser.add_argument(
-        "--purge", action="store_true", help="Delete everything a previous run of this script created (matched by source_tag/embedding_model), then exit. Run again without --purge to re-seed."
+        "--purge",
+        action="store_true",
+        help="Delete everything a previous run of this script created (matched by identity.uploaded_by / seed-library-* tag names), then exit. Run again without --purge to re-seed.",
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")

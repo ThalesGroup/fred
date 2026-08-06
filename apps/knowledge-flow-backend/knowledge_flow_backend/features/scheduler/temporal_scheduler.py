@@ -27,8 +27,8 @@ from temporalio.client import Client, WorkflowExecutionStatus
 from knowledge_flow_backend.common.structures import SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
-from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
 from knowledge_flow_backend.features.scheduler.repair_vector_metadata_workflow import RepairVectorMetadataWorkflow
+from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
 from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPull, ProcessPush, RevectorizeCorpusWorkflow
 
 logger = logging.getLogger(__name__)

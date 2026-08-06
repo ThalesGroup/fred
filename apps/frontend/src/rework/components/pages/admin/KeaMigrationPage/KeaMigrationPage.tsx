@@ -34,7 +34,10 @@ import { launchPlatformImport } from "../../../../features/migration/launchPlatf
 import { runKeaDryRun } from "../../../../features/migration/runKeaDryRun";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
 import type { KeaDryRunResponse } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useCorpusRepairVectorMetadataMutation, useCorpusRevectorizeMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useCorpusRepairVectorMetadataMutation,
+  useCorpusRevectorizeMutation,
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useResetPlatformRebacMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import styles from "./KeaMigrationPage.module.css";
@@ -193,7 +196,11 @@ export default function KeaMigrationPage() {
         taskRegistered({
           taskId: task_id,
           kind: "ingestion",
-          target: { type: "corpus-repair-vector-metadata", id: task_id, label: `Repair vector metadata · ${sourceTag}` },
+          target: {
+            type: "corpus-repair-vector-metadata",
+            id: task_id,
+            label: `Repair vector metadata · ${sourceTag}`,
+          },
         }),
       );
       setRevectorizeResult(`Lancé — task ${task_id}. Suivre le rapport détaillé sur /admin/tasks.`);
@@ -382,11 +389,11 @@ export default function KeaMigrationPage() {
         <p className={styles.intro}>
           <strong>3a — Réparer uniquement.</strong> Pour tout document où <em>au moins un</em> chunk vectoriel
           (OpenSearch) et <em>au moins un</em> objet de contenu (S3) ont été retrouvés — signal de présence minimale,
-          pas une vérification de complétude totale (aucun nombre attendu fiable de chunks/objets n&apos;existe pour
-          les documents restaurés depuis Kea) : corrige seulement le statut &laquo;&nbsp;en attente&nbsp;&raquo; en
-          base. Un document réellement sans vecteur ou sans contenu n&apos;est jamais touché — juste compté dans le
-          rapport de la tâche. Cette action ne peut structurellement jamais déclencher de reconstruction, de
-          suppression de vecteurs, ou d&apos;appel au modèle d&apos;embeddings, quel que soit le tag saisi.
+          pas une vérification de complétude totale (aucun nombre attendu fiable de chunks/objets n&apos;existe pour les
+          documents restaurés depuis Kea) : corrige seulement le statut &laquo;&nbsp;en attente&nbsp;&raquo; en base. Un
+          document réellement sans vecteur ou sans contenu n&apos;est jamais touché — juste compté dans le rapport de la
+          tâche. Cette action ne peut structurellement jamais déclencher de reconstruction, de suppression de vecteurs,
+          ou d&apos;appel au modèle d&apos;embeddings, quel que soit le tag saisi.
         </p>
         <div className={styles.actions}>
           <Button

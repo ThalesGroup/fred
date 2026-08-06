@@ -28,7 +28,11 @@ from fred_core.documents.document_store import (
     BaseDocumentMetadataStore,
     DocumentMetadataDeserializationError,
 )
-from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from fred_core.documents.document_structures import (
+    DocumentMetadata,
+    ProcessingStage,
+    ProcessingStatus,
+)
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
 
@@ -295,7 +299,10 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             row.doc = self._to_dict(metadata)
 
     async def bulk_mark_vector_done(
-        self, source_tag: str, document_uids: list[str], session: AsyncSession | None = None
+        self,
+        source_tag: str,
+        document_uids: list[str],
+        session: AsyncSession | None = None,
     ) -> list[str]:
         """Atomically set `processing.stages.vector = done` and clear any
         `processing.errors.vector` for exactly these document_uids -- nothing else
@@ -363,7 +370,9 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 updated: list[str] = []
                 for i in range(0, len(unique_uids), _BULK_UPDATE_CHUNK_SIZE):
                     chunk = unique_uids[i : i + _BULK_UPDATE_CHUNK_SIZE]
-                    result = await s.execute(update_stmt, {"source_tag": source_tag, "uids": chunk})
+                    result = await s.execute(
+                        update_stmt, {"source_tag": source_tag, "uids": chunk}
+                    )
                     updated.extend(row[0] for row in result.fetchall())
 
                 missing = set(unique_uids) - set(updated)
@@ -432,7 +441,10 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             not_verified = [
                 document_uid
                 for document_uid in updated
-                if found_by_uid[document_uid].doc.get("processing", {}).get("stages", {}).get(ProcessingStage.VECTORIZED.value)
+                if found_by_uid[document_uid]
+                .doc.get("processing", {})
+                .get("stages", {})
+                .get(ProcessingStage.VECTORIZED.value)
                 != ProcessingStatus.DONE.value
             ]
             if not_verified:

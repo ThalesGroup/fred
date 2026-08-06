@@ -60,11 +60,15 @@ async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
 def _doc(uid: str, source_tag: str = "fred") -> DocumentMetadata:
     return DocumentMetadata(
         identity=Identity(document_name=f"{uid}.pdf", document_uid=uid, title=uid),
-        source=SourceInfo(source_type=SourceType.PUSH, source_tag=source_tag, pull_location=None),
+        source=SourceInfo(
+            source_type=SourceType.PUSH, source_tag=source_tag, pull_location=None
+        ),
     )
 
 
-async def _insert_raw_row(sessions: async_sessionmaker, *, document_uid: str, source_tag: str, doc: dict) -> None:
+async def _insert_raw_row(
+    sessions: async_sessionmaker, *, document_uid: str, source_tag: str, doc: dict
+) -> None:
     """Insert a row with a hand-crafted `doc` JSON blob, bypassing
     `DocumentMetadata`/`save_metadata` entirely -- the only way to construct a
     row whose `processing`/`stages`/`errors` keys are genuinely absent (going
@@ -72,7 +76,14 @@ async def _insert_raw_row(sessions: async_sessionmaker, *, document_uid: str, so
     `default_factory`)."""
     async with sessions() as s:
         async with s.begin():
-            s.add(DocumentMetadataRow(document_uid=document_uid, source_tag=source_tag, tag_ids=[], doc=doc))
+            s.add(
+                DocumentMetadataRow(
+                    document_uid=document_uid,
+                    source_tag=source_tag,
+                    tag_ids=[],
+                    doc=doc,
+                )
+            )
 
 
 def _vector_stage(md: DocumentMetadata) -> ProcessingStatus | None:
@@ -80,7 +91,9 @@ def _vector_stage(md: DocumentMetadata) -> ProcessingStatus | None:
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_sets_vector_done_and_clears_the_vector_error(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_sets_vector_done_and_clears_the_vector_error(
+    tmp_path: Path,
+) -> None:
     engine = await _make_sqlite_engine(tmp_path, "bulk_basic.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
     md = _doc("doc-1")
@@ -96,7 +109,9 @@ async def test_bulk_mark_vector_done_sets_vector_done_and_clears_the_vector_erro
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_touches_only_the_two_allowed_json_paths(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_touches_only_the_two_allowed_json_paths(
+    tmp_path: Path,
+) -> None:
     """Everything else on the document -- identity, source, tags, other
     processing stages, other processing errors -- must survive byte-for-byte."""
     engine = await _make_sqlite_engine(tmp_path, "bulk_scope.sqlite3")
@@ -114,14 +129,24 @@ async def test_bulk_mark_vector_done_touches_only_the_two_allowed_json_paths(tmp
     assert after.identity == before.identity
     assert after.source == before.source
     assert after.tags.tag_ids == ["tag-a", "tag-b"]
-    assert after.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
-    assert after.processing.stages[ProcessingStage.PREVIEW_READY] == ProcessingStatus.IN_PROGRESS
-    assert after.processing.errors[ProcessingStage.SQL_INDEXED] == "unrelated tabular failure"
+    assert (
+        after.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
+    )
+    assert (
+        after.processing.stages[ProcessingStage.PREVIEW_READY]
+        == ProcessingStatus.IN_PROGRESS
+    )
+    assert (
+        after.processing.errors[ProcessingStage.SQL_INDEXED]
+        == "unrelated tabular failure"
+    )
     assert _vector_stage(after) == ProcessingStatus.DONE
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_works_when_processing_is_entirely_absent(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_works_when_processing_is_entirely_absent(
+    tmp_path: Path,
+) -> None:
     """A row whose `doc` JSON has no `processing` key at all (e.g. a very old or
     hand-restored row) must not crash, and must end up with exactly
     `processing.stages.vector = done` -- proving `processing`/`stages` are
@@ -132,11 +157,17 @@ async def test_bulk_mark_vector_done_works_when_processing_is_entirely_absent(tm
     sessions = make_session_factory(engine)
     store = PostgresDocumentMetadataStore(engine)
     raw_doc = {
-        "identity": {"document_name": "doc-1.pdf", "document_uid": "doc-1", "title": "doc-1"},
+        "identity": {
+            "document_name": "doc-1.pdf",
+            "document_uid": "doc-1",
+            "title": "doc-1",
+        },
         "source": {"source_type": "push", "source_tag": "fred"},
         # no "processing" key at all
     }
-    await _insert_raw_row(sessions, document_uid="doc-1", source_tag="fred", doc=raw_doc)
+    await _insert_raw_row(
+        sessions, document_uid="doc-1", source_tag="fred", doc=raw_doc
+    )
 
     updated = await store.bulk_mark_vector_done("fred", ["doc-1"])
 
@@ -146,16 +177,24 @@ async def test_bulk_mark_vector_done_works_when_processing_is_entirely_absent(tm
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_works_when_stages_is_absent_but_processing_is_present(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_works_when_stages_is_absent_but_processing_is_present(
+    tmp_path: Path,
+) -> None:
     engine = await _make_sqlite_engine(tmp_path, "bulk_no_stages.sqlite3")
     sessions = make_session_factory(engine)
     store = PostgresDocumentMetadataStore(engine)
     raw_doc = {
-        "identity": {"document_name": "doc-1.pdf", "document_uid": "doc-1", "title": "doc-1"},
+        "identity": {
+            "document_name": "doc-1.pdf",
+            "document_uid": "doc-1",
+            "title": "doc-1",
+        },
         "source": {"source_type": "push", "source_tag": "fred"},
         "processing": {},  # present, but no "stages"/"errors" keys
     }
-    await _insert_raw_row(sessions, document_uid="doc-1", source_tag="fred", doc=raw_doc)
+    await _insert_raw_row(
+        sessions, document_uid="doc-1", source_tag="fred", doc=raw_doc
+    )
 
     updated = await store.bulk_mark_vector_done("fred", ["doc-1"])
 
@@ -165,27 +204,39 @@ async def test_bulk_mark_vector_done_works_when_stages_is_absent_but_processing_
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_works_when_errors_is_absent(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_works_when_errors_is_absent(
+    tmp_path: Path,
+) -> None:
     engine = await _make_sqlite_engine(tmp_path, "bulk_no_errors.sqlite3")
     sessions = make_session_factory(engine)
     store = PostgresDocumentMetadataStore(engine)
     raw_doc = {
-        "identity": {"document_name": "doc-1.pdf", "document_uid": "doc-1", "title": "doc-1"},
+        "identity": {
+            "document_name": "doc-1.pdf",
+            "document_uid": "doc-1",
+            "title": "doc-1",
+        },
         "source": {"source_type": "push", "source_tag": "fred"},
         "processing": {"stages": {"raw": "done"}},  # no "errors" key
     }
-    await _insert_raw_row(sessions, document_uid="doc-1", source_tag="fred", doc=raw_doc)
+    await _insert_raw_row(
+        sessions, document_uid="doc-1", source_tag="fred", doc=raw_doc
+    )
 
     updated = await store.bulk_mark_vector_done("fred", ["doc-1"])
 
     assert updated == ["doc-1"]
     result = await store.get_metadata_by_uid("doc-1")
     assert _vector_stage(result) == ProcessingStatus.DONE
-    assert result.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
+    assert (
+        result.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
+    )
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_rolls_back_everything_when_one_uid_is_absent(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_rolls_back_everything_when_one_uid_is_absent(
+    tmp_path: Path,
+) -> None:
     """A document_uid absent from the table entirely (never existed, or a typo
     in the caller's scan result) must fail the WHOLE batch -- including the
     other, genuinely valid uids in the same call -- rather than silently
@@ -203,7 +254,9 @@ async def test_bulk_mark_vector_done_rolls_back_everything_when_one_uid_is_absen
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_rolls_back_everything_when_a_uid_source_tag_no_longer_matches(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_rolls_back_everything_when_a_uid_source_tag_no_longer_matches(
+    tmp_path: Path,
+) -> None:
     """A document whose `source_tag` changed between the caller's earlier scan
     and this write (e.g. re-tagged mid-repair) is out of scope -- and, same as
     the absent-uid case, must fail the whole batch rather than silently
@@ -221,7 +274,9 @@ async def test_bulk_mark_vector_done_rolls_back_everything_when_a_uid_source_tag
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_retry_converges_to_the_same_final_state(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_retry_converges_to_the_same_final_state(
+    tmp_path: Path,
+) -> None:
     engine = await _make_sqlite_engine(tmp_path, "bulk_retry.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
     await store.save_metadata(_doc("doc-1"))
@@ -238,7 +293,9 @@ async def test_bulk_mark_vector_done_retry_converges_to_the_same_final_state(tmp
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_returns_empty_list_and_touches_nothing_for_empty_input(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_returns_empty_list_and_touches_nothing_for_empty_input(
+    tmp_path: Path,
+) -> None:
     engine = await _make_sqlite_engine(tmp_path, "bulk_empty.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
     await store.save_metadata(_doc("doc-1"))
@@ -251,7 +308,9 @@ async def test_bulk_mark_vector_done_returns_empty_list_and_touches_nothing_for_
 
 
 @pytest.mark.asyncio
-async def test_bulk_mark_vector_done_deduplicates_repeated_uids_in_the_input(tmp_path: Path) -> None:
+async def test_bulk_mark_vector_done_deduplicates_repeated_uids_in_the_input(
+    tmp_path: Path,
+) -> None:
     engine = await _make_sqlite_engine(tmp_path, "bulk_dedup.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
     await store.save_metadata(_doc("doc-1"))
