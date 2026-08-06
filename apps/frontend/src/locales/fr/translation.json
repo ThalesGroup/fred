@@ -2035,7 +2035,7 @@
           },
           "reasoning": {
             "label": "Raisonnement",
-            "hint": "Offre aux utilisateurs de cet agent un bouton dans le composeur de chat pour activer le raisonnement du modèle, question par question. Nécessite un modèle prenant en charge le raisonnement."
+            "hint": "Offre aux utilisateurs de cet agent un bouton dans le composeur de chat pour activer le raisonnement du modèle dans la conversation. Nécessite un modèle prenant en charge le raisonnement."
           },
           "reasoningDefaultOn": {
             "label": "Raisonnement activé par défaut",

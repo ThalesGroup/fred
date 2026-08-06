@@ -2035,7 +2035,7 @@
           },
           "reasoning": {
             "label": "Reasoning",
-            "hint": "Give this agent's users a chat-composer button to turn the model's reasoning on, question by question. Requires a model that supports reasoning."
+            "hint": "Give this agent's users a chat-composer button to turn the model's reasoning on for the conversation. Requires a model that supports reasoning."
           },
           "reasoningDefaultOn": {
             "label": "Reasoning on by default",
