@@ -253,6 +253,9 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
     async def _fake_universal(deps):
         return universal
 
+    async def _fake_has_unreachable(deps):
+        return False
+
     monkeypatch.setattr(
         routing_policy_service, "aggregate_capability_catalog", _fake_aggregate
     )
@@ -260,6 +263,11 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
         routing_policy_service,
         "universally_available_model_profile_ids",
         _fake_universal,
+    )
+    monkeypatch.setattr(
+        routing_policy_service,
+        "has_unreachable_enabled_model_source",
+        _fake_has_unreachable,
     )
     return catalog
 
@@ -540,6 +548,7 @@ async def test_available_models_empty_when_no_capability_usable(monkeypatch) -> 
     )
 
     assert result.profiles == []
+    assert result.empty_reason is None
 
 
 @pytest.mark.asyncio
@@ -568,6 +577,38 @@ async def test_available_models_excludes_profile_missing_from_some_pods(
     )
 
     assert [p.profile_id for p in result.profiles] == ["chat.openai.gpt4o"]
+
+
+@pytest.mark.asyncio
+async def test_available_models_marks_empty_as_runtime_unreachable(monkeypatch) -> None:
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    async def _fake_universal(deps):
+        return frozenset()
+
+    async def _fake_has_unreachable(deps):
+        return True
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    monkeypatch.setattr(
+        routing_policy_service,
+        "universally_available_model_profile_ids",
+        _fake_universal,
+    )
+    monkeypatch.setattr(
+        routing_policy_service,
+        "has_unreachable_enabled_model_source",
+        _fake_has_unreachable,
+    )
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert result.profiles == []
+    assert result.empty_reason == "runtime_source_unreachable"
 
 
 # ---------------------------------------------------------------------------
