@@ -50,6 +50,7 @@ export function SearchPolicyControl({ composer, open, onToggleOpen }: Capability
       options={options}
       open={open}
       onToggle={onToggleOpen}
+      accentSelected
       onChange={(value) => {
         composer.onSearchPolicyChange(value);
         // Selecting a value closes this row's submenu, mirroring the former

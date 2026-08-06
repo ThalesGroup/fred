@@ -60,6 +60,13 @@ interface InlineDrawerProps {
    * can use the whole width. The content then owns its own insets.
    */
   flushBody?: boolean;
+  /**
+   * Render the panel as a detached floating card (push layout): inset from every
+   * edge, a single `outline-retreat` border, `--radius-l` corners and a subtle
+   * shadow, dropping the drawer's flush edge border and the header divider.
+   * Opt-in — default panels stay flush.
+   */
+  floating?: boolean;
 }
 
 export function InlineDrawer({
@@ -72,6 +79,7 @@ export function InlineDrawer({
   layout = "overlay",
   resizable,
   flushBody = false,
+  floating = false,
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
@@ -135,6 +143,7 @@ export function InlineDrawer({
         className={styles.drawer}
         data-open={open}
         data-layout={layout}
+        data-floating={floating ? "true" : undefined}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
         aria-hidden={!open}
         aria-labelledby={titleId}

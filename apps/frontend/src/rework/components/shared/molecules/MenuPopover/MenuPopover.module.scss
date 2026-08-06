@@ -78,6 +78,19 @@
   background: var(--state-on-surface-selected);
 }
 
+/* `accentSelected` callers (e.g. the search-mode picker) additionally colour the
+   picked option's label + trailing check in primary over a primary-tinted 16%
+   selected layer (`--state-primary-selected`), a stronger active-choice cue than
+   the neutral on-surface selected state layer. */
+.item[data-accent-selected="true"][data-selected="true"] {
+  background: var(--state-primary-selected);
+}
+
+.item[data-accent-selected="true"][data-selected="true"] .itemLabel,
+.item[data-accent-selected="true"][data-selected="true"] .itemTrailing {
+  color: var(--primary);
+}
+
 .itemIcon {
   display: inline-flex;
   flex-shrink: 0;

@@ -4,9 +4,12 @@
  * the anchored dialog the always-on chat-context-prompts row opens
  * (CAPAB-01 #1976). */
 
-/* Tools ("tune") menu keeps a comfortable fixed width for its inline values. */
+/* Tools ("tune") menu hugs its content — as wide as its widest row — capped at
+   380px (its former fixed width) / the viewport so long inline values ellipsise
+   rather than overflow. */
 .controlSlotBox {
-  width: 380px;
+  width: fit-content;
+  max-width: min(380px, calc(100vw - 32px));
 }
 
 /* Add ("primary") menu hugs its rows' content and caps at 240px, so the menu
@@ -52,10 +55,6 @@
 }
 
 @media (max-width: 720px) {
-  .controlSlotBox {
-    width: min(380px, calc(100vw - 32px));
-  }
-
   .pickerAnchor {
     top: calc(100% + var(--spacing-xs));
     right: 0;

@@ -727,7 +727,9 @@ Both open the same `MenuPopover`-based popover. `ComposerActionsMenu` gained `ic
 `openAriaLabel` / `dialogAriaLabel` props (defaulting to the add-menu values), and
 `ComposerControlSlot` gained a `part: "primary" | "tools"` prop selecting which control groups it
 renders — so the two buttons reuse the same component. The two triggers are spaced by the
-composer's `commandSlot` gap.
+composer's `commandSlot` gap. The tune popover (`.controlSlotBox`) hugs its content
+(`width: fit-content`, capped at 380px / viewport, 2026-08-06) rather than a fixed 380px, so it's
+as wide as its widest row.
 
 ---
 
@@ -770,6 +772,63 @@ state (`useComposerSettings`) — no new backend concept.
 - `SearchPolicyControl`/`RagScopeControl` (the `EnumSelectRow`-based stock-kit rows) stay
   registered in `stockChatTurnControlKit` regardless of chip/row placement — only excluded from
   `ComposerControlSlot`'s `"tools"` render while chipped, never deleted.
+- **Search-mode active-choice accent (2026-08-06)** — in the search-mode submenu (the only
+  `EnumSelectRow` still in the tune popover), the picked option renders its label + trailing check
+  in `--primary` over a `--state-primary-selected` (primary-tinted 16%) background layer, instead
+  of the neutral on-surface selected layer. Opt-in via a new `accentSelected` prop threaded
+  `SearchPolicyControl` → `EnumSelectRow` → `MenuPopoverItem` (`data-accent-selected` +
+  `data-selected` gate the CSS), so other `MenuPopoverItem` selected states (the scope chip's
+  options, profile menu, …) are unaffected.
+
+---
+
+### Document-scope side panel (2026-08-06)
+
+**Location:** `src/rework/components/shared/molecules/DocumentScopePanel/`,
+`src/rework/features/capabilities/stockKit/DocumentScopeControl.tsx`,
+`src/rework/components/shared/molecules/ComposerActionsMenu/`,
+`src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+**Status:** `Functional`
+
+The composer's `document_scope` control (the resource/library picker) moved out of a cramped
+inline popover into a full-height right-side push panel (#2259).
+
+- The `document_scope` row in the "tune" popover is now a **launcher**: clicking it closes the
+  tune menu and opens `DocumentScopePanel` — an `InlineDrawer layout="push"` sharing
+  `ManagedChatPage`'s single push-drawer slot (`activePushDrawer`), so it never stacks with the
+  attachments / capability panels. The old inline `MenuPopover` + `usePickerMenuMaxHeight` anchor
+  in `DocumentScopeControl` is gone; the row just computes the current-selection summary and calls
+  `composer.onOpenDocumentScopePanel` (a new field on `ChatTurnControlComposerState`). The row has
+  no trailing chevron (2026-08-06) — it opens a panel, not an inline sub-popover. Its
+  library-count value label reads "N dossiers" (`librariesCount`, relabelled from
+  "N bibliothèques" — this key is composer-only, so the agent-form wording is untouched; the
+  picker's own shared strings, e.g. the empty state, still say "bibliothèque").
+- Panel: rendered as a **floating card** (`InlineDrawer floating`, 2026-08-06) — inset from every
+  edge with a single `outline-muted` 1px border, `--radius-m` (16px) corners and a subtle
+  `--shadow-s` (border/radius softened from the initial `outline-retreat`/24px on 2026-08-06),
+  dropping the push drawer's flush edge border and the header divider. Header title "Définir les
+  ressources accessibles" + `InlineDrawer`'s built-in close, plus a **Réinitialiser** icon button
+  (Tooltip) in `headerActions`. Body reuses the existing `DocumentLibraryScopePicker` at full
+  height, `flushBody` + a 16px left/right/bottom inset (top stays flush under the header). The
+  picker mounts only while the panel is open so its tag/document queries don't fire for every chat
+  that merely exposes the control. In the tree, the folder tile is fully clickable to expand:
+  `nodeTrigger` is an absolutely-positioned button filling the whole `nodeRow` (padding included),
+  with the visible content above it (`pointer-events: none` on the non-interactive parts so clicks
+  fall through, the checkbox kept interactive above). Tiles are borderless on a `surface-main`
+  background and take the standard 8% `on-surface` hover state-layer (the trigger's hover
+  background), matching buttons and other hoverable zones (2026-08-06).
+- **Reset** reverts the per-turn selection to the agent's configured scope. For an agent that
+  binds specific libraries at creation (`bind_libraries` → `bound_library_ids`), the library tree
+  stays read-only and reset clears only any per-turn document narrowing back to that bound
+  baseline; for an unbound agent, reset clears to empty (no per-agent *editable* default exists in
+  the data today — this is frontend-only). Reset is disabled when the selection already equals the
+  agent scope.
+- **Tune badge**: `ComposerActionsMenu` gained a `badge` prop (a small `--error` dot over the
+  trigger). `ManagedChatPage` sets it when a ponctual document-scope override is active
+  (`hasPonctualDocumentScope`: a non-empty document selection, or — for unbound agents — a
+  non-empty library selection), signalling the agent's resource access is narrowed for this
+  conversation.
 
 ---
 
@@ -1956,6 +2015,12 @@ grip on the left edge, bounds 320–900px capped at 45vw, width persisted per
 writable-document editor and the PPT preview panels share a persisted width.
 Hidden below the 720px breakpoint (push drawers go fixed full-width there).
 
+Opt-in **floating-card** variant (`floating` prop, push layout, 2026-08-06): the panel detaches
+into a card inset from every edge — single `outline-muted` 1px border, `--radius-m` (16px)
+corners, subtle `--shadow-s` — dropping the flush edge border and the header divider. Width stays
+fixed during the open animation so content doesn't reflow. First consumer: the document-scope
+panel (see "Document-scope side panel"). Default panels stay flush.
+
 #### Open UX issues
 
 - **Focus trap** — deliberately no focus trap (main content stays interactive per RFC §2.5). Confirm with accessibility review: WCAG 2.1 SC 2.1.2 applies to modal dialogs, not drawers; but screen reader users should be informed the drawer is open.
@@ -2153,16 +2218,21 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 **Location:** `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
 **Status:** `Functional`
 
-Page composition: floating `topBar` (`position: absolute`) holding `SessionTitleEditor`;
-single `chatArea` scroll container (`overflow-y: auto`) containing page-local
-`ConversationThread` and sticky `RichInputField`. The composer is built once (a single
-`composer` element) and placed either centered in the empty "new conversation" state or in the
-sticky `inputOverlay` mid-conversation — same structure both times (2026-08-06, see
-`RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` — currently just RAG
-scope, see "Composer option chips" (`COMPOSER_CHIP_WIDGETS` changes as placement is iterated on);
-`leftSlot` holds the add/tune `ComposerActionsMenu` buttons (search policy, document scope,
-reasoning, library selection, when the agent exposes them). No `AgentOptionsPanel`, no
-`ConversationHeader`.
+Page composition (`.page` is a **flex column**, 2026-08-06): a full-width `topBar` (holding
+`SessionTitleEditor`) sits on top and always spans the whole page; below it a `.contentRow` (flex
+row) holds the main column (`chatArea` scroll container + sticky composer) on the left and the
+push drawers (capability / attachments / document-scope) on the right. Pulling the header out of
+the main column means an opening push drawer reflows only the content row — the panel slides
+**under** the full-width header instead of shrinking it. (Before this, the header lived inside the
+main column and shrank whenever a push drawer opened.) The `data-picker-top-boundary` attribute
+stays on the header so the composer's anchored pickers still stop just below it. The composer is
+built once (a single `composer` element) and placed either centered in the empty "new
+conversation" state or in the sticky `inputOverlay` mid-conversation — same structure both times
+(2026-08-06, see `RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` —
+currently just RAG scope, see "Composer option chips" (`COMPOSER_CHIP_WIDGETS` changes as
+placement is iterated on); `leftSlot` holds the add/tune `ComposerActionsMenu` buttons (search
+policy, document scope, reasoning, library selection, when the agent exposes them). No
+`AgentOptionsPanel`, no `ConversationHeader`.
 
 #### Open UX issues
 

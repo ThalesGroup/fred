@@ -22,6 +22,7 @@ import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/Session
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
+import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/DocumentScopePanel";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
 import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
@@ -92,7 +93,7 @@ export default function ManagedChatPage() {
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
   // a time so their widths never cumulate.
   const [activePushDrawer, setActivePushDrawer] = useState<
-    { kind: "attachments" } | { kind: "capability"; key: string } | null
+    { kind: "attachments" } | { kind: "capability"; key: string } | { kind: "document-scope" } | null
   >(null);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
 
@@ -238,6 +239,23 @@ export default function ManagedChatPage() {
     if (files.length > 0) addAttachments(files, "drop");
   };
 
+  // Resolve the `document_scope` widget's params once (#2259) — shared by the
+  // tune-menu launcher row, the tune badge, and the side panel. `libraries` /
+  // `documents` gate which sections the picker shows; `bound_library_ids`
+  // (non-null) means the agent binds specific libraries at creation, so the
+  // library scope is read-only and reset returns to that bound baseline.
+  const documentScopeParams = chat.chatControls.find((c) => c.widget === "document_scope")?.params as
+    | { libraries?: boolean; documents?: boolean; bound_library_ids?: string[] | null }
+    | undefined;
+  const documentScopeBoundLibraryIds = documentScopeParams?.bound_library_ids ?? [];
+  const documentScopeHasBound = documentScopeBoundLibraryIds.length > 0;
+  // A ponctual (per-turn) narrowing exists when the user selected something
+  // beyond the agent's configured scope. A bound agent can't change libraries
+  // (read-only), so only a document narrowing counts there. Drives the tune
+  // badge and the panel's reset-enabled state.
+  const hasPonctualDocumentScope =
+    (!documentScopeHasBound && chat.selectedLibraryIds.length > 0) || chat.selectedDocumentUids.length > 0;
+
   // Shared composer state read/written by every chat-turn control, mounted in
   // both the "add" (primary) and "tune" (tools) popovers.
   const composerState = {
@@ -247,6 +265,8 @@ export default function ManagedChatPage() {
     onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
     selectedDocumentUids: chat.selectedDocumentUids,
     onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
+    // The document_scope tune row calls this to open the side panel (#2259).
+    onOpenDocumentScopePanel: () => setActivePushDrawer({ kind: "document-scope" }),
     searchPolicy: chat.searchPolicy,
     onSearchPolicyChange: chat.setSearchPolicy,
     ragScope: chat.ragScope,
@@ -305,6 +325,7 @@ export default function ManagedChatPage() {
               icon={{ category: "outlined", type: "tune" }}
               openAriaLabel={t("chatbot.composerActions.tuneOpenAria")}
               dialogAriaLabel={t("chatbot.composerActions.tuneDialogAria")}
+              badge={hasPonctualDocumentScope}
             >
               {({ closeMenu }) => (
                 <ComposerControlSlot
@@ -344,117 +365,148 @@ export default function ManagedChatPage() {
             event.currentTarget.value = "";
           }}
         />
-        {/* Main column — flexes to fill the row; the push drawer shifts it left */}
-        <div className={styles.mainColumn}>
-          {allowChatAttachments && dragActive && (
-            <div className={styles.dropOverlay} aria-hidden>
-              <div className={styles.dropOverlayContent}>
-                <span className={styles.dropOverlayPlus}>+</span>
-                <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
-              </div>
-            </div>
-          )}
-          {/* Session title bar — full-width surface; the inner row is capped to
-              the composer field width so title and composer stay aligned.
-              data-picker-top-boundary: the composer's anchored pickers
-              (usePickerMenuMaxHeight) stop just below this bar instead of
-              sliding under it. */}
-          <div className={styles.topBar} data-picker-top-boundary>
-            <div className={styles.topBarInner}>
-              <div className={styles.topBarTitle}>
-                {chat.sessionId && chat.sessionTitle != null && (
-                  <div className={styles.topBarTitleRow}>
-                    <span className={styles.titleLabel}>
-                      {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
-                    </span>
-                    {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
-                    <span className={styles.editButtonSlot}>
-                      <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-                    </span>
-                  </div>
-                )}
-                <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
-              </div>
-              <div className={styles.topBarRight}>
-                {conversationTokenUsage.total_tokens > 0 && (
-                  <TokenUsageBadge usage={conversationTokenUsage} variant="stacked" />
-                )}
-                <div className={styles.topBarActions}>
-                  {attachmentsCount > 0 && (
-                    <button
-                      type="button"
-                      className={styles.conversationFilesButton}
-                      onClick={() =>
-                        setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
-                      }
-                    >
-                      <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-                      <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-                    </button>
-                  )}
-                  {isAdmin && (
-                    <IconButton
-                      variant="icon"
-                      size="small"
-                      icon={{ category: "outlined", type: "build" }}
-                      aria-label={t("chatbot.toggleDebugDrawer")}
-                      onClick={() => setDebugOpen((v) => !v)}
-                    />
-                  )}
+        {/* Full-width header — always spans the whole page and stays above the
+            content row below, so an opened side panel slides UNDER it instead of
+            shrinking it. The inner row is capped to the composer field width so
+            title and composer stay aligned. data-picker-top-boundary: the
+            composer's anchored pickers (usePickerMenuMaxHeight) stop just below
+            this bar. */}
+        <div className={styles.topBar} data-picker-top-boundary>
+          <div className={styles.topBarInner}>
+            <div className={styles.topBarTitle}>
+              {chat.sessionId && chat.sessionTitle != null && (
+                <div className={styles.topBarTitleRow}>
+                  <span className={styles.titleLabel}>
+                    {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+                  </span>
+                  {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
+                  <span className={styles.editButtonSlot}>
+                    <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+                  </span>
                 </div>
+              )}
+              <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
+            </div>
+            <div className={styles.topBarRight}>
+              {conversationTokenUsage.total_tokens > 0 && (
+                <TokenUsageBadge usage={conversationTokenUsage} variant="stacked" />
+              )}
+              <div className={styles.topBarActions}>
+                {attachmentsCount > 0 && (
+                  <button
+                    type="button"
+                    className={styles.conversationFilesButton}
+                    onClick={() =>
+                      setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
+                    }
+                  >
+                    <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
+                    <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+                  </button>
+                )}
+                {isAdmin && (
+                  <IconButton
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "build" }}
+                    aria-label={t("chatbot.toggleDebugDrawer")}
+                    onClick={() => setDebugOpen((v) => !v)}
+                  />
+                )}
               </div>
             </div>
           </div>
+        </div>
 
-          <div
-            className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
-            ref={scrollContainerRef}
-          >
-            {isInitialState ? (
-              <div className={styles.initialStage}>
-                <ManagedChatWelcome />
-                <div className={styles.initialComposer}>
-                  {composer}
-                  <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+        {/* Content row: [ chat main column (flex) ][ push drawer ]. The push
+            drawer reflows the chat left while the full-width header above stays
+            put and the panel slides under it. */}
+        <div className={styles.contentRow}>
+          <div className={styles.mainColumn}>
+            {allowChatAttachments && dragActive && (
+              <div className={styles.dropOverlay} aria-hidden>
+                <div className={styles.dropOverlayContent}>
+                  <span className={styles.dropOverlayPlus}>+</span>
+                  <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
                 </div>
               </div>
-            ) : (
-              <ConversationThread
-                messages={chat.threadMessages}
-                pendingHitl={chat.pendingHitl}
-                isLoading={chat.isLoadingHistory}
-                isStreaming={chat.waitResponse}
-                scrollContainerRef={scrollContainerRef}
-                onHitlAnswer={chat.handleHitlAnswer}
-              />
+            )}
+
+            <div
+              className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
+              ref={scrollContainerRef}
+            >
+              {isInitialState ? (
+                <div className={styles.initialStage}>
+                  <ManagedChatWelcome />
+                  <div className={styles.initialComposer}>
+                    {composer}
+                    <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                  </div>
+                </div>
+              ) : (
+                <ConversationThread
+                  messages={chat.threadMessages}
+                  pendingHitl={chat.pendingHitl}
+                  isLoading={chat.isLoadingHistory}
+                  isStreaming={chat.waitResponse}
+                  scrollContainerRef={scrollContainerRef}
+                  onHitlAnswer={chat.handleHitlAnswer}
+                />
+              )}
+            </div>
+
+            {!isInitialState && (
+              <div className={styles.inputOverlay}>
+                {composer}
+                <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+              </div>
             )}
           </div>
 
-          {!isInitialState && (
-            <div className={styles.inputOverlay}>
-              {composer}
-              <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
-            </div>
+          {/* Capability side-panel slot (#1979) — mounts as a flex sibling of the
+            main column so its push drawer reflows the conversation left. */}
+          <CapabilitySidePanelHost
+            capabilityIds={chat.capabilityIds}
+            activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
+            onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+          />
+
+          <SessionAttachmentsDrawer
+            open={attachmentsDrawerOpen}
+            onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
+            attachments={chat.persistedAttachments}
+            isLoading={chat.isHydratingAttachments}
+            onDelete={(attachmentId) => {
+              void chat.deletePersistedAttachment(attachmentId);
+            }}
+          />
+
+          {/* Document-scope side panel (#2259) — opened from the tune menu's
+            document_scope row, sharing the single push-drawer slot above so it
+            never stacks with the attachments / capability panels. Only mounted
+            when the agent exposes the control. */}
+          {documentScopeParams && (
+            <DocumentScopePanel
+              open={activePushDrawer?.kind === "document-scope"}
+              onClose={() => setActivePushDrawer((v) => (v?.kind === "document-scope" ? null : v))}
+              teamId={teamId}
+              showLibraries={documentScopeParams.libraries === true}
+              showDocuments={documentScopeParams.documents === true}
+              boundLibraryIds={documentScopeBoundLibraryIds}
+              selectedLibraryIds={chat.selectedLibraryIds}
+              onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
+              selectedDocumentUids={chat.selectedDocumentUids}
+              onSelectedDocumentUidsChange={chat.setSelectedDocumentUids}
+              canReset={hasPonctualDocumentScope}
+              onReset={() => {
+                chat.setSelectedLibraryIds([]);
+                chat.setSelectedDocumentUids([]);
+              }}
+            />
           )}
         </div>
 
-        {/* Capability side-panel slot (#1979) — mounts as a flex sibling of the
-            main column so its push drawer reflows the conversation left. */}
-        <CapabilitySidePanelHost
-          capabilityIds={chat.capabilityIds}
-          activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
-          onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
-        />
-
-        <SessionAttachmentsDrawer
-          open={attachmentsDrawerOpen}
-          onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
-          attachments={chat.persistedAttachments}
-          isLoading={chat.isHydratingAttachments}
-          onDelete={(attachmentId) => {
-            void chat.deletePersistedAttachment(attachmentId);
-          }}
-        />
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
         {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
         <UploadWarningAckDialog

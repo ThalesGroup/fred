@@ -74,6 +74,12 @@ export interface ChatTurnControlComposerState {
   onSelectedLibraryIdsChange: (ids: string[]) => void;
   selectedDocumentUids: string[];
   onSelectedDocumentUidsChange: (uids: string[]) => void;
+  /**
+   * Opens the right-side document-scope panel (#2259). The `document_scope`
+   * tune-menu row calls this instead of expanding its own inline popover; the
+   * page owns the panel's open state (single push-drawer slot).
+   */
+  onOpenDocumentScopePanel?: () => void;
   searchPolicy: SearchPolicyName;
   onSearchPolicyChange: (value: SearchPolicyName) => void;
   ragScope: RagScopeName;
