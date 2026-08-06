@@ -60,7 +60,17 @@ async def list_repair_candidates_for_source_tag(source_tag: str) -> list[dict]:
     blobs, keeping the Temporal payload small at repair scale (~10k docs):
     `document_uid`, whether the document is tabular (CSV/XLSX -- excluded from
     this vector-only repair and reported separately, `sql` reconciliation is
-    out of scope here), and whether `vector` already reads `done`.
+    out of scope here), whether `vector` already reads `done`, and whether
+    *any* processing stage reads `failed` or `in_progress`.
+
+    That last flag exists because a stale `not_started` and a real failure/stuck
+    stage look identical if you only check `vector != done`: on the real Kea
+    corpus, some documents already have real vectors in OpenSearch despite a
+    `failed`/`in_progress` stage elsewhere (e.g. a `preview` failure on a
+    document whose `vector` never started). Without this flag, the workflow
+    would silently mark such a document `done` and clear its error the same as
+    any clean `not_started` case -- erasing a real, worth-investigating failure
+    signal. See `_wf_repair_categorize`'s precedence for how this is used.
     """
     from knowledge_flow_backend.application_context import ApplicationContext
 
@@ -70,11 +80,13 @@ async def list_repair_candidates_for_source_tag(source_tag: str) -> list[dict]:
     for doc in docs:
         file_type = doc.file.file_type.value if doc.file and doc.file.file_type else None
         vector_done = doc.processing.stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
+        failed_or_running = any(status in (ProcessingStatus.FAILED, ProcessingStatus.IN_PROGRESS) for status in doc.processing.stages.values())
         records.append(
             {
                 "document_uid": doc.document_uid,
                 "is_tabular": file_type in _TABULAR_FILE_TYPES,
                 "vector_done": vector_done,
+                "failed_or_running": failed_or_running,
             }
         )
     activity.logger.info(

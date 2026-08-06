@@ -42,12 +42,12 @@ from knowledge_flow_backend.features.scheduler import worker as worker_module
 from knowledge_flow_backend.features.scheduler.repair_vector_metadata_workflow import _wf_repair_categorize
 
 
-def _candidate(document_uid: str, *, is_tabular: bool = False, vector_done: bool = False) -> dict:
-    return {"document_uid": document_uid, "is_tabular": is_tabular, "vector_done": vector_done}
+def _candidate(document_uid: str, *, is_tabular: bool = False, vector_done: bool = False, failed_or_running: bool = False) -> dict:
+    return {"document_uid": document_uid, "is_tabular": is_tabular, "vector_done": vector_done, "failed_or_running": failed_or_running}
 
 
 class TestRepairCategorize:
-    def test_distinguishes_all_five_buckets(self) -> None:
+    def test_distinguishes_all_six_buckets(self) -> None:
         candidates = [
             _candidate("already-done", vector_done=True),
             _candidate("eligible-1"),
@@ -55,9 +55,10 @@ class TestRepairCategorize:
             _candidate("no-vector"),
             _candidate("no-content"),
             _candidate("tabular-1", is_tabular=True),
+            _candidate("broken-1", failed_or_running=True),
         ]
-        vector_uids = ["eligible-1", "eligible-2", "no-content"]
-        content_uids = ["eligible-1", "eligible-2", "no-vector"]
+        vector_uids = ["eligible-1", "eligible-2", "no-content", "broken-1"]
+        content_uids = ["eligible-1", "eligible-2", "no-vector", "broken-1"]
 
         buckets = _wf_repair_categorize(candidates, vector_uids, content_uids)
 
@@ -66,6 +67,7 @@ class TestRepairCategorize:
         assert buckets["missing_vectors"] == 1  # "no-vector"
         assert buckets["missing_content"] == 1  # "no-content"
         assert buckets["tabular_excluded"] == 1
+        assert buckets["failed_or_running_excluded"] == 1  # "broken-1"
 
     def test_tabular_takes_precedence_over_already_done(self) -> None:
         """A tabular document must always land in `tabular_excluded`, even if it
@@ -78,6 +80,33 @@ class TestRepairCategorize:
         assert buckets["tabular_excluded"] == 1
         assert buckets["already_done"] == 0
         assert buckets["eligible"] == []
+
+    def test_failed_or_running_takes_precedence_over_eligible(self) -> None:
+        """A document with a `failed`/`in_progress` stage elsewhere must never be
+        silently marked `done` just because it already has real vectors and
+        content -- that would erase a real failure signal instead of surfacing
+        it. This is the #2234 hardening gap found against the real Kea corpus
+        (e.g. `vector: failed` or `preview: failed` docs that already have
+        vectors in OpenSearch)."""
+        candidates = [_candidate("broken-1", failed_or_running=True)]
+
+        buckets = _wf_repair_categorize(candidates, vector_uids=["broken-1"], content_uids=["broken-1"])
+
+        assert buckets["failed_or_running_excluded"] == 1
+        assert buckets["eligible"] == []
+        assert buckets["missing_vectors"] == 0
+        assert buckets["missing_content"] == 0
+
+    def test_failed_or_running_takes_precedence_over_already_done(self) -> None:
+        """`vector_done` is checked first (bucket 2), so a document already
+        reading `vector: done` stays `already_done` even if another stage is
+        failed/running -- only a non-done `vector` stage needs this exclusion."""
+        candidates = [_candidate("doc-1", vector_done=True, failed_or_running=True)]
+
+        buckets = _wf_repair_categorize(candidates, vector_uids=["doc-1"], content_uids=["doc-1"])
+
+        assert buckets["already_done"] == 1
+        assert buckets["failed_or_running_excluded"] == 0
 
     def test_missing_vectors_takes_precedence_over_missing_content(self) -> None:
         """A document missing both is reported once, under missing_vectors --
@@ -95,6 +124,7 @@ class TestRepairCategorize:
         assert buckets == {
             "tabular_excluded": 0,
             "already_done": 0,
+            "failed_or_running_excluded": 0,
             "eligible": [],
             "missing_vectors": 0,
             "missing_content": 0,
@@ -108,6 +138,7 @@ class TestRepairCategorize:
             document_uid = "doc-1"
             is_tabular = False
             vector_done = False
+            failed_or_running = False
 
         buckets = _wf_repair_categorize([_Candidate()], vector_uids=["doc-1"], content_uids=["doc-1"])
 

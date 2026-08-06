@@ -67,9 +67,14 @@ def _wf_repair_categorize(candidates: list[Any], vector_uids: list[str], content
          -- this repair is vector-only; `sql` reconciliation for tabular docs is
          a separate, out-of-scope gap (#2234 remediation notes).
       2. already `vector: done` -> `already_done`, left untouched.
-      3. has both real vectors and real content -> eligible for repair.
-      4. no real vectors -> `missing_vectors`, left untouched.
-      5. has vectors but no real content -> `missing_content`, left untouched.
+      3. any processing stage reads `failed` or `in_progress` -> `failed_or_running_excluded`,
+         left untouched. A stale `not_started` flag and a real failure/stuck stage are not
+         the same problem: this repair must never silently mark such a document `done`
+         (clearing its error) just because it happens to already have vectors/content --
+         that would erase a real failure signal instead of surfacing it for investigation.
+      4. has both real vectors and real content -> eligible for repair.
+      5. no real vectors -> `missing_vectors`, left untouched.
+      6. has vectors but no real content -> `missing_content`, left untouched.
 
     "has real vectors"/"has real content" means the document_uid appeared at
     least once in the corresponding strict scan -- not that every expected
@@ -80,6 +85,7 @@ def _wf_repair_categorize(candidates: list[Any], vector_uids: list[str], content
 
     tabular_excluded = 0
     already_done = 0
+    failed_or_running_excluded = 0
     eligible: list[str] = []
     missing_vectors = 0
     missing_content = 0
@@ -92,6 +98,9 @@ def _wf_repair_categorize(candidates: list[Any], vector_uids: list[str], content
         if _wf_get(candidate, "vector_done", False):
             already_done += 1
             continue
+        if _wf_get(candidate, "failed_or_running", False):
+            failed_or_running_excluded += 1
+            continue
         if document_uid not in vector_set:
             missing_vectors += 1
         elif document_uid not in content_set:
@@ -102,6 +111,7 @@ def _wf_repair_categorize(candidates: list[Any], vector_uids: list[str], content
     return {
         "tabular_excluded": tabular_excluded,
         "already_done": already_done,
+        "failed_or_running_excluded": failed_or_running_excluded,
         "eligible": eligible,
         "missing_vectors": missing_vectors,
         "missing_content": missing_content,
@@ -188,6 +198,7 @@ class RepairVectorMetadataWorkflow:
                 "missing_vectors": buckets["missing_vectors"],
                 "missing_content": buckets["missing_content"],
                 "tabular_excluded": buckets["tabular_excluded"],
+                "failed_or_running_excluded": buckets["failed_or_running_excluded"],
                 "errors": 0,
             }
         except Exception as exc:

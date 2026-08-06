@@ -40,6 +40,7 @@ from fred_core.documents.document_structures import (
     FileType,
     Identity,
     ProcessingStage,
+    ProcessingStatus,
     SourceInfo,
     SourceType,
 )
@@ -61,7 +62,14 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _make_metadata(document_uid: str, *, file_type: FileType = FileType.PDF, vector_done: bool = False, source_tag: str = "fred") -> DocumentMetadata:
+def _make_metadata(
+    document_uid: str,
+    *,
+    file_type: FileType = FileType.PDF,
+    vector_done: bool = False,
+    source_tag: str = "fred",
+    stage_status: tuple[ProcessingStage, ProcessingStatus] | None = None,
+) -> DocumentMetadata:
     md = DocumentMetadata(
         identity=Identity(document_name=f"{document_uid}.pdf", document_uid=document_uid, title=document_uid),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag=source_tag),
@@ -69,6 +77,9 @@ def _make_metadata(document_uid: str, *, file_type: FileType = FileType.PDF, vec
     )
     if vector_done:
         md.processing.mark_done(ProcessingStage.VECTORIZED)
+    if stage_status is not None:
+        stage, status = stage_status
+        md.processing.set_status(stage, status)
     return md
 
 
@@ -104,11 +115,38 @@ class TestListRepairCandidatesForSourceTag:
 
         metadata_store.list_by_source_tag.assert_awaited_once_with("fred")
         assert result == [
-            {"document_uid": "doc-1", "is_tabular": False, "vector_done": False},
-            {"document_uid": "doc-2", "is_tabular": False, "vector_done": True},
-            {"document_uid": "doc-3", "is_tabular": True, "vector_done": False},
-            {"document_uid": "doc-4", "is_tabular": True, "vector_done": False},
+            {"document_uid": "doc-1", "is_tabular": False, "vector_done": False, "failed_or_running": False},
+            {"document_uid": "doc-2", "is_tabular": False, "vector_done": True, "failed_or_running": False},
+            {"document_uid": "doc-3", "is_tabular": True, "vector_done": False, "failed_or_running": False},
+            {"document_uid": "doc-4", "is_tabular": True, "vector_done": False, "failed_or_running": False},
         ]
+
+    def test_flags_failed_or_running_when_any_stage_is_failed_or_in_progress(self):
+        """Real Kea-corpus shape (#2234 hardening): a document whose `vector`
+        never started but whose `preview` stage reads `failed`, and one whose
+        `vector` stage itself reads `failed` -- both must be flagged, not
+        silently treated the same as a clean `not_started` document."""
+        docs = [
+            _make_metadata("doc-failed-preview", stage_status=(ProcessingStage.PREVIEW_READY, ProcessingStatus.FAILED)),
+            _make_metadata("doc-failed-vector", stage_status=(ProcessingStage.VECTORIZED, ProcessingStatus.FAILED)),
+            _make_metadata("doc-in-progress", stage_status=(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)),
+            _make_metadata("doc-clean"),
+        ]
+        metadata_store = MagicMock()
+        metadata_store.list_by_source_tag = AsyncMock(return_value=docs)
+        app_ctx = MagicMock()
+        app_ctx.get_metadata_store.return_value = metadata_store
+
+        with patch(_PATCH_CTX, return_value=app_ctx):
+            result = _run(list_repair_candidates_for_source_tag("fred"))
+
+        by_uid = {r["document_uid"]: r["failed_or_running"] for r in result}
+        assert by_uid == {
+            "doc-failed-preview": True,
+            "doc-failed-vector": True,
+            "doc-in-progress": True,
+            "doc-clean": False,
+        }
 
 
 class TestNeverTouchesTheEmbedderOrVectorStoreAdapter:

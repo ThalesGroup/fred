@@ -118,6 +118,7 @@ const REPAIR_COUNTER_KEYS = [
   "missing_vectors",
   "missing_content",
   "tabular_excluded",
+  "failed_or_running_excluded",
   "errors",
 ] as const satisfies readonly (keyof RepairVectorMetadataResult)[];
 
@@ -139,7 +140,9 @@ function RepairResultDetails({ result, t }: { result: RepairVectorMetadataResult
   return (
     <Disclosure
       title={t("rework.taskActivity.repair.detailsTitle")}
-      defaultOpen={(result.missing_vectors ?? 0) + (result.missing_content ?? 0) + (result.errors ?? 0) > 0}
+      defaultOpen={
+        (result.missing_vectors ?? 0) + (result.missing_content ?? 0) + (result.failed_or_running_excluded ?? 0) + (result.errors ?? 0) > 0
+      }
     >
       <dl className={styles.counterList}>
         {counters.map(([key, value]) => (

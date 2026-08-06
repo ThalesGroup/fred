@@ -2461,6 +2461,7 @@
           "missing_vectors": "Vecteurs manquants (non touchés)",
           "missing_content": "Contenu manquant (non touché)",
           "tabular_excluded": "Documents tabulaires exclus (sql, hors périmètre)",
+          "failed_or_running_excluded": "En échec ou en cours (non touchés)",
           "errors": "Erreurs"
         }
       }

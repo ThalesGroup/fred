@@ -57,6 +57,12 @@ class RepairVectorMetadataResult(BaseModel):
     compare against (it was never transported by the Kea restore), so this can
     never prove *every* chunk or object of a document survived. Never present
     this report, in UI text or logs, as having verified full completeness.
+
+    `failed_or_running_excluded` counts documents left untouched because some
+    processing stage reads `failed` or `in_progress` -- a stale `not_started`
+    flag and a real failure/stuck stage are not the same problem, and this
+    repair must never silently mark one `done` (clearing its error) just
+    because it happens to already have vectors/content present.
     """
 
     source_tag: str
@@ -67,6 +73,7 @@ class RepairVectorMetadataResult(BaseModel):
     missing_vectors: int = 0
     missing_content: int = 0
     tabular_excluded: int = 0
+    failed_or_running_excluded: int = 0
     errors: int = 0
 
 

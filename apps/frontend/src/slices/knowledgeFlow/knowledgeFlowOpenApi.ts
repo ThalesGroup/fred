@@ -1727,6 +1727,7 @@ export type RepairVectorMetadataResult = {
   missing_vectors?: number;
   missing_content?: number;
   tabular_excluded?: number;
+  failed_or_running_excluded?: number;
   errors?: number;
 };
 export type IngestionDetail = {

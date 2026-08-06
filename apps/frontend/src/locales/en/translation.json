@@ -2461,6 +2461,7 @@
           "missing_vectors": "Missing vectors (left untouched)",
           "missing_content": "Missing content (left untouched)",
           "tabular_excluded": "Tabular documents excluded (sql, out of scope)",
+          "failed_or_running_excluded": "Failed or running (left untouched)",
           "errors": "Errors"
         }
       }
