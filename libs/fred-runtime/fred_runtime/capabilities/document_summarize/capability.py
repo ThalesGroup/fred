@@ -286,19 +286,27 @@ class DocumentSummarizeCapability(
                     elapsed_s=time.monotonic() - started,
                     document_uid=document_uid,
                 )
-                # 403/404 almost always means the model passed a file NAME (or
-                # a stale/foreign uid) — the backend fails closed on unknown
-                # resources. Tell the model how to recover instead of letting
-                # it give up and echo the error.
+                # 403/404 almost always means the model passed something that
+                # is not a document uid — a file NAME, a stale/foreign uid, or
+                # a FOLDER's tag id from a list_document_tree folder line
+                # (observed live, issue #2244) — the backend fails closed on
+                # unknown resources. Tell the model how to recover instead of
+                # letting it give up and echo the error.
                 if getattr(exc, "status_code", None) in (403, 404):
                     message += (
-                        " If you passed a file name, that is the likely cause: "
-                        "document_uid must be the opaque uid. Find it in the "
-                        "conversation's attached-files list (the bracketed "
-                        "value after the file name), in a search hit's 'uid' "
-                        "field, or via list_document_tree — then call "
-                        "summarize_document again with that uid. Do not "
-                        "repeat the uid to the user."
+                        " Likely cause: document_uid was not a document's "
+                        "opaque uid. If you passed a file name, resolve the "
+                        "uid first: it is in the conversation's attached-files "
+                        "list (the bracketed value after the file name), in a "
+                        "search hit's 'uid' field, or on a DOCUMENT line of "
+                        "list_document_tree. If you took the id from a FOLDER "
+                        "line (it ends with '/', id shown as [folder:...]), "
+                        "that is a folder id, not a document — summarize each "
+                        "document listed under that folder instead. Then call "
+                        "summarize_document again with a real document uid; "
+                        "if other documents already summarized fine, continue "
+                        "with those results. Do not repeat the uid to the "
+                        "user."
                     )
                     # CAPAB-02: `_document_tool_failure` already baked the
                     # (shorter) pre-hint message into `artifact.blocks`; the

@@ -309,6 +309,11 @@ async def test_summarize_403_failure_teaches_uid_recovery() -> None:
     assert message.artifact.is_error is True
     assert "opaque uid" in message.content
     assert "list_document_tree" in message.content
+    # Issue #2244: the other live-observed 403 cause is a FOLDER tag id taken
+    # from a tree folder line — the hint must cover it so the model summarizes
+    # the folder's documents instead of retrying the same bad id.
+    assert "[folder:...]" in message.content
+    assert "summarize each document" in message.content
     # CAPAB-02: the recovery hint is appended to `message` AFTER
     # `_document_tool_failure` already built the artifact — it must also
     # land in `blocks`, or a Graph agent (which keeps only the artifact)
