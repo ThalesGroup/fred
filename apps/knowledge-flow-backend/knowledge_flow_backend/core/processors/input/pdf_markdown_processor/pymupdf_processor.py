@@ -22,6 +22,7 @@ import pymupdf4llm
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     collapse_whitespace,
     normalize_repeated_chars,
+    strip_surrogates,
 )
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.base_pdf_extractor import BasePdfExtractor
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import ImageTranscription
@@ -58,7 +59,10 @@ class PyMuPdfExtractor(BasePdfExtractor):
             else:
                 text = ""
 
-            md_text = normalize_repeated_chars(text)
+            # Same PyMuPDF source as the lite path, so the same unpaired-surrogate hazard:
+            # strip before anything can try to encode this page as UTF-8.
+            md_text = strip_surrogates(text)
+            md_text = normalize_repeated_chars(md_text)
             md_text = collapse_whitespace(md_text)
             cleaned_pages.append(md_text)
 
