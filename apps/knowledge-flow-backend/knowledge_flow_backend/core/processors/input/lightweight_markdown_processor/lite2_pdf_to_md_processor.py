@@ -32,6 +32,7 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     collapse_whitespace,
     enforce_max_chars,
     normalize_repeated_chars,
+    strip_surrogates,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
         converted = self._md.convert(str(file_path))
         # Pylance sometimes flags `.text`; guard with getattr for static peace of mind.
         md = converted.markdown
+        md = strip_surrogates(md)
         md = self._normalize_whitespace(md, opts)
 
         md, truncated = enforce_max_chars(md, opts.max_chars)
@@ -116,8 +118,11 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
                 text = ""
                 page_no = -1
 
-            # Apply your normalization pipeline
-            md_text = self._normalize_repeated_chars(text, opts)
+            # Apply your normalization pipeline. strip_surrogates runs first and is not
+            # opt-gated: unpaired surrogates from a malformed ToUnicode CMap are not a
+            # style choice, they make the page impossible to encode as UTF-8 downstream.
+            md_text = strip_surrogates(text)
+            md_text = self._normalize_repeated_chars(md_text, opts)
             md_text = self._remove_additional_tags(md_text, opts)
             md_text = self._normalize_whitespace(md_text, opts)
 

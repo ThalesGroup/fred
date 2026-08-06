@@ -23,6 +23,7 @@ that accumulates across ingestion batches until the worker pod OOMs.
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -73,3 +74,55 @@ def test_processor_extract_file_metadata_closes_the_document(fitz_open_spy: Fitz
     assert metadata["page_count"] >= 1
     assert len(fitz_open_spy.opened) == 1
     assert fitz_open_spy.opened[0].is_closed
+
+
+# --- unpaired-surrogate regression (issue #2261) ------------------------------
+#
+# A malformed ToUnicode CMap makes PyMuPDF hand back text holding unpaired UTF-16
+# surrogates. Writing output.md then raised UnicodeEncodeError, and since the input
+# is deterministic the document failed all three Temporal attempts.
+
+LONE_SURROGATE = chr(0xDBFF)  # the code point reported in the issue
+
+
+def test_extract_pymupdf4llm_drops_unpaired_surrogates(sample_pdf_file: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.pymupdf4llm.to_markdown",
+        lambda *a, **k: [{"text": f"AERS Sensor{LONE_SURROGATE} ICD", "metadata": {"page_number": 1}}],
+    )
+
+    result = LitePdfToMdExtractor().extract(sample_pdf_file)
+
+    assert result.markdown == "AERS Sensor ICD"
+    result.markdown.encode("utf-8")  # would raise before the fix
+
+
+def test_extract_with_markitdown_drops_unpaired_surrogates(sample_pdf_file: Path, monkeypatch: pytest.MonkeyPatch):
+    # Force the primary engine to fail so the markitdown fallback is exercised.
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.pymupdf4llm.to_markdown",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    extractor = LitePdfToMdExtractor()
+    monkeypatch.setattr(
+        extractor._md,
+        "convert",
+        lambda *a, **k: SimpleNamespace(markdown=f"AERS Sensor{LONE_SURROGATE} ICD"),
+    )
+
+    result = extractor.extract(sample_pdf_file)
+
+    assert result.extras == {"engine": "markitdown"}
+    assert result.markdown == "AERS Sensor ICD"
+
+
+def test_convert_file_to_markdown_writes_output_for_surrogate_tainted_pdf(sample_pdf_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """End-to-end guard: this is the exact call that raised in production."""
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.pymupdf4llm.to_markdown",
+        lambda *a, **k: [{"text": f"page one{LONE_SURROGATE}", "metadata": {"page_number": 1}}],
+    )
+
+    result = LitePdfMarkdownProcessor().convert_file_to_markdown(sample_pdf_file, tmp_path, "uid-2261")
+
+    assert Path(result["md_file"]).read_text(encoding="utf-8") == "page one"
