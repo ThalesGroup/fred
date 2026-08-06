@@ -2450,6 +2450,19 @@
           "docs_imported": "Documents importés",
           "docs_skipped": "Documents ignorés"
         }
+      },
+      "repair": {
+        "detailsTitle": "Rapport de réparation",
+        "counter": {
+          "metadata_documents": "Documents correspondant à ce source_tag",
+          "already_done": "Déjà marqués terminés",
+          "eligible_with_vectors_and_content": "Vecteurs et contenu confirmés",
+          "repaired": "Réparés",
+          "missing_vectors": "Vecteurs manquants (non touchés)",
+          "missing_content": "Contenu manquant (non touché)",
+          "tabular_excluded": "Documents tabulaires exclus (sql, hors périmètre)",
+          "errors": "Erreurs"
+        }
       }
     }
   },
