@@ -897,21 +897,41 @@ _(none yet)_
 
 #### Open UX issues
 
-- **Elevation / containment** — currently rendered inline in the message stream. A card
-  with a stronger border or shadow may better signal that this is an action required from
-  the user, not just a message.
-
 - **Focus management** — when `HitlPrompt` appears, focus should move to the first
   actionable element (first choice button or the free-text input). Not yet implemented.
 
-- **Frozen card visual distinction** — `readonly` mode (history replay) disables choice
-  buttons but does not visually differentiate the frozen state from a live prompt. A
-  muted/greyed style on the card or buttons would signal "past interaction" more clearly.
-
 #### Resolved
 
+- **Choice row hidden once answered; active-state border/shadow (2026-08-05)** — the
+  choices row (and its right-alignment fix below) now renders only when `!readonly`:
+  once a question is answered, the frozen `hitl_request` history row shows just the
+  title/question, since the answer already appears as the `hitl_response` turn
+  immediately after it in the thread — a disabled button row was redundant. This also
+  resolves the former "Frozen card visual distinction" issue (there's no longer a button
+  row to visually differentiate). Button right/left position now comes from an explicit
+  `order` style (`order: 2` for the default choice, `order: 1` for the rest) rather than
+  pre-sorting the array — the sort-based approach silently broke whenever a choice's
+  `default` flag wasn't available (e.g. `HitlChoiceRecord`, the persisted-history type,
+  never carried it), so `order` is the robust fix. A live (`!readonly`) card also gets
+  `.active`: the same `border-color: var(--primary)` + primary-tinted glow `box-shadow`
+  as `RichInputField`'s focused composer field (`RichInputField.module.css`
+  `.field:focus-within`) — resolves the former "Elevation / containment" issue by
+  signalling "needs your input" with the same visual language as the chat field.
+
+- **Card containment + button restyle (2026-08-05)** — `.card` now uses
+  `surface-container-high` background and an `outline-retreat` border (up from
+  `surface-container`/`outline`). `.title` is `primary`/`title-medium` (was
+  `on-surface`/`title-small`); `.question` is `body-medium` (was `body-large`). Choice
+  buttons use the shared `Button` atom's `default` signal from
+  `HumanChoiceOption.default` — the default choice (e.g. "Continuer"/"Proceed") renders
+  `variant="filled" color="primary"`, non-default choices (e.g. "Annuler"/"Cancel")
+  render `variant="text" color="on-surface-retreat"` — right-aligned
+  (`justify-content: flex-end`) with the default choice ordered last so it lands
+  rightmost.
+
 - **`readonly` prop added (2026-04-27)** — `HitlPrompt` now accepts `readonly?: boolean`.
-  When set, choice buttons are disabled and the free-text section is hidden. Used by
+  When set, the choices row and free-text section are hidden entirely (2026-08-05 —
+  previously choices were only disabled, not hidden; see above). Used by
   `ManagedChatPage` when rendering `hitl_request` history rows.
 
 - **Dropped its own `max-width: 72%` / `align-self: flex-start` (2026-07-22)** — `HitlPrompt`
