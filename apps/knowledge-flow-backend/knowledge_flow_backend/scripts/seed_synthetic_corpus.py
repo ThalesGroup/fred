@@ -71,6 +71,7 @@ from fred_core.documents.document_structures import (
     FileType,
     Identity,
     ProcessingStage,
+    ProcessingStatus,
     SourceInfo,
     SourceType,
     Tagging,
@@ -361,6 +362,64 @@ async def _purge(app_context: ApplicationContext, concurrency: int) -> None:
         logger.info("No seeded document_uid/tag_ids found -- nothing to purge from OpenSearch.")
 
 
+async def _synthetic_pool(metadata_store) -> list[DocumentMetadata]:
+    return await metadata_store.get_all_metadata({"identity": {"uploaded_by": SEED_UPLOADED_BY}})
+
+
+async def _mark_stuck_pending(metadata_store, n: int, seed: int, concurrency: int) -> None:
+    """
+    The #2234 "stuck pending" shape, at scale: flip VECTORIZED back to
+    NOT_STARTED in Postgres for `n` synthetic documents while leaving their
+    OpenSearch chunks and S3 content completely untouched -- Postgres lies
+    that the work was never done, even though it demonstrably was. Never
+    touches the 18(ish) real documents: the candidate pool is scoped to
+    identity.uploaded_by, same as `_purge`.
+    """
+    pool = await _synthetic_pool(metadata_store)
+    eligible = [d for d in pool if d.processing.stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE]
+    logger.info("Synthetic pool=%d, eligible (currently vector=done)=%d", len(pool), len(eligible))
+    if n > len(eligible):
+        logger.warning("Requested %d but only %d eligible -- marking all of them.", n, len(eligible))
+    rng = random.Random(seed)
+    chosen = rng.sample(eligible, min(n, len(eligible)))
+
+    sem = asyncio.Semaphore(concurrency)
+    done = 0
+
+    async def _one(doc: DocumentMetadata) -> None:
+        nonlocal done
+        doc.set_stage_status(ProcessingStage.VECTORIZED, ProcessingStatus.NOT_STARTED)
+        async with sem:
+            await metadata_store.save_metadata(doc)
+        done += 1
+
+    await asyncio.gather(*(_one(d) for d in chosen))
+    logger.info("Marked %d synthetic document(s) as stuck-pending (vector=not_started; OpenSearch/S3 untouched).", done)
+
+
+async def _restore_stuck_pending(metadata_store, concurrency: int) -> None:
+    """Reverse _mark_stuck_pending: set vector back to DONE for every synthetic
+    document currently marked not_started. Safe because nothing else in this
+    pool ever sets that stage to not_started -- there's nothing else to confuse
+    it with."""
+    pool = await _synthetic_pool(metadata_store)
+    stuck = [d for d in pool if d.processing.stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.NOT_STARTED]
+    logger.info("Restoring %d stuck-pending synthetic document(s) back to vector=done ...", len(stuck))
+
+    sem = asyncio.Semaphore(concurrency)
+    done = 0
+
+    async def _one(doc: DocumentMetadata) -> None:
+        nonlocal done
+        doc.set_stage_status(ProcessingStage.VECTORIZED, ProcessingStatus.DONE)
+        async with sem:
+            await metadata_store.save_metadata(doc)
+        done += 1
+
+    await asyncio.gather(*(_one(d) for d in stuck))
+    logger.info("Restored %d document(s).", done)
+
+
 async def run(args: argparse.Namespace) -> None:
     configuration = load_configuration()
     ApplicationContext(configuration)
@@ -368,6 +427,14 @@ async def run(args: argparse.Namespace) -> None:
 
     if args.purge:
         await _purge(app_context, args.concurrency)
+        return
+
+    if args.mark_stuck_pending is not None:
+        await _mark_stuck_pending(app_context.get_metadata_store(), args.mark_stuck_pending, args.seed, args.concurrency)
+        return
+
+    if args.restore_stuck_pending:
+        await _restore_stuck_pending(app_context.get_metadata_store(), args.concurrency)
         return
 
     tag_store = app_context.get_tag_store()
@@ -432,6 +499,18 @@ def main() -> None:
         "--purge",
         action="store_true",
         help="Delete everything a previous run of this script created (matched by identity.uploaded_by / seed-library-* tag names), then exit. Run again without --purge to re-seed.",
+    )
+    parser.add_argument(
+        "--mark-stuck-pending",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Standalone action: flip N already-seeded synthetic documents' vector stage back to not_started in Postgres, leaving their OpenSearch chunks and S3 content untouched (the #2234 'stuck pending' shape, at scale). Never touches real documents. Exits after running.",
+    )
+    parser.add_argument(
+        "--restore-stuck-pending",
+        action="store_true",
+        help="Standalone action: reverse --mark-stuck-pending -- set vector back to done for every synthetic document currently marked not_started. Exits after running.",
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
