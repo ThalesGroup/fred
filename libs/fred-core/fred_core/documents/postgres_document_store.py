@@ -441,8 +441,8 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             not_verified = [
                 document_uid
                 for document_uid in updated
-                if found_by_uid[document_uid]
-                .doc.get("processing", {})
+                if (found_by_uid[document_uid].doc or {})
+                .get("processing", {})
                 .get("stages", {})
                 .get(ProcessingStage.VECTORIZED.value)
                 != ProcessingStatus.DONE.value

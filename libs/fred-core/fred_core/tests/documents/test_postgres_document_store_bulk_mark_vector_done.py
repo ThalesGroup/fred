@@ -104,6 +104,7 @@ async def test_bulk_mark_vector_done_sets_vector_done_and_clears_the_vector_erro
 
     assert updated == ["doc-1"]
     result = await store.get_metadata_by_uid("doc-1")
+    assert result is not None
     assert _vector_stage(result) == ProcessingStatus.DONE
     assert ProcessingStage.VECTORIZED not in result.processing.errors
 
@@ -126,6 +127,7 @@ async def test_bulk_mark_vector_done_touches_only_the_two_allowed_json_paths(
     await store.bulk_mark_vector_done("fred", ["doc-1"])
 
     after = await store.get_metadata_by_uid("doc-1")
+    assert after is not None
     assert after.identity == before.identity
     assert after.source == before.source
     assert after.tags.tag_ids == ["tag-a", "tag-b"]
@@ -173,6 +175,7 @@ async def test_bulk_mark_vector_done_works_when_processing_is_entirely_absent(
 
     assert updated == ["doc-1"]
     result = await store.get_metadata_by_uid("doc-1")
+    assert result is not None
     assert _vector_stage(result) == ProcessingStatus.DONE
 
 
@@ -200,6 +203,7 @@ async def test_bulk_mark_vector_done_works_when_stages_is_absent_but_processing_
 
     assert updated == ["doc-1"]
     result = await store.get_metadata_by_uid("doc-1")
+    assert result is not None
     assert _vector_stage(result) == ProcessingStatus.DONE
 
 
@@ -227,6 +231,7 @@ async def test_bulk_mark_vector_done_works_when_errors_is_absent(
 
     assert updated == ["doc-1"]
     result = await store.get_metadata_by_uid("doc-1")
+    assert result is not None
     assert _vector_stage(result) == ProcessingStatus.DONE
     assert (
         result.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
@@ -250,6 +255,7 @@ async def test_bulk_mark_vector_done_rolls_back_everything_when_one_uid_is_absen
 
     # doc-1 would have matched on its own -- it must still be untouched.
     result = await store.get_metadata_by_uid("doc-1")
+    assert result is not None
     assert _vector_stage(result) != ProcessingStatus.DONE
 
 
@@ -270,6 +276,7 @@ async def test_bulk_mark_vector_done_rolls_back_everything_when_a_uid_source_tag
         await store.bulk_mark_vector_done("fred", ["doc-1", "doc-2"])
 
     result = await store.get_metadata_by_uid("doc-1")
+    assert result is not None
     assert _vector_stage(result) != ProcessingStatus.DONE
 
 
@@ -283,9 +290,11 @@ async def test_bulk_mark_vector_done_retry_converges_to_the_same_final_state(
 
     first = await store.bulk_mark_vector_done("fred", ["doc-1"])
     after_first = await store.get_metadata_by_uid("doc-1")
+    assert after_first is not None
 
     second = await store.bulk_mark_vector_done("fred", ["doc-1"])
     after_second = await store.get_metadata_by_uid("doc-1")
+    assert after_second is not None
 
     assert first == second == ["doc-1"]
     assert after_first.model_dump(mode="json") == after_second.model_dump(mode="json")
@@ -304,6 +313,7 @@ async def test_bulk_mark_vector_done_returns_empty_list_and_touches_nothing_for_
 
     assert result == []
     after = await store.get_metadata_by_uid("doc-1")
+    assert after is not None
     assert _vector_stage(after) != ProcessingStatus.DONE
 
 
