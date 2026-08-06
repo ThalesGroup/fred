@@ -18,7 +18,7 @@ import logging
 from typing import Any, List, Optional, cast
 
 from pydantic import ValidationError
-from sqlalchemy import BigInteger, CursorResult, delete, func, select
+from sqlalchemy import BigInteger, CursorResult, bindparam, delete, func, select, text
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -28,11 +28,16 @@ from fred_core.documents.document_store import (
     BaseDocumentMetadataStore,
     DocumentMetadataDeserializationError,
 )
-from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
 
 logger = logging.getLogger(__name__)
+
+# Chunk size for `bulk_mark_vector_done`'s `WHERE document_uid IN (...)` batches --
+# bounds each statement's parameter count for very large repairs (e.g. ~10,000
+# document_uids) while the whole call still runs inside one transaction.
+_BULK_UPDATE_CHUNK_SIZE = 2000
 
 
 class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
@@ -288,6 +293,156 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             row.date_added_to_kb = metadata.source.date_added_to_kb
             row.tag_ids = list(metadata.tags.tag_ids or [])
             row.doc = self._to_dict(metadata)
+
+    async def bulk_mark_vector_done(
+        self, source_tag: str, document_uids: list[str], session: AsyncSession | None = None
+    ) -> list[str]:
+        """Atomically set `processing.stages.vector = done` and clear any
+        `processing.errors.vector` for exactly these document_uids -- nothing else
+        in `doc` (identity, source, tags, ACL, other stages/errors, extensions,
+        business timestamps) is touched. `processing`/`processing.stages` are
+        created if the document's JSON doesn't have them yet (`jsonb_set(...,
+        create_missing=true)` alone does NOT create missing *intermediate* parent
+        objects in PostgreSQL -- only the final path element -- so this builds the
+        `processing` object explicitly via `COALESCE(...) || jsonb_build_object(...)`
+        instead of relying on that).
+
+        `source_tag` re-scopes the `WHERE` clause at write time, not just at the
+        caller's earlier scan time (`WHERE source_tag = :source_tag AND
+        document_uid IN (...)`): a document whose `source_tag` changed between the
+        scan and this write is out of scope and must not be silently repaired.
+
+        One transaction for the whole call, chunked into bounded
+        `WHERE ... IN (...)` statements (`_BULK_UPDATE_CHUNK_SIZE`) so a single call
+        stays well clear of practical statement-parameter limits even at ~10,000
+        uids: if any chunk's UPDATE fails, or either postcondition below fails, the
+        whole call raises before returning -- the caller's transaction (this
+        method's own, when `session` is None; see `use_session`) rolls back
+        entirely, so a partially-applied repair can never be observed.
+
+        Postconditions checked before returning (both required, both raise on
+        failure so the caller rolls back):
+          1. every requested document_uid was actually found under `source_tag` --
+             an absent uid, or one whose `source_tag` no longer matches, fails the
+             whole batch rather than being silently skipped.
+          2. every updated document_uid reads back `processing.stages.vector ==
+             "done"` -- a defensive read-back check, independent of the UPDATE
+             statement's own correctness.
+
+        Semantically idempotent: re-running with the same `source_tag` and uids
+        converges to the same end state. This is not a guaranteed physical no-op --
+        PostgreSQL may still rewrite a row even when the JSON value it computes is
+        unchanged -- only that the observable result is identical.
+        """
+        unique_uids = list(dict.fromkeys(document_uids))
+        if not unique_uids:
+            return []
+
+        async with use_session(self._sessions, session) as s:
+            if self._is_postgres:
+                update_stmt = text(
+                    """
+                    UPDATE metadata
+                    SET doc = doc || jsonb_build_object(
+                        'processing',
+                        COALESCE(doc->'processing', '{}'::jsonb)
+                        || jsonb_build_object(
+                            'stages',
+                            COALESCE(doc->'processing'->'stages', '{}'::jsonb) || jsonb_build_object('vector', 'done')
+                        )
+                        || jsonb_build_object(
+                            'errors',
+                            COALESCE(doc->'processing'->'errors', '{}'::jsonb) - 'vector'
+                        )
+                    )
+                    WHERE source_tag = :source_tag
+                      AND document_uid IN :uids
+                    RETURNING document_uid
+                    """
+                ).bindparams(bindparam("uids", expanding=True))
+                updated: list[str] = []
+                for i in range(0, len(unique_uids), _BULK_UPDATE_CHUNK_SIZE):
+                    chunk = unique_uids[i : i + _BULK_UPDATE_CHUNK_SIZE]
+                    result = await s.execute(update_stmt, {"source_tag": source_tag, "uids": chunk})
+                    updated.extend(row[0] for row in result.fetchall())
+
+                missing = set(unique_uids) - set(updated)
+                if missing:
+                    raise RuntimeError(
+                        f"bulk_mark_vector_done: {len(missing)} document_uid(s) not found under "
+                        f"source_tag={source_tag!r} (absent, or its source_tag changed since the "
+                        "scan) -- rolling back the whole repair batch instead of applying a partial one."
+                    )
+
+                verify_stmt = text(
+                    """
+                    SELECT document_uid
+                    FROM metadata
+                    WHERE document_uid IN :uids
+                      AND doc #>> '{processing,stages,vector}' = 'done'
+                    """
+                ).bindparams(bindparam("uids", expanding=True))
+                verified: set[str] = set()
+                for i in range(0, len(updated), _BULK_UPDATE_CHUNK_SIZE):
+                    chunk = updated[i : i + _BULK_UPDATE_CHUNK_SIZE]
+                    result = await s.execute(verify_stmt, {"uids": chunk})
+                    verified.update(row[0] for row in result.fetchall())
+                not_verified = set(updated) - verified
+                if not_verified:
+                    raise RuntimeError(
+                        f"bulk_mark_vector_done: {len(not_verified)} document_uid(s) did not read back "
+                        "processing.stages.vector == 'done' after the update -- rolling back the whole "
+                        "repair batch."
+                    )
+
+                return updated
+
+            # SQLite (tests): no jsonb `||`/`#>>` operators used above -- per-row
+            # read/modify/write in the same transaction, applying the identical
+            # source_tag scoping and postcondition checks the Postgres path
+            # enforces directly in SQL.
+            rows = (
+                (
+                    await s.execute(
+                        select(DocumentMetadataRow).where(
+                            DocumentMetadataRow.document_uid.in_(unique_uids),
+                            DocumentMetadataRow.source_tag == source_tag,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            found_by_uid = {row.document_uid: row for row in rows}
+            missing = set(unique_uids) - set(found_by_uid)
+            if missing:
+                raise RuntimeError(
+                    f"bulk_mark_vector_done: {len(missing)} document_uid(s) not found under "
+                    f"source_tag={source_tag!r} (absent, or its source_tag changed since the "
+                    "scan) -- rolling back the whole repair batch instead of applying a partial one."
+                )
+
+            updated = []
+            for document_uid, row in found_by_uid.items():
+                metadata = self._from_row(row)
+                metadata.processing.mark_done(ProcessingStage.VECTORIZED)
+                row.doc = self._to_dict(metadata)
+                updated.append(document_uid)
+
+            not_verified = [
+                document_uid
+                for document_uid in updated
+                if found_by_uid[document_uid].doc.get("processing", {}).get("stages", {}).get(ProcessingStage.VECTORIZED.value)
+                != ProcessingStatus.DONE.value
+            ]
+            if not_verified:
+                raise RuntimeError(
+                    f"bulk_mark_vector_done: {len(not_verified)} document_uid(s) did not read back "
+                    "processing.stages.vector == 'done' after the update -- rolling back the whole "
+                    "repair batch."
+                )
+
+            return updated
 
     async def delete_metadata(
         self, document_uid: str, session: AsyncSession | None = None
