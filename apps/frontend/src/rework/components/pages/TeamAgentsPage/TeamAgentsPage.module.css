@@ -7,13 +7,11 @@
 
 .title {
   display: flex;
-  justify-content: center;
   align-items: center;
   gap: var(--spacing-m);
   padding: var(--spacing-xl) var(--spacing-l) var(--spacing-l);
   color: var(--on-surface);
   font: var(--font-title-large);
-  text-align: center;
 }
 
 .bannerNotice {
@@ -29,7 +27,6 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, 320px);
   grid-auto-rows: minmax(210px, auto);
-  justify-content: center;
   gap: var(--spacing-m);
   padding: 0 var(--spacing-l) var(--spacing-l);
   overflow: auto;
