@@ -139,8 +139,8 @@
       }
     },
     "document_access": {
-      "name": "Accès aux documents",
-      "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG).",
+      "name": "Rechercher dans les ressources",
+      "description": "Capacité de rechercher une information dans les ressources de l'équipe.",
       "fields": {
         "show_library_selection": {
           "title": "Sélecteur de bibliothèque de documents",
@@ -193,8 +193,8 @@
       }
     },
     "document_summarize": {
-      "name": "Résumé de document",
-      "description": "Génère à la demande le résumé d'un document. Nécessite par défaut votre approbation avant chaque résumé.",
+      "name": "Résumer un document",
+      "description": "Capacité de résumer un document et d'en exploiter le résultat.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -207,8 +207,8 @@
       }
     },
     "writable_document": {
-      "name": "Document collaboratif",
-      "description": "Rédigez des documents avec l'agent dans un éditeur Markdown côte à côte, et exportez-les en Word ou Markdown.",
+      "name": "Générer un document texte (Word)",
+      "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
       "panel": {
         "writable_document_pane": {
           "title": "Document"
@@ -222,7 +222,7 @@
       "noSession": "Aucune session — ouvrez une conversation pour voir ses documents.",
       "empty": "Aucun document pour l'instant. Demandez à l'agent d'en rédiger un.",
       "card": {
-        "aria": "Document collaboratif",
+        "aria": "Générer un document texte (Word)",
         "open": "Ouvrir",
         "updatedByAgent": "Mis à jour par l'agent",
         "updatedByUser": "Modifié par vous"
@@ -236,8 +236,8 @@
       }
     },
     "ppt_filler": {
-      "name": "Générateur PowerPoint",
-      "description": "Faites remplir votre propre modèle PowerPoint depuis la conversation : l'agent extrait les valeurs et produit une présentation finalisée.",
+      "name": "Remplir un fichier PowerPoint",
+      "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé.",
       "form": {
         "uploadTemplate": "Téléverser un modèle .pptx",
         "replaceTemplate": "Remplacer le modèle",
@@ -703,8 +703,8 @@
         }
       },
       "filesystem": {
-        "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)",
-        "name": "Accès au système de fichiers"
+        "description": "Capacité de parcourir l'ensemble des dossiers et fichiers présents dans les ressources.",
+        "name": "Parcourir l'arborescence des ressources"
       },
       "jira": {
         "description": "Permet à votre agent d'interagir avec Jira",
@@ -767,8 +767,8 @@
         "name": "Rechercher dans opensearch"
       },
       "tabular": {
-        "description": "Permet à votre agent d'interroger des sources de données tabulaires (feuilles de calcul, csv...)",
-        "name": "Accès aux données tabulaires"
+        "description": "Capacité d'exploiter les données issues des fichiers tabulaires présents dans les ressources (CSV, Excel...).",
+        "name": "Exploiter les fichiers tabulaires"
       },
       "web_github_readonly": {
         "description": "Capacité locale en processus pour consulter des pages web publiques et inspecter des dépôts GitHub (lecture seule)",
@@ -2011,7 +2011,50 @@
         "advancedSettings": "Paramètres avancés",
         "capabilitiesInfo": {
           "title": "À quoi servent ces capacités ?",
-          "body": "Les capacités sont les outils que votre agent peut utiliser pendant une conversation : rechercher dans vos documents, résumer un fichier, ou encore générer une présentation. Activez uniquement celles dont votre agent a besoin, puis ajustez leurs réglages si nécessaire. Vous pourrez toujours modifier cette sélection après la création de l'agent."
+          "body": "Les capacités sont les outils que votre agent peut utiliser pendant une conversation : rechercher dans vos documents, résumer un fichier, ou encore générer une présentation. Activez uniquement celles dont votre agent a besoin, puis ajustez leurs réglages si nécessaire. Vous pourrez toujours modifier cette sélection après la création de l'agent.\nPour les utiliser, pour la plupart, il suffit de le demander en langage naturel à votre agent (ex : \"Fais un résumé du document attaché à cette conversation.\")."
+        },
+        "capabilities": {
+          "header": "Sélectionnez les capacités de votre agent",
+          "viewToggle": {
+            "advanced": "Avancé",
+            "aria": "Affichage avancé des capacités"
+          },
+          "included": {
+            "label": "Capacités incluses",
+            "missing": "Capacités manquantes",
+            "activeTooltip": "Activée pour cet agent.",
+            "inactiveTooltip": "Disponible, mais non activée pour cet agent.",
+            "unavailableTooltip": "Non activée par l'administrateur de la plateforme pour votre équipe."
+          },
+          "sections": {
+            "dataKnowledge": "Données et connaissances",
+            "documentProduction": "Production de documents",
+            "intelligenceOrchestration": "Intelligence et orchestration",
+            "actionsIntegration": "Actions et intégration"
+          },
+          "actionsIntegrationEmpty": "Aucune capacité dans cette section pour le moment.",
+          "packs": {
+            "teamResources": {
+              "title": "Accès aux ressources de l'équipe",
+              "description": "Permet à l'agent d'exploiter les ressources de l'équipe pour remplir sa mission."
+            },
+            "conversationAttachments": {
+              "title": "Pièces jointes à une conversation",
+              "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
+            },
+            "wordDocument": {
+              "title": "Générer un document Word",
+              "description": "Capacité d'éditer et de générer un document texte téléchargeable."
+            },
+            "powerpointDocument": {
+              "title": "Remplir un document PowerPoint",
+              "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
+            },
+            "reasoning": {
+              "title": "Raisonnement",
+              "description": "Accès au mode \"raisonnement\" dans les options du chat."
+            }
+          }
         },
         "createdBy": "Créé par {{user}}",
         "updatedBy": "Modifié par {{user}}",
@@ -2034,12 +2077,12 @@
             "placeholder": "Finalité, utilisateurs cibles, acteurs impactés, données exploitées, productions/livrables, impacts en cas d'erreur de l'agent..."
           },
           "reasoning": {
-            "label": "Raisonnement",
-            "hint": "Offre aux utilisateurs de cet agent un bouton dans le composeur de chat pour activer le raisonnement du modèle dans la conversation. Nécessite un modèle prenant en charge le raisonnement."
+            "label": "Accéder au raisonnement approfondi",
+            "hint": "Accès au mode \"raisonnement approfondi\" dans les options du chat."
           },
           "reasoningDefaultOn": {
-            "label": "Raisonnement activé par défaut",
-            "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
+            "label": "Raisonnement approfondi activé par défaut",
+            "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement approfondi déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement approfondi est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
           }
         },
         "noTemplates": "Aucun modèle d'agent disponible — demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",

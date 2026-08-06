@@ -1,0 +1,40 @@
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+/* Simple 40px section header, per spec. */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 var(--spacing-m);
+  height: 40px;
+  color: var(--on-surface-retreat);
+  font: var(--font-title-small);
+}
+
+.packList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emptyState {
+  margin: 0;
+  border: 1px dashed var(--outline-muted);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-m);
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+}

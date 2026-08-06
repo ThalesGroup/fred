@@ -139,8 +139,8 @@
       }
     },
     "document_access": {
-      "name": "Document access",
-      "description": "Search documents uploaded using semantic similarity (RAG).",
+      "name": "Search team resources",
+      "description": "Ability to search for information in the team's resources.",
       "fields": {
         "show_library_selection": {
           "title": "Document library picker",
@@ -193,8 +193,8 @@
       }
     },
     "document_summarize": {
-      "name": "Document summarization",
-      "description": "Generate an on-demand summary of one document. Requires your approval before each summary by default.",
+      "name": "Summarize a document",
+      "description": "Ability to summarize a document and make use of the result.",
       "fields": {
         "require_confirmation": {
           "title": "Require confirmation",
@@ -207,8 +207,8 @@
       }
     },
     "writable_document": {
-      "name": "Writable document",
-      "description": "Write documents with the agent in a side-by-side Markdown editor, and export them to Word or Markdown.",
+      "name": "Generate a text document (Word)",
+      "description": "Ability to edit and generate a downloadable text document.",
       "panel": {
         "writable_document_pane": {
           "title": "Document"
@@ -222,7 +222,7 @@
       "noSession": "No session — open a chat to see its documents.",
       "empty": "No document yet. Ask the agent to draft one.",
       "card": {
-        "aria": "Collaborative document",
+        "aria": "Generate a text document (Word)",
         "open": "Open",
         "updatedByAgent": "Updated by the agent",
         "updatedByUser": "Edited by you"
@@ -236,8 +236,8 @@
       }
     },
     "ppt_filler": {
-      "name": "PowerPoint generator",
-      "description": "Fill your own PowerPoint template from the conversation: the agent extracts the values and returns a finished deck.",
+      "name": "Fill a PowerPoint file",
+      "description": "Ability to fill a PPT file from a detailed template.",
       "form": {
         "uploadTemplate": "Upload a .pptx template",
         "replaceTemplate": "Replace the template",
@@ -703,8 +703,8 @@
         }
       },
       "filesystem": {
-        "description": "Allow your agent to access a filesystem (local or Minio)",
-        "name": "Filesystem access"
+        "description": "Ability to browse all folders and files present in the resources.",
+        "name": "Browse the resource folders"
       },
       "jira": {
         "description": "Allow your agent to interact with Jira",
@@ -767,8 +767,8 @@
         "name": "Search in opensearch"
       },
       "tabular": {
-        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)",
-        "name": "Tabular data access"
+        "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
+        "name": "Use tabular files"
       },
       "web_github_readonly": {
         "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)",
@@ -2011,7 +2011,50 @@
         "advancedSettings": "Advanced settings",
         "capabilitiesInfo": {
           "title": "What are these capabilities for?",
-          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created."
+          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
+        },
+        "capabilities": {
+          "header": "Select your agent's capabilities",
+          "viewToggle": {
+            "advanced": "Advanced",
+            "aria": "Advanced capabilities view"
+          },
+          "included": {
+            "label": "Included capabilities",
+            "missing": "Missing capabilities",
+            "activeTooltip": "Active on this agent.",
+            "inactiveTooltip": "Available, but not active on this agent.",
+            "unavailableTooltip": "Not enabled by the platform administrator for your team."
+          },
+          "sections": {
+            "dataKnowledge": "Data and knowledge",
+            "documentProduction": "Document production",
+            "intelligenceOrchestration": "Intelligence and orchestration",
+            "actionsIntegration": "Actions and integration"
+          },
+          "actionsIntegrationEmpty": "No capability in this section yet.",
+          "packs": {
+            "teamResources": {
+              "title": "Access to team resources",
+              "description": "Lets the agent use the team's resources to carry out its mission."
+            },
+            "conversationAttachments": {
+              "title": "Attachments in a conversation",
+              "description": "Allows adding documents to a conversation to use their information."
+            },
+            "wordDocument": {
+              "title": "Generate a Word document",
+              "description": "Ability to edit and generate a downloadable text document."
+            },
+            "powerpointDocument": {
+              "title": "Fill in a PowerPoint document",
+              "description": "Ability to fill a PPT file from a detailed template."
+            },
+            "reasoning": {
+              "title": "Reasoning",
+              "description": "Access to \"reasoning\" mode in the chat options."
+            }
+          }
         },
         "createdBy": "Created by {{user}}",
         "updatedBy": "Updated by {{user}}",
@@ -2034,12 +2077,12 @@
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           },
           "reasoning": {
-            "label": "Reasoning",
-            "hint": "Give this agent's users a chat-composer button to turn the model's reasoning on for the conversation. Requires a model that supports reasoning."
+            "label": "Access deep reasoning",
+            "hint": "Access to \"deep reasoning\" mode in the chat options."
           },
           "reasoningDefaultOn": {
-            "label": "Reasoning on by default",
-            "hint": "Every new conversation with this agent starts with the composer's reasoning toggle already on. Users can still switch it off per question. Reasoning is slower and, on agents that call tools, can make the model repeat calls."
+            "label": "Deep reasoning on by default",
+            "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
           }
         },
         "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
