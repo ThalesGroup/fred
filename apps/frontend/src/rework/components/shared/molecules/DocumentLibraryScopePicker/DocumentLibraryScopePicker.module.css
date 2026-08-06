@@ -68,6 +68,12 @@
   font-size: 18px;
 }
 
+/* Non-expandable folder (folders-only mode): keep the chevron's box for
+   alignment but hide the glyph. */
+.expandIconHidden {
+  visibility: hidden;
+}
+
 .checkbox {
   margin: 0;
   accent-color: var(--primary);

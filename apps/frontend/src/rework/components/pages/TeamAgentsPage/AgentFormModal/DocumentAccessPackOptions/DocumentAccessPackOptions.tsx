@@ -51,6 +51,7 @@ export function DocumentAccessPackOptions({ configValues, onConfigChange, teamId
             teamId={teamId}
             selectedTagIds={selectedTagIds}
             onChange={(tagIds) => onConfigChange("library_tag_ids", tagIds)}
+            foldersOnly
           />
         </div>
       )}

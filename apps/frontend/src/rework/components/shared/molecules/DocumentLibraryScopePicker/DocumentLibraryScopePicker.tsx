@@ -33,6 +33,11 @@ interface DocumentLibraryScopePickerProps {
   selectedDocumentUids?: string[];
   onDocumentsChange?: (documentUids: string[]) => void;
   disableLibrarySelection?: boolean;
+  /** Folders-only mode: hide (and never fetch) the documents inside folders, and
+   *  only make a folder expandable when it has sub-folders. Used by the Simple
+   *  capabilities view, where the tree is for a quick folder overview, not
+   *  per-document scoping. */
+  foldersOnly?: boolean;
 }
 
 function findPrimaryTagId(node: TagNode): string | null {
@@ -70,6 +75,7 @@ export function DocumentLibraryScopePicker({
   selectedDocumentUids,
   onDocumentsChange,
   disableLibrarySelection = false,
+  foldersOnly = false,
 }: DocumentLibraryScopePickerProps) {
   const { t } = useTranslation();
   const { activeTeam } = useFrontendBootstrap();
@@ -120,6 +126,7 @@ export function DocumentLibraryScopePicker({
   );
 
   useEffect(() => {
+    if (foldersOnly) return;
     expanded.forEach((path) => {
       const node = path
         .split("/")
@@ -128,7 +135,7 @@ export function DocumentLibraryScopePicker({
       const tagId = node ? findPrimaryTagId(node) : null;
       if (tagId) void loadDocumentsForTag(tagId);
     });
-  }, [expanded, loadDocumentsForTag, tree]);
+  }, [expanded, loadDocumentsForTag, tree, foldersOnly]);
 
   const toggleExpand = (path: string) => {
     setExpanded((prev) => (prev.includes(path) ? prev.filter((item) => item !== path) : [...prev, path]));
@@ -169,6 +176,10 @@ export function DocumentLibraryScopePicker({
         const tagId = findPrimaryTagId(child);
         const docs = tagId ? (documentsByTagId[tagId] ?? []) : [];
         const isLoadingDocs = tagId ? Boolean(loadingTagIds[tagId]) : false;
+        // Folders-only: a folder is expandable only when it holds sub-folders
+        // (documents are never shown here), so leaf folders don't offer an
+        // expand affordance that would open onto nothing.
+        const expandable = !foldersOnly || child.children.size > 0;
 
         return (
           <li key={child.full} className={styles.node}>
@@ -177,14 +188,21 @@ export function DocumentLibraryScopePicker({
                   (padding included) so a click anywhere on the tile expands,
                   and doubles as the hover state-layer. The checkbox and any
                   other real controls sit above it and keep their own clicks. */}
-              <button
-                type="button"
-                className={styles.nodeTrigger}
-                onClick={() => toggleExpand(child.full)}
-                aria-label={isExpanded ? t("rework.collapse") : t("rework.expand")}
-                aria-expanded={isExpanded}
-              />
-              <span className={`${styles.expandIcon} material-symbols-outlined`} aria-hidden>
+              {expandable && (
+                <button
+                  type="button"
+                  className={styles.nodeTrigger}
+                  onClick={() => toggleExpand(child.full)}
+                  aria-label={isExpanded ? t("rework.collapse") : t("rework.expand")}
+                  aria-expanded={isExpanded}
+                />
+              )}
+              {/* Kept in the layout even when not expandable (visibility:hidden)
+                  so every folder row's checkbox/icon stay aligned. */}
+              <span
+                className={`${styles.expandIcon} material-symbols-outlined ${expandable ? "" : styles.expandIconHidden}`}
+                aria-hidden
+              >
                 {isExpanded ? "expand_more" : "chevron_right"}
               </span>
               <input
@@ -213,7 +231,7 @@ export function DocumentLibraryScopePicker({
 
             {isExpanded && (
               <div className={styles.nodeChildren}>
-                {docs.length > 0 && (
+                {!foldersOnly && docs.length > 0 && (
                   <ul className={styles.documentList}>
                     {docs.map((doc) => {
                       const documentUid = doc.identity.document_uid;
