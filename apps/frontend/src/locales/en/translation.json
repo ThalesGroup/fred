@@ -1936,6 +1936,8 @@
           "explanation": "Override the default model for a specific runtime operation (e.g. planning), optionally refined further by purpose.",
           "operation": "Operation",
           "purpose": "Purpose (optional)",
+          "agent": "Agent (optional)",
+          "agentAny": "All agents",
           "targetProfileId": "Profile id",
           "targetProfilePlaceholder": "Select a model",
           "addRule": "Add rule"

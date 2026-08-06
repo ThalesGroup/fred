@@ -224,6 +224,7 @@ def resolve_team_override(
     chat_default_profile_id: str | None,
     operation: str | None,
     purpose: str,
+    agent_id: str | None = None,
 ) -> str | None:
     """
     Second, narrower resolution pass applied only when the static
@@ -231,30 +232,41 @@ def resolve_team_override(
     (`TEAM-ROUTING-POLICY-RFC.md` §8.3) — never consulted otherwise, so a
     static rule always wins over team policy.
 
-    Precedence, identical in shape to `ModelRoutingResolver.resolve` but over
-    the much smaller (operation, purpose) criteria a `TeamOperationRouteRule`
-    carries (§4):
-    1. a rule matching both `operation` and `purpose` wins
-    2. else a rule matching `operation` with `purpose=None` (wildcard) wins
-    3. else `chat_default_profile_id` if set
-    4. else `None` — caller keeps the static catalog default unchanged
+    Precedence, identical in shape to `ModelRoutingResolver.resolve`: `operation`
+    is always required; `purpose` and `agent_id` are optional criteria (None =
+    wildcard). A rule matches when every criterion it defines equals the request.
+    The winner is the rule with the most defined criteria (highest specificity),
+    ties broken by declaration order — so `agent+operation+purpose` beats
+    `agent+operation` / `operation+purpose`, which beat bare `operation`.
+
+    Adding `agent_id` is backward compatible: a rule that leaves it None behaves
+    exactly as before, and callers that omit `agent_id` (default None) match only
+    agent-agnostic rules.
+
+    1. the most specific matching rule wins
+    2. else `chat_default_profile_id` if set
+    3. else `None` — caller keeps the static catalog default unchanged
 
     Pure function, no I/O, no side effects — easy to unit test in isolation
     from the resolver/provider wiring.
     """
 
-    operation_match: str | None = None
-    wildcard_match: str | None = None
+    best_profile_id: str | None = None
+    best_specificity = -1
     for rule in operation_route_rules or []:
         if rule.operation != operation:
             continue
-        if rule.purpose == purpose:
-            operation_match = rule.target_profile_id
-        elif rule.purpose is None and wildcard_match is None:
-            wildcard_match = rule.target_profile_id
+        if rule.purpose is not None and rule.purpose != purpose:
+            continue
+        if rule.agent_id is not None and rule.agent_id != agent_id:
+            continue
+        # Count the optional criteria this rule pins down (operation is always
+        # present, so it does not discriminate between candidates).
+        specificity = (rule.purpose is not None) + (rule.agent_id is not None)
+        if specificity > best_specificity:
+            best_specificity = specificity
+            best_profile_id = rule.target_profile_id
 
-    if operation_match is not None:
-        return operation_match
-    if wildcard_match is not None:
-        return wildcard_match
+    if best_profile_id is not None:
+        return best_profile_id
     return chat_default_profile_id

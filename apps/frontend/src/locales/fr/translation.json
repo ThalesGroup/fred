@@ -1936,6 +1936,8 @@
           "explanation": "Remplacer le modèle par défaut pour une opération runtime spécifique (ex. planning), éventuellement affinée par un objectif (purpose).",
           "operation": "Opération",
           "purpose": "Objectif (optionnel)",
+          "agent": "Agent (optionnel)",
+          "agentAny": "Tous les agents",
           "targetProfileId": "Identifiant du profil",
           "targetProfilePlaceholder": "Sélectionner un modèle",
           "addRule": "Ajouter une règle"

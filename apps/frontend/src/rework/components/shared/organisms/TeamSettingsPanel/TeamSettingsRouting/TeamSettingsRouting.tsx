@@ -25,6 +25,7 @@ import type {
   TeamOperationRouteRule,
   TeamWithPermissions,
 } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useAvailableModelProfilesQuery,
   useTeamRoutingPolicyQuery,
@@ -32,6 +33,8 @@ import {
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 const NO_DEFAULT = "";
+// Sentinel for the "applies to every agent" option (rule.agent_id = null).
+const AGENT_ANY = "";
 
 interface TeamSettingsRoutingProps {
   team: TeamWithPermissions;
@@ -49,7 +52,7 @@ interface RuleRow extends TeamOperationRouteRule {
 let nextKey = 0;
 function newRow(): RuleRow {
   nextKey += 1;
-  return { key: `new-${nextKey}`, rule_id: "", operation: "", purpose: null, target_profile_id: "" };
+  return { key: `new-${nextKey}`, rule_id: "", operation: "", purpose: null, agent_id: null, target_profile_id: "" };
 }
 
 /**
@@ -65,6 +68,12 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
   const { t } = useTranslation();
   const { data: policy, isLoading } = useTeamRoutingPolicyQuery({ teamId: team.id });
   const { data: availableModels, isLoading: isLoadingModels } = useAvailableModelProfilesQuery({
+    teamId: team.id,
+  });
+  // The team's agents — for the optional per-rule agent scope. The rule's
+  // `agent_id` matches the runtime's `definition.agent_id`, i.e. the template's
+  // `source_agent_id`.
+  const { data: agentTemplates } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery({
     teamId: team.id,
   });
   const [updateRoutingPolicy, { isLoading: isSaving }] = useUpdateTeamRoutingPolicyMutation();
@@ -102,6 +111,31 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
     return options;
   }, [availableModels, chatDefaultProfileId, rows, t]);
 
+  const agentOptions: OptionModel<string>[] = useMemo(() => {
+    const options: OptionModel<string>[] = [
+      { value: AGENT_ANY, label: t("rework.teamSettings.routing.operationRules.agentAny"), key: "__any_agent__" },
+    ];
+    const seen = new Set<string>([AGENT_ANY]);
+    (agentTemplates ?? []).forEach((tpl) => {
+      if (seen.has(tpl.source_agent_id)) return;
+      seen.add(tpl.source_agent_id);
+      options.push({ value: tpl.source_agent_id, label: tpl.display_name, key: tpl.source_agent_id });
+    });
+    // Keep a rule's agent selectable even if it's no longer listed (renamed/removed).
+    rows.forEach((row) => {
+      if (row.agent_id && !seen.has(row.agent_id)) {
+        seen.add(row.agent_id);
+        options.push({
+          value: row.agent_id,
+          label: row.agent_id,
+          key: row.agent_id,
+          description: t("rework.teamSettings.routing.profileUnavailable"),
+        });
+      }
+    });
+    return options;
+  }, [agentTemplates, rows, t]);
+
   if (isLoading || isLoadingModels) return null;
 
   const hasNoModelsAvailable = profileOptions.length === 0;
@@ -115,6 +149,9 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
   };
   const handleRowProfileChange = (key: string, targetProfileId: string) => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, target_profile_id: targetProfileId } : r)));
+  };
+  const handleRowAgentChange = (key: string, agentId: string) => {
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, agent_id: agentId || null } : r)));
   };
 
   const handleSave = async () => {
@@ -191,6 +228,14 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
                 label={t("rework.teamSettings.routing.operationRules.purpose")}
                 value={row.purpose ?? ""}
                 onChange={(e) => handleRowChange(row.key, "purpose", e.target.value)}
+                disabled={!canWrite}
+              />
+              <Select
+                size="medium"
+                label={t("rework.teamSettings.routing.operationRules.agent")}
+                value={row.agent_id ?? AGENT_ANY}
+                options={agentOptions}
+                onChange={(value) => handleRowAgentChange(row.key, value)}
                 disabled={!canWrite}
               />
               <Select

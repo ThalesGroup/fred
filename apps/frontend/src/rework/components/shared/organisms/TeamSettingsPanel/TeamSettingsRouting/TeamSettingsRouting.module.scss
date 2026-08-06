@@ -30,7 +30,7 @@
 
 .rule-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr 1fr auto;
   align-items: end;
   gap: var(--spacing-xs);
 }

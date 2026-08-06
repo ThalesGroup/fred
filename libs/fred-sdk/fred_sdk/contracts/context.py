@@ -111,6 +111,11 @@ class TeamOperationRouteRule(BaseModel):
     rule_id: str = Field(..., min_length=1)
     operation: str = Field(..., min_length=1)
     purpose: str | None = None
+    # Optional per-agent scope: when set, the rule only applies to this agent
+    # (matched against the request's `agent_id`). None = applies to every agent
+    # of the team (wildcard) — the historical behaviour, so existing rules are
+    # unchanged. Resolved by `resolve_team_override` alongside operation/purpose.
+    agent_id: str | None = None
     target_profile_id: str = Field(..., min_length=1)
 
 

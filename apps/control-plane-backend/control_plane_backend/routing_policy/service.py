@@ -161,9 +161,13 @@ async def _validate_write(
     if len(set(rule_ids)) != len(rule_ids):
         raise DuplicateOperationRuleError(operation="*", purpose=None)
 
-    seen_op_purpose: set[tuple[str, str | None]] = set()
+    # Uniqueness is on (operation, purpose, agent_id): the same operation/purpose
+    # may target different models for different agents, so agent_id is part of the
+    # rule's identity. Agent-agnostic rules keep agent_id=None, so this is
+    # backward compatible with policies written before per-agent routing existed.
+    seen_op_purpose: set[tuple[str, str | None, str | None]] = set()
     for rule in request.operation_rules:
-        key = (rule.operation, rule.purpose)
+        key = (rule.operation, rule.purpose, rule.agent_id)
         if key in seen_op_purpose:
             raise DuplicateOperationRuleError(
                 operation=rule.operation, purpose=rule.purpose
