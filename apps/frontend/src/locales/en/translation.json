@@ -2035,7 +2035,7 @@
           },
           "reasoning": {
             "label": "Reasoning",
-            "hint": "Let users turn the model's reasoning on for a single question, from the chat composer. Only appears when the model supports it and an administrator has enabled it."
+            "hint": "Give this agent's users a chat-composer button to turn the model's reasoning on for the conversation. Requires a model that supports reasoning."
           },
           "reasoningDefaultOn": {
             "label": "Reasoning on by default",
