@@ -24,6 +24,7 @@
 
 import { useState } from "react";
 import { useDispatch } from "react-redux";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
@@ -37,6 +38,17 @@ import { useCorpusRepairVectorMetadataMutation, useCorpusRevectorizeMutation } f
 import { useResetPlatformRebacMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import styles from "./KeaMigrationPage.module.css";
+
+// RTK Query's `.unwrap()` throws a `FetchBaseQueryError`/`SerializedError` --
+// a plain, non-Error object (`{status, data}` or `{name, message}`) -- never a
+// real `Error` instance. `e instanceof Error ? e.message : String(e)` was
+// silently rendering the literal text "[object Object]" for every API error
+// on this page instead of the backend's actual detail message.
+function describeError(e: unknown): string {
+  const detail = normalizeApiError(e).detail;
+  if (detail) return detail;
+  return e instanceof Error ? e.message : "Erreur inconnue.";
+}
 
 function FileField({
   label,
@@ -129,7 +141,7 @@ export default function KeaMigrationPage() {
       const result = await runKeaDryRun(file, realmFile ?? undefined);
       setReport(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
       setReport(null);
     } finally {
       setIsDryRunning(false);
@@ -151,7 +163,7 @@ export default function KeaMigrationPage() {
       );
       setApplyResult(`Import lancé — task ${taskId}. Suivre la progression sur /admin/migration.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
     } finally {
       setIsApplying(false);
     }
@@ -187,7 +199,7 @@ export default function KeaMigrationPage() {
       setRevectorizeResult(`Lancé — task ${task_id}. Suivre le rapport détaillé sur /admin/tasks.`);
       setSourceTag("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
     }
   };
 
@@ -224,7 +236,7 @@ export default function KeaMigrationPage() {
       setRevectorizeResult(`Lancé — task ${task_id}. Suivre la progression sur /admin/tasks.`);
       setSourceTag("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
     }
   };
 
@@ -241,7 +253,7 @@ export default function KeaMigrationPage() {
         }),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
     }
   };
 
