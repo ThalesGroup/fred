@@ -939,7 +939,7 @@ export function ConversationOptionsPanel({
     <>
       <Box
         sx={{
-          position: "fixed",
+          position: "absolute",
           top: { xs: 8, md: 12 },
           right: { xs: 8, md: 16 + rightOffsetPx },
           // Match the pane's width animation so the rail travels with the pane

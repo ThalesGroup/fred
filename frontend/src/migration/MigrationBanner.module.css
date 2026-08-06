@@ -1,4 +1,4 @@
-/* KEA MIGRATION (throwaway) — overlay banner, see MigrationBanner.tsx */
+/* KEA MIGRATION (throwaway) — top banner, see MigrationBanner.tsx */
 
 /* Background color comes from configuration (inline style); the fixed dark
    text assumes the configured color stays light, like the default #00BBDD. */
@@ -7,20 +7,12 @@
   --banner-text: #00222c;
 
   display: flex;
-  position: absolute;
-  top: var(--spacing-m);
-  right: var(--spacing-xl);
-  left: var(--spacing-xl);
+  flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
-  z-index: 1100;
   animation: slide-in 200ms ease-out;
-  margin: 0 auto;
-  box-shadow: var(--shadow-s);
-  border-radius: var(--radius-s);
-  padding: var(--spacing-s) var(--spacing-s) var(--spacing-s) var(--spacing-m);
-  max-width: 1100px;
+  padding: var(--spacing-m) var(--spacing-xl);
 }
 
 .message {
@@ -49,14 +41,6 @@
 
 .separator {
   color: var(--banner-text);
-}
-
-/* IconButton sets --main-color on the button itself via [data-color], so the
-   override has to target the button too — inheriting from .banner would lose. */
-.banner button {
-  --main-color: var(--banner-text);
-  --state-on-surface-hover: rgb(0 0 0 / 10%);
-  --state-on-surface-pressed: rgb(0 0 0 / 20%);
 }
 
 @keyframes slide-in {

@@ -14,64 +14,31 @@
 
 // ---------------------------------------------------------------------------
 // KEA MIGRATION (one-shot, throwaway-on-kea).
-// Announces, once per session (i.e. once per login), that the new version is
-// available. Color, texts and links come from the platform-managed
+// Announces, persistently and without a dismiss action, that the new version
+// is available. Color, texts and links come from the platform-managed
 // frontend_settings.properties.migrationBanner; without it, nothing renders.
-// Rendered as an overlay over the page content only — never over the sidebar.
+// Rendered once at the app root (see App.tsx), above the routed content, so
+// it shows on every page and pushes the rest of the app down instead of
+// covering it.
 // ---------------------------------------------------------------------------
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import styles from "./MigrationBanner.module.css";
-
-const DISMISSED_KEY = "kea-migration-banner-dismissed";
-const AUTO_HIDE_MS = 30_000;
-
-const wasDismissed = () => {
-  try {
-    return sessionStorage.getItem(DISMISSED_KEY) === "true";
-  } catch {
-    return false; // private mode / storage disabled: show the banner anyway
-  }
-};
-
-const markDismissed = () => {
-  try {
-    sessionStorage.setItem(DISMISSED_KEY, "true");
-  } catch {
-    /* storage unavailable — the banner simply reappears on reload */
-  }
-};
 
 const resolveLocalized = (map: { [key: string]: string } | undefined | null, lang: string): string | null =>
   map ? (map[lang] ?? map["en"] ?? null) : null;
 
 export default function MigrationBanner() {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const { migrationBanner } = useFrontendProperties();
-  const [open, setOpen] = useState(() => !wasDismissed());
-
-  useEffect(() => {
-    if (!open) return;
-    const timer = window.setTimeout(() => {
-      markDismissed();
-      setOpen(false);
-    }, AUTO_HIDE_MS);
-    return () => window.clearTimeout(timer);
-  }, [open]);
 
   const lang = i18n.language?.split("-")[0] ?? "en";
   const title = resolveLocalized(migrationBanner?.titles, lang);
   const message = resolveLocalized(migrationBanner?.messages, lang);
 
-  if (!open || !migrationBanner || (!title && !message)) return null;
-
-  const close = () => {
-    markDismissed();
-    setOpen(false);
-  };
+  if (!migrationBanner || (!title && !message)) return null;
 
   return (
     <div className={styles.banner} style={{ backgroundColor: migrationBanner.color }} role="status" aria-live="polite">
@@ -93,14 +60,6 @@ export default function MigrationBanner() {
             </a>
           </Fragment>
         ))}
-        <IconButton
-          color="on-surface"
-          variant="icon"
-          size="xs"
-          icon={{ category: "outlined", type: "close" }}
-          onClick={close}
-          aria-label={t("common.close")}
-        />
       </div>
     </div>
   );

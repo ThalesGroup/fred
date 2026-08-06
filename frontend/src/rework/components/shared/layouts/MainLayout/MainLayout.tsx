@@ -1,7 +1,6 @@
 import { Outlet } from "react-router-dom";
 import Sidebar from "@shared/organisms/Sidebar/Sidebar.tsx";
 import { CssBaseline } from "@mui/material";
-import MigrationBanner from "src/migration/MigrationBanner.tsx"; // KEA-MIGRATION (throwaway)
 import styles from "./MainLayout.module.css";
 
 export default function MainLayout() {
@@ -13,7 +12,6 @@ export default function MainLayout() {
           <Sidebar />
         </nav>
         <div className={styles.contentArea}>
-          <MigrationBanner /> {/* KEA-MIGRATION (throwaway) */}
           <main className={styles.content}>
             <Outlet />
           </main>

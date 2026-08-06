@@ -84,7 +84,7 @@ export default function Chat() {
 
   if (flowsLoading) {
     return (
-      <Box sx={{ p: 3, display: "grid", placeItems: "center", height: "100vh" }}>
+      <Box sx={{ p: 3, display: "grid", placeItems: "center", height: "100%" }}>
         <CircularProgress />
       </Box>
     );

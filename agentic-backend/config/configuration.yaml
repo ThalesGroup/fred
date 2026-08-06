@@ -60,6 +60,23 @@ frontend_settings:
   properties:
     logoName: "fred"
     siteDisplayName: "Fred"
+    migrationBanner:
+      color: "#00BBDD"
+      titles:
+        en: "New version available"
+        fr: "Nouvelle version disponible"
+      messages:
+        en: "Fred has a new home."
+        fr: "Fred a une nouvelle adresse."
+      links:
+        - url: "https://fred.example.com"
+          labels:
+            en: "Go to new Fred"
+            fr: "Accéder au nouveau Fred"
+        - url: "https://fredk8.dev"
+          labels:
+            en: "Go to new Fred"
+            fr: "Accéder au nouveau Fred"
 ai:
   # In production  activate the configuration persistence mechanism
   # that allow users to create/update agents at runtime and change
