@@ -141,7 +141,11 @@ function RepairResultDetails({ result, t }: { result: RepairVectorMetadataResult
     <Disclosure
       title={t("rework.taskActivity.repair.detailsTitle")}
       defaultOpen={
-        (result.missing_vectors ?? 0) + (result.missing_content ?? 0) + (result.failed_or_running_excluded ?? 0) + (result.errors ?? 0) > 0
+        (result.missing_vectors ?? 0) +
+          (result.missing_content ?? 0) +
+          (result.failed_or_running_excluded ?? 0) +
+          (result.errors ?? 0) >
+        0
       }
     >
       <dl className={styles.counterList}>
