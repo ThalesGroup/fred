@@ -2545,6 +2545,45 @@ the pair).
 
 ---
 
+### 8.44 ✅ `DocumentExtractionPort` — server-side exhaustive extraction (DOCREAD-01 Phase 2, 2026-08-07)
+
+**Moves `document_extract` off client-side paging.** The Phase 1 tool
+(§8.43) had the agent page the whole document into its own context and
+accumulate — a burst of token-heavy model calls that tripped the provider's
+rate limit (observed live: Mistral `mistral-small-latest` returned HTTP 429
+`code=1300` mid-turn on a multi-page extraction). Root cause is structural, not
+a bug: exhaustive extraction over a big document is inherently many LLM calls,
+and doing them agent-side re-sends the growing context each round.
+
+**New optional port `DocumentExtractionPort.extract(document_uid, *,
+instruction) -> DocumentExtractionResult`** (`fred-sdk`) runs the whole
+map-reduce **server-side in Knowledge Flow**, in ONE agent tool call. KF's new
+`POST /knowledge-flow/v1/documents/{uid}/extract` (`ExtractService` +
+`DocumentExtractor`) maps over EVERY chunk (no salience pruning — deliberately
+NOT `SmartDocSummarizer`, which keeps only top-N shards and compresses at
+reduce, dropping items) and reduces by concatenate + case-insensitive de-dupe,
+never summarizing. The map phase runs with **bounded concurrency
+(`_MAP_CONCURRENCY=3`) and 429-aware retry/backoff** (respects `Retry-After`,
+exponential + jitter) so a throttling provider slows the extraction rather than
+failing the turn (DOCREAD-01 #2). Document text is resolved through
+`SummarizeService.get_document_text`, so the corpus/session-attachment access
+rules stay single-sourced. `document_verbatim`'s positional read stays on the
+paginated `document_markdown` port; only exhaustive extraction moved.
+
+Wiring mirrors the summarize path: `KfDocumentClient.extract` (extended read
+timeout), `DocumentExtractionAdapter`, injected in `agent_app.py`'s turn-time
+`RuntimeServices`. The `document_extract` capability tool is now one call
+returning the consolidated list; its `page_max_chars` config field was removed
+(server owns paging). Additive/optional — no existing runtime path changes.
+Tuning knobs (concurrency, retry, input cap) are module constants pending live
+calibration against real provider limits, and the map remains inherently
+LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
+`test_document_extractor.py` (exhaustive de-dupe, NONE handling, 429 retry),
+`test_capability_document_reading.py` (one-call path, empty/truncation/error
+shaping).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.
