@@ -13,10 +13,10 @@
 // limitations under the License.
 
 // ---------------------------------------------------------------------------
-// KEA MIGRATION (one-shot, throwaway-on-kea).
-// Announces, persistently and without a dismiss action, that the new version
-// is available. Color, texts and links come from the platform-managed
-// frontend_settings.properties.migrationBanner; without it, nothing renders.
+// Generic informative top banner (not tied to any one announcement).
+// Announces, persistently and without a dismiss action, whatever platform
+// operators configure. Color, texts and links come from the platform-managed
+// frontend_settings.properties.infoBanner; without it, nothing renders.
 // Rendered once at the app root (see App.tsx), above the routed content, so
 // it shows on every page and pushes the rest of the app down instead of
 // covering it.
@@ -25,30 +25,30 @@
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
-import styles from "./MigrationBanner.module.css";
+import styles from "./InfoBanner.module.css";
 
 const resolveLocalized = (map: { [key: string]: string } | undefined | null, lang: string): string | null =>
   map ? (map[lang] ?? map["en"] ?? null) : null;
 
-export default function MigrationBanner() {
+export default function InfoBanner() {
   const { i18n } = useTranslation();
-  const { migrationBanner } = useFrontendProperties();
+  const { infoBanner: banner } = useFrontendProperties();
 
   const lang = i18n.language?.split("-")[0] ?? "en";
-  const title = resolveLocalized(migrationBanner?.titles, lang);
-  const message = resolveLocalized(migrationBanner?.messages, lang);
+  const title = resolveLocalized(banner?.titles, lang);
+  const message = resolveLocalized(banner?.messages, lang);
 
-  if (!migrationBanner || (!title && !message)) return null;
+  if (!banner || (!title && !message)) return null;
 
   return (
-    <div className={styles.banner} style={{ backgroundColor: migrationBanner.color }} role="status" aria-live="polite">
+    <div className={styles.banner} style={{ backgroundColor: banner.color }} role="status" aria-live="polite">
       <p className={styles.message}>
         {title && <strong>{title}</strong>}
         {title && message ? " " : null}
         {message}
       </p>
       <div className={styles.actions}>
-        {(migrationBanner.links ?? []).map((link, index) => (
+        {(banner.links ?? []).map((link, index) => (
           <Fragment key={link.url}>
             {index > 0 && (
               <span className={styles.separator} aria-hidden="true">

@@ -1,4 +1,4 @@
-/* KEA MIGRATION (throwaway) — top banner, see MigrationBanner.tsx */
+/* Generic informative top banner, see InfoBanner.tsx */
 
 /* Background color comes from configuration (inline style); the fixed dark
    text assumes the configured color stays light, like the default #00BBDD. */

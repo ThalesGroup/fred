@@ -1379,7 +1379,7 @@ export type UploadWarning = {
     [key: string]: string;
   };
 };
-export type MigrationBannerLink = {
+export type InfoBannerLink = {
   /** Link target URL. */
   url: string;
   /** Locale → label map (e.g. {"en": "...", "fr": "..."}). */
@@ -1387,7 +1387,7 @@ export type MigrationBannerLink = {
     [key: string]: string;
   };
 };
-export type MigrationBanner = {
+export type InfoBanner = {
   /** Banner background CSS color. */
   color?: string;
   /** Locale → emphasized lead sentence map, rendered in bold before the message. */
@@ -1399,7 +1399,7 @@ export type MigrationBanner = {
     [key: string]: string;
   };
   /** Links rendered on the right side of the banner. */
-  links?: MigrationBannerLink[];
+  links?: InfoBannerLink[];
 };
 export type Properties = {
   logoName?: string;
@@ -1429,8 +1429,8 @@ export type Properties = {
   gcuVersion?: string | null;
   /** Optional alert shown in the document upload drawer. Omit to show nothing. */
   uploadWarning?: UploadWarning | null;
-  /** Optional new-version banner overlaid on the page content. Omit to show nothing. */
-  migrationBanner?: MigrationBanner | null;
+  /** Optional informative banner shown above the app content. Omit to show nothing. */
+  infoBanner?: InfoBanner | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

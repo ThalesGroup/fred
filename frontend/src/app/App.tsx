@@ -26,7 +26,7 @@ import { AuthProvider } from "../security/AuthContext";
 import { createDarkTheme, createLightTheme } from "../styles/theme";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
-import MigrationBanner from "../migration/MigrationBanner.tsx"; // KEA-MIGRATION (throwaway)
+import InfoBanner from "../banner/InfoBanner.tsx";
 
 const pulse = keyframes`
   0% { transform: scale(1); opacity: 0.9; }
@@ -166,7 +166,7 @@ function FredUiContent() {
     >
       <AuthProvider>
         <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw" }}>
-          <MigrationBanner /> {/* KEA-MIGRATION (throwaway) */}
+          <InfoBanner />
           <Box sx={{ flex: 1, minHeight: 0 }}>
             <GcuGuard>
               {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
