@@ -226,6 +226,17 @@ async def emit_ingestion_task_event(
     task_service = ApplicationContext.get_instance().get_task_service()
     await task_service.record(event)
 
+    # #2279: the task row is not what the library renders -- the document's
+    # processing stages are, and a stage persisted `in_progress` before the work
+    # started stays that way when the failure came from outside the activity
+    # (e.g. a child workflow Temporal timed out). Fail those stages here too, so
+    # the row does not keep reading "processing" once the task leaves the active
+    # list. Best-effort: never let it mask the failure being reported.
+    if TaskState(state) == TaskState.failed and document_uid:
+        from knowledge_flow_backend.features.scheduler.document_failure import mark_in_progress_stages_failed
+
+        await mark_in_progress_stages_failed(document_uid, error or "Processing failed")
+
 
 @activity.defn
 async def fast_store_vectors(payload: dict) -> dict:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -49,6 +50,17 @@ from fred_core.tasks.workflow_control import (
 
 logger = logging.getLogger(__name__)
 
+# Called after reconciliation drove a task terminal from the executor's verdict,
+# so the owning app can repair whatever *it* knows the task was mutating. Kept
+# deliberately generic -- fred-core hands over the run and the outcome and stays
+# out of the app's domain: knowledge-flow uses it to fail the document's stuck
+# processing stages (#2279), which fred-core must not know about.
+#
+# Invoked only on a terminal executor verdict, never when the status is unknown,
+# so the never-false-fail rule in `_reconciled_terminal` extends to whatever the
+# hook writes. Failures inside the hook are swallowed by the caller.
+ReconciledTerminalHook = Callable[["TaskRunRow", TaskState, str], Awaitable[None]]
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -70,10 +82,12 @@ class TaskService:
         store: TaskStore,
         bus: IEventBus,
         control: WorkflowControl,
+        on_reconciled_terminal: ReconciledTerminalHook | None = None,
     ) -> None:
         self.store = store
         self.bus = bus
         self._control = control
+        self._on_reconciled_terminal = on_reconciled_terminal
 
     @classmethod
     def build(
@@ -82,6 +96,7 @@ class TaskService:
         backend: SchedulerBackend,
         temporal_client_provider: TemporalClientProvider | None = None,
         postgres_dsn: str | None = None,
+        on_reconciled_terminal: ReconciledTerminalHook | None = None,
     ) -> "TaskService":
         store = TaskStore(engine)
         if backend == SchedulerBackend.TEMPORAL:
@@ -94,7 +109,12 @@ class TaskService:
         else:
             bus = MemoryEventBus()
             control = NoopWorkflowControl()
-        return cls(store=store, bus=bus, control=control)
+        return cls(
+            store=store,
+            bus=bus,
+            control=control,
+            on_reconciled_terminal=on_reconciled_terminal,
+        )
 
     async def start(
         self,
@@ -315,6 +335,20 @@ class TaskService:
             state.value,
             message,
         )
+        # The task row is now correct, but the objects the task was mutating may
+        # still read as in-flight (a document whose processing stage is stuck at
+        # `in_progress`, #2279). Let the owning app repair its own surface. Never
+        # let that fail reconciliation: the terminal event above is already
+        # durable, and re-raising here would only strand the task again.
+        if self._on_reconciled_terminal is not None:
+            try:
+                await self._on_reconciled_terminal(run, state, message)
+            except Exception:
+                logger.warning(
+                    "[TaskService] reconciled-terminal hook failed for task_id=%s",
+                    task_id,
+                    exc_info=True,
+                )
         return True
 
     async def reconcile_task(self, task_id: str) -> bool:

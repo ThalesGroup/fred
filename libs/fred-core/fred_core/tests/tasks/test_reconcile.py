@@ -138,7 +138,9 @@ async def build_service():
     which then raises 'Event loop is closed' from that thread."""
     engines: list[Any] = []
 
-    async def _build(tmp_path, status_by_eid) -> tuple[TaskService, _StubControl]:
+    async def _build(
+        tmp_path, status_by_eid, on_reconciled_terminal=None
+    ) -> tuple[TaskService, _StubControl]:
         engine = create_async_engine_from_config(
             PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
         )
@@ -147,7 +149,10 @@ async def build_service():
             await conn.run_sync(Base.metadata.create_all)
         control = _StubControl(status_by_eid)
         service = TaskService(
-            store=TaskStore(engine), bus=MemoryEventBus(), control=control
+            store=TaskStore(engine),
+            bus=MemoryEventBus(),
+            control=control,
+            on_reconciled_terminal=on_reconciled_terminal,
         )
         return service, control
 
@@ -404,3 +409,63 @@ async def test_run_reconcile_sweeper_invokes_reconcile_and_is_cancellable():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert calls[0] == (5, 7)
+
+
+# ── 5. reconciled-terminal hook (#2279) ──────────────────────────────────────
+#
+# Reconciliation fixes the task row, but the objects the task was mutating stay
+# stale unless the owning app is told. These lock the hook's contract: it fires
+# on (and only on) a terminal verdict, and it can never break reconciliation.
+
+
+@pytest.mark.asyncio
+async def test_hook_receives_run_state_and_message(tmp_path, build_service):
+    seen: list[tuple[str, TaskState, str]] = []
+
+    async def hook(run: TaskRunRow, state: TaskState, message: str) -> None:
+        seen.append((run.task_id, state, message))
+
+    service, _ = await build_service(
+        tmp_path, {"wf-1": ExecutionStatus.timed_out}, hook
+    )
+    task_id = await _new_task(service, execution_id="wf-1")
+
+    assert await service.reconcile_task(task_id) is True
+    assert seen == [(task_id, TaskState.failed, "Execution timed_out")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [ExecutionStatus.running, None])
+async def test_hook_not_called_when_running_or_unreachable(
+    tmp_path, status, build_service
+):
+    # The never-false-fail invariant has to extend to whatever the hook writes:
+    # a saturated/unreachable Temporal must not paint the document red.
+    calls: list[str] = []
+
+    async def hook(run: TaskRunRow, state: TaskState, message: str) -> None:
+        calls.append(run.task_id)
+
+    service, _ = await build_service(tmp_path, {"wf-1": status}, hook)
+    task_id = await _new_task(service, execution_id="wf-1")
+
+    assert await service.reconcile_task(task_id) is False
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_hook_failure_does_not_break_reconciliation(tmp_path, build_service):
+    # The terminal event is already durable when the hook runs; letting the hook
+    # propagate would strand the very task reconciliation just fixed.
+    async def hook(run: TaskRunRow, state: TaskState, message: str) -> None:
+        raise RuntimeError("metadata store down")
+
+    service, _ = await build_service(
+        tmp_path, {"wf-1": ExecutionStatus.timed_out}, hook
+    )
+    task_id = await _new_task(service, execution_id="wf-1")
+
+    assert await service.reconcile_task(task_id) is True
+    run = await service.get_run(task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.failed
