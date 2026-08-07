@@ -528,6 +528,18 @@ export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly 
   return toolResultOk(entry.result) ? "ok" : "error";
 }
 
+/**
+ * True when a combo tool entry was cancelled by the user at its HITL gate. The
+ * frontend injects an optimistic error tool_result flagged `cancelled_by_user`
+ * on cancel (see `useChatSse.sendHitlResume`), so the previously "running" row
+ * flips immediately to a cancelled state (red status dot) instead of hanging.
+ */
+export function isCancelledByUser(entry: TraceEntry): boolean {
+  if (entry.kind !== "combo" || !entry.result) return false;
+  const extras = entry.result.metadata?.extras as { cancelled_by_user?: boolean } | undefined;
+  return extras?.cancelled_by_user === true;
+}
+
 // A "tool_use" thought is a synthetic bookkeeping block the runtime opens/closes
 // around every tool call purely to bracket it in time (see react_runtime.py).
 // Its conclusion is always the hardcoded literal "Done"/"Error" and its title is

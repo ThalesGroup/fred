@@ -1383,6 +1383,7 @@
     "chatTrace": {
       "ariaLabel": "Agent reasoning trace",
       "awaitingConfirmation": "awaiting confirmation…",
+      "cancelledByUser": "cancelled by the user",
       "details": "Details",
       "errorCopied": "Error message copied to clipboard",
       "turnFailed": "The turn failed — open for details",

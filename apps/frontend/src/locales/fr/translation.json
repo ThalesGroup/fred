@@ -1383,6 +1383,7 @@
     "chatTrace": {
       "ariaLabel": "Trace de raisonnement de l'agent",
       "awaitingConfirmation": "en attente de confirmation…",
+      "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
       "errorCopied": "Message d'erreur copié dans le presse-papier",
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
