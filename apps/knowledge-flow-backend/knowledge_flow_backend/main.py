@@ -71,6 +71,7 @@ from knowledge_flow_backend.features.kpi.prometheus_controller import (
 from knowledge_flow_backend.features.metadata.controller import MetadataController
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
+from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.summarize.controller import SummarizeController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tabular.execution import register_tabular_exception_handlers
@@ -246,6 +247,7 @@ def create_app() -> FastAPI:
     VectorSearchController(router)
     TreeController(router)
     SummarizeController(app, router)
+    ExtractController(app, router)
     KPIController(router)
     ResourceController(router)
     McpFilesystemController(router)
