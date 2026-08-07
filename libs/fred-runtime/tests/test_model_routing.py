@@ -563,7 +563,10 @@ class TestResolveTeamOverride:
             rule_id="r-any", operation="planning", target_profile_id="any"
         )
         specific = TeamOperationRouteRule(
-            rule_id="r-rico", operation="planning", agent_id="rico", target_profile_id="rico"
+            rule_id="r-rico",
+            operation="planning",
+            agent_id="rico",
+            target_profile_id="rico",
         )
         result = resolve_team_override(
             operation_route_rules=[agnostic, specific],

@@ -159,20 +159,21 @@ async def _validate_write(
 
     rule_ids = [r.rule_id for r in request.operation_rules]
     if len(set(rule_ids)) != len(rule_ids):
-        raise DuplicateOperationRuleError(operation="*", purpose=None)
+        raise DuplicateOperationRuleError(operation=None, purpose=None)
 
-    # Uniqueness is on (operation, purpose, agent_id): the same operation/purpose
-    # may target different models for different agents, so agent_id is part of the
-    # rule's identity. Agent-agnostic rules keep agent_id=None, so this is
-    # backward compatible with policies written before per-agent routing existed.
-    seen_op_purpose: set[tuple[str, str | None, str | None]] = set()
+    # Uniqueness is on (operation, purpose, agent_id): the same combination
+    # may not appear twice in the policy. Operation and agent_id are both
+    # optional (None = wildcard), so a rule with operation=None applies to
+    # all operations. This is backward compatible: rules written before
+    # operation became optional keep operation non-None.
+    seen_rule_key: set[tuple[str | None, str | None, str | None]] = set()
     for rule in request.operation_rules:
         key = (rule.operation, rule.purpose, rule.agent_id)
-        if key in seen_op_purpose:
+        if key in seen_rule_key:
             raise DuplicateOperationRuleError(
-                operation=rule.operation, purpose=rule.purpose
+                operation=rule.operation, purpose=rule.purpose, agent_id=rule.agent_id
             )
-        seen_op_purpose.add(key)
+        seen_rule_key.add(key)
 
     referenced = _referenced_profile_ids(
         chat_default_profile_id=request.chat_default_profile_id,

@@ -56,12 +56,12 @@ function newRow(): RuleRow {
   // (`TeamOperationRouteRule.rule_id`, min_length=1). The form never surfaces
   // it, so generate one at creation — without this a new override always failed
   // write-time validation with a 422. Existing rows keep their own rule_id.
-  // `agent_id` defaults to null (rule applies to every agent) until the author
-  // scopes it to a specific agent.
+  // `operation` and `agent_id` default to null (wildcard / applies to all) until
+  // the author refines them — at least one must be non-null per validation.
   return {
     key: `new-${nextKey}`,
     rule_id: crypto.randomUUID(),
-    operation: "",
+    operation: null,
     purpose: null,
     agent_id: null,
     target_profile_id: "",
@@ -177,9 +177,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
   const handleAddRow = () => setRows((prev) => [...prev, newRow()]);
   const handleRemoveRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
   const handleRowChange = (key: string, field: "operation" | "purpose", value: string) => {
-    setRows((prev) =>
-      prev.map((r) => (r.key === key ? { ...r, [field]: field === "purpose" && value === "" ? null : value } : r)),
-    );
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value === "" ? null : value } : r)));
   };
   const handleRowProfileChange = (key: string, targetProfileId: string) => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, target_profile_id: targetProfileId } : r)));
@@ -244,8 +242,8 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
           {rows.map((row) => (
             <div className={styles["rule-row"]} key={row.key}>
               <TextInput
-                label={t("rework.teamSettings.routing.operationRules.operation")}
-                value={row.operation}
+                label={`${t("rework.teamSettings.routing.operationRules.operation")} (optional)`}
+                value={row.operation ?? ""}
                 onChange={(e) => handleRowChange(row.key, "operation", e.target.value)}
                 disabled={!canWrite}
               />

@@ -232,16 +232,15 @@ def resolve_team_override(
     (`TEAM-ROUTING-POLICY-RFC.md` §8.3) — never consulted otherwise, so a
     static rule always wins over team policy.
 
-    Precedence, identical in shape to `ModelRoutingResolver.resolve`: `operation`
-    is always required; `purpose` and `agent_id` are optional criteria (None =
-    wildcard). A rule matches when every criterion it defines equals the request.
-    The winner is the rule with the most defined criteria (highest specificity),
-    ties broken by declaration order — so `agent+operation+purpose` beats
-    `agent+operation` / `operation+purpose`, which beat bare `operation`.
+    Precedence, identical in shape to `ModelRoutingResolver.resolve`: `operation`,
+    `purpose`, and `agent_id` are all optional criteria (None = wildcard). A rule
+    matches when every criterion it defines equals the request. The winner is the
+    rule with the most defined criteria (highest specificity), ties broken by
+    declaration order — so `agent+operation+purpose` beats `agent+operation` /
+    `operation+purpose` / `agent`, etc.
 
-    Adding `agent_id` is backward compatible: a rule that leaves it None behaves
-    exactly as before, and callers that omit `agent_id` (default None) match only
-    agent-agnostic rules.
+    Backward compatible with agent-agnostic rules: a rule that leaves
+    agent_id=None behaves as before.
 
     1. the most specific matching rule wins
     2. else `chat_default_profile_id` if set
@@ -254,15 +253,18 @@ def resolve_team_override(
     best_profile_id: str | None = None
     best_specificity = -1
     for rule in operation_route_rules or []:
-        if rule.operation != operation:
+        if rule.operation is not None and rule.operation != operation:
             continue
         if rule.purpose is not None and rule.purpose != purpose:
             continue
         if rule.agent_id is not None and rule.agent_id != agent_id:
             continue
-        # Count the optional criteria this rule pins down (operation is always
-        # present, so it does not discriminate between candidates).
-        specificity = (rule.purpose is not None) + (rule.agent_id is not None)
+        # Count the optional criteria this rule pins down.
+        specificity = (
+            (rule.operation is not None)
+            + (rule.purpose is not None)
+            + (rule.agent_id is not None)
+        )
         if specificity > best_specificity:
             best_specificity = specificity
             best_profile_id = rule.target_profile_id

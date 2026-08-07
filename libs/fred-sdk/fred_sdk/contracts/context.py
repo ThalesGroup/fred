@@ -42,7 +42,7 @@ from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional
 
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # NOTE: This module is the canonical home for portable context + UI parts.
 # Keep Link/Geo parts and RuntimeContext here to avoid circular imports.
@@ -99,7 +99,7 @@ class GeoPart(BaseModel):
 class TeamOperationRouteRule(BaseModel):
     """
     One team-authored model-routing override for a specific runtime operation
-    (`TEAM-ROUTING-POLICY-RFC.md` §3/§8). Lives in `fred-sdk` — not
+    or agent (`TEAM-ROUTING-POLICY-RFC.md` §3/§8). Lives in `fred-sdk` — not
     `fred-runtime` or `control-plane-backend` — because both of those already
     depend on `fred_sdk.contracts` and this type is shared verbatim by both:
     control-plane stores/validates it (`TeamRoutingPolicy`), fred-runtime
@@ -109,7 +109,10 @@ class TeamOperationRouteRule(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     rule_id: str = Field(..., min_length=1)
-    operation: str = Field(..., min_length=1)
+    # Optional operation scope: when set, the rule only applies to this operation.
+    # None = applies to every operation (wildcard). Resolved by `resolve_team_override`
+    # alongside purpose/agent_id.
+    operation: str | None = None
     purpose: str | None = None
     # Optional per-agent scope: when set, the rule only applies to this agent
     # (matched against the request's `agent_id`). None = applies to every agent
@@ -117,6 +120,12 @@ class TeamOperationRouteRule(BaseModel):
     # unchanged. Resolved by `resolve_team_override` alongside operation/purpose.
     agent_id: str | None = None
     target_profile_id: str = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def validate_at_least_one_criterion(self) -> "TeamOperationRouteRule":
+        if self.operation is None and self.agent_id is None:
+            raise ValueError("Rule must specify at least one of: operation, agent_id")
+        return self
 
 
 class RuntimeContext(BaseModel):

@@ -85,13 +85,16 @@ class UnknownProfileError(Exception):
 
 
 class DuplicateOperationRuleError(Exception):
-    """Two operation rules in the same write share an (operation, purpose) pair
+    """Two rules in the same write share an (operation, purpose, agent_id) triplet
     (RFC §3.2 invariant) — the resolver has no defined tie-break for that, so
     reject rather than silently pick one."""
 
-    def __init__(self, *, operation: str, purpose: str | None) -> None:
+    def __init__(
+        self, *, operation: str | None, purpose: str | None, agent_id: str | None = None
+    ) -> None:
         self.operation = operation
         self.purpose = purpose
+        self.agent_id = agent_id
         super().__init__(
-            f"Duplicate operation rule for (operation={operation!r}, purpose={purpose!r})."
+            f"Duplicate rule for (operation={operation!r}, purpose={purpose!r}, agent_id={agent_id!r})."
         )
