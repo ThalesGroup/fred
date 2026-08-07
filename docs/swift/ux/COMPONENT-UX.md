@@ -980,13 +980,35 @@ opened document. When the extraction is missing (endpoint 404s, or empty body), 
 renders a `preview.markdownUnavailable` notice instead of the former literal
 "Error loading document." string, which read as document content.
 
+**Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
+previously mounted one live `<canvas>` per page of the document the moment it
+loaded; at ~3.5 MB of bitmap per page that allocated gigabytes on a large PDF and
+crashed the browser tab. The viewer now renders one cheap, correctly-sized
+placeholder slot per page — so the scrollbar still reflects the document's real
+length — and mounts a real `<Page>` only for slots inside a 600 px band around
+the viewport, tracked by a single `IntersectionObserver`. Placeholders are sized
+from page 1's own geometry (A4 portrait as fallback), so the scroll extent is
+right for landscape and slide-shaped documents too. pdf.js is additionally given
+`disableAutoFetch: true` so it fetches byte ranges on demand against the
+`Accept-Ranges: bytes` support `/raw_content/stream/{uid}` already provides,
+instead of buffering the whole file up front.
+
+**Large-document guard (2026-08-07, #2273).** Past 500 pages the viewer shows an
+opt-in panel (`preview.pdf.largeTitle` / `largeBody` / `largeConfirm`) reporting
+the page count, with an "afficher quand même" action, instead of rendering
+immediately. Virtualization bounds the canvases, but one placeholder plus one
+observer entry per page is not free and pdf.js still walks the whole page tree —
+so the pathological shape stays behind an explicit choice. The state resets on
+every newly opened document.
+
 #### Open UX issues
 
 - **Assistant side panel** — FRONT-13's other half (collapsible "ask the assistant"
   panel next to the viewer) is not built yet, blocked on an agent-selection product
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
-  continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
+  continuous scroll at the container's full width (`PDF_SCALE = 1.0`). Revisit if
+  users report needing them.
 - **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
   unaffected by this component.
 
