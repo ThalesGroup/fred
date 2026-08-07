@@ -1,3 +1,57 @@
+**v2.1.32** — 2026-08-07
+
+- **Summary**
+
+  Agent creation gets a simpler capabilities experience: a new Simple view
+  groups related capabilities into one-switch "packs", with guided setup for
+  the PowerPoint and team-resources packs. The chat composer adds
+  quick-access option chips and moves the document/library picker into its
+  own side panel. Team admins can now delete evaluations, and PDF imports
+  and multi-tool agent answers get more reliable.
+
+- **Features**
+
+  - Agent creation: a new Simple/Advanced toggle in the Capabilities tab
+    groups related capabilities into "packs", so enabling a coherent feature
+    is one switch instead of picking individual capabilities one by one;
+    each pack shows whether its capabilities are actually enabled for your
+    team (#2220, #2250)
+  - The PowerPoint capability pack now walks you through uploading and
+    validating the required template before you can save the agent (#2270)
+  - The team-resources capability pack offers a simple folder-only scoping
+    tree, alongside the existing per-document scoping in Advanced view
+    (#2270)
+  - Chat composer: quick-access option chips (e.g. search scope) sit right
+    in the composer, and the document/library picker now opens in its own
+    side panel instead of a cramped popover (#2264, #2259, #2252)
+  - Redesigned confirmation card for approval requests during a
+    conversation (#2264, #2252)
+  - Team admins can now delete an evaluation and all its runs, cases,
+    metrics and events (#2248)
+
+- **Improvements**
+
+  - Team marketplace cards you're not a member of are no longer clickable,
+    cards line up at equal height, and a search field was added (#2270)
+  - Prompts and Agents page headers, and the agents grid, are now
+    left-aligned instead of centered (#2270)
+  - The prompt preview dialog is vertically centered and capped in height so
+    it can no longer overflow the screen (#2270)
+
+- **Bug Fixes**
+
+  - PDF documents with malformed text encoding could fail to import
+    entirely; the broken characters are now cleaned up so import succeeds
+    (#2261, #2266)
+  - When an agent ran several tool calls at once and only one failed, the
+    whole answer used to be replaced by the raw error — you now still get
+    the answer built from the calls that succeeded (#2244, #2260)
+  - Agents no longer mistake a folder for a document when summarizing,
+    which previously caused an error (#2244, #2260)
+  - The reasoning capability hint in the agent form now clearly states it
+    applies for the whole conversation once turned on, not per question
+    (#2262, #2263)
+
 **v2.1.31** — 2026-08-06
 
 - **Summary**
