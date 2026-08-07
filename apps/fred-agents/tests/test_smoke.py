@@ -181,6 +181,16 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
     monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(offline_mcp_catalog))
 
     from fred_agents.main import create_app
+    from fred_runtime.app.config_loader import load_agent_pod_config
+    from fred_runtime.migrations import create_runtime_schema
+
+    # The pod refuses to start against an unmigrated database (#2290) — stores
+    # no longer create their own tables. Stand in for the deploy migration job
+    # (`python -m fred_runtime migrate`) on the shipped config's SQLite file,
+    # using the same helper fred-runtime's own suite uses.
+    sqlite_path = load_agent_pod_config().storage.postgres.sqlite_path
+    if sqlite_path:
+        create_runtime_schema(sqlite_path)
 
     return create_app()
 

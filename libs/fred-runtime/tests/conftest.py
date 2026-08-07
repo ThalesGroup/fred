@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from fred_runtime.app.config import AgentPodConfig
@@ -35,25 +34,18 @@ def migrate_test_config(config: AgentPodConfig) -> AgentPodConfig:
       only in fred-runtime's Alembic tree, and `initialize_sql()` refuses to
       finish startup when the table is missing
     - a test that boots the pod therefore must do what a deployment's migration
-      job (`python -m fred_runtime migrate`) does first; this is the single
-      place that knows how, instead of every test module repeating it
+      job (`python -m fred_runtime migrate`) does first
 
-    Sync on purpose: the config builders that call it are plain functions, some
-    of them invoked from inside an already-running event loop.
+    The "how" lives in `fred_runtime.migrations.create_runtime_schema` so the
+    fred-agents suite (which boots the same pod from its own shipped config)
+    uses the same helper rather than a second copy.
     """
-    from fred_core.history.postgres_history_store import history_metadata
-    from sqlalchemy import create_engine
+    from fred_runtime.migrations import create_runtime_schema
 
     sqlite_path = config.storage.postgres.sqlite_path
     if not sqlite_path:  # a Postgres-backed config needs the real migration job
         return config
-    path = Path(sqlite_path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(f"sqlite:///{path}")
-    try:
-        history_metadata().create_all(engine)
-    finally:
-        engine.dispose()
+    create_runtime_schema(sqlite_path)
     return config
 
 

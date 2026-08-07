@@ -84,3 +84,38 @@ def run_all_migrations() -> list[str]:
 
     logger.info("[MIGRATE] complete: %s", ", ".join(upgraded))
     return upgraded
+
+
+def create_runtime_schema(sqlite_path: str | Path) -> None:
+    """
+    Create fred-runtime's Alembic-owned tables on a SQLite file — tests and
+    throwaway databases only.
+
+    Why this exists:
+    - no store creates its own tables any more (#2290): `session_history` DDL
+      lives only in this package's Alembic tree, and a pod refuses to finish
+      starting when the table is missing
+    - a test that boots a pod therefore has to do what the deploy migration job
+      (`python -m fred_runtime migrate`) does first; this is the one helper both
+      the fred-runtime and fred-agents suites use, so the "how" lives in exactly
+      one place
+
+    Why not `run_all_migrations()`: that resolves the database from
+    `CONFIG_FILE` and walks every installed capability's tree — far more moving
+    parts than an offline test needs, and it cannot be pointed at an arbitrary
+    file. Real deployments use the CLI; tests use this.
+
+    Sync on purpose: the test config builders that call it are plain functions,
+    some of them invoked from inside an already-running event loop.
+    """
+
+    from fred_core.history.postgres_history_store import history_metadata
+    from sqlalchemy import create_engine
+
+    path = Path(sqlite_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(f"sqlite:///{path}")
+    try:
+        history_metadata().create_all(engine)
+    finally:
+        engine.dispose()

@@ -2529,10 +2529,17 @@ table is unstamped (the pre-#2290 state) still boots, with a warning naming the
 recovery path.
 
 Tests create the schema explicitly: `fred_core.history.create_history_schema`
-(fred-core tests) and `migrate_test_config` in
-`libs/fred-runtime/tests/conftest.py` (pod-booting tests) — the stand-in for the
-deploy migration job. Local dev is unaffected: `make run` in `apps/fred-agents`
-already runs `db-upgrade` first.
+(fred-core tests) and `fred_runtime.migrations.create_runtime_schema` — the
+stand-in for the deploy migration job, shared by both pod-booting suites
+(`libs/fred-runtime/tests/conftest.py`'s `migrate_test_config`, and
+`apps/fred-agents/tests/test_smoke.py`). Local dev is unaffected: `make run` in
+`apps/fred-agents` already runs `db-upgrade` first.
+
+Note for test authors: a suite that boots a pod against a **persistent** SQLite
+file (`apps/fred-agents/config/configuration.yaml` points at
+`~/.fred/fred-agents/runtime.sqlite3`) must create the schema itself. Such a
+file left over from before this change already contains `session_history`, so
+the guard stays quiet locally and fires only on a clean runner.
 
 Operator recovery path (which revision to stamp, by columns present):
 [`ops/DATABASE_MIGRATIONS.md`](../ops/DATABASE_MIGRATIONS.md).
