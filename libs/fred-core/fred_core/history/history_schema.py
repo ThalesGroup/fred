@@ -200,6 +200,19 @@ class HitlChoiceRecord(BaseModel):
     label: str
 
 
+class HitlPendingCallRecord(BaseModel):
+    """
+    One tool call a persisted HITL gate covers, mirroring the live event's
+    ``PendingToolCall`` (fred-sdk ``contracts/runtime.py``). Kept as its own
+    record here (rather than importing fred-sdk's) because ``fred-core`` sits
+    below the sdk layer and must stay self-contained.
+    """
+
+    tool_call_id: str = ""
+    tool_name: str
+    args_preview: str = ""
+
+
 class HitlRequestPart(BaseModel):
     """
     Full structured record of a HITL pause presented to the user.
@@ -210,6 +223,13 @@ class HitlRequestPart(BaseModel):
       show exactly what the agent asked and what options were available
     - the UI can reconstruct an interactive choice card from this record when
       replaying history, instead of showing a flat system note
+    - ``interrupt_id``/``checkpoint_id``/``pending_calls`` (added alongside the
+      original fields, 2026-08) are the resume identity + gated tool calls: the
+      original fields alone let the UI SHOW a reconstructed card but never
+      ANSWER it — a page reload while a gate was still open left the turn
+      genuinely un-resumable and the gated tool call stuck rendering as
+      "running" (no way to correlate it as awaiting confirmation). These make
+      reconstruction after a reload fully interactive again, not just readable.
 
     How to use it:
     - one ``HitlRequestPart`` per ``awaiting_human`` event, stored in a
@@ -221,6 +241,10 @@ class HitlRequestPart(BaseModel):
     title: Optional[str] = None
     question: str
     choices: List[HitlChoiceRecord]
+    free_text: bool = False
+    interrupt_id: Optional[str] = None
+    checkpoint_id: Optional[str] = None
+    pending_calls: List[HitlPendingCallRecord] = Field(default_factory=list)
 
 
 class HitlResponsePart(BaseModel):
@@ -461,6 +485,10 @@ def make_hitl_request(
     choices: List[Dict[str, str]],
     stage: Optional[str] = None,
     title: Optional[str] = None,
+    free_text: bool = False,
+    interrupt_id: Optional[str] = None,
+    checkpoint_id: Optional[str] = None,
+    pending_calls: Optional[List[Dict[str, str]]] = None,
 ) -> ChatMessage:
     """
     Build the HITL gate record from an ``awaiting_human`` SSE event.
@@ -468,11 +496,18 @@ def make_hitl_request(
     Why this exists:
     - the full gate definition (question + all presented options) must survive
       in history for audit and UI replay; a flat text note loses the choices
+    - ``interrupt_id``/``checkpoint_id``/``pending_calls`` are the resume
+      identity — persisting them (not just the display text) is what lets the
+      UI reconstruct a FULLY INTERACTIVE prompt after a page reload while the
+      gate is still open, not just a readable-but-dead one
 
     How to use it:
     - call when an ``awaiting_human`` runtime event is received
     - pass ``choices`` as the raw list of ``{id, label}`` dicts from the event
       payload; extra keys are ignored
+    - pass ``interrupt_id``/``checkpoint_id``/``pending_calls`` straight from
+      the same event's ``request`` (``HumanInputRequest``) — omit only for a
+      caller that genuinely has none (e.g. a non-tool-approval gate)
 
     Example:
     - ``make_hitl_request(sid, xid, rank, question="Proceed?",
@@ -482,6 +517,14 @@ def make_hitl_request(
         HitlChoiceRecord(id=c["id"], label=c.get("label", c["id"]))
         for c in choices
         if "id" in c
+    ]
+    pending_call_records = [
+        HitlPendingCallRecord(
+            tool_call_id=c.get("tool_call_id", ""),
+            tool_name=c.get("tool_name", ""),
+            args_preview=c.get("args_preview", ""),
+        )
+        for c in (pending_calls or [])
     ]
     return ChatMessage(
         session_id=session_id,
@@ -496,6 +539,10 @@ def make_hitl_request(
                 title=title,
                 question=question,
                 choices=choice_records,
+                free_text=free_text,
+                interrupt_id=interrupt_id,
+                checkpoint_id=checkpoint_id,
+                pending_calls=pending_call_records,
             )
         ],
     )

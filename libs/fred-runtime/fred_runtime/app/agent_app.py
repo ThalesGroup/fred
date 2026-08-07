@@ -2183,11 +2183,15 @@ async def _write_turn_history(
                 )
 
         elif kind == "awaiting_human":
-            # Store the full HITL gate definition — question and all choices —
-            # so audit logs and UI replay have the complete structured record.
+            # Store the full HITL gate definition — question, all choices, and
+            # the resume identity (interrupt_id/checkpoint_id/pending_calls) —
+            # so audit logs and UI replay have the complete structured record
+            # AND a reload while the gate is still open can reconstruct a
+            # working (not just readable) prompt.
             req = payload.get("request", {})
             question = req.get("question") or req.get("title") or "HITL pause"
             raw_choices = req.get("choices") or []
+            raw_pending_calls = req.get("pending_calls") or []
             messages.append(
                 make_hitl_request(
                     session_id,
@@ -2204,6 +2208,18 @@ async def _write_turn_history(
                     ],
                     stage=req.get("stage"),
                     title=req.get("title"),
+                    free_text=bool(req.get("free_text")),
+                    interrupt_id=req.get("interrupt_id"),
+                    checkpoint_id=req.get("checkpoint_id"),
+                    pending_calls=[
+                        {
+                            "tool_call_id": c.get("tool_call_id", ""),
+                            "tool_name": c.get("tool_name", ""),
+                            "args_preview": c.get("args_preview", ""),
+                        }
+                        for c in raw_pending_calls
+                        if isinstance(c, dict)
+                    ],
                 )
             )
             rank += 1
