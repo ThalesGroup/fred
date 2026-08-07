@@ -218,7 +218,13 @@
     },
     "document_extract": {
       "name": "Extraction d'information d'un document",
-      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre."
+      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "fields": {
+        "require_confirmation": {
+          "title": "Confirmation requise",
+          "description": "Met en pause avant chaque extraction pour recueillir votre approbation (continuer/annuler). Activé par défaut — cette capacité consomme beaucoup de tokens ; à désactiver uniquement pour un agent dont l'usage est déjà éprouvé."
+        }
+      }
     },
     "writable_document": {
       "name": "Générer un document texte (Word)",

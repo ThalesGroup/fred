@@ -39,12 +39,15 @@ from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityManifest,
     EmptyModel,
+    HitlGateRequest,
+    HitlSpec,
 )
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
     ToolInvocationResult,
 )
+from fred_sdk.contracts.models import FieldSpec, UIHints
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel
 
@@ -52,16 +55,23 @@ from fred_runtime.capabilities.document_read_common import document_tool_failure
 
 
 class DocumentExtractConfig(BaseModel):
-    """No agent-creation config today: server-side extraction needs no per-agent
-    knob. Kept as a typed model so a future option (e.g. a result cap) is an
-    additive, migration-free change."""
+    """Agent-creation / stored config of the document-extract capability.
+
+    `require_confirmation` gates each `extract_from_document` call behind a human
+    proceed/cancel (default on): extraction is token-heavy, so the confirmation
+    is shown BEFORE any LLM work is spent. An admin who trusts this agent's usage
+    can turn it off per instance. Same mechanism/field name as
+    `document_summarize` (RFC §5.4)."""
+
+    require_confirmation: bool = True
 
 
 class DocumentExtractCapability(
     AgentCapability[DocumentExtractConfig, DocumentExtractConfig, EmptyModel]
 ):
     """Exhaustive, server-side document extraction. Single tool, no chat
-    controls, no turn options, no HITL (read-only)."""
+    controls, no turn options; HITL-gated by default (token-heavy), configurable
+    per instance via `require_confirmation`."""
 
     manifest = CapabilityManifest(
         id="document_extract",
@@ -70,7 +80,16 @@ class DocumentExtractCapability(
         name="capability.document_extract.name",
         description="capability.document_extract.description",
         icon="find_in_page",
-        config_fields=[],
+        config_fields=[
+            FieldSpec(
+                key="require_confirmation",
+                type="boolean",
+                title="capability.document_extract.fields.require_confirmation.title",
+                description="capability.document_extract.fields.require_confirmation.description",
+                default=True,
+                ui=UIHints(group="safety"),
+            ),
+        ],
         # team_scope left at the class default (ADMIN_GATED).
     )
     ConfigModel = DocumentExtractConfig
@@ -151,3 +170,28 @@ class DocumentExtractCapability(
             return content, artifact
 
         return [extract_from_document]
+
+    def hitl_specs(self) -> Sequence[HitlSpec]:
+        """Gate `extract_from_document` behind a human proceed/cancel, on by
+        default and per-instance configurable via `require_confirmation`
+        (RFC §5.4), the same mechanism as `document_summarize`. `require=False`
+        defers to the `when` predicate, which reads the resolved instance config
+        fresh at gate time (`request.context.config`) — so it always reflects the
+        CURRENT `require_confirmation`, not whatever was set at assembly time.
+        The gate runs BEFORE the tool, so a cancel spends no extraction tokens."""
+
+        return [
+            HitlSpec(
+                tool="extract_from_document",
+                require=False,
+                when=_confirmation_required,
+            )
+        ]
+
+
+def _confirmation_required(request: HitlGateRequest) -> bool:
+    """Whether this agent instance still wants a human's proceed/cancel before
+    `extract_from_document` runs — the resolved `require_confirmation` config
+    value (default `True`, see `DocumentExtractConfig`)."""
+
+    return bool(request.context.config.require_confirmation)

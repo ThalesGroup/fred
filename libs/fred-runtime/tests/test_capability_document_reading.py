@@ -33,6 +33,7 @@ from fred_runtime.capabilities import (
     build_capability_context,
 )
 from fred_runtime.capabilities.document_extract import DocumentExtractCapability
+from fred_runtime.capabilities.document_extract.capability import DocumentExtractConfig
 from fred_runtime.capabilities.document_read_common import (
     DEFAULT_PAGE_MAX_CHARS,
     DocumentReadConfig,
@@ -41,7 +42,11 @@ from fred_runtime.capabilities.document_read_common import (
 from fred_runtime.capabilities.document_verbatim import DocumentVerbatimCapability
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
 from fred_runtime.integrations.v2_runtime.adapters import paginate_markdown
-from fred_sdk.contracts.capability import CapabilityContext, CapabilityIdentity
+from fred_sdk.contracts.capability import (
+    CapabilityContext,
+    CapabilityIdentity,
+    HitlGateRequest,
+)
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
     DocumentExtractionPort,
@@ -431,3 +436,48 @@ async def test_timeout_failure_names_the_document() -> None:
 
 def test_config_model_accepts_empty() -> None:
     assert DocumentReadConfig().page_max_chars is None
+
+
+# ---------------------------------------------------------------------------
+# document_extract HITL gate — token-heavy, so confirm by default
+# ---------------------------------------------------------------------------
+
+
+def _extract_hitl_request(config: dict[str, Any]) -> HitlGateRequest:
+    ctx = build_capability_context(
+        DocumentExtractCapability(),
+        identity=_identity(),
+        services=_extract_services(),
+        config=config,
+    )
+    return HitlGateRequest(
+        tool_call={"name": "extract_from_document", "args": {}, "id": "call-1"},
+        tool=None,
+        context=ctx,
+    )
+
+
+def test_extract_declares_configurable_hitl_gate() -> None:
+    specs = list(DocumentExtractCapability().hitl_specs())
+    assert len(specs) == 1
+    assert specs[0].tool == "extract_from_document"
+    # require=False + a `when` predicate — decided from resolved config at gate
+    # time, not hardcoded (same pattern as document_summarize).
+    assert specs[0].require is False
+    assert specs[0].when is not None
+
+
+def test_extract_confirmation_on_by_default() -> None:
+    spec = list(DocumentExtractCapability().hitl_specs())[0]
+    assert spec.when is not None
+    assert spec.when(_extract_hitl_request({})) is True
+
+
+def test_extract_confirmation_can_be_disabled_per_instance() -> None:
+    spec = list(DocumentExtractCapability().hitl_specs())[0]
+    assert spec.when is not None
+    assert spec.when(_extract_hitl_request({"require_confirmation": False})) is False
+
+
+def test_extract_config_defaults_confirmation_on() -> None:
+    assert DocumentExtractConfig().require_confirmation is True

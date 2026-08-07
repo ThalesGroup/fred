@@ -218,7 +218,13 @@
     },
     "document_extract": {
       "name": "Extract information from a document",
-      "description": "Ability to exhaustively extract the requested information from a document, without missing anything."
+      "description": "Ability to exhaustively extract the requested information from a document, without missing anything.",
+      "fields": {
+        "require_confirmation": {
+          "title": "Require confirmation",
+          "description": "Pause for your proceed/cancel approval before each extraction. On by default — this capability is token-intensive; turn it off only for an agent whose usage you already trust."
+        }
+      }
     },
     "writable_document": {
       "name": "Generate a text document (Word)",
