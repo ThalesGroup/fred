@@ -40,19 +40,26 @@ Supported user-authored tokens are:
 | `{user_id}` | Authenticated user identifier |
 | `{agent_id}` | Agent definition identifier |
 
-Persistence-time validation rejects unknown simple tokens such as `{name}` with
-HTTP 422 before writing the agent or prompt-library record. Non-simple brace
-patterns such as `{}`, `{0}`, `{object.attr}`, and code blocks containing braces
-are preserved as literals by the renderer and are not rejected by the current
-validator.
+Any `{…}` the renderer does not recognize is left exactly as written. That covers
+unknown simple tokens such as `{name}`, and equally non-simple patterns such as
+`{}`, `{0}`, `{object.attr}`, JSON, and code blocks containing braces. The
+renderer never raises: substitution falls back to the matched text.
 
-Validation applies to:
+**There is no persistence-time validation of prompt tokens** (#2277). Prompt text
+is stored verbatim on managed-agent create/update (`type == "prompt"` field specs)
+and on prompt-library create/update.
 
-- managed-agent create/update for field specs with `type == "prompt"`
-- prompt-library create/update
+Rejecting unknown tokens with HTTP 422 was removed because it was a false
+positive — the renderer already handled those prompts correctly, so the check only
+blocked authors from writing legitimate text such as `Hello {name}`, with no
+in-product documentation or UI hint to explain the rule. The accepted trade-off is
+that a typo (`{todya}` for `{today}`) now reaches the prompt as literal text
+instead of being caught on write; that failure is visible to the author in the
+agent's output.
 
-Atomic agent creation follows from that validation: a bad prompt tuning value is
-rejected before the agent instance row is created.
+`PROMPT_SAFE_TOKENS` remains the single source of truth for the renderer, and is
+the intended source for a prompt-editor UI hint that would make the feature
+discoverable.
 
 ## 3. Prompt Library
 

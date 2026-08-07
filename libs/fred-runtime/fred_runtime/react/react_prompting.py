@@ -278,10 +278,11 @@ def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) 
       reached the agent binding but was never appended to the system prompt, so a
       selected prompt such as "speak Spanish" had no effect on the model (#1915).
     - user-authored context prompts may legitimately use the same safe tokens as
-      agent templates (e.g. ``{response_language}``, ``{today}``), which are
-      persistence-validated against ``PROMPT_SAFE_TOKENS``. They are therefore
-      rendered through the same safe renderer rather than appended verbatim, so a
-      token in a library prompt substitutes exactly as it would in an agent prompt.
+      agent templates (e.g. ``{response_language}``, ``{today}``). They are
+      therefore rendered through the same safe renderer rather than appended
+      verbatim, so a token in a library prompt substitutes exactly as it would in
+      an agent prompt — and any unrecognized ``{…}`` is preserved as written,
+      since prompt text is stored without token validation (#2277).
 
     How to use:
     - call while assembling the final system prompt for one runtime turn; returns
