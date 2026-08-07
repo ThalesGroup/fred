@@ -317,6 +317,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self._secure = secure
         self._verify_certs = verify_certs
         self._bulk_size = bulk_size
+        # Largest batch size the embedding provider has accepted after rejecting a
+        # bigger one (None until a batch-limit error is seen). Only ever lowered, so
+        # later slices skip the provider calls that are known to fail.
+        self._learned_embedding_batch_cap: Optional[int] = None
         self._embedding_model_name = embedding_model_name
         self._kpi = kpi
         self._vs: OpenSearchVectorSearch | None = None
@@ -724,6 +728,23 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         )
         return prepared_documents, prepared_ids
 
+    def _effective_embedding_batch_size(self) -> int:
+        if self._learned_embedding_batch_cap is None:
+            return self._bulk_size
+        return max(1, min(self._bulk_size, self._learned_embedding_batch_cap))
+
+    def _lower_learned_embedding_batch_cap(self, new_cap: int) -> None:
+        current = self._learned_embedding_batch_cap
+        if current is not None and current <= new_cap:
+            return
+        self._learned_embedding_batch_cap = new_cap
+        logger.info(
+            "[VECTOR][OPENSEARCH] learned embedding batch cap for index=%s lowered to %s (was %s)",
+            self._index,
+            new_cap,
+            current,
+        )
+
     def _add_documents_with_adaptive_batching(
         self,
         documents: List[Document],
@@ -743,9 +764,35 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             It first tries the batch as-is. If the embedding backend reports a
             structured batch-limit error, the helper splits the batch in half and retries
             recursively until each sub-batch is accepted or only one document remains.
+            The size that triggered the split is remembered on the instance
+            (`_learned_embedding_batch_cap`) so later batches are pre-split without
+            re-attempting a provider call that is known to fail. The cap is only ever
+            lowered; a pathological batch (one giant chunk) can therefore leave it
+            smaller than strictly needed, which costs extra requests but never errors.
             If the backend reports a transient server-side failure, the helper retries the
             same batch with exponential backoff before giving up.
         """
+        cap = self._learned_embedding_batch_cap
+        if cap is not None and len(documents) > cap:
+            split_index = max(1, len(documents) // 2)
+            logger.info(
+                "[VECTOR][OPENSEARCH] batch exceeds learned embedding cap for index=%s batch_size=%s learned_cap=%s; splitting without provider attempt",
+                self._index,
+                len(documents),
+                cap,
+            )
+            left_ids = self._add_documents_with_adaptive_batching(
+                documents=documents[:split_index],
+                ids=ids[:split_index],
+                split_chunk_size=split_chunk_size,
+            )
+            right_ids = self._add_documents_with_adaptive_batching(
+                documents=documents[split_index:],
+                ids=ids[split_index:],
+                split_chunk_size=split_chunk_size,
+            )
+            return left_ids + right_ids
+
         try:
             logger.info(
                 "[VECTOR][OPENSEARCH] add batch attempt index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s ids_sample=%s",
@@ -815,6 +862,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     )
 
                 split_index = max(1, len(documents) // 2)
+                self._lower_learned_embedding_batch_cap(split_index)
                 logger.warning(
                     "[VECTOR][OPENSEARCH] embedding batch exceeds provider limit for index=%s batch_size=%s; splitting into sub-batches %s and %s",
                     self._index,
@@ -901,15 +949,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
 
             assigned_ids: List[str] = []
-            for start in range(0, len(documents), self._bulk_size):
-                end = start + self._bulk_size
+            start = 0
+            while start < len(documents):
+                # Re-read each iteration: an earlier slice may have lowered the cap.
+                end = min(start + self._effective_embedding_batch_size(), len(documents))
                 batch_documents = documents[start:end]
                 batch_ids = ids[start:end]
                 logger.info(
                     "[VECTOR][OPENSEARCH] processing bulk slice index=%s start=%s end=%s batch_size=%s",
                     self._index,
                     start,
-                    min(end, len(documents)),
+                    end,
                     len(batch_documents),
                 )
                 assigned_ids.extend(
@@ -918,6 +968,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                         ids=batch_ids,
                     )
                 )
+                start = end
 
             logger.info(
                 "[VECTOR][OPENSEARCH] add_documents complete index=%s input_documents=%s stored_chunks=%s",
