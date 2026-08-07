@@ -7,6 +7,7 @@ import {
   groupTraceEntries,
   humanizeToolName,
   isDocumentTreeTool,
+  entryLabel,
   isTraceChannel,
   isFinalChannel,
   isSummarizeDocumentTool,
@@ -244,6 +245,16 @@ describe("statusForEntry", () => {
   it("returns 'error' for an error-channel message", () => {
     const m = msg({ channel: "error" });
     expect(statusForEntry({ kind: "solo", message: m })).toBe("error");
+  });
+
+  it("keeps a turn-crash error line short and copyable (DOCREAD-01)", () => {
+    const raw = 'Error code: 429 - {"message":"Rate limit exceeded"}';
+    const entry = { kind: "solo", message: textMsg(raw, { channel: "error" }) } as const;
+    // Line: no raw dump inline (the row renders a localized short indication);
+    // drawer: the raw message is what gets copied.
+    expect(primaryTextForEntry(entry)).toBe("");
+    expect(toolCopyText(entry)).toBe(raw);
+    expect(entryLabel(entry)).toBe("Error");
   });
 
   it("returns 'ok' for a completed solo thought", () => {

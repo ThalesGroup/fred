@@ -153,6 +153,12 @@
   font-style: italic;
 }
 
+/* Turn-crash error row: same error token as the status dot, applied to the
+   label + message so the whole line reads as an error. */
+.errorText {
+  color: var(--error);
+}
+
 /* Trailing latency */
 .secondary {
   flex-shrink: 0;

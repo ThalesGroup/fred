@@ -1384,6 +1384,8 @@
       "ariaLabel": "Trace de raisonnement de l'agent",
       "awaitingConfirmation": "en attente de confirmation…",
       "details": "Détails",
+      "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
       "phase": {

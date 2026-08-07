@@ -51,6 +51,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   const tokenUsage = tokenUsageForEntry(entry);
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";
+  const isError = status === "error";
 
   // Curated volume metadata (never raw args/content) so two calls to the same
   // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
@@ -81,7 +82,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
       </div>
 
       <span
-        className={phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label}
+        className={`${phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label} ${isError ? styles.errorText : ""}`}
         data-phase={phase ?? undefined}
       >
         {label}
@@ -89,13 +90,17 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
 
       {discriminatorText && <span className={styles.discriminator}>{discriminatorText}</span>}
 
-      <span className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""}`}>
+      <span
+        className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""} ${isError ? styles.errorText : ""}`}
+      >
         {primary ||
           (isAwaitingConfirmation
             ? t("rework.chatTrace.awaitingConfirmation")
             : isPending
               ? t("rework.chatTrace.running")
-              : "")}
+              : isError
+                ? t("rework.chatTrace.turnFailed")
+                : "")}
       </span>
 
       {secondary && <span className={styles.secondary}>{secondary}</span>}

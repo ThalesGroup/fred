@@ -508,6 +508,19 @@ export function useChatSse(
             });
           }
           thoughtBufsRef.current.clear();
+          // Persist the crash in the chain of thought as an error entry (not
+          // just the transient toast): a trailing error row whose raw message is
+          // browsable in the trace drawer. The toast still fires for the
+          // immediate signal.
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank: rankRef.current++,
+            timestamp: ts,
+            role: "assistant",
+            channel: "error",
+            parts: [{ type: "text", text: event.message ?? "Agent execution error" }],
+          });
           onError?.(event.message ?? "Agent execution error");
           break;
         }

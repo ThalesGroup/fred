@@ -1384,6 +1384,8 @@
       "ariaLabel": "Agent reasoning trace",
       "awaitingConfirmation": "awaiting confirmation…",
       "details": "Details",
+      "errorCopied": "Error message copied to clipboard",
+      "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
       "phase": {
