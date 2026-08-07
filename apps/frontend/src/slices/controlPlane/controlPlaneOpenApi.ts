@@ -2294,7 +2294,7 @@ export type ChatControlDescriptor = {
 };
 export type TeamOperationRouteRule = {
   rule_id: string;
-  operation: string;
+  operation?: string | null;
   purpose?: string | null;
   agent_id?: string | null;
   target_profile_id: string;

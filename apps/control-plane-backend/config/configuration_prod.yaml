@@ -93,7 +93,7 @@ platform:
   runtime_catalog_sources:
     - runtime_id: fred-samples-agents
       base_url: http://127.0.0.1:8010/samples/agents/v1
-      enabled: true
+      enabled: false
       ingress_prefix: /samples/agents/v1
     - runtime_id: fred-agents
       base_url: http://127.0.0.1:8000/fred/agents/v2
@@ -101,9 +101,9 @@ platform:
       ingress_prefix: /fred/agents/v2
     - runtime_id: rags-agents
       base_url: http://127.0.0.1:8013/rags/agents/v2
-      enabled: true
+      enabled: false
       ingress_prefix: /rags/agents/v2
     - runtime_id: dt-agents
       base_url: http://127.0.0.1:8020/dt/agents/v2
-      enabled: true
+      enabled: false
       ingress_prefix: /dt/agents/v2
