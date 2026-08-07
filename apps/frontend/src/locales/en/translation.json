@@ -218,13 +218,7 @@
     },
     "document_extract": {
       "name": "Extract information from a document",
-      "description": "Ability to exhaustively extract the requested information from a document, without missing anything.",
-      "fields": {
-        "page_max_chars": {
-          "title": "Page length",
-          "description": "Default and hard maximum length (in characters) of each page read by the extract_from_document tool. Leave empty to use the built-in default."
-        }
-      }
+      "description": "Ability to exhaustively extract the requested information from a document, without missing anything."
     },
     "writable_document": {
       "name": "Generate a text document (Word)",

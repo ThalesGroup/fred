@@ -218,13 +218,7 @@
     },
     "document_extract": {
       "name": "Extraction d'information d'un document",
-      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
-      "fields": {
-        "page_max_chars": {
-          "title": "Longueur de page",
-          "description": "Longueur par défaut et maximale (en caractères) de chaque page lue par l'outil extract_from_document. Laisser vide pour utiliser la valeur par défaut intégrée."
-        }
-      }
+      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre."
     },
     "writable_document": {
       "name": "Générer un document texte (Word)",
