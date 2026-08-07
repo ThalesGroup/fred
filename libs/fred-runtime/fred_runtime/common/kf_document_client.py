@@ -141,6 +141,28 @@ class KfDocumentClient(KfBaseClient):
             size=len(content),
         )
 
+    async def fetch_markdown(self, *, document_uid: str) -> str:
+        """Fetch a document's FULL parsed markdown (``output.md``) by uid.
+
+        Wire format (matches controller):
+          GET /markdown/{document_uid}
+          -> {"content": "<full markdown text>"}
+
+        Returns the whole document verbatim; the adapter owns pagination (this
+        client stays wire-format only). Knowledge Flow's per-document ReBAC
+        gates the read.
+        """
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path=f"/markdown/{document_uid}",
+            phase_name="kf_document_markdown_fetch",
+        )
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, dict):
+            return str(data.get("content", ""))
+        return str(data)
+
     async def tree(
         self,
         *,

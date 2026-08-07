@@ -872,6 +872,60 @@ class DocumentSummarizePort(ABC):
         """
 
 
+class DocumentMarkdownResult(FrozenModel):
+    """
+    Typed result of one paginated read of a document's FULL parsed markdown
+    (DOCREAD-01).
+
+    Distinct from the two neighbouring shapes:
+    - `DocumentSummaryResult` is a lossy overview — this is the document
+      verbatim, nothing dropped;
+    - `DocumentRawContent` is the original uploaded bytes (a PDF/DOCX blob the
+      model cannot read as text) — this is the markdown Knowledge Flow parsed at
+      ingestion (`output.md`), directly usable by the model.
+
+    Pagination is the whole point (it is why `document_summarize`'s "half
+    answer" failure mode cannot recur here): `text` is one bounded window
+    `[offset : offset+max_chars]`, and `next_offset` is the offset to pass for
+    the next page or `None` once the end of the document has been reached — so
+    an exhaustive read always knows whether more text remains.
+    """
+
+    document_uid: str
+    text: str = ""
+    offset: int = 0
+    next_offset: int | None = None
+    total_chars: int = 0
+
+
+class DocumentMarkdownPort(ABC):
+    """
+    Capability-safe paginated read of a corpus document's FULL parsed markdown
+    by uid (DOCREAD-01). Same doctrine as `DocumentSummarizePort`: takes SCOPE
+    PARAMETERS only (the uid plus the page window) and NEVER a caller-supplied
+    context, identity, or access token — auth/identity come solely from the
+    adapter's privately-captured per-turn binding, and Knowledge Flow's own
+    per-document ReBAC is the real authorization gate. Document uids are
+    internal working identifiers: tools use them freely but never surface them
+    to the end user.
+    """
+
+    @abstractmethod
+    async def fetch_markdown(
+        self,
+        document_uid: str,
+        *,
+        offset: int = 0,
+        max_chars: int = 8000,
+    ) -> DocumentMarkdownResult:
+        """
+        Return one bounded page `[offset : offset+max_chars]` of the document's
+        full markdown. The result's `next_offset` is the offset to pass to read
+        the following page, or `None` when the end has been reached. Raises
+        `DocumentPortCallError` on transport failure.
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -927,6 +981,12 @@ class RuntimeServices:
     # the positional meaning of any field an external positional-argument
     # caller might already rely on.
     kpi_writer: BaseKPIWriter | None = None
+    # Paginated full-markdown read of a corpus document by uid (DOCREAD-01):
+    # powers the `document_verbatim` / `document_extract` capabilities. Same
+    # doctrine/optionality as the other document ports — the per-turn binding
+    # and raw access token stay private to the adapter. Appended after
+    # `kpi_writer` for the same positional-safety reason noted above.
+    document_markdown: DocumentMarkdownPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

@@ -68,6 +68,8 @@ from fred_sdk.contracts.runtime import (
     ChatModelFactoryPort,
     DocumentContentPort,
     DocumentFolderPort,
+    DocumentMarkdownPort,
+    DocumentMarkdownResult,
     DocumentPortCallError,
     DocumentRawContent,
     DocumentSearchPort,
@@ -1075,6 +1077,91 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
             summary=result.summary,
             shrunk_for_budget=result.shrunk_for_budget,
             keywords=tuple(result.keywords),
+        )
+
+
+# Built-in page size when a caller (or its capability config) requests none.
+DEFAULT_MARKDOWN_PAGE_CHARS = 8000
+
+
+def paginate_markdown(
+    *, document_uid: str, full: str, offset: int, max_chars: int
+) -> DocumentMarkdownResult:
+    """Slice one page out of a document's full markdown (DOCREAD-01).
+
+    Pure function (no I/O) so the pagination contract — clamped bounds and the
+    `next_offset` end-of-document signal — is unit-testable without a live
+    Knowledge Flow. `offset`/`max_chars` are clamped defensively: a negative
+    offset starts at 0, a non-positive `max_chars` falls back to the default,
+    and an offset past the end yields an empty final page with `next_offset`
+    None (never an exception).
+    """
+
+    if offset < 0:
+        offset = 0
+    if max_chars <= 0:
+        max_chars = DEFAULT_MARKDOWN_PAGE_CHARS
+    total = len(full)
+    start = min(offset, total)
+    end = min(start + max_chars, total)
+    return DocumentMarkdownResult(
+        document_uid=document_uid,
+        text=full[start:end],
+        offset=start,
+        next_offset=end if end < total else None,
+        total_chars=total,
+    )
+
+
+class DocumentMarkdownAdapter(DocumentMarkdownPort):
+    """
+    Runtime adapter behind `RuntimeServices.document_markdown` (DOCREAD-01).
+
+    Fetches a corpus document's FULL parsed markdown by uid and returns it one
+    bounded page at a time. Same doctrine as `DocumentSummarizeAdapter`: no
+    scope narrowing (the caller already holds a concrete uid and KF's
+    per-document ReBAC is the gate), the per-turn binding/token stay private
+    (through `_VectorSearchAgentShim` + `KfDocumentClient`).
+
+    Pagination is done adapter-side because Knowledge Flow's markdown endpoint
+    has no page parameter today (the KF client stays wire-format only). To avoid
+    re-fetching the whole document on every page within one turn, the full
+    markdown is memoised per uid on this per-turn adapter instance and cleared
+    on `rebind` (a new turn).
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._client = KfDocumentClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+        self._cache: dict[str, str] = {}
+
+    async def fetch_markdown(
+        self,
+        document_uid: str,
+        *,
+        offset: int = 0,
+        max_chars: int = DEFAULT_MARKDOWN_PAGE_CHARS,
+    ) -> DocumentMarkdownResult:
+        full = self._cache.get(document_uid)
+        if full is None:
+            try:
+                full = await self._client.fetch_markdown(document_uid=document_uid)
+            except httpx.HTTPError as exc:
+                raise _wrap_document_port_error(exc) from exc
+            self._cache[document_uid] = full
+        return paginate_markdown(
+            document_uid=document_uid,
+            full=full,
+            offset=offset,
+            max_chars=max_chars,
         )
 
 

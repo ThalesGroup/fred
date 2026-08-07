@@ -153,6 +153,7 @@ from ..integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     DocumentContentAdapter,
     DocumentFolderAdapter,
+    DocumentMarkdownAdapter,
     DocumentSearchAdapter,
     DocumentSummarizeAdapter,
     DocumentTreeAdapter,
@@ -752,6 +753,12 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    # Paginated full-markdown read (DOCREAD-01): powers document_verbatim /
+    # document_extract, same private-binding doctrine.
+    document_markdown = DocumentMarkdownAdapter(
+        binding=binding,
+        settings=settings,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
@@ -811,6 +818,7 @@ def _build_runtime_services(
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
         document_tree=document_tree,
         document_summarize=document_summarize,
+        document_markdown=document_markdown,
     )
 
 
