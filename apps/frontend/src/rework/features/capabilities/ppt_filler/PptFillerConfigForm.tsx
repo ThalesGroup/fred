@@ -19,40 +19,14 @@
 // travels with the atomic save (multipart with-assets endpoints) — this
 // preview never stores anything; the backend re-parses the real bytes on save.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { CapabilityConfigWidgetProps } from "../types";
-import {
-  useAnalyzeAnalyzePostMutation,
-  type BodyAnalyzeAnalyzePost,
-  type ParseResult,
-  type SlideSchema,
-  type TemplateError,
-} from "./api/pptFillerCapabilityOpenApi";
+import { usePptTemplateAnalysis } from "./usePptTemplateAnalysis";
 import styles from "./PptFillerConfigForm.module.css";
-
-/** The manifest's one upload slot key (AssetSlot.key on the backend). */
-const TEMPLATE_SLOT = "template";
-
-/**
- * i18n an error by its stable code (the RFC contract: `code` is the machine
- * key, `message` the English fallback). Unknown codes fall back to the
- * backend-provided message so a new code never renders blank.
- */
-function useTemplateErrorText() {
-  const { t } = useTranslation();
-  return (error: TemplateError): string =>
-    t(`capability.ppt_filler.errors.${error.code}`, {
-      defaultValue: error.message,
-      slide: error.slide,
-      // The literal `{{key}}` placeholder is prebuilt here — braces inside an
-      // i18next template would be parsed as interpolation markers.
-      placeholder: `{{${error.key}}}`,
-    });
-}
 
 export function PptFillerConfigForm({
   disabled,
@@ -62,56 +36,22 @@ export function PptFillerConfigForm({
   onBlockingErrorChange,
 }: CapabilityConfigWidgetProps) {
   const { t } = useTranslation();
-  const errorText = useTemplateErrorText();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [analyze, { isLoading: isAnalyzing }] = useAnalyzeAnalyzePostMutation();
-  const [analysis, setAnalysis] = useState<ParseResult | null>(null);
-  const [analyzeFailed, setAnalyzeFailed] = useState(false);
-
-  const stagedFile = assetFiles[TEMPLATE_SLOT];
-  const persistedSchema = (configValues.schema_slides as SlideSchema[] | undefined) ?? [];
-  const hasPersistedTemplate = persistedSchema.length > 0;
-
-  // What the preview shows: the staged file's live analysis when one is
-  // picked, else the persisted schema (source of truth: the saved template).
-  const previewSlides = stagedFile ? (analysis?.schema ?? []) : persistedSchema;
-  const previewErrors = stagedFile ? (analysis?.errors ?? []) : [];
-
-  const blockingError = useMemo(() => {
-    if (!stagedFile && !hasPersistedTemplate) return t("capability.ppt_filler.form.templateRequired");
-    if (stagedFile && previewErrors.length > 0) return t("capability.ppt_filler.form.templateInvalid");
-    return null;
-  }, [stagedFile, hasPersistedTemplate, previewErrors.length, t]);
-
-  useEffect(() => {
-    onBlockingErrorChange(blockingError);
-    // Clearing on unmount keeps a deselected capability from blocking Save.
-    return () => onBlockingErrorChange(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockingError]);
-
-  const handlePick = async (file: File) => {
-    onAssetFileChange(TEMPLATE_SLOT, file);
-    setAnalysis(null);
-    setAnalyzeFailed(false);
-    try {
-      // The generated client cannot express multipart; the FormData body cast
-      // is the sanctioned narrow exception (types still come from the client).
-      const formData = new FormData();
-      formData.append("file", file, file.name);
-      const result = await analyze({
-        bodyAnalyzeAnalyzePost: formData as unknown as BodyAnalyzeAnalyzePost,
-      }).unwrap();
-      setAnalysis(result);
-    } catch {
-      setAnalyzeFailed(true);
-    }
-  };
+  const {
+    stagedFile,
+    hasPersistedTemplate,
+    isAnalyzing,
+    analyzeFailed,
+    previewSlides,
+    previewErrors,
+    blockingError,
+    handlePick,
+    handleClear: clearAnalysis,
+    errorText,
+  } = usePptTemplateAnalysis({ configValues, assetFiles, onAssetFileChange, onBlockingErrorChange });
 
   const handleClear = () => {
-    onAssetFileChange(TEMPLATE_SLOT, null);
-    setAnalysis(null);
-    setAnalyzeFailed(false);
+    clearAnalysis();
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 

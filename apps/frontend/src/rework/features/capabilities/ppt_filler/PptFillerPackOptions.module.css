@@ -1,0 +1,55 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+/* Upload button + staged-file chip on one wrapping row. */
+.uploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.fileInput {
+  display: none;
+}
+
+/* Spinner sits where the button icon would, inheriting the button's text color. */
+.buttonSpinner {
+  display: inline-flex;
+  align-items: center;
+}
+
+.learnMoreLink {
+  align-self: flex-start;
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: none;
+}
+
+.learnMoreLink:hover {
+  text-decoration: underline;
+}
+
+.blocking {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding-left: var(--spacing-m);
+}
+
+.error {
+  color: var(--error);
+  font: var(--font-body-small);
+}

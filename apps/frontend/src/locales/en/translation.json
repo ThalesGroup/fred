@@ -147,8 +147,8 @@
           "description": "Show a document library selector in the chat interface."
         },
         "bind_libraries": {
-          "title": "Bind to specific libraries",
-          "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+          "title": "Restrict to specific folders",
+          "description": "Restrict the agent's knowledge and search to specific folders."
         },
         "library_tag_ids": {
           "title": "Bound document libraries",
@@ -248,6 +248,7 @@
         "templateInvalid": "Fix the template errors below before saving.",
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
+        "uploadSuccessToast": "PowerPoint template validated.",
         "schemaTitle": "Fields the agent will fill",
         "learnMore": "How does this work? What should I upload?",
         "slide": "Slide {{number}}",
@@ -1402,6 +1403,11 @@
     "marketplace": {
       "teams": {
         "otherTeams": "Discover other teams",
+        "search": {
+          "ariaLabel": "Search for a team",
+          "clearAriaLabel": "Clear search",
+          "placeholder": "Search for a team"
+        },
         "title": "Community teams",
         "yourTeams": "Your teams"
       }
