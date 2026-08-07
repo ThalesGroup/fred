@@ -329,8 +329,15 @@ async def model_probe_step(
     response_text = (
         response.content if isinstance(response.content, str) else str(response.content)
     )
+    response_metadata = getattr(response, "response_metadata", None) or {}
+    resolved_model_name = (
+        response_metadata.get("model_name") or response_metadata.get("model")
+        if isinstance(response_metadata, dict)
+        else None
+    )
     lines = [
         f"Model probe complete for operation **`{operation}`**.",
+        f"Model resolved: **`{resolved_model_name or '(unknown)'}`**.",
         "",
         response_text,
     ]
