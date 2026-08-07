@@ -2501,6 +2501,50 @@ the `folder:` form. Regression tests:
 
 ---
 
+### 8.43 ✅ `DocumentMarkdownPort` — paginated full-content read for capabilities (DOCREAD-01, 2026-08-07)
+
+**New optional port on `RuntimeServices` (`fred-sdk`
+`contracts/runtime.py`).** `document_summarize` returns a lossy overview and
+the model cannot tell it only saw a summary — so "what does the first paragraph
+say?" or "list ALL the requirements" answers come out half-complete. The three
+existing document ports could not close this: `document_summarize` is
+deliberately lossy, `document_content` returns the original uploaded **bytes**
+(a PDF/DOCX blob the model can't read as text), and `document_search` returns
+only the top-k relevant chunks. Knowledge Flow already stores the full parsed
+markdown (`output.md`, un-truncated under the default ingestion config) and
+serves it at `GET /knowledge-flow/v1/markdown/{uid}` — it just wasn't reachable
+through a capability-safe port.
+
+`DocumentMarkdownPort.fetch_markdown(document_uid, *, offset, max_chars) ->
+DocumentMarkdownResult{text, offset, next_offset, total_chars}` exposes it under
+the same doctrine as the other document ports (scope parameters only; the
+per-turn binding and access token stay private to the adapter; KF per-document
+ReBAC is the gate). **Pagination is the contract's point:** each call returns one
+bounded window and `next_offset` (None at end of document), so an exhaustive
+read can never silently stop half-way — the failure mode §8.42/§8.27 work around
+downstream, addressed here at the source. Wiring: `DocumentMarkdownAdapter`
+(`adapters.py`) fetches the whole markdown once via
+`KfDocumentClient.fetch_markdown` (KF client stays wire-format only), memoises it
+per uid on the per-turn instance, and slices adapter-side (`paginate_markdown`,
+a pure helper) — KF has no page parameter today. Injected in `agent_app.py`'s
+`RuntimeServices` assembly (turn-time path only; the save-time services subset
+does not carry it). Additive and optional, so no existing runtime breaks.
+
+**Consumers (DOCREAD-01):** two admin-gated capabilities, `document_verbatim`
+(tool `read_document`, positional verbatim slice) and `document_extract` (tool
+`extract_from_document`, exhaustive enumeration), both on this one port and
+differing only in tool intent and how the continuation footer is worded. The
+frontend Simple view groups them under one `document_reading` tool pack while the
+Advanced view keeps each toggle independent (front-only presentation, no backend
+change). Phase 1 relies on the agent paging to completion (guided by
+`next_offset`); a server-side map-reduce extraction endpoint is the deliberately
+deferred Phase 2 if that proves unreliable on very large documents. Tests:
+`test_capability_document_reading.py` (pagination contract, both tools' footers,
+config cap, error shaping), `test_capability_endpoints_1974.py` (pod advertises
+the pair).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.
