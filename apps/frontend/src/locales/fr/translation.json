@@ -1418,6 +1418,10 @@
       "title": "Conditions Générales d'Utilisation (CGU)",
       "validate": "Accepter les CGU"
     },
+    "hitlPrompt": {
+      "accepted": "Accepté",
+      "refused": "Refusé"
+    },
     "knowledgeHub": {
       "loading": "Chargement..."
     },

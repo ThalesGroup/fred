@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
-import { toThreadMessages } from "./toThreadMessages";
+import { hitlResponseKey, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
   return {
@@ -101,5 +101,16 @@ describe("toThreadMessages — raw ui_part retention (#1977)", () => {
 
     expect(user?.uiParts).toEqual([]);
     expect(hitl?.uiParts).toEqual([]);
+  });
+});
+
+describe("hitlResponseKey", () => {
+  it("maps the tool-approval gate's stable choice ids to i18n keys", () => {
+    expect(hitlResponseKey("proceed")).toBe("rework.hitlPrompt.accepted");
+    expect(hitlResponseKey("cancel")).toBe("rework.hitlPrompt.refused");
+  });
+
+  it("returns null for an unrecognized id, so the caller can fall back to raw text", () => {
+    expect(hitlResponseKey("some_custom_choice")).toBeNull();
   });
 });

@@ -1418,6 +1418,10 @@
       "title": "Terms of Service (ToS)",
       "validate": "Accept the TOS"
     },
+    "hitlPrompt": {
+      "accepted": "Accepted",
+      "refused": "Refused"
+    },
     "knowledgeHub": {
       "loading": "Loading..."
     },

@@ -23,6 +23,26 @@ import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { isTraceChannel, textOf, uiPartsOf } from "../../../utils/traceUtils";
 
+/**
+ * Maps a persisted HITL choice id (`HitlResponsePart.choice_id`) to an i18n key
+ * for display in the chat, or `null` for an id this map doesn't know.
+ *
+ * Why this exists: the backend's `make_hitl_response` never populates `label`
+ * (see `agent_app.py`'s history-persist path) — only the raw `choice_id`
+ * ("proceed"/"cancel", the ONLY ids the tool-approval gate uses today) survives
+ * into history, so without this the chat bubble showed the literal untranslated
+ * id. This stays a plain function (not `useTranslation()`) because
+ * `toThreadMessages` is a pure, hookless fold — the caller resolves the key via
+ * `t()` at render time. An unrecognized id (e.g. a future bespoke Graph-authored
+ * question) returns `null` so the caller can fall back to the raw text instead
+ * of showing nothing.
+ */
+export function hitlResponseKey(choiceId: string): string | null {
+  if (choiceId === "proceed") return "rework.hitlPrompt.accepted";
+  if (choiceId === "cancel") return "rework.hitlPrompt.refused";
+  return null;
+}
+
 export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
   const order: string[] = [];
   const groups = new Map<string, ChatMessage[]>();
