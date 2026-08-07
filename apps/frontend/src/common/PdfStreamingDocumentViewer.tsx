@@ -60,11 +60,27 @@ const LARGE_DOCUMENT_PAGE_COUNT = 500;
 
 // pdf.js transport options. Module-level so the object identity stays stable:
 // a fresh object on every render makes react-pdf tear down and reload the whole
-// document. `disableAutoFetch` stops pdf.js from pulling the entire file up
-// front — `/raw_content/stream/{uid}` advertises `Accept-Ranges: bytes` and
-// serves 206 responses (content_controller.py), so pages are fetched by byte
-// range as they are actually needed.
-const PDF_OPTIONS = { disableAutoFetch: true, disableStream: false };
+// document.
+//
+// Both flags are needed to actually fetch by byte range, and `disableStream` is
+// the load-bearing one. pdf.js opens a full-file request first, and cancels it
+// in favour of range requests only when streaming is off:
+//
+//     if (!this._isStreamingSupported && this._isRangeSupported) {
+//       this.cancel(new AbortException("Streaming is disabled."));   // pdf.mjs
+//     }
+//
+// With `disableStream: false` that request is never cancelled, so the whole
+// document streams into memory *alongside* the range requests — a 50 MB PDF
+// showed one 200 of 51.86 MB followed by 36 partial 206s. `disableAutoFetch`
+// alone does not prevent this: it only suppresses the background prefetch of
+// the remaining chunks once ranges are in use.
+//
+// `/raw_content/stream/{uid}` advertises `Accept-Ranges: bytes` and serves 206
+// responses (content_controller.py), so pdf.js takes the range path. If a proxy
+// ever strips that header — compressing `application/pdf` drops both it and
+// `Content-Length` — pdf.js silently falls back to buffering the entire file.
+const PDF_OPTIONS = { disableAutoFetch: true, disableStream: true };
 
 /** Fold a batch of IntersectionObserver entries into the set of pages that
  * should currently hold a real canvas. Returns `prev` unchanged when nothing

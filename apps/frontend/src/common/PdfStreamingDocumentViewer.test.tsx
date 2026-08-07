@@ -178,11 +178,15 @@ describe("PdfStreamingDocumentViewer page virtualization (#2273)", () => {
 });
 
 describe("PdfStreamingDocumentViewer transport options (#2273)", () => {
+  // `disableStream` must be true, not just `disableAutoFetch`: pdf.js cancels its
+  // initial full-file request in favour of range requests only when streaming is
+  // off. Left at false, a 50 MB PDF downloaded whole (one 200 of 51.86 MB) on top
+  // of its range requests, defeating the point of virtualizing the pages.
   it("asks pdf.js to fetch byte ranges on demand instead of the whole file", async () => {
     render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(10);
 
-    expect(documentProps.current.options).toMatchObject({ disableAutoFetch: true, disableStream: false });
+    expect(documentProps.current.options).toMatchObject({ disableAutoFetch: true, disableStream: true });
   });
 
   it("keeps the options object identity stable so react-pdf never reloads the document", async () => {
