@@ -67,6 +67,8 @@ from fred_sdk.contracts.runtime import (
     AgentAssetPort,
     ChatModelFactoryPort,
     DocumentContentPort,
+    DocumentExtractionPort,
+    DocumentExtractionResult,
     DocumentFolderPort,
     DocumentMarkdownPort,
     DocumentMarkdownResult,
@@ -1162,6 +1164,44 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
             full=full,
             offset=offset,
             max_chars=max_chars,
+        )
+
+
+class DocumentExtractionAdapter(DocumentExtractionPort):
+    """
+    Runtime adapter behind `RuntimeServices.document_extraction` (DOCREAD-01
+    Phase 2). Delegates the whole exhaustive map-reduce to Knowledge Flow in one
+    call (`KfDocumentClient.extract`, extended read timeout). Same doctrine as
+    `DocumentSummarizeAdapter`: no scope narrowing, binding/token stay private.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._client = KfDocumentClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+
+    async def extract(
+        self, document_uid: str, *, instruction: str
+    ) -> DocumentExtractionResult:
+        try:
+            result = await self._client.extract(
+                document_uid=document_uid, instruction=instruction
+            )
+        except httpx.HTTPError as exc:
+            raise _wrap_document_port_error(exc) from exc
+        return DocumentExtractionResult(
+            document_uid=result.document_uid,
+            extraction=result.extraction,
+            item_count=result.item_count,
+            chunks_processed=result.chunks_processed,
+            truncated=result.truncated,
         )
 
 

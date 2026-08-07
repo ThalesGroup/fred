@@ -926,6 +926,48 @@ class DocumentMarkdownPort(ABC):
         """
 
 
+class DocumentExtractionResult(FrozenModel):
+    """Typed result of one server-side exhaustive extraction (DOCREAD-01 Phase 2).
+
+    `extraction` is the consolidated, de-duplicated list of every matching item
+    (markdown bullets, in document order) — produced by a map over EVERY chunk of
+    the document with a concatenate/de-dupe reduce, never a lossy summary.
+    """
+
+    document_uid: str
+    extraction: str = ""
+    item_count: int = 0
+    chunks_processed: int = 0
+    truncated: bool = False
+
+
+class DocumentExtractionPort(ABC):
+    """
+    Capability-safe server-side exhaustive extraction (DOCREAD-01 Phase 2). Same
+    doctrine as `DocumentSummarizePort`: the caller passes only the document uid
+    and the extraction instruction; identity stays private to the adapter and
+    Knowledge Flow's per-document ReBAC is the gate.
+
+    Unlike `DocumentMarkdownPort` (which streams pages for the AGENT to process,
+    N model calls), this runs the whole map-reduce on the Knowledge Flow side in
+    ONE call — so the agent never bursts many model calls of its own, and the
+    provider throttling is absorbed server-side (bounded concurrency + 429
+    backoff). Long-running; adapters use an extended read timeout.
+    """
+
+    @abstractmethod
+    async def extract(
+        self,
+        document_uid: str,
+        *,
+        instruction: str,
+    ) -> DocumentExtractionResult:
+        """
+        Exhaustively extract every item matching `instruction` from the document.
+        Raises `DocumentPortCallError` on transport failure.
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -987,6 +1029,10 @@ class RuntimeServices:
     # and raw access token stay private to the adapter. Appended after
     # `kpi_writer` for the same positional-safety reason noted above.
     document_markdown: DocumentMarkdownPort | None = None
+    # Server-side exhaustive extraction (DOCREAD-01 Phase 2): powers the
+    # `document_extract` capability's single-call path. Same doctrine/optionality
+    # as the other document ports.
+    document_extraction: DocumentExtractionPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

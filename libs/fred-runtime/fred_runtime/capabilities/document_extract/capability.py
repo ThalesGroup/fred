@@ -13,28 +13,25 @@
 # limitations under the License.
 
 """
-`DocumentExtractCapability` (DOCREAD-01) — exhaustively extract information from
-a document, nothing omitted, through the `document_markdown` port.
+`DocumentExtractCapability` (DOCREAD-01) — exhaustively extract information from a
+document, nothing omitted.
 
-Half of the document-reading pair (see `document_read_common`). This capability
-answers "give me EVERY X in this document" questions (all requirements, every
-deadline…) where a summary would silently drop items — the exact "half answer"
-failure mode `document_summarize` has. The tool streams the document's full text
-in pages and instructs the model, in-band, to keep paging to the end before
-concluding, so completeness is structurally signalled rather than hoped for.
+Phase 2 (2026-08-07): the tool no longer pages the document into the agent's own
+context (which made the agent burst many token-heavy model calls and trip the
+provider's rate limit). It now makes ONE call to the `document_extraction` port,
+which runs the exhaustive map-reduce server-side in Knowledge Flow — mapping over
+EVERY chunk with bounded concurrency and 429 backoff, then de-duplicating without
+compressing — and returns the consolidated list. `document_verbatim`'s
+positional read stays on the paginated `document_markdown` port; only exhaustive
+extraction moved server-side.
 
-Phase 1 relies on the agent paging to completion (guided by the per-page
-continuation footer). If that proves unreliable on very large documents, the
-robust follow-up is a server-side map-reduce extraction endpoint (mirroring the
-summarize map-reduce but accumulating instead of compressing) — deliberately not
-built yet.
-
-Installing fred-runtime registers it via the `fred.capabilities` entry point
-(`document_extract`); it is `ADMIN_GATED` (class default).
+Admin-gated (class default), registered via the `document_extract`
+`fred.capabilities` entry point.
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 
 from fred_sdk.contracts.capability import (
@@ -43,22 +40,28 @@ from fred_sdk.contracts.capability import (
     CapabilityManifest,
     EmptyModel,
 )
-from fred_sdk.contracts.context import ToolInvocationResult
-from fred_sdk.contracts.models import FieldSpec, UIHints
-from langchain_core.tools import BaseTool, tool
-
-from fred_runtime.capabilities.document_read_common import (
-    DocumentReadConfig,
-    read_document_page,
-    resolve_page_max_chars,
+from fred_sdk.contracts.context import (
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
 )
+from langchain_core.tools import BaseTool, tool
+from pydantic import BaseModel
+
+from fred_runtime.capabilities.document_read_common import document_tool_failure
+
+
+class DocumentExtractConfig(BaseModel):
+    """No agent-creation config today: server-side extraction needs no per-agent
+    knob. Kept as a typed model so a future option (e.g. a result cap) is an
+    additive, migration-free change."""
 
 
 class DocumentExtractCapability(
-    AgentCapability[DocumentReadConfig, DocumentReadConfig, EmptyModel]
+    AgentCapability[DocumentExtractConfig, DocumentExtractConfig, EmptyModel]
 ):
-    """Exhaustive, paginated document extraction. Single tool, no chat controls,
-    no turn options, no HITL (read-only)."""
+    """Exhaustive, server-side document extraction. Single tool, no chat
+    controls, no turn options, no HITL (read-only)."""
 
     manifest = CapabilityManifest(
         id="document_extract",
@@ -67,42 +70,30 @@ class DocumentExtractCapability(
         name="capability.document_extract.name",
         description="capability.document_extract.description",
         icon="find_in_page",
-        config_fields=[
-            FieldSpec(
-                key="page_max_chars",
-                type="integer",
-                title="capability.document_extract.fields.page_max_chars.title",
-                description="capability.document_extract.fields.page_max_chars.description",
-                min=200,
-                max=50_000,
-                ui=UIHints(group="retrieval", advanced=True),
-            ),
-        ],
+        config_fields=[],
         # team_scope left at the class default (ADMIN_GATED).
     )
-    ConfigModel = DocumentReadConfig
+    ConfigModel = DocumentExtractConfig
 
     def tools(
         self,
-        ctx: CapabilityContext[DocumentReadConfig, EmptyModel],
+        ctx: CapabilityContext[DocumentExtractConfig, EmptyModel],
     ) -> Sequence[BaseTool]:
-        config = ctx.config
         services = ctx.services
-        page_cap = config.page_max_chars
 
         @tool("extract_from_document", response_format="content_and_artifact")
         async def extract_from_document(
             document_uid: str,
             what_to_extract: str,
-            offset: int = 0,
-            max_chars: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
             """Exhaustively extract information from a document — nothing omitted.
 
             Use this when the user wants a COMPLETE, nothing-missed answer over a
             whole document — e.g. "list ALL the requirements in this spec",
-            "every deadline", "each obligation and its owner". It streams the
-            document's full text in pages so you can gather every matching item.
+            "every deadline", "each obligation and its owner". One call reads the
+            ENTIRE document (server-side) and returns a consolidated,
+            de-duplicated list of every matching item — you do NOT page through
+            the document yourself.
 
             When to use a different tool instead:
             - do NOT use summarize_document for this — a summary silently drops
@@ -112,33 +103,51 @@ class DocumentExtractCapability(
 
             `what_to_extract` describes precisely what to enumerate (e.g.
             "functional requirements", "dates and their surrounding context").
-
-            COMPLETENESS — read the document to the END: start at `offset` 0;
-            each result tells you whether more text remains and the next offset.
-            Keep calling with that next offset, accumulating matches, until the
-            result says the end has been reached. NEVER give your final list
-            while more text remains.
-
             `document_uid` MUST be the document's opaque uid, not its name — get
             it from a search hit's 'uid', the document tree, or the
             conversation's attached-files list. NEVER repeat the uid in your
-            answer; refer to the document by its display name. `max_chars` bounds
-            each page (leave unset for the agent's default).
+            answer; refer to the document by its display name.
+
+            The returned list is already complete: present it to the user, do not
+            call this tool again for the same request.
             """
 
-            # `what_to_extract` steers the model's own reading; the tool returns
-            # the raw page text plus the continuation signal (Phase 1 — no
-            # server-side extraction pass), so it is intentionally not forwarded
-            # to the port.
-            _ = what_to_extract
-            effective = resolve_page_max_chars(page_cap, max_chars)
-            return await read_document_page(
-                port=services.document_markdown,
+            port = services.document_extraction
+            if port is None:
+                raise RuntimeError(
+                    "extract_from_document: RuntimeServices.document_extraction "
+                    "is not available on this execution path."
+                )
+
+            started = time.monotonic()
+            try:
+                result = await port.extract(document_uid, instruction=what_to_extract)
+            except Exception as exc:
+                message, artifact = document_tool_failure(
+                    tool_ref="extract_from_document",
+                    action="extract from the document",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                    document_uid=document_uid,
+                )
+                return message, artifact
+
+            if result.item_count == 0:
+                content = (
+                    f"No items matching “{what_to_extract}” were found in the document."
+                )
+            else:
+                content = result.extraction
+                if result.truncated:
+                    content += (
+                        "\n\n[Note: the document exceeded the processing cap and "
+                        "was read head+tail; some middle content may be omitted.]"
+                    )
+
+            artifact = ToolInvocationResult(
                 tool_ref="extract_from_document",
-                document_uid=document_uid,
-                offset=offset,
-                max_chars=effective,
-                exhaustive=True,
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=content),),
             )
+            return content, artifact
 
         return [extract_from_document]

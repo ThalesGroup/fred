@@ -152,6 +152,7 @@ from ..integrations.v2_runtime.adapters import (
     AgentConfigAssetsAdapter,
     CompositeToolInvoker,
     DocumentContentAdapter,
+    DocumentExtractionAdapter,
     DocumentFolderAdapter,
     DocumentMarkdownAdapter,
     DocumentSearchAdapter,
@@ -753,9 +754,15 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
-    # Paginated full-markdown read (DOCREAD-01): powers document_verbatim /
-    # document_extract, same private-binding doctrine.
+    # Paginated full-markdown read (DOCREAD-01): powers document_verbatim,
+    # same private-binding doctrine.
     document_markdown = DocumentMarkdownAdapter(
+        binding=binding,
+        settings=settings,
+    )
+    # Server-side exhaustive extraction (DOCREAD-01 Phase 2): powers
+    # document_extract's single-call path.
+    document_extraction = DocumentExtractionAdapter(
         binding=binding,
         settings=settings,
     )
@@ -819,6 +826,7 @@ def _build_runtime_services(
         document_tree=document_tree,
         document_summarize=document_summarize,
         document_markdown=document_markdown,
+        document_extraction=document_extraction,
     )
 
 

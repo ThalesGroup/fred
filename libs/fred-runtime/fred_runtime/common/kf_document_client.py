@@ -81,6 +81,14 @@ class DocumentTreeResult(BaseModel):
     truncated: bool
 
 
+class ExtractDocumentResult(BaseModel):
+    document_uid: str
+    extraction: str = ""
+    item_count: int = 0
+    chunks_processed: int = 0
+    truncated: bool = False
+
+
 class KfDocumentClient(KfBaseClient):
     """
     Authenticated client for Knowledge Flow's document surface: raw-content
@@ -233,3 +241,27 @@ class KfDocumentClient(KfBaseClient):
         )
         r.raise_for_status()
         return SummarizeDocumentResult.model_validate(r.json())
+
+    async def extract(
+        self,
+        *,
+        document_uid: str,
+        instruction: str,
+    ) -> ExtractDocumentResult:
+        """
+        Wire format (matches controller):
+          POST /documents/{document_uid}/extract
+          { "instruction": str }
+
+        Exhaustive server-side map-reduce over the whole document — long-running,
+        so it uses the same extended read timeout as summarize.
+        """
+        r = await self._request_with_token_refresh(
+            method="POST",
+            path=f"/documents/{document_uid}/extract",
+            phase_name="kf_document_extract",
+            json={"instruction": instruction},
+            read_timeout=self._summarize_read_timeout,
+        )
+        r.raise_for_status()
+        return ExtractDocumentResult.model_validate(r.json())

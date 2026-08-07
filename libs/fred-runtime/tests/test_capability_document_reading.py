@@ -44,6 +44,8 @@ from fred_runtime.integrations.v2_runtime.adapters import paginate_markdown
 from fred_sdk.contracts.capability import CapabilityContext, CapabilityIdentity
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
+    DocumentExtractionPort,
+    DocumentExtractionResult,
     DocumentMarkdownPort,
     DocumentMarkdownResult,
     DocumentPortCallError,
@@ -83,8 +85,39 @@ class _FakeMarkdownPort(DocumentMarkdownPort):
         )
 
 
+class _FakeExtractionPort(DocumentExtractionPort):
+    """Fake server-side extraction port recording calls, returning a canned
+    consolidated result (or raising)."""
+
+    def __init__(
+        self,
+        result: DocumentExtractionResult | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._result = result
+        self._error = error
+
+    async def extract(
+        self, document_uid: str, *, instruction: str
+    ) -> DocumentExtractionResult:
+        self.calls.append({"document_uid": document_uid, "instruction": instruction})
+        if self._error is not None:
+            raise self._error
+        return self._result or DocumentExtractionResult(
+            document_uid=document_uid,
+            extraction="- item one\n- item two",
+            item_count=2,
+            chunks_processed=3,
+        )
+
+
 def _services(port: _FakeMarkdownPort | None = None) -> RuntimeServices:
     return RuntimeServices(document_markdown=port or _FakeMarkdownPort())
+
+
+def _extract_services(port: _FakeExtractionPort | None = None) -> RuntimeServices:
+    return RuntimeServices(document_extraction=port or _FakeExtractionPort())
 
 
 def _tools(cap: Any, ctx: CapabilityContext[Any, Any]) -> dict[str, Any]:
@@ -227,42 +260,91 @@ async def test_read_document_signals_end_of_document() -> None:
 def test_extract_tool_registered() -> None:
     cap = DocumentExtractCapability()
     ctx = build_capability_context(
-        cap, identity=_identity(), services=_services(), config={}
+        cap, identity=_identity(), services=_extract_services(), config={}
     )
     assert set(_tools(cap, ctx)) == {"extract_from_document"}
 
 
 @pytest.mark.asyncio
-async def test_extract_directs_the_agent_to_keep_paging() -> None:
-    port = _FakeMarkdownPort(full="A" * 500)
+async def test_extract_makes_one_server_side_call_and_returns_the_list() -> None:
+    port = _FakeExtractionPort(
+        DocumentExtractionResult(
+            document_uid="u1",
+            extraction="- req A\n- req B\n- req C",
+            item_count=3,
+            chunks_processed=5,
+        )
+    )
     cap = DocumentExtractCapability()
     ctx = build_capability_context(
-        cap, identity=_identity(), services=_services(port), config={}
+        cap, identity=_identity(), services=_extract_services(port), config={}
     )
 
-    mid = await _invoke(
+    msg = await _invoke(
         cap,
         ctx,
         "extract_from_document",
-        {"document_uid": "u1", "what_to_extract": "requirements", "max_chars": 200},
+        {"document_uid": "u1", "what_to_extract": "requirements"},
     )
-    # Imperative directive, unlike the verbatim tool's softer wording.
-    assert "MORE TEXT REMAINS" in mid.content
-    assert "do not conclude" in mid.content
-    assert "offset=200" in mid.content
 
-    end = await _invoke(
+    # Exactly one server-side call — no agent-side paging loop.
+    assert port.calls == [{"document_uid": "u1", "instruction": "requirements"}]
+    assert msg.content == "- req A\n- req B\n- req C"
+    assert msg.artifact.blocks[0].text == msg.content
+    assert msg.artifact.is_error is False
+
+
+@pytest.mark.asyncio
+async def test_extract_reports_empty_result_clearly() -> None:
+    port = _FakeExtractionPort(
+        DocumentExtractionResult(document_uid="u1", extraction="", item_count=0)
+    )
+    cap = DocumentExtractCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_extract_services(port), config={}
+    )
+    msg = await _invoke(
         cap,
         ctx,
         "extract_from_document",
-        {
-            "document_uid": "u1",
-            "what_to_extract": "requirements",
-            "offset": 400,
-            "max_chars": 200,
-        },
+        {"document_uid": "u1", "what_to_extract": "penalties"},
     )
-    assert "END OF DOCUMENT reached" in end.content
+    assert "No items matching" in msg.content and "penalties" in msg.content
+
+
+@pytest.mark.asyncio
+async def test_extract_flags_truncation() -> None:
+    port = _FakeExtractionPort(
+        DocumentExtractionResult(
+            document_uid="u1", extraction="- x", item_count=1, truncated=True
+        )
+    )
+    cap = DocumentExtractCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_extract_services(port), config={}
+    )
+    msg = await _invoke(
+        cap,
+        ctx,
+        "extract_from_document",
+        {"document_uid": "u1", "what_to_extract": "x"},
+    )
+    assert "middle content may be omitted" in msg.content
+
+
+@pytest.mark.asyncio
+async def test_extract_missing_port_fails_loud() -> None:
+    cap = DocumentExtractCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=RuntimeServices(), config={}
+    )
+    with pytest.raises(RuntimeError, match="document_extraction"):
+        await _invoke(
+            cap,
+            ctx,
+            "extract_from_document",
+            {"document_uid": "u", "what_to_extract": "x"},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -310,12 +392,12 @@ async def test_missing_markdown_port_fails_loud() -> None:
 
 @pytest.mark.asyncio
 async def test_403_failure_teaches_uid_recovery() -> None:
-    port = _FakeMarkdownPort(
+    port = _FakeExtractionPort(
         error=DocumentPortCallError("403 Forbidden", status_code=403)
     )
     cap = DocumentExtractCapability()
     ctx = build_capability_context(
-        cap, identity=_identity(), services=_services(port), config={}
+        cap, identity=_identity(), services=_extract_services(port), config={}
     )
 
     msg = await _invoke(
