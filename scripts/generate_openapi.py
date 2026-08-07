@@ -32,7 +32,13 @@ def main():
         # Set required environment variables
         os.environ.setdefault("ENV_FILE", str(config_dir / ".env"))
         os.environ.setdefault("CONFIG_FILE", str(config_dir / "configuration.yaml"))
-        
+
+        # Disable HuggingFace downloads during static OpenAPI generation (prevents network
+        # errors when generate_openapi imports ML models that try to download from HuggingFace)
+        os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
         # Set dummy secrets for static generation (prevents validation errors).
         # create_app() loads the full config but never connects to any backend here,
         # so dummy values satisfy the fail-fast validators (OpenSearch / Postgres

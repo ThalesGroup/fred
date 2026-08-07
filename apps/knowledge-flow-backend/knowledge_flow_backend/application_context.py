@@ -17,7 +17,7 @@ import importlib
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type, Union
+from typing import Any, Dict, Optional, Type, Union
 
 from fred_core import (
     BaseFilesystem,
@@ -43,10 +43,8 @@ from fred_core.sql import create_async_engine_from_config
 from fred_core.users.store.postgres_user_store import init_user_store
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
+from sentence_transformers import CrossEncoder
 from sqlalchemy.ext.asyncio import AsyncEngine
-
-if TYPE_CHECKING:
-    from sentence_transformers import CrossEncoder
 
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
@@ -639,7 +637,7 @@ class ApplicationContext:
             raise ValueError("Vision model configuration is missing.")
         return get_model(self.configuration.vision_model)
 
-    def get_crossencoder_model(self) -> "CrossEncoder":
+    def get_crossencoder_model(self) -> CrossEncoder:
         """
         Retrieve the cross-encoder model based on the application configuration.
         If no cross-encoder model is configured, a default model is used.
@@ -652,8 +650,6 @@ class ApplicationContext:
             ValueError: If the model name is required but not provided in offline mode,
                         or if the model configuration is missing.
         """
-        from sentence_transformers import CrossEncoder
-
         # A default model is loaded if none is specified in the configuration.
         if not self.configuration.crossencoder_model:
             self.configuration.crossencoder_model = ModelConfiguration(provider=None, name="cross-encoder/ms-marco-MiniLM-L-12-v2")
