@@ -49,8 +49,7 @@ def main():
 
         # Monkeypatch HuggingFace downloads to raise immediately instead of trying network access.
         # This allows the app to start for schema generation without actual model loading.
-        import sys
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         def block_hf_download(*args, **kwargs):
             """Block any HuggingFace model downloads."""
