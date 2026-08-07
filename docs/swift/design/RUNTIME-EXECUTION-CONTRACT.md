@@ -2528,18 +2528,29 @@ were in fact removed from it. A database whose tables exist but whose version
 table is unstamped (the pre-#2290 state) still boots, with a warning naming the
 recovery path.
 
-Tests create the schema explicitly: `fred_core.history.create_history_schema`
-(fred-core tests) and `fred_runtime.migrations.create_runtime_schema` — the
-stand-in for the deploy migration job, shared by both pod-booting suites
-(`libs/fred-runtime/tests/conftest.py`'s `migrate_test_config`, and
-`apps/fred-agents/tests/test_smoke.py`). Local dev is unaffected: `make run` in
-`apps/fred-agents` already runs `db-upgrade` first.
+**Tests run the real migrations, not hand-rolled DDL.** Every pod-booting test
+applies fred-runtime's Alembic tree to its SQLite file through
+`fred_runtime.migrations.upgrade_sqlite_database` (`DATABASE_URL` override, run
+off-loop because Alembic's online runner calls `asyncio.run`) — used by
+`libs/fred-runtime/tests/conftest.py`'s `migrate_test_config` and by
+`apps/fred-agents/tests/test_smoke.py`. Cost is ~30ms per database once imports
+are warm, and the payoff is that the suite proves the migration tree produces a
+schema the pod can boot against, leaving `alembic_version_runtime` stamped at
+head exactly like a real install. Re-introducing `metadata.create_all` in test
+setup would recreate, in test code, the second schema definition this entry
+removed from production.
+
+The one exception is `fred_core.history.create_history_schema`, for fred-core's
+own unit tests: fred-core sits below the package that owns the Alembic tree and
+cannot import upwards to run it. Anything that *can* import fred-runtime must
+use `upgrade_sqlite_database`.
 
 Note for test authors: a suite that boots a pod against a **persistent** SQLite
 file (`apps/fred-agents/config/configuration.yaml` points at
-`~/.fred/fred-agents/runtime.sqlite3`) must create the schema itself. Such a
-file left over from before this change already contains `session_history`, so
-the guard stays quiet locally and fires only on a clean runner.
+`~/.fred/fred-agents/runtime.sqlite3`) must migrate it itself. Such a file left
+over from before this change already contains `session_history`, so the guard
+stays quiet locally and fires only on a clean runner — which is exactly how this
+was missed locally and caught by CI.
 
 Operator recovery path (which revision to stamp, by columns present):
 [`ops/DATABASE_MIGRATIONS.md`](../ops/DATABASE_MIGRATIONS.md).

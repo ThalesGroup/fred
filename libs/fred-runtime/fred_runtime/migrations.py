@@ -35,6 +35,7 @@ How to use:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from .capabilities import CapabilityRegistry
@@ -86,36 +87,53 @@ def run_all_migrations() -> list[str]:
     return upgraded
 
 
-def create_runtime_schema(sqlite_path: str | Path) -> None:
+def upgrade_sqlite_database(sqlite_path: str | Path) -> None:
     """
-    Create fred-runtime's Alembic-owned tables on a SQLite file — tests and
-    throwaway databases only.
+    Apply fred-runtime's Alembic migrations to one SQLite file — tests and
+    throwaway databases.
 
     Why this exists:
     - no store creates its own tables any more (#2290): `session_history` DDL
       lives only in this package's Alembic tree, and a pod refuses to finish
       starting when the table is missing
     - a test that boots a pod therefore has to do what the deploy migration job
-      (`python -m fred_runtime migrate`) does first; this is the one helper both
-      the fred-runtime and fred-agents suites use, so the "how" lives in exactly
-      one place
+      (`python -m fred_runtime migrate`) does first
 
-    Why not `run_all_migrations()`: that resolves the database from
-    `CONFIG_FILE` and walks every installed capability's tree — far more moving
-    parts than an offline test needs, and it cannot be pointed at an arbitrary
-    file. Real deployments use the CLI; tests use this.
+    Why it runs the real migrations rather than `metadata.create_all`: hand-rolled
+    test DDL is a second definition of the schema — exactly the duplication #2290
+    removed from production. Running the tree means every pod-booting test also
+    proves the migrations produce a schema the pod can actually boot against, and
+    leaves `alembic_version_runtime` stamped like a real install. It costs ~30ms
+    per database once imports are warm.
 
-    Sync on purpose: the test config builders that call it are plain functions,
-    some of them invoked from inside an already-running event loop.
+    Why `DATABASE_URL`: `alembic/env.py` honours it ahead of `CONFIG_FILE`
+    (`fred_core.sql.alembic_env._build_url`), which is the only way to point the
+    tree at an arbitrary file. The previous value is restored, since tests run
+    in-process and some set it themselves.
+
+    Why the worker thread: Alembic's online runner calls `asyncio.run`, which
+    raises inside a running event loop — and some callers build their config from
+    async tests. Running it off-loop makes this safe from both contexts.
+
+    Sibling: `run_all_migrations()` is the deploy path — it resolves the database
+    from `CONFIG_FILE` and walks every installed capability's tree too.
     """
 
-    from fred_core.history.postgres_history_store import history_metadata
-    from sqlalchemy import create_engine
+    from concurrent.futures import ThreadPoolExecutor
 
     path = Path(sqlite_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(f"sqlite:///{path}")
-    try:
-        history_metadata().create_all(engine)
-    finally:
-        engine.dispose()
+
+    def _run() -> None:
+        previous = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{path}"
+        try:
+            _upgrade(str(RUNTIME_ALEMBIC_DIR), label="fred-runtime")
+        finally:
+            if previous is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(_run).result()

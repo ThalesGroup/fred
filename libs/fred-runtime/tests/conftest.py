@@ -36,16 +36,18 @@ def migrate_test_config(config: AgentPodConfig) -> AgentPodConfig:
     - a test that boots the pod therefore must do what a deployment's migration
       job (`python -m fred_runtime migrate`) does first
 
-    The "how" lives in `fred_runtime.migrations.create_runtime_schema` so the
-    fred-agents suite (which boots the same pod from its own shipped config)
-    uses the same helper rather than a second copy.
+    It runs the real Alembic tree (`fred_runtime.migrations.upgrade_sqlite_database`,
+    also used by the fred-agents suite), not hand-rolled DDL: a second definition
+    of the schema in test code is the duplication #2290 just removed from
+    production, and running the tree proves the migrations actually produce a
+    bootable schema.
     """
-    from fred_runtime.migrations import create_runtime_schema
+    from fred_runtime.migrations import upgrade_sqlite_database
 
     sqlite_path = config.storage.postgres.sqlite_path
     if not sqlite_path:  # a Postgres-backed config needs the real migration job
         return config
-    create_runtime_schema(sqlite_path)
+    upgrade_sqlite_database(sqlite_path)
     return config
 
 

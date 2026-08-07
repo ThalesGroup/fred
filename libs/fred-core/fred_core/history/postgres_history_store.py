@@ -155,15 +155,18 @@ async def create_history_schema(engine: AsyncEngine) -> None:
     Create the ``session_history`` table on *engine* — tests and throwaway
     databases only.
 
-    Why this exists (and why it is a free function, not a store method):
-    - production DDL is owned by fred-runtime's Alembic tree (issue #2290);
-      the store itself never creates tables, on any code path
-    - unit tests build a fresh SQLite file per test and need the schema without
-      booting Alembic — this is that hook, and calling it is an explicit,
-      visible test-setup step rather than a hidden side effect of the first read
-
-    Do not call this from application startup or from a request path: a real
-    deployment gets its schema from ``python -m fred_runtime migrate``.
+    Scope — read before reaching for this:
+    - it exists for **fred-core's own unit tests**, which sit one layer below
+      the package that owns the migrations: fred-runtime holds the Alembic tree
+      for ``session_history``, and fred-core cannot import upwards to run it
+    - anything that can import fred-runtime must use
+      ``fred_runtime.migrations.upgrade_sqlite_database`` instead, which applies
+      the real tree — a second definition of the schema is precisely the
+      duplication issue #2290 removed from production, and it must not creep
+      back in through test helpers
+    - production DDL is owned by Alembic alone; the store creates nothing, on
+      any code path, and a real deployment gets its schema from
+      ``python -m fred_runtime migrate``
 
     Example:
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")

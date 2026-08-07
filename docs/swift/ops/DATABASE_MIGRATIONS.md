@@ -121,8 +121,11 @@ then:
   hours later;
 - migrations are applied by `python -m fred_runtime migrate` (what the Helm
   migration hook and `make db-upgrade` in `apps/fred-agents` both run);
-- tests and throwaway databases call `fred_core.history.create_history_schema`
-  explicitly.
+- tests apply the same migrations to their throwaway SQLite databases through
+  `fred_runtime.migrations.upgrade_sqlite_database` (~30ms each), so the suite
+  also proves the tree produces a schema a pod can boot against. Only fred-core's
+  own unit tests use `fred_core.history.create_history_schema` — that package
+  sits below the one owning the tree and cannot import upwards to run it.
 
 `SqlCheckpointer` still self-creates its own (non-Alembic) tables — tracked
 separately.

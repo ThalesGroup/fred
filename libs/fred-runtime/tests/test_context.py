@@ -222,23 +222,12 @@ def _sqlite_config(minimal_config, tmp_path):
     return config
 
 
-async def _migrate_sqlite(config) -> None:
-    """Stand in for `python -m fred_runtime migrate` on the test's SQLite file.
+def _migrate_sqlite(config) -> None:
+    """Apply the real Alembic tree to the test's SQLite file — what
+    `python -m fred_runtime migrate` does on a deployment (#2290)."""
+    from fred_runtime.migrations import upgrade_sqlite_database
 
-    Since #2290 the history store creates no tables itself — the schema comes
-    from Alembic — so a test that boots the pod must set the schema up first,
-    exactly as a deployment's migration job does.
-    """
-    from fred_core.history.postgres_history_store import create_history_schema
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(
-        f"sqlite+aiosqlite:///{config.storage.postgres.sqlite_path}"
-    )
-    try:
-        await create_history_schema(engine)
-    finally:
-        await engine.dispose()
+    upgrade_sqlite_database(config.storage.postgres.sqlite_path)
 
 
 @pytest.mark.asyncio
@@ -249,7 +238,7 @@ async def test_initialize_sql_succeeds_and_wires_checkpointer_and_history_store(
     checkpointer and history store — the happy path the failure tests below
     are contrasted against."""
     config = _sqlite_config(minimal_config, tmp_path)
-    await _migrate_sqlite(config)
+    _migrate_sqlite(config)
     container = PodApplicationContext(config)
     container.initialize_kpi_writer()
 
