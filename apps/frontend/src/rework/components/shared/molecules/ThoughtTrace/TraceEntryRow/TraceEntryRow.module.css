@@ -83,7 +83,13 @@
 /* In-progress dots pulse by fading their own colour toward
    surface-container-low, never through opacity — opacity would let the
    timeline rail show through the dot underneath it. */
-.dot_pending,
+/* Running (pending) pulses toward tertiary; awaiting-confirmation keeps the
+   warning hue to stay visually distinct from a plain running step. */
+.dot_pending {
+  --pulse-color: var(--tertiary);
+  animation: pulse 1.2s ease-in-out infinite;
+  background: var(--tertiary);
+}
 .dot_awaiting_confirmation {
   --pulse-color: var(--warning);
   animation: pulse 1.2s ease-in-out infinite;
@@ -151,6 +157,13 @@
 
 .primaryPending {
   font-style: italic;
+}
+
+/* The "running…" (pending) status text: tertiary, slightly detached from the
+   preceding tool label. */
+.primaryRunning {
+  margin-left: 4px;
+  color: var(--tertiary);
 }
 
 /* Turn-crash error row: same error token as the status dot, applied to the

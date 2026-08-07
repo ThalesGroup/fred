@@ -96,7 +96,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
       {discriminatorText && <span className={styles.discriminator}>{discriminatorText}</span>}
 
       <span
-        className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""} ${isCrashLine ? styles.errorText : ""}`}
+        className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""} ${isPending ? styles.primaryRunning : ""} ${isCrashLine ? styles.errorText : ""}`}
       >
         {primary ||
           (isCancelled
