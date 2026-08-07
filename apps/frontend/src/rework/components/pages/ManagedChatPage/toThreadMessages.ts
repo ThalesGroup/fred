@@ -18,10 +18,101 @@
 // must now retain every ui_part raw, unknown kinds included.
 
 import type { ChatMessage, VectorSearchHit } from "../../../../slices/agentic/agenticOpenApi";
+import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { isTraceChannel, textOf, uiPartsOf } from "../../../utils/traceUtils";
+
+// Raw shape of a persisted `HitlRequestPart` (fred-core `history_schema.py`).
+// Hand-cast, matching this file's existing `RespPart` precedent: `agenticOpenApi.ts`
+// has no live regeneration target (no `make update-*-api` target touches it — see
+// `hitlResponseKey`'s docstring for the sibling case) and its `ChatMessage.parts`
+// union predates these hitl part kinds, so a generated type isn't available here.
+type ReqPart = {
+  question?: string;
+  choices?: Array<{ id: string; label: string }>;
+  title?: string | null;
+  stage?: string | null;
+  free_text?: boolean;
+  interrupt_id?: string | null;
+  checkpoint_id?: string | null;
+  pending_calls?: Array<{ tool_call_id?: string; tool_name?: string; args_preview?: string }>;
+};
+
+function hitlRequestPart(m: ChatMessage): ReqPart | undefined {
+  return m.parts?.[0] as unknown as ReqPart | undefined;
+}
+
+// Groups messages by exchange_id, preserving first-appearance order — the exact
+// grouping `toThreadMessages` folds over. Shared so `reconstructPendingHitl`
+// (which needs only the LAST exchange) can never drift from that grouping.
+function groupByExchange(messages: ChatMessage[]): { order: string[]; groups: Map<string, ChatMessage[]> } {
+  const order: string[] = [];
+  const groups = new Map<string, ChatMessage[]>();
+  for (const msg of messages) {
+    const eid = msg.exchange_id;
+    if (!groups.has(eid)) {
+      order.push(eid);
+      groups.set(eid, []);
+    }
+    groups.get(eid)!.push(msg);
+  }
+  return { order, groups };
+}
+
+/**
+ * Reconstructs the live `pendingHitl` state from persisted history, for the
+ * "reload while a HITL gate is still open" case (#2286-ish — reported live:
+ * refreshing the page while a confirmation was pending made the prompt vanish
+ * and left the gated tool stuck showing "running").
+ *
+ * Why this is possible at all: the SSE stream that reaches an `awaiting_human`
+ * pause ENDS there (the resume is a separate stream/call), so history — written
+ * fire-and-forget right after the stream closes — already contains the
+ * `hitl_request` row for a still-open gate by the time any refresh could race
+ * it. The gap was purely that nothing reconstructed the interactive prompt
+ * from it, AND (fixed alongside this) `HitlRequestPart` didn't persist the
+ * resume identity (`interrupt_id`/`checkpoint_id`/`pending_calls`) needed to
+ * actually answer it — only enough to display it read-only.
+ *
+ * Returns `null` when the last exchange's `hitl_request` (if any) already has
+ * a matching `hitl_response` — i.e. nothing is actually still pending.
+ */
+export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaitingHumanEvent | null {
+  const { order, groups } = groupByExchange(messages);
+  const lastEid = order[order.length - 1];
+  if (lastEid === undefined) return null;
+  const lastMsgs = groups.get(lastEid)!;
+
+  const hitlReqMsg = lastMsgs.find((m) => (m.channel as string) === "hitl_request");
+  if (!hitlReqMsg) return null;
+  const hasResponse = lastMsgs.some((m) => (m.channel as string) === "hitl_response");
+  if (hasResponse) return null;
+
+  const part = hitlRequestPart(hitlReqMsg);
+  if (!part) return null;
+
+  return {
+    type: "awaiting_human",
+    session_id: hitlReqMsg.session_id,
+    exchange_id: lastEid,
+    payload: {
+      title: part.title ?? null,
+      question: part.question ?? null,
+      choices: part.choices ?? [],
+      free_text: part.free_text ?? false,
+      stage: part.stage ?? null,
+      interrupt_id: part.interrupt_id ?? null,
+      checkpoint_id: part.checkpoint_id ?? null,
+      pending_calls: (part.pending_calls ?? []).map((c) => ({
+        tool_call_id: c.tool_call_id ?? "",
+        tool_name: c.tool_name ?? "",
+        args_preview: c.args_preview ?? "",
+      })),
+    },
+  };
+}
 
 /**
  * Maps a persisted HITL choice id (`HitlResponsePart.choice_id`) to an i18n key
@@ -44,17 +135,7 @@ export function hitlResponseKey(choiceId: string): string | null {
 }
 
 export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
-  const order: string[] = [];
-  const groups = new Map<string, ChatMessage[]>();
-
-  for (const msg of messages) {
-    const eid = msg.exchange_id;
-    if (!groups.has(eid)) {
-      order.push(eid);
-      groups.set(eid, []);
-    }
-    groups.get(eid)!.push(msg);
-  }
+  const { order, groups } = groupByExchange(messages);
 
   const result: ThreadMessage[] = [];
   const lastEid = order[order.length - 1] as string | undefined;
@@ -77,9 +158,16 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     }
 
     const hitlReqMsg = msgs.find((m) => (m.channel as string) === "hitl_request");
-    if (hitlReqMsg) {
-      type ReqPart = { question?: string; choices?: Array<{ id: string; label: string }>; title?: string | null };
-      const part = hitlReqMsg.parts?.[0] as unknown as ReqPart | undefined;
+    const hitlRespMsg = msgs.find((m) => (m.channel as string) === "hitl_response");
+    // The trailing exchange's hitl_request with no matching response yet is a
+    // GATE STILL OPEN, not history — `reconstructPendingHitl` turns it into the
+    // live, interactive `pendingHitl` state instead (rendered by the caller at
+    // the bottom of the thread, in the same spot a fresh live pause would be).
+    // Rendering it here too would show it twice: once dead (this readonly
+    // card), once actionable.
+    const isOpenGate = isLast && !hitlRespMsg;
+    if (hitlReqMsg && !isOpenGate) {
+      const part = hitlRequestPart(hitlReqMsg);
       result.push({
         id: `${eid}:hitl_req`,
         role: "hitl_request",
@@ -93,7 +181,6 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       });
     }
 
-    const hitlRespMsg = msgs.find((m) => (m.channel as string) === "hitl_response");
     if (hitlRespMsg) {
       type RespPart = { label?: string | null; choice_id?: string };
       const part = hitlRespMsg.parts?.[0] as unknown as RespPart | undefined;
