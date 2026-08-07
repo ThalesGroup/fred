@@ -24,8 +24,10 @@ with `safe_prompt_token_map` in fred-runtime, and adding a key here without
 adding the matching runtime value would render that token as empty text.
 """
 
+import fred_sdk.contracts.prompt_utils as prompt_utils
 from fred_sdk.contracts import PROMPT_SAFE_TOKENS as PROMPT_SAFE_TOKENS_REEXPORT
-from fred_sdk.contracts.prompt_utils import PROMPT_SAFE_TOKENS
+
+PROMPT_SAFE_TOKENS = prompt_utils.PROMPT_SAFE_TOKENS
 
 # ---------------------------------------------------------------------------
 # PROMPT_SAFE_TOKENS registry
@@ -74,7 +76,5 @@ def test_validator_surface_is_gone() -> None:
     Re-adding save-time rejection would once again block prompts such as
     `Hello {name}` that the renderer handles correctly.
     """
-    import fred_sdk.contracts.prompt_utils as prompt_utils
-
     assert not hasattr(prompt_utils, "validate_prompt_template")
     assert not hasattr(prompt_utils, "PromptTemplateError")
