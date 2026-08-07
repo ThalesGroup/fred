@@ -48,11 +48,13 @@ def main():
         os.environ.setdefault("FRED_POSTGRES_PASSWORD", "dummy-password-for-static-generation")  # pragma: allowlist secret
 
         # Prevent HuggingFace/transformers from downloading models during schema generation
-        # by redirecting cache directories to a non-existent location that forces offline mode
-        cache_dir = "/dev/null/.hf_cache_disabled"
-        os.environ.setdefault("HF_HOME", cache_dir)
-        os.environ.setdefault("HF_HUB_CACHE", cache_dir)
-        os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", cache_dir)
+        # by redirecting cache directories to an empty directory with no models cached.
+        # Create a temporary empty cache directory to force offline mode.
+        import tempfile
+        empty_cache_dir = tempfile.mkdtemp(prefix=".hf_cache_empty_")
+        os.environ.setdefault("HF_HOME", empty_cache_dir)
+        os.environ.setdefault("HF_HUB_CACHE", os.path.join(empty_cache_dir, "hub"))
+        os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", empty_cache_dir)
 
         # Import and create the FastAPI app
         from main import create_app
