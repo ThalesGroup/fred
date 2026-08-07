@@ -7613,10 +7613,10 @@ async def test_get_prompt_detail_includes_category_id_emoji_and_tags(
 
 
 @pytest.mark.asyncio
-async def test_prompt_library_rejects_invalid_prompt_template_before_write(
+async def test_prompt_library_accepts_unknown_prompt_template_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Prompt CRUD validates template text before any prompt row is written."""
+    """Prompt CRUD stores unknown {tokens} verbatim rather than rejecting (#2277)."""
 
     monkeypatch.setattr(
         "control_plane_backend.product.api.require_team_access",
@@ -7632,15 +7632,15 @@ async def test_prompt_library_rejects_invalid_prompt_template_before_write(
         resp = await client.post(
             "/control-plane/v1/teams/personal/prompts",
             json={
-                "name": "Bad prompt",
+                "name": "Unknown token prompt",
                 "description": None,
                 "text": "Hello {unknown_token}.",
             },
         )
 
-    assert resp.status_code == 422
-    assert "{unknown_token}" in resp.json()["detail"]
-    assert store._records == []
+    assert resp.status_code == 201
+    assert len(store._records) == 1
+    assert store._records[0].text == "Hello {unknown_token}."
 
 
 # ---------------------------------------------------------------------------
@@ -7774,15 +7774,15 @@ async def test_delete_prompt_category_blocked_while_in_use(
 
 
 # ---------------------------------------------------------------------------
-# Prompt template validation — enroll (create-then-reject)
+# Prompt template tokens — enroll (unknown tokens are accepted, #2277)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_enroll_agent_instance_rejects_unknown_prompt_token(
+async def test_enroll_agent_instance_accepts_unknown_prompt_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Unknown {token} in prompts.system → 422 before any DB write."""
+    """Unknown {token} in prompts.system → 201; the renderer leaves it verbatim."""
     monkeypatch.setattr(
         "control_plane_backend.product.api.require_team_access",
         _fake_require_team_access,
@@ -7817,17 +7817,20 @@ async def test_enroll_agent_instance_rejects_unknown_prompt_token(
             json={
                 "usage_statement": "Test usage statement covering purpose, users, data, and error impact.",
                 "template_id": "runtime-a:rags.sample.validated",
-                "display_name": "Bad Prompt Agent",
+                "display_name": "Unknown Token Agent",
                 "tuning_field_values": {
                     "prompts.system": "Hello {name}, today is {today}.",
                 },
             },
         )
 
-    assert resp.status_code == 422
-    assert "{name}" in resp.json()["detail"]
-    # Agent must not have been written to the store
-    assert store._records == []
+    assert resp.status_code == 201
+    assert len(store._records) == 1
+    # Text is stored verbatim — {name} survives to be rendered as a literal
+    assert (
+        store._records[0].tuning.values["prompts.system"]
+        == "Hello {name}, today is {today}."
+    )
 
 
 @pytest.mark.asyncio
@@ -7936,10 +7939,10 @@ async def test_enroll_agent_instance_accepts_prompt_with_code_braces(
 
 
 @pytest.mark.asyncio
-async def test_patch_agent_instance_rejects_unknown_prompt_token(
+async def test_patch_agent_instance_accepts_unknown_prompt_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Updating prompts.system with an unknown {token} → 422, record unchanged."""
+    """Updating prompts.system with an unknown {token} → 200, value persisted."""
     monkeypatch.setattr(
         "control_plane_backend.product.api.require_team_access",
         _fake_require_team_access,
@@ -7972,10 +7975,11 @@ async def test_patch_agent_instance_rejects_unknown_prompt_token(
             },
         )
 
-    assert resp.status_code == 422
-    assert "{unknown_var}" in resp.json()["detail"]
-    # Stored record must be unchanged
-    assert store._records[0].tuning.values.get("prompts.system") is None
+    assert resp.status_code == 200
+    assert (
+        store._records[0].tuning.values["prompts.system"]
+        == "Hi {unknown_var}, today is {today}."
+    )
 
 
 # ---------------------------------------------------------------------------
