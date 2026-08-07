@@ -47,10 +47,17 @@ def main():
         os.environ.setdefault("OPENSEARCH_PASSWORD", "dummy-password-for-static-generation")  # pragma: allowlist secret
         os.environ.setdefault("FRED_POSTGRES_PASSWORD", "dummy-password-for-static-generation")  # pragma: allowlist secret
 
+        # Prevent HuggingFace/transformers from downloading models during schema generation
+        # by redirecting cache directories to a non-existent location that forces offline mode
+        cache_dir = "/dev/null/.hf_cache_disabled"
+        os.environ.setdefault("HF_HOME", cache_dir)
+        os.environ.setdefault("HF_HUB_CACHE", cache_dir)
+        os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", cache_dir)
+
         # Import and create the FastAPI app
         from main import create_app
         app = create_app()
-        
+
         # Generate OpenAPI specification
         openapi_spec = app.openapi()
         
