@@ -120,7 +120,15 @@ export default function BarChart({
                   angle={compact ? 0 : -35}
                   textAnchor={compact ? "middle" : "end"}
                   interval={0}
-                  height={compact ? 14 : undefined}
+                  // Only pass `height` in compact mode. Spreading it instead of
+                  // `height={compact ? 14 : undefined}` matters: Recharts reads
+                  // `child.props.height` directly when it computes the chart
+                  // offset, and React's defaultProps substitution does not apply
+                  // to a prop that is present-but-undefined. An explicit
+                  // `undefined` therefore left offset.bottom/height null, which
+                  // collapsed the plot area — axes and grid never rendered and
+                  // the bars came out as empty <g> elements.
+                  {...(compact ? { height: 14 } : {})}
                 />
                 <YAxis
                   type="number"
