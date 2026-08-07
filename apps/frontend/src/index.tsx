@@ -32,6 +32,30 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 
+// <html> is deliberately `overflow: hidden` (styles/index.css) — every real
+// scroll in this app happens inside a purpose-built internal container, so
+// the document itself scrolling is always a browser quirk, never a user
+// action. The recurring case: Chromium force-blurs a still-focused control
+// when it's disabled or removed from the DOM (a mutation's `isLoading`
+// disabling a switch mid-toggle, a dialog/drawer closing under a focused
+// button) and silently scrollIntoView()s the nearest scrollable ancestor —
+// which, absent a normal scrolling body, is <html>. The page then looks
+// frozen: no visible scrollbar, no wheel response, top content scrolled out
+// of reach, recoverable only by a reload (admin Capabilities page, reported
+// repeatedly — #2275). Patching every trigger site is whack-a-mole; this
+// snaps the illegitimate scroll back the instant it happens, regardless of
+// which future interaction causes it.
+window.addEventListener(
+  "scroll",
+  () => {
+    const html = document.documentElement;
+    if (html.scrollTop !== 0 || html.scrollLeft !== 0) {
+      html.scrollTo(0, 0);
+    }
+  },
+  { passive: true },
+);
+
 const startApp = async () => {
   console.info("Starting Fred UI...");
   try {
