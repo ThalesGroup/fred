@@ -106,6 +106,66 @@ added since the stamp point:
 make db-upgrade
 ```
 
+## Who creates tables: Alembic only
+
+No runtime store creates its own tables. `PostgresHistoryStore` used to run
+`metadata.create_all` lazily on every read and write path; that produced
+databases with the right tables and an *unstamped* version table, which no
+later `alembic upgrade head` could ever be applied to (issue #2290). Since
+then:
+
+- `session_history` DDL lives only in `libs/fred-runtime/alembic/versions/`;
+- a fred-runtime pod verifies at startup that `session_history` exists and
+  refuses to finish booting when it does not — the log names the table and the
+  command to run, instead of surfacing an `UndefinedTableError` mid-request
+  hours later;
+- migrations are applied by `python -m fred_runtime migrate` (what the Helm
+  migration hook and `make db-upgrade` in `apps/fred-agents` both run);
+- tests and throwaway databases call `fred_core.history.create_history_schema`
+  explicitly.
+
+`SqlCheckpointer` still self-creates its own (non-Alembic) tables — tracked
+separately.
+
+### Recovering a database whose `session_history` was self-created
+
+Symptom: the platform works, but `alembic upgrade head` fails with
+`DuplicateTable: relation "session_history" already exists`, because
+`alembic_version_runtime` was never written. A pod boot also logs:
+
+```
+[SCHEMA] fred-runtime: tables exist but 'alembic_version_runtime' is not stamped
+```
+
+Fix: stamp the revision that matches the table you actually have, then upgrade.
+Which revision depends on the columns present — check first:
+
+```bash
+psql "$DSN" -c '\d session_history'
+```
+
+| Columns present                                            | Stamp this revision |
+| ---------------------------------------------------------- | ------------------- |
+| no `exchange_id`                                            | `a1e2f3c4d5b6`      |
+| `exchange_id`, but no `team_id` / `agent_instance_id`       | `b2f3a4e5c6d7`      |
+| `exchange_id`, `team_id`, `agent_instance_id` (recent code) | `c3d4b5a6f7e8`      |
+
+```bash
+cd libs/fred-runtime
+CONFIG_FILE=<your config> uv run alembic stamp <revision from the table above>
+```
+
+Then apply everything after that point — from `apps/fred-agents`, so installed
+capability trees are upgraded in the same pass:
+
+```bash
+cd apps/fred-agents && make db-upgrade      # python -m fred_runtime migrate
+```
+
+Stamping writes into `alembic_version_runtime` (fred-runtime's own version
+table — every backend and every capability has its own; see
+`libs/fred-runtime/alembic/env.py`).
+
 ## SQLite compatibility
 
 Migrations must work on both PostgreSQL and SQLite (CI validates both).

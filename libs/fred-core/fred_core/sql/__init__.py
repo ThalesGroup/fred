@@ -32,8 +32,11 @@ from fred_core.sql.base_sql import (
     run_ddl_with_advisory_lock,
 )
 from fred_core.sql.mixin import PydanticJsonMixin, SeedMarkerMixin
+from fred_core.sql.schema_guard import SchemaNotMigratedError, require_tables
 
 __all__ = [
+    "SchemaNotMigratedError",
+    "require_tables",
     "make_alembic_env",
     "make_session_factory",
     "use_session",

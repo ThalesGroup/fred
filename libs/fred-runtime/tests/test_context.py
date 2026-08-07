@@ -222,6 +222,25 @@ def _sqlite_config(minimal_config, tmp_path):
     return config
 
 
+async def _migrate_sqlite(config) -> None:
+    """Stand in for `python -m fred_runtime migrate` on the test's SQLite file.
+
+    Since #2290 the history store creates no tables itself — the schema comes
+    from Alembic — so a test that boots the pod must set the schema up first,
+    exactly as a deployment's migration job does.
+    """
+    from fred_core.history.postgres_history_store import create_history_schema
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{config.storage.postgres.sqlite_path}"
+    )
+    try:
+        await create_history_schema(engine)
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.asyncio
 async def test_initialize_sql_succeeds_and_wires_checkpointer_and_history_store(
     minimal_config, tmp_path
@@ -229,7 +248,9 @@ async def test_initialize_sql_succeeds_and_wires_checkpointer_and_history_store(
     """A reachable (sqlite, dev-equivalent) store must produce a non-None
     checkpointer and history store — the happy path the failure tests below
     are contrasted against."""
-    container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
+    config = _sqlite_config(minimal_config, tmp_path)
+    await _migrate_sqlite(config)
+    container = PodApplicationContext(config)
     container.initialize_kpi_writer()
 
     await container.initialize_sql()
@@ -368,3 +389,56 @@ async def test_initialize_sql_bounds_the_connectivity_ping(
     # Same leak-on-failure regression as the unreachable-Postgres case above
     # — the timeout path must dispose the engine too.
     assert engine.disposed is True
+
+
+# ---------------------------------------------------------------------------
+# initialize_sql() — an unmigrated database must abort startup (#2290). The
+# history store no longer self-creates `session_history`, so an install whose
+# migration job never ran has no schema; without this guard it would boot green
+# and die mid-turn on UndefinedTableError (the #2137 failure class).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_initialize_sql_fails_fast_when_the_schema_was_never_migrated(
+    minimal_config, tmp_path
+) -> None:
+    """Reachable database, no `session_history` — startup must abort with a
+    message naming the missing table and the command that fixes it."""
+    from fred_core.sql.schema_guard import SchemaNotMigratedError
+
+    container = PodApplicationContext(_sqlite_config(minimal_config, tmp_path))
+    container.initialize_kpi_writer()
+
+    with pytest.raises(SchemaNotMigratedError) as excinfo:
+        await container.initialize_sql()
+
+    message = str(excinfo.value)
+    assert "session_history" in message
+    assert "python -m fred_runtime migrate" in message
+    # No partially initialized store may be published on this path.
+    assert container.get_sql_engine() is None
+    assert container.get_checkpointer() is None
+    assert container.get_history_store() is None
+
+
+@pytest.mark.asyncio
+async def test_initialize_sql_does_not_create_the_history_schema_itself(
+    minimal_config, tmp_path
+) -> None:
+    """Regression guard for #2290: booting the pod must never leave DDL behind.
+    A second boot against the same database must fail identically — proof that
+    the first one created nothing."""
+    from fred_core.sql.schema_guard import SchemaNotMigratedError
+
+    config = _sqlite_config(minimal_config, tmp_path)
+    container = PodApplicationContext(config)
+    container.initialize_kpi_writer()
+
+    with pytest.raises(SchemaNotMigratedError):
+        await container.initialize_sql()
+
+    second = PodApplicationContext(config)
+    second.initialize_kpi_writer()
+    with pytest.raises(SchemaNotMigratedError):
+        await second.initialize_sql()

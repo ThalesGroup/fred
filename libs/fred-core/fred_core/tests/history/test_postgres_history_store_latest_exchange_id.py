@@ -24,7 +24,10 @@ from __future__ import annotations
 
 import pytest
 from fred_core.history.history_schema import make_user_text
-from fred_core.history.postgres_history_store import PostgresHistoryStore
+from fred_core.history.postgres_history_store import (
+    PostgresHistoryStore,
+    create_history_schema,
+)
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -32,6 +35,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 async def test_latest_exchange_id_is_none_for_an_unknown_session(tmp_path) -> None:
     db = tmp_path / "history.sqlite3"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db}")
+    # The store never creates its own tables (#2290 — Alembic owns that DDL);
+    # tests set the schema up explicitly.
+    await create_history_schema(engine)
     store = PostgresHistoryStore(engine)
 
     assert await store.latest_exchange_id("no-such-session") is None
@@ -43,6 +49,9 @@ async def test_latest_exchange_id_returns_the_highest_rank_rows_exchange(
 ) -> None:
     db = tmp_path / "history.sqlite3"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db}")
+    # The store never creates its own tables (#2290 — Alembic owns that DDL);
+    # tests set the schema up explicitly.
+    await create_history_schema(engine)
     store = PostgresHistoryStore(engine)
 
     await store.save(

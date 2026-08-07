@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import pytest
 from fred_core.history.history_schema import make_user_text
-from fred_core.history.postgres_history_store import PostgresHistoryStore
+from fred_core.history.postgres_history_store import (
+    PostgresHistoryStore,
+    create_history_schema,
+)
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -39,6 +42,9 @@ class _RecordingKPIWriter(NoOpKPIWriter):
 async def test_save_emits_persist_sql_and_pool_wait_metrics(tmp_path) -> None:
     db = tmp_path / "history.sqlite3"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db}")
+    # The store never creates its own tables (#2290 — Alembic owns that DDL);
+    # tests set the schema up explicitly.
+    await create_history_schema(engine)
     writer = _RecordingKPIWriter()
     store = PostgresHistoryStore(engine, kpi=writer)
 
@@ -59,6 +65,9 @@ async def test_save_emits_persist_sql_and_pool_wait_metrics(tmp_path) -> None:
 async def test_save_is_silent_without_a_kpi_writer(tmp_path) -> None:
     db = tmp_path / "history.sqlite3"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db}")
+    # The store never creates its own tables (#2290 — Alembic owns that DDL);
+    # tests set the schema up explicitly.
+    await create_history_schema(engine)
     store = PostgresHistoryStore(engine)  # kpi=None default
 
     await store.save(

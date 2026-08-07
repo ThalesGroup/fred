@@ -26,6 +26,8 @@ How to use it:
 - import ``ChatMessage``, ``Role``, ``Channel`` for message construction
 - import ``PostgresHistoryStore`` to persist and retrieve messages
 - import ``BaseHistoryStore`` to type-annotate store dependencies
+- import ``create_history_schema`` in tests/throwaway databases only; real
+  deployments get the ``session_history`` schema from Alembic
 
 Example:
     from fred_core.history import ChatMessage, Role, Channel, PostgresHistoryStore
@@ -50,10 +52,16 @@ from fred_core.history.history_schema import (
     make_tool_result,
     make_user_text,
 )
-from fred_core.history.postgres_history_store import PostgresHistoryStore
+from fred_core.history.postgres_history_store import (
+    PostgresHistoryStore,
+    create_history_schema,
+    history_metadata,
+)
 
 __all__ = [
     "BaseHistoryStore",
+    "create_history_schema",
+    "history_metadata",
     "Channel",
     "ChatMessage",
     "ChatMetadata",

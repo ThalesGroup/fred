@@ -16,12 +16,45 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fred_runtime.app.config import AgentPodConfig
 from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+
+
+def migrate_test_config(config: AgentPodConfig) -> AgentPodConfig:
+    """
+    Create the Alembic-owned runtime schema on a test config's SQLite file and
+    return the config unchanged (so builders can `return migrate_test_config(...)`).
+
+    Why this exists:
+    - since #2290 no store creates its own tables: `session_history` DDL lives
+      only in fred-runtime's Alembic tree, and `initialize_sql()` refuses to
+      finish startup when the table is missing
+    - a test that boots the pod therefore must do what a deployment's migration
+      job (`python -m fred_runtime migrate`) does first; this is the single
+      place that knows how, instead of every test module repeating it
+
+    Sync on purpose: the config builders that call it are plain functions, some
+    of them invoked from inside an already-running event loop.
+    """
+    from fred_core.history.postgres_history_store import history_metadata
+    from sqlalchemy import create_engine
+
+    sqlite_path = config.storage.postgres.sqlite_path
+    if not sqlite_path:  # a Postgres-backed config needs the real migration job
+        return config
+    path = Path(sqlite_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(f"sqlite:///{path}")
+    try:
+        history_metadata().create_all(engine)
+    finally:
+        engine.dispose()
+    return config
 
 
 @pytest.fixture(autouse=True)

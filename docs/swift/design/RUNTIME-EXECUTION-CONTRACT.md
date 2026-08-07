@@ -2501,6 +2501,50 @@ the `folder:` form. Regression tests:
 
 ---
 
+### 8.43 ✅ Alembic owns `session_history` DDL; an unmigrated pod fails at startup (issue #2290, 2026-08-07)
+
+**Extends §8.33.** `PostgresHistoryStore` used to call `_ensure_tables()` —
+`metadata.create_all` under a Postgres advisory lock — from every read and
+write path (`save`, `get`, `list_sessions`, `delete_session`,
+`session_belongs_to_user`, `session_exists`, `next_rank`,
+`latest_exchange_id`), in parallel with the Alembic tree that already owns the
+same schema (`libs/fred-runtime/alembic/versions/a1e2f3c4d5b6_*`,
+`b2f3a4e5c6d7_*`, `c3d4b5a6f7e8_*`). Hit in production: an install that skipped
+its migration job worked — the store silently made the table — but
+`alembic_version_runtime` was never stamped, so the first `alembic upgrade head`
+needed for anything else replayed from the first revision and died on "table
+already exists". The operator was left with a working database and a migration
+tree that could never be applied, recoverable only by hand-stamping.
+
+**What changed.** `_ensure_tables()` and all eight call sites are gone; the
+store creates nothing, on any path. `PodApplicationContext.initialize_sql()`
+now calls `fred_core.sql.require_tables` once, right after the §8.33
+connectivity ping and before the checkpointer/history store are published: a
+missing `session_history` raises `SchemaNotMigratedError` naming the table and
+the exact fix (`python -m fred_runtime migrate`), so the lifespan aborts and
+the replica never becomes Ready. This is startup-only work — nothing was added
+to the per-turn path; the eight per-call `await self._ensure_tables()` guards
+were in fact removed from it. A database whose tables exist but whose version
+table is unstamped (the pre-#2290 state) still boots, with a warning naming the
+recovery path.
+
+Tests create the schema explicitly: `fred_core.history.create_history_schema`
+(fred-core tests) and `migrate_test_config` in
+`libs/fred-runtime/tests/conftest.py` (pod-booting tests) — the stand-in for the
+deploy migration job. Local dev is unaffected: `make run` in `apps/fred-agents`
+already runs `db-upgrade` first.
+
+Operator recovery path (which revision to stamp, by columns present):
+[`ops/DATABASE_MIGRATIONS.md`](../ops/DATABASE_MIGRATIONS.md).
+
+**Deliberately out of scope:** `SqlCheckpointer._ensure_tables()`
+(`fred_runtime/runtime_support/sql_checkpointer.py`, ~12 call sites plus three
+direct calls from `agent_app.py`) has the identical pattern and is tracked
+separately — its tables are in no Alembic tree yet, so removing lazy creation
+there needs migrations written first.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.
