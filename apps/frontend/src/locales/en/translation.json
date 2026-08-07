@@ -206,6 +206,26 @@
         }
       }
     },
+    "document_verbatim": {
+      "name": "Read a document verbatim",
+      "description": "Ability to read a document's exact text, page by page.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Page length",
+          "description": "Default and hard maximum length (in characters) of each page returned by the read_document tool. Leave empty to use the built-in default."
+        }
+      }
+    },
+    "document_extract": {
+      "name": "Extract information from a document",
+      "description": "Ability to exhaustively extract the requested information from a document, without missing anything.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Page length",
+          "description": "Default and hard maximum length (in characters) of each page read by the extract_from_document tool. Leave empty to use the built-in default."
+        }
+      }
+    },
     "writable_document": {
       "name": "Generate a text document (Word)",
       "description": "Ability to edit and generate a downloadable text document.",
@@ -2045,6 +2065,10 @@
             "conversationAttachments": {
               "title": "Attachments in a conversation",
               "description": "Allows adding documents to a conversation to use their information."
+            },
+            "documentReading": {
+              "title": "Document reading",
+              "description": "Lets the agent read a document verbatim and exhaustively extract information from it."
             },
             "wordDocument": {
               "title": "Generate a Word document",

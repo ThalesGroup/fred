@@ -206,6 +206,26 @@
         }
       }
     },
+    "document_verbatim": {
+      "name": "Verbatim document",
+      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Longueur de page",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+        }
+      }
+    },
+    "document_extract": {
+      "name": "Extraction d'information d'un document",
+      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Longueur de page",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque page lue par l'outil extract_from_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+        }
+      }
+    },
     "writable_document": {
       "name": "Générer un document texte (Word)",
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
@@ -2045,6 +2065,10 @@
             "conversationAttachments": {
               "title": "Pièces jointes à une conversation",
               "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
+            },
+            "documentReading": {
+              "title": "Lecture de documents",
+              "description": "Permet à l'agent de lire un document mot à mot et d'en extraire des informations de façon exhaustive."
             },
             "wordDocument": {
               "title": "Générer un document Word",

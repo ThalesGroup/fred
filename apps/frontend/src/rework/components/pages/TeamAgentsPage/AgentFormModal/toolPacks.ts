@@ -101,6 +101,11 @@ export const CAP_FILESYSTEM = "mcp-knowledge-flow-fs";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
+// Document-reading pair (DOCREAD-01): two independent backend capabilities that
+// the Simple view groups under one "Lecture de documents" pack, while the
+// Advanced view keeps each toggle separate.
+export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
+export const CAP_DOCUMENT_EXTRACT = "document_extract";
 
 /** `document_access` config field keys the resource packs compute. */
 export const DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY = "search_attachments_only";
@@ -142,6 +147,22 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         includes: [{ capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" }],
         enablesCapabilityIds: [CAP_DOCUMENT_SUMMARIZE],
         documentAccessIntent: "attachments",
+      },
+      {
+        // DOCREAD-01: one Simple-view card grouping the two independent
+        // document-reading capabilities (verbatim read + exhaustive extraction).
+        // Plain pack — enabling it selects both ids; the Advanced view still
+        // toggles each on its own.
+        id: "document_reading",
+        kind: "capabilities",
+        icon: "article",
+        titleKey: "rework.teams.formAgent.capabilities.packs.documentReading.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.documentReading.description",
+        includes: [
+          { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
+          { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
+        ],
+        enablesCapabilityIds: [CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT],
       },
     ],
   },
