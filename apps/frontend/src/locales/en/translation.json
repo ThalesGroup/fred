@@ -1595,6 +1595,7 @@
           "unavailable": "Document content is unavailable.",
           "largeTitle": "Large document",
           "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
+          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
           "largeConfirm": "Display anyway"
         }
       },

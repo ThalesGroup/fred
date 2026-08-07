@@ -1595,6 +1595,7 @@
           "unavailable": "Le contenu du document est indisponible.",
           "largeTitle": "Document volumineux",
           "largeBody": "Ce PDF compte {{pages}} pages. L'afficher peut ralentir votre navigateur.",
+          "largeBodyBytes": "Ce PDF pèse {{megabytes}} Mo. Son ouverture peut prendre un long moment et ralentir votre navigateur.",
           "largeConfirm": "Afficher quand même"
         }
       },

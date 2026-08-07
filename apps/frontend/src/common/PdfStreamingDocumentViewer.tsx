@@ -58,6 +58,31 @@ const FALLBACK_PAGE_ASPECT_RATIO = 297 / 210;
 // being the one shape that can still hurt.
 const LARGE_DOCUMENT_PAGE_COUNT = 500;
 
+// Above this file size the document is not handed to pdf.js *at all* until the
+// user asks for it. This guard exists because the page-count one above cannot
+// do the job on its own: `numPages` is only known from `onLoadSuccess`, i.e.
+// after pdf.js has already parsed the document — and for some documents the
+// parse itself is the expensive act it should be guarding (#2273):
+//
+// pdf.js validates `/Count` at open by fetching the LAST page's dict
+// (`checkLastPage` → `getPage(numPages - 1)`, pdf.worker.mjs), and
+// `Catalog.getPageDict` walks `/Kids` linearly, fetching every kid just to
+// learn it is a one-page leaf. A document with a FLAT 3666-ref /Kids array —
+// legal, and what naive generators emit — therefore fetches all 3666 page
+// dicts at open; interleaved with their content streams they touch every chunk
+// of a 50 MB file: 803 serial 64 KB range requests, ~48 s, the whole file read
+// before the page-count guard could appear. The same page count in a balanced
+// tree (what LaTeX/Word/Acrobat emit — intermediate /Count nodes let the walk
+// skip subtrees unfetched) opens in 2 requests / ~1.3 MB, measured on a 91 MB
+// file.
+//
+// Size is the only property of a document knowable before parsing it, so it is
+// the only thing a pre-parse guard can key on. It is a proxy, not a measure:
+// a 50 MB, 36-page image scan opens fine (36 kid fetches), while a smaller
+// flat-tree document could still be slow. It is deliberately conservative —
+// being asked to confirm a document that would have opened fine costs one click.
+const LARGE_DOCUMENT_BYTES = 20 * 1024 * 1024;
+
 // pdf.js transport options. Module-level so the object identity stays stable:
 // a fresh object on every render makes react-pdf tear down and reload the whole
 // document.
@@ -80,7 +105,16 @@ const LARGE_DOCUMENT_PAGE_COUNT = 500;
 // responses (content_controller.py), so pdf.js takes the range path. If a proxy
 // ever strips that header — compressing `application/pdf` drops both it and
 // `Content-Length` — pdf.js silently falls back to buffering the entire file.
-const PDF_OPTIONS = { disableAutoFetch: true, disableStream: true };
+//
+// `rangeChunkSize` raises pdf.js's 64 KB default. On-demand fetching means every
+// object pdf.js reaches for that is not yet local costs a round trip, and its
+// open-time /Kids walk resolves them strictly one at a time (see
+// LARGE_DOCUMENT_BYTES above): a flat-tree 3666-page PDF needed 803 sequential
+// 64 KB requests (~48 s) to open, 54×1 MB (~26 s) with this setting. Fetching
+// 1 MB per miss trades bytes for round trips — the right trade when the round
+// trips are serialized — and costs nothing on well-formed documents, which
+// only ever ask for a handful of chunks.
+const PDF_OPTIONS = { disableAutoFetch: true, disableStream: true, rangeChunkSize: 1024 * 1024 };
 
 /** Fold a batch of IntersectionObserver entries into the set of pages that
  * should currently hold a real canvas. Returns `prev` unchanged when nothing
@@ -213,13 +247,54 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
     return `/knowledge-flow/v1/raw_content/stream/${documentUid}`;
   }, [documentUid]);
 
+  const authHeader = useMemo(() => (token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : null), [token]);
+
   const fileProp = useMemo(() => {
     if (!pdfUrl) return null;
     // If we have a bearer, send it; otherwise allow cookies (same-site backend).
-    return token
-      ? { url: pdfUrl, httpHeaders: { Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}` } }
+    return authHeader
+      ? { url: pdfUrl, httpHeaders: { Authorization: authHeader } }
       : { url: pdfUrl, withCredentials: true };
-  }, [pdfUrl, token]);
+  }, [pdfUrl, authHeader]);
+
+  // How big is this document? Asked *before* <Document> mounts, so the size
+  // guard can fire without pdf.js ever touching the file (see LARGE_DOCUMENT_BYTES).
+  //
+  // A one-byte ranged GET is the cheapest way to find out: the 206 carries
+  // `Content-Range: bytes 0-0/<total>`. The endpoint exposes no HEAD route, and
+  // the metadata that holds the size is not plumbed down to this component —
+  // this needs neither.
+  //
+  // A failed or unparseable probe is not fatal: `sizeBytes` stays null, the
+  // guard does not fire, and the viewer behaves exactly as it did before. Being
+  // unable to measure a document is not a reason to refuse to show it.
+  const [sizeBytes, setSizeBytes] = useState<number | null>(null);
+  const [sizeProbed, setSizeProbed] = useState(false);
+  useEffect(() => {
+    if (!pdfUrl) return;
+    let cancelled = false;
+    setSizeBytes(null);
+    setSizeProbed(false);
+    fetch(pdfUrl, {
+      headers: { Range: "bytes=0-0", ...(authHeader ? { Authorization: authHeader } : {}) },
+      credentials: authHeader ? "same-origin" : "include",
+    })
+      .then((res) => {
+        // "bytes 0-0/52428800" → 52428800. A proxy that rewrites or drops the
+        // header lands on NaN, which reads as "unknown" below.
+        const total = Number(res.headers.get("Content-Range")?.split("/")[1]);
+        if (!cancelled && Number.isFinite(total) && total > 0) setSizeBytes(total);
+      })
+      .catch(() => {
+        // Probe failure is non-fatal by design — fall through to the unguarded path.
+      })
+      .finally(() => {
+        if (!cancelled) setSizeProbed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfUrl, authHeader]);
 
   // Lets a late-resolving page-geometry probe tell whether it still belongs to
   // the document on screen (see onDocumentLoadSuccess).
@@ -264,6 +339,11 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
 
   const isLargeDocument = numPages !== null && numPages > LARGE_DOCUMENT_PAGE_COUNT;
   const showPages = numPages !== null && (!isLargeDocument || largeDocumentConfirmed);
+
+  // The size guard withholds the <Document> mount entirely; the page-count guard
+  // above can only withhold the pages, pdf.js having already parsed by then.
+  const isLargeFile = sizeBytes !== null && sizeBytes > LARGE_DOCUMENT_BYTES;
+  const fileGuardBlocking = isLargeFile && !largeDocumentConfirmed;
 
   // Mount/unmount page canvases as their placeholders enter and leave the scroll
   // viewport. The placeholders themselves never unmount for a given document, so
@@ -324,11 +404,37 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
     });
   }, [numPages, pageWidth, pageAspectRatio, mountedPages, showPages]);
 
+  const guardPanel = (body: string) => (
+    <div className={styles.guard} role="status">
+      <p className={styles.guardTitle}>{t("rework.resources.preview.pdf.largeTitle")}</p>
+      <p className={styles.guardBody}>{body}</p>
+      <button type="button" className={styles.guardAction} onClick={() => setLargeDocumentConfirmed(true)}>
+        {t("rework.resources.preview.pdf.largeConfirm")}
+      </button>
+    </div>
+  );
+
   return (
     <div ref={contentRef} className={styles.viewer}>
       {!isLoading && loadError && <p className={styles.error}>{loadError}</p>}
 
-      {fileProp && !loadError && (
+      {/* The size probe is one request for one byte, but <Document> must not mount
+          before it answers — mounting is the expensive act this guard prevents. */}
+      {fileProp && !loadError && !sizeProbed && (
+        <p className={styles.loading}>{t("rework.resources.preview.loading")}</p>
+      )}
+
+      {fileProp &&
+        !loadError &&
+        sizeProbed &&
+        fileGuardBlocking &&
+        guardPanel(
+          t("rework.resources.preview.pdf.largeBodyBytes", {
+            megabytes: Math.round((sizeBytes ?? 0) / (1024 * 1024)),
+          }),
+        )}
+
+      {fileProp && !loadError && sizeProbed && !fileGuardBlocking && (
         <Document
           key={reloadKey}
           className={styles.document}
@@ -339,17 +445,9 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
           loading={<p className={styles.loading}>{t("rework.resources.preview.loading")}</p>}
           error={<p className={styles.error}>{t("rework.resources.preview.pdf.loadFailed")}</p>}
         >
-          {isLargeDocument && !largeDocumentConfirmed && (
-            <div className={styles.guard} role="status">
-              <p className={styles.guardTitle}>{t("rework.resources.preview.pdf.largeTitle")}</p>
-              <p className={styles.guardBody}>
-                {t("rework.resources.preview.pdf.largeBody", { pages: numPages ?? 0 })}
-              </p>
-              <button type="button" className={styles.guardAction} onClick={() => setLargeDocumentConfirmed(true)}>
-                {t("rework.resources.preview.pdf.largeConfirm")}
-              </button>
-            </div>
-          )}
+          {isLargeDocument &&
+            !largeDocumentConfirmed &&
+            guardPanel(t("rework.resources.preview.pdf.largeBody", { pages: numPages ?? 0 }))}
           {pageSlots}
         </Document>
       )}

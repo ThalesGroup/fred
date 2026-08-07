@@ -82,17 +82,43 @@ vi.stubGlobal(
   },
 );
 
+// The viewer probes the file's size with a one-byte ranged GET before it will
+// mount <Document> at all. Default to a small file so the size guard stays out
+// of the way of every test that isn't about it.
+const probe = vi.hoisted(() => ({
+  sizeBytes: 1024 * 1024,
+  fail: false,
+  contentRange: undefined as string | undefined,
+  calls: [] as { url: string; init: any }[],
+}));
+vi.stubGlobal("fetch", (url: string, init: any) => {
+  probe.calls.push({ url, init });
+  return probe.fail
+    ? Promise.reject(new Error("probe failed"))
+    : Promise.resolve({
+        headers: {
+          get: (name: string) =>
+            name === "Content-Range" ? (probe.contentRange ?? `bytes 0-0/${probe.sizeBytes}`) : null,
+        },
+      });
+});
+
 import { PdfStreamingDocumentViewer, reduceMountedPages } from "./PdfStreamingDocumentViewer.tsx";
 
 let container: HTMLDivElement;
 let root: Root;
 
-function render(ui: React.ReactElement) {
+/** Render and let the size probe settle. <Document> is deliberately withheld
+ * until the probe answers, so without this flush there is nothing to drive. */
+async function render(ui: React.ReactElement) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
     root.render(ui);
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 
@@ -130,6 +156,10 @@ beforeEach(() => {
   documentProps.current = null;
   io.callback = null;
   io.observed = [];
+  probe.sizeBytes = 1024 * 1024;
+  probe.fail = false;
+  probe.contentRange = undefined;
+  probe.calls = [];
 });
 
 afterEach(() => {
@@ -141,7 +171,7 @@ afterEach(() => {
 
 describe("PdfStreamingDocumentViewer page virtualization (#2273)", () => {
   it("reserves a slot for every page but mounts only the pages in view", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(200);
 
     // The scrollbar must still reflect the real document length…
@@ -151,7 +181,7 @@ describe("PdfStreamingDocumentViewer page virtualization (#2273)", () => {
   });
 
   it("mounts pages as they scroll into the band and unmounts them on the way out", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(200);
 
     scrollTo([
@@ -170,7 +200,7 @@ describe("PdfStreamingDocumentViewer page virtualization (#2273)", () => {
   });
 
   it("observes every page slot so no page is stranded as a permanent placeholder", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(120);
 
     expect(io.observed).toHaveLength(120);
@@ -183,14 +213,14 @@ describe("PdfStreamingDocumentViewer transport options (#2273)", () => {
   // off. Left at false, a 50 MB PDF downloaded whole (one 200 of 51.86 MB) on top
   // of its range requests, defeating the point of virtualizing the pages.
   it("asks pdf.js to fetch byte ranges on demand instead of the whole file", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(10);
 
     expect(documentProps.current.options).toMatchObject({ disableAutoFetch: true, disableStream: true });
   });
 
   it("keeps the options object identity stable so react-pdf never reloads the document", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     const first = documentProps.current.options;
     await loadDocument(10);
     scrollTo([{ page: 2, visible: true }]);
@@ -201,7 +231,7 @@ describe("PdfStreamingDocumentViewer transport options (#2273)", () => {
 
 describe("PdfStreamingDocumentViewer large-document guard (#2273)", () => {
   it("renders no page at all until the user opts in, past the page-count ceiling", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(900);
 
     expect(mountedPageNumbers()).toEqual([]);
@@ -210,7 +240,7 @@ describe("PdfStreamingDocumentViewer large-document guard (#2273)", () => {
   });
 
   it("renders the (still virtualized) document once the user confirms", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(900);
 
     act(() => {
@@ -222,11 +252,72 @@ describe("PdfStreamingDocumentViewer large-document guard (#2273)", () => {
   });
 
   it("renders a document under the ceiling with no guard", async () => {
-    render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
     await loadDocument(499);
 
     expect(container.textContent).not.toContain("rework.resources.preview.pdf.largeTitle");
     expect(container.querySelectorAll("[data-page-number]")).toHaveLength(499);
+  });
+});
+
+// The page-count guard above can only fire from onLoadSuccess — by which point
+// pdf.js has parsed the document, which on a 50 MB/3000-page text PDF meant 803
+// serial range requests and ~48 s. These pin the guard that fires *before* the
+// file is handed to pdf.js at all: what it protects is the mount itself, so the
+// assertions are about <Document> being absent, not merely about pages.
+describe("PdfStreamingDocumentViewer large-file guard (#2273)", () => {
+  it("never mounts Document for an oversized file until the user opts in", async () => {
+    probe.sizeBytes = 50 * 1024 * 1024;
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+
+    expect(container.querySelector("[data-testid='pdf-document']")).toBeNull();
+    expect(documentProps.current).toBeNull();
+    expect(container.textContent).toContain("rework.resources.preview.pdf.largeTitle");
+  });
+
+  it("mounts Document once the user opts in", async () => {
+    probe.sizeBytes = 50 * 1024 * 1024;
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+
+    act(() => {
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(container.querySelector("[data-testid='pdf-document']")).not.toBeNull();
+  });
+
+  it("lets a file under the ceiling through untouched", async () => {
+    probe.sizeBytes = 5 * 1024 * 1024;
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+
+    expect(container.textContent).not.toContain("rework.resources.preview.pdf.largeTitle");
+    expect(documentProps.current).not.toBeNull();
+  });
+
+  // Failing to measure a document is not a reason to refuse to show it: the
+  // viewer must degrade to its previous, unguarded behaviour rather than
+  // stranding the user behind a wall it cannot justify.
+  it("falls through to the normal path when the probe fails", async () => {
+    probe.fail = true;
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+
+    expect(container.textContent).not.toContain("rework.resources.preview.pdf.largeTitle");
+    expect(documentProps.current).not.toBeNull();
+  });
+
+  it("falls through when a proxy mangles Content-Range", async () => {
+    probe.contentRange = "bytes 0-0/*";
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+
+    expect(documentProps.current).not.toBeNull();
+  });
+
+  it("asks for a single byte so the probe cannot itself be expensive", async () => {
+    await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
+
+    expect(probe.calls).toHaveLength(1);
+    expect(probe.calls[0].url).toBe("/knowledge-flow/v1/raw_content/stream/doc-1");
+    expect(probe.calls[0].init.headers).toMatchObject({ Range: "bytes=0-0" });
   });
 });
 
