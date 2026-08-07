@@ -52,6 +52,15 @@ logger = logging.getLogger(__name__)
 # Tuning knobs. Deliberately conservative defaults — the map phase is throttled
 # by the model provider, so we favour "slow but complete" over "fast but 429".
 # Candidates to promote to configuration once live tuning settles them.
+#
+# The vectorization splitter yields ~1.5k-char shards — one LLM call per shard
+# would mean hundreds of calls for a real spec (609k chars → 471 calls, observed
+# live: 4 min AND it exhausted the provider's rate limit for following turns).
+# So consecutive shards are PACKED into large map windows: one LLM call per
+# ~24k-char window keeps table/semantic boundaries (from the splitter) while
+# cutting the call count ~18× (471 → ~26). De-dup across the small window overlap
+# is handled by the reduce.
+_MAP_WINDOW_CHARS = 24_000
 _MAP_CONCURRENCY = 3
 _MAX_RETRIES = 5
 _BACKOFF_BASE_S = 2.0
@@ -118,6 +127,26 @@ def _parse_items(raw: str) -> list[str]:
             continue
         items.append(s)
     return items
+
+
+def _pack_windows(chunks: list[str], window_chars: int) -> list[str]:
+    """Greedily pack consecutive splitter shards into map windows of at most
+    `window_chars`, so one LLM call covers many shards instead of one call per
+    tiny shard. Keeps the splitter's table/semantic boundaries; a single shard
+    already larger than the window becomes its own window."""
+
+    windows: list[str] = []
+    cur: list[str] = []
+    cur_len = 0
+    for c in chunks:
+        if cur and cur_len + len(c) > window_chars:
+            windows.append("\n\n".join(cur))
+            cur, cur_len = [], 0
+        cur.append(c)
+        cur_len += len(c)
+    if cur:
+        windows.append("\n\n".join(cur))
+    return windows
 
 
 class DocumentExtractor:
@@ -200,10 +229,11 @@ class DocumentExtractor:
         chunks = [s.page_content or "" for s in shards if (s.page_content or "").strip()]
         if not chunks:
             return ExtractionResult(text="", item_count=0, chunks_processed=0, truncated=truncated)
+        windows = _pack_windows(chunks, _MAP_WINDOW_CHARS)
 
         sem = asyncio.Semaphore(_MAP_CONCURRENCY)
         started = time.monotonic()
-        per_chunk = await asyncio.gather(*(self._extract_chunk(instruction, c, sem) for c in chunks))
+        per_chunk = await asyncio.gather(*(self._extract_chunk(instruction, w, sem) for w in windows))
         elapsed_ms = (time.monotonic() - started) * 1000
 
         # REDUCE: concatenate in document order, de-duplicate case-insensitively
@@ -219,7 +249,8 @@ class DocumentExtractor:
                     items.append(it)
 
         logger.info(
-            "[EXTRACT] chunks=%d items=%d chars_in=%d elapsed_ms=%.0f truncated=%s",
+            "[EXTRACT] windows=%d (shards=%d) items=%d chars_in=%d elapsed_ms=%.0f truncated=%s",
+            len(windows),
             len(chunks),
             len(items),
             len(text),
@@ -230,6 +261,6 @@ class DocumentExtractor:
         return ExtractionResult(
             text=body,
             item_count=len(items),
-            chunks_processed=len(chunks),
+            chunks_processed=len(windows),
             truncated=truncated,
         )

@@ -27,6 +27,7 @@ from knowledge_flow_backend.features.extract import extractor as extractor_mod
 from knowledge_flow_backend.features.extract.extractor import (
     DocumentExtractor,
     _is_rate_limit,
+    _pack_windows,
     _parse_items,
 )
 
@@ -95,20 +96,32 @@ def test_is_rate_limit_detects_shapes() -> None:
     assert _is_rate_limit(ValueError("boom"))[0] is False
 
 
+def test_pack_windows_reduces_call_count() -> None:
+    # Ten 1k shards packed into ~2.5k windows → far fewer map calls than shards.
+    shards = ["x" * 1000] * 10
+    windows = _pack_windows(shards, 2500)
+    assert len(windows) == 5  # 2 shards per window (3rd would exceed 2500)
+    # A single oversized shard still becomes its own window (never dropped).
+    assert _pack_windows(["y" * 9000], 2500) == ["y" * 9000]
+
+
 # ---------------------------------------------------------------------------
 # Exhaustive map-reduce
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_extract_is_exhaustive_and_dedupes_across_chunks() -> None:
-    # Two chunks; "req B" appears in both → must appear once, order preserved.
+async def test_extract_is_exhaustive_and_dedupes_across_chunks(monkeypatch) -> None:
+    # Force one window per shard so the two shards make two map calls (with the
+    # default 24k window they would pack into one). "req B" appears in both →
+    # must appear once, order preserved.
+    monkeypatch.setattr(extractor_mod, "_MAP_WINDOW_CHARS", 1)
     model = _FakeModel(["- req A\n- req B", "- req B\n- req C"])
     ex = _make_extractor(model)
 
     result = await ex.extract(text="chunk1|||chunk2", instruction="requirements")
 
-    assert result.chunks_processed == 2
+    assert result.chunks_processed == 2  # two windows
     assert result.item_count == 3
     assert result.text == "- req A\n- req B\n- req C"
 
