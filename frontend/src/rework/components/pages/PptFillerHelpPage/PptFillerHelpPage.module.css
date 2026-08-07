@@ -4,7 +4,7 @@
   align-items: flex-start;
   background-color: var(--surface-main);
   width: 100%;
-  height: 100vh;
+  height: 100%;
   overflow-y: auto;
   color: var(--on-surface);
 }
