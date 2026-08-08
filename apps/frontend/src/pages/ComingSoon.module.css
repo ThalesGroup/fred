@@ -12,8 +12,9 @@
 }
 
 .icon {
-  width: 48px;
-  height: 48px;
+  display: flex;
+  color: var(--primary);
+  font-size: 48px;
 }
 
 .title {

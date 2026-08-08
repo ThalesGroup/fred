@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { toIconType } from "@shared/utils/Type.ts";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import styles from "./ComingSoon.module.css";
@@ -27,7 +29,9 @@ export function ComingSoon() {
 
   return (
     <div className={styles.container}>
-      <img className={styles.icon} src={`images/${agentIconName}.svg`} alt="" />
+      <span className={styles.icon}>
+        <Icon category="outlined" type={toIconType(agentIconName, "person")} filled />
+      </span>
       <p className={styles.title}>{t("comingSoon.title", { siteDisplayName })}</p>
       <p className={styles.description}>{t("comingSoon.description")}</p>
     </div>
