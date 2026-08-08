@@ -110,6 +110,16 @@ Phase 3a uses one control-plane-owned bootstrap payload:
   - `current_user`
   - `active_team`
   - `available_teams`
+    - `Team.my_relations` — **added 2026-08-08 (#2298).** Each `available_teams`
+      entry now carries the caller's own folded role relations
+      (`team_admin`/`team_editor`/`team_analyst`/`team_member`), the same
+      unambiguous field `active_team`/`TeamWithPermissions` already exposed.
+      Moved onto the base `Team` model (it is caller-specific, exactly like the
+      pre-existing `Team.is_member`) so the Home team list can render per-team
+      role labels without a per-team refetch. Costs **no extra ReBAC read**: the
+      value is sliced from the `roles_by_user` fold `_bulk_team_membership`
+      already computes per team (it was previously discarded). Empty list for
+      the personal/system space and for any team the caller is not a member of.
   - `gcu_version`
     - optional Terms of Use / CGU gating switch exposed by deployment config
   - `feature_flags`

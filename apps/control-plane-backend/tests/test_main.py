@@ -829,6 +829,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "member_count": 1,
             "admins": [],
             "is_member": True,
+            "my_relations": ["team_editor"],
             "joining_mode": "invite_only",
             "visibility": "public",
             "max_resources_storage_size": 5368709120,
@@ -5383,7 +5384,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
             return "https://example.test/banner.png"
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
-        return {}, {}
+        return {}, {}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {}
@@ -5457,7 +5458,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
         members = {"user-1", "marc"}
-        return {"team-1": members}, {"team-1": members}
+        return {"team-1": members}, {"team-1": members}, {"team-1": set()}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {
