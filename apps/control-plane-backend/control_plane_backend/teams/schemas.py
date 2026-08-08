@@ -136,6 +136,17 @@ class Team(BaseModel):
     member_count: int | None = None
     admins: list[UserSummary] = Field(default_factory=list)
     is_member: bool = False
+    # The caller's own raw role relations on this team (team_admin/_editor/
+    # _analyst/_member — the same set `TeamMember.relations` exposes for other
+    # members). Caller-specific, exactly like `is_member` above: every path
+    # that renders a `Team` already resolves the current user's membership, so
+    # exposing their folded roles here costs no extra ReBAC read (they are
+    # derived from the same `_fold_team_role_relations` fold). `permissions`
+    # alone cannot answer "does this user hold team_analyst" reliably:
+    # can_run_evaluations/can_manage_evaluation_corpus are also granted to
+    # team_admin via the FGA union, so a plain admin would look like an analyst
+    # too. Frontend team-role badges (#2100, #2298) need this unambiguous.
+    my_relations: list[UserTeamRelation] = Field(default_factory=list)
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
     visibility: TeamVisibility = TeamVisibility.PUBLIC
@@ -177,14 +188,9 @@ class TeamRetentionView(BaseModel):
 
 class TeamWithPermissions(Team):
     permissions: list[TeamPermission] = Field(default_factory=list)
-    # The caller's own raw role relations on this team (team_admin/_editor/
-    # _analyst/_member — the same set `TeamMember.relations` exposes for other
-    # members). `permissions` alone cannot answer "does this user hold
-    # team_analyst" reliably: can_run_evaluations/can_manage_evaluation_corpus
-    # are also granted to team_admin via the FGA union, so a plain admin would
-    # look like an analyst too. Frontend team-role badges (#2100) need this
-    # unambiguous.
-    my_relations: list[UserTeamRelation] = Field(default_factory=list)
+    # `my_relations` is inherited from `Team` (caller's own folded roles) — it
+    # used to live here, but it is caller-specific just like `is_member` and is
+    # now resolved on every `Team` path, so it moved to the base model (#2298).
     # CTRLP-12 (RFC §3.B): resolved per-team retention (platform cap vs team
     # value). None for system/personal teams, which have no team-editable
     # retention (personal deletes use the platform `personal_delete_grace`).

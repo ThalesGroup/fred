@@ -1416,11 +1416,23 @@
         "changelog": "What's new"
       }
     },
-    "profileMenu": {
-      "adminBadge": "admin",
-      "adminConsole": "Technical console",
-      "contactSupport": "Contact support",
+    "home": {
+      "title": "Home",
+      "searchPlaceholder": "Search a team",
+      "searchClear": "Clear search",
+      "yourTeams": "Your teams",
+      "pageTitle": "Home",
+      "pageSubtitle": "Select a space in the left panel to get started."
+    },
+    "mainNav": {
+      "ariaLabel": "Main navigation",
+      "home": "Home",
+      "marketplace": "Marketplace",
       "helpCenter": "Help Center",
+      "adminConsole": "Technical console"
+    },
+    "profileMenu": {
+      "contactSupport": "Contact support",
       "profile": "Profile"
     },
     "promptCategories": {
@@ -1682,6 +1694,7 @@
         "menu": {
           "resources": "Resources"
         },
+        "teamLabel": "Team",
         "userTeam": "Personal space"
       }
     },

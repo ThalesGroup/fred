@@ -1371,8 +1371,13 @@ async def _get_team_relations_cached(
 async def _bulk_team_membership(
     rebac: RebacEngine,
     team_ids: list[TeamId],
-) -> tuple[dict[TeamId, set[str]], dict[TeamId, set[str]]]:
-    """Resolve admins/members for every id in `team_ids`.
+    user_id: str,
+) -> tuple[
+    dict[TeamId, set[str]],
+    dict[TeamId, set[str]],
+    dict[TeamId, set[UserTeamRelation]],
+]:
+    """Resolve admins/members (and the caller's own roles) for every id in `team_ids`.
 
     #2065 correction: the earlier "4 bulk `list_relations` reads total"
     design does not work against a real OpenFGA store — confirmed live
@@ -1403,7 +1408,7 @@ async def _bulk_team_membership(
     value.
     """
     if not team_ids:
-        return {}, {}
+        return {}, {}, {}
 
     per_team_relations = await asyncio.gather(
         *(_get_team_relations_cached(rebac, team_id) for team_id in team_ids)
@@ -1411,6 +1416,11 @@ async def _bulk_team_membership(
 
     admin_ids_map: dict[TeamId, set[str]] = {}
     member_ids_map: dict[TeamId, set[str]] = {}
+    # The caller's own folded roles per team — sliced out of the same
+    # `roles_by_user` the admin/member maps are built from, so it adds no
+    # ReBAC read. Discarding it (as this function used to) forced a per-team
+    # refetch to show role badges in the team list (#2298).
+    my_relations_map: dict[TeamId, set[UserTeamRelation]] = {}
     for team_id, relations in zip(team_ids, per_team_relations):
         roles_by_user = _fold_team_role_relations(relations)
         admin_ids_map[team_id] = {
@@ -1419,8 +1429,9 @@ async def _bulk_team_membership(
             if UserTeamRelation.TEAM_ADMIN in roles
         }
         member_ids_map[team_id] = set(roles_by_user.keys())
+        my_relations_map[team_id] = roles_by_user.get(user_id, set())
 
-    return admin_ids_map, member_ids_map
+    return admin_ids_map, member_ids_map, my_relations_map
 
 
 async def _enrich_teams_with_membership(
@@ -1441,9 +1452,11 @@ async def _enrich_teams_with_membership(
 
     content_store = deps.get_content_store()
     team_ids: list[TeamId] = [metadata.id for metadata in teams_metadata]
-    team_admin_ids_map, team_member_ids_map = await _bulk_team_membership(
-        rebac, team_ids
-    )
+    (
+        team_admin_ids_map,
+        team_member_ids_map,
+        my_relations_map,
+    ) = await _bulk_team_membership(rebac, team_ids, user.uid)
     all_admin_ids: set[str] = (
         set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
     )
@@ -1456,6 +1469,7 @@ async def _enrich_teams_with_membership(
             admin_ids=team_admin_ids_map.get(metadata.id, set()),
             member_ids=team_member_ids_map.get(metadata.id, set()),
             is_member=user.uid in team_member_ids_map.get(metadata.id, set()),
+            my_relations=my_relations_map.get(metadata.id, set()),
             admin_summaries=user_summaries,
             content_store=content_store,
             default_max_resources_storage_size=default_max_storage,
@@ -1470,6 +1484,7 @@ def _build_team_dto(
     admin_ids: set[str],
     member_ids: set[str],
     is_member: bool,
+    my_relations: set[UserTeamRelation],
     admin_summaries: dict[str, UserSummary],
     content_store: ContentStore,
     default_max_resources_storage_size: int | None,
@@ -1521,6 +1536,7 @@ def _build_team_dto(
         member_count=len(member_ids),
         admins=admins,
         is_member=is_member,
+        my_relations=sorted(my_relations, key=lambda relation: relation.value),
         description=metadata.description,
         joining_mode=metadata.joining_mode,
         visibility=metadata.visibility,
@@ -1660,14 +1676,16 @@ async def _build_team_with_permissions(
         admin_ids=admin_ids,
         member_ids=member_ids,
         is_member=user.uid in member_ids,
+        my_relations=roles_by_user.get(user.uid, set()),
         admin_summaries=admin_summaries,
         content_store=deps.get_content_store(),
         default_max_resources_storage_size=deps.configuration.app.default_team_max_resources_storage_size,
     )
+    # `my_relations` now rides along on the base `Team` (via `team.model_dump()`),
+    # so it must not be passed again here — a duplicate keyword would raise.
     return TeamWithPermissions(
         **team.model_dump(),
         permissions=permissions,
-        my_relations=list(roles_by_user.get(user.uid, set())),
         retention=retention,
     )
 

@@ -95,7 +95,7 @@ export function DocumentViewerModeToggle({ view, onChange }: { view: ViewMode; o
   return (
     <ButtonGroup
       items={viewTabItems}
-      size="xs"
+      size="2xs"
       color="secondary"
       variant="tabs"
       aria-label={t("rework.resources.preview.tabsAria")}
