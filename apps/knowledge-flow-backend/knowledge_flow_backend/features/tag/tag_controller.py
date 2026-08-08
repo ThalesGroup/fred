@@ -21,6 +21,7 @@ from fastapi.params import Query
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
+
 from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     TagAlreadyExistsError,
     TagNotFoundError,
