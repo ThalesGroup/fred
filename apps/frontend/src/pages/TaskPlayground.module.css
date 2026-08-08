@@ -1,25 +1,25 @@
 .page {
   display: grid;
   gap: var(--spacing-l);
-  max-width: 900px;
   padding: var(--spacing-l);
+  max-width: 900px;
 }
 
 .title {
-  font: var(--font-title-medium);
-  color: var(--on-surface);
   margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
 }
 
 .controlsPanel {
   display: grid;
   grid-template-columns: 160px 160px 1fr;
-  gap: var(--spacing-m);
   align-items: center;
-  padding: var(--spacing-m);
-  border-radius: var(--radius-m);
+  gap: var(--spacing-m);
   border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
   background: var(--surface-container);
+  padding: var(--spacing-m);
 }
 
 .progressRow {
@@ -30,9 +30,9 @@
 
 .progressValue {
   min-width: 36px;
-  text-align: right;
-  font: var(--font-label-medium);
   color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  text-align: right;
 }
 
 .rangeInput {
@@ -45,11 +45,11 @@
 }
 
 .actionsRow {
-  grid-column: 1 / -1;
   display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-xs);
-  flex-wrap: wrap;
 }
 
 .actionsSpacer {
@@ -57,14 +57,14 @@
 }
 
 .emptyState {
-  font: var(--font-body-medium);
   color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .divider {
+  margin: 0;
   border: none;
   border-top: 1px solid var(--outline-variant);
-  margin: 0;
 }
 
 .section {
@@ -73,40 +73,40 @@
 }
 
 .sectionTitle {
-  font: var(--font-title-small);
-  color: var(--on-surface);
   margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
 }
 
 .sectionSubtitle {
   display: block;
-  font: var(--font-body-small);
   color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .indicatorGroup {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-l);
   align-items: flex-end;
+  gap: var(--spacing-l);
 }
 
 .indicatorItem {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3xs);
   align-items: flex-start;
+  gap: var(--spacing-3xs);
 }
 
 .indicatorMeta {
-  font: var(--font-label-small);
   color: var(--on-surface-retreat);
+  font: var(--font-label-small);
 }
 
 .indicatorRow {
   display: flex;
-  gap: var(--spacing-s);
   align-items: center;
+  gap: var(--spacing-s);
 }
 
 .stateGrid {
@@ -116,8 +116,8 @@
 
 .stateRow {
   display: flex;
-  gap: var(--spacing-m);
   align-items: center;
+  gap: var(--spacing-m);
 }
 
 .stateBadgeCell {
@@ -130,9 +130,9 @@
 
 .statePercentCell {
   min-width: 36px;
-  text-align: right;
-  font: var(--font-label-small);
   color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-align: right;
 }
 
 .cardGrid {

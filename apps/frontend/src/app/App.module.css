@@ -14,37 +14,37 @@
 }
 
 .loadingScreen {
-  min-height: 100vh;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   background: var(--surface-main);
+  min-height: 100vh;
   color: var(--on-surface);
 }
 
 .logoBadge {
   display: flex;
-  align-items: center;
   justify-content: center;
-  width: 170px;
+  align-items: center;
   padding: var(--spacing-s) var(--spacing-l);
+  width: 170px;
 }
 
 .logo {
+  filter: drop-shadow(var(--shadow-m));
+  animation: pulse 1.8s ease-in-out infinite;
   width: 68px;
   height: 68px;
-  animation: pulse 1.8s ease-in-out infinite;
-  filter: drop-shadow(var(--shadow-m));
 }
 
 .srOnly {
   position: absolute;
+  margin: -1px;
+  padding: 0;
   width: 1px;
   height: 1px;
-  padding: 0;
-  margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
   border: 0;
+  white-space: nowrap;
 }

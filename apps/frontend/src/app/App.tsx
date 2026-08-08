@@ -44,11 +44,7 @@ const LoadingScreen = ({
   return (
     <div className={styles.loadingScreen}>
       <div className={styles.logoBadge}>
-        <img
-          className={styles.logo}
-          src={`${baseUrl}images/${darkMode ? logoNameDark : logoName}.svg`}
-          alt={alt}
-        />
+        <img className={styles.logo} src={`${baseUrl}images/${darkMode ? logoNameDark : logoName}.svg`} alt={alt} />
         <span className={styles.srOnly}>{label}</span>
       </div>
     </div>
