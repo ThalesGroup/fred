@@ -422,12 +422,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.summarizeDocumentRequest,
       }),
     }),
-    queryKnowledgeFlowV1KpiQueryPost: build.mutation<
-      QueryKnowledgeFlowV1KpiQueryPostApiResponse,
-      QueryKnowledgeFlowV1KpiQueryPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/kpi/query`, method: "POST", body: queryArg.kpiQuery }),
-    }),
     getCreateResSchemaKnowledgeFlowV1ResourcesSchemaGet: build.query<
       GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse,
       GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg
@@ -1260,10 +1254,6 @@ export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApi
 export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg = {
   documentUid: string;
   summarizeDocumentRequest: SummarizeDocumentRequest;
-};
-export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
-export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
-  kpiQuery: KpiQuery;
 };
 export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse = /** status 200 Successful Response */ {
   [key: string]: any;
@@ -2239,81 +2229,6 @@ export type SummarizeDocumentRequest = {
   /** Target ceiling for the returned summary length, in characters. */
   max_chars?: number;
 };
-export type KpiQueryResultRow = {
-  group: {
-    [key: string]: any;
-  };
-  metrics: {
-    [key: string]: number;
-  };
-  doc_count: number;
-};
-export type KpiQueryResult = {
-  rows?: KpiQueryResultRow[];
-};
-export type FilterTerm = {
-  field:
-    | "metric.name"
-    | "metric.type"
-    | "dims.status"
-    | "dims.user_id"
-    | "dims.agent_id"
-    | "dims.doc_uid"
-    | "dims.file_type"
-    | "dims.http_status"
-    | "dims.error_code"
-    | "dims.model"
-    | "dims.step"
-    | "dims.agent_step"
-    | "dims.service";
-  value: string;
-};
-export type SelectMetric = {
-  /** name in response, e.g. 'p95' or 'cost_usd' */
-  alias: string;
-  op: "sum" | "avg" | "min" | "max" | "count" | "value_count" | "percentile";
-  /** Required except for count/percentile */
-  field?: ("metric.value" | "cost.tokens_total" | "cost.usd" | "cost.tokens_prompt" | "cost.tokens_completion") | null;
-  /** Percentile, e.g. 95 */
-  p?: number | null;
-};
-export type TimeBucket = {
-  /** e.g. '1h', '1d', '15m' */
-  interval: string;
-  /** IANA TZ, e.g. 'Europe/Paris' */
-  timezone?: string | null;
-};
-export type OrderBy = {
-  by?: "doc_count" | "metric";
-  metric_alias?: string | null;
-  direction?: "asc" | "desc";
-};
-export type KpiQuery = {
-  /** ISO or 'now-24h' */
-  since: string;
-  until?: string | null;
-  view_global?: boolean;
-  filters?: FilterTerm[];
-  select: SelectMetric[];
-  group_by?: (
-    | "dims.file_type"
-    | "dims.doc_uid"
-    | "dims.doc_source"
-    | "dims.user_id"
-    | "dims.agent_id"
-    | "dims.step"
-    | "dims.agent_step"
-    | "dims.tool_name"
-    | "dims.model"
-    | "dims.http_status"
-    | "dims.error_code"
-    | "dims.status"
-    | "dims.service"
-  )[];
-  time_bucket?: TimeBucket | null;
-  limit?: number;
-  order_by?: OrderBy | null;
-};
 export type ResourceKind = "prompt" | "template" | "chat-context";
 export type Resource = {
   id: string;
@@ -2780,7 +2695,6 @@ export const {
   useRerankDocumentsMutation,
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
-  useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,

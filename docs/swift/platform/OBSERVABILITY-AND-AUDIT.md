@@ -136,8 +136,8 @@ outside Fred's authorization model; that index is a meaningfully different expos
 individual user's own data," so access to Dashboards itself is an infrastructure/deployment
 concern, not something Fred's API mediates. The raw OpenSearch Ops surface this stream sits next
 to (cluster health, indices, mappings, shards) is a separate, still-Fred-exposed admin surface and
-requires `CAN_OBSERVE_PLATFORM` — the same platform-wide observation capability Stream 2's
-`view_global` branch already requires (§4) — enforced server-side, not only hidden behind a
+requires `CAN_OBSERVE_PLATFORM` — the same platform-wide observation capability that gates
+Stream 2's control-plane Analytics presets (§4) — enforced server-side, not only hidden behind a
 frontend route guard.
 
 Each event carries a closed, structurally-derived `category` (`application` or `kpi`) — never
