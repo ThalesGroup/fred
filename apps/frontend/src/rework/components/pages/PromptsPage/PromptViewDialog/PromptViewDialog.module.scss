@@ -3,11 +3,18 @@
   position: relative;
   flex-direction: column;
   gap: var(--spacing-m);
-  margin: 2rem auto;
+  /* Auto margins on both axes centre the card in FullPageModal's flex column
+   * (overriding its default align-items/justify-content, per the flexbox auto-
+   * margin rule) and — combined with max-height below — collapse to exactly
+   * 2rem (32px) top/bottom once the card is as tall as it's allowed to get. */
+  margin: auto;
   border-radius: var(--radius-l);
   background: var(--surface-container-high);
   padding: var(--spacing-l);
   width: min(48rem, calc(100vw - 2rem));
+  min-height: 500px;
+  /* Never closer than 2rem (32px) to the scrim's top/bottom edge. */
+  max-height: calc(100vh - 4rem);
 }
 
 .closeButton {
@@ -56,8 +63,13 @@
 
 .textSection {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-2xs);
+  /* Lets this section shrink below its content's natural height once the
+   * card hits max-height — without it, a flex item's default automatic
+   * min-height would keep forcing the card taller than its cap. */
+  min-height: 0;
 }
 
 .textHeader {
@@ -73,12 +85,17 @@
 }
 
 .textarea {
+  /* Sized to its own content by default (no forced height — a short prompt
+   * keeps a short box); once .textSection runs out of room under the card's
+   * max-height, this is the only part of the dialog that shrinks and scrolls
+   * — see .textSection's min-height: 0 for why that's possible. */
+  flex: 1;
   cursor: default;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--spacing-xs);
   background-color: var(--surface-container-lowest);
   padding: var(--spacing-s);
-  height: 24rem;
+  min-height: 0;
   overflow-y: auto;
   color: var(--on-surface);
   font: var(--font-body-large);

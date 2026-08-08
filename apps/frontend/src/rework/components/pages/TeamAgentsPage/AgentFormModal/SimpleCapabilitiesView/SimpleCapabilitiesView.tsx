@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ToolPackCard } from "../ToolPackCard/ToolPackCard.tsx";
 import { applyPackToggle, derivePackChecked, type CapabilitySelectionState } from "../toolPackLogic.ts";
-import { TOOL_PACK_SECTIONS } from "../toolPacks.ts";
+import { TOOL_PACK_SECTIONS, type ToolPack } from "../toolPacks.ts";
 import styles from "./SimpleCapabilitiesView.module.css";
 
 interface SimpleCapabilitiesViewProps {
@@ -24,6 +25,10 @@ interface SimpleCapabilitiesViewProps {
   selection: CapabilitySelectionState;
   disabled: boolean;
   onSelectionChange: (next: CapabilitySelectionState) => void;
+  /** Optional per-pack options UI (e.g. the PowerPoint template upload), shown
+   *  inside the card while the pack is active. Returns `undefined` for packs
+   *  with nothing to configure. */
+  renderPackOptions?: (pack: ToolPack) => ReactNode;
 }
 
 /**
@@ -38,6 +43,7 @@ export function SimpleCapabilitiesView({
   selection,
   disabled,
   onSelectionChange,
+  renderPackOptions,
 }: SimpleCapabilitiesViewProps) {
   const { t } = useTranslation();
   const activeIds = new Set(selection.selectedCapabilityIds);
@@ -60,6 +66,7 @@ export function SimpleCapabilitiesView({
                   availableIds={availableIds}
                   activeIds={activeIds}
                   onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
+                  options={renderPackOptions?.(pack)}
                 />
               ))}
             </ul>

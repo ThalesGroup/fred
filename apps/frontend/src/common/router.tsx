@@ -41,12 +41,10 @@ import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
-import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { Protected } from "@core/guards/Protected";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
-import { McpHub } from "../pages/McpHub";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
@@ -84,15 +82,8 @@ const AdminIndexRoute = () => {
   return <Navigate to="/unauthorized" replace />;
 };
 
-// Lazy loaded monitoring pages
-const Kpis = lazy(() => import("../pages/Kpis").then((module) => ({ default: module.Kpis })));
-const Runtime = lazy(() => import("../pages/Runtime"));
-const DataHub = lazy(() => import("../pages/DataHub"));
-const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
 const LibraryTreePlayground = lazy(() => import("@components/pages/LibraryTreePlayground/LibraryTreePlayground.tsx"));
-const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
-const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 // Lazy: the Help Center chunk carries its whole markdown corpus (HELP-01).
 const HelpCenterPage = lazy(() => import("@components/pages/HelpCenterPage/HelpCenterPage.tsx"));
 
@@ -237,70 +228,6 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "monitoring/kpis",
-        element: (
-          <Protected requires="observer">
-            <SuspenseWrapper>
-              <Kpis />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/runtime",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <Runtime />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/data",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <DataHub />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/rebac-backfill",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <RebacBackfill />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/processors",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <ProcessorBench />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/processors/runs/:runId",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <ProcessorRunDetail />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "test-renderer",
-        element: <RendererPlayground />,
-      },
-      {
         path: "dev/tasks",
         element: import.meta.env.DEV ? (
           <SuspenseWrapper>
@@ -319,10 +246,6 @@ export const routes: RouteObject[] = [
         ) : (
           <PageError />
         ),
-      },
-      {
-        path: "tools",
-        element: <McpHub />,
       },
       {
         path: "*",
@@ -378,6 +301,9 @@ export const routes: RouteObject[] = [
     element: <Unauthorized />,
   },
   {
+    // Whitelist-rejection landing page (HTTP 403 "user_not_whitelisted",
+    // see docs/swift/platform/KEYCLOAK.md §"Behavior"). Standalone, no
+    // MainLayout chrome — must render even when auth/bootstrap has failed.
     path: "coming-soon",
     element: <ComingSoon />,
   },

@@ -75,7 +75,8 @@
   "app": {
     "loading": {
       "router": "Fred is starting...",
-      "ui": "Fred is getting the UI ready..."
+      "ui": "Fred is getting the UI ready...",
+      "generic": "Loading, please wait..."
     }
   },
   "appCard": {
@@ -147,8 +148,8 @@
           "description": "Show a document library selector in the chat interface."
         },
         "bind_libraries": {
-          "title": "Bind to specific libraries",
-          "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+          "title": "Restrict to specific folders",
+          "description": "Restrict the agent's knowledge and search to specific folders."
         },
         "library_tag_ids": {
           "title": "Bound document libraries",
@@ -268,6 +269,7 @@
         "templateInvalid": "Fix the template errors below before saving.",
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
+        "uploadSuccessToast": "PowerPoint template validated.",
         "schemaTitle": "Fields the agent will fill",
         "learnMore": "How does this work? What should I upload?",
         "slide": "Slide {{number}}",
@@ -893,54 +895,6 @@
   "pageError": {
     "message": "Back to Home"
   },
-  "procbench": {
-    "browse": "Browse",
-    "clear": "Clear",
-    "col": {
-      "duration": "Duration",
-      "headings": "Headings",
-      "processor": "Processor",
-      "status": "Status",
-      "tokens": "Tokens (est)",
-      "words": "Words"
-    },
-    "description": "Upload a document (pdf, docx, pptx, csv, txt, md, xlsm, jsonl) and compare extraction quality and speed across processors.",
-    "detail": {
-      "collapseAll": "Collapse all",
-      "expandAll": "Expand all",
-      "title": "Run Detail"
-    },
-    "metricsTitle": "Processor Metrics",
-    "noFile": "No file selected",
-    "noMarkdown": "No markdown produced",
-    "openLatest": "Open latest run",
-    "persistLabel": "Save run",
-    "processorsCount": "{{count}} processor(s)",
-    "run": "Run Bench",
-    "runFailed": "Benchmark failed",
-    "runSuccess": "Benchmark complete",
-    "runSuccessDetail": "Processors executed successfully.",
-    "running": "Running...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processors",
-      "delete": "Delete",
-      "deleteFailed": "Failed to delete run",
-      "empty": "No saved runs yet.",
-      "file": "File",
-      "modified": "Modified",
-      "open": "Open",
-      "title": "Saved runs"
-    },
-    "summaryFor": "Summary for '{{name}}'",
-    "title": "Document Processor Bench",
-    "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
-    "uploadTitle": "Upload a document",
-    "view": {
-      "sideBySide": "Side by side",
-      "stacked": "Stacked"
-    }
-  },
   "profile": {
     "theme": {
       "dark": "Dark",
@@ -1429,6 +1383,11 @@
     "marketplace": {
       "teams": {
         "otherTeams": "Discover other teams",
+        "search": {
+          "ariaLabel": "Search for a team",
+          "clearAriaLabel": "Clear search",
+          "placeholder": "Search for a team"
+        },
         "title": "Community teams",
         "yourTeams": "Your teams"
       }

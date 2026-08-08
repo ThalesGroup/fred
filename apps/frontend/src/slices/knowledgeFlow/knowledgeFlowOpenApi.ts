@@ -61,12 +61,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/metadata/${queryArg.documentUid}` }),
     }),
-    getProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGet: build.query<
-      GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiResponse,
-      GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/documents/processing/graph` }),
-    }),
     updateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPut: build.mutation<
       UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse,
       UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg
@@ -362,12 +356,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    backfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPost: build.mutation<
-      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse,
-      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/tags/rebac/backfill`, method: "POST" }),
-    }),
     echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg
@@ -421,12 +409,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         body: queryArg.summarizeDocumentRequest,
       }),
-    }),
-    queryKnowledgeFlowV1KpiQueryPost: build.mutation<
-      QueryKnowledgeFlowV1KpiQueryPostApiResponse,
-      QueryKnowledgeFlowV1KpiQueryPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/kpi/query`, method: "POST", body: queryArg.kpiQuery }),
     }),
     getCreateResSchemaKnowledgeFlowV1ResourcesSchemaGet: build.query<
       GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse,
@@ -641,40 +623,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         body: queryArg.taskListRequestV1,
       }),
-    }),
-    listProcessorsKnowledgeFlowV1DevBenchProcessorsGet: build.query<
-      ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse,
-      ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/dev/bench/processors` }),
-    }),
-    runKnowledgeFlowV1DevBenchRunPost: build.mutation<
-      RunKnowledgeFlowV1DevBenchRunPostApiResponse,
-      RunKnowledgeFlowV1DevBenchRunPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/dev/bench/run`,
-        method: "POST",
-        body: queryArg.bodyRunKnowledgeFlowV1DevBenchRunPost,
-      }),
-    }),
-    listRunsKnowledgeFlowV1DevBenchRunsGet: build.query<
-      ListRunsKnowledgeFlowV1DevBenchRunsGetApiResponse,
-      ListRunsKnowledgeFlowV1DevBenchRunsGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/dev/bench/runs` }),
-    }),
-    getRunKnowledgeFlowV1DevBenchRunsRunIdGet: build.query<
-      GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiResponse,
-      GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}` }),
-    }),
-    deleteRunKnowledgeFlowV1DevBenchRunsRunIdDelete: build.mutation<
-      DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse,
-      DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}`, method: "DELETE" }),
     }),
     listTabularDocuments: build.query<ListTabularDocumentsApiResponse, ListTabularDocumentsApiArg>({
       query: (queryArg) => ({
@@ -1030,9 +978,6 @@ export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApi
 export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiArg = {
   documentUid: string;
 };
-export type GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiResponse =
-  /** status 200 Successful Response */ ProcessingGraph;
-export type GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiArg = void;
 export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse =
   /** status 200 Successful Response */ any;
 export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg = {
@@ -1224,9 +1169,6 @@ export type UnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteApiArg = {
   targetId: string;
   targetType: ShareTargetResource;
 };
-export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse =
-  /** status 200 Successful Response */ RebacBackfillResponse;
-export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg = void;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -1260,10 +1202,6 @@ export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApi
 export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg = {
   documentUid: string;
   summarizeDocumentRequest: SummarizeDocumentRequest;
-};
-export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
-export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
-  kpiQuery: KpiQuery;
 };
 export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse = /** status 200 Successful Response */ {
   [key: string]: any;
@@ -1408,26 +1346,6 @@ export type CorpusTasksResultApiArg = {
 export type CorpusTasksListApiResponse = /** status 200 Successful Response */ any;
 export type CorpusTasksListApiArg = {
   taskListRequestV1: TaskListRequestV1;
-};
-export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
-  /** status 200 Successful Response */ ProcessorDescriptor[];
-export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiArg = void;
-export type RunKnowledgeFlowV1DevBenchRunPostApiResponse = /** status 200 Successful Response */ BenchmarkResponse;
-export type RunKnowledgeFlowV1DevBenchRunPostApiArg = {
-  bodyRunKnowledgeFlowV1DevBenchRunPost: BodyRunKnowledgeFlowV1DevBenchRunPost;
-};
-export type ListRunsKnowledgeFlowV1DevBenchRunsGetApiResponse = /** status 200 Successful Response */ SavedRunSummary[];
-export type ListRunsKnowledgeFlowV1DevBenchRunsGetApiArg = void;
-export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiResponse =
-  /** status 200 Successful Response */ BenchmarkResponse;
-export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiArg = {
-  runId: string;
-};
-export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
-export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
-  runId: string;
 };
 export type ListTabularDocumentsApiResponse = /** status 200 Successful Response */ TabularDocumentResponse[];
 export type ListTabularDocumentsApiArg = {
@@ -1919,32 +1837,6 @@ export type DocumentMetadata = {
     [key: string]: any;
   } | null;
 };
-export type ProcessingGraphNode = {
-  id: string;
-  kind: string;
-  label: string;
-  document_uid?: string | null;
-  table_name?: string | null;
-  vector_count?: number | null;
-  row_count?: number | null;
-  file_type?: FileType | null;
-  source_tag?: string | null;
-  /** Document version (0=base, 1=draft). Set only for document nodes. */
-  version?: number | null;
-  backend?: string | null;
-  backend_detail?: string | null;
-  embedding_model?: string | null;
-  embedding_dimension?: number | null;
-};
-export type ProcessingGraphEdge = {
-  source: string;
-  target: string;
-  kind: string;
-};
-export type ProcessingGraph = {
-  nodes: ProcessingGraphNode[];
-  edges: ProcessingGraphEdge[];
-};
 export type BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut = {
   title: string;
 };
@@ -2106,13 +1998,6 @@ export type TagShareRequest = {
   target_type: ShareTargetResource;
   relation: UserTagRelation;
 };
-export type RebacBackfillResponse = {
-  rebac_enabled: boolean;
-  tags_seen: number;
-  documents_seen: number;
-  tag_owner_relations_created: number;
-  tag_parent_relations_created: number;
-};
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type EchoEnvelope = {
   kind: "SearchPolicyName";
@@ -2238,81 +2123,6 @@ export type SummarizeDocumentRequest = {
   instruction?: string | null;
   /** Target ceiling for the returned summary length, in characters. */
   max_chars?: number;
-};
-export type KpiQueryResultRow = {
-  group: {
-    [key: string]: any;
-  };
-  metrics: {
-    [key: string]: number;
-  };
-  doc_count: number;
-};
-export type KpiQueryResult = {
-  rows?: KpiQueryResultRow[];
-};
-export type FilterTerm = {
-  field:
-    | "metric.name"
-    | "metric.type"
-    | "dims.status"
-    | "dims.user_id"
-    | "dims.agent_id"
-    | "dims.doc_uid"
-    | "dims.file_type"
-    | "dims.http_status"
-    | "dims.error_code"
-    | "dims.model"
-    | "dims.step"
-    | "dims.agent_step"
-    | "dims.service";
-  value: string;
-};
-export type SelectMetric = {
-  /** name in response, e.g. 'p95' or 'cost_usd' */
-  alias: string;
-  op: "sum" | "avg" | "min" | "max" | "count" | "value_count" | "percentile";
-  /** Required except for count/percentile */
-  field?: ("metric.value" | "cost.tokens_total" | "cost.usd" | "cost.tokens_prompt" | "cost.tokens_completion") | null;
-  /** Percentile, e.g. 95 */
-  p?: number | null;
-};
-export type TimeBucket = {
-  /** e.g. '1h', '1d', '15m' */
-  interval: string;
-  /** IANA TZ, e.g. 'Europe/Paris' */
-  timezone?: string | null;
-};
-export type OrderBy = {
-  by?: "doc_count" | "metric";
-  metric_alias?: string | null;
-  direction?: "asc" | "desc";
-};
-export type KpiQuery = {
-  /** ISO or 'now-24h' */
-  since: string;
-  until?: string | null;
-  view_global?: boolean;
-  filters?: FilterTerm[];
-  select: SelectMetric[];
-  group_by?: (
-    | "dims.file_type"
-    | "dims.doc_uid"
-    | "dims.doc_source"
-    | "dims.user_id"
-    | "dims.agent_id"
-    | "dims.step"
-    | "dims.agent_step"
-    | "dims.tool_name"
-    | "dims.model"
-    | "dims.http_status"
-    | "dims.error_code"
-    | "dims.status"
-    | "dims.service"
-  )[];
-  time_bucket?: TimeBucket | null;
-  limit?: number;
-  order_by?: OrderBy | null;
 };
 export type ResourceKind = "prompt" | "template" | "chat-context";
 export type Resource = {
@@ -2471,57 +2281,6 @@ export type TaskListRequestV1 = {
   status?: ("queued" | "running" | "succeeded" | "failed" | "canceled") | null;
   limit?: number;
   team_id: string;
-};
-export type ProcessorDescriptor = {
-  id: string;
-  name: string;
-  kind: "standard" | "fast";
-  file_types?: string[];
-};
-export type ProcessorRunMetrics = {
-  chars: number;
-  words: number;
-  headings: number;
-  h1: number;
-  h2: number;
-  h3: number;
-  images: number;
-  links: number;
-  code_blocks: number;
-  table_like_lines: number;
-  tokens_est: number;
-};
-export type ProcessorRunResult = {
-  processor_id: string;
-  display_name: string;
-  kind: "standard" | "fast";
-  status: "ok" | "error";
-  duration_ms: number;
-  markdown?: string | null;
-  metrics?: ProcessorRunMetrics | null;
-  page_count?: number | null;
-  error_message?: string | null;
-};
-export type BenchmarkResponse = {
-  input_filename: string;
-  file_type: string;
-  results: ProcessorRunResult[];
-};
-export type BodyRunKnowledgeFlowV1DevBenchRunPost = {
-  /** Input document (pdf, docx, …) */
-  file: string;
-  /** Comma-separated processor ids; default by file type */
-  processors?: string | null;
-  /** Persist the run under the user's benchmark folder */
-  persist?: boolean | null;
-};
-export type SavedRunSummary = {
-  id: string;
-  input_filename: string;
-  file_type: string;
-  processors_count: number;
-  size?: number | null;
-  modified?: string | null;
 };
 export type TabularTableSummary = {
   query_alias: string;
@@ -2718,8 +2477,6 @@ export const {
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
-  useGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
-  useLazyGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
@@ -2770,7 +2527,6 @@ export const {
   useLazyListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
   useUnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteMutation,
-  useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useSimilaritySearchMutation,
@@ -2780,7 +2536,6 @@ export const {
   useRerankDocumentsMutation,
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
-  useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
@@ -2824,14 +2579,6 @@ export const {
   useCorpusTasksGetMutation,
   useCorpusTasksResultMutation,
   useCorpusTasksListMutation,
-  useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
-  useLazyListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
-  useRunKnowledgeFlowV1DevBenchRunPostMutation,
-  useListRunsKnowledgeFlowV1DevBenchRunsGetQuery,
-  useLazyListRunsKnowledgeFlowV1DevBenchRunsGetQuery,
-  useGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
-  useLazyGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
-  useDeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteMutation,
   useListTabularDocumentsQuery,
   useLazyListTabularDocumentsQuery,
   useGetTabularDocumentsSchemasQuery,
