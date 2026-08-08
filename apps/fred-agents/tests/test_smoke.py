@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
@@ -142,7 +143,24 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
         "_build_chat_model_factory",
         lambda config: factory,
     )
-    config_file = Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
+    # Load the pod's real configuration.yaml but redirect the SQLite fallback
+    # path into `tmp_path`. Pointing CONFIG_FILE straight at the checked-in
+    # file (as before) made every "offline" smoke test share
+    # `~/.fred/fred-agents/runtime.sqlite3` with whatever `make run` dev pod
+    # happens to be running on this machine (any checkout, since the path is
+    # under `~`, not the repo) — SQLite has no busy-timeout/WAL here, so a
+    # concurrent writer intermittently trips "database is locked" and the
+    # turn surfaces as an unhandled execution error instead of `final`.
+    real_config_file = (
+        Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
+    )
+    config_payload = yaml.safe_load(real_config_file.read_text(encoding="utf-8"))
+    config_payload["storage"]["postgres"]["sqlite_path"] = str(
+        tmp_path / "runtime.sqlite3"
+    )
+    config_file = tmp_path / "configuration.yaml"
+    config_file.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
+
     offline_mcp_catalog = tmp_path / "mcp_catalog.yaml"
     offline_mcp_catalog.write_text(
         # Every id any registered template names in `default_mcp_servers` must

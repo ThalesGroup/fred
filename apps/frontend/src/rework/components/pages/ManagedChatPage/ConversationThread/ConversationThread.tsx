@@ -16,12 +16,14 @@
 // Lives under pages/ so it may import from shared/organisms freely.
 
 import { memo, type ReactNode, type RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
+import { hitlResponseKey } from "../toThreadMessages";
 
 interface ConversationThreadProps {
   messages: ThreadMessage[];
@@ -46,6 +48,7 @@ export const ConversationThread = memo(function ConversationThread({
   scrollContainerRef,
   onHitlAnswer,
 }: ConversationThreadProps) {
+  const { t } = useTranslation();
   const turnKey = messages.filter((m) => m.role === "user").length;
   // The pending tool call(s) this HITL prompt gates, if the runtime reported
   // any (see build_tool_approval_request's HumanInputRequest.pending_calls —
@@ -65,7 +68,12 @@ export const ConversationThread = memo(function ConversationThread({
     >
       {messages.map((msg) => {
         if (msg.role === "user" || msg.role === "hitl_response") {
-          return <UserTurn key={msg.id} text={msg.text} />;
+          // hitl_response's `text` is the raw persisted choice_id ("proceed" /
+          // "cancel") — the backend never localizes it (see hitlResponseKey's
+          // docstring) — so translate it here; an unrecognized id falls back
+          // to showing the raw text rather than nothing.
+          const key = msg.role === "hitl_response" ? hitlResponseKey(msg.text) : null;
+          return <UserTurn key={msg.id} text={key ? t(key) : msg.text} />;
         }
         if (msg.role === "hitl_request") {
           const frozenEvent: RuntimeAwaitingHumanEvent = {

@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
   entryLabel,
+  isCancelledByUser,
   phaseKeyForEntry,
   primaryTextForEntry,
   secondaryTextForEntry,
@@ -51,6 +52,11 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   const tokenUsage = tokenUsageForEntry(entry);
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";
+  // The turn-crash line is a solo error-channel entry (execution_error). A
+  // failed or user-cancelled TOOL is a combo whose result is an error — those
+  // keep the red status dot but their own label/text, not the crash wording.
+  const isCrashLine = entry.kind === "solo" && status === "error";
+  const isCancelled = isCancelledByUser(entry);
 
   // Curated volume metadata (never raw args/content) so two calls to the same
   // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
@@ -81,7 +87,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
       </div>
 
       <span
-        className={phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label}
+        className={`${phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label} ${isCrashLine ? styles.errorText : ""}`}
         data-phase={phase ?? undefined}
       >
         {label}
@@ -89,16 +95,23 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
 
       {discriminatorText && <span className={styles.discriminator}>{discriminatorText}</span>}
 
-      <span className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""}`}>
+      <span
+        className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""} ${isPending ? styles.primaryRunning : ""} ${isCrashLine ? styles.errorText : ""}`}
+      >
         {primary ||
-          (isAwaitingConfirmation
-            ? t("rework.chatTrace.awaitingConfirmation")
-            : isPending
-              ? t("rework.chatTrace.running")
-              : "")}
+          (isCancelled
+            ? t("rework.chatTrace.cancelledByUser")
+            : isAwaitingConfirmation
+              ? t("rework.chatTrace.awaitingConfirmation")
+              : isPending
+                ? t("rework.chatTrace.running")
+                : isCrashLine
+                  ? t("rework.chatTrace.turnFailed")
+                  : "")}
       </span>
 
-      {secondary && <span className={styles.secondary}>{secondary}</span>}
+      {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}
+      {secondary && !isCancelled && <span className={styles.secondary}>{secondary}</span>}
 
       {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
     </div>

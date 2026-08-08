@@ -671,6 +671,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/documents/{document_uid}/extract
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
     method: DELETE
     path: /knowledge-flow/v1/documents/{document_uid}/labels/{label}
     review_status: pending_review
