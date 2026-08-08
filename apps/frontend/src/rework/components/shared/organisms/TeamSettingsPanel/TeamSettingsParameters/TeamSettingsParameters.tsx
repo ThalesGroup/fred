@@ -18,7 +18,8 @@ import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
-import React, { useEffect, useRef } from "react";
+import AvatarCropEditor from "@shared/organisms/AvatarCropEditor/AvatarCropEditor.tsx";
+import React, { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   JoiningMode,
@@ -27,7 +28,7 @@ import {
 } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useUpdateTeamMutation,
-  useUploadTeamBannerMutation,
+  useUploadTeamAvatarMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import TeamSettingsRetention from "@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx";
@@ -40,7 +41,7 @@ interface TeamSettingsParametersForm {
   description: string;
 }
 
-const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 // TEAM-09: order drives the button group's left-to-right layout and index
@@ -51,11 +52,13 @@ const JOINING_MODES: JoiningMode[] = ["open", "invite_only"];
 const VISIBILITIES: TeamVisibility[] = ["public", "private"];
 
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
-  const { defaultTeamBannerFile } = useFrontendProperties();
+  const { defaultTeamAvatarFile } = useFrontendProperties();
   const { t } = useTranslation();
   const [updateTeam] = useUpdateTeamMutation();
-  const [uploadBanner] = useUploadTeamBannerMutation();
+  const [uploadAvatar, { isLoading: isUploadingAvatar }] = useUploadTeamAvatarMutation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The image the user just picked, pending crop. Non-null opens the editor.
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const { register, getValues, watch, reset } = useForm<TeamSettingsParametersForm>({
     defaultValues: {
@@ -78,8 +81,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
   const descriptionValue = watch("description");
-  const defaultBannerUrl = defaultTeamBannerFile ? `/images/${defaultTeamBannerFile}` : undefined;
-  const bannerImageUrl = team.banner_image_url ?? defaultBannerUrl;
+  const defaultAvatarUrl = defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined;
+  const avatarImageUrl = team.avatar_image_url ?? defaultAvatarUrl;
 
   const joiningMode = team.joining_mode ?? "invite_only";
   const handleSelectJoiningMode = (index: number) => {
@@ -110,38 +113,41 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
 
-  const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Picking a file no longer uploads directly — it opens the square crop editor.
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    // Reset the input immediately so re-picking the same file re-fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = "";
     if (!file || !team?.id) return;
-
-    // Client-side validation
     if (!ALLOWED_TYPES.includes(file.type)) {
       console.error("Invalid file type:", file.type);
       return;
     }
-
-    if (file.size > MAX_BANNER_SIZE) {
+    if (file.size > MAX_AVATAR_SIZE) {
       console.error("File size exceeds limit:", file.size);
       return;
     }
+    setCropFile(file);
+  };
 
+  // The editor hands back the cropped square as a bounded WebP blob (#2300).
+  const handleCropSave = async (blob: Blob) => {
+    if (!team?.id) return;
+    const croppedFile = new File([blob], "avatar.webp", { type: "image/webp" });
     try {
-      await uploadBanner({
+      await uploadAvatar({
         teamId: team.id,
         // The generated client types the multipart file field as `string`
         // (OpenAPI 3.1 contentMediaType binary → string). The enhanced endpoint
         // sends the real File via FormData at runtime; cast to fit the generated
         // arg shape, matching the `as never` idiom used for other uploads.
-        bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: { file: file as never },
+        bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: { file: croppedFile as never },
       }).unwrap();
-
-      console.log("Banner uploaded successfully");
-      // RTK Query will automatically invalidate and refetch team data
+      // RTK Query invalidates and refetches team data automatically.
     } catch (error) {
-      console.error("Banner upload error:", error);
+      console.error("Avatar upload error:", error);
     } finally {
-      // Reset file input
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setCropFile(null);
     }
   };
 
@@ -149,16 +155,16 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     <div className={styles["team-settings-parameters-container"]}>
       <PageHeader title={t("rework.teamSettings.parameters.title")} />
       <div className={`${styles["form-section"]} ${styles["team-images-section"]}`}>
-        <div className={styles["team-banner"]}>
-          <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBanner.title")}</span>
-          <div className={styles["team-banner-content"]}>
-            <div className={styles["team-banner-upload"]}>
+        <div className={styles["team-avatar"]}>
+          <span className={styles["team-avatar-title"]}>{t("rework.teamSettings.parameters.teamAvatar.title")}</span>
+          <div className={styles["team-avatar-content"]}>
+            <div className={styles["team-avatar-upload"]}>
               <input
                 ref={fileInputRef}
                 type="file"
-                className={styles["team-banner-file-input"]}
+                className={styles["team-avatar-file-input"]}
                 accept={ALLOWED_TYPES.join(",")}
-                onChange={handleBannerUpload}
+                onChange={handleFileSelect}
               />
               <Button
                 color="secondary"
@@ -167,16 +173,16 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
                 icon={{ category: "outlined", type: "upload" }}
                 onClick={() => fileInputRef.current?.click()}
               >
-                {t("rework.teamSettings.parameters.teamBanner.import")}
+                {t("rework.teamSettings.parameters.teamAvatar.import")}
               </Button>
-              <span className={styles["team-banner-hint"]}>{t("rework.teamSettings.parameters.teamBanner.hint")}</span>
+              <span className={styles["team-avatar-hint"]}>{t("rework.teamSettings.parameters.teamAvatar.hint")}</span>
             </div>
-            <div className={styles["team-banner-preview"]}>
-              {bannerImageUrl ? (
-                <img className={styles["team-banner-preview-image"]} src={bannerImageUrl} alt="" />
+            <div className={styles["team-avatar-preview"]}>
+              {avatarImageUrl ? (
+                <img className={styles["team-avatar-preview-image"]} src={avatarImageUrl} alt="" />
               ) : (
-                <span className={styles["team-banner-preview-empty"]}>
-                  {t("rework.teamSettings.parameters.teamBanner.noBanner")}
+                <span className={styles["team-avatar-preview-empty"]}>
+                  {t("rework.teamSettings.parameters.teamAvatar.noAvatar")}
                 </span>
               )}
             </div>
@@ -248,6 +254,15 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
         />
       </div>
 */}
+      {cropFile && (
+        <AvatarCropEditor
+          file={cropFile}
+          open
+          onCancel={() => setCropFile(null)}
+          onSave={handleCropSave}
+          saving={isUploadingAvatar}
+        />
+      )}
     </div>
   );
 }

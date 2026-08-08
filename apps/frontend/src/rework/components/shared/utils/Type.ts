@@ -43,6 +43,7 @@ const customIcons = ["customAgent"] as const;
  */
 export const materialIcons = [
   "add",
+  "remove",
   "home",
   "people",
   "groups",
