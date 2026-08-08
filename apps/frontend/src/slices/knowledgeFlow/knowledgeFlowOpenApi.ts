@@ -422,6 +422,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.summarizeDocumentRequest,
       }),
     }),
+    extractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPost: build.mutation<
+      ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiResponse,
+      ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/extract`,
+        method: "POST",
+        body: queryArg.extractDocumentRequest,
+      }),
+    }),
     queryKnowledgeFlowV1KpiQueryPost: build.mutation<
       QueryKnowledgeFlowV1KpiQueryPostApiResponse,
       QueryKnowledgeFlowV1KpiQueryPostApiArg
@@ -1260,6 +1270,12 @@ export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApi
 export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg = {
   documentUid: string;
   summarizeDocumentRequest: SummarizeDocumentRequest;
+};
+export type ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiResponse =
+  /** status 200 Successful Response */ ExtractDocumentResponse;
+export type ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiArg = {
+  documentUid: string;
+  extractDocumentRequest: ExtractDocumentRequest;
 };
 export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
@@ -2239,6 +2255,19 @@ export type SummarizeDocumentRequest = {
   /** Target ceiling for the returned summary length, in characters. */
   max_chars?: number;
 };
+export type ExtractDocumentResponse = {
+  document_uid: string;
+  /** Consolidated, de-duplicated list of every extracted item (markdown bullets), in document order. */
+  extraction: string;
+  item_count: number;
+  chunks_processed: number;
+  /** True if the document exceeded the processing cap and was head/tail-windowed. */
+  truncated: boolean;
+};
+export type ExtractDocumentRequest = {
+  /** What to extract exhaustively, e.g. 'every functional requirement', 'all deadlines and their context'. */
+  instruction: string;
+};
 export type KpiQueryResultRow = {
   group: {
     [key: string]: any;
@@ -2780,6 +2809,7 @@ export const {
   useRerankDocumentsMutation,
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
+  useExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
