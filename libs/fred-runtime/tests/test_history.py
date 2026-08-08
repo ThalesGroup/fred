@@ -281,6 +281,18 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
                     {"id": "yes", "label": "Yes, deploy"},
                     {"id": "no", "label": "No, abort"},
                 ],
+                # Resume identity + gated calls (2026-08): must survive into
+                # history too, or a page reload while this gate is still open
+                # can show a card but never actually answer it (#refresh-hitl).
+                "interrupt_id": "int-42",
+                "checkpoint_id": None,
+                "pending_calls": [
+                    {
+                        "tool_call_id": "call-1",
+                        "tool_name": "extract_from_document",
+                        "args_preview": '{"document_uid": "u1"}',
+                    }
+                ],
             },
         },
         {
@@ -323,6 +335,14 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     assert len(hitl_part.choices) == 2
     assert hitl_part.choices[0].id == "yes"
     assert hitl_part.choices[1].label == "No, abort"
+
+    # Resume identity survives too (#refresh-hitl) — without it, the frontend
+    # can reconstruct a readable card after a reload but never resume it.
+    assert hitl_part.interrupt_id == "int-42"
+    assert hitl_part.checkpoint_id is None
+    assert len(hitl_part.pending_calls) == 1
+    assert hitl_part.pending_calls[0].tool_call_id == "call-1"
+    assert hitl_part.pending_calls[0].tool_name == "extract_from_document"
 
     assert messages[2].role == Role.system
     assert messages[2].channel == Channel.error

@@ -2337,6 +2337,13 @@ task-acknowledgement mechanism the dedicated tabs use (`POST /tasks/{id}/ack`).
 Models-as-capability (`kind="model"` catalog projection, model-routing
 fail-closed enforcement) is specified above, not repeated here.
 
+**`team_activity_summary` preset retired (2026-08-08).** Once the embedded
+panel above was gone, this preset's only consumer (`TeamUsagePage`'s
+Activités trend) had none left — endpoint, response model, and generated
+client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
+`/team/:teamId/settings/activity`) remain the canonical, ack-capable place
+for this data; no replacement preset was added.
+
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118)
 
 A team (or personal space) chooses which of the models already available to

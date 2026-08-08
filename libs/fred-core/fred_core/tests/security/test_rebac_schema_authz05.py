@@ -137,15 +137,16 @@ def test_can_use_team_agents_is_team_member_only() -> None:
     }
 
 
-def test_can_observe_platform_gates_both_kpi_dashboards() -> None:
+def test_can_observe_platform_gates_platform_wide_kpi_observation() -> None:
     """AUTHZ-05 review item 16: `can_observe_platform` is the one relation for
-    cross-user / platform-wide KPI observation, gating both the standalone KPI
-    dashboard (`/monitoring/kpis`) and the control-plane Analytics presets
-    (`/admin/analytics`). It is gated on `platform_observer` directly - which
-    already unions in `platform_admin` - so both roles pass. The previous,
-    separate `can_read_kpi_global` (platform_admin-only) was a duplicate the
-    RFC never asked for (§6.1 defines only `can_observe_platform`) and is
-    retired: it must not reappear in the schema."""
+    cross-user / platform-wide KPI observation, gating the control-plane
+    Analytics presets (`/admin/analytics`) and the remaining technical
+    observability surfaces. It is gated on `platform_observer` directly -
+    which already unions in `platform_admin` - so both roles pass. The
+    previous, separate `can_read_kpi_global` (platform_admin-only) was a
+    duplicate the RFC never asked for (§6.1 defines only
+    `can_observe_platform`) and is retired: it must not reappear in the
+    schema."""
     organization = _type_definition("organization")
 
     assert organization["relations"]["can_observe_platform"] == {

@@ -215,12 +215,20 @@ Three narrow, `platform_admin`-only capabilities govern the team *registry*
 ### Platform observability — `can_observe_platform`
 
 The one relation for cross-user / platform-wide KPI observation — granted to
-`platform_observer` (which unions in `platform_admin`). Gates both the
-standalone KPI dashboard and the control-plane Analytics presets: today
-`platform_admin` and `platform_observer` see the same platform-wide recap.
-When the Analytics surface grows admin-only technical panels, gate those
-specific widgets on a new, narrower capability — don't split platform-wide
-observation into two relations again.
+`platform_observer` (which unions in `platform_admin`). Gates the
+control-plane Analytics presets (`GET /control-plane/v1/kpi/presets/*`) and
+the raw OpenSearch Ops surface (cluster health, indices, mappings, shards):
+today `platform_admin` and `platform_observer` see the same platform-wide
+recap. The raw Prometheus Ops surface (`/prometheus/*`) is not gated by this
+relation — it requires authentication only (AUTHZ-05 review item 8a; the
+org-level `CAN_READ_METRICS` capability was removed outright, not folded into
+`can_observe_platform`). When the Analytics surface grows admin-only
+technical panels, gate those specific widgets on a new, narrower capability
+— don't split platform-wide observation into two relations again.
+
+> Retired: the standalone `/monitoring/kpis` frontend page and its backing
+> `POST /knowledge-flow/v1/kpi/query` endpoint were removed; `can_observe_platform`
+> no longer gates them.
 
 ### Deployment admin
 

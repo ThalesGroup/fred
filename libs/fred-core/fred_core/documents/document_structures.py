@@ -323,55 +323,6 @@ class ProcessingSummary(BaseModel):
     not_started: int
 
 
-class ProcessingGraphNode(BaseModel):
-    """
-    Node in the processing graph, used to visualize how documents relate
-    to downstream artifacts (tables, vector indexes, etc.).
-    """
-
-    id: str
-    kind: str  # e.g. document, table, vector_index
-    label: str
-
-    # Optional metadata depending on node kind
-    document_uid: Optional[str] = None
-    table_name: Optional[str] = None
-    vector_count: Optional[int] = None
-    row_count: Optional[int] = None
-    file_type: Optional[FileType] = None
-    source_tag: Optional[str] = None
-    version: Optional[int] = Field(
-        default=None,
-        description="Document version (0=base, 1=draft). Set only for document nodes.",
-        ge=0,
-    )
-    # Optional backend/system metadata for the UI (vector/table nodes)
-    backend: Optional[str] = None  # e.g., opensearch | pgvector | clickhouse
-    backend_detail: Optional[str] = None  # e.g., index name or collection/table
-    embedding_model: Optional[str] = None
-    embedding_dimension: Optional[int] = None
-
-
-class ProcessingGraphEdge(BaseModel):
-    """
-    Directed edge between processing graph nodes.
-    """
-
-    source: str
-    target: str
-    kind: str  # e.g. vectorized, sql_indexed
-
-
-class ProcessingGraph(BaseModel):
-    """
-    Lightweight graph structure that can be consumed directly by the UI
-    to render a data lineage view (documents → tables / vectors).
-    """
-
-    nodes: List[ProcessingGraphNode]
-    edges: List[ProcessingGraphEdge]
-
-
 class DocSummary(BaseModel):
     """
     Fred rationale:

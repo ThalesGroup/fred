@@ -408,7 +408,7 @@ storage:
 Important behavior:
 
 - Prometheus metrics are still exported and usable in Grafana.
-- `/kpi/query` does not return persisted historical KPI rows in this mode.
+- The Control Plane Analytics presets (`GET /control-plane/v1/kpi/presets/*`) do not return persisted historical KPI rows in this mode.
 
 Local laptop foreground profile (`configuration.yaml`):
 

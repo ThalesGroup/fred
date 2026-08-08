@@ -75,7 +75,8 @@
   "app": {
     "loading": {
       "router": "Fred démarre...",
-      "ui": "Fred prépare l'interface..."
+      "ui": "Fred prépare l'interface...",
+      "generic": "Chargement, veuillez patienter..."
     }
   },
   "appCard": {
@@ -203,6 +204,26 @@
         "summarize_max_chars": {
           "title": "Longueur maximale du résumé",
           "description": "Longueur par défaut et maximale (en caractères) des résumés produits par l'outil summarize_document. Laisser vide pour utiliser la valeur par défaut intégrée et respecter la longueur demandée par le modèle."
+        }
+      }
+    },
+    "document_verbatim": {
+      "name": "Verbatim document",
+      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Longueur de page",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+        }
+      }
+    },
+    "document_extract": {
+      "name": "Extraction d'information d'un document",
+      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "fields": {
+        "require_confirmation": {
+          "title": "Confirmation requise",
+          "description": "Met en pause avant chaque extraction pour recueillir votre approbation (continuer/annuler). Activé par défaut — cette capacité consomme beaucoup de tokens ; à désactiver uniquement pour un agent dont l'usage est déjà éprouvé."
         }
       }
     },
@@ -874,54 +895,6 @@
   "pageError": {
     "message": "Retour à la page d'accueil"
   },
-  "procbench": {
-    "browse": "Parcourir",
-    "clear": "Effacer",
-    "col": {
-      "duration": "Durée",
-      "headings": "Titres",
-      "processor": "Processeur",
-      "status": "Statut",
-      "tokens": "Jetons (est)",
-      "words": "Mots"
-    },
-    "description": "Ajoutez un document (PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL) et comparez la qualité et la vitesse d'extraction entre processeurs.",
-    "detail": {
-      "collapseAll": "Tout replier",
-      "expandAll": "Tout déplier",
-      "title": "Détail de l'exécution"
-    },
-    "metricsTitle": "Métriques des processeurs",
-    "noFile": "Aucun fichier sélectionné",
-    "noMarkdown": "Aucun markdown produit",
-    "openLatest": "Ouvrir la dernière exécution",
-    "persistLabel": "Enregistrer l'exécution",
-    "processorsCount": "{{count}} processeur(s)",
-    "run": "Lancer le banc",
-    "runFailed": "Échec du banc",
-    "runSuccess": "Banc terminé",
-    "runSuccessDetail": "Processeurs exécutés avec succès.",
-    "running": "Exécution...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processeurs",
-      "delete": "Supprimer",
-      "deleteFailed": "Échec de la suppression",
-      "empty": "Aucune exécution enregistrée.",
-      "file": "Fichier",
-      "modified": "Modifié",
-      "open": "Ouvrir",
-      "title": "Exécutions enregistrées"
-    },
-    "summaryFor": "Résumé pour '{{name}}'",
-    "title": "Banc de test des processeurs",
-    "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
-    "uploadTitle": "Ajouter un document",
-    "view": {
-      "sideBySide": "Côte à côte",
-      "stacked": "Empilé"
-    }
-  },
   "profile": {
     "theme": {
       "dark": "Sombre",
@@ -1364,7 +1337,10 @@
     "chatTrace": {
       "ariaLabel": "Trace de raisonnement de l'agent",
       "awaitingConfirmation": "en attente de confirmation…",
+      "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
+      "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
       "phase": {
@@ -1395,6 +1371,10 @@
       "lockInformation": "Lire les CGU avant de pouvoir les accepter",
       "title": "Conditions Générales d'Utilisation (CGU)",
       "validate": "Accepter les CGU"
+    },
+    "hitlPrompt": {
+      "accepted": "Accepté",
+      "refused": "Refusé"
     },
     "knowledgeHub": {
       "loading": "Chargement..."
@@ -2069,6 +2049,10 @@
             "conversationAttachments": {
               "title": "Pièces jointes à une conversation",
               "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
+            },
+            "documentReading": {
+              "title": "Lecture de documents",
+              "description": "Permet à l'agent de lire un document mot à mot et d'en extraire des informations de façon exhaustive."
             },
             "wordDocument": {
               "title": "Générer un document Word",
