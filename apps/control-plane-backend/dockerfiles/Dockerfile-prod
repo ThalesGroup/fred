@@ -53,10 +53,12 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/control_plane_bac
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 
-# Remove the broken alembic.ini symlink before copying the real file —
-# Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/. /app/
-RUN rm -f /app/alembic.ini
+
+# alembic.ini is a real file only at the repo root; the per-project ones are dev-only
+# symlinks kept out of the build context (see .dockerignore), because Kaniko would copy
+# them verbatim and land a dangling link here. Ship the real file next to /app/pyproject.toml,
+# whose [tool.alembic] script_location resolves to /app/alembic.
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 
 USER ${USER_NAME}
