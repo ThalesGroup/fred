@@ -61,12 +61,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/metadata/${queryArg.documentUid}` }),
     }),
-    getProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGet: build.query<
-      GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiResponse,
-      GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/documents/processing/graph` }),
-    }),
     updateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPut: build.mutation<
       UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse,
       UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg
@@ -361,12 +355,6 @@ const injectedRtkApi = api.injectEndpoints({
           target_type: queryArg.targetType,
         },
       }),
-    }),
-    backfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPost: build.mutation<
-      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse,
-      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/tags/rebac/backfill`, method: "POST" }),
     }),
     echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
@@ -990,9 +978,6 @@ export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApi
 export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiArg = {
   documentUid: string;
 };
-export type GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiResponse =
-  /** status 200 Successful Response */ ProcessingGraph;
-export type GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiArg = void;
 export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse =
   /** status 200 Successful Response */ any;
 export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg = {
@@ -1184,9 +1169,6 @@ export type UnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteApiArg = {
   targetId: string;
   targetType: ShareTargetResource;
 };
-export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse =
-  /** status 200 Successful Response */ RebacBackfillResponse;
-export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg = void;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -1855,32 +1837,6 @@ export type DocumentMetadata = {
     [key: string]: any;
   } | null;
 };
-export type ProcessingGraphNode = {
-  id: string;
-  kind: string;
-  label: string;
-  document_uid?: string | null;
-  table_name?: string | null;
-  vector_count?: number | null;
-  row_count?: number | null;
-  file_type?: FileType | null;
-  source_tag?: string | null;
-  /** Document version (0=base, 1=draft). Set only for document nodes. */
-  version?: number | null;
-  backend?: string | null;
-  backend_detail?: string | null;
-  embedding_model?: string | null;
-  embedding_dimension?: number | null;
-};
-export type ProcessingGraphEdge = {
-  source: string;
-  target: string;
-  kind: string;
-};
-export type ProcessingGraph = {
-  nodes: ProcessingGraphNode[];
-  edges: ProcessingGraphEdge[];
-};
 export type BodyUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePut = {
   title: string;
 };
@@ -2041,13 +1997,6 @@ export type TagShareRequest = {
   target_id: string;
   target_type: ShareTargetResource;
   relation: UserTagRelation;
-};
-export type RebacBackfillResponse = {
-  rebac_enabled: boolean;
-  tags_seen: number;
-  documents_seen: number;
-  tag_owner_relations_created: number;
-  tag_parent_relations_created: number;
 };
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type EchoEnvelope = {
@@ -2528,8 +2477,6 @@ export const {
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
-  useGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
-  useLazyGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useUpdateDocumentMetadataTitleKnowledgeFlowV1DocumentMetadataDocumentUidTitlePutMutation,
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
@@ -2580,7 +2527,6 @@ export const {
   useLazyListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
   useUnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteMutation,
-  useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useSimilaritySearchMutation,
