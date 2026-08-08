@@ -135,14 +135,14 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.rescueTeamAdminRequest,
       }),
     }),
-    uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: build.mutation<
-      UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiResponse,
-      UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg
+    uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
+      UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse,
+      UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/banner`,
+        url: `/control-plane/v1/teams/${queryArg.teamId}/avatar`,
         method: "POST",
-        body: queryArg.bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost,
+        body: queryArg.bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost,
       }),
     }),
     listTeamMembersControlPlaneV1TeamsTeamIdMembersGet: build.query<
@@ -1023,10 +1023,10 @@ export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
   teamId: string;
   rescueTeamAdminRequest: RescueTeamAdminRequest;
 };
-export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiResponse = unknown;
-export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg = {
+export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
+export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
   teamId: string;
-  bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost;
+  bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost;
 };
 export type ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiResponse =
   /** status 200 Successful Response */ TeamMember[];
@@ -1709,7 +1709,7 @@ export type TeamWithPermissions = {
   description?: string | null;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
-  banner_image_url?: string | null;
+  avatar_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
   permissions?: TeamPermission[];
@@ -1730,7 +1730,7 @@ export type Team = {
   description?: string | null;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
-  banner_image_url?: string | null;
+  avatar_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
 };
@@ -1742,15 +1742,15 @@ export type UpdateTeamRequest = {
   description?: string | null;
   joining_mode?: JoiningMode | null;
   visibility?: TeamVisibility | null;
-  banner_image_url?: string | null;
+  avatar_image_url?: string | null;
   team_delete_grace?: string | null;
   max_idle?: string | null;
 };
 export type RescueTeamAdminRequest = {
   user_id: string;
 };
-export type BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost = {
-  /** Banner image file (max 5MB, JPEG/PNG/WebP) */
+export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
+  /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
   file: string;
 };
 export type TeamMember = {
@@ -2834,7 +2834,7 @@ export const {
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
-  useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation,
+  useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,

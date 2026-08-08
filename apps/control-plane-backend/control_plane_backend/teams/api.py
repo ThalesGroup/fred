@@ -11,7 +11,7 @@ from control_plane_backend.teams.dependencies import (
 )
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
-    BannerUploadError,
+    AvatarUploadError,
     CreateTeamRequest,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
@@ -63,7 +63,7 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
-    upload_team_banner as upload_team_banner_from_service,
+    upload_team_avatar as upload_team_avatar_from_service,
 )
 from control_plane_backend.users.schemas import UserSummary
 
@@ -79,10 +79,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def team_not_found_handler(_request, exc: TeamNotFoundError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    @app.exception_handler(BannerUploadError)
-    async def banner_upload_error_handler(
+    @app.exception_handler(AvatarUploadError)
+    async def avatar_upload_error_handler(
         _request,
-        exc: BannerUploadError,
+        exc: AvatarUploadError,
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
@@ -261,19 +261,19 @@ async def rescue_team_admin(
 
 
 @router.post(
-    "/teams/{team_id}/banner",
+    "/teams/{team_id}/avatar",
     status_code=204,
-    summary="Upload team banner image",
+    summary="Upload team avatar image",
 )
-async def upload_team_banner(
+async def upload_team_avatar(
     team_id: Annotated[TeamId, Path()],
     deps: TeamDependencies,
     file: UploadFile = File(
-        ..., description="Banner image file (max 5MB, JPEG/PNG/WebP)"
+        ..., description="Avatar image file (max 5MB, JPEG/PNG/WebP)"
     ),
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    await upload_team_banner_from_service(user, team_id, file, deps)
+    await upload_team_avatar_from_service(user, team_id, file, deps)
 
 
 @router.get(
