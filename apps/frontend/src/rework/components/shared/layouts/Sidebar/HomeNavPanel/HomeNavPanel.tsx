@@ -83,7 +83,7 @@ export default function HomeNavPanel() {
               redirection={`/team/${team.id}/agents`}
               name={team.name}
               roles={team.my_relations}
-              imgUrl={team.banner_image_url ?? (defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined)}
+              imgUrl={team.avatar_image_url ?? (defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined)}
               avatarName={team.name}
             />
           ))}
