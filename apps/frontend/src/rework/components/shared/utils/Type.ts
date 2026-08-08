@@ -13,16 +13,23 @@ export type ButtonVariant = "filled" | "outlined" | "text";
 /**
  * Shared size scale for interactive components (Button, IconButton, ButtonGroupItem, Select…).
  *
- * | Value    | Height  | Typical use                                      |
- * |----------|---------|--------------------------------------------------|
- * | medium   | 2.5rem  | Default — primary actions, main form controls    |
- * | small    | 2rem    | Secondary actions, dense forms                   |
- * | xs       | 1.5rem  | Compact / auxiliary controls (admin toggles, …)  |
+ * | Value    | Typical use                                              |
+ * |----------|----------------------------------------------------------|
+ * | medium   | Default — primary actions, main form controls            |
+ * | small    | Secondary actions, dense forms                           |
+ * | xs       | Compact controls / dense fields (e.g. nav-panel search)  |
+ * | 2xs      | Extra-compact auxiliary controls (row action icons, …)   |
  *
- * Each component that consumes this type must implement all three sizes in its
- * SCSS module via the `data-size` attribute (atoms) or a `btn-{size}` class (Button/IconButton).
+ * NOTE (#2298 / #2299): the concrete pixel height a value maps to still differs
+ * per component (a known scale inconsistency #2299 will unify) — e.g. `xs` is
+ * 2rem/32px on TextInput and Select but buttons express 32px through `small`.
+ * `2xs` (added #2298) is the 1.5rem/24px tier that used to be called `xs` on
+ * Button/IconButton/ButtonGroupItem/TextInput; those call sites were migrated so
+ * `xs` could become the 32px "compact field" tier the Home nav-panel search
+ * needs. A component only needs to implement the sizes it actually offers — not
+ * every value maps to a rule in every component.
  */
-export type ComponentSize = "medium" | "small" | "xs";
+export type ComponentSize = "medium" | "small" | "xs" | "2xs";
 
 export type IconButtonVariant = "filled" | "tonal" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
@@ -150,6 +157,7 @@ export const materialIcons = [
   "arrow_downward",
   "bar_chart",
   "help",
+  "help_center",
   "link",
   "rocket_launch",
   "quiz",

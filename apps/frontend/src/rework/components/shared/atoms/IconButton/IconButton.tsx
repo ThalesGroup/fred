@@ -21,7 +21,11 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 // Matches each size's `--icon-size` (IconButton.module.scss) so the spinner
 // drops into the same visual footprint as the icon it replaces — no button
 // resize when toggling `loading`.
-const SPINNER_SIZE: Record<ComponentSize, number> = { xs: 16, small: 20, medium: 24 };
+// IconButton expresses 32px through `small`, so it does not offer a distinct
+// `xs` (32px) tier — the `xs` entry mirrors `small` only to satisfy the
+// exhaustive Record; no `.btn-xs` rule exists (see #2298/#2299). `2xs` is the
+// 24px tier formerly named `xs`.
+const SPINNER_SIZE: Record<ComponentSize, number> = { "2xs": 16, xs: 20, small: 20, medium: 24 };
 
 export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
   /** Defaults to "on-surface-retreat" — the app's baseline icon-button color. */
