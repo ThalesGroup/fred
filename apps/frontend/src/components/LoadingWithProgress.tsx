@@ -20,8 +20,8 @@ const LoadingWithProgress = () => {
   const { t } = useTranslation();
 
   return (
-    <div className={styles.container}>
-      <Spinner size={24} />
+    <div className={styles.container} role="status">
+      <Spinner size={24} decorative />
       <span className={styles.label}>{t("app.loading.generic")}</span>
     </div>
   );
