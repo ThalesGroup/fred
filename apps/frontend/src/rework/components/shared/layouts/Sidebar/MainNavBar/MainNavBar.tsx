@@ -93,7 +93,7 @@ export default function MainNavBar() {
           variant="icon"
           size="medium"
           style={ICON_STYLE}
-          color={entry.active ? "on-surface" : "on-surface-retreat"}
+          color={entry.active ? "primary" : "on-surface-retreat"}
           icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
           title={entry.label}
           aria-label={entry.label}
