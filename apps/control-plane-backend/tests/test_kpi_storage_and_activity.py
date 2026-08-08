@@ -13,20 +13,17 @@
 # limitations under the License.
 
 """
-`storage_by_team` and `team_activity_summary` (OBSERV-02 v3, §2.9/§2.5).
+`storage_by_team` (OBSERV-02 v3, §2.9).
 
-`storage_by_team` covers the three-way quota resolution (per-team override >
-platform config default > unlimited) — the one piece of real business logic
-in that preset, everything else is a direct field read. `team_activity_summary`
-covers its one behavioral rule: team_id is required, unlike every other
-team_scopable preset.
+Covers the three-way quota resolution (per-team override > platform config
+default > unlimited) — the one piece of real business logic in that preset,
+everything else is a direct field read.
 """
 
 # pyright: reportArgumentType=false
-# ^ this suite passes `store=None`/`request=None` — neither preset under test
-#   uses them (storage_by_team is Postgres-only, and the 400-before-any-query
-#   validation in team_activity_summary never reaches its store/request use)
-#   — same convention as test_capability_enablement_1980.py.
+# ^ this suite passes `store=None`/`request=None` — storage_by_team is
+#   Postgres-only and never uses them — same convention as
+#   test_capability_enablement_1980.py.
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -35,9 +32,6 @@ from types import SimpleNamespace
 import pytest
 from control_plane_backend.kpi.presets import storage_by_team
 from control_plane_backend.kpi.presets.storage_by_team import query_storage_by_team
-from control_plane_backend.kpi.presets.team_activity_summary import (
-    query_team_activity_summary,
-)
 from fastapi import HTTPException
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
@@ -211,20 +205,6 @@ async def test_storage_unknown_team_raises_404(monkeypatch: pytest.MonkeyPatch) 
             team_id=TeamId("ghost"),
         )
     assert exc_info.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_team_activity_summary_requires_team_id() -> None:
-    with pytest.raises(HTTPException) as exc_info:
-        await query_team_activity_summary(
-            store=None,
-            user=_user(),
-            since=_SINCE,
-            until=_UNTIL,
-            request=None,
-            team_id=None,
-        )
-    assert exc_info.value.status_code == 400
 
 
 def _expected_row(team_id: str, label: str, *, used: int, quota: int | None):

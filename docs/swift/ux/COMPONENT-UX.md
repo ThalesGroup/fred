@@ -1794,8 +1794,10 @@ mislabeled for an admin looking at a page that's majority team-scoped content.
 team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activity_summary` trend
 line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
 `/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
-nav rail, which additionally has ack support this embed never did. See
-`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36 and the `TaskActivity` entry below.
+nav rail, which additionally has ack support this embed never did. With this page as its only
+consumer gone, the `team_activity_summary` preset endpoint itself was retired outright
+(2026-08-08) — it is no longer part of the contract. See `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36
+and the `TaskActivity` entry below.
 
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
