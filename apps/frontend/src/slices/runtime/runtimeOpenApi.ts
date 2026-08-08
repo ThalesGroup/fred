@@ -758,8 +758,17 @@ export type HitlChoiceRecord = {
   id: string;
   label: string;
 };
+export type HitlPendingCallRecord = {
+  args_preview?: string;
+  tool_call_id?: string;
+  tool_name: string;
+};
 export type HitlRequestPart = {
+  checkpoint_id?: string | null;
   choices: HitlChoiceRecord[];
+  free_text?: boolean;
+  interrupt_id?: string | null;
+  pending_calls?: HitlPendingCallRecord[];
   question: string;
   stage?: string | null;
   title?: string | null;
