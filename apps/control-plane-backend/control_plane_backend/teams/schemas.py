@@ -22,8 +22,8 @@ class TeamNotFoundError(Exception):
         super().__init__(f"Team with id '{team_id}' not found")
 
 
-class BannerUploadError(Exception):
-    """Raised when banner upload validation fails."""
+class AvatarUploadError(Exception):
+    """Raised when avatar upload validation fails."""
 
     def __init__(self, message: str):
         self.message = message
@@ -150,7 +150,7 @@ class Team(BaseModel):
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
     visibility: TeamVisibility = TeamVisibility.PUBLIC
-    banner_image_url: str | None = None
+    avatar_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
 
@@ -255,7 +255,7 @@ class UpdateTeamRequest(BaseModel):
     description: str | None = Field(default=None, max_length=180)
     joining_mode: JoiningMode | None = None
     visibility: TeamVisibility | None = None
-    banner_image_url: str | None = Field(default=None, max_length=300)
+    avatar_image_url: str | None = Field(default=None, max_length=300)
     # CTRLP-12 (RFC §3.B): per-team retention, patched through the team surface.
     # Partial semantics (exclude_unset): an omitted field keeps its current
     # stored value, an explicit ``null`` clears it (re-inherit the platform cap).

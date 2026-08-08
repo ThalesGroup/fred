@@ -1416,6 +1416,11 @@
         "changelog": "Nouveautés"
       }
     },
+    "avatarCrop": {
+      "title": "Recadrer l'avatar",
+      "save": "Enregistrer",
+      "zoom": "Zoom"
+    },
     "home": {
       "title": "Accueil",
       "searchPlaceholder": "Rechercher une équipe",
@@ -1962,11 +1967,11 @@
           "public": "Publique",
           "private": "Privée"
         },
-        "teamBanner": {
-          "title": "Bannière de l'équipe",
+        "teamAvatar": {
+          "title": "Avatar de l'équipe",
           "import": "Importer",
           "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
-          "noBanner": "Aucune bannière sélectionnée"
+          "noAvatar": "Aucun avatar sélectionné"
         },
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",

@@ -2410,3 +2410,27 @@ inside a shared multi-member team (distinct from personal-space support,
 which is just a team routing policy scoped to a one-member team), model
 temperature/timeout tuning, a per-message composer picker, direct
 `models_catalog.yaml` editing from the product.
+
+## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
+
+The per-team uploaded image is now a **square avatar**, not a wide banner.
+The rename is API-surface deep but stops short of the database:
+
+- **Read field:** `Team.avatar_image_url` (was `banner_image_url`) — on the base
+  `Team`, so it rides on `bootstrap.available_teams`, `GET /teams`,
+  `GET /teams/{id}` alike. Presigned URL (or a stored absolute URL) to the
+  team's avatar object, or `null`.
+- **Write field:** `UpdateTeamRequest.avatar_image_url` (was `banner_image_url`).
+- **Upload route:** `POST /control-plane/v1/teams/{team_id}/avatar` (was
+  `/banner`) — multipart, max 5 MB, JPEG/PNG/WebP. Handler `upload_team_avatar`,
+  error `AvatarUploadError`.
+- **Storage layer unchanged (Option A):** the DB column and the `fred_core`
+  `TeamMetadata`/`TeamMetadataPatch` fields keep their legacy
+  `banner_object_storage_key` / `banner_image_url` names — no migration. The
+  control-plane `update_team` bridges the public `avatar_image_url` write field
+  to the storage layer's `banner_image_url` before persisting. New avatar
+  objects are stored under `teams/{id}/avatar-<uuid>.<ext>`.
+
+The frontend uploads the image through an in-app square crop editor that
+exports a bounded 512×512 WebP, so avatars are small regardless of the source
+image (a backend image-resize safety net remains a follow-up).

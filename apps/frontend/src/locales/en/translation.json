@@ -1416,6 +1416,11 @@
         "changelog": "What's new"
       }
     },
+    "avatarCrop": {
+      "title": "Crop avatar",
+      "save": "Save",
+      "zoom": "Zoom"
+    },
     "home": {
       "title": "Home",
       "searchPlaceholder": "Search a team",
@@ -1962,11 +1967,11 @@
           "public": "Public",
           "private": "Private"
         },
-        "teamBanner": {
-          "title": "Team banner",
+        "teamAvatar": {
+          "title": "Team avatar",
           "import": "Import",
           "hint": "JPEG, PNG, or WebP · 5 MB maximum",
-          "noBanner": "No banner selected"
+          "noAvatar": "No avatar selected"
         },
         "teamPrompt": {
           "label": "Team context (prompt)",
