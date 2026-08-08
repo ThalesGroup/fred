@@ -195,7 +195,7 @@ class DocumentExtractor:
                         delay = retry_after if retry_after is not None else min(_BACKOFF_CAP_S, _BACKOFF_BASE_S * (2**attempt))
                         # Jitter avoids a thundering herd of retried chunks all
                         # waking at the same instant and re-tripping the limit.
-                        delay += random.uniform(0, 0.5)
+                        delay += random.uniform(0, 0.5)  # nosec B311 — retry jitter, not security-sensitive
                         logger.warning(
                             "[EXTRACT] rate-limited on chunk (attempt %d/%d); backing off %.1fs",
                             attempt + 1,
