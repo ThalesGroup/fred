@@ -75,7 +75,8 @@
   "app": {
     "loading": {
       "router": "Fred démarre...",
-      "ui": "Fred prépare l'interface..."
+      "ui": "Fred prépare l'interface...",
+      "generic": "Chargement, veuillez patienter..."
     }
   },
   "appCard": {

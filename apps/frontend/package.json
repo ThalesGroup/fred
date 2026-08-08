@@ -20,13 +20,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
     "@fontsource/inter": "^5.2.6",
     "@fontsource/roboto": "^5.1.0",
     "@mdxeditor/editor": "^4.0.4",
-    "@mui/icons-material": "^7.3.9",
-    "@mui/material": "^7.3.9",
     "@reduxjs/toolkit": "^2.1.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.2",
@@ -60,8 +56,6 @@
     "uuid": "^11.0.3"
   },
   "devDependencies": {
-    "@date-io/dayjs": "^3.0.0",
-    "@mui/x-date-pickers": "^8.27.2",
     "@rtk-query/codegen-openapi": "2.2.0",
     "@svgr/rollup": "^8.1.0",
     "@types/react": "^19.2.14",

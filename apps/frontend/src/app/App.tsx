@@ -13,26 +13,17 @@
 // limitations under the License.
 
 // FredUi.tsx
-import { Box, Typography, useTheme } from "@mui/material";
-import { ThemeProvider, keyframes } from "@mui/material/styles";
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import { DrawerProvider } from "../components/DrawerProvider";
 import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
-import { createDarkTheme, createLightTheme } from "../styles/theme";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
-
-const pulse = keyframes`
-  0% { transform: scale(1); opacity: 0.9; }
-  50% { transform: scale(1.08); opacity: 1; }
-  100% { transform: scale(1); opacity: 0.9; }
-`;
+import styles from "./App.module.css";
 
 const LoadingScreen = ({
   label,
@@ -46,76 +37,21 @@ const LoadingScreen = ({
   alt: string;
 }) => {
   const { darkMode } = useContext(ApplicationContext);
-  const theme = useTheme();
   const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
     ? (import.meta.env.BASE_URL ?? "/")
     : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: theme.palette.background.default,
-        color: theme.palette.text.primary,
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <Box
-        sx={{
-          position: "absolute",
-          inset: 0,
-          background: "radial-gradient(circle at 50% 110%, rgba(255,255,255,0.06), transparent 35%)",
-          pointerEvents: "none",
-        }}
-      />
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          px: 2.5,
-          py: 2,
-          borderRadius: 3,
-          backdropFilter: "none",
-          backgroundColor: "transparent",
-          boxShadow: "none",
-          zIndex: 1,
-          width: 170,
-          justifyContent: "center",
-        }}
-      >
-        <Box
-          component="img"
+    <div className={styles.loadingScreen}>
+      <div className={styles.logoBadge}>
+        <img
+          className={styles.logo}
           src={`${baseUrl}images/${darkMode ? logoNameDark : logoName}.svg`}
           alt={alt}
-          sx={{
-            width: 68,
-            height: 68,
-            animation: `${pulse} 1.8s ease-in-out infinite`,
-            filter: darkMode ? "drop-shadow(0 6px 16px rgba(0,0,0,0.35))" : "drop-shadow(0 6px 16px rgba(0,0,0,0.12))",
-          }}
         />
-        <Typography
-          component="span"
-          sx={{
-            position: "absolute",
-            width: 1,
-            height: 1,
-            padding: 0,
-            margin: -1,
-            overflow: "hidden",
-            clip: "rect(0,0,0,0)",
-            whiteSpace: "nowrap",
-            border: 0,
-          }}
-        >
-          {label}
-        </Typography>
-      </Box>
-    </Box>
+        <span className={styles.srOnly}>{label}</span>
+      </div>
+    </div>
   );
 };
 
@@ -168,12 +104,9 @@ function FredUiContent() {
       <AuthProvider>
         <GcuGuard>
           <BootstrapGuard>
-            {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
             <ConfirmationDialogProvider>
               <ToastProvider>
-                <DrawerProvider>
-                  <RouterProvider router={router} />
-                </DrawerProvider>
+                <RouterProvider router={router} />
               </ToastProvider>
             </ConfirmationDialogProvider>
           </BootstrapGuard>
@@ -186,12 +119,10 @@ function FredUiContent() {
 function AppWithTheme() {
   const { darkMode } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
-  const theme = useMemo(() => {
-    // data-theme must be set before cssVar() resolves CSS variables for the MUI palette.
-    // Effects run after render — too late for theme creation — so we set it synchronously here.
-    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
-    return darkMode ? createDarkTheme() : createLightTheme();
-  }, [darkMode]);
+
+  // Effects run after render, which is too late for the first paint to pick
+  // up the right palette — set it synchronously during render instead.
+  document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
 
   useEffect(() => {
     // Chrome derives 12h/24h for datetime-local from <html lang>.
@@ -199,11 +130,7 @@ function AppWithTheme() {
     document.documentElement.lang = i18n.language ?? "fr";
   }, [i18n.language]);
 
-  return (
-    <ThemeProvider theme={theme}>
-      <FredUiContent />
-    </ThemeProvider>
-  );
+  return <FredUiContent />;
 }
 
 function FredUi() {
