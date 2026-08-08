@@ -1,0 +1,32 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  height: 100vh;
+  width: 100vw;
+  padding: var(--spacing-l);
+  background: var(--surface-main);
+  color: var(--on-surface);
+}
+
+.icon {
+  width: 48px;
+  height: 48px;
+}
+
+.title {
+  font: var(--font-title-medium);
+  color: var(--on-surface-retreat);
+  margin: 0;
+  text-align: center;
+}
+
+.description {
+  font: var(--font-body-medium);
+  color: var(--on-surface-retreat);
+  text-align: center;
+  max-width: 60ch;
+  margin: 0;
+}

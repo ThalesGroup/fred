@@ -44,6 +44,7 @@ import LoadingWithProgress from "../components/LoadingWithProgress";
 import { Protected } from "@core/guards/Protected";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
@@ -298,6 +299,13 @@ export const routes: RouteObject[] = [
   {
     path: "unauthorized",
     element: <Unauthorized />,
+  },
+  {
+    // Whitelist-rejection landing page (HTTP 403 "user_not_whitelisted",
+    // see docs/swift/platform/KEYCLOAK.md §"Behavior"). Standalone, no
+    // MainLayout chrome — must render even when auth/bootstrap has failed.
+    path: "coming-soon",
+    element: <ComingSoon />,
   },
 ];
 
