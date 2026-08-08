@@ -23,6 +23,7 @@ throttling provider slow the map down instead of failing the turn.
 from __future__ import annotations
 
 import pytest
+
 from knowledge_flow_backend.features.extract import extractor as extractor_mod
 from knowledge_flow_backend.features.extract.extractor import (
     DocumentExtractor,
