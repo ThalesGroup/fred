@@ -36,20 +36,20 @@ export interface TeamCardProps {
 }
 
 export default function TeamCard({ team, withDescription, onJoined }: TeamCardProps) {
-  const { defaultTeamBannerFile, defaultTeamAvatarFile, defaultPersonalBannerFile, defaultPersonalAvatarFile } =
-    useFrontendProperties();
+  const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
   const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
   const userFullName = KeyCloakService.GetUserFullName();
 
-  // Configured assets replace initials/solid colour. Without configured assets,
-  // the card keeps the name-derived solid colour treatment.
+  // A configured default avatar replaces initials; without one, the card keeps
+  // the name-derived coloured initials. The personal space renders round, teams
+  // square (#2300 — the team image is now a square avatar, not a wide banner).
   const isPersonal = team.id === activeTeam?.id;
-  const bannerFile = isPersonal ? defaultPersonalBannerFile : defaultTeamBannerFile;
   const avatarFile = isPersonal ? defaultPersonalAvatarFile : defaultTeamAvatarFile;
   const color = isPersonal ? PERSONAL_TEAM_COLOR : teamColor(team.name);
   const avatarName = isPersonal ? userFullName : team.name;
+  const roundAvatar = isPersonal ? { borderRadius: "50%" } : undefined;
 
   const handleJoinTeam = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault();
@@ -63,45 +63,41 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
 
   return (
     <div className={styles.teamCardContainer}>
-      {team.banner_image_url || bannerFile ? (
-        <img
-          className={styles.teamBanner}
-          src={team.banner_image_url ?? `/images/${bannerFile}`}
-          alt=""
-          aria-hidden="true"
-        />
-      ) : (
-        <div className={styles.teamBanner} style={{ background: color.banner }} aria-hidden="true" />
-      )}
-      {team.banner_image_url ? (
-        <img className={styles.teamAvatar} src={team.banner_image_url} alt="" aria-hidden="true" />
-      ) : avatarFile ? (
-        <img
-          className={styles.teamAvatar}
-          style={isPersonal ? { borderRadius: "50%" } : undefined}
-          src={`/images/${avatarFile}`}
-          alt=""
-          aria-hidden="true"
-        />
-      ) : (
-        <TeamInitials
-          className={styles.teamAvatar}
-          name={avatarName}
-          size="medium"
-          shape={isPersonal ? "round" : "square"}
-          color={color}
-        />
-      )}
       <div className={styles.teamCardDetails}>
-        <div className={styles.teamCardDetailName}>
-          <div className={styles.teamInformation}>
+        <div className={styles.teamCardHeader}>
+          {team.avatar_image_url ? (
+            <img
+              className={styles.teamAvatar}
+              style={roundAvatar}
+              src={team.avatar_image_url}
+              alt=""
+              aria-hidden="true"
+            />
+          ) : avatarFile ? (
+            <img
+              className={styles.teamAvatar}
+              style={roundAvatar}
+              src={`/images/${avatarFile}`}
+              alt=""
+              aria-hidden="true"
+            />
+          ) : (
+            <TeamInitials
+              className={styles.teamAvatar}
+              name={avatarName}
+              size="medium"
+              shape={isPersonal ? "round" : "square"}
+              color={color}
+            />
+          )}
+          <div className={styles.teamCardHeaderText}>
             <div className={styles.teamName}>{team.name}</div>
-          </div>
-          <div className={styles.teamMemberCount}>
-            <span className={styles.teamMemberCountIcon}>
-              <Icon category={"outlined"} type={"groups"} />
-            </span>
-            {t("rework.teamCard.memberCount", { count: team.member_count })}
+            <div className={styles.teamMemberCount}>
+              <span className={styles.teamMemberCountIcon}>
+                <Icon category={"outlined"} type={"groups"} />
+              </span>
+              {t("rework.teamCard.memberCount", { count: team.member_count })}
+            </div>
           </div>
         </div>
         {withDescription && <div className={styles.teamCardDescription}>{team.description}</div>}
