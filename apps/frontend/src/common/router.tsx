@@ -26,6 +26,7 @@ import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
+import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
@@ -60,8 +61,8 @@ const ManagedChatPageRoute = () => {
 };
 
 // Bare `/` should land on the canonical personal-space URL (`personal-<uid>`,
-// not the bare `"personal"` alias) so the address bar and TeamSelectionNavbar's
-// selection check agree from the first paint. A static `<Navigate>` here never
+// not the bare `"personal"` alias) so the address bar and the team selection
+// check agree from the first paint. A static `<Navigate>` here never
 // resolves the real id: CTRLP-10 residual, see
 // docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md §4.3.
 const HomeIndexRoute = () => {
@@ -116,6 +117,13 @@ export const routes: RouteObject[] = [
       {
         index: true,
         element: <HomeIndexRoute />,
+      },
+      {
+        // Landing behind the mainNavBar Home entry (#2298). The team switcher
+        // renders in the Home nav panel (Sidebar HOME mode); this is the
+        // content-area placeholder.
+        path: "home",
+        element: <HomePage />,
       },
       {
         path: "team/:teamId/agents",

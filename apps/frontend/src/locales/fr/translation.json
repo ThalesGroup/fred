@@ -1436,11 +1436,23 @@
         "changelog": "Nouveautés"
       }
     },
-    "profileMenu": {
-      "adminBadge": "admin",
-      "adminConsole": "Console technique",
-      "contactSupport": "Contacter le support",
+    "home": {
+      "title": "Accueil",
+      "searchPlaceholder": "Rechercher une équipe",
+      "searchClear": "Effacer la recherche",
+      "yourTeams": "Vos équipes",
+      "pageTitle": "Accueil",
+      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer."
+    },
+    "mainNav": {
+      "ariaLabel": "Navigation principale",
+      "home": "Accueil",
+      "marketplace": "Marketplace",
       "helpCenter": "Centre d'aide",
+      "adminConsole": "Console technique"
+    },
+    "profileMenu": {
+      "contactSupport": "Contacter le support",
       "profile": "Profil"
     },
     "promptCategories": {
@@ -1702,6 +1714,7 @@
         "menu": {
           "resources": "Ressources"
         },
+        "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
       }
     },
@@ -1873,7 +1886,7 @@
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
-      "team_admin": "Administrateur",
+      "team_admin": "Admin",
       "team_editor": "Editeur",
       "team_analyst": "Analyste",
       "team_member": "Membre"
