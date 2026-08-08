@@ -36,9 +36,6 @@ from fred_core.common.team_id import TeamId
 from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from fred_core.documents.document_structures import (
     DocumentMetadata,
-    ProcessingGraph,
-    ProcessingGraphEdge,
-    ProcessingGraphNode,
     ProcessingStage,
     ProcessingStatus,
 )
@@ -47,11 +44,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.structures import (
-    ClickHouseVectorStorageConfig,
-    OpenSearchVectorIndexConfig,
-    PgVectorStorageConfig,
-)
 from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels, with_label_added, with_label_removed
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
@@ -368,145 +360,6 @@ class MetadataService:
 
         logger.info("[MetadataService] The vector store does not support retrieving chunk")
         return None
-
-    async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
-        """
-        Build a lightweight processing graph for all documents visible to the user.
-
-        The graph connects:
-        - document nodes to vector_index nodes when the document has been vectorized
-        - document nodes to table nodes when the document has been SQL indexed
-        """
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-
-        try:
-            docs = await self.metadata_store.get_all_metadata({})
-        except MetadataDeserializationError as e:
-            logger.error(f"[Metadata] Deserialization error while building processing graph: {e}")
-            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
-        except Exception as e:
-            logger.error(f"Error retrieving metadata for processing graph: {e}")
-            raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
-
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            visible_docs = docs
-        else:
-            authorized_doc_ids = {d.id for d in authorized_doc_ref}
-            visible_docs = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
-
-        # Lazy-load optional stores only if needed
-        def ensure_vector_store():
-            if self.vector_store is None:
-                try:
-                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                except Exception as e:
-                    logger.warning(f"[GRAPH] Could not initialize vector store for graph: {e}")
-            return self.vector_store
-
-        nodes: list[ProcessingGraphNode] = []
-        edges: list[ProcessingGraphEdge] = []
-
-        # Vector backend info (for UI diagnostics)
-        vector_backend: str | None = None
-        vector_detail: str | None = None
-        embedding_model_name: str | None = getattr(self.config.embedding_model, "name", None)
-        try:
-            vs_cfg = self.config.storage.vector_store
-            if isinstance(vs_cfg, OpenSearchVectorIndexConfig):
-                vector_backend = "opensearch"
-                vector_detail = f"index={vs_cfg.index}"
-            elif isinstance(vs_cfg, PgVectorStorageConfig):
-                vector_backend = "pgvector"
-                vector_detail = f"collection={vs_cfg.collection_name}"
-            elif isinstance(vs_cfg, ClickHouseVectorStorageConfig):
-                vector_backend = "clickhouse"
-                vector_detail = f"table={vs_cfg.table}"
-            else:
-                vector_backend = type(vs_cfg).__name__
-                vector_detail = None
-        except Exception as e:
-            logger.debug("[GRAPH] Unable to resolve vector backend info: %s", e)
-
-        for metadata in visible_docs:
-            doc_uid = metadata.document_uid
-            doc_node_id = f"doc:{doc_uid}"
-
-            nodes.append(
-                ProcessingGraphNode(
-                    id=doc_node_id,
-                    kind="document",
-                    label=metadata.document_name,
-                    document_uid=doc_uid,
-                    file_type=metadata.file.file_type,
-                    source_tag=metadata.source.source_tag,
-                    version=getattr(metadata.identity, "version", 0),
-                )
-            )
-
-            stages = metadata.processing.stages or {}
-
-            # --- Vector index node (per-document) ---------------------------------
-            if stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE:
-                vector_store = ensure_vector_store()
-                vector_count: int | None = None
-                if vector_store is not None and hasattr(vector_store, "get_document_chunk_count"):
-                    try:
-                        vector_count = int(vector_store.get_document_chunk_count(document_uid=doc_uid))  # type: ignore[attr-defined]
-                    except Exception as e:
-                        logger.warning(f"[GRAPH] Failed to count vectors for document '{doc_uid}': {e}")
-
-                vec_node_id = f"vec:{doc_uid}"
-                nodes.append(
-                    ProcessingGraphNode(
-                        id=vec_node_id,
-                        kind="vector_index",
-                        label=f"Vectors for {metadata.document_name}",
-                        document_uid=doc_uid,
-                        vector_count=vector_count,
-                        backend=vector_backend,
-                        backend_detail=vector_detail,
-                        embedding_model=embedding_model_name,
-                    )
-                )
-                edges.append(
-                    ProcessingGraphEdge(
-                        source=doc_node_id,
-                        target=vec_node_id,
-                        kind="vectorized",
-                    )
-                )
-
-            # --- SQL table nodes (one per dataset table) ---------------------------
-            if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE:
-                artifact = read_tabular_artifact(metadata)
-                multi_artifact = read_tabular_multi_artifact(metadata)
-                if artifact is not None:
-                    table_facts = [(artifact.dataset_uid, artifact.row_count)]
-                elif multi_artifact is not None:
-                    table_facts = [(table.query_alias, table.row_count) for table in multi_artifact.tables]
-                else:
-                    table_facts = []
-                for table_name, row_count in table_facts:
-                    table_node_id = f"table:{table_name}"
-                    nodes.append(
-                        ProcessingGraphNode(
-                            id=table_node_id,
-                            kind="table",
-                            label=table_name,
-                            document_uid=doc_uid,
-                            table_name=table_name,
-                            row_count=row_count,
-                        )
-                    )
-                    edges.append(
-                        ProcessingGraphEdge(
-                            source=doc_node_id,
-                            target=table_node_id,
-                            kind="sql_indexed",
-                        )
-                    )
-
-        return ProcessingGraph(nodes=nodes, edges=edges)
 
     async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token: str | None = None) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, new_tag_id, consistency_token=consistency_token)

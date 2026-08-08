@@ -69,23 +69,6 @@ run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost v
 		$(IMAGE_FULL) \
 		knowledge_flow_backend/main_worker.py
 
-.PHONY: bench
-BENCH_FILE ?= tests/assets/sample.pdf
-BENCH_OUT  ?= ./target/bench
-bench: dev ## Run processor benchmark locally (no server needed). FILE=path PROCESSORS=id1,id2 OUT=dir
-	@echo "Running processor benchmark on $(BENCH_FILE) ..."
-	PYTHONPATH=. $(PYTHON) tests/scripts/bench_processors.py "$(BENCH_FILE)" \
-		$(if $(PROCESSORS),--processors "$(PROCESSORS)",) \
-		--out "$(BENCH_OUT)"
-
-.PHONY: markdown-profile-test
-markdown-profile-test: ## Run recursive markdown profile test script (set INPUT_DIR=... optionally PROFILES=fast,medium,rich OUTPUT_DIR=...)
-	./tests/scripts/test_markdown_profiles.sh \
-		--input-dir "$(INPUT_DIR)" \
-		--profiles "$(PROFILES)" \
-		--output-dir "$(OUTPUT_DIR)" \
-		--base-url "$(BASE_URL)"
-
 .PHONY: run-docker
 run-docker: ## Run Knowledge Flow API in Docker (uses host network by default)
 	@echo "🚀 Running Knowledge Flow API in Docker..."
@@ -166,10 +149,6 @@ WORKER_CONTAINER_NAME ?= kf-worker
 WORKER_DOCKER_NETWORK ?= host
 API_CONTAINER_NAME ?= kf-api
 API_DOCKER_NETWORK ?= host
-PROFILES ?= fast,medium,rich
-INPUT_DIR ?= ./tests/assets
-OUTPUT_DIR ?= ./target/markdown-profile-tests
-BASE_URL ?= http://localhost:8111/knowledge-flow/v1
 TEST_STATE_DIR ?= ./.fred-test
 TEST_DOCKER_USER ?= $(shell id -u):$(shell id -g)
 

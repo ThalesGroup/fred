@@ -265,7 +265,7 @@ predicate, grant only team `can_read`, scope to the request `team_id`, and fail 
 - [ ] Case detail drawer — input, expected output, actual output, structural checks, metric scores/reasons, latency, tokens, errors
 - [ ] Permission-aware controls and side-effect warning before start
 - [ ] All request/response types from generated OpenAPI — no hand-written TypeScript duplicates
-- [ ] Reuse patterns from `ProcessorBench.tsx`, `ProcessorRunDetail.tsx`, `rework/features/tasks`
+- [ ] Reuse patterns from `rework/features/tasks` (shared task/SSE surface) and the evaluation framework's own generated API contracts
 
 ---
 

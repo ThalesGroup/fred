@@ -55,13 +55,11 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
 from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
-from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
-from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
 from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
 )
@@ -246,12 +244,9 @@ def create_app() -> FastAPI:
     VectorSearchController(router)
     TreeController(router)
     SummarizeController(app, router)
-    KPIController(router)
     ResourceController(router)
     McpFilesystemController(router)
     CorpusManagerController(router)
-    # Developer benchmarking tools (always mounted; auth-protected)
-    BenchmarkController(router)
 
     if configuration.mcp.tabular_enabled:
         # Required for Tessa
@@ -350,26 +345,6 @@ def create_app() -> FastAPI:
         logger.info("%s MCP Prometheus Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
     else:
         logger.warning("%s MCP Prometheus Ops disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
-
-    if configuration.mcp.kpi_enabled:
-        mcp_kpi = FastApiMCP(
-            app,
-            name="Knowledge Flow KPI MCP",
-            description=(
-                "Query interface for application KPIs. "
-                "Use these endpoints to run structured aggregations over metrics "
-                "(e.g. vectorization latency, LLM usage, token costs, error counts). "
-                "Provides schema, presets, and query compilation helpers so agents can "
-                "form valid KPI queries without guessing."
-            ),
-            include_tags=["KPI"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
-        )
-        mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
-    else:
-        logger.warning("%s MCP KPI disabled via configuration.mcp.kpi_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.tabular_enabled:
         mcp_tabular = FastApiMCP(
