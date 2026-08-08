@@ -241,7 +241,6 @@ class OrganizationPermission(str, Enum):
     # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"
-    CAN_RUN_BENCHMARK = "can_run_benchmark"
 
     # Direct check against the raw `platform_observer` relation — not a
     # computed capability. Used to derive display-only frontend flags

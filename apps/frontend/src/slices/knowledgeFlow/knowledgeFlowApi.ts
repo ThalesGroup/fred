@@ -12,5 +12,5 @@ export const knowledgeFlowApi = createApi({
 
   endpoints: () => ({}),
   reducerPath: "knowledgeFlowApi",
-  tagTypes: ["BenchRun", "Team", "TeamMember"],
+  tagTypes: ["Team", "TeamMember"],
 });

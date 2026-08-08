@@ -44,7 +44,7 @@ class DoclingPdfExtractor(BasePdfExtractor):
         """`num_threads` sizes docling's internal OMP/accelerator pool for this extraction.
 
         Passed in explicitly (not read from ApplicationContext here) so this extractor stays
-        usable standalone, e.g. from the procbench benchmark harness with no live ApplicationContext.
+        usable standalone, with no live ApplicationContext required.
         """
         self._num_threads = num_threads
         self._converter: Optional[DocumentConverter] = None

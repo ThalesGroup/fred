@@ -55,7 +55,6 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
 from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
-from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
@@ -248,8 +247,6 @@ def create_app() -> FastAPI:
     ResourceController(router)
     McpFilesystemController(router)
     CorpusManagerController(router)
-    # Developer benchmarking tools (always mounted; auth-protected)
-    BenchmarkController(router)
 
     if configuration.mcp.tabular_enabled:
         # Required for Tessa

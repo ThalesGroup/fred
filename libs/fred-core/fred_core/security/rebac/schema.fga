@@ -69,7 +69,6 @@ type organization
   # Platform administration surfaces (global, no resource instance).
   define can_administer_users: platform_admin
   define can_manage_platform: platform_admin
-  define can_run_benchmark: platform_admin
 
 
 type team
