@@ -38,7 +38,10 @@
   font: var(--font-title-medium);
 }
 
+/* Dividers above and below frame the personal space apart from the team list. */
 .personalSpace {
+  border-top: 1px solid var(--outline-muted);
+  border-bottom: 1px solid var(--outline-muted);
   padding: var(--spacing-2xs) 0;
 }
 
