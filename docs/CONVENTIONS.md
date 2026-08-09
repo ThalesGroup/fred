@@ -109,6 +109,12 @@ below are what to follow while writing the code, not just at review time.
   unrelated change.
 - **Never hand-edit generated files.** `openapi.json` — regenerate from source and
   document the regeneration command when you run it.
+- **Wrap bare `for x in SomeEnum:` in `list(...)`.** `EnumMeta.__iter__` makes an
+  `Enum` class itself iterable, but CodeQL's Python analysis doesn't model that and
+  flags `for x in SomeEnum:` as "non-iterable used in for loop" — a false positive,
+  not a bug. Write `for x in list(SomeEnum):` instead: same members, same order, but
+  the explicit `list()` call reads as unambiguously iterable to the analyzer, so the
+  finding never fires and there's nothing to dismiss on GitHub each scan.
 
 ### Testing (Python)
 

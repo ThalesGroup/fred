@@ -394,7 +394,7 @@ class TagService:
         Removes any user-tag relation regardless of the level originally assigned.
         """
         await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
-        for relation in UserTagRelation:
+        for relation in list(UserTagRelation):
             await self.rebac.delete_relation(
                 Relation(
                     subject=RebacReference(type=target_type, id=target_id),
