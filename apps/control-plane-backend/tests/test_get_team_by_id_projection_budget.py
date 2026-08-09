@@ -409,7 +409,7 @@ async def test_create_get_update_share_the_same_assembler(
     distinct authorization rule (create_team: org-level `CAN_CREATE_TEAM`,
     no CAN_READ on the just-created team; get_team_by_id: the caller-supplied
     `required_permissions`; update_team: `CAN_UPDATE_INFO` specifically)."""
-    import control_plane_backend.teams.service as service
+    from control_plane_backend.teams import service
 
     calls: list[str] = []
     real_assembler = service._build_team_with_permissions

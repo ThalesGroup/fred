@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-import fred_core.security.whitelist_access_control.access_control as _wl_module
+from fred_core.security.whitelist_access_control import access_control as _wl_module
 from fred_core.security.structure import KeycloakUser
 from fred_core.security.whitelist_access_control.access_control import (
     _normalize_email,
