@@ -47,49 +47,13 @@ def main():
         os.environ.setdefault("OPENSEARCH_PASSWORD", "dummy-password-for-static-generation")  # pragma: allowlist secret
         os.environ.setdefault("FRED_POSTGRES_PASSWORD", "dummy-password-for-static-generation")  # pragma: allowlist secret
 
-        # Monkeypatch HuggingFace downloads to raise immediately instead of trying network access.
-        # This allows the app to start for schema generation without actual model loading.
-        from unittest.mock import patch
+        # Import and create the FastAPI app
+        from main import create_app
+        app = create_app()
 
-        def block_hf_download(*args, **kwargs):
-            """Block any HuggingFace model downloads."""
-            raise RuntimeError(
-                "Model downloads are disabled during OpenAPI schema generation. "
-                "This is expected and does not affect the generated schema."
-            )
+        # Generate OpenAPI specification
+        openapi_spec = app.openapi()
 
-        # Patch before importing the app to intercept any model loading attempts
-        hf_patches = [
-            ("huggingface_hub.file_download.http_get", block_hf_download),
-            ("huggingface_hub.file_download.hf_hub_download", block_hf_download),
-            ("huggingface_hub.snapshot_download.snapshot_download", block_hf_download),
-            ("transformers.modeling_utils.cached_file", block_hf_download),
-            ("sentence_transformers.util.http_get", block_hf_download),
-        ]
-
-        patches_to_apply = []
-        for patch_target, patch_func in hf_patches:
-            try:
-                patches_to_apply.append(patch(patch_target, patch_func))
-            except (AttributeError, ImportError):
-                pass  # Some patches may not apply if modules aren't loaded yet
-
-        # Apply all patches
-        for p in patches_to_apply:
-            p.start()
-
-        try:
-            # Import and create the FastAPI app
-            from main import create_app
-            app = create_app()
-
-            # Generate OpenAPI specification
-            openapi_spec = app.openapi()
-        finally:
-            # Stop all patches
-            for p in patches_to_apply:
-                p.stop()
-        
         # Output file in the backend directory
         output_file = backend_dir / "openapi.json"
         

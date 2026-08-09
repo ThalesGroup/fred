@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import styles from "./TeamSettingsRouting.module.scss";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
@@ -54,27 +55,6 @@ function newRow(): RuleRow {
   // it, so generate one at creation — without this a new override always failed
   // write-time validation with a 422. Existing rows keep their own rule_id.
   return { key: `new-${nextKey}`, rule_id: crypto.randomUUID(), operation: "", purpose: null, target_profile_id: "" };
-}
-
-/** Turn an RTK Query error into a human-readable message.
- *
- * The control-plane returns a string `detail` for 400 write-time validation
- * (RFC §7.2 — unusable/unknown profile, duplicate rule). FastAPI request-shape
- * rejections return a 422 whose `detail` is an array of `{loc, msg, type}`;
- * rendering that array directly is what produced the "[object Object]" banner. */
-function extractSaveErrorDetail(err: unknown, fallback: string): string {
-  const detail =
-    err && typeof err === "object" && "data" in err && err.data && typeof err.data === "object" && "detail" in err.data
-      ? (err.data as { detail: unknown }).detail
-      : undefined;
-  if (typeof detail === "string" && detail.trim().length > 0) return detail;
-  if (Array.isArray(detail)) {
-    const messages = detail
-      .map((item) => (item && typeof item === "object" && "msg" in item ? String((item as { msg: unknown }).msg) : ""))
-      .filter((message) => message.length > 0);
-    if (messages.length > 0) return messages.join("; ");
-  }
-  return fallback;
 }
 
 /**
@@ -156,7 +136,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
         },
       }).unwrap();
     } catch (err) {
-      setError(extractSaveErrorDetail(err, t("rework.teamSettings.routing.saveError")));
+      setError(normalizeApiError(err).detail ?? t("rework.teamSettings.routing.saveError"));
     }
   };
 
