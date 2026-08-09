@@ -2,7 +2,10 @@
 
 **Branch:** `fixes` · **Source:** GitHub → Security and quality → Standard findings → Code quality
 **Reproduced locally:** CodeQL 2.25.6, suite `python-code-quality.qls`, over the tracked Python tree.
-**Totals:** 196 findings locally (GitHub shows ~205; delta = slightly later commit + a couple extended-suite rules).
+**Totals:** 196 findings locally as of 2026-08-05 (GitHub showed ~205 then; delta = slightly later commit +
+a couple extended-suite rules). **Per-rule counts below drift as code changes — `py/unused-global-variable`
+was re-verified against current `HEAD` on 2026-08-09 (grew to 55); other rules' counts are the 2026-08-05
+snapshot and not re-checked.**
 **Nature:** all severity "Note" (Maintainability / Reliability). **None are security issues.**
 
 > How this was produced: built a CodeQL DB over a `git archive` export of the tree and ran the
@@ -83,10 +86,23 @@
   **66 are `...` (Ellipsis) bodies** of `Protocol` / `@abstractmethod` / `@overload` stubs (idiomatic);
   **12 are `await task`** statements (awaited for completion / exception propagation — that *is* the effect).
   **Zero** were a `==`-instead-of-`=` typo (grepped all 78). Safe to bulk-dismiss.
-- **FP `py/unused-global-variable` (22)** — **~16 are Alembic migration globals**
-  (`revision`, `down_revision`, `branch_labels`, `depends_on` in `alembic/versions/*.py`) — **required by
-  the Alembic framework**, read via introspection CodeQL can't see. Dismiss those. Remaining ~6 to check:
-  `core/stores/vector/clickhouse_vector_store.py:39–43`, `libs/fred-core/.../documents/document_models.py:46`.
+- **FP `py/unused-global-variable` (55, re-verified 2026-08-09 — fully triaged, all FP)** — GitHub now
+  shows 55 open for this rule (grown from the 22 last counted here); re-checked every one against current
+  `HEAD` rather than the stale local DB. Two shapes, both false positives, zero real bugs:
+  - **52 — Alembic migration globals** (`revision`, `down_revision`, `branch_labels`, `depends_on` across
+    every `alembic/versions/*.py`) — **required by the Alembic framework**, read via introspection CodeQL
+    can't see. Dismiss all on GitHub.
+  - **3 — cross-call memoization/registration globals, CodeQL can't see the read on the *next* call**:
+    - `libs/fred-runtime/fred_runtime/app/agent_app.py:354` (`_execute_response_adapter_cache`) — `global`
+      declared, read at the top of `_execute_response_adapter()`, written at the end; the write is only
+      "used" by the *next* invocation, which a single-invocation dead-store analysis doesn't model.
+    - `libs/fred-sdk/fred_sdk/contracts/ui_part_union.py:62,100` (`_current_members`) — same shape: guards
+      `rebuild_ui_part_union()` against redundant rebuilds across calls.
+    - `libs/fred-core/fred_core/documents/document_models.py:46` (`_tag_ids_gin_index`) — a SQLAlchemy
+      `Index(...)` bound to a module global purely for its *side effect* (registers the GIN index against
+      `DocumentMetadataRow.tag_ids` at import time); the name itself is never read again by design, same
+      class as the Alembic constants.
+  - Dismiss all 55 on GitHub with the reasons above. Nothing to fix in code.
 - **FP `py/non-iterable-in-for-loop` (1)** — `features/tag/tag_service.py:308` iterates `UserTagRelation`,
   a `class(str, Enum)`. Iterating an Enum class is valid; CodeQL doesn't model the Enum metaclass. Dismiss.
 - **Ignore `py/mixed-returns` (22)** — standard guard-clause idiom in FastAPI controllers
