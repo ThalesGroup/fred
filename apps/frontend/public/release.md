@@ -1,3 +1,62 @@
+**v2.1.33** — 2026-08-09
+
+- **Summary**
+
+  Agents can now read documents verbatim or exhaustively extract information
+  from them, with a confirmation step before the token-heavy extraction runs.
+  Team images become square avatars with a built-in crop editor, the primary
+  navigation is reworked around a new Home panel listing your teams, and
+  admins can route a specific model to an individual agent instead of only
+  the whole team. Several display bugs and a UI freeze are also fixed.
+
+- **Features**
+
+  - Agents can now read a document verbatim (e.g. quote a specific section)
+    or exhaustively extract information across an entire document, gated
+    behind a confirmation step since extraction is token-heavy (#2293)
+  - Team images are now square avatars with an in-app crop-and-zoom editor,
+    replacing the old wide banner (#2300, #2302)
+  - Reworked primary navigation: a compact icon column for Home,
+    Marketplace, Help Center and Admin, with a new Home panel listing your
+    teams and your role in each (#2298, #2301)
+  - Admins can now route a specific model to an individual agent on a team,
+    not just the whole team (#2280)
+
+- **Improvements**
+
+  - A confirmation prompt left open when the page reloads can now be
+    answered, instead of leaving the step stuck as "running" forever (#2293)
+  - Cancelling a confirmation prompt now shows immediately instead of
+    leaving the step hanging (#2293)
+  - A crashed conversation turn now shows a clear error entry with a copy
+    button, instead of only a passing toast (#2293)
+  - Prompt templates no longer reject unrecognized `{tokens}` — they always
+    rendered safely, so the check only ever blocked working prompts (#2283)
+  - Large document imports embed faster by learning the right batch size
+    instead of repeatedly retrying batches the provider rejects (#2285)
+
+- **Bug Fixes**
+
+  - Admin analytics: the vertical usage chart renders again, and KPI tiles
+    no longer overlap the chart grid (#2291)
+  - Long values (e.g. full email addresses) in tables like Team Members no
+    longer run into the next column (#2286)
+  - The admin Capabilities page no longer occasionally freezes the whole
+    app (#2276)
+  - The Resources table now always shows the real filename as the document
+    name (#2306)
+  - Toggling a capability in the admin catalog now correctly refreshes the
+    "included capabilities" indicators on the agent edit form (#2306)
+  - Model routing: new override rules failed to save with a generic error;
+    save errors are now shown clearly and conflicting rules are rejected at
+    save time instead of silently picking a winner (#2280, #2281)
+
+- **Deployment note**
+
+  Database migrations now ship correctly in all production images,
+  including fred-agents, which previously carried a broken migration file.
+  Additive fix — no action needed for existing deployments.
+
 **v2.1.32** — 2026-08-07
 
 - **Summary**
