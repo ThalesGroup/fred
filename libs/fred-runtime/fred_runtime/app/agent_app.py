@@ -351,6 +351,7 @@ def _execute_response_adapter() -> TypeAdapter[Any]:
     cache = _execute_response_adapter_cache
     if cache is None or cache[0] is not union_token:
         cache = (union_token, TypeAdapter(RuntimeEvent | _RuntimeErrorPayload))
+        # codeql[py/unused-global-variable]
         _execute_response_adapter_cache = cache
     return cache[1]
 
