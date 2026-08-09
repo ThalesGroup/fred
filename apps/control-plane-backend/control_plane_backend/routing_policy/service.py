@@ -212,7 +212,9 @@ async def _validate_write(
                 and rule_a.agent_id == rule_b.agent_id
             ):
                 raise DuplicateOperationRuleError(
-                    operation=rule_a.operation, purpose=rule_a.purpose, agent_id=rule_a.agent_id
+                    operation=rule_a.operation,
+                    purpose=rule_a.purpose,
+                    agent_id=rule_a.agent_id,
                 )
             if _specificity(rule_a) == _specificity(rule_b):
                 raise AmbiguousOperationRuleError(
