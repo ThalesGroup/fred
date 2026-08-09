@@ -394,7 +394,8 @@ export type ConversationTurn = {
   user_message: string;
 };
 export type TeamOperationRouteRule = {
-  operation: string;
+  agent_id?: string | null;
+  operation?: string | null;
   purpose?: string | null;
   rule_id: string;
   target_profile_id: string;
