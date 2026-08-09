@@ -185,6 +185,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
+    // Agent templates' `available_capabilities` is what the agent edit
+    // form's "Capacités incluses" indicators read to decide whether a
+    // capability is available (green) or missing (red). This query carried
+    // no tags at all, so an admin enabling/disabling a capability never
+    // refreshed it — the cached list just sat there (up to
+    // `keepUnusedDataFor`, since `controlPlaneApi` has no
+    // refetchOnMount/Focus either) showing capabilities as missing that had
+    // just been turned on, until a full page reload wiped the whole store.
+    // Tagging it the same way the admin catalog query is tagged closes that
+    // gap for every consumer, not just the agent form (evaluation run
+    // creation reads the same field from the same query).
+    getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
     // Agent instances. `controlPlaneApi` has no refetchOnMount/Focus, so a
     // cached list only refreshes through tags. The managed chat reads this
     // list for the agent's display name and capability set, so without these
