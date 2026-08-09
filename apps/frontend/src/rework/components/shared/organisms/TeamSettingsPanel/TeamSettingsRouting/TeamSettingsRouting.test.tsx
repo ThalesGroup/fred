@@ -209,7 +209,8 @@ describe("TeamSettingsRouting", () => {
     h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
     h.availableModels = ONE_MODEL;
     h.updateRoutingPolicy.mockReturnValue({
-      unwrap: () => Promise.reject({ status: 400, data: { detail: "Team 'team-1' may not use profile id(s) ['ghost']." } }),
+      unwrap: () =>
+        Promise.reject({ status: 400, data: { detail: "Team 'team-1' may not use profile id(s) ['ghost']." } }),
     } as never);
     render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
 

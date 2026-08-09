@@ -159,8 +159,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
 
   const hasNoModelsAvailable = profileOptions.length === 0;
 
-  const handleAddRow = () =>
-    setRows((prev) => [...prev, newRow(agentTemplates?.[0]?.source_agent_id ?? null)]);
+  const handleAddRow = () => setRows((prev) => [...prev, newRow(agentTemplates?.[0]?.source_agent_id ?? null)]);
   const handleRemoveRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
   const handleRowChange = (key: string, field: "operation" | "purpose", value: string) => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value === "" ? null : value } : r)));
