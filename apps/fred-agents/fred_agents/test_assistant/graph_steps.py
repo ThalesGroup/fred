@@ -52,6 +52,8 @@ from fred_sdk import (
 from fred_sdk.contracts.context import GeoPart
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from fred_agents.model_metadata import resolved_model_name
+
 from .graph_state import TestState
 
 
@@ -329,15 +331,9 @@ async def model_probe_step(
     response_text = (
         response.content if isinstance(response.content, str) else str(response.content)
     )
-    response_metadata = getattr(response, "response_metadata", None) or {}
-    resolved_model_name = (
-        response_metadata.get("model_name") or response_metadata.get("model")
-        if isinstance(response_metadata, dict)
-        else None
-    )
     lines = [
         f"Model probe complete for operation **`{operation}`**.",
-        f"Model resolved: **`{resolved_model_name or '(unknown)'}`**.",
+        f"Model resolved: **`{resolved_model_name(response) or '(unknown)'}`**.",
         "",
         response_text,
     ]

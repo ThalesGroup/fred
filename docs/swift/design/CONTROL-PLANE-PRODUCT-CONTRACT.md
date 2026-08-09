@@ -2339,28 +2339,43 @@ section is the product/data/API contract.
 
 **Data model** (`TeamRoutingPolicy`): `team_id`, `version`,
 `chat_default_profile_id: str | None`, `operation_rules:
-list[TeamOperationRouteRule]` (`rule_id`, `operation`, `purpose: str | None`,
-`target_profile_id`). `rule_id` unique per team policy; `(operation,
-purpose)` unique per team policy. `null` `chat_default_profile_id` means "use
-the runtime catalog default."
+list[TeamOperationRouteRule]` (`rule_id`, `operation: str | None`, `purpose:
+str | None`, `agent_id: str | None` — per-agent override, 2026-08-09,
+issue #2267 — `target_profile_id`). `rule_id` unique per team policy;
+`(operation, purpose, agent_id)` unique per team policy. `operation`,
+`purpose`, and `agent_id` are each optional (`null` = wildcard, matches every
+value). `null` `chat_default_profile_id` means "use the runtime catalog
+default."
 
-**Resolution (fixed, deterministic, no scoring):** an operation+purpose match
-wins, else an operation-only match (`purpose=null`), else
-`chat_default_profile_id` if set, else the runtime catalog default for
-capability `chat`.
+**Resolution (deterministic — most-specific match wins, ambiguity rejected at
+write time, never at resolve time):** among the rules whose non-null criteria
+all match the request, the one defining the most criteria (highest
+specificity: 0-3, counting `operation`/`purpose`/`agent_id`) wins; else
+`chat_default_profile_id` if set; else the runtime catalog default for
+capability `chat`. Write-time validation (below) guarantees the winner is
+always unambiguous — two rules that could both match one request with equal
+specificity can never coexist in a stored policy, so "most specific wins" has
+exactly one answer for every possible request. `resolve_team_override`
+(fred-runtime) additionally breaks a tie by declaration order as a defensive
+fallback; this should be unreachable given the write-time guarantee and exists
+only so a resolve call never raises.
 
-**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects
+**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects:
 any referenced profile whose derived capability id
 (`model_capability_id(provider, name)` — coarser-grained than a profile id,
 since two profiles can share one `(provider, name)`) is not currently
-`can_use`-enabled for the team, **and** rejects any profile not present on
-**every** enabled, model-capable pod
-(`capabilities/catalog.py::universally_available_model_profile_ids`,
-intersection — not the union this section's admission
-catalog uses, since whichever pod serves a turn must resolve the chosen
-profile or fail closed at runtime). The `available-models` picker (§ below)
-applies the same intersection filter, so it never offers what the write
-would reject.
+`can_use`-enabled for the team; any profile not present on **every** enabled,
+model-capable pod (`capabilities/catalog.py::universally_available_model_profile_ids`,
+intersection — not the union this section's admission catalog uses, since
+whichever pod serves a turn must resolve the chosen profile or fail closed at
+runtime); a duplicate `rule_id`; two rules sharing an exact `(operation,
+purpose, agent_id)` triplet; and two rules that could both match one request
+with equal specificity but pin different criteria to get there (e.g. one rule
+keying on `operation`+`agent_id`, another on `purpose`+`agent_id`, for the
+same `agent_id`) — the resolver has no defined winner for that case, so the
+write is rejected rather than leaving an outcome that depends on storage
+order. The `available-models` picker (§ below) applies the same intersection
+filter, so it never offers what the write would reject.
 
 **Authorization:** read — `team_admin`, `team_editor`, `team_analyst` (a
 plain `team_member` is denied); write — `team_editor` only.
@@ -2388,8 +2403,9 @@ silently dropped. `team_admin` sees the same panel with inputs disabled
 (read-only), not a second component. Hidden entirely when the team has no
 enabled models beyond the deployment default.
 
-**Explicit non-goals (V1):** per-agent routing rules, per-user routing
-inside a shared multi-member team (distinct from personal-space support,
-which is just a team routing policy scoped to a one-member team), model
-temperature/timeout tuning, a per-message composer picker, direct
-`models_catalog.yaml` editing from the product.
+**Explicit non-goals (V1):** per-user routing inside a shared multi-member
+team (distinct from personal-space support, which is just a team routing
+policy scoped to a one-member team), model temperature/timeout tuning, a
+per-message composer picker, direct `models_catalog.yaml` editing from the
+product. Per-agent routing rules (2026-08-09, issue #2267) are no longer a
+non-goal — see the data model and resolution notes above.

@@ -44,9 +44,11 @@ from control_plane_backend.capabilities.catalog import (
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy.schemas import (
+    AmbiguousOperationRuleError,
     AvailableModelProfile,
     AvailableModelProfileList,
     DuplicateOperationRuleError,
+    DuplicateRuleIdError,
     ProfileNotUsableError,
     TeamRoutingPolicy,
     UnknownProfileError,
@@ -137,6 +139,34 @@ def _referenced_profile_ids(
     return ids
 
 
+def _specificity(rule: TeamOperationRouteRule) -> int:
+    """How many of the three optional match criteria this rule pins down —
+    mirrors the resolver's own tie-break scoring (`resolve_team_override`)."""
+
+    return (
+        (rule.operation is not None)
+        + (rule.purpose is not None)
+        + (rule.agent_id is not None)
+    )
+
+
+def _could_both_match_one_request(
+    a: TeamOperationRouteRule, b: TeamOperationRouteRule
+) -> bool:
+    """True when some concrete request could satisfy both rules at once —
+    every field where both rules pin a value agrees; a None (wildcard) on
+    either side never blocks a match."""
+
+    for value_a, value_b in (
+        (a.operation, b.operation),
+        (a.purpose, b.purpose),
+        (a.agent_id, b.agent_id),
+    ):
+        if value_a is not None and value_b is not None and value_a != value_b:
+            return False
+    return True
+
+
 async def _validate_write(
     deps: ProductServiceDependencies,
     *,
@@ -157,23 +187,37 @@ async def _validate_write(
     whichever pod actually lacks it (`TeamRoutingProfileDriftError`).
     """
 
-    rule_ids = [r.rule_id for r in request.operation_rules]
-    if len(set(rule_ids)) != len(rule_ids):
-        raise DuplicateOperationRuleError(operation=None, purpose=None)
-
-    # Uniqueness is on (operation, purpose, agent_id): the same combination
-    # may not appear twice in the policy. Operation and agent_id are both
-    # optional (None = wildcard), so a rule with operation=None applies to
-    # all operations. This is backward compatible: rules written before
-    # operation became optional keep operation non-None.
-    seen_rule_key: set[tuple[str | None, str | None, str | None]] = set()
+    seen_rule_ids: set[str] = set()
     for rule in request.operation_rules:
-        key = (rule.operation, rule.purpose, rule.agent_id)
-        if key in seen_rule_key:
-            raise DuplicateOperationRuleError(
-                operation=rule.operation, purpose=rule.purpose, agent_id=rule.agent_id
-            )
-        seen_rule_key.add(key)
+        if rule.rule_id in seen_rule_ids:
+            raise DuplicateRuleIdError(rule_id=rule.rule_id)
+        seen_rule_ids.add(rule.rule_id)
+
+    # Resolution is fixed and deterministic — never a scoring tie-break an
+    # admin has to reason about (RFC §3.2). Two rules that share an exact
+    # (operation, purpose, agent_id) triplet are rejected outright; two rules
+    # that could both match one request with equal specificity but differ in
+    # which criteria they pin (e.g. one keys on agent_id+operation, the other
+    # on agent_id+purpose, for the same agent) are rejected too — the
+    # resolver would otherwise break that tie by declaration order, an
+    # outcome this UI never surfaces to the person editing it.
+    rules = request.operation_rules
+    for i, rule_a in enumerate(rules):
+        for rule_b in rules[i + 1 :]:
+            if not _could_both_match_one_request(rule_a, rule_b):
+                continue
+            if (
+                rule_a.operation == rule_b.operation
+                and rule_a.purpose == rule_b.purpose
+                and rule_a.agent_id == rule_b.agent_id
+            ):
+                raise DuplicateOperationRuleError(
+                    operation=rule_a.operation, purpose=rule_a.purpose, agent_id=rule_a.agent_id
+                )
+            if _specificity(rule_a) == _specificity(rule_b):
+                raise AmbiguousOperationRuleError(
+                    rule_id_a=rule_a.rule_id, rule_id_b=rule_b.rule_id
+                )
 
     referenced = _referenced_profile_ids(
         chat_default_profile_id=request.chat_default_profile_id,

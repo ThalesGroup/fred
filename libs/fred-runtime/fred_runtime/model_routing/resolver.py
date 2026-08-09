@@ -237,7 +237,13 @@ def resolve_team_override(
     matches when every criterion it defines equals the request. The winner is the
     rule with the most defined criteria (highest specificity), ties broken by
     declaration order — so `agent+operation+purpose` beats `agent+operation` /
-    `operation+purpose` / `agent`, etc.
+    `operation+purpose` / `agent`, etc. Two rules that could tie in specificity
+    for an overlapping request can never both be stored for the same team:
+    control-plane's write-time validation (`routing_policy/service.py
+    ::_validate_write`, `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37) rejects that
+    combination outright, so the declaration-order tie-break below is a
+    defensive fallback that should be unreachable in practice, not a documented
+    resolution rule callers may rely on.
 
     Backward compatible with agent-agnostic rules: a rule that leaves
     agent_id=None behaves as before.

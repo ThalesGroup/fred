@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import styles from "./TeamSettingsRouting.module.scss";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
@@ -50,43 +51,48 @@ interface RuleRow extends TeamOperationRouteRule {
 }
 
 let nextKey = 0;
-function newRow(): RuleRow {
+/** `defaultAgentId` should be the team's first real agent, when it has one —
+ * a row with both `operation` and `agent_id` null always fails write-time
+ * validation (`validate_at_least_one_criterion`) and free-text `operation`
+ * has no meaningful non-null default, so `agent_id` is the only field that
+ * can start non-null and still mean something (this PR's whole point is
+ * per-agent overrides). Falls back to null (today's "any agent") only when
+ * the team has no agents to pick from yet. */
+function newRow(defaultAgentId: string | null): RuleRow {
   nextKey += 1;
   // `rule_id` is a server-required, non-empty stable identifier
   // (`TeamOperationRouteRule.rule_id`, min_length=1). The form never surfaces
   // it, so generate one at creation — without this a new override always failed
   // write-time validation with a 422. Existing rows keep their own rule_id.
-  // `operation` and `agent_id` default to null (wildcard / applies to all) until
-  // the author refines them — at least one must be non-null per validation.
   return {
     key: `new-${nextKey}`,
     rule_id: crypto.randomUUID(),
     operation: null,
     purpose: null,
-    agent_id: null,
+    agent_id: defaultAgentId,
     target_profile_id: "",
   };
 }
 
-/** Turn an RTK Query error into a human-readable message.
- *
- * The control-plane returns a string `detail` for 400 write-time validation
- * (RFC §7.2 — unusable/unknown profile, duplicate rule). FastAPI request-shape
- * rejections return a 422 whose `detail` is an array of `{loc, msg, type}`;
- * rendering that array directly is what produced the "[object Object]" banner. */
-function extractSaveErrorDetail(err: unknown, fallback: string): string {
-  const detail =
-    err && typeof err === "object" && "data" in err && err.data && typeof err.data === "object" && "detail" in err.data
-      ? (err.data as { detail: unknown }).detail
-      : undefined;
-  if (typeof detail === "string" && detail.trim().length > 0) return detail;
-  if (Array.isArray(detail)) {
-    const messages = detail
-      .map((item) => (item && typeof item === "object" && "msg" in item ? String((item as { msg: unknown }).msg) : ""))
-      .filter((message) => message.length > 0);
-    if (messages.length > 0) return messages.join("; ");
+/** Build a picker's option list from a base catalog, keeping any row's
+ * currently-referenced value selectable even if the catalog no longer lists
+ * it (renamed/removed upstream) — flagged via description rather than
+ * silently dropped. Shared by the profile and agent pickers below, which
+ * differ only in their catalog shape and current-value source. */
+function withUnavailableFallback(
+  base: OptionModel<string>[],
+  currentValues: Iterable<string | null | undefined>,
+  unavailableLabel: string,
+): OptionModel<string>[] {
+  const known = new Set(base.map((option) => option.value));
+  const stale = new Set<string>();
+  for (const value of currentValues) {
+    if (value && !known.has(value)) stale.add(value);
   }
-  return fallback;
+  if (stale.size === 0) return base;
+  const options = [...base];
+  stale.forEach((value) => options.push({ value, label: value, key: value, description: unavailableLabel }));
+  return options;
 }
 
 /**
@@ -123,58 +129,38 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
   }, [policy]);
 
   const profileOptions: OptionModel<string>[] = useMemo(() => {
-    const options: OptionModel<string>[] = (availableModels?.profiles ?? []).map((profile) => ({
+    const base: OptionModel<string>[] = (availableModels?.profiles ?? []).map((profile) => ({
       value: profile.profile_id,
       label: `${t(profile.name, { defaultValue: profile.name })} (${profile.profile_id})`,
       key: profile.profile_id,
     }));
-    const known = new Set(options.map((option) => option.value));
-    const stale = new Set<string>();
-    if (chatDefaultProfileId && !known.has(chatDefaultProfileId)) stale.add(chatDefaultProfileId);
-    rows.forEach((row) => {
-      if (row.target_profile_id && !known.has(row.target_profile_id)) stale.add(row.target_profile_id);
-    });
-    stale.forEach((profileId) =>
-      options.push({
-        value: profileId,
-        label: profileId,
-        key: profileId,
-        description: t("rework.teamSettings.routing.profileUnavailable"),
-      }),
-    );
-    return options;
+    const currentValues = [chatDefaultProfileId, ...rows.map((row) => row.target_profile_id)];
+    return withUnavailableFallback(base, currentValues, t("rework.teamSettings.routing.profileUnavailable"));
   }, [availableModels, chatDefaultProfileId, rows, t]);
 
   const agentOptions: OptionModel<string>[] = useMemo(() => {
-    const options: OptionModel<string>[] = [
+    const base: OptionModel<string>[] = [
       { value: AGENT_ANY, label: t("rework.teamSettings.routing.operationRules.agentAny"), key: "__any_agent__" },
     ];
-    const seen = new Set<string>([AGENT_ANY]);
+    const seenTemplateIds = new Set<string>([AGENT_ANY]);
     (agentTemplates ?? []).forEach((tpl) => {
-      if (seen.has(tpl.source_agent_id)) return;
-      seen.add(tpl.source_agent_id);
-      options.push({ value: tpl.source_agent_id, label: tpl.display_name, key: tpl.source_agent_id });
+      if (seenTemplateIds.has(tpl.source_agent_id)) return;
+      seenTemplateIds.add(tpl.source_agent_id);
+      base.push({ value: tpl.source_agent_id, label: tpl.display_name, key: tpl.source_agent_id });
     });
-    // Keep a rule's agent selectable even if it's no longer listed (renamed/removed).
-    rows.forEach((row) => {
-      if (row.agent_id && !seen.has(row.agent_id)) {
-        seen.add(row.agent_id);
-        options.push({
-          value: row.agent_id,
-          label: row.agent_id,
-          key: row.agent_id,
-          description: t("rework.teamSettings.routing.profileUnavailable"),
-        });
-      }
-    });
-    return options;
+    return withUnavailableFallback(
+      base,
+      rows.map((row) => row.agent_id),
+      t("rework.teamSettings.routing.profileUnavailable"),
+    );
   }, [agentTemplates, rows, t]);
 
   if (isLoading || isLoadingModels) return null;
 
   const hasNoModelsAvailable = profileOptions.length === 0;
 
-  const handleAddRow = () => setRows((prev) => [...prev, newRow()]);
+  const handleAddRow = () =>
+    setRows((prev) => [...prev, newRow(agentTemplates?.[0]?.source_agent_id ?? null)]);
   const handleRemoveRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
   const handleRowChange = (key: string, field: "operation" | "purpose", value: string) => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value === "" ? null : value } : r)));
@@ -200,7 +186,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
         },
       }).unwrap();
     } catch (err) {
-      setError(extractSaveErrorDetail(err, t("rework.teamSettings.routing.saveError")));
+      setError(normalizeApiError(err).detail ?? t("rework.teamSettings.routing.saveError"));
     }
   };
 

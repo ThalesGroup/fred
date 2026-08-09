@@ -34,19 +34,13 @@ from fred_sdk import (
     StepResult,
     typed_node,
 )
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from fred_agents.model_metadata import resolved_model_name
 
 from .graph_state import PhaseRecord, RoutingProbeState
 
 _NO_MODEL = "(no model configured for this pod)"
-
-
-def _resolved_model_name(response: BaseMessage) -> str:
-    metadata = getattr(response, "response_metadata", None) or {}
-    if not isinstance(metadata, dict):
-        return "(unknown)"
-    name = metadata.get("model_name") or metadata.get("model")
-    return name if isinstance(name, str) and name.strip() else "(unknown)"
 
 
 def _make_phase_step(phase: str, operation: str):
@@ -91,7 +85,7 @@ def _make_phase_step(phase: str, operation: str):
         record = PhaseRecord(
             phase=phase,
             operation=operation,
-            model_name=_resolved_model_name(response),
+            model_name=resolved_model_name(response) or "(unknown)",
             reply=reply.strip(),
         )
         return StepResult(

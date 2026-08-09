@@ -98,3 +98,33 @@ class DuplicateOperationRuleError(Exception):
         super().__init__(
             f"Duplicate rule for (operation={operation!r}, purpose={purpose!r}, agent_id={agent_id!r})."
         )
+
+
+class DuplicateRuleIdError(Exception):
+    """Two rules in the same write share a `rule_id` — always a client bug
+    (rule_id is a client-generated stable key, never user-authored), never a
+    legitimate routing intent. Reported separately from
+    `DuplicateOperationRuleError` so the message names the actual offending
+    id instead of a misleading (None, None, None) triplet."""
+
+    def __init__(self, *, rule_id: str) -> None:
+        self.rule_id = rule_id
+        super().__init__(f"Duplicate rule_id {rule_id!r} in the same write.")
+
+
+class AmbiguousOperationRuleError(Exception):
+    """Two rules in the same write could both match the same request with
+    equal specificity (RFC §3.2 resolution is "fixed, deterministic, no
+    scoring") — e.g. one rule pinning (operation, agent_id) and another
+    pinning (purpose, agent_id) for the same agent_id. The resolver breaks
+    such ties by declaration order, which this UI never surfaces to an
+    admin, so reject the write instead of leaving an outcome that depends on
+    storage order."""
+
+    def __init__(self, *, rule_id_a: str, rule_id_b: str) -> None:
+        self.rule_id_a = rule_id_a
+        self.rule_id_b = rule_id_b
+        super().__init__(
+            f"Rules {rule_id_a!r} and {rule_id_b!r} can both match the same request "
+            "with equal specificity — remove or narrow one so resolution stays deterministic."
+        )

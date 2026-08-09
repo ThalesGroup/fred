@@ -209,7 +209,7 @@ describe("TeamSettingsRouting", () => {
     h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
     h.availableModels = ONE_MODEL;
     h.updateRoutingPolicy.mockReturnValue({
-      unwrap: () => Promise.reject({ data: { detail: "Team 'team-1' may not use profile id(s) ['ghost']." } }),
+      unwrap: () => Promise.reject({ status: 400, data: { detail: "Team 'team-1' may not use profile id(s) ['ghost']." } }),
     } as never);
     render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
 
@@ -277,6 +277,7 @@ describe("TeamSettingsRouting", () => {
     h.updateRoutingPolicy.mockReturnValue({
       unwrap: () =>
         Promise.reject({
+          status: 422,
           data: {
             detail: [
               {
@@ -329,5 +330,44 @@ describe("TeamSettingsRouting", () => {
     const rules = lastCall.updateTeamRoutingPolicyRequest.operation_rules;
     expect(rules).toHaveLength(1);
     expect(rules[0].rule_id.length).toBeGreaterThan(0);
+  });
+
+  it("defaults a newly added row's agent to the team's first agent, not null+null", async () => {
+    // operation and agent_id are both optional on the server, but at least one
+    // is required (validate_at_least_one_criterion) — a fresh row with a real
+    // agent available must not default to a combination write-time validation
+    // always rejects.
+    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = ONE_MODEL;
+    h.agentTemplates = [
+      {
+        template_id: "t1",
+        source_runtime_id: "fred-agents",
+        source_agent_id: "rico",
+        display_name: "Rico",
+        description: "",
+      },
+    ] as AgentTemplateSummary[];
+    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
+    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+
+    const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
+    act(() => {
+      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "rework.teamSettings.routing.save",
+    )!;
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const calls = h.updateRoutingPolicy.mock.calls as unknown as Array<
+      [{ updateTeamRoutingPolicyRequest: { operation_rules: { agent_id?: string | null }[] } }]
+    >;
+    const rules = calls[calls.length - 1][0].updateTeamRoutingPolicyRequest.operation_rules;
+    expect(rules[0].agent_id).toBe("rico");
   });
 });
