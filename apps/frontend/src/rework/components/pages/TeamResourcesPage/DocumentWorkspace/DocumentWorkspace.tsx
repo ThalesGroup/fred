@@ -106,13 +106,9 @@ function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
 }
 
-// identity.title (decision 9, RFC §13.8: cosmetic in-app rename) never carries
-// an extension — it's either a plain user-typed label, or, for a never-renamed
-// document, the file's own embedded "title" metadata property (e.g. a pptx's
-// core Title, commonly auto-filled by PowerPoint from the template/first
-// slide and never including ".pptx"). identity.document_name always does
-// ("Original file name incl. extension"), so it's the source of truth for the
-// extension regardless of which label wins for display.
+// identity.document_name is always "Original file name incl. extension" —
+// the source of truth for both display and extension, unlike identity.title
+// (see embeddedTitle below).
 // Matches the backend's own extension check (Path(name).suffix) in
 // rename_document — a rename may never change it (DOCUMENT-RENAME-RFC.md §4).
 function documentExtension(doc: DocumentMetadata): string {
@@ -120,10 +116,26 @@ function documentExtension(doc: DocumentMetadata): string {
   return dot > 0 ? doc.identity.document_name.slice(dot) : "";
 }
 
+// The Name column always shows document_name: identity.title is populated
+// ingestion-time straight from the file's own embedded metadata
+// (PDF /Title, docx core_properties.title) with no validation, so it's as
+// likely to be empty, a stale value copied from a shared template, or a
+// generic "Untitled" placeholder as it is a real paper/document title.
 function documentDisplayName(doc: DocumentMetadata): string {
-  const label = doc.identity.title || doc.identity.document_name;
-  const extension = documentExtension(doc);
-  return extension && !label.toLowerCase().endsWith(extension.toLowerCase()) ? `${label}${extension}` : label;
+  return doc.identity.document_name;
+}
+
+// Surfaced as a hint next to the filename, not as the primary label: still
+// useful (e.g. an arXiv PDF's real paper title) when it isn't just noise —
+// filtered out when blank or when it doesn't actually add anything over the
+// filename itself (base_input_processor.py defaults title to the filename
+// stem, so most never-renamed, no-metadata documents would otherwise show an
+// identical-looking hint).
+function embeddedTitle(doc: DocumentMetadata): string | null {
+  const title = doc.identity.title?.trim();
+  if (!title) return null;
+  const stem = doc.identity.document_name.replace(/\.[^./]+$/, "");
+  return title === doc.identity.document_name || title === stem ? null : title;
 }
 
 function rowLabel(row: Row): string {
@@ -771,12 +783,20 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           );
         }
         const spec = fileIconSpec(row.doc.file?.file_type);
+        const title = embeddedTitle(row.doc);
         return (
           <span className={styles.nameCell}>
             <span className={styles.rowIcon} style={{ color: spec.color }}>
               <Icon category="outlined" type={spec.type} filled={spec.filled} />
             </span>
             <span>{documentDisplayName(row.doc)}</span>
+            {title && (
+              <Tooltip text={t("rework.resources.embeddedTitleHint", { title })}>
+                <span className={styles.titleHintIcon} aria-label={t("rework.resources.embeddedTitleHint", { title })}>
+                  <Icon category="outlined" type="info" />
+                </span>
+              </Tooltip>
+            )}
           </span>
         );
       },

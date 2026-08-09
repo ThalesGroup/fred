@@ -1522,6 +1522,7 @@
         "created": "Added on",
         "author": "Added by"
       },
+      "embeddedTitleHint": "Embedded title: {{title}}",
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",

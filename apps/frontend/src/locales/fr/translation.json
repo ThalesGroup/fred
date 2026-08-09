@@ -1522,6 +1522,7 @@
         "created": "Ajouté le",
         "author": "Ajouté par"
       },
+      "embeddedTitleHint": "Titre intégré au fichier : {{title}}",
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
