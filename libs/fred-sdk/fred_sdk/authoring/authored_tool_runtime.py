@@ -316,7 +316,7 @@ def _coerce_tool_return(
     *,
     tool_ref: str,
     value: object,
-    context: "ToolContext",
+    context: ToolContext,
     success_message: str | None,
 ) -> ToolInvocationResult:
     """

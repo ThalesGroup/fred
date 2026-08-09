@@ -49,6 +49,8 @@ from fred_core.security.rebac.capability_authz import (
 from fred_core.security.rebac.rebac_engine import RebacEngine, RebacReference
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 
+__all__ = ["usable_capability_ids"]
+
 logger = logging.getLogger(__name__)
 
 
