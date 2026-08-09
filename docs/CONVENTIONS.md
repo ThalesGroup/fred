@@ -109,6 +109,38 @@ below are what to follow while writing the code, not just at review time.
   unrelated change.
 - **Never hand-edit generated files.** `openapi.json` — regenerate from source and
   document the regeneration command when you run it.
+- **Wrap bare `for x in SomeEnum:` in `list(...)`.** `EnumMeta.__iter__` makes an
+  `Enum` class itself iterable, but CodeQL's Python analysis doesn't model that and
+  flags `for x in SomeEnum:` as "non-iterable used in for loop" — a false positive,
+  not a bug. Write `for x in list(SomeEnum):` instead: same members, same order, but
+  the explicit `list()` call reads as unambiguously iterable to the analyzer, so the
+  finding never fires and there's nothing to dismiss on GitHub each scan.
+- **Don't quote a type inside `cast(...)` when the type is already imported at
+  module level.** CodeQL's `py/unused-import` query resolves usage inside real
+  annotation positions (`def f(x: "SomeType")`, `x: "SomeType" = ...`) but not
+  inside an arbitrary string literal passed to `typing.cast(...)` — so
+  `cast("SomeType", value)` reads as an unused import even though it isn't. Quoting
+  is unread by CodeQL either way at runtime (`cast()` ignores its first argument),
+  so unless the name is `TYPE_CHECKING`-only (genuine circular-import guard), write
+  `cast(SomeType, value)` unquoted — same behavior, no false positive. Same logic
+  for a quoted forward-ref annotation (`x: "SomeType"`) in a module that already has
+  `from __future__ import annotations`: the quotes are redundant (every annotation
+  is deferred already) and only a bare `x: SomeType` is recognized as a real usage.
+- **A re-exported name needs `__all__`, not just `import x as x`.** The explicit
+  `from mod import name as name` re-export idiom satisfies mypy's
+  `--no-implicit-reexport` and ruff's F401, but CodeQL's `py/unused-import` query
+  only checks `__all__` — it has no special case for the same-name-alias pattern.
+  Keep the `as name` alias (mypy still wants it) and add
+  `__all__ = ["name", ...]` alongside it so CodeQL recognizes the export too.
+- **Side-effect-only imports outside `__init__.py` cannot be silenced.** CodeQL's
+  `py/unused-import` query hardcodes its "imported to force module loading"
+  exception to `__init__.py` files only — an Alembic `env.py` importing ORM model
+  modules purely to register them on `Base.metadata`, or a `compat/*_patch.py`
+  monkeypatch module imported purely for its side effect, has no code-level fix:
+  moving the import into a real `__init__.py` isn't an option either, since that's
+  exactly the circular-import trap the existing `# noqa: F401` comment is there to
+  document. Treat these as an accepted false-positive class — dismiss on GitHub
+  with reason "false positive" rather than re-investigating each one.
 
 ### Testing (Python)
 

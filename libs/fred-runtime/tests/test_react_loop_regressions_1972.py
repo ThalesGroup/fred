@@ -156,7 +156,7 @@ def _compile_agent(
             always_require_tools=always_require_tools,
         ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
-        chat_model_factory=cast("ChatModelFactoryPort | None", chat_model_factory),
+        chat_model_factory=cast(ChatModelFactoryPort | None, chat_model_factory),
         definition=cast(ReActAgentDefinition, _FakeDefinition()),
         infer_operation_from_messages=infer_react_model_operation_from_messages,
         default_operation=REACT_MODEL_OPERATION_ROUTING,

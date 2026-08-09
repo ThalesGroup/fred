@@ -12,9 +12,13 @@ import sqlalchemy as sa
 ${imports if imports else ""}
 
 # revision identifiers, used by Alembic.
+# codeql[py/unused-global-variable]
 revision: str = ${repr(up_revision)}
+# codeql[py/unused-global-variable]
 down_revision: Union[str, Sequence[str], None] = ${repr(down_revision)}
+# codeql[py/unused-global-variable]
 branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
+# codeql[py/unused-global-variable]
 depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
 
 
