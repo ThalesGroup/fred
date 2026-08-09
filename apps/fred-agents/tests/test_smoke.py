@@ -489,6 +489,63 @@ def test_fred_test_assistant_model_probe_uses_operation_aware_routing(
     assert "routing" in factory.requested_operations
 
 
+def test_routing_probe_alpha_and_beta_register_as_distinct_agents_and_stream(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Verify both routing-probe identities register under distinct agent_ids
+    from one shared `RoutingProbeGraphAgent` class, and that a real streamed
+    turn on one of them runs all three phases end to end (#2267).
+
+    Why this test exists:
+    - the two probes are the first agents in this pod built by instantiating
+      one class twice with different `agent_id`s rather than subclassing —
+      this proves that pattern registers and executes cleanly through the
+      real FastAPI app, not just via the unit-level fakes in
+      test_routing_probe_graph.py
+
+    How to use it:
+    - run via `make test` from the `fred-agents` project
+    """
+
+    factory = RecordingStaticChatModelFactory(
+        ToolFriendlyFakeChatModel(responses=[AIMessage(content="Phase confirmed.")])
+    )
+    app = _build_offline_agents_app(monkeypatch, tmp_path, factory)
+
+    with TestClient(app) as client:
+        registered = client.get("/fred/agents/v2/agents").json()
+        assert "fred.github.routing_probe_alpha" in registered
+        assert "fred.github.routing_probe_beta" in registered
+
+        template_ids = {
+            template["template_agent_id"]
+            for template in client.get("/fred/agents/v2/agents/templates").json()
+        }
+        assert "fred.github.routing_probe_alpha" in template_ids
+        assert "fred.github.routing_probe_beta" in template_ids
+
+        stream_response = client.post(
+            "/fred/agents/v2/agents/execute/stream",
+            json={
+                "agent_id": "fred.github.routing_probe_alpha",
+                "input": "hello",
+                "session_id": "routing-probe-alpha-session",
+                "runtime_context": {"user_id": "routing-probe-user"},
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = _parse_sse_payloads(stream_response.text)
+    assert payloads
+    assert not any("error" in payload for payload in payloads)
+    final_content = str(payloads[-1]["content"])
+    assert "Routing" in final_content
+    assert "Planning" in final_content
+    assert "Execution" in final_content
+    assert factory.requested_operations == ["routing", "planning", "execution"]
+
+
 def test_mindmap_prompt_files_load_from_packaged_module() -> None:
     """
     Verify packaged mindmap prompts resolve through the shipped module path.

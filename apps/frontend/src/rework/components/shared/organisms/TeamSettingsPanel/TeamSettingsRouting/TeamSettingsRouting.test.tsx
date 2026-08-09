@@ -24,6 +24,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
+  AgentTemplateSummary,
   AvailableModelProfileList,
   TeamRoutingPolicy,
   TeamWithPermissions,
@@ -38,6 +39,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   policy: undefined as TeamRoutingPolicy | undefined,
   availableModels: undefined as AvailableModelProfileList | undefined,
+  agentTemplates: undefined as AgentTemplateSummary[] | undefined,
   updateRoutingPolicy: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
 }));
 
@@ -49,6 +51,10 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useTeamRoutingPolicyQuery: () => ({ data: h.policy, isLoading: false }),
   useAvailableModelProfilesQuery: () => ({ data: h.availableModels, isLoading: false }),
   useUpdateTeamRoutingPolicyMutation: () => [h.updateRoutingPolicy, { isLoading: false }],
+}));
+
+vi.mock("../../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery: () => ({ data: h.agentTemplates }),
 }));
 
 import TeamSettingsRouting from "./TeamSettingsRouting.tsx";
@@ -73,6 +79,7 @@ afterEach(() => {
   h.updateRoutingPolicy.mockClear();
   h.policy = undefined;
   h.availableModels = undefined;
+  h.agentTemplates = undefined;
 });
 
 const TEAM = { id: "team-1", name: "Team One", is_member: true, admins: [], permissions: [] } as TeamWithPermissions;
@@ -112,8 +119,9 @@ describe("TeamSettingsRouting", () => {
     render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
 
     const triggers = selectTriggers();
+    // [0] default profile · [1] the rule's agent scope · [2] the rule's target profile
     expect(triggers[0].textContent).toContain("Mistral (default.chat.mistral)");
-    expect(triggers[1].textContent).toContain("GPT-5 (chat.openai.gpt5)");
+    expect(triggers[2].textContent).toContain("GPT-5 (chat.openai.gpt5)");
 
     const inputs = container.querySelectorAll("input");
     expect((inputs[0] as HTMLInputElement).value).toBe("planning");
@@ -169,8 +177,8 @@ describe("TeamSettingsRouting", () => {
 
     // operation + purpose text inputs for the new row.
     expect(container.querySelectorAll("input")).toHaveLength(2);
-    // default-profile select + the new row's target-profile select.
-    expect(selectTriggers()).toHaveLength(2);
+    // default-profile select + the new row's agent + target-profile selects.
+    expect(selectTriggers()).toHaveLength(3);
   });
 
   it("save PATCHes the picked default profile id and current rows", async () => {
@@ -216,6 +224,52 @@ describe("TeamSettingsRouting", () => {
     });
 
     expect(container.textContent).toContain("may not use profile id(s) ['ghost']");
+  });
+
+  it("round-trips an agent-scoped rule and shows the agent name", async () => {
+    h.policy = {
+      team_id: "team-1",
+      version: 1,
+      chat_default_profile_id: null,
+      operation_rules: [
+        {
+          rule_id: "r1",
+          operation: "planning",
+          purpose: null,
+          agent_id: "rico",
+          target_profile_id: "chat.openai.gpt5",
+        },
+      ],
+    };
+    h.availableModels = ONE_MODEL;
+    h.agentTemplates = [
+      {
+        template_id: "t1",
+        source_runtime_id: "fred-agents",
+        source_agent_id: "rico",
+        display_name: "Rico",
+        description: "",
+      },
+    ] as AgentTemplateSummary[];
+    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
+    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+
+    // the rule's agent-scope select resolves the id to the agent's display name
+    expect(selectTriggers()[1].textContent).toContain("Rico");
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "rework.teamSettings.routing.save",
+    )!;
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const calls = h.updateRoutingPolicy.mock.calls as unknown as Array<
+      [{ updateTeamRoutingPolicyRequest: { operation_rules: { agent_id?: string | null }[] } }]
+    >;
+    const rules = calls[calls.length - 1][0].updateTeamRoutingPolicyRequest.operation_rules;
+    expect(rules[0].agent_id).toBe("rico");
   });
 
   it("renders a 422 array-shaped detail as a readable message, not [object Object]", async () => {
@@ -277,5 +331,44 @@ describe("TeamSettingsRouting", () => {
     const rules = lastCall.updateTeamRoutingPolicyRequest.operation_rules;
     expect(rules).toHaveLength(1);
     expect(rules[0].rule_id.length).toBeGreaterThan(0);
+  });
+
+  it("defaults a newly added row's agent to the team's first agent, not null+null", async () => {
+    // operation and agent_id are both optional on the server, but at least one
+    // is required (validate_at_least_one_criterion) — a fresh row with a real
+    // agent available must not default to a combination write-time validation
+    // always rejects.
+    h.policy = { team_id: "team-1", version: 0, chat_default_profile_id: null, operation_rules: [] };
+    h.availableModels = ONE_MODEL;
+    h.agentTemplates = [
+      {
+        template_id: "t1",
+        source_runtime_id: "fred-agents",
+        source_agent_id: "rico",
+        display_name: "Rico",
+        description: "",
+      },
+    ] as AgentTemplateSummary[];
+    h.updateRoutingPolicy.mockReturnValue({ unwrap: () => Promise.resolve() } as never);
+    render(<TeamSettingsRouting team={TEAM} canWrite={true} />);
+
+    const addButton = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("addRule"))!;
+    act(() => {
+      addButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "rework.teamSettings.routing.save",
+    )!;
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const calls = h.updateRoutingPolicy.mock.calls as unknown as Array<
+      [{ updateTeamRoutingPolicyRequest: { operation_rules: { agent_id?: string | null }[] } }]
+    >;
+    const rules = calls[calls.length - 1][0].updateTeamRoutingPolicyRequest.operation_rules;
+    expect(rules[0].agent_id).toBe("rico");
   });
 });

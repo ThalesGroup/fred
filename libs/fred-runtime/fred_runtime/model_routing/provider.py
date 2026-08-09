@@ -358,6 +358,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
             operation=operation,
             purpose=purpose,
+            agent_id=definition.agent_id,
         )
         if team_profile_id is None:
             return selection
