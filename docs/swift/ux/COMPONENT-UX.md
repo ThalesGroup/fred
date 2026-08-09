@@ -1349,6 +1349,42 @@ the input exactly; the popover's only remaining offset is the deliberate
 
 ---
 
+### `DataTable` — body cells contain their content; primitive values truncate (#2284, 2026-08-07)
+
+**Location:** `src/rework/components/shared/molecules/DataTable/DataTable.tsx`,
+`src/rework/components/shared/molecules/DataTable/DataTable.module.scss`
+**Status:** `Functional`
+
+Reported on the Team members table: long values in the "Identifiant" column
+(usernames are full email addresses) ran under the First name column, and
+some wrapped onto two lines. Fixed in the molecule, not the call site, since
+any table with free-length text had the same bug (`AdminTeamsPage` team
+names, `MigrationPage` team names):
+
+- `.datatable-cell` gained `overflow: hidden` — whatever a `cellRenderer`
+  produces, it can no longer spill under the neighbouring column. Safe with
+  in-cell popovers (`IconButtonMenu`, `Tooltip`): their content portals to
+  `document.body`, so cell clipping can't touch it. Headers already
+  truncated (`.header-content`); this is the body-cell half.
+- Primitive `cellRenderer` values (string/number) are wrapped by DataTable
+  in a `.cell-text` span: single-line `text-overflow: ellipsis`, full value
+  readable via the span's native `title` on hover — same idiom as
+  `CorpusAuditPage`/`CapabilitiesPage` name cells. Element values pass
+  through untouched (the caller owns their layout).
+
+`TeamSettingsMembersTable`'s three text columns (Identifiant, First name,
+Last name) now return plain strings and get this behaviour for free.
+
+#### Open UX issues
+
+- The hover reveal is the native browser tooltip, not the design-system
+  `Tooltip` atom (and it also shows for values that aren't cut). A styled
+  only-when-truncated variant was prototyped and dropped as
+  disproportionate; revisit if design review wants tooltip consistency in
+  tables.
+
+---
+
 ### `TeamSettingsMembers` — member search field (2026-07-26)
 
 **Location:**
@@ -1758,8 +1794,10 @@ mislabeled for an admin looking at a page that's majority team-scoped content.
 team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activity_summary` trend
 line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
 `/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
-nav rail, which additionally has ack support this embed never did. See
-`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36 and the `TaskActivity` entry below.
+nav rail, which additionally has ack support this embed never did. With this page as its only
+consumer gone, the `team_activity_summary` preset endpoint itself was retired outright
+(2026-08-08) — it is no longer part of the contract. See `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36
+and the `TaskActivity` entry below.
 
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where

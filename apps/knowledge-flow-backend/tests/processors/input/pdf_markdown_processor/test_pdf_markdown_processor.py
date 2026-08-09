@@ -407,8 +407,9 @@ def test_pdf_kpi_timer_emits_when_in_activity_context(monkeypatch: pytest.Monkey
 
 
 def test_pdf_kpi_timer_noops_outside_activity_context(processor: PdfMarkdownProcessor):
-    """Outside a Temporal activity (e.g. `procbench` or a plain unit test), the timer
-    must no-op without ever touching ApplicationContext — which may not be initialized."""
+    """Outside a Temporal activity (e.g. a standalone script or a plain unit test),
+    the timer must no-op without ever touching ApplicationContext — which may not
+    be initialized."""
     with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop", "file_type": "pdf"}):
         pass
 

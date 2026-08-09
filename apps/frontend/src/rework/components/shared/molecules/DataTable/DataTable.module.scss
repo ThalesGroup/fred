@@ -101,6 +101,11 @@
   padding: 0 var(--spacing-s);
   min-width: 0;
   min-height: var(--datatable-row-height, 3.5rem);
+  /* Containment: whatever a cellRenderer produces, it must never spill under
+   * the neighbouring column. Headers already truncate (`.header-content`
+   * below); this is the body-cell half. Popover content (IconButtonMenu,
+   * Tooltip) is portaled to document.body, so clipping here can't touch it. */
+  overflow: hidden;
   color: var(--on-surface);
   font: var(--font-body-medium);
 
@@ -109,6 +114,16 @@
     overflow-x: hidden;
     color: var(--on-surface-retreat);
     font: var(--font-label-large);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Primitive cell values (DataTable.tsx wraps them in this span): same
+   * single-line ellipsis the header already applies, so free-length text
+   * truncates inside its own track; the full value stays readable via the
+   * span's `title`. */
+  .cell-text {
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

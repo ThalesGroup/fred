@@ -58,27 +58,29 @@ index.tsx
 └── loadConfig() (async)
     └── Keycloak login
         └── render <FredUi />
-              ├── ThemeProvider (dark/light via ApplicationContext)
-              ├── RouterProvider (createBrowserRouter)
-              ├── ToastProvider + ConfirmationDialogProvider
               └── ApplicationContextProvider
-                   └── LayoutWithSidebar
-                         ├── SideBar (toggle + cluster + theme)
-                         └── Outlet (all pages go here)
+                   └── AppWithTheme (sets [data-theme] light/dark/system on <html>)
+                        └── AuthProvider
+                             └── GcuGuard → BootstrapGuard
+                                  ├── ConfirmationDialogProvider + ToastProvider
+                                  └── RouterProvider (createBrowserRouter)
+                                       └── LayoutWithSidebar
+                                             ├── SideBar (toggle + cluster + theme)
+                                             └── Outlet (all pages go here)
 ```
 
 ### Component Responsibilities
 
-| Component            | Responsibility                                                        |
-| -------------------- | --------------------------------------------------------------------- |
-| `index.tsx`          | Loads config, triggers Keycloak login, renders the root app component |
-| `FredUi.tsx`         | Wraps all providers and initializes routing based on loaded config    |
-| `ApplicationContext` | Holds global app state (cluster, theme, sidebar, namespaces, etc.)    |
-| `ThemeProvider`      | Applies the MUI theme (light/dark) dynamically using context          |
-| `RouterProvider`     | Powers the app's route tree using `createBrowserRouter()`             |
-| `LayoutWithSidebar`  | Defines app layout with optional sidebar and main outlet              |
-| `SideBar`            | Navigation + cluster selection + theme toggle                         |
-| `Outlet`             | Displays the active page route                                        |
+| Component            | Responsibility                                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `index.tsx`          | Loads config, triggers Keycloak login, renders the root app component                                                  |
+| `FredUi.tsx`         | Wraps all providers and initializes routing based on loaded config                                                     |
+| `ApplicationContext` | Holds global app state (cluster, theme, sidebar, namespaces, etc.)                                                     |
+| `AppWithTheme`       | Resolves light/dark/system to a `[data-theme]` attribute on `<html>`, read by CSS custom properties (no theme library) |
+| `RouterProvider`     | Powers the app's route tree using `createBrowserRouter()`                                                              |
+| `LayoutWithSidebar`  | Defines app layout with optional sidebar and main outlet                                                               |
+| `SideBar`            | Navigation + cluster selection + theme toggle                                                                          |
+| `Outlet`             | Displays the active page route                                                                                         |
 
 ### Key Features
 

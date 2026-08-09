@@ -333,7 +333,10 @@ export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>
 
 /** Text for the drawer header's single copy action, or null when there's nothing to copy. */
 export function toolCopyText(entry: TraceEntry): string | null {
-  if (entry.kind !== "combo") return null;
+  // Error rows: the raw crash message is copyable from the drawer.
+  if (entry.kind === "solo") {
+    return entry.message.channel === "error" ? textOf(entry.message) || null : null;
+  }
   const data = entry.result ? parseToolResultContent(entry.result) : null;
   const sqlResult = asSqlQueryResult(data);
   if (sqlResult) return sqlResult.sql_query;
@@ -463,6 +466,9 @@ export function entryLabel(entry: TraceEntry): string {
 // Short preview text shown inline in the row
 export function primaryTextForEntry(entry: TraceEntry): string {
   if (entry.kind === "solo") {
+    // Error rows keep the line short (a localized indication rendered by the
+    // row); the raw message is browsable in the trace drawer, not dumped inline.
+    if (entry.message.channel === "error") return "";
     if (entry.message.channel === "thought") {
       const extras = thoughtExtras(entry.message);
       return extras.title || textOf(entry.message);
@@ -520,6 +526,18 @@ export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly 
     return "pending";
   }
   return toolResultOk(entry.result) ? "ok" : "error";
+}
+
+/**
+ * True when a combo tool entry was cancelled by the user at its HITL gate. The
+ * frontend injects an optimistic error tool_result flagged `cancelled_by_user`
+ * on cancel (see `useChatSse.sendHitlResume`), so the previously "running" row
+ * flips immediately to a cancelled state (red status dot) instead of hanging.
+ */
+export function isCancelledByUser(entry: TraceEntry): boolean {
+  if (entry.kind !== "combo" || !entry.result) return false;
+  const extras = entry.result.metadata?.extras as { cancelled_by_user?: boolean } | undefined;
+  return extras?.cancelled_by_user === true;
 }
 
 // A "tool_use" thought is a synthetic bookkeeping block the runtime opens/closes

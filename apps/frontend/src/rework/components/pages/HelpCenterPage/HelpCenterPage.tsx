@@ -87,7 +87,7 @@ export default function HelpCenterPage() {
           <HelpSearch lang={lang} tree={tree} />
           <ButtonGroup
             variant="radio"
-            size="xs"
+            size="2xs"
             color="secondary"
             aria-label={t("rework.helpCenter.languageAria")}
             items={HELP_LANGS.map((l) => ({ label: l.toUpperCase() }))}

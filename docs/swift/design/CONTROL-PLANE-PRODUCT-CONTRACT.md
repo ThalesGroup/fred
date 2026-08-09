@@ -110,6 +110,16 @@ Phase 3a uses one control-plane-owned bootstrap payload:
   - `current_user`
   - `active_team`
   - `available_teams`
+    - `Team.my_relations` — **added 2026-08-08 (#2298).** Each `available_teams`
+      entry now carries the caller's own folded role relations
+      (`team_admin`/`team_editor`/`team_analyst`/`team_member`), the same
+      unambiguous field `active_team`/`TeamWithPermissions` already exposed.
+      Moved onto the base `Team` model (it is caller-specific, exactly like the
+      pre-existing `Team.is_member`) so the Home team list can render per-team
+      role labels without a per-team refetch. Costs **no extra ReBAC read**: the
+      value is sliced from the `roles_by_user` fold `_bulk_team_membership`
+      already computes per team (it was previously discarded). Empty list for
+      the personal/system space and for any team the caller is not a member of.
   - `gcu_version`
     - optional Terms of Use / CGU gating switch exposed by deployment config
   - `feature_flags`
@@ -2327,6 +2337,13 @@ task-acknowledgement mechanism the dedicated tabs use (`POST /tasks/{id}/ack`).
 Models-as-capability (`kind="model"` catalog projection, model-routing
 fail-closed enforcement) is specified above, not repeated here.
 
+**`team_activity_summary` preset retired (2026-08-08).** Once the embedded
+panel above was gone, this preset's only consumer (`TeamUsagePage`'s
+Activités trend) had none left — endpoint, response model, and generated
+client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
+`/team/:teamId/settings/activity`) remain the canonical, ack-capable place
+for this data; no replacement preset was added.
+
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118)
 
 A team (or personal space) chooses which of the models already available to
@@ -2409,3 +2426,27 @@ policy scoped to a one-member team), model temperature/timeout tuning, a
 per-message composer picker, direct `models_catalog.yaml` editing from the
 product. Per-agent routing rules (2026-08-09, issue #2267) are no longer a
 non-goal — see the data model and resolution notes above.
+
+## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
+
+The per-team uploaded image is now a **square avatar**, not a wide banner.
+The rename is API-surface deep but stops short of the database:
+
+- **Read field:** `Team.avatar_image_url` (was `banner_image_url`) — on the base
+  `Team`, so it rides on `bootstrap.available_teams`, `GET /teams`,
+  `GET /teams/{id}` alike. Presigned URL (or a stored absolute URL) to the
+  team's avatar object, or `null`.
+- **Write field:** `UpdateTeamRequest.avatar_image_url` (was `banner_image_url`).
+- **Upload route:** `POST /control-plane/v1/teams/{team_id}/avatar` (was
+  `/banner`) — multipart, max 5 MB, JPEG/PNG/WebP. Handler `upload_team_avatar`,
+  error `AvatarUploadError`.
+- **Storage layer unchanged (Option A):** the DB column and the `fred_core`
+  `TeamMetadata`/`TeamMetadataPatch` fields keep their legacy
+  `banner_object_storage_key` / `banner_image_url` names — no migration. The
+  control-plane `update_team` bridges the public `avatar_image_url` write field
+  to the storage layer's `banner_image_url` before persisting. New avatar
+  objects are stored under `teams/{id}/avatar-<uuid>.<ext>`.
+
+The frontend uploads the image through an in-app square crop editor that
+exports a bounded 512×512 WebP, so avatars are small regardless of the source
+image (a backend image-resize safety net remains a follow-up).

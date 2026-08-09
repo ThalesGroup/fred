@@ -26,6 +26,7 @@ import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
+import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
@@ -41,12 +42,10 @@ import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
-import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { Protected } from "@core/guards/Protected";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
-import { McpHub } from "../pages/McpHub";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
@@ -60,8 +59,8 @@ const ManagedChatPageRoute = () => {
 };
 
 // Bare `/` should land on the canonical personal-space URL (`personal-<uid>`,
-// not the bare `"personal"` alias) so the address bar and TeamSelectionNavbar's
-// selection check agree from the first paint. A static `<Navigate>` here never
+// not the bare `"personal"` alias) so the address bar and the team selection
+// check agree from the first paint. A static `<Navigate>` here never
 // resolves the real id: CTRLP-10 residual, see
 // docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md §4.3.
 const HomeIndexRoute = () => {
@@ -84,15 +83,8 @@ const AdminIndexRoute = () => {
   return <Navigate to="/unauthorized" replace />;
 };
 
-// Lazy loaded monitoring pages
-const Kpis = lazy(() => import("../pages/Kpis").then((module) => ({ default: module.Kpis })));
-const Runtime = lazy(() => import("../pages/Runtime"));
-const DataHub = lazy(() => import("../pages/DataHub"));
-const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
 const LibraryTreePlayground = lazy(() => import("@components/pages/LibraryTreePlayground/LibraryTreePlayground.tsx"));
-const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
-const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 // Lazy: the Help Center chunk carries its whole markdown corpus (HELP-01).
 const HelpCenterPage = lazy(() => import("@components/pages/HelpCenterPage/HelpCenterPage.tsx"));
 
@@ -116,6 +108,13 @@ export const routes: RouteObject[] = [
       {
         index: true,
         element: <HomeIndexRoute />,
+      },
+      {
+        // Landing behind the mainNavBar Home entry (#2298). The team switcher
+        // renders in the Home nav panel (Sidebar HOME mode); this is the
+        // content-area placeholder.
+        path: "home",
+        element: <HomePage />,
       },
       {
         path: "team/:teamId/agents",
@@ -237,70 +236,6 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "monitoring/kpis",
-        element: (
-          <Protected requires="observer">
-            <SuspenseWrapper>
-              <Kpis />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/runtime",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <Runtime />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/data",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <DataHub />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/rebac-backfill",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <RebacBackfill />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/processors",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <ProcessorBench />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "monitoring/processors/runs/:runId",
-        element: (
-          <Protected requires="admin">
-            <SuspenseWrapper>
-              <ProcessorRunDetail />
-            </SuspenseWrapper>
-          </Protected>
-        ),
-      },
-      {
-        path: "test-renderer",
-        element: <RendererPlayground />,
-      },
-      {
         path: "dev/tasks",
         element: import.meta.env.DEV ? (
           <SuspenseWrapper>
@@ -319,10 +254,6 @@ export const routes: RouteObject[] = [
         ) : (
           <PageError />
         ),
-      },
-      {
-        path: "tools",
-        element: <McpHub />,
       },
       {
         path: "*",
@@ -378,6 +309,9 @@ export const routes: RouteObject[] = [
     element: <Unauthorized />,
   },
   {
+    // Whitelist-rejection landing page (HTTP 403 "user_not_whitelisted",
+    // see docs/swift/platform/KEYCLOAK.md §"Behavior"). Standalone, no
+    // MainLayout chrome — must render even when auth/bootstrap has failed.
     path: "coming-soon",
     element: <ComingSoon />,
   },

@@ -135,14 +135,14 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.rescueTeamAdminRequest,
       }),
     }),
-    uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: build.mutation<
-      UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiResponse,
-      UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg
+    uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
+      UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse,
+      UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/teams/${queryArg.teamId}/banner`,
+        url: `/control-plane/v1/teams/${queryArg.teamId}/avatar`,
         method: "POST",
-        body: queryArg.bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost,
+        body: queryArg.bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost,
       }),
     }),
     listTeamMembersControlPlaneV1TeamsTeamIdMembersGet: build.query<
@@ -848,19 +848,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    handlerControlPlaneV1KpiPresetsTeamActivitySummaryGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/team_activity_summary`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
     createCampaignControlPlaneV1EvaluationCampaignsPost: build.mutation<
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse,
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg
@@ -1023,10 +1010,10 @@ export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
   teamId: string;
   rescueTeamAdminRequest: RescueTeamAdminRequest;
 };
-export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiResponse = unknown;
-export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg = {
+export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
+export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
   teamId: string;
-  bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost;
+  bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost;
 };
 export type ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiResponse =
   /** status 200 Successful Response */ TeamMember[];
@@ -1529,16 +1516,6 @@ export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg = {
   /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
   teamId?: string | null;
 };
-export type HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiResponse =
-  /** status 200 Successful Response */ TeamActivitySummaryResponse;
-export type HandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg = {
@@ -1670,6 +1647,7 @@ export type CreateUserRequest = {
   enabled?: boolean;
 };
 export type GcuVersionsType = "v1";
+export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
 export type TeamPermission =
@@ -1687,7 +1665,6 @@ export type TeamPermission =
   | "can_run_evaluations"
   | "can_manage_evaluation_corpus"
   | "can_read_conversations_for_evaluation";
-export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type RetentionFieldView = {
   platform_max?: string | null;
   team_value?: string | null;
@@ -1705,14 +1682,14 @@ export type TeamWithPermissions = {
   member_count?: number | null;
   admins?: UserSummary[];
   is_member?: boolean;
+  my_relations?: UserTeamRelation[];
   description?: string | null;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
-  banner_image_url?: string | null;
+  avatar_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
   permissions?: TeamPermission[];
-  my_relations?: UserTeamRelation[];
   retention?: TeamRetentionView | null;
 };
 export type UserDetails = {
@@ -1726,10 +1703,11 @@ export type Team = {
   member_count?: number | null;
   admins?: UserSummary[];
   is_member?: boolean;
+  my_relations?: UserTeamRelation[];
   description?: string | null;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
-  banner_image_url?: string | null;
+  avatar_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
 };
@@ -1741,15 +1719,15 @@ export type UpdateTeamRequest = {
   description?: string | null;
   joining_mode?: JoiningMode | null;
   visibility?: TeamVisibility | null;
-  banner_image_url?: string | null;
+  avatar_image_url?: string | null;
   team_delete_grace?: string | null;
   max_idle?: string | null;
 };
 export type RescueTeamAdminRequest = {
   user_id: string;
 };
-export type BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost = {
-  /** Banner image file (max 5MB, JPEG/PNG/WebP) */
+export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
+  /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
   file: string;
 };
 export type TeamMember = {
@@ -2643,13 +2621,6 @@ export type TeamStorageResponse = {
   since: string;
   until: string;
 };
-export type TeamActivitySummaryResponse = {
-  last_active_at: string | null;
-  sessions_in_range: number;
-  trend: "active" | "quiet";
-  since: string;
-  until: string;
-};
 export type CampaignCreatedResponse = {
   campaign_id: string;
   task_id: string | null;
@@ -2834,7 +2805,7 @@ export const {
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
-  useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation,
+  useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,
@@ -2944,8 +2915,6 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
   useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
   useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,

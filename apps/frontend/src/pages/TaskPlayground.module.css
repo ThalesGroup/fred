@@ -1,0 +1,142 @@
+.page {
+  display: grid;
+  gap: var(--spacing-l);
+  padding: var(--spacing-l);
+  max-width: 900px;
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.controlsPanel {
+  display: grid;
+  grid-template-columns: 160px 160px 1fr;
+  align-items: center;
+  gap: var(--spacing-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+}
+
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.progressValue {
+  min-width: 36px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  text-align: right;
+}
+
+.rangeInput {
+  flex: 1;
+  accent-color: var(--primary);
+}
+
+.rangeInput:disabled {
+  accent-color: var(--state-text-disabled);
+}
+
+.actionsRow {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.actionsSpacer {
+  flex: 1;
+}
+
+.emptyState {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.divider {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.section {
+  display: grid;
+  gap: var(--spacing-s);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.sectionSubtitle {
+  display: block;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.indicatorGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-l);
+}
+
+.indicatorItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-3xs);
+}
+
+.indicatorMeta {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.indicatorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.stateGrid {
+  display: grid;
+  gap: var(--spacing-s);
+}
+
+.stateRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.stateBadgeCell {
+  width: 220px;
+}
+
+.stateProgressCell {
+  flex: 1;
+}
+
+.statePercentCell {
+  min-width: 36px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-align: right;
+}
+
+.cardGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+}

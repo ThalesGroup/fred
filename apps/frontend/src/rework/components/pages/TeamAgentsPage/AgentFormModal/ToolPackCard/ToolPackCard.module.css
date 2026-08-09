@@ -69,6 +69,28 @@
   flex-shrink: 0;
 }
 
+/* Options reveal: per-pack configuration UI shown between the header and the
+   expander while the pack is active. Height-animated on open (the design
+   system's max-height technique — grid-rows was tested and dropped); the cap is
+   lifted to `none` after the transition (inline style) so async-growing content
+   is never clipped. */
+.optionsReveal {
+  transition: max-height var(--duration-medium-4) var(--easing-emphasized-decelerate);
+  max-height: 0;
+  overflow: hidden;
+}
+
+.optionsRevealOpen {
+  /* Generous cap comfortably above the real content — only governs the open
+     animation, then removed. */
+  max-height: 480px;
+}
+
+.optionsInner {
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-m);
+}
+
 /* Expander row: reveals the included-capabilities list. Full-width, left-aligned
    label + chevron, separated from the header by a thin divider. */
 .expander {

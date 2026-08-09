@@ -32,7 +32,8 @@ import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
-import { toThreadMessages } from "./toThreadMessages";
+import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
+import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -359,11 +360,25 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const threadMessages = useMemo(() => toThreadMessages(messages, waitResponse), [messages, waitResponse]);
 
+  // History load/switch always REPLACES pendingHitl with whatever the loaded
+  // messages actually say — set when the trailing exchange has a HITL gate
+  // still open (no matching response yet), cleared (null) otherwise. Fixes
+  // refreshing mid-confirmation: the prompt used to simply vanish (live-only
+  // state, never reconstructed from history) and the gated tool stayed stuck
+  // rendering as "running" with no way to answer it.
+  const handleHistoryLoaded = useCallback(
+    (msgs: ChatMessage[]) => {
+      replaceAllMessages(msgs);
+      setPendingHitl(reconstructPendingHitl(msgs));
+    },
+    [replaceAllMessages],
+  );
+
   const { isLoading: isLoadingHistory } = useSessionHistory({
     sessionId,
     teamId,
     agentInstanceId,
-    onLoaded: replaceAllMessages,
+    onLoaded: handleHistoryLoaded,
     isTurnActive,
   });
   isLoadingHistoryRef.current = isLoadingHistory;

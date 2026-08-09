@@ -16,8 +16,8 @@
 
 Cluster health, indices, mappings, shard allocation, and diagnostics are
 platform-wide infrastructure visibility with no personal-scope subset, so
-every route requires `CAN_OBSERVE_PLATFORM` — same capability as
-`/kpi/query`'s `view_global` branch. Exercised via a representative sample
+every route requires `CAN_OBSERVE_PLATFORM` — the same capability that gates
+the Control Plane Analytics presets. Exercised via a representative sample
 of routes (cheap GET, path param, and derived-summary shapes) rather than
 all ~22, since they all share one gate.
 """

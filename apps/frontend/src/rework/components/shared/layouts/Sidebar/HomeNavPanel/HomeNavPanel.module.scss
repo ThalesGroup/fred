@@ -1,0 +1,76 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  height: 100%;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--spacing-s) var(--spacing-xs);
+}
+
+.titleContainer {
+  display: flex;
+  align-items: center;
+  height: 48px;
+}
+
+.title {
+  color: var(--on-surface-retreat);
+  font: var(--font-title-medium);
+}
+
+/* Dividers above and below frame the personal space apart from the team list. */
+.personalSpace {
+  border-top: 1px solid var(--outline-muted);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) 0;
+}
+
+.teamList {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.teamListHeader {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-m);
+  height: 32px;
+}
+
+.teamListHeaderLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* The team list fills the remaining height and scrolls on overflow.
+ * `scrollbar-gutter: stable` reserves the (thin, global) scrollbar track so the
+ * rows never reflow horizontally the moment the scrollbar appears — the width
+ * stays constant whether or not it is scrolling. */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}

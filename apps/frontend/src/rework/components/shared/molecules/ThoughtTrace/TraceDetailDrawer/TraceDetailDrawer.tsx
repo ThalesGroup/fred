@@ -13,7 +13,9 @@
 // limitations under the License.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { useToast, type ToastInput } from "@shared/molecules/Toast/ToastProvider";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
@@ -189,10 +191,23 @@ function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }
   return <GenericToolDetail entry={entry} />;
 }
 
+/** Detail view for a turn-crash error entry: the raw error message (the same
+ *  text shown in the transient toast), in an error-styled block. */
+function ErrorDetail({ entry }: { entry: TraceEntry }) {
+  const text = detailTextForEntry(entry);
+  return (
+    <div className={styles.detail}>
+      <div className={styles.errorDetailBox}>{text}</div>
+    </div>
+  );
+}
+
 /** Single copy affordance for the drawer header — copies the SQL query, the curated
- *  JSON payload, or nothing (RAG sources are browsed, not copied as text). */
-function CopyHeaderAction({ text }: { text: string }) {
+ *  JSON payload, the raw error message, or nothing (RAG sources are browsed, not
+ *  copied as text). `toast`, when set, confirms the copy with a success toast. */
+function CopyHeaderAction({ text, toast }: { text: string; toast?: ToastInput }) {
   const [copied, setCopied] = useState(false);
+  const { showSuccess } = useToast();
 
   const handleCopy = () => {
     navigator.clipboard
@@ -200,6 +215,7 @@ function CopyHeaderAction({ text }: { text: string }) {
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+        if (toast) showSuccess(toast);
       })
       .catch(() => {});
   };
@@ -216,19 +232,36 @@ function CopyHeaderAction({ text }: { text: string }) {
 }
 
 export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
+  const { t } = useTranslation();
   const label = entry ? entryLabel(entry) : "";
   const copyText = entry ? toolCopyText(entry) : null;
+  const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
 
   return (
     <InlineDrawer
       open={entry !== null}
       onClose={onClose}
       title={label}
-      headerActions={copyText ? <CopyHeaderAction text={copyText} key={label} /> : undefined}
+      headerActions={
+        copyText ? (
+          <CopyHeaderAction
+            text={copyText}
+            toast={isError ? { summary: t("rework.chatTrace.errorCopied") } : undefined}
+            key={label}
+          />
+        ) : undefined
+      }
       layout="overlay"
       width="720px"
     >
-      {entry && (entry.kind === "combo" ? <ToolDetail entry={entry} /> : <TextDetail entry={entry} />)}
+      {entry &&
+        (isError ? (
+          <ErrorDetail entry={entry} />
+        ) : entry.kind === "combo" ? (
+          <ToolDetail entry={entry} />
+        ) : (
+          <TextDetail entry={entry} />
+        ))}
     </InlineDrawer>
   );
 }

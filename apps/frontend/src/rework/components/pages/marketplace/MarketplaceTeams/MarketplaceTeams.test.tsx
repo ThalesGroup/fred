@@ -20,6 +20,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import type { Team, TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
@@ -35,6 +36,19 @@ const h = vi.hoisted(() => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+// `renderToStaticMarkup` has no router context, so a real `Link`/`Navigate`
+// throws (`useContext(...) is null`) the moment a member card wraps itself
+// in one — stand in with plain markup, same as other page tests that don't
+// need actual routing behaviour asserted.
+vi.mock("react-router-dom", () => ({
+  Link: ({ to, children, className }: { to: string; children: ReactNode; className?: string }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
+  Navigate: ({ to }: { to: string }) => <div data-testid="navigate" data-to={to} />,
 }));
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -89,5 +103,53 @@ describe("MarketplaceTeams personal-space exclusion", () => {
     const html = render();
     expect(html).not.toContain("team-card-personal-other-user");
     expect(html).toContain("team-card-fredlab");
+  });
+});
+
+describe("MarketplaceTeams card navigability", () => {
+  beforeEach(() => {
+    h.bootstrap = {
+      activeTeam: { id: "personal-me" } as TeamWithPermissions,
+      availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
+      bootstrap: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+  });
+
+  it("only wraps member-team cards in a navigation link, regardless of platform-admin status", () => {
+    h.teams = {
+      data: [
+        { id: "fredlab", name: "fredlab", is_member: true } as Team,
+        { id: "acme", name: "acme", is_member: false } as Team,
+      ],
+    };
+    const html = render();
+    expect(html).toContain(`<a href="/team/fredlab/agents"`);
+    expect(html).not.toContain('href="/team/acme/agents"');
+  });
+});
+
+describe("MarketplaceTeams search", () => {
+  beforeEach(() => {
+    h.bootstrap = {
+      activeTeam: { id: "personal-me" } as TeamWithPermissions,
+      availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
+      bootstrap: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    h.teams = {
+      data: [
+        { id: "fredlab", name: "Fred Lab", is_member: true } as Team,
+        { id: "acme", name: "Acme", is_member: false } as Team,
+      ],
+    };
+  });
+
+  it("renders every team when no search query is set", () => {
+    const html = render();
+    expect(html).toContain("team-card-fredlab");
+    expect(html).toContain("team-card-acme");
   });
 });

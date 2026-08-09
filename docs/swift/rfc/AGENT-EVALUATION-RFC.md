@@ -725,7 +725,7 @@ A local memory runner may be retained for tests and developer mode when the eval
 /monitoring/evaluations/:campaignId
 ```
 
-These routes align with the existing monitoring and processor-benchmark navigation.
+These routes align with the existing monitoring navigation.
 
 ### 12.2 Campaign creation
 
@@ -761,7 +761,7 @@ Display:
 - case detail drawer showing input, expected output, actual output, structural checks, metric scores/reasons, latency, tokens, execution errors, and scoring errors;
 - raw trace details only when the user is authorized and trace retention is enabled.
 
-The implementation should reuse the interaction patterns of `ProcessorBench.tsx`, `ProcessorRunDetail.tsx`, and `rework/features/tasks`, but not reuse the Knowledge Flow development-only benchmark API.
+The implementation should reuse the interaction patterns of `rework/features/tasks` (the shared task/SSE surface) and the evaluation framework's own generated API contracts as the canonical source — not a Knowledge Flow-specific pattern.
 
 ### 12.5 Generated API types
 

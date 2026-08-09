@@ -81,11 +81,17 @@ MUI-free, pure move). Still legacy, each needs its own session, not a quick
 relocation: `TaskPlayground` (no rework Select/Slider atom yet), `ComingSoon`
 (squashing into `PageEmptyState` would drop the branded per-site icon),
 `LoadingWithProgress` (rework's `ProgressBar` atom has no indeterminate mode),
-and the monitoring/`tools` pages (`Kpis`, `Runtime`, `DataHub`, `RebacBackfill`,
-`ProcessorBench`, `ProcessorRunDetail`, `McpHub`) — real pages with their own
-legacy UI kit, not pure relocations. Full tree still not reachable regardless:
-also blocked on the missing evaluation UI (#1892) and the disabled PDF viewer
-(FRONT-13).
+and the monitoring/`tools` pages (`Kpis`, `Runtime`, `McpHub`) — real pages
+with their own legacy UI kit, not pure relocations.
+(`ProcessorBench`/`ProcessorRunDetail`, listed here as still pending in the
+2026-07-19 snapshot above, were since removed outright as dead code by
+#2296; `RebacBackfill`'s and `DataHub`'s pages went with them and their
+backend endpoints — `POST /tags/rebac/backfill` and
+`GET /documents/processing/graph`, both dead once the page was gone, no
+other caller — followed on 2026-08-08, the latter with its `ProcessingGraph*`
+types removed from `fred-core` too.) Full tree still not reachable regardless:
+also blocked on the missing evaluation UI (#1892) and the disabled PDF
+viewer (FRONT-13).
 
 ## 3 Explicit Non-Goals
 

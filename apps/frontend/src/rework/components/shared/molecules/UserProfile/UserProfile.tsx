@@ -13,12 +13,11 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from "react";
-import { useHref, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
@@ -26,21 +25,17 @@ import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
 /**
  * Bottom-of-rail user entry. Clicking the row opens a popover above it grouping
- * everything user-scoped: Profile (the existing settings page), the platform
- * admin/observability console (migrated here from the rail — visible to
- * platform_admin and platform_observer; `AdminIndexRoute` in router.tsx sends
- * each to the first `/admin` page they can actually see, item 16), and
- * Logout. Team admin stays on the team banner gear; this menu is global only.
+ * user-scoped actions: Profile (the existing settings page), optional Contact
+ * support, and Logout. The Help Center and the platform admin console moved out
+ * of this menu to the mainNavBar (#2298); team admin stays on the team banner
+ * gear. This menu is global only.
  */
 export default function UserProfile() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { canAdmin, canObservePlatform } = useUserCapabilities();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Basename-aware href — the Help Center opens in its own tab (HELP-01).
-  const helpCenterHref = useHref("/help");
 
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
@@ -83,27 +78,7 @@ export default function UserProfile() {
                   label={t("rework.profileMenu.profile")}
                   onClick={() => goTo("/settings")}
                 />,
-                <MenuPopoverItem
-                  key="help-center"
-                  icon={{ category: "outlined", type: "help" }}
-                  label={t("rework.profileMenu.helpCenter")}
-                  onClick={() => {
-                    setOpen(false);
-                    window.open(helpCenterHref, "_blank", "noopener,noreferrer");
-                  }}
-                />,
               ],
-              canAdmin || canObservePlatform
-                ? [
-                    <MenuPopoverItem
-                      key="admin"
-                      icon={{ category: "outlined", type: "admin_panel_settings" }}
-                      label={t("rework.profileMenu.adminConsole")}
-                      badge={t("rework.profileMenu.adminBadge")}
-                      onClick={() => goTo("/admin")}
-                    />,
-                  ]
-                : [],
               contactSupportLink
                 ? [
                     <MenuPopoverItem

@@ -18,7 +18,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
-from fred_core.documents.document_structures import DocumentMetadata, ProcessingGraph
+from fred_core.documents.document_structures import DocumentMetadata
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -150,23 +150,6 @@ class MetadataController:
         async def get_document_metadata(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.get_document_metadata(user, document_uid)
-            except Exception as e:
-                raise handle_exception(e)
-
-        @router.get(
-            "/documents/processing/graph",
-            tags=["Documents"],
-            response_model=ProcessingGraph,
-            summary="Get processing graph for all documents",
-            description=(
-                "Returns a lightweight graph describing how ingested documents relate to downstream artifacts "
-                "(per-document vector indexes and tabular artifacts). The graph is expressed as nodes and edges "
-                "that can be consumed directly by the UI for visualization."
-            ),
-        )
-        async def get_processing_graph(user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return await self.service.get_processing_graph(user)
             except Exception as e:
                 raise handle_exception(e)
 

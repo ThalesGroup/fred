@@ -15,11 +15,34 @@
 import styles from "./MarketplaceTeams.module.scss";
 import { useTranslation } from "react-i18next";
 import TeamCard from "@shared/organisms/TeamCard/TeamCard.tsx";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { useListTeamsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { Link, Navigate } from "react-router-dom";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import { isPersonalTeamId } from "@shared/utils/teamId";
+import { useMemo, useState } from "react";
+
+// Free-text query matched against name and description — a team must match
+// every whitespace-separated token in at least one of those two fields.
+// Same tokenized-match approach as TeamSettingsMembersTable. Applied
+// client-side: both team lists are already fetched in full by useListTeamsQuery.
+const MIN_SEARCH_LENGTH = 2;
+
+function matchesSearch(team: Team, tokens: string[]): boolean {
+  const haystacks = [team.name, team.description]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+  return tokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
+}
+
+function filterTeams(teams: Team[] | undefined, search: string): Team[] {
+  if (!teams) return [];
+  const trimmed = search.trim().toLowerCase();
+  if (trimmed.length < MIN_SEARCH_LENGTH) return teams;
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  return teams.filter((team) => matchesSearch(team, tokens));
+}
 
 /**
  * Render the collaborative team marketplace only when collaborative teams exist.
@@ -37,10 +60,8 @@ import { isPersonalTeamId } from "@shared/utils/teamId";
  */
 export default function MarketplaceTeams() {
   const { t } = useTranslation();
-  const { activeTeam, availableTeams, bootstrap, isLoading, refetch } = useFrontendBootstrap();
-  // AUTHZ-05 review item 4: platform-admin gating is OpenFGA-derived
-  // (`PermissionSummary.is_platform_admin`), not a raw Keycloak role check.
-  const isAdmin = bootstrap?.permissions?.is_platform_admin ?? false;
+  const { activeTeam, availableTeams, isLoading, refetch } = useFrontendBootstrap();
+  const [search, setSearch] = useState("");
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId);
   const { data: teams } = useListTeamsQuery(undefined, {
@@ -52,6 +73,9 @@ export default function MarketplaceTeams() {
   // list one, including the caller's own — see #2068.
   const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
   const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id));
+
+  const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search), [yourTeams, search]);
+  const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search), [otherTeams, search]);
 
   // Wait for bootstrap before redirecting away: redirecting on the first,
   // pre-bootstrap render sends the user to the bare "personal" alias, then a
@@ -69,10 +93,12 @@ export default function MarketplaceTeams() {
     // ControlPlaneTeam:LIST tag invalidation baked into useJoinTeamMutation —
     // bootstrap's own team list (the navbar/team switcher) is a separate
     // cache, so it needs its own refetch.
-    if (isAdmin)
+    // Only a team the caller is a member of is navigable — non-member cards
+    // (the "discover" section) offer join/invite-only affordances, not entry.
+    if (team.is_member)
       return (
-        <Link to={`/team/${team.id}/agents`}>
-          <TeamCard key={team.id} team={team} withDescription={withDescription} onJoined={refetch} />
+        <Link key={team.id} className={styles.marketplaceTeamsCardLink} to={`/team/${team.id}/agents`}>
+          <TeamCard team={team} withDescription={withDescription} onJoined={refetch} />
         </Link>
       );
     return <TeamCard key={team.id} team={team} withDescription={withDescription} onJoined={refetch} />;
@@ -82,16 +108,22 @@ export default function MarketplaceTeams() {
     <div className={styles.marketplaceTeamsContainer}>
       <div className={styles.marketplaceTeamsHeader}>
         <h1 className={styles.marketplaceTeamsTitle}>{t("rework.marketplace.teams.title")}</h1>
+        <div className={styles.marketplaceTeamsSearch}>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t("rework.marketplace.teams.search.placeholder")}
+            ariaLabel={t("rework.marketplace.teams.search.ariaLabel")}
+            clearAriaLabel={t("rework.marketplace.teams.search.clearAriaLabel")}
+            size="small"
+          />
+        </div>
       </div>
       <div className={styles.marketplaceTeamsContent}>
         <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.yourTeams")}</div>
-        <div className={styles.marketplaceTeamsList}>
-          {yourTeams && yourTeams.map((team) => renderCard(team, false))}
-        </div>
+        <div className={styles.marketplaceTeamsList}>{filteredYourTeams.map((team) => renderCard(team, false))}</div>
         <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.otherTeams")}</div>
-        <div className={styles.marketplaceTeamsList}>
-          {otherTeams && otherTeams.map((team) => renderCard(team, true))}
-        </div>
+        <div className={styles.marketplaceTeamsList}>{filteredOtherTeams.map((team) => renderCard(team, true))}</div>
       </div>
     </div>
   );

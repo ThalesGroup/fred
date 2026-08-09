@@ -53,6 +53,11 @@ document_access = "fred_runtime.capabilities.document_access:DocumentAccessCapab
 # Split out of document_access (RFC §10.1): admin-gated, HITL-gated on-demand
 # summarization. Auto-discovered the same way — do NOT register manually.
 document_summarize = "fred_runtime.capabilities.document_summarize:DocumentSummarizeCapability"
+# Document-reading pair (DOCREAD-01): verbatim paginated read + exhaustive
+# extraction, both on the shared `DocumentMarkdownPort`. Admin-gated,
+# auto-discovered — do NOT register manually.
+document_verbatim = "fred_runtime.capabilities.document_verbatim:DocumentVerbatimCapability"
+document_extract = "fred_runtime.capabilities.document_extract:DocumentExtractCapability"
 
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.

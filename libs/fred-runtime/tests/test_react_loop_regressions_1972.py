@@ -221,19 +221,20 @@ _EXPECTED_PAYLOAD_EN: dict[str, Any] = {
     "title": "Confirm tool execution",
     "question": (
         "The agent wants to execute Update Ticket. "
-        "This may modify state or trigger an external action. "
+        "This may modify state, trigger an external action, or consume a "
+        "large number of tokens. "
         "Do you want to continue?"
     ),
     "choices": [
         {
             "id": "proceed",
-            "label": "Proceed",
+            "label": "Accept",
             "description": "Run this tool now.",
             "default": True,
         },
         {
             "id": "cancel",
-            "label": "Cancel",
+            "label": "Reject",
             "description": "Do not run this tool; let the agent replan.",
             "default": False,
         },
@@ -256,19 +257,20 @@ _EXPECTED_PAYLOAD_FR: dict[str, Any] = {
     "title": "Confirmer l'exécution de l'outil",
     "question": (
         "L'agent souhaite exécuter « Update Ticket ». "
-        "Cette action peut modifier un état ou déclencher une action externe. "
+        "Cette action peut modifier un état, déclencher une action externe "
+        "ou consommer beaucoup de tokens. "
         "Voulez-vous continuer ?"
     ),
     "choices": [
         {
             "id": "proceed",
-            "label": "Continuer",
+            "label": "Accepter",
             "description": "Exécuter cet outil maintenant.",
             "default": True,
         },
         {
             "id": "cancel",
-            "label": "Annuler",
+            "label": "Refuser",
             "description": "Ne pas exécuter cet outil et laisser l'agent se replanifier.",
             "default": False,
         },
