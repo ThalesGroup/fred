@@ -528,6 +528,55 @@ class TestResolveTeamOverride:
         )
         assert result == "specific"
 
+    def test_agent_specific_rule_matches_only_its_agent(self) -> None:
+        rule = TeamOperationRouteRule(
+            rule_id="r1",
+            operation="planning",
+            agent_id="rico",
+            target_profile_id="p1",
+        )
+        # matches when the request is for that agent
+        assert (
+            resolve_team_override(
+                operation_route_rules=[rule],
+                chat_default_profile_id="team.default",
+                operation="planning",
+                purpose="chat",
+                agent_id="rico",
+            )
+            == "p1"
+        )
+        # falls back for any other agent
+        assert (
+            resolve_team_override(
+                operation_route_rules=[rule],
+                chat_default_profile_id="team.default",
+                operation="planning",
+                purpose="chat",
+                agent_id="other",
+            )
+            == "team.default"
+        )
+
+    def test_agent_specific_rule_wins_over_agent_agnostic_rule(self) -> None:
+        agnostic = TeamOperationRouteRule(
+            rule_id="r-any", operation="planning", target_profile_id="any"
+        )
+        specific = TeamOperationRouteRule(
+            rule_id="r-rico",
+            operation="planning",
+            agent_id="rico",
+            target_profile_id="rico",
+        )
+        result = resolve_team_override(
+            operation_route_rules=[agnostic, specific],
+            chat_default_profile_id=None,
+            operation="planning",
+            purpose="chat",
+            agent_id="rico",
+        )
+        assert result == "rico"
+
     def test_non_matching_operation_falls_back_to_chat_default(self) -> None:
         rule = TeamOperationRouteRule(
             rule_id="r1", operation="planning", target_profile_id="p1"

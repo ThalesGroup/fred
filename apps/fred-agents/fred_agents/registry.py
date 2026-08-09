@@ -34,6 +34,10 @@ from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.mindmap import MINDMAP_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
+from fred_agents.routing_probe.graph_agent import (
+    ROUTING_PROBE_ALPHA_AGENT,
+    ROUTING_PROBE_BETA_AGENT,
+)
 from fred_agents.self_test import SELF_TEST_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
 from fred_agents.sql_expert import SQL_EXPERT_AGENT
@@ -75,6 +79,13 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     - fred.github.test_assistant  No-LLM graph agent. Exercises every SSE event
                                type without any external service. Used for UI
                                validation and integration scenario testing.
+    - fred.github.routing_probe_alpha / _beta  Two identically-behaved graph
+                               agents (distinct agent_id, same class) that run
+                               one invoke_model call per phase (routing,
+                               planning, execution) and report which model
+                               answered each. Enroll both in a team to compare
+                               an operation-wide routing override against one
+                               scoped to a single agent (#2267).
     """
 
     return {
@@ -89,6 +100,8 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         SQL_EXPERT_AGENT.agent_id: SQL_EXPERT_AGENT,
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
         SELF_TEST_AGENT.agent_id: SELF_TEST_AGENT,
+        ROUTING_PROBE_ALPHA_AGENT.agent_id: ROUTING_PROBE_ALPHA_AGENT,
+        ROUTING_PROBE_BETA_AGENT.agent_id: ROUTING_PROBE_BETA_AGENT,
     }
 
 
