@@ -2570,6 +2570,21 @@ outline + 6% tint) while hovered with files. Same `canUpdateResources` gate as
 the row's explicit upload action; rows without a tag (pure path prefixes) are
 not drop targets.
 
+### `DocumentWorkspace` — embedded-title hint on the Name column
+
+The Name column always shows `identity.document_name` (the real filename) now,
+never `identity.title`: the latter is populated ingestion-time straight from a
+file's own embedded metadata (PDF `/Title`, docx `core_properties.title`) with
+no validation, so it was as likely to be empty, a stale value copied from a
+shared template, or a generic "Untitled" placeholder as a real title. When a
+document does carry a meaningful embedded title (different from the filename
+or its stem), a small `info` icon next to the name surfaces it via the
+`Tooltip` atom instead of silently overriding the display name. The icon is
+`tabIndex={0}` so Tooltip's keyboard-focus disclosure actually reaches it, and
+its own flex-row cell wraps the Tooltip's wrapper span in a `flex-shrink: 0`
+guard so a narrow column with a long filename can't crush the icon down to
+nothing. (Found live 2026-08-09.)
+
 ### `CategoryPicker` / prompt category surfaces (PROMPT-09)
 
 **Location:** `src/rework/components/shared/molecules/CategoryPicker/CategoryPicker.tsx`

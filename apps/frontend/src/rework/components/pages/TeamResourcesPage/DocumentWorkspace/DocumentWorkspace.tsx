@@ -791,11 +791,17 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             </span>
             <span>{documentDisplayName(row.doc)}</span>
             {title && (
-              <Tooltip text={t("rework.resources.embeddedTitleHint", { title })}>
-                <span className={styles.titleHintIcon} aria-label={t("rework.resources.embeddedTitleHint", { title })}>
-                  <Icon category="outlined" type="info" />
-                </span>
-              </Tooltip>
+              <span className={styles.titleHintWrapper}>
+                <Tooltip text={t("rework.resources.embeddedTitleHint", { title })}>
+                  <span
+                    className={styles.titleHintIcon}
+                    tabIndex={0}
+                    aria-label={t("rework.resources.embeddedTitleHint", { title })}
+                  >
+                    <Icon category="outlined" type="info" />
+                  </span>
+                </Tooltip>
+              </span>
             )}
           </span>
         );
