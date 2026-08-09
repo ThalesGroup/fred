@@ -17,7 +17,6 @@ from types import SimpleNamespace
 import pytest
 from fred_core.common import ModelConfiguration
 
-import knowledge_flow_backend.application_context as application_context_module
 from knowledge_flow_backend.application_context import ApplicationContext
 
 
@@ -62,7 +61,7 @@ def test_get_crossencoder_model_offline_uses_resolved_local_path(monkeypatch, tm
             local_files_only=local_files_only,
         )
 
-    monkeypatch.setattr(application_context_module, "CrossEncoder", fake_cross_encoder)
+    monkeypatch.setattr("sentence_transformers.CrossEncoder", fake_cross_encoder)
 
     context = _build_context(
         model_name="cross-encoder/ms-marco-MiniLM-L-12-v2",
@@ -87,7 +86,7 @@ def test_get_crossencoder_model_offline_raises_when_local_path_load_fails(monkey
         calls.append(cache_folder)
         raise RuntimeError("configured cache missing")
 
-    monkeypatch.setattr(application_context_module, "CrossEncoder", fake_cross_encoder)
+    monkeypatch.setattr("sentence_transformers.CrossEncoder", fake_cross_encoder)
 
     context = _build_context(
         model_name="cross-encoder/ms-marco-MiniLM-L-12-v2",
@@ -133,7 +132,7 @@ def test_get_crossencoder_model_online_behavior_unchanged(monkeypatch):
             local_files_only=local_files_only,
         )
 
-    monkeypatch.setattr(application_context_module, "CrossEncoder", fake_cross_encoder)
+    monkeypatch.setattr("sentence_transformers.CrossEncoder", fake_cross_encoder)
 
     context = _build_context(
         model_name="cross-encoder/ms-marco-MiniLM-L-12-v2",
