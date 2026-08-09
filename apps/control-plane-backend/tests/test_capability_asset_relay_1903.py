@@ -32,9 +32,9 @@ from __future__ import annotations
 from typing import Any, cast
 
 import control_plane_backend.product.api as api
-from control_plane_backend.product import service
 import httpx
 import pytest
+from control_plane_backend.product import service
 from control_plane_backend.product.service import CapabilityAssetFile
 from fastapi import HTTPException, UploadFile
 from fred_core.common import TeamId
