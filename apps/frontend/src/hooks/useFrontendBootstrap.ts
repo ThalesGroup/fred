@@ -41,7 +41,7 @@ export function useFrontendBootstrap(): FrontendBootstrapState {
   // this endpoint and every team mutation, see controlPlaneApiEnhancements.ts)
   // keeps this fresh for changes made in this session.
   //
-  // PR #2160 review (Codex, P1): `TeamSelectionNavbar` keeps this query
+  // PR #2160 review (Codex, P1): `MainNavBar` keeps this query
   // permanently subscribed across every route (see `MainLayout.tsx`), so
   // RTK Query's unused-data eviction never runs, and tags alone only react
   // to mutations dispatched from this browser's own Redux store — a team

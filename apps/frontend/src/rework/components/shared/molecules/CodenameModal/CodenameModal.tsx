@@ -102,7 +102,7 @@ export default function CodenameModal({ open, onClose, data }: Props) {
             <div className={styles.closeButton}>
               <IconButton
                 variant="filled"
-                size="xs"
+                size="2xs"
                 icon={{ category: "outlined", type: "close" }}
                 onClick={onClose}
                 aria-label={t("common.close")}

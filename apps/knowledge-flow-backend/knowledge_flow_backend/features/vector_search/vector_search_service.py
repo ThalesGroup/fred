@@ -135,8 +135,17 @@ class VectorSearchService:
         self.vector_store = ctx.get_create_vector_store(self.embedder)
         self.tag_service = TagService()
         self.metadata_service = MetadataService()
-        self.crossencoder_model = ctx.get_crossencoder_model()
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
+        self._crossencoder_model: Optional[Any] = None
+
+    @property
+    def crossencoder_model(self) -> Any:
+        # Loaded on first actual rerank, not at service construction: constructing this
+        # service (e.g. FastAPI route registration, OpenAPI generation) must not require
+        # a working HF model client — see cross-encoder CI 429s on generate-openapi.
+        if self._crossencoder_model is None:
+            self._crossencoder_model = ApplicationContext.get_instance().get_crossencoder_model()
+        return self._crossencoder_model
 
     def _kpi_search_dims(self, *, policy: str) -> dict[str, Optional[str]]:
         index_name = getattr(self.vector_store, "index_name", None) or getattr(self.vector_store, "index", None)

@@ -342,13 +342,22 @@ async def list_documents_in_scope(scope: dict) -> list[str]:
 
 @activity.defn
 async def get_chunk_count(document_uid: str) -> int:
-    """Return the vector chunk count for one document (0 if the store can't report it).
+    """Return the vector chunk count for one document.
 
     `get_document_chunk_count` is a blocking, synchronous call on the
     OpenSearch client (no async client exists in this adapter) — run it in a
     worker thread so it never blocks the Temporal worker's event loop, the
     same pattern already used for the other blocking calls in this module
     (`ingestion_service.get_local_copy`/`process_output` in `output_process`).
+
+    Returns 0 only when the configured vector store genuinely has no
+    chunk-count capability. Any other failure (OpenSearch timeout, index/auth
+    misconfiguration) is left to propagate so this activity's retry policy
+    (`RevectorizeDocument`, `features/scheduler/workflow.py`) actually retries
+    it, and so a document whose count check fails is reported as a real
+    failure instead of being silently treated as "0 chunks" — which used to
+    make `_wf_should_skip_revectorize` fall through to a real, unnecessary
+    re-embed for a document that was never actually empty (#2234).
     """
     from knowledge_flow_backend.application_context import ApplicationContext
 
@@ -357,11 +366,7 @@ async def get_chunk_count(document_uid: str) -> int:
     vector_store = context.get_create_vector_store(embedder)
     if not hasattr(vector_store, "get_document_chunk_count"):
         return 0
-    try:
-        return int(await asyncio.to_thread(vector_store.get_document_chunk_count, document_uid=document_uid))  # type: ignore[attr-defined]
-    except Exception:
-        activity.logger.warning("[SCHEDULER][ACTIVITY][GET_CHUNK_COUNT] failed for %s", document_uid, exc_info=True)
-        return 0
+    return int(await asyncio.to_thread(vector_store.get_document_chunk_count, document_uid=document_uid))  # type: ignore[attr-defined]
 
 
 @activity.defn

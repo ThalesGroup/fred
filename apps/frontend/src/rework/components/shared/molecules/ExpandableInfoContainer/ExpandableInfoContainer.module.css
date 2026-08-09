@@ -91,11 +91,12 @@
 }
 
 .contentOpen {
-  max-height: 200px;
+  max-height: 280px;
 }
 
 .body {
   margin: 0;
   padding: var(--spacing-xs) var(--spacing-s) var(--spacing-s);
   font: var(--font-body-medium);
+  white-space: pre-line;
 }

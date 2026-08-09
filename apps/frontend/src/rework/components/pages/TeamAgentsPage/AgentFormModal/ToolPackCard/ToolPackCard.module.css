@@ -1,0 +1,210 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  overflow: hidden;
+  color: var(--on-surface);
+  --pack-icon-bg: var(--surface-container-high);
+  --pack-icon-color: var(--on-surface-retreat);
+  --pack-title-color: var(--on-surface);
+  --pack-description-color: var(--on-surface-retreat);
+}
+
+/* Active pack: title + icon pick up the primary role, same cue CapabilityCard
+   uses for a ticked capability. */
+.card[data-checked="true"] {
+  --pack-title-color: var(--primary);
+  --pack-icon-color: var(--on-primary);
+  --pack-icon-bg: var(--primary);
+}
+
+/* Whole header is the click target (padding included), matching CapabilityCard. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  cursor: pointer;
+  padding: var(--spacing-m);
+  user-select: none;
+}
+
+.header:hover {
+  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-s);
+  background: var(--pack-icon-bg);
+  width: 3rem;
+  height: 3rem;
+  color: var(--pack-icon-color);
+  font-size: 1.75rem;
+}
+
+.meta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.title {
+  color: var(--pack-title-color);
+  font: var(--font-title-medium);
+}
+
+.description {
+  color: var(--pack-description-color);
+  font: var(--font-body-medium);
+}
+
+.switch {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* Options reveal: per-pack configuration UI shown between the header and the
+   expander while the pack is active. Height-animated on open (the design
+   system's max-height technique — grid-rows was tested and dropped); the cap is
+   lifted to `none` after the transition (inline style) so async-growing content
+   is never clipped. */
+.optionsReveal {
+  transition: max-height var(--duration-medium-4) var(--easing-emphasized-decelerate);
+  max-height: 0;
+  overflow: hidden;
+}
+
+.optionsRevealOpen {
+  /* Generous cap comfortably above the real content — only governs the open
+     animation, then removed. */
+  max-height: 480px;
+}
+
+.optionsInner {
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-m);
+}
+
+/* Expander row: reveals the included-capabilities list. Full-width, left-aligned
+   label + chevron, separated from the header by a thin divider. */
+.expander {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  cursor: pointer;
+  border: none;
+  border-top: 1px solid var(--outline-muted);
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-m);
+  width: 100%;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.expander:hover {
+  /* Same state-layer-over-surface treatment as the card header, not a text
+     color swap — the whole row lightens on hover. */
+  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
+}
+
+.expander:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* Left end of the expander row: "Capacités incluses" label + status summary. */
+.expanderStart {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+/* At-a-glance summary — one mini status icon per included capability. */
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+.summaryIcon {
+  display: inline-flex;
+  align-items: center;
+  height: 1rem;
+  font-size: 1rem;
+}
+
+/* Bigger expand chevron (18px) whose box stays at the row's text line height,
+   so enlarging the glyph never grows the expander row. */
+.chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  height: 1rem;
+  font-size: 18px;
+}
+
+/* Right end of the expander row: the "missing capabilities" flag (if any) sits
+   just left of the expand chevron. */
+.expanderEnd {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.missing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  color: var(--error);
+  font: var(--font-label-medium);
+}
+
+.included {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-m);
+  list-style: none;
+}
+
+.includedRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Status colors, shared by the detailed-list badge and the summary mini-icons. */
+.status_active {
+  color: var(--success); /* active on the agent */
+}
+
+.status_inactive {
+  color: var(--on-surface-retreat); /* admin-enabled but not active (e.g. off in Advanced) */
+}
+
+.status_unavailable {
+  color: var(--error); /* not enabled by the platform admin — cannot be activated */
+}
+
+/* Detailed-list badge size. */
+.statusIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 1.125rem;
+}
+
+.includedLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}

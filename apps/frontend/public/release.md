@@ -1,3 +1,113 @@
+**v2.1.32** — 2026-08-07
+
+- **Summary**
+
+  Agent creation gets a simpler capabilities experience: a new Simple view
+  groups related capabilities into one-switch "packs", with guided setup for
+  the PowerPoint and team-resources packs. The chat composer adds
+  quick-access option chips and moves the document/library picker into its
+  own side panel. Team admins can now delete evaluations, and PDF imports
+  and multi-tool agent answers get more reliable.
+
+- **Features**
+
+  - Agent creation: a new Simple/Advanced toggle in the Capabilities tab
+    groups related capabilities into "packs", so enabling a coherent feature
+    is one switch instead of picking individual capabilities one by one;
+    each pack shows whether its capabilities are actually enabled for your
+    team (#2220, #2250)
+  - The PowerPoint capability pack now walks you through uploading and
+    validating the required template before you can save the agent (#2270)
+  - The team-resources capability pack offers a simple folder-only scoping
+    tree, alongside the existing per-document scoping in Advanced view
+    (#2270)
+  - Chat composer: quick-access option chips (e.g. search scope) sit right
+    in the composer, and the document/library picker now opens in its own
+    side panel instead of a cramped popover (#2264, #2259, #2252)
+  - Redesigned confirmation card for approval requests during a
+    conversation (#2264, #2252)
+  - Team admins can now delete an evaluation and all its runs, cases,
+    metrics and events (#2248)
+
+- **Improvements**
+
+  - Team marketplace cards you're not a member of are no longer clickable,
+    cards line up at equal height, and a search field was added (#2270)
+  - Prompts and Agents page headers, and the agents grid, are now
+    left-aligned instead of centered (#2270)
+  - The prompt preview dialog is vertically centered and capped in height so
+    it can no longer overflow the screen (#2270)
+
+- **Bug Fixes**
+
+  - PDF documents with malformed text encoding could fail to import
+    entirely; the broken characters are now cleaned up so import succeeds
+    (#2261, #2266)
+  - When an agent ran several tool calls at once and only one failed, the
+    whole answer used to be replaced by the raw error — you now still get
+    the answer built from the calls that succeeded (#2244, #2260)
+  - Agents no longer mistake a folder for a document when summarizing,
+    which previously caused an error (#2244, #2260)
+  - The reasoning capability hint in the agent form now clearly states it
+    applies for the whole conversation once turned on, not per question
+    (#2262, #2263)
+
+**v2.1.31** — 2026-08-06
+
+- **Summary**
+
+  The Kea-to-Swift migration tooling gains a new repair action for documents
+  that already have their content and search index in place but were still
+  shown as unprocessed after migrating — it fixes just that mismatch without
+  reprocessing anything, and leaves documents with a genuine error untouched.
+  The migration page also shows real error messages instead of a generic
+  object error.
+
+- **Features**
+
+  - Kea-to-Swift migration: a new "Repair only" action fixes documents that
+    already have their content and search index but were still marked
+    unprocessed after migration, without re-running any other step (#2234,
+    #2254)
+  - The repair action skips documents that are still failing or in progress,
+    so it never clears a genuine processing error (#2234, #2254)
+
+- **Bug Fixes**
+
+  - The Kea-to-Swift migration page now shows the actual error message
+    instead of a generic "[object Object]" error (#2234, #2254)
+
+**v2.1.30** — 2026-08-05
+
+- **Summary**
+
+  Switching back to a conversation you already opened now renders instantly,
+  and reopens just as fast after a page refresh. Fixes stop the document and
+  prompt pickers from sliding under the chat top bar, re-anchor drop-down
+  menus that drifted on Windows, and clarify the agents page when no agent
+  capability is enabled.
+
+- **Improvements**
+
+  - Switching back to a previously opened conversation is now instant, and
+    stays instant after a page refresh in the same tab (#2239, #2241)
+
+- **Security**
+
+  - Routine dependency updates: cryptography and aiohttp (Python), fast-uri
+    (frontend) (#2225, #2231, #2243)
+
+- **Bug Fixes**
+
+  - The document and prompt pickers no longer slide under the chat top bar
+    and get clipped when expanded (#2245, #2246)
+  - Switching conversations while one is still loading can no longer briefly
+    show the wrong conversation's messages (#2239, #2241)
+  - Drop-down menus no longer appear detached from their button on Windows,
+    where a visible scrollbar shifted them sideways (#2233, #2235)
+  - The agents page now explains that no agent capability is enabled instead
+    of showing a bare empty list (#2238, #2242)
+
 **v2.1.29** — 2026-08-04
 
 - **Bug Fixes**

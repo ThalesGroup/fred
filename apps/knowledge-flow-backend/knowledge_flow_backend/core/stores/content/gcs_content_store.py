@@ -166,7 +166,10 @@ class GcsContentStore(BaseContentStore):
             blob.delete()
             logger.info("[CONTENT][GCS] Deleted object='%s' from document bucket='%s'", blob.name, self.document_bucket_name)
 
-    def list_document_uids(self) -> List[str]:
+    def list_document_uids(self, *, strict: bool = False) -> List[str]:
+        """`strict` is a no-op here: this implementation already propagates any
+        `list_blobs` failure instead of swallowing it (see `BaseContentStore.
+        list_document_uids` for what `strict` means for backends that don't)."""
         doc_uids: set[str] = set()
         for blob in self.client.list_blobs(self.document_bucket_name):
             prefix = blob.name.split("/", 1)[0]

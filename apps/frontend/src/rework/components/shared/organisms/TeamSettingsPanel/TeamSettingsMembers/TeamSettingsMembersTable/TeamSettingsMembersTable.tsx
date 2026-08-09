@@ -172,17 +172,21 @@ export default function TeamSettingsMembersTable({ team, search, size = "medium"
 
   const columns = useMemo((): DataTableColumn<TeamMember>[] => {
     const cols: DataTableColumn<TeamMember>[] = [
+      // Plain strings on purpose: DataTable ellipsis-truncates primitive
+      // cell values inside their own column (full value on hover via
+      // `title`), which is exactly what these free-length identity fields
+      // need — a long email must not run under the next column.
       {
         label: t("rework.teamSettings.members.table.identifiant"),
-        cellRenderer: (teamMember) => <div>{teamMember.user.username}</div>,
+        cellRenderer: (teamMember) => teamMember.user.username,
       },
       {
         label: t("rework.teamSettings.members.table.firstName"),
-        cellRenderer: (teamMember) => <div>{teamMember.user.first_name}</div>,
+        cellRenderer: (teamMember) => teamMember.user.first_name,
       },
       {
         label: t("rework.teamSettings.members.table.lastName"),
-        cellRenderer: (teamMember) => <div>{teamMember.user.last_name}</div>,
+        cellRenderer: (teamMember) => teamMember.user.last_name,
       },
       {
         label: t("rework.teamSettings.members.table.role"),

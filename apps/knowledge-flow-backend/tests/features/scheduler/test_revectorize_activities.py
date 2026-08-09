@@ -149,16 +149,20 @@ def test_get_chunk_count_returns_zero_when_store_lacks_the_method():
     assert result == 0
 
 
-def test_get_chunk_count_returns_zero_when_store_raises():
+def test_get_chunk_count_propagates_when_store_raises():
+    """A store failure (timeout, index/auth misconfiguration) must never be folded
+    into "0 chunks" -- that used to make an unrelated check failure look like a
+    genuinely empty document and trigger an unnecessary real re-embed (#2234).
+    Letting it propagate lets the activity's own retry policy retry it, and lets
+    `RevectorizeDocument` report a real failure instead."""
     vector_store = MagicMock()
     vector_store.get_document_chunk_count.side_effect = RuntimeError("boom")
     app_ctx = MagicMock()
     app_ctx.get_create_vector_store.return_value = vector_store
 
     with patch(_PATCH_CTX, return_value=app_ctx):
-        result = _run(get_chunk_count("doc-1"))
-
-    assert result == 0
+        with pytest.raises(RuntimeError, match="boom"):
+            _run(get_chunk_count("doc-1"))
 
 
 def test_get_chunk_count_runs_the_blocking_opensearch_call_in_a_thread():

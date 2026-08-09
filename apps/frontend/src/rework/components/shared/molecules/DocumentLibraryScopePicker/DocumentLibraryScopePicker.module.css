@@ -15,23 +15,63 @@
 
 .nodeRow {
   display: flex;
+  position: relative;
   align-items: center;
   gap: var(--spacing-xs);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   padding: var(--spacing-xs) var(--spacing-s);
 }
 
-.expandButton {
+/* Full-tile expand trigger: absolutely fills the whole tile (padding included)
+   so a click anywhere expands, and carries the hover state-layer. Sits behind
+   the visible content (z-index 0); interactive content above keeps its own
+   clicks, non-interactive content lets clicks fall through to this button. */
+.nodeTrigger {
+  position: absolute;
+  z-index: 0;
+  cursor: pointer;
+  inset: 0;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  padding: 0;
+}
+
+/* Same 8% on-surface hover state-layer as buttons and other hoverable zones. */
+.nodeRow:hover .nodeTrigger {
+  background: var(--state-on-surface-hover);
+}
+
+/* Visible content stacks above the trigger. Non-interactive parts are
+   pointer-transparent so a click on them reaches the trigger (expands); the
+   checkbox keeps its own pointer events (selection). */
+.nodeRow > .expandIcon,
+.nodeRow > .folderIcon,
+.nodeRow > .nodeMeta {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.nodeRow > .checkbox {
+  position: relative;
+  z-index: 1;
+}
+
+.expandIcon {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  cursor: pointer;
-  border: 0;
-  background: transparent;
-  padding: 0;
   color: var(--on-surface-retreat);
+  font-size: 18px;
+}
+
+/* Non-expandable folder (folders-only mode): keep the chevron's box for
+   alignment but hide the glyph. */
+.expandIconHidden {
+  visibility: hidden;
 }
 
 .checkbox {
@@ -39,9 +79,12 @@
   accent-color: var(--primary);
 }
 
+/* Color comes from the shared fileIconSpec (inline style), matching the
+   Resources table; only the glyph size is fixed here. */
 .folderIcon,
 .documentIcon {
-  color: var(--on-surface-retreat);
+  display: inline-flex;
+  align-items: center;
   font-size: 18px;
 }
 

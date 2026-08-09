@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from fred_core import KeycloakUser
 from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, StartTaskResponse, TaskTarget
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from knowledge_flow_backend.application_context import ApplicationContext
 
@@ -146,6 +146,35 @@ class RevectorizeCorpusRequestV1(BaseModel):
 
     thread_id: Optional[str] = None
     exchange_id: Optional[str] = None
+
+
+class RepairVectorMetadataRequestV1(BaseModel):
+    """3a — "Réparer uniquement" (#2234): repair `processing.stages.vector` for
+    documents whose vectors and content are already confirmed to exist. Always a
+    bare `source_tag` scope (platform-wide by construction, see
+    `CorpusManagerController._authorize_repair_vector_metadata`) -- unlike
+    `RevectorizeCorpusRequestV1`, there is no `tag_ids`/`document_uids` variant and
+    no `options` (this action has exactly one, hard-coded, safe behavior)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["v1"] = "v1"
+    source_tag: str
+
+    # AUTHZ-05 review finding: see BuildCorpusTocRequestV1.team_id.
+    team_id: str
+
+    @field_validator("source_tag", "team_id")
+    @classmethod
+    def _strip_and_require_non_empty(cls, value: str) -> str:
+        # `list_by_source_tag`/`_authorize_repair_vector_metadata` treat these as
+        # meaningful scope/authorization identifiers -- a blank or whitespace-only
+        # value must never silently resolve to "no filter" or "no team", so reject
+        # it here rather than at the SQL/ReBAC layer.
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty or whitespace-only")
+        return stripped
 
 
 class PurgeVectorsOptionsV1(BaseModel):
@@ -356,6 +385,49 @@ class CorpusManagerService:
             await task_svc.bind_execution(resp.task_id, execution_id=handle.workflow_id)
         except Exception:
             logger.warning("Could not bind revectorize task %s to workflow %s", resp.task_id, handle.workflow_id, exc_info=True)
+
+        return StartTaskResponse(task_id=resp.task_id)
+
+    async def repair_vector_metadata(self, req: RepairVectorMetadataRequestV1, user: KeycloakUser) -> StartTaskResponse:
+        """
+        Start the vector-metadata repair action ("3a — Réparer uniquement", #2234).
+
+        Deliberately not `revectorize_corpus`/`RevectorizeCorpusWorkflow`: this
+        action never touches vectors, content, or the embedder -- see
+        `RepairVectorMetadataWorkflow`'s module docstring. `source_tag` is
+        resolved to document_uids inside the workflow's own activities, not here.
+        """
+        if self._ingestion_task_service is None:
+            raise RuntimeError("Vector-metadata repair requires the ingestion scheduler to be enabled.")
+
+        task_svc = ApplicationContext.get_instance().get_task_service()
+        target = TaskTarget(type="corpus-repair-vector-metadata", id=req.source_tag, label=f"Repair vector metadata: {req.source_tag}")
+        start_req = StartIngestionRequest(params=StartIngestionParams(resource_ids=[]))
+        resp = await task_svc.start(start_req, created_by=user.uid, team_id=req.team_id, target=target)
+
+        # A `task_run` row now exists (state pending) with no workflow behind it yet.
+        # If starting the Temporal workflow itself fails, that row must not be left
+        # pending forever -- drive it to `failed` with the real reason before
+        # re-raising, so the API call still surfaces the original error to the
+        # caller and the task is never silently orphaned (contrast `bind_execution`
+        # below, which is best-effort *after* a successful start: at that point the
+        # workflow is genuinely running, so a bind failure only affects OPS-04
+        # reconciliation, not whether the work happens at all).
+        try:
+            handle = await self._ingestion_task_service.start_repair_vector_metadata(
+                source_tag=req.source_tag,
+                task_id=resp.task_id,
+            )
+        except Exception as exc:
+            message = str(exc).strip() or "Failed to start the vector-metadata repair workflow"
+            await task_svc.fail_task(resp.task_id, message[:500])
+            raise
+
+        # OPS-04 reconciliation: see revectorize_corpus.
+        try:
+            await task_svc.bind_execution(resp.task_id, execution_id=handle.workflow_id)
+        except Exception:
+            logger.warning("Could not bind repair-vector-metadata task %s to workflow %s", resp.task_id, handle.workflow_id, exc_info=True)
 
         return StartTaskResponse(task_id=resp.task_id)
 

@@ -43,6 +43,40 @@ class IngestionProcessingProfile(StrEnum):
 # ── per-kind detail models ────────────────────────────────────────────────────
 
 
+class RepairVectorMetadataResult(BaseModel):
+    """Structured outcome of the vector-metadata repair action (#2234, 3a).
+
+    Populated only on the terminal `succeeded`/`failed` event of
+    `RepairVectorMetadataWorkflow`, same convention as `MigrationResult` below --
+    a typed report an operator reads directly off the task, not just a pass/fail.
+
+    IMPORTANT scope limitation, by design (an urgent repair, not a full audit):
+    `eligible_with_vectors_and_content`/`repaired` mean the document_uid had *at
+    least one* real vector chunk in OpenSearch and *at least one* real object in
+    the content store -- there is no reliable expected chunk/object count to
+    compare against (it was never transported by the Kea restore), so this can
+    never prove *every* chunk or object of a document survived. Never present
+    this report, in UI text or logs, as having verified full completeness.
+
+    `failed_or_running_excluded` counts documents left untouched because some
+    processing stage reads `failed` or `in_progress` -- a stale `not_started`
+    flag and a real failure/stuck stage are not the same problem, and this
+    repair must never silently mark one `done` (clearing its error) just
+    because it happens to already have vectors/content present.
+    """
+
+    source_tag: str
+    metadata_documents: int = 0
+    already_done: int = 0
+    eligible_with_vectors_and_content: int = 0
+    repaired: int = 0
+    missing_vectors: int = 0
+    missing_content: int = 0
+    tabular_excluded: int = 0
+    failed_or_running_excluded: int = 0
+    errors: int = 0
+
+
 class IngestionDetail(BaseModel):
     processed: int
     total: int
@@ -50,6 +84,9 @@ class IngestionDetail(BaseModel):
     preview: int
     vectorized: int
     sql_indexed: int
+    # Populated only on the terminal event of the vector-metadata repair action
+    # (#2234, 3a) -- every other ingestion-kind task leaves this None.
+    result: RepairVectorMetadataResult | None = None
 
 
 class TaskLogDetail(BaseModel):

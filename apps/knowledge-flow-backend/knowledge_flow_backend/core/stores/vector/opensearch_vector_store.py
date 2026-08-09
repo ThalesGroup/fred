@@ -209,6 +209,7 @@ T = TypeVar("T", bound=BaseVectorHit)
 EMBEDDING_RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})
 EMBEDDING_RETRY_BASE_DELAY_SECONDS = 0.5
 EMBEDDING_RETRY_MAX_ATTEMPTS = 3
+EMBEDDING_CAP_PROBE_AFTER_SUCCESSES = 10
 
 
 @dataclass(frozen=True)
@@ -217,6 +218,74 @@ class EmbeddingRequestFailure:
     provider_code: str | None
     provider_type: str | None
     exception_type: str
+
+
+def scan_document_uids_composite(
+    client: OpenSearch,
+    index: str,
+    *,
+    page_size: int = 1000,
+    strict: bool = False,
+    request_timeout: int = 30,
+) -> List[str]:
+    """
+    Page through every distinct `metadata.document_uid` in `index` via a
+    `composite` aggregation (`after_key`), using `client` as given.
+
+    Pure and side-effect-free: takes an already-constructed client and index
+    name and issues only `search` calls -- never touches indices, mappings, or
+    pipelines, and never needs an embedder. This is what lets the
+    vector-metadata repair action (#2234, 3a) list real vector document_uids
+    without ever constructing an `OpenSearchVectorStoreAdapter` (whose
+    `__init__` calls `ensure_ready()`, which calls the embedder and can create
+    or update the index/pipeline/mapping -- forbidden for a metadata-only
+    repair). `OpenSearchVectorStoreAdapter.list_document_uids` delegates here
+    too, so there is exactly one paging implementation.
+
+    Pages through a `composite` aggregation instead of a single `terms`
+    aggregation capped at a fixed bucket count. A one-shot `terms` agg
+    silently truncates once the index holds more distinct document_uids than
+    its `size`, ordered by descending chunk count -- so once a deployment's
+    real document count crosses that cap, correctly-vectorized documents with
+    fewer chunks silently drop out of the list. `page_size` bounds each
+    round-trip only, never the total result. `request_timeout` bounds each
+    individual `search` call so a stuck OpenSearch node fails this scan
+    instead of hanging it indefinitely.
+
+    `strict=False` (default, used by `OpenSearchVectorStoreAdapter.
+    list_document_uids`'s existing callers, e.g. `audit_stores`) is
+    best-effort: any failure -- on the first page or midway through paging --
+    logs and returns whatever was collected so far. `strict=True` (the
+    vector-metadata repair path) never does that: a failure on any page
+    raises instead, so a caller that must never treat "scan failed" as "0
+    vectors" gets a hard error instead of a silently incomplete list.
+    """
+    doc_uids: list[str] = []
+    after: dict[str, object] | None = None
+    try:
+        while True:
+            composite: dict[str, object] = {
+                "size": page_size,
+                "sources": [{"doc_uid": {"terms": {"field": "metadata.document_uid"}}}],
+            }
+            if after is not None:
+                composite["after"] = after
+            body = {"size": 0, "aggs": {"by_doc": {"composite": composite}}}
+            resp = client.search(index=index, body=body, request_timeout=request_timeout)  # type: ignore[call-arg]  # opensearch-py's @query_params decorator accepts this at runtime; its type stub doesn't reflect that
+            agg = resp.get("aggregations", {}).get("by_doc", {})  # type: ignore[dict-item]
+            buckets = agg.get("buckets", [])
+            if not buckets:
+                break
+            doc_uids.extend(str(b["key"]["doc_uid"]) for b in buckets if b.get("key", {}).get("doc_uid"))
+            after = agg.get("after_key")
+            if after is None:
+                break
+        return doc_uids
+    except Exception:
+        if strict:
+            raise
+        logger.warning("[VECTOR][OPENSEARCH] Could not list document_uids from index=%s", index, exc_info=True)
+        return []
 
 
 class OpenSearchVectorStoreAdapter(BaseVectorStore):
@@ -249,6 +318,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self._secure = secure
         self._verify_certs = verify_certs
         self._bulk_size = bulk_size
+        # Largest batch size the embedding provider has accepted after rejecting a
+        # bigger one (None until a batch-limit error is seen). Lowered on rejection;
+        # after EMBEDDING_CAP_PROBE_AFTER_SUCCESSES consecutive successes at the cap,
+        # one batch probes double the size so a dense early batch cannot pin the cap
+        # low for the rest of the corpus.
+        self._learned_embedding_batch_cap: Optional[int] = None
+        self._cap_success_streak: int = 0
         self._embedding_model_name = embedding_model_name
         self._kpi = kpi
         self._vs: OpenSearchVectorSearch | None = None
@@ -656,6 +732,38 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         )
         return prepared_documents, prepared_ids
 
+    def _current_embedding_attempt_limit(self) -> Optional[int]:
+        """
+        Largest batch size worth attempting right now: the learned cap, or — once
+        EMBEDDING_CAP_PROBE_AFTER_SUCCESSES consecutive full-cap batches have
+        succeeded — a one-shot upward probe at double the cap (bounded by
+        bulk_size) so the cap can recover from an unusually dense early batch.
+        """
+        cap = self._learned_embedding_batch_cap
+        if cap is None:
+            return None
+        if self._cap_success_streak >= EMBEDDING_CAP_PROBE_AFTER_SUCCESSES:
+            return min(self._bulk_size, cap * 2)
+        return cap
+
+    def _effective_embedding_batch_size(self) -> int:
+        limit = self._current_embedding_attempt_limit()
+        if limit is None:
+            return self._bulk_size
+        return max(1, min(self._bulk_size, limit))
+
+    def _lower_learned_embedding_batch_cap(self, new_cap: int) -> None:
+        current = self._learned_embedding_batch_cap
+        if current is not None and current <= new_cap:
+            return
+        self._learned_embedding_batch_cap = new_cap
+        logger.info(
+            "[VECTOR][OPENSEARCH] learned embedding batch cap for index=%s lowered to %s (was %s)",
+            self._index,
+            new_cap,
+            current,
+        )
+
     def _add_documents_with_adaptive_batching(
         self,
         documents: List[Document],
@@ -675,9 +783,38 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             It first tries the batch as-is. If the embedding backend reports a
             structured batch-limit error, the helper splits the batch in half and retries
             recursively until each sub-batch is accepted or only one document remains.
-            If the backend reports a transient server-side failure, the helper retries the
-            same batch with exponential backoff before giving up.
+            The size that triggered the split is remembered on the instance
+            (`_learned_embedding_batch_cap`) so later batches are pre-split without
+            re-attempting a provider call that is known to fail. The cap is lowered
+            on rejection; after EMBEDDING_CAP_PROBE_AFTER_SUCCESSES consecutive
+            successes at the cap, one batch probes double the size so the cap
+            converges back up when an early dense batch pushed it lower than the
+            rest of the corpus needs. A failed probe costs a single rejected call
+            and resets the streak. If the backend reports a transient server-side
+            failure, the helper retries the same batch with exponential backoff
+            before giving up.
         """
+        limit = self._current_embedding_attempt_limit()
+        if limit is not None and len(documents) > limit:
+            split_index = max(1, len(documents) // 2)
+            logger.info(
+                "[VECTOR][OPENSEARCH] batch exceeds learned embedding cap for index=%s batch_size=%s attempt_limit=%s; splitting without provider attempt",
+                self._index,
+                len(documents),
+                limit,
+            )
+            left_ids = self._add_documents_with_adaptive_batching(
+                documents=documents[:split_index],
+                ids=ids[:split_index],
+                split_chunk_size=split_chunk_size,
+            )
+            right_ids = self._add_documents_with_adaptive_batching(
+                documents=documents[split_index:],
+                ids=ids[split_index:],
+                split_chunk_size=split_chunk_size,
+            )
+            return left_ids + right_ids
+
         try:
             logger.info(
                 "[VECTOR][OPENSEARCH] add batch attempt index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s ids_sample=%s",
@@ -705,6 +842,20 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 retry_attempt,
                 split_chunk_size,
             )
+            cap = self._learned_embedding_batch_cap
+            if cap is not None:
+                if len(documents) > cap:
+                    # Successful upward probe: adopt the bigger size.
+                    self._learned_embedding_batch_cap = len(documents)
+                    self._cap_success_streak = 0
+                    logger.info(
+                        "[VECTOR][OPENSEARCH] learned embedding batch cap for index=%s raised to %s after successful probe (was %s)",
+                        self._index,
+                        len(documents),
+                        cap,
+                    )
+                elif len(documents) == cap:
+                    self._cap_success_streak += 1
             return assigned_ids
         except Exception as error:
             failure = self._get_embedding_request_failure(error)
@@ -747,6 +898,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     )
 
                 split_index = max(1, len(documents) // 2)
+                self._cap_success_streak = 0
+                self._lower_learned_embedding_batch_cap(split_index)
                 logger.warning(
                     "[VECTOR][OPENSEARCH] embedding batch exceeds provider limit for index=%s batch_size=%s; splitting into sub-batches %s and %s",
                     self._index,
@@ -833,15 +986,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
 
             assigned_ids: List[str] = []
-            for start in range(0, len(documents), self._bulk_size):
-                end = start + self._bulk_size
+            start = 0
+            while start < len(documents):
+                # Re-read each iteration: an earlier slice may have lowered the cap.
+                end = min(start + self._effective_embedding_batch_size(), len(documents))
                 batch_documents = documents[start:end]
                 batch_ids = ids[start:end]
                 logger.info(
                     "[VECTOR][OPENSEARCH] processing bulk slice index=%s start=%s end=%s batch_size=%s",
                     self._index,
                     start,
-                    min(end, len(documents)),
+                    end,
                     len(batch_documents),
                 )
                 assigned_ids.extend(
@@ -850,6 +1005,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                         ids=batch_ids,
                     )
                 )
+                start = end
 
             logger.info(
                 "[VECTOR][OPENSEARCH] add_documents complete index=%s input_documents=%s stored_chunks=%s",
@@ -897,21 +1053,26 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
             return 0
 
-    def list_document_uids(self, *, max_buckets: int = 10000) -> List[str]:
+    def list_document_uids(self, *, page_size: int = 1000, strict: bool = False) -> List[str]:
         """
-        Return distinct document_uids known to this vector index (best effort).
+        Return every distinct document_uid known to this vector index.
+
+        `strict=False` (default, used by `audit_stores`) is best-effort: any
+        failure -- on the first page or midway through paging -- logs and
+        returns whatever was collected so far. `strict=True` (used by the
+        vector-metadata repair path, #2234) never does that: a failure on any
+        page raises instead, so a caller that must never treat "scan failed"
+        as "0 vectors" gets a hard error instead of a silently incomplete list.
+
+        Delegates to `scan_document_uids_composite` (module-level, pure) so the
+        same paging logic is available to callers that must never construct a
+        full `OpenSearchVectorStoreAdapter` (whose `__init__` calls
+        `ensure_ready()` -> an embedder call and possible index/pipeline
+        creation) just to page through document_uids -- see that function's
+        docstring, and the repair action's `list_strict_vector_document_uids`
+        activity, which uses it directly against a raw client instead.
         """
-        try:
-            body = {
-                "size": 0,
-                "aggs": {"by_doc": {"terms": {"field": "metadata.document_uid", "size": max_buckets}}},
-            }
-            resp = self._client.search(index=self._index, body=body)
-            buckets = resp.get("aggregations", {}).get("by_doc", {}).get("buckets", [])  # type: ignore[dict-item]
-            return [str(b.get("key")) for b in buckets if b.get("key")]
-        except Exception:
-            logger.warning("[VECTOR][OPENSEARCH] Could not list document_uids from index=%s", self._index, exc_info=True)
-            return []
+        return scan_document_uids_composite(self._client, self._index, page_size=page_size, strict=strict)
 
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """

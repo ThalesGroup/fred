@@ -75,7 +75,8 @@
   "app": {
     "loading": {
       "router": "Fred démarre...",
-      "ui": "Fred prépare l'interface..."
+      "ui": "Fred prépare l'interface...",
+      "generic": "Chargement, veuillez patienter..."
     }
   },
   "appCard": {
@@ -139,16 +140,16 @@
       }
     },
     "document_access": {
-      "name": "Accès aux documents",
-      "description": "Recherchez dans les documents téléversés par similarité sémantique (RAG).",
+      "name": "Rechercher dans les ressources",
+      "description": "Capacité de rechercher une information dans les ressources de l'équipe.",
       "fields": {
         "show_library_selection": {
           "title": "Sélecteur de bibliothèque de documents",
           "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
         },
         "bind_libraries": {
-          "title": "Lier à des bibliothèques spécifiques",
-          "description": "Restreindre cet agent à un ensemble fixe de bibliothèques de documents choisies lors de la configuration."
+          "title": "Restreindre à des dossiers spécifiques",
+          "description": "Restreindre la connaissance et la recherche de l'agent à certains dossiers."
         },
         "library_tag_ids": {
           "title": "Bibliothèques de documents liées",
@@ -193,8 +194,8 @@
       }
     },
     "document_summarize": {
-      "name": "Résumé de document",
-      "description": "Génère à la demande le résumé d'un document. Nécessite par défaut votre approbation avant chaque résumé.",
+      "name": "Résumer un document",
+      "description": "Capacité de résumer un document et d'en exploiter le résultat.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -206,9 +207,29 @@
         }
       }
     },
+    "document_verbatim": {
+      "name": "Verbatim document",
+      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Longueur de page",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+        }
+      }
+    },
+    "document_extract": {
+      "name": "Extraction d'information d'un document",
+      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "fields": {
+        "require_confirmation": {
+          "title": "Confirmation requise",
+          "description": "Met en pause avant chaque extraction pour recueillir votre approbation (continuer/annuler). Activé par défaut — cette capacité consomme beaucoup de tokens ; à désactiver uniquement pour un agent dont l'usage est déjà éprouvé."
+        }
+      }
+    },
     "writable_document": {
-      "name": "Document collaboratif",
-      "description": "Rédigez des documents avec l'agent dans un éditeur Markdown côte à côte, et exportez-les en Word ou Markdown.",
+      "name": "Générer un document texte (Word)",
+      "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
       "panel": {
         "writable_document_pane": {
           "title": "Document"
@@ -222,7 +243,7 @@
       "noSession": "Aucune session — ouvrez une conversation pour voir ses documents.",
       "empty": "Aucun document pour l'instant. Demandez à l'agent d'en rédiger un.",
       "card": {
-        "aria": "Document collaboratif",
+        "aria": "Générer un document texte (Word)",
         "open": "Ouvrir",
         "updatedByAgent": "Mis à jour par l'agent",
         "updatedByUser": "Modifié par vous"
@@ -236,8 +257,8 @@
       }
     },
     "ppt_filler": {
-      "name": "Générateur PowerPoint",
-      "description": "Faites remplir votre propre modèle PowerPoint depuis la conversation : l'agent extrait les valeurs et produit une présentation finalisée.",
+      "name": "Remplir un fichier PowerPoint",
+      "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé.",
       "form": {
         "uploadTemplate": "Téléverser un modèle .pptx",
         "replaceTemplate": "Remplacer le modèle",
@@ -248,6 +269,7 @@
         "templateInvalid": "Corrigez les erreurs du modèle ci-dessous avant d'enregistrer.",
         "analyzing": "Analyse du modèle…",
         "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
+        "uploadSuccessToast": "Modèle PowerPoint validé.",
         "schemaTitle": "Champs que l'agent remplira",
         "learnMore": "Comment ça marche ? Que dois-je uploader ?",
         "slide": "Diapositive {{number}}",
@@ -346,6 +368,10 @@
       "tuneDialogAria": "Réglages de conversation",
       "tuneOpenAria": "Ouvrir les réglages de conversation"
     },
+    "documentScopePanel": {
+      "title": "Définir les ressources accessibles",
+      "resetTooltip": "Réinitialiser"
+    },
     "composerSettings": {
       "attachFile": "Joindre un fichier",
       "boundLibrariesTitle": "Bibliothèques liées",
@@ -354,16 +380,16 @@
       "documentsLoadError": "Impossible de charger les documents.",
       "documentsNoScope": "La sélection de documents est activée, mais aucun sélecteur de bibliothèque ni aucune bibliothèque liée n'est configuré.",
       "documentsTitle": "Documents",
-      "librariesCount": "{{count}} bibliothèques",
+      "librariesCount": "{{count}} dossiers",
       "librariesTitle": "Bibliothèques",
       "loading": "Chargement...",
       "loadingDocuments": "Chargement des documents...",
       "noDocumentsAvailable": "Aucun document disponible.",
       "noDocumentsSelected": "Aucun document sélectionné",
       "noLibrariesAvailable": "Aucune bibliothèque disponible.",
-      "scopeCorpus": "Corpus",
-      "scopeCorpusAndWeb": "Corpus + web",
-      "scopeGeneral": "Général",
+      "scopeCorpus": "Ressources",
+      "scopeCorpusAndWeb": "Modèle + Ressources",
+      "scopeGeneral": "Modèle",
       "scopeRowLabel": "Portée",
       "scopeTitle": "Portée de recherche",
       "searchPolicyRowLabel": "Recherche",
@@ -703,8 +729,8 @@
         }
       },
       "filesystem": {
-        "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)",
-        "name": "Accès au système de fichiers"
+        "description": "Capacité de parcourir l'ensemble des dossiers et fichiers présents dans les ressources.",
+        "name": "Parcourir l'arborescence des ressources"
       },
       "jira": {
         "description": "Permet à votre agent d'interagir avec Jira",
@@ -767,8 +793,8 @@
         "name": "Rechercher dans opensearch"
       },
       "tabular": {
-        "description": "Permet à votre agent d'interroger des sources de données tabulaires (feuilles de calcul, csv...)",
-        "name": "Accès aux données tabulaires"
+        "description": "Capacité d'exploiter les données issues des fichiers tabulaires présents dans les ressources (CSV, Excel...).",
+        "name": "Exploiter les fichiers tabulaires"
       },
       "web_github_readonly": {
         "description": "Capacité locale en processus pour consulter des pages web publiques et inspecter des dépôts GitHub (lecture seule)",
@@ -868,54 +894,6 @@
   },
   "pageError": {
     "message": "Retour à la page d'accueil"
-  },
-  "procbench": {
-    "browse": "Parcourir",
-    "clear": "Effacer",
-    "col": {
-      "duration": "Durée",
-      "headings": "Titres",
-      "processor": "Processeur",
-      "status": "Statut",
-      "tokens": "Jetons (est)",
-      "words": "Mots"
-    },
-    "description": "Ajoutez un document (PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL) et comparez la qualité et la vitesse d'extraction entre processeurs.",
-    "detail": {
-      "collapseAll": "Tout replier",
-      "expandAll": "Tout déplier",
-      "title": "Détail de l'exécution"
-    },
-    "metricsTitle": "Métriques des processeurs",
-    "noFile": "Aucun fichier sélectionné",
-    "noMarkdown": "Aucun markdown produit",
-    "openLatest": "Ouvrir la dernière exécution",
-    "persistLabel": "Enregistrer l'exécution",
-    "processorsCount": "{{count}} processeur(s)",
-    "run": "Lancer le banc",
-    "runFailed": "Échec du banc",
-    "runSuccess": "Banc terminé",
-    "runSuccessDetail": "Processeurs exécutés avec succès.",
-    "running": "Exécution...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processeurs",
-      "delete": "Supprimer",
-      "deleteFailed": "Échec de la suppression",
-      "empty": "Aucune exécution enregistrée.",
-      "file": "Fichier",
-      "modified": "Modifié",
-      "open": "Ouvrir",
-      "title": "Exécutions enregistrées"
-    },
-    "summaryFor": "Résumé pour '{{name}}'",
-    "title": "Banc de test des processeurs",
-    "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
-    "uploadTitle": "Ajouter un document",
-    "view": {
-      "sideBySide": "Côte à côte",
-      "stacked": "Empilé"
-    }
   },
   "profile": {
     "theme": {
@@ -1359,7 +1337,10 @@
     "chatTrace": {
       "ariaLabel": "Trace de raisonnement de l'agent",
       "awaitingConfirmation": "en attente de confirmation…",
+      "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
+      "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
       "phase": {
@@ -1391,6 +1372,10 @@
       "title": "Conditions Générales d'Utilisation (CGU)",
       "validate": "Accepter les CGU"
     },
+    "hitlPrompt": {
+      "accepted": "Accepté",
+      "refused": "Refusé"
+    },
     "knowledgeHub": {
       "loading": "Chargement..."
     },
@@ -1398,6 +1383,11 @@
     "marketplace": {
       "teams": {
         "otherTeams": "Découvrez d'autres équipes",
+        "search": {
+          "ariaLabel": "Rechercher une équipe",
+          "clearAriaLabel": "Effacer la recherche",
+          "placeholder": "Rechercher une équipe"
+        },
         "title": "Équipes de la communauté",
         "yourTeams": "Vos équipes"
       }
@@ -1426,11 +1416,28 @@
         "changelog": "Nouveautés"
       }
     },
-    "profileMenu": {
-      "adminBadge": "admin",
-      "adminConsole": "Console technique",
-      "contactSupport": "Contacter le support",
+    "avatarCrop": {
+      "title": "Recadrer l'avatar",
+      "save": "Enregistrer",
+      "zoom": "Zoom"
+    },
+    "home": {
+      "title": "Accueil",
+      "searchPlaceholder": "Rechercher une équipe",
+      "searchClear": "Effacer la recherche",
+      "yourTeams": "Vos équipes",
+      "pageTitle": "Accueil",
+      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer."
+    },
+    "mainNav": {
+      "ariaLabel": "Navigation principale",
+      "home": "Accueil",
+      "marketplace": "Marketplace",
       "helpCenter": "Centre d'aide",
+      "adminConsole": "Console technique"
+    },
+    "profileMenu": {
+      "contactSupport": "Contacter le support",
       "profile": "Profil"
     },
     "promptCategories": {
@@ -1636,8 +1643,8 @@
     "save": "Sauvegarder",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Démarrez un pod runtime pour inscrire des agents.",
-        "title": "Aucun runtime d'agents disponible"
+        "description": "Demandez à un administrateur d'activer une capability d'agent, ou vérifiez qu'un runtime d'agents est connecté.",
+        "title": "Aucun agent disponible pour le moment"
       },
       "controlPlane": {
         "description": "Vérifiez que le service de contrôle est en cours d'exécution.",
@@ -1692,6 +1699,7 @@
         "menu": {
           "resources": "Ressources"
         },
+        "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
       }
     },
@@ -1863,7 +1871,7 @@
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
-      "team_admin": "Administrateur",
+      "team_admin": "Admin",
       "team_editor": "Editeur",
       "team_analyst": "Analyste",
       "team_member": "Membre"
@@ -1959,11 +1967,11 @@
           "public": "Publique",
           "private": "Privée"
         },
-        "teamBanner": {
-          "title": "Bannière de l'équipe",
+        "teamAvatar": {
+          "title": "Avatar de l'équipe",
           "import": "Importer",
           "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
-          "noBanner": "Aucune bannière sélectionnée"
+          "noAvatar": "Aucun avatar sélectionné"
         },
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
@@ -2011,7 +2019,54 @@
         "advancedSettings": "Paramètres avancés",
         "capabilitiesInfo": {
           "title": "À quoi servent ces capacités ?",
-          "body": "Les capacités sont les outils que votre agent peut utiliser pendant une conversation : rechercher dans vos documents, résumer un fichier, ou encore générer une présentation. Activez uniquement celles dont votre agent a besoin, puis ajustez leurs réglages si nécessaire. Vous pourrez toujours modifier cette sélection après la création de l'agent."
+          "body": "Les capacités sont les outils que votre agent peut utiliser pendant une conversation : rechercher dans vos documents, résumer un fichier, ou encore générer une présentation. Activez uniquement celles dont votre agent a besoin, puis ajustez leurs réglages si nécessaire. Vous pourrez toujours modifier cette sélection après la création de l'agent.\nPour les utiliser, pour la plupart, il suffit de le demander en langage naturel à votre agent (ex : \"Fais un résumé du document attaché à cette conversation.\")."
+        },
+        "capabilities": {
+          "header": "Sélectionnez les capacités de votre agent",
+          "viewToggle": {
+            "advanced": "Avancé",
+            "aria": "Affichage avancé des capacités"
+          },
+          "included": {
+            "label": "Capacités incluses",
+            "missing": "Capacités manquantes",
+            "activeTooltip": "Activée pour cet agent.",
+            "inactiveTooltip": "Disponible, mais non activée pour cet agent.",
+            "unavailableTooltip": "Non activée par l'administrateur de la plateforme pour votre équipe."
+          },
+          "sections": {
+            "dataKnowledge": "Données et connaissances",
+            "documentProduction": "Production de documents",
+            "intelligenceOrchestration": "Intelligence et orchestration",
+            "actionsIntegration": "Actions et intégration"
+          },
+          "actionsIntegrationEmpty": "Aucune capacité dans cette section pour le moment.",
+          "packs": {
+            "teamResources": {
+              "title": "Accès aux ressources de l'équipe",
+              "description": "Permet à l'agent d'exploiter les ressources de l'équipe pour remplir sa mission."
+            },
+            "conversationAttachments": {
+              "title": "Pièces jointes à une conversation",
+              "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
+            },
+            "documentReading": {
+              "title": "Lecture de documents",
+              "description": "Permet à l'agent de lire un document mot à mot et d'en extraire des informations de façon exhaustive."
+            },
+            "wordDocument": {
+              "title": "Générer un document Word",
+              "description": "Capacité d'éditer et de générer un document texte téléchargeable."
+            },
+            "powerpointDocument": {
+              "title": "Remplir un document PowerPoint",
+              "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
+            },
+            "reasoning": {
+              "title": "Raisonnement",
+              "description": "Accès au mode \"raisonnement\" dans les options du chat."
+            }
+          }
         },
         "createdBy": "Créé par {{user}}",
         "updatedBy": "Modifié par {{user}}",
@@ -2034,15 +2089,15 @@
             "placeholder": "Finalité, utilisateurs cibles, acteurs impactés, données exploitées, productions/livrables, impacts en cas d'erreur de l'agent..."
           },
           "reasoning": {
-            "label": "Raisonnement",
-            "hint": "Permet aux utilisateurs d'activer le raisonnement du modèle pour une seule question, depuis le composeur de chat. N'apparaît que si le modèle le supporte et qu'un administrateur l'a activé."
+            "label": "Accéder au raisonnement approfondi",
+            "hint": "Accès au mode \"raisonnement approfondi\" dans les options du chat."
           },
           "reasoningDefaultOn": {
-            "label": "Raisonnement activé par défaut",
-            "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
+            "label": "Raisonnement approfondi activé par défaut",
+            "hint": "Chaque nouvelle conversation avec cet agent démarre avec le bouton de raisonnement approfondi déjà activé. Les utilisateurs peuvent toujours le désactiver question par question. Le raisonnement approfondi est plus lent et, sur les agents qui appellent des outils, peut amener le modèle à répéter des appels."
           }
         },
-        "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
+        "noTemplates": "Aucun modèle d'agent disponible — demandez à un administrateur d'activer une capability d'agent, ou vérifiez le runtime d'agents.",
         "templateBrowser": {
           "title": "Sélectionner un template d'agent",
           "subtitle": "Chaque template permet de créer un agent pensé et optimisé pour une mission spécifique."
@@ -2333,7 +2388,11 @@
           "upload": "Import",
           "manual": "Manuel",
           "capture": "Capture"
-        }
+        },
+        "deleteTitle": "Supprimer l'évaluation",
+        "deleteMessage": "Supprimer l'évaluation {{id}} ? Cela supprime définitivement l'évaluation ainsi que toutes ses exécutions, cas, métriques et événements.",
+        "deleteSuccess": "Évaluation supprimée",
+        "deleteError": "Échec de la suppression de l'évaluation"
       },
       "evaluationCreate": {
         "title": "Nouvelle évaluation",
@@ -2449,6 +2508,20 @@
           "tags_skipped": "Tags ignorés",
           "docs_imported": "Documents importés",
           "docs_skipped": "Documents ignorés"
+        }
+      },
+      "repair": {
+        "detailsTitle": "Rapport de réparation",
+        "counter": {
+          "metadata_documents": "Documents correspondant à ce source_tag",
+          "already_done": "Déjà marqués terminés",
+          "eligible_with_vectors_and_content": "Vecteurs et contenu confirmés",
+          "repaired": "Réparés",
+          "missing_vectors": "Vecteurs manquants (non touchés)",
+          "missing_content": "Contenu manquant (non touché)",
+          "tabular_excluded": "Documents tabulaires exclus (sql, hors périmètre)",
+          "failed_or_running_excluded": "En échec ou en cours (non touchés)",
+          "errors": "Erreurs"
         }
       }
     }

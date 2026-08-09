@@ -21,9 +21,7 @@ export interface FrontendProperties {
   agentsNicknameSingular: string;
   contactSupportLink: string;
   defaultPersonalAvatarFile: string;
-  defaultPersonalBannerFile: string;
   defaultTeamAvatarFile: string;
-  defaultTeamBannerFile: string;
   faviconName: string;
   faviconNameDark: string;
   gcuVersion: string | null;
@@ -59,9 +57,7 @@ export function useFrontendProperties(): FrontendProperties {
       agentsNicknameSingular: getProperty("agentsNicknameSingular") || "Agent",
       contactSupportLink: getProperty("contactSupportLink") || "",
       defaultPersonalAvatarFile: getProperty("defaultPersonalAvatarFile") || "",
-      defaultPersonalBannerFile: getProperty("defaultPersonalBannerFile") || "",
       defaultTeamAvatarFile: getProperty("defaultTeamAvatarFile") || "",
-      defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "",
       faviconName: getProperty("faviconName") || "fred",
       faviconNameDark: getProperty("faviconNameDark") || "fred-dark",
       // Sourced from the public pre-auth `/frontend/config` (via `getGcuVersion`),

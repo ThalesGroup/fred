@@ -415,6 +415,14 @@ export default function AgentFormModal({
               onReasoningDefaultOnChange={(v) => setForm((prev) => ({ ...prev, reasoningDefaultOn: v }))}
               onTuningChange={handleTuningChange}
               onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
+              onCapabilitySelectionReplace={(next) =>
+                setForm((prev) => ({
+                  ...prev,
+                  selectedCapabilityIds: next.selectedCapabilityIds,
+                  capabilityConfigValues: next.capabilityConfigValues,
+                  reasoningEnabled: next.reasoningEnabled,
+                }))
+              }
               onCapabilityConfigChange={handleCapabilityConfigChange}
               onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
               onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}

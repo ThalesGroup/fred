@@ -98,6 +98,9 @@ class FakeOpenSearchClient:
         self.search_pipeline = FakeSearchPipeline(exists=pipeline_exists)
         self.update_by_query_calls: list[tuple[str, dict]] = []
         self.update_by_query_response: dict = {"updated": 1}
+        self.search_calls: list[dict] = []
+        self.search_responses: list[dict] = []
+        self.search_request_timeouts: list[int | None] = []
 
     def close(self) -> None:
         return None
@@ -105,6 +108,13 @@ class FakeOpenSearchClient:
     def update_by_query(self, *, index: str, body: dict, params: dict | None = None) -> dict:
         self.update_by_query_calls.append((index, deepcopy(body)))
         return self.update_by_query_response
+
+    def search(self, *, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        self.search_calls.append(deepcopy(body))
+        self.search_request_timeouts.append(request_timeout)
+        if self.search_responses:
+            return self.search_responses.pop(0)
+        return {"aggregations": {}}
 
 
 def test_opensearch_vector_store_creates_missing_index(monkeypatch):
@@ -390,13 +400,271 @@ def test_opensearch_vector_store_add_documents_splits_embedding_batches_on_provi
 
     assert assigned_ids == [f"cid-{i}" for i in range(5)]
     assert len(FakeVectorSearch.created) == 1
+    # The failed 5-doc attempt lowers the learned cap to 2, so the 3-doc right
+    # half is pre-split without re-attempting a size known to fail.
     assert FakeVectorSearch.created[0].calls == [
         (5, ["cid-0", "cid-1", "cid-2", "cid-3", "cid-4"]),
         (2, ["cid-0", "cid-1"]),
-        (3, ["cid-2", "cid-3", "cid-4"]),
         (1, ["cid-2"]),
         (2, ["cid-3", "cid-4"]),
     ]
+
+
+def test_opensearch_vector_store_reuses_learned_embedding_batch_size_across_bulk_slices(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+
+    class FakeEmbeddingBatchLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("provider rejected embedding batch")
+            self.status_code = 400
+            self.code = "3210"
+            self.type = "invalid_request_prompt"
+            self.body = {
+                "code": "3210",
+                "type": "invalid_request_prompt",
+                "raw_status_code": 400,
+            }
+
+    class FakeVectorSearch:
+        created: list["FakeVectorSearch"] = []
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.calls: list[tuple[int, list[str]]] = []
+            FakeVectorSearch.created.append(self)
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            self.calls.append((len(documents), list(ids)))
+            if len(documents) > 2:
+                raise FakeEmbeddingBatchLimitError()
+            return list(ids)
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=4,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(8)
+    ]
+
+    assigned_ids = store.add_documents(docs)
+
+    assert assigned_ids == [f"cid-{i}" for i in range(8)]
+    # Only the very first slice pays a failed provider call; every later slice
+    # is cut at the learned cap (2) up front.
+    assert FakeVectorSearch.created[0].calls == [
+        (4, ["cid-0", "cid-1", "cid-2", "cid-3"]),
+        (2, ["cid-0", "cid-1"]),
+        (2, ["cid-2", "cid-3"]),
+        (2, ["cid-4", "cid-5"]),
+        (2, ["cid-6", "cid-7"]),
+    ]
+
+
+def test_opensearch_vector_store_does_not_reattempt_a_batch_size_that_just_failed(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+
+    class FakeEmbeddingBatchLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("provider rejected embedding batch")
+            self.status_code = 400
+            self.code = "3210"
+            self.type = "invalid_request_prompt"
+            self.body = {
+                "code": "3210",
+                "type": "invalid_request_prompt",
+                "raw_status_code": 400,
+            }
+
+    class FakeVectorSearch:
+        created: list["FakeVectorSearch"] = []
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.calls: list[tuple[int, list[str]]] = []
+            FakeVectorSearch.created.append(self)
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            self.calls.append((len(documents), list(ids)))
+            if len(documents) > 2:
+                raise FakeEmbeddingBatchLimitError()
+            return list(ids)
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=8,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(8)
+    ]
+
+    assigned_ids = store.add_documents(docs)
+
+    assert assigned_ids == [f"cid-{i}" for i in range(8)]
+    # 8 fails -> cap 4; 4 fails -> cap 2. The right 4-doc half is then pre-split
+    # instead of re-attempting size 4, which the left half just saw fail.
+    calls = FakeVectorSearch.created[0].calls
+    assert calls == [
+        (8, [f"cid-{i}" for i in range(8)]),
+        (4, ["cid-0", "cid-1", "cid-2", "cid-3"]),
+        (2, ["cid-0", "cid-1"]),
+        (2, ["cid-2", "cid-3"]),
+        (2, ["cid-4", "cid-5"]),
+        (2, ["cid-6", "cid-7"]),
+    ]
+    assert [size for size, _ in calls].count(4) == 1
+
+
+def test_opensearch_vector_store_probes_upward_after_success_streak_and_raises_cap(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(ovs, "EMBEDDING_CAP_PROBE_AFTER_SUCCESSES", 2)
+
+    class FakeEmbeddingBatchLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("provider rejected embedding batch")
+            self.status_code = 400
+            self.code = "3210"
+            self.type = "invalid_request_prompt"
+            self.body = {
+                "code": "3210",
+                "type": "invalid_request_prompt",
+                "raw_status_code": 400,
+            }
+
+    class FakeVectorSearch:
+        created: list["FakeVectorSearch"] = []
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.calls: list[tuple[int, list[str]]] = []
+            self.rejected_once = False
+            FakeVectorSearch.created.append(self)
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            self.calls.append((len(documents), list(ids)))
+            # Reject the first oversized attempt only: the provider was briefly
+            # saturated by a dense batch, later batches of the same size fit.
+            if len(documents) > 2 and not self.rejected_once:
+                self.rejected_once = True
+                raise FakeEmbeddingBatchLimitError()
+            return list(ids)
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=4,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(16)
+    ]
+
+    assigned_ids = store.add_documents(docs)
+
+    assert assigned_ids == [f"cid-{i}" for i in range(16)]
+    # 4 fails once -> cap 2; after 2 successes at the cap, the next slice probes
+    # 4 again, succeeds, and the cap is adopted back at 4 for the rest.
+    assert [size for size, _ in FakeVectorSearch.created[0].calls] == [4, 2, 2, 4, 4, 4]
+
+
+def test_opensearch_vector_store_failed_probe_relowers_cap_and_continues(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(ovs, "EMBEDDING_CAP_PROBE_AFTER_SUCCESSES", 2)
+
+    class FakeEmbeddingBatchLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("provider rejected embedding batch")
+            self.status_code = 400
+            self.code = "3210"
+            self.type = "invalid_request_prompt"
+            self.body = {
+                "code": "3210",
+                "type": "invalid_request_prompt",
+                "raw_status_code": 400,
+            }
+
+    class FakeVectorSearch:
+        created: list["FakeVectorSearch"] = []
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.calls: list[tuple[int, list[str]]] = []
+            FakeVectorSearch.created.append(self)
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            self.calls.append((len(documents), list(ids)))
+            if len(documents) > 2:
+                raise FakeEmbeddingBatchLimitError()
+            return list(ids)
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=4,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(12)
+    ]
+
+    assigned_ids = store.add_documents(docs)
+
+    assert assigned_ids == [f"cid-{i}" for i in range(12)]
+    # Each probe at 4 is rejected, the cap stays at 2, the probe batch is split
+    # and everything still lands; the streak resets so probes stay amortized.
+    assert [size for size, _ in FakeVectorSearch.created[0].calls] == [4, 2, 2, 4, 2, 2, 4, 2, 2]
 
 
 def test_opensearch_vector_store_retries_single_oversized_document_with_smaller_text_splitter(monkeypatch):
@@ -538,3 +806,153 @@ def test_opensearch_vector_store_retries_transient_embedding_failure_without_spl
         (4, ["cid-0", "cid-1", "cid-2", "cid-3"]),
     ]
     assert sleep_calls == [ovs.EMBEDDING_RETRY_BASE_DELAY_SECONDS]
+
+
+def test_list_document_uids_pages_past_a_single_page_via_composite_aggregation(monkeypatch):
+    """A one-shot `terms` agg silently truncates once an index holds more distinct
+    document_uids than its `size`. This must page through `after_key` until
+    exhausted instead, or a real deployment's own audit tool (`MetadataService.
+    audit_stores`) would eventually treat correctly-vectorized documents that fell
+    off the truncated list as `missing_vectors` and reset them (#2234)."""
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.search_responses = [
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-2"},
+                    "buckets": [
+                        {"key": {"doc_uid": "doc-1"}, "doc_count": 5},
+                        {"key": {"doc_uid": "doc-2"}, "doc_count": 3},
+                    ],
+                }
+            }
+        },
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-3"},
+                    "buckets": [{"key": {"doc_uid": "doc-3"}, "doc_count": 1}],
+                }
+            }
+        },
+        {"aggregations": {"by_doc": {"buckets": []}}},
+    ]
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    result = store.list_document_uids(page_size=2)
+
+    assert result == ["doc-1", "doc-2", "doc-3"]
+    assert len(fake_client.search_calls) == 3
+    assert fake_client.search_calls[0]["aggs"]["by_doc"]["composite"]["size"] == 2
+    assert "after" not in fake_client.search_calls[0]["aggs"]["by_doc"]["composite"]
+    assert fake_client.search_calls[1]["aggs"]["by_doc"]["composite"]["after"] == {"doc_uid": "doc-2"}
+    assert fake_client.search_calls[2]["aggs"]["by_doc"]["composite"]["after"] == {"doc_uid": "doc-3"}
+
+
+def test_list_document_uids_returns_empty_list_when_store_raises(monkeypatch):
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+
+    def _raise(*, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        raise RuntimeError("boom")
+
+    fake_client.search = _raise  # type: ignore[method-assign]
+    store = _make_store_for_existing_index(monkeypatch, fake_client)
+
+    assert store.list_document_uids() == []
+
+
+# ── scan_document_uids_composite (module-level, pure) -- #2234 3a repair path ─
+# Extracted so the repair action's `list_strict_vector_document_uids` activity
+# can page through document_uids using only a raw, already-configured
+# `OpenSearch` client (`ApplicationContext.get_opensearch_client()`) -- never an
+# `OpenSearchVectorStoreAdapter` instance, whose `__init__` calls `ensure_ready()`
+# (embedder call, possible index/pipeline creation). These tests exercise the
+# helper directly, the same way the activity does, independent of the adapter.
+
+
+def test_scan_document_uids_composite_pages_multiple_times_via_after_key():
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.search_responses = [
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-2"},
+                    "buckets": [
+                        {"key": {"doc_uid": "doc-1"}, "doc_count": 5},
+                        {"key": {"doc_uid": "doc-2"}, "doc_count": 3},
+                    ],
+                }
+            }
+        },
+        {
+            "aggregations": {
+                "by_doc": {
+                    "after_key": {"doc_uid": "doc-3"},
+                    "buckets": [{"key": {"doc_uid": "doc-3"}, "doc_count": 1}],
+                }
+            }
+        },
+        {"aggregations": {"by_doc": {"buckets": []}}},
+    ]
+
+    result = ovs.scan_document_uids_composite(fake_client, "fred-vectors", page_size=2, strict=True)
+
+    assert result == ["doc-1", "doc-2", "doc-3"]
+    assert len(fake_client.search_calls) == 3
+
+
+def test_scan_document_uids_composite_passes_a_bounded_request_timeout():
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    fake_client.search_responses = [{"aggregations": {"by_doc": {"buckets": []}}}]
+
+    ovs.scan_document_uids_composite(fake_client, "fred-vectors", request_timeout=7)
+
+    assert fake_client.search_request_timeouts == [7]
+
+
+def test_scan_document_uids_composite_strict_raises_when_an_intermediate_page_fails():
+    """The failure happens on page 2, *after* page 1 already returned real
+    document_uids -- strict mode must still raise (never return the partial
+    list collected so far), so a caller that must never treat "scan failed" as
+    "these N document_uids are the complete answer" gets a hard error."""
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+    call_count = {"n": 0}
+    first_page = {
+        "aggregations": {
+            "by_doc": {
+                "after_key": {"doc_uid": "doc-1"},
+                "buckets": [{"key": {"doc_uid": "doc-1"}, "doc_count": 5}],
+            }
+        }
+    }
+
+    def _search(*, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        call_count["n"] += 1
+        fake_client.search_calls.append(deepcopy(body))
+        if call_count["n"] == 1:
+            return first_page
+        raise RuntimeError("boom on page 2")
+
+    fake_client.search = _search  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="boom on page 2"):
+        ovs.scan_document_uids_composite(fake_client, "fred-vectors", page_size=1, strict=True)
+
+    assert call_count["n"] == 2
+
+
+def test_scan_document_uids_composite_non_strict_swallows_and_returns_empty_on_first_page_failure():
+    mapping = ovs.build_vector_index_mapping(4)
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
+
+    def _raise(*, index: str, body: dict, request_timeout: int | None = None) -> dict:
+        raise RuntimeError("boom")
+
+    fake_client.search = _raise  # type: ignore[method-assign]
+
+    assert ovs.scan_document_uids_composite(fake_client, "fred-vectors", strict=False) == []

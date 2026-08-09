@@ -95,3 +95,37 @@ def collapse_whitespace(text: str) -> str:
 def normalize_repeated_chars(text):
     # Replace "." character repeated three or more times with exactly three occurrences of that character
     return re.sub(r"(\.)\1{2,}", r"\1\1\1", text)
+
+
+_SURROGATE_RE = re.compile("[\ud800-\udfff]")
+
+
+def strip_surrogates(text: str) -> str:
+    """Make extracted text UTF-8 encodable by removing unpaired UTF-16 surrogates.
+
+    Fred rationale:
+    PyMuPDF builds text from a PDF's `ToUnicode` CMap, which is UTF-16BE. A malformed
+    CMap leaks unpaired surrogates (U+D800–U+DFFF) into the Python `str`. A `str` may
+    legally hold one, but UTF-8 cannot encode it — so ingestion dies at the first encode
+    boundary (writing `output.md`, JSON-serializing chunks for OpenSearch, or the
+    embedding HTTP call) with `UnicodeEncodeError`, and fails every Temporal retry
+    because the input is deterministic. Sanitizing here rather than at the file write
+    keeps the poisoned text out of the index and the embeddings too.
+
+    Two steps, in order:
+    1. A UTF-16 `surrogatepass` round-trip re-pairs surrogates the extractor failed to
+       combine, recovering the real character (emoji, CJK-ext glyph) instead of losing it.
+    2. Whatever is still a surrogate afterwards is genuinely unpaired and carries no
+       character to preserve, so it is dropped.
+
+    Cheap on the common path: the scan short-circuits before any allocation when the text
+    holds no surrogate at all, which is every well-formed document.
+    """
+    if not text or not _SURROGATE_RE.search(text):
+        return text
+    try:
+        text = text.encode("utf-16", "surrogatepass").decode("utf-16", "surrogatepass")
+    except UnicodeError:
+        # Malformed beyond re-pairing; the unconditional strip below still makes it safe.
+        pass
+    return _SURROGATE_RE.sub("", text)

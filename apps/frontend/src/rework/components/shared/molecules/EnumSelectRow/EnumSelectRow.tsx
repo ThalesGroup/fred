@@ -39,6 +39,9 @@ export interface EnumSelectRowProps<T extends string> {
   open: boolean;
   onToggle: () => void;
   onChange: (value: T) => void;
+  /** Render the picked option's label + check in `primary` (a stronger active
+   * cue than the neutral selected state layer). Opt-in — e.g. the search-mode row. */
+  accentSelected?: boolean;
 }
 
 export function EnumSelectRow<T extends string>({
@@ -50,6 +53,7 @@ export function EnumSelectRow<T extends string>({
   open,
   onToggle,
   onChange,
+  accentSelected = false,
 }: EnumSelectRowProps<T>) {
   const selected = options.find((option) => option.value === value) ?? options[0];
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -147,6 +151,7 @@ export function EnumSelectRow<T extends string>({
                     role="option"
                     label={option.label}
                     selected={isActive}
+                    accentSelected={accentSelected}
                     trailingIcon={isActive ? "check_circle" : undefined}
                     tabIndex={index === focusedIndex ? 0 : -1}
                     onClick={() => selectOption(option.value)}

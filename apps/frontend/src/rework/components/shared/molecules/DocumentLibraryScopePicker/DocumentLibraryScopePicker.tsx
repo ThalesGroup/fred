@@ -14,6 +14,8 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import { buildTree, type TagNode } from "../../../../../shared/utils/tagTree";
 import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -31,6 +33,11 @@ interface DocumentLibraryScopePickerProps {
   selectedDocumentUids?: string[];
   onDocumentsChange?: (documentUids: string[]) => void;
   disableLibrarySelection?: boolean;
+  /** Folders-only mode: hide (and never fetch) the documents inside folders, and
+   *  only make a folder expandable when it has sub-folders. Used by the Simple
+   *  capabilities view, where the tree is for a quick folder overview, not
+   *  per-document scoping. */
+  foldersOnly?: boolean;
 }
 
 function findPrimaryTagId(node: TagNode): string | null {
@@ -68,6 +75,7 @@ export function DocumentLibraryScopePicker({
   selectedDocumentUids,
   onDocumentsChange,
   disableLibrarySelection = false,
+  foldersOnly = false,
 }: DocumentLibraryScopePickerProps) {
   const { t } = useTranslation();
   const { activeTeam } = useFrontendBootstrap();
@@ -118,6 +126,7 @@ export function DocumentLibraryScopePicker({
   );
 
   useEffect(() => {
+    if (foldersOnly) return;
     expanded.forEach((path) => {
       const node = path
         .split("/")
@@ -126,7 +135,7 @@ export function DocumentLibraryScopePicker({
       const tagId = node ? findPrimaryTagId(node) : null;
       if (tagId) void loadDocumentsForTag(tagId);
     });
-  }, [expanded, loadDocumentsForTag, tree]);
+  }, [expanded, loadDocumentsForTag, tree, foldersOnly]);
 
   const toggleExpand = (path: string) => {
     setExpanded((prev) => (prev.includes(path) ? prev.filter((item) => item !== path) : [...prev, path]));
@@ -167,20 +176,35 @@ export function DocumentLibraryScopePicker({
         const tagId = findPrimaryTagId(child);
         const docs = tagId ? (documentsByTagId[tagId] ?? []) : [];
         const isLoadingDocs = tagId ? Boolean(loadingTagIds[tagId]) : false;
+        // Folders-only: a folder is expandable only when it holds sub-folders
+        // (documents are never shown here), so leaf folders don't offer an
+        // expand affordance that would open onto nothing.
+        const expandable = !foldersOnly || child.children.size > 0;
 
         return (
           <li key={child.full} className={styles.node}>
             <div className={styles.nodeRow}>
-              <button
-                type="button"
-                className={styles.expandButton}
-                onClick={() => toggleExpand(child.full)}
-                aria-label={isExpanded ? t("rework.collapse") : t("rework.expand")}
+              {/* Full-tile expand trigger — absolutely fills the whole tile
+                  (padding included) so a click anywhere on the tile expands,
+                  and doubles as the hover state-layer. The checkbox and any
+                  other real controls sit above it and keep their own clicks. */}
+              {expandable && (
+                <button
+                  type="button"
+                  className={styles.nodeTrigger}
+                  onClick={() => toggleExpand(child.full)}
+                  aria-label={isExpanded ? t("rework.collapse") : t("rework.expand")}
+                  aria-expanded={isExpanded}
+                />
+              )}
+              {/* Kept in the layout even when not expandable (visibility:hidden)
+                  so every folder row's checkbox/icon stay aligned. */}
+              <span
+                className={`${styles.expandIcon} material-symbols-outlined ${expandable ? "" : styles.expandIconHidden}`}
+                aria-hidden
               >
-                <span className="material-symbols-outlined" aria-hidden>
-                  {isExpanded ? "expand_more" : "chevron_right"}
-                </span>
-              </button>
+                {isExpanded ? "expand_more" : "chevron_right"}
+              </span>
               <input
                 type="checkbox"
                 className={styles.checkbox}
@@ -191,8 +215,11 @@ export function DocumentLibraryScopePicker({
                 }}
                 onChange={() => toggleNodeSelection(child)}
               />
-              <span className={`${styles.folderIcon} material-symbols-outlined`} aria-hidden>
-                {isExpanded ? "folder_open" : "folder"}
+              {/* Same folder icon/color as the Resources table (shared
+                  fileIconSpec) — the chevron already carries the expand state,
+                  so no folder_open swap here. */}
+              <span className={styles.folderIcon} style={{ color: FOLDER_ICON.color }} aria-hidden>
+                <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
               </span>
               <div className={styles.nodeMeta}>
                 <span className={styles.nodeLabel}>{child.name}</span>
@@ -204,11 +231,19 @@ export function DocumentLibraryScopePicker({
 
             {isExpanded && (
               <div className={styles.nodeChildren}>
-                {docs.length > 0 && (
+                {!foldersOnly && docs.length > 0 && (
                   <ul className={styles.documentList}>
                     {docs.map((doc) => {
                       const documentUid = doc.identity.document_uid;
                       const checked = selectedDocumentUids?.includes(documentUid) ?? false;
+                      // Same file-type icon/color as the Resources table (shared
+                      // fileIconSpec), so a given extension reads identically here.
+                      const docSpec = fileIconSpec(doc.file?.file_type);
+                      const docIcon = (
+                        <span className={styles.documentIcon} style={{ color: docSpec.color }} aria-hidden>
+                          <Icon category="outlined" type={docSpec.type} filled={docSpec.filled} />
+                        </span>
+                      );
                       return (
                         <li key={documentUid} className={styles.documentItem}>
                           {documentSelectionEnabled ? (
@@ -219,16 +254,12 @@ export function DocumentLibraryScopePicker({
                                 checked={checked}
                                 onChange={(event) => toggleDocumentSelection(documentUid, event.target.checked)}
                               />
-                              <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
-                                description
-                              </span>
+                              {docIcon}
                               <span className={styles.documentName}>{doc.identity.document_name}</span>
                             </label>
                           ) : (
                             <>
-                              <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
-                                description
-                              </span>
+                              {docIcon}
                               <span className={styles.documentName}>{doc.identity.document_name}</span>
                             </>
                           )}

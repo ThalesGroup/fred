@@ -33,9 +33,6 @@ from control_plane_backend.kpi.presets.sessions_over_time import (
     SESSIONS_OVER_TIME_PRESET,
 )
 from control_plane_backend.kpi.presets.storage_by_team import STORAGE_BY_TEAM_PRESET
-from control_plane_backend.kpi.presets.team_activity_summary import (
-    TEAM_ACTIVITY_SUMMARY_PRESET,
-)
 from control_plane_backend.kpi.presets.token_usage_by_agent import (
     TOKEN_USAGE_BY_AGENT_PRESET,
 )
@@ -82,7 +79,6 @@ PRESETS: list[PresetDef] = [
     TOKEN_USAGE_BY_AGENT_PRESET,
     TOKEN_USAGE_BY_MODEL_PRESET,
     STORAGE_BY_TEAM_PRESET,
-    TEAM_ACTIVITY_SUMMARY_PRESET,
 ]
 
 __all__ = ["PRESETS", "PresetDef"]

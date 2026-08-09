@@ -24,6 +24,7 @@
 
 import { useState } from "react";
 import { useDispatch } from "react-redux";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
@@ -33,10 +34,24 @@ import { launchPlatformImport } from "../../../../features/migration/launchPlatf
 import { runKeaDryRun } from "../../../../features/migration/runKeaDryRun";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
 import type { KeaDryRunResponse } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useCorpusRevectorizeMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useCorpusRepairVectorMetadataMutation,
+  useCorpusRevectorizeMutation,
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useResetPlatformRebacMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import styles from "./KeaMigrationPage.module.css";
+
+// RTK Query's `.unwrap()` throws a `FetchBaseQueryError`/`SerializedError` --
+// a plain, non-Error object (`{status, data}` or `{name, message}`) -- never a
+// real `Error` instance. `e instanceof Error ? e.message : String(e)` was
+// silently rendering the literal text "[object Object]" for every API error
+// on this page instead of the backend's actual detail message.
+function describeError(e: unknown): string {
+  const detail = normalizeApiError(e).detail;
+  if (detail) return detail;
+  return e instanceof Error ? e.message : "Erreur inconnue.";
+}
 
 function FileField({
   label,
@@ -100,10 +115,13 @@ export default function KeaMigrationPage() {
   const [applyResult, setApplyResult] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [sourceTag, setSourceTag] = useState("");
+  const [repairVectorMetadata, { isLoading: isRepairing }] = useCorpusRepairVectorMetadataMutation();
   const [revectorizeCorpus, { isLoading: isRevectorizing }] = useCorpusRevectorizeMutation();
   const [revectorizeResult, setRevectorizeResult] = useState<string | null>(null);
   const [resetPlatformRebac, { isLoading: isTearingDown }] = useResetPlatformRebacMutation();
   const [showTeardownConfirm, setShowTeardownConfirm] = useState(false);
+  const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
+  const isBusy3 = isRepairing || isRevectorizing;
 
   const canRun = file !== null && !isDryRunning && !isApplying;
 
@@ -126,7 +144,7 @@ export default function KeaMigrationPage() {
       const result = await runKeaDryRun(file, realmFile ?? undefined);
       setReport(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
       setReport(null);
     } finally {
       setIsDryRunning(false);
@@ -148,13 +166,53 @@ export default function KeaMigrationPage() {
       );
       setApplyResult(`Import lancé — task ${taskId}. Suivre la progression sur /admin/migration.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
     } finally {
       setIsApplying(false);
     }
   };
 
-  const handleRevectorize = async () => {
+  // 3a — dedicated metadata-only repair action (#2234): a small bulk Postgres
+  // reconciliation, structurally incapable of deleting vectors, reading content, or
+  // calling the embedder — never routes through /corpus/revectorize. See
+  // `RepairVectorMetadataWorkflow`'s module docstring on the backend.
+  const handleRepair = async () => {
+    if (!sourceTag.trim()) return;
+    setError(null);
+    setRevectorizeResult(null);
+    const userId = KeyCloakService.GetUserId();
+    if (!userId) {
+      setError("Impossible de déterminer l'utilisateur connecté.");
+      return;
+    }
+    try {
+      const { task_id } = await repairVectorMetadata({
+        repairVectorMetadataRequestV1: {
+          source_tag: sourceTag,
+          team_id: personalTeamId(userId),
+        },
+      }).unwrap();
+      dispatch(
+        taskRegistered({
+          taskId: task_id,
+          kind: "ingestion",
+          target: {
+            type: "corpus-repair-vector-metadata",
+            id: task_id,
+            label: `Repair vector metadata · ${sourceTag}`,
+          },
+        }),
+      );
+      setRevectorizeResult(`Lancé — task ${task_id}. Suivre le rapport détaillé sur /admin/tasks.`);
+      setSourceTag("");
+    } catch (e) {
+      setError(describeError(e));
+    }
+  };
+
+  // 3b — the real re-vectorization pipeline (MIGR-07), unchanged by the #2234
+  // 3a split other than dropping the now-removed metadata_only option.
+  const handleRebuild = async () => {
     if (!sourceTag.trim()) return;
     setError(null);
     setRevectorizeResult(null);
@@ -179,13 +237,13 @@ export default function KeaMigrationPage() {
         taskRegistered({
           taskId: task_id,
           kind: "ingestion",
-          target: { type: "corpus-revectorize", id: task_id, label: `Rebuild embeddings · ${sourceTag}` },
+          target: { type: "corpus-revectorize", id: task_id, label: `Rebuild missing embeddings · ${sourceTag}` },
         }),
       );
-      setRevectorizeResult(`Reconstruction lancée — task ${task_id}. Suivre la progression sur /admin/migration.`);
+      setRevectorizeResult(`Lancé — task ${task_id}. Suivre la progression sur /admin/tasks.`);
       setSourceTag("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
     }
   };
 
@@ -202,8 +260,13 @@ export default function KeaMigrationPage() {
         }),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e));
     }
+  };
+
+  const handleRebuildConfirmed = () => {
+    setShowRebuildConfirm(false);
+    void handleRebuild();
   };
 
   return (
@@ -308,12 +371,10 @@ export default function KeaMigrationPage() {
       )}
 
       <div className={styles.report}>
-        <span className={styles.reportTitle}>Étape 3 : reconstruire les embeddings</span>
+        <span className={styles.reportTitle}>Étape 3 : réparer le statut des documents</span>
         <p className={styles.intro}>
-          Rattache les vecteurs déjà présents (ou reconstruit ceux qui manquent) pour les documents dont les métadonnées
-          viennent d&apos;être restaurées par l&apos;import — à lancer après l&apos;import réel et le premier login des
-          utilisateurs concernés. Le tag à saisir est celui utilisé côté Kea au moment de l&apos;ingestion des documents
-          (le défaut applicatif pour un upload manuel est <code>fred</code>).
+          Deux actions séparées, à ne jamais confondre. Le tag à saisir est celui utilisé côté Kea au moment de
+          l&apos;ingestion des documents (le défaut applicatif pour un upload manuel est <code>fred</code>).
         </p>
         <div className={styles.uploadRow}>
           <TextInput
@@ -321,18 +382,45 @@ export default function KeaMigrationPage() {
             value={sourceTag}
             onChange={(e) => setSourceTag(e.target.value)}
             placeholder="ex. fred"
-            disabled={isRevectorizing}
+            disabled={isBusy3}
           />
         </div>
+
+        <p className={styles.intro}>
+          <strong>3a — Réparer uniquement.</strong> Pour tout document où <em>au moins un</em> chunk vectoriel
+          (OpenSearch) et <em>au moins un</em> objet de contenu (S3) ont été retrouvés — signal de présence minimale,
+          pas une vérification de complétude totale (aucun nombre attendu fiable de chunks/objets n&apos;existe pour les
+          documents restaurés depuis Kea) : corrige seulement le statut &laquo;&nbsp;en attente&nbsp;&raquo; en base. Un
+          document réellement sans vecteur ou sans contenu n&apos;est jamais touché — juste compté dans le rapport de la
+          tâche. Cette action ne peut structurellement jamais déclencher de reconstruction, de suppression de vecteurs,
+          ou d&apos;appel au modèle d&apos;embeddings, quel que soit le tag saisi.
+        </p>
         <div className={styles.actions}>
           <Button
             color="primary"
             variant="filled"
             size="medium"
-            onClick={() => void handleRevectorize()}
-            disabled={!sourceTag.trim() || isRevectorizing}
+            onClick={() => void handleRepair()}
+            disabled={!sourceTag.trim() || isBusy3}
           >
-            {isRevectorizing ? "Lancement…" : "Reconstruire les embeddings"}
+            {isRepairing ? "Lancement…" : "3a — Réparer uniquement (jamais de reconstruction)"}
+          </Button>
+        </div>
+
+        <p className={styles.intro}>
+          <strong>3b — Reconstruire les documents manquants.</strong> À utiliser séparément, seulement pour les
+          documents que l&apos;étape 3a a signalés comme réellement sans vecteur — reconstruction réelle (coût de
+          calcul, plus long).
+        </p>
+        <div className={styles.actions}>
+          <Button
+            color="secondary"
+            variant="outlined"
+            size="medium"
+            onClick={() => setShowRebuildConfirm(true)}
+            disabled={!sourceTag.trim() || isBusy3}
+          >
+            {isRevectorizing ? "Lancement…" : "3b — Reconstruire les documents manquants"}
           </Button>
         </div>
         {revectorizeResult && <div className={styles.success}>{revectorizeResult}</div>}
@@ -357,6 +445,17 @@ export default function KeaMigrationPage() {
           </Button>
         </div>
       </div>
+
+      <ConfirmationDialog
+        open={showRebuildConfirm}
+        title="Reconstruire les documents manquants ?"
+        message={`Va réellement reconstruire (extraction + embeddings) tout document sans aucun vecteur sous le tag "${sourceTag}". Plus long et plus coûteux que 3a — à utiliser seulement pour les documents que 3a a signalés comme réellement manquants.`}
+        confirmLabel="Reconstruire"
+        cancelLabel="Annuler"
+        criticalAction
+        onConfirm={handleRebuildConfirmed}
+        onCancel={() => setShowRebuildConfirm(false)}
+      />
 
       <ConfirmationDialog
         open={showTeardownConfirm}

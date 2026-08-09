@@ -69,3 +69,21 @@ def test_extract_closes_the_document_even_on_failure(fitz_open_spy: list, sample
 
     assert len(fitz_open_spy) == 1
     assert fitz_open_spy[0].is_closed
+
+
+def test_extract_drops_unpaired_surrogates(sample_pdf_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Regression for issue #2261.
+
+    A malformed ToUnicode CMap makes PyMuPDF return text holding unpaired UTF-16
+    surrogates, which UTF-8 cannot encode — the medium/rich profile writes the same
+    output.md as the lite path, so it carries the same hazard.
+    """
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor.pymupdf4llm.to_markdown",
+        lambda *a, **k: [{"text": "AERS Sensor" + chr(0xDBFF) + " ICD", "metadata": {"page_number": 1}}],
+    )
+
+    md_text, _images = PyMuPdfExtractor().extract(sample_pdf_file, str(tmp_path))
+
+    assert md_text == "AERS Sensor ICD"
+    md_text.encode("utf-8")  # would raise before the fix

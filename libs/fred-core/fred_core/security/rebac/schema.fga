@@ -49,22 +49,26 @@ type organization
   define can_edit_agent_class_path: platform_admin
 
   # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: the platform_observer role's own
-  # named capability — cross-user / platform-wide KPI observation, gating both
-  # the standalone KPI dashboard (`/monitoring/kpis`) and the control-plane
-  # Analytics preset endpoints (`/admin/analytics`). AUTHZ-05 review item 16:
-  # previously split into a second, platform_admin-only `can_read_kpi_global`
-  # (legacy Action.READ_GLOBAL) for the Analytics presets — retired as a
-  # duplicate this RFC never asked for; `platform_admin` already reaches this
-  # relation through the `platform_observer` union above. Today both roles see
-  # the same platform-wide recap; when Analytics grows admin-only technical
-  # panels, gate those specific widgets on a new, narrower capability instead
-  # of reintroducing this split.
+  # named capability — cross-user / platform-wide KPI observation, gating the
+  # control-plane Analytics preset endpoints (`/admin/analytics`) and the raw
+  # OpenSearch Ops surface. The raw Prometheus Ops surface is authentication-only
+  # and is not gated by this relation. AUTHZ-05 review item 16: previously
+  # split into a second, platform_admin-only
+  # `can_read_kpi_global` (legacy Action.READ_GLOBAL) for the Analytics presets —
+  # retired as a duplicate this RFC never asked for; `platform_admin` already
+  # reaches this relation through the `platform_observer` union above. Today
+  # both roles see the same platform-wide recap; when Analytics grows
+  # admin-only technical panels, gate those specific widgets on a new,
+  # narrower capability instead of reintroducing this split.
+  # Retired 2026-08-08: this relation also used to gate the standalone KPI
+  # dashboard (`/monitoring/kpis`, backed by `POST /knowledge-flow/v1/kpi/query`)
+  # — both were removed once the control-plane Analytics presets fully
+  # superseded them.
   define can_observe_platform: platform_observer
 
   # Platform administration surfaces (global, no resource instance).
   define can_administer_users: platform_admin
   define can_manage_platform: platform_admin
-  define can_run_benchmark: platform_admin
 
 
 type team

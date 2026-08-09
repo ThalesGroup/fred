@@ -1,0 +1,17 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+/* The folder tree, alone, on its own tinted surface — the "simple mode" visual:
+   no field label, no hint (the switch above already explains it), just the
+   picker. 12px radius is an explicit per-design value off the 8/16/24 token
+   scale; padding is --spacing-xs (8px). */
+.treeCard {
+  border-radius: 12px;
+  background: var(--surface-container-low);
+  padding: var(--spacing-xs);
+}

@@ -104,6 +104,26 @@ describe("normalizeApiError", () => {
       expect(normalizeApiError(error).detail).toBe("Bad value");
     });
 
+    it("extracts the first pydantic error's msg from a FastAPI-default detail array", () => {
+      // FastAPI's own validation-error body (a route's request model validated by
+      // FastAPI itself, not re-raised by app code as a plain string) -- distinct
+      // from the array shape under errors[] above.
+      const error = {
+        status: 422,
+        data: {
+          detail: [
+            {
+              type: "value_error",
+              loc: ["body", "source_tag"],
+              msg: "Value error, must not be empty or whitespace-only",
+              input: "",
+            },
+          ],
+        },
+      };
+      expect(normalizeApiError(error).detail).toBe("Value error, must not be empty or whitespace-only");
+    });
+
     it("returns no detail when data has neither detail nor a usable errors array", () => {
       expect(normalizeApiError({ status: 409, data: { errors: "not-an-array" } }).detail).toBeUndefined();
       expect(normalizeApiError({ status: 409, data: {} }).detail).toBeUndefined();

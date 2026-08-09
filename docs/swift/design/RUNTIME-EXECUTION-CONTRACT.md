@@ -2462,6 +2462,128 @@ persisted before this fix.
 
 ---
 
+### 8.42 ✅ Tool error claims the final response only when the whole round failed (issue #2244, 2026-08-05)
+
+**Refines §8.27's runtime half.** Since the v2 loop shipped, any
+`is_error=True` tool result made the ReAct stream surface that error text
+verbatim as the `FinalRuntimeEvent` content and discard the LLM's own
+synthesis ("the LLM is NOT trusted to relay it", `react_runtime.py`).
+Observed live (mistral-small, 2026-08-05): a "summarize all my docs" turn
+made six parallel `summarize_document` calls — five succeeded, one 403'd
+(the model had passed a folder's tag id from `list_document_tree` as a
+`document_uid`) — and the user got only the raw 403 text while five good
+summaries were thrown away. This also actively contradicted §8.27's
+tool-failure-recovery prompt suffix, which instructs the model to answer
+from what succeeded: the model complied, and the runtime then discarded
+that answer.
+
+**New policy** (`react_runtime.py`, `round_had_tool_success`): an error
+claims the final response only while no tool call of the same round (the
+batch requested by one tool-calling `AIMessage`) has succeeded. Any
+success — a parallel sibling arriving before or after the error, or a
+later round's recovery retry — revokes the claim and restores the LLM's
+synthesis as the final response; the failed call itself still reports
+`is_error=True` in the trace. A wholly-failed round keeps the pre-existing
+guarantee: the error text is the final response and assistant deltas stay
+suppressed. A success in an *earlier* round does not shield a later
+wholly-failed round — each round is judged on its own results.
+
+**Companion fixes in the same change (issue #2244):** Knowledge Flow's
+tree rendering now prefixes folder tag ids (`name [folder:tag-id]/`,
+`tree_builder.py`) so they are no longer visually identical to document
+uids; `list_document_tree`'s docstring warns folder ids are never
+`document_uid`s; `summarize_document`'s 403/404 recovery hint covers the
+folder-id cause; the frontend's `stripDocumentUids` redaction also strips
+the `folder:` form. Regression tests:
+`test_react_tool_error_final_2244.py` (all four round shapes),
+`test_tree_builder.py`, `test_capability_document_summarize.py`,
+`traceUtils.test.ts`.
+
+---
+
+### 8.43 ✅ `DocumentMarkdownPort` — paginated full-content read for capabilities (DOCREAD-01, 2026-08-07)
+
+**New optional port on `RuntimeServices` (`fred-sdk`
+`contracts/runtime.py`).** `document_summarize` returns a lossy overview and
+the model cannot tell it only saw a summary — so "what does the first paragraph
+say?" or "list ALL the requirements" answers come out half-complete. The three
+existing document ports could not close this: `document_summarize` is
+deliberately lossy, `document_content` returns the original uploaded **bytes**
+(a PDF/DOCX blob the model can't read as text), and `document_search` returns
+only the top-k relevant chunks. Knowledge Flow already stores the full parsed
+markdown (`output.md`, un-truncated under the default ingestion config) and
+serves it at `GET /knowledge-flow/v1/markdown/{uid}` — it just wasn't reachable
+through a capability-safe port.
+
+`DocumentMarkdownPort.fetch_markdown(document_uid, *, offset, max_chars) ->
+DocumentMarkdownResult{text, offset, next_offset, total_chars}` exposes it under
+the same doctrine as the other document ports (scope parameters only; the
+per-turn binding and access token stay private to the adapter; KF per-document
+ReBAC is the gate). **Pagination is the contract's point:** each call returns one
+bounded window and `next_offset` (None at end of document), so an exhaustive
+read can never silently stop half-way — the failure mode §8.42/§8.27 work around
+downstream, addressed here at the source. Wiring: `DocumentMarkdownAdapter`
+(`adapters.py`) fetches the whole markdown once via
+`KfDocumentClient.fetch_markdown` (KF client stays wire-format only), memoises it
+per uid on the per-turn instance, and slices adapter-side (`paginate_markdown`,
+a pure helper) — KF has no page parameter today. Injected in `agent_app.py`'s
+`RuntimeServices` assembly (turn-time path only; the save-time services subset
+does not carry it). Additive and optional, so no existing runtime breaks.
+
+**Consumers (DOCREAD-01):** two admin-gated capabilities, `document_verbatim`
+(tool `read_document`, positional verbatim slice) and `document_extract` (tool
+`extract_from_document`, exhaustive enumeration), both on this one port and
+differing only in tool intent and how the continuation footer is worded. The
+frontend Simple view groups them under one `document_reading` tool pack while the
+Advanced view keeps each toggle independent (front-only presentation, no backend
+change). Phase 1 relies on the agent paging to completion (guided by
+`next_offset`); a server-side map-reduce extraction endpoint is the deliberately
+deferred Phase 2 if that proves unreliable on very large documents. Tests:
+`test_capability_document_reading.py` (pagination contract, both tools' footers,
+config cap, error shaping), `test_capability_endpoints_1974.py` (pod advertises
+the pair).
+
+---
+
+### 8.44 ✅ `DocumentExtractionPort` — server-side exhaustive extraction (DOCREAD-01 Phase 2, 2026-08-07)
+
+**Moves `document_extract` off client-side paging.** The Phase 1 tool
+(§8.43) had the agent page the whole document into its own context and
+accumulate — a burst of token-heavy model calls that tripped the provider's
+rate limit (observed live: Mistral `mistral-small-latest` returned HTTP 429
+`code=1300` mid-turn on a multi-page extraction). Root cause is structural, not
+a bug: exhaustive extraction over a big document is inherently many LLM calls,
+and doing them agent-side re-sends the growing context each round.
+
+**New optional port `DocumentExtractionPort.extract(document_uid, *,
+instruction) -> DocumentExtractionResult`** (`fred-sdk`) runs the whole
+map-reduce **server-side in Knowledge Flow**, in ONE agent tool call. KF's new
+`POST /knowledge-flow/v1/documents/{uid}/extract` (`ExtractService` +
+`DocumentExtractor`) maps over EVERY chunk (no salience pruning — deliberately
+NOT `SmartDocSummarizer`, which keeps only top-N shards and compresses at
+reduce, dropping items) and reduces by concatenate + case-insensitive de-dupe,
+never summarizing. The map phase runs with **bounded concurrency
+(`_MAP_CONCURRENCY=3`) and 429-aware retry/backoff** (respects `Retry-After`,
+exponential + jitter) so a throttling provider slows the extraction rather than
+failing the turn (DOCREAD-01 #2). Document text is resolved through
+`SummarizeService.get_document_text`, so the corpus/session-attachment access
+rules stay single-sourced. `document_verbatim`'s positional read stays on the
+paginated `document_markdown` port; only exhaustive extraction moved.
+
+Wiring mirrors the summarize path: `KfDocumentClient.extract` (extended read
+timeout), `DocumentExtractionAdapter`, injected in `agent_app.py`'s turn-time
+`RuntimeServices`. The `document_extract` capability tool is now one call
+returning the consolidated list; its `page_max_chars` config field was removed
+(server owns paging). Additive/optional — no existing runtime path changes.
+Tuning knobs (concurrency, retry, input cap) are module constants pending live
+calibration against real provider limits, and the map remains inherently
+LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
+`test_document_extractor.py` (exhaustive de-dupe, NONE handling, 429 retry),
+`test_capability_document_reading.py` (one-call path, empty/truncation/error
+shaping).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

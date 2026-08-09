@@ -72,6 +72,12 @@ class SummarizeService:
             splitter=self.context.get_text_splitter(),
         )
 
+    async def get_document_text(self, user: KeycloakUser, document_uid: str) -> str:
+        """Public accessor for the resolved document text (corpus preview or
+        reconstructed session-attachment text), reused by the extraction service
+        so the security-sensitive resolution lives in exactly one place."""
+        return await self._get_document_markdown(user, document_uid)
+
     async def _get_document_markdown(self, user: KeycloakUser, document_uid: str) -> str:
         """Resolve the document's text for summarization, uniformly across both
         document sources Fred exposes to agents:

@@ -12,3 +12,18 @@
 .menuBody {
   display: flex;
 }
+
+/* Red dot signalling an active per-turn override (e.g. a ponctual document
+   scope, #2259). Positioned over the trigger's top-right; the container is
+   already position: relative. */
+.badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border: 1.5px solid var(--surface-container-high);
+  border-radius: var(--radius-full);
+  background: var(--error);
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}

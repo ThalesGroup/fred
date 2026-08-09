@@ -1,7 +1,7 @@
 // NOT GENERATED. Safe to edit.
 import {
   controlPlaneApi as api,
-  UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg,
+  UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg,
 } from "./controlPlaneOpenApi";
 
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
@@ -130,13 +130,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: "LIST" },
       ],
     },
-    uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: {
-      query: (queryArg: UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg) => {
+    uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: {
+      query: (queryArg: UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg) => {
         const formData = new FormData();
-        formData.append("file", queryArg.bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost.file);
+        formData.append("file", queryArg.bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost.file);
 
         return {
-          url: `/control-plane/v1/teams/${queryArg.teamId}/banner`,
+          url: `/control-plane/v1/teams/${queryArg.teamId}/avatar`,
           method: "POST",
           body: formData,
         };
@@ -294,7 +294,7 @@ export const {
   useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
-  useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation: useUploadTeamBannerMutation,
+  useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,
   useSearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery: useSearchCandidateTeamMembersQuery,
@@ -329,7 +329,6 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
-  useHandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetQuery: useTeamActivitySummaryQuery,
   // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,

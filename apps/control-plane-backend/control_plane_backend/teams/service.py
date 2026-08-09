@@ -56,7 +56,7 @@ from control_plane_backend.scheduler.temporal.structures import LifecycleManager
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
-    BannerUploadError,
+    AvatarUploadError,
     CreateTeamRequest,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
@@ -86,9 +86,9 @@ from control_plane_backend.users.schemas import UserSummary
 
 logger = logging.getLogger(__name__)
 
-_MAX_BANNER_FILE_SIZE_BYTES = 5 * 1024 * 1024
-_ALLOWED_BANNER_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
-_BANNER_EXTENSION_BY_MIME = {
+_MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024
+_ALLOWED_AVATAR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_AVATAR_EXTENSION_BY_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
@@ -752,6 +752,12 @@ async def update_team(
     # PATCH with no fields is a no-op.
     if request.model_fields_set:
         patch_data = request.model_dump(exclude_unset=True)
+        # The public API exposes the team image as `avatar_image_url`, but the
+        # storage layer (fred_core `TeamMetadataPatch`) still speaks `banner_*`
+        # (#2300 Option A: the DB column keeps its legacy name, no migration).
+        # Bridge the write field name here so the patch still reaches the store.
+        if "avatar_image_url" in patch_data:
+            patch_data["banner_image_url"] = patch_data.pop("avatar_image_url")
         # CTRLP-12 (RFC §3.B): retention rides the same team PATCH. Validate the
         # cap server-side and stamp the audit column only when a retention field
         # is actually touched.
@@ -805,26 +811,26 @@ async def update_team(
     return await _build_team_with_permissions(user, metadata, deps, consistency_token)
 
 
-async def upload_team_banner(
+async def upload_team_avatar(
     user: KeycloakUser,
     team_id: TeamId,
     file: UploadFile,
     deps: TeamServiceDependencies,
 ) -> None:
     """
-    Validate and upload one team banner image to the configured content store.
+    Validate and upload one team avatar image to the configured content store.
 
     Why this function exists:
     - team customization needs one backend-owned upload path with size and MIME
       validation before metadata is persisted
 
     How to use it:
-    - call from the banner upload route with the authenticated user and the raw
+    - call from the avatar upload route with the authenticated user and the raw
       FastAPI `UploadFile`
     - pass request-scoped dependencies when available
 
     Example:
-    - `await upload_team_banner(user, TeamId("fredlab"), file, deps)`
+    - `await upload_team_avatar(user, TeamId("fredlab"), file, deps)`
     """
     rebac = deps.rebac
 
@@ -837,35 +843,35 @@ async def upload_team_banner(
     )
 
     try:
-        payload = await file.read(_MAX_BANNER_FILE_SIZE_BYTES + 1)
-        if len(payload) > _MAX_BANNER_FILE_SIZE_BYTES:
-            raise BannerUploadError(
-                f"File too large: {len(payload)} bytes (max: {_MAX_BANNER_FILE_SIZE_BYTES})"
+        payload = await file.read(_MAX_AVATAR_FILE_SIZE_BYTES + 1)
+        if len(payload) > _MAX_AVATAR_FILE_SIZE_BYTES:
+            raise AvatarUploadError(
+                f"File too large: {len(payload)} bytes (max: {_MAX_AVATAR_FILE_SIZE_BYTES})"
             )
         if not payload:
-            raise BannerUploadError("Empty file upload is not allowed")
+            raise AvatarUploadError("Empty file upload is not allowed")
 
         declared_content_type = (
             file.content_type or "application/octet-stream"
         ).lower()
-        if declared_content_type not in _ALLOWED_BANNER_MIME_TYPES:
-            raise BannerUploadError(f"Invalid content type: {declared_content_type}")
+        if declared_content_type not in _ALLOWED_AVATAR_MIME_TYPES:
+            raise AvatarUploadError(f"Invalid content type: {declared_content_type}")
 
         detected_content_type = _detect_image_content_type(payload)
-        if detected_content_type not in _ALLOWED_BANNER_MIME_TYPES:
-            raise BannerUploadError(
+        if detected_content_type not in _ALLOWED_AVATAR_MIME_TYPES:
+            raise AvatarUploadError(
                 f"File content doesn't match allowed image formats: {detected_content_type or 'unknown'}"
             )
         if detected_content_type != declared_content_type:
-            raise BannerUploadError(
+            raise AvatarUploadError(
                 f"File content doesn't match declared content type: {detected_content_type}"
             )
 
         file_ext = Path(file.filename or "").suffix.lower()
         if not file_ext:
-            file_ext = _BANNER_EXTENSION_BY_MIME[detected_content_type]
+            file_ext = _AVATAR_EXTENSION_BY_MIME[detected_content_type]
 
-        object_storage_key = f"teams/{team_id}/banner-{uuid4().hex}{file_ext}"
+        object_storage_key = f"teams/{team_id}/avatar-{uuid4().hex}{file_ext}"
         deps.get_content_store().put_object(
             object_storage_key,
             BytesIO(payload),
@@ -876,7 +882,7 @@ async def upload_team_banner(
             team_id,
             TeamMetadataPatch(banner_object_storage_key=object_storage_key),
         )
-        logger.info("Uploaded banner for team %s: %s", team_id, object_storage_key)
+        logger.info("Uploaded avatar for team %s: %s", team_id, object_storage_key)
     finally:
         await file.close()
 
@@ -1371,8 +1377,13 @@ async def _get_team_relations_cached(
 async def _bulk_team_membership(
     rebac: RebacEngine,
     team_ids: list[TeamId],
-) -> tuple[dict[TeamId, set[str]], dict[TeamId, set[str]]]:
-    """Resolve admins/members for every id in `team_ids`.
+    user_id: str,
+) -> tuple[
+    dict[TeamId, set[str]],
+    dict[TeamId, set[str]],
+    dict[TeamId, set[UserTeamRelation]],
+]:
+    """Resolve admins/members (and the caller's own roles) for every id in `team_ids`.
 
     #2065 correction: the earlier "4 bulk `list_relations` reads total"
     design does not work against a real OpenFGA store — confirmed live
@@ -1403,7 +1414,7 @@ async def _bulk_team_membership(
     value.
     """
     if not team_ids:
-        return {}, {}
+        return {}, {}, {}
 
     per_team_relations = await asyncio.gather(
         *(_get_team_relations_cached(rebac, team_id) for team_id in team_ids)
@@ -1411,6 +1422,11 @@ async def _bulk_team_membership(
 
     admin_ids_map: dict[TeamId, set[str]] = {}
     member_ids_map: dict[TeamId, set[str]] = {}
+    # The caller's own folded roles per team — sliced out of the same
+    # `roles_by_user` the admin/member maps are built from, so it adds no
+    # ReBAC read. Discarding it (as this function used to) forced a per-team
+    # refetch to show role badges in the team list (#2298).
+    my_relations_map: dict[TeamId, set[UserTeamRelation]] = {}
     for team_id, relations in zip(team_ids, per_team_relations):
         roles_by_user = _fold_team_role_relations(relations)
         admin_ids_map[team_id] = {
@@ -1419,8 +1435,9 @@ async def _bulk_team_membership(
             if UserTeamRelation.TEAM_ADMIN in roles
         }
         member_ids_map[team_id] = set(roles_by_user.keys())
+        my_relations_map[team_id] = roles_by_user.get(user_id, set())
 
-    return admin_ids_map, member_ids_map
+    return admin_ids_map, member_ids_map, my_relations_map
 
 
 async def _enrich_teams_with_membership(
@@ -1441,9 +1458,11 @@ async def _enrich_teams_with_membership(
 
     content_store = deps.get_content_store()
     team_ids: list[TeamId] = [metadata.id for metadata in teams_metadata]
-    team_admin_ids_map, team_member_ids_map = await _bulk_team_membership(
-        rebac, team_ids
-    )
+    (
+        team_admin_ids_map,
+        team_member_ids_map,
+        my_relations_map,
+    ) = await _bulk_team_membership(rebac, team_ids, user.uid)
     all_admin_ids: set[str] = (
         set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
     )
@@ -1456,6 +1475,7 @@ async def _enrich_teams_with_membership(
             admin_ids=team_admin_ids_map.get(metadata.id, set()),
             member_ids=team_member_ids_map.get(metadata.id, set()),
             is_member=user.uid in team_member_ids_map.get(metadata.id, set()),
+            my_relations=my_relations_map.get(metadata.id, set()),
             admin_summaries=user_summaries,
             content_store=content_store,
             default_max_resources_storage_size=default_max_storage,
@@ -1470,6 +1490,7 @@ def _build_team_dto(
     admin_ids: set[str],
     member_ids: set[str],
     is_member: bool,
+    my_relations: set[UserTeamRelation],
     admin_summaries: dict[str, UserSummary],
     content_store: ContentStore,
     default_max_resources_storage_size: int | None,
@@ -1485,21 +1506,21 @@ def _build_team_dto(
 
     How to use it:
     - pass membership sets already resolved for this one team; the only I/O
-      performed here is the banner's presigned URL lookup
+      performed here is the avatar's presigned URL lookup
     """
-    banner_image_url: str | None = None
+    avatar_image_url: str | None = None
     if metadata.banner_object_storage_key:
         if _is_absolute_url(metadata.banner_object_storage_key):
-            banner_image_url = metadata.banner_object_storage_key
+            avatar_image_url = metadata.banner_object_storage_key
         else:
             try:
-                banner_image_url = content_store.get_presigned_url(
+                avatar_image_url = content_store.get_presigned_url(
                     metadata.banner_object_storage_key,
                     expires=timedelta(hours=1),
                 )
             except Exception as exc:
                 logger.warning(
-                    "Failed to generate presigned URL for team %s banner: %s",
+                    "Failed to generate presigned URL for team %s avatar: %s",
                     metadata.id,
                     exc,
                 )
@@ -1521,10 +1542,11 @@ def _build_team_dto(
         member_count=len(member_ids),
         admins=admins,
         is_member=is_member,
+        my_relations=sorted(my_relations, key=lambda relation: relation.value),
         description=metadata.description,
         joining_mode=metadata.joining_mode,
         visibility=metadata.visibility,
-        banner_image_url=banner_image_url,
+        avatar_image_url=avatar_image_url,
         max_resources_storage_size=max_storage,
         current_resources_storage_size=metadata.current_resources_storage_size,
     )
@@ -1660,14 +1682,16 @@ async def _build_team_with_permissions(
         admin_ids=admin_ids,
         member_ids=member_ids,
         is_member=user.uid in member_ids,
+        my_relations=roles_by_user.get(user.uid, set()),
         admin_summaries=admin_summaries,
         content_store=deps.get_content_store(),
         default_max_resources_storage_size=deps.configuration.app.default_team_max_resources_storage_size,
     )
+    # `my_relations` now rides along on the base `Team` (via `team.model_dump()`),
+    # so it must not be passed again here — a duplicate keyword would raise.
     return TeamWithPermissions(
         **team.model_dump(),
         permissions=permissions,
-        my_relations=list(roles_by_user.get(user.uid, set())),
         retention=retention,
     )
 

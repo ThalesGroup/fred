@@ -58,20 +58,12 @@
   gap: var(--spacing-2xs);
 }
 
-.inlineRow {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  min-height: 36px;
-}
-
 .textarea {
   display: block;
   /* flex-basis must be `auto` (not the `0%` that plain `flex: 1` sets) so the
      inline height JS assigns in resize() governs the main-axis size in the
      column layout — otherwise flex-basis:0 pins it to min-height (one line)
-     and the auto-grow never takes. In the compact inline row this still grows
-     to fill the width (grow: 1). */
+     and the auto-grow never takes. */
   flex: 1 1 auto;
   outline: none;
   border: none;

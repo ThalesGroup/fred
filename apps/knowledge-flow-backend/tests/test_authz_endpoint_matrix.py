@@ -54,8 +54,9 @@ def _router_prefixes(tree: ast.AST) -> dict[str, str]:
     """Find local `APIRouter(prefix=...)` variables in one module.
 
     How to use it:
-    - pair with `_declared_route_operations` to account for nested routers such
-      as `APIRouter(prefix="/dev/bench")`.
+    - pair with `_declared_route_operations` to account for nested routers
+      created with their own `prefix=` (mounted under the module's main
+      `router`, not just top-level).
     - only literal prefixes are included; dynamic route registration must be
       added to the matrix with a focused test.
     """

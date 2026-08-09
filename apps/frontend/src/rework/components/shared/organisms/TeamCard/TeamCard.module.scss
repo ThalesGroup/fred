@@ -5,29 +5,13 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 290px;
+  /* Fills whatever height the row gives it (flex `align-items: stretch` on
+   * the parent list, and — when wrapped for navigation — the flex Link
+   * wrapper), so cards in the same row line up on their footer regardless of
+   * description length. */
+  height: 100%;
   /* No overflow: hidden here — an admin-avatar tooltip in the footer must be
-   * able to escape the card bounds. The banner below clips its own square
-   * corners to match the card's rounded top instead. */
-}
-
-.teamBanner {
-  border-radius: var(--radius-m) var(--radius-m) 0 0;
-  width: 100%;
-  height: 96px;
-  object-fit: cover;
-}
-
-.teamAvatar {
-  /* Positioned so the avatar's vertical centre sits on the banner bottom edge. */
-  /* banner height (96px) − avatar half-height (24px) = 72px from container top */
-  position: absolute;
-  top: 72px;
-  left: var(--spacing-m);
-  box-shadow: var(--shadow-s);
-  border-radius: var(--radius-s);
-  width: 48px;
-  height: 48px;
-  object-fit: cover;
+   * able to escape the card bounds. */
 }
 
 .teamCardDetails {
@@ -35,18 +19,31 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-s);
-  padding: var(--spacing-xl) var(--spacing-m) var(--spacing-m) var(--spacing-m);
+  padding: var(--spacing-m);
 }
 
-.teamCardDetailName {
+/* Card header: the square team avatar next to the name + member count
+ * (#2300 — replaces the former wide banner + overlapping avatar). */
+.teamCardHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.teamAvatar {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: var(--radius-s);
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+}
+
+.teamCardHeaderText {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-3xs);
-}
-
-.teamInformation {
-  display: flex;
-  justify-content: space-between;
+  min-width: 0;
 }
 
 .teamName {

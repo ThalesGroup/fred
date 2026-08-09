@@ -93,7 +93,9 @@
   }
 }
 
-.btn-xs {
+/* 24px tier, formerly `.btn-xs` (renamed #2298). IconButton has no 32px `xs`
+ * rule — it uses `small` for 32px. */
+.btn-2xs {
   width: 1.5rem;
   height: 1.5rem;
   --icon-size: 1rem;

@@ -212,17 +212,18 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         assert response.status_code == 200
         entries = response.json()[0]["available_capabilities"]
         # Capabilities self-register via `fred.capabilities` entry points, but
-        # only the three declared in THIS package's own pyproject.toml
+        # only the ones declared in THIS package's own pyproject.toml
         # ([project.entry-points."fred.capabilities"]) are guaranteed present
         # in fred-runtime's own test venv: demo_echo (tracer), the #1906
-        # document_access pilot, and document_summarize (split out of it per
-        # RFC §10.1) — advertised sorted by id. `ppt_filler`/`writable_document`
-        # live in SEPARATE packages (fred-capability-ppt-filler,
-        # fred-capability-writable-document) that are not a declared
-        # dependency here; they only show up if a local venv happens to have
-        # them installed out-of-band (e.g. via a monorepo-wide `make`
-        # command) — do not add them back to this list, that made the test
-        # pass locally while failing in CI's clean environment.
+        # document_access pilot, document_summarize (split out of it per
+        # RFC §10.1), and the DOCREAD-01 document-reading pair
+        # (document_verbatim + document_extract) — advertised sorted by id.
+        # `ppt_filler`/`writable_document` live in SEPARATE packages
+        # (fred-capability-ppt-filler, fred-capability-writable-document) that
+        # are not a declared dependency here; they only show up if a local venv
+        # happens to have them installed out-of-band (e.g. via a monorepo-wide
+        # `make` command) — do not add them back to this list, that made the
+        # test pass locally while failing in CI's clean environment.
         #
         # Reasoning is deliberately NOT here: it is a property of how the model
         # is called, not a tool an agent uses, so it is a plain agent field
@@ -231,7 +232,9 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         assert [e["id"] for e in entries] == [
             "demo_echo",
             "document_access",
+            "document_extract",
             "document_summarize",
+            "document_verbatim",
         ]
         entry = entries[0]
         assert entry["version"] == DemoEchoCapability.manifest.version

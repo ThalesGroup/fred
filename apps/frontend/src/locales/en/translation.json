@@ -75,7 +75,8 @@
   "app": {
     "loading": {
       "router": "Fred is starting...",
-      "ui": "Fred is getting the UI ready..."
+      "ui": "Fred is getting the UI ready...",
+      "generic": "Loading, please wait..."
     }
   },
   "appCard": {
@@ -139,16 +140,16 @@
       }
     },
     "document_access": {
-      "name": "Document access",
-      "description": "Search documents uploaded using semantic similarity (RAG).",
+      "name": "Search team resources",
+      "description": "Ability to search for information in the team's resources.",
       "fields": {
         "show_library_selection": {
           "title": "Document library picker",
           "description": "Show a document library selector in the chat interface."
         },
         "bind_libraries": {
-          "title": "Bind to specific libraries",
-          "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+          "title": "Restrict to specific folders",
+          "description": "Restrict the agent's knowledge and search to specific folders."
         },
         "library_tag_ids": {
           "title": "Bound document libraries",
@@ -193,8 +194,8 @@
       }
     },
     "document_summarize": {
-      "name": "Document summarization",
-      "description": "Generate an on-demand summary of one document. Requires your approval before each summary by default.",
+      "name": "Summarize a document",
+      "description": "Ability to summarize a document and make use of the result.",
       "fields": {
         "require_confirmation": {
           "title": "Require confirmation",
@@ -206,9 +207,29 @@
         }
       }
     },
+    "document_verbatim": {
+      "name": "Read a document verbatim",
+      "description": "Ability to read a document's exact text, page by page.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Page length",
+          "description": "Default and hard maximum length (in characters) of each page returned by the read_document tool. Leave empty to use the built-in default."
+        }
+      }
+    },
+    "document_extract": {
+      "name": "Extract information from a document",
+      "description": "Ability to exhaustively extract the requested information from a document, without missing anything.",
+      "fields": {
+        "require_confirmation": {
+          "title": "Require confirmation",
+          "description": "Pause for your proceed/cancel approval before each extraction. On by default — this capability is token-intensive; turn it off only for an agent whose usage you already trust."
+        }
+      }
+    },
     "writable_document": {
-      "name": "Writable document",
-      "description": "Write documents with the agent in a side-by-side Markdown editor, and export them to Word or Markdown.",
+      "name": "Generate a text document (Word)",
+      "description": "Ability to edit and generate a downloadable text document.",
       "panel": {
         "writable_document_pane": {
           "title": "Document"
@@ -222,7 +243,7 @@
       "noSession": "No session — open a chat to see its documents.",
       "empty": "No document yet. Ask the agent to draft one.",
       "card": {
-        "aria": "Collaborative document",
+        "aria": "Generate a text document (Word)",
         "open": "Open",
         "updatedByAgent": "Updated by the agent",
         "updatedByUser": "Edited by you"
@@ -236,8 +257,8 @@
       }
     },
     "ppt_filler": {
-      "name": "PowerPoint generator",
-      "description": "Fill your own PowerPoint template from the conversation: the agent extracts the values and returns a finished deck.",
+      "name": "Fill a PowerPoint file",
+      "description": "Ability to fill a PPT file from a detailed template.",
       "form": {
         "uploadTemplate": "Upload a .pptx template",
         "replaceTemplate": "Replace the template",
@@ -248,6 +269,7 @@
         "templateInvalid": "Fix the template errors below before saving.",
         "analyzing": "Analyzing the template…",
         "analyzeFailed": "The template could not be analyzed. Check the file and try again.",
+        "uploadSuccessToast": "PowerPoint template validated.",
         "schemaTitle": "Fields the agent will fill",
         "learnMore": "How does this work? What should I upload?",
         "slide": "Slide {{number}}",
@@ -346,6 +368,10 @@
       "tuneDialogAria": "Chat settings",
       "tuneOpenAria": "Open chat settings"
     },
+    "documentScopePanel": {
+      "title": "Define accessible resources",
+      "resetTooltip": "Reset"
+    },
     "composerSettings": {
       "attachFile": "Attach file",
       "boundLibrariesTitle": "Bound libraries",
@@ -354,16 +380,16 @@
       "documentsLoadError": "Unable to load documents.",
       "documentsNoScope": "Document selection is enabled, but no library picker or bound library is configured.",
       "documentsTitle": "Documents",
-      "librariesCount": "{{count}} libraries",
+      "librariesCount": "{{count}} folders",
       "librariesTitle": "Libraries",
       "loading": "Loading...",
       "loadingDocuments": "Loading documents...",
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
-      "scopeCorpus": "Corpus",
-      "scopeCorpusAndWeb": "Corpus + web",
-      "scopeGeneral": "General",
+      "scopeCorpus": "Resources",
+      "scopeCorpusAndWeb": "Model + Resources",
+      "scopeGeneral": "Model",
       "scopeRowLabel": "Scope",
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
@@ -703,8 +729,8 @@
         }
       },
       "filesystem": {
-        "description": "Allow your agent to access a filesystem (local or Minio)",
-        "name": "Filesystem access"
+        "description": "Ability to browse all folders and files present in the resources.",
+        "name": "Browse the resource folders"
       },
       "jira": {
         "description": "Allow your agent to interact with Jira",
@@ -767,8 +793,8 @@
         "name": "Search in opensearch"
       },
       "tabular": {
-        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)",
-        "name": "Tabular data access"
+        "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
+        "name": "Use tabular files"
       },
       "web_github_readonly": {
         "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)",
@@ -868,54 +894,6 @@
   },
   "pageError": {
     "message": "Back to Home"
-  },
-  "procbench": {
-    "browse": "Browse",
-    "clear": "Clear",
-    "col": {
-      "duration": "Duration",
-      "headings": "Headings",
-      "processor": "Processor",
-      "status": "Status",
-      "tokens": "Tokens (est)",
-      "words": "Words"
-    },
-    "description": "Upload a document (pdf, docx, pptx, csv, txt, md, xlsm, jsonl) and compare extraction quality and speed across processors.",
-    "detail": {
-      "collapseAll": "Collapse all",
-      "expandAll": "Expand all",
-      "title": "Run Detail"
-    },
-    "metricsTitle": "Processor Metrics",
-    "noFile": "No file selected",
-    "noMarkdown": "No markdown produced",
-    "openLatest": "Open latest run",
-    "persistLabel": "Save run",
-    "processorsCount": "{{count}} processor(s)",
-    "run": "Run Bench",
-    "runFailed": "Benchmark failed",
-    "runSuccess": "Benchmark complete",
-    "runSuccessDetail": "Processors executed successfully.",
-    "running": "Running...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processors",
-      "delete": "Delete",
-      "deleteFailed": "Failed to delete run",
-      "empty": "No saved runs yet.",
-      "file": "File",
-      "modified": "Modified",
-      "open": "Open",
-      "title": "Saved runs"
-    },
-    "summaryFor": "Summary for '{{name}}'",
-    "title": "Document Processor Bench",
-    "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
-    "uploadTitle": "Upload a document",
-    "view": {
-      "sideBySide": "Side by side",
-      "stacked": "Stacked"
-    }
   },
   "profile": {
     "theme": {
@@ -1359,7 +1337,10 @@
     "chatTrace": {
       "ariaLabel": "Agent reasoning trace",
       "awaitingConfirmation": "awaiting confirmation…",
+      "cancelledByUser": "cancelled by the user",
       "details": "Details",
+      "errorCopied": "Error message copied to clipboard",
+      "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
       "phase": {
@@ -1391,6 +1372,10 @@
       "title": "Terms of Service (ToS)",
       "validate": "Accept the TOS"
     },
+    "hitlPrompt": {
+      "accepted": "Accepted",
+      "refused": "Refused"
+    },
     "knowledgeHub": {
       "loading": "Loading..."
     },
@@ -1398,6 +1383,11 @@
     "marketplace": {
       "teams": {
         "otherTeams": "Discover other teams",
+        "search": {
+          "ariaLabel": "Search for a team",
+          "clearAriaLabel": "Clear search",
+          "placeholder": "Search for a team"
+        },
         "title": "Community teams",
         "yourTeams": "Your teams"
       }
@@ -1426,11 +1416,28 @@
         "changelog": "What's new"
       }
     },
-    "profileMenu": {
-      "adminBadge": "admin",
-      "adminConsole": "Technical console",
-      "contactSupport": "Contact support",
+    "avatarCrop": {
+      "title": "Crop avatar",
+      "save": "Save",
+      "zoom": "Zoom"
+    },
+    "home": {
+      "title": "Home",
+      "searchPlaceholder": "Search a team",
+      "searchClear": "Clear search",
+      "yourTeams": "Your teams",
+      "pageTitle": "Home",
+      "pageSubtitle": "Select a space in the left panel to get started."
+    },
+    "mainNav": {
+      "ariaLabel": "Main navigation",
+      "home": "Home",
+      "marketplace": "Marketplace",
       "helpCenter": "Help Center",
+      "adminConsole": "Technical console"
+    },
+    "profileMenu": {
+      "contactSupport": "Contact support",
       "profile": "Profile"
     },
     "promptCategories": {
@@ -1636,8 +1643,8 @@
     "save": "Save",
     "serviceNotice": {
       "agentTemplates": {
-        "description": "Start a runtime pod to enroll managed agents.",
-        "title": "No agent runtime available"
+        "description": "Ask a platform admin to enable an agent capability, or check that an agent runtime is connected.",
+        "title": "No agents available yet"
       },
       "controlPlane": {
         "description": "Check that the control-plane service is running.",
@@ -1692,6 +1699,7 @@
         "menu": {
           "resources": "Resources"
         },
+        "teamLabel": "Team",
         "userTeam": "Personal space"
       }
     },
@@ -1959,11 +1967,11 @@
           "public": "Public",
           "private": "Private"
         },
-        "teamBanner": {
-          "title": "Team banner",
+        "teamAvatar": {
+          "title": "Team avatar",
           "import": "Import",
           "hint": "JPEG, PNG, or WebP · 5 MB maximum",
-          "noBanner": "No banner selected"
+          "noAvatar": "No avatar selected"
         },
         "teamPrompt": {
           "label": "Team context (prompt)",
@@ -2011,7 +2019,54 @@
         "advancedSettings": "Advanced settings",
         "capabilitiesInfo": {
           "title": "What are these capabilities for?",
-          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created."
+          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
+        },
+        "capabilities": {
+          "header": "Select your agent's capabilities",
+          "viewToggle": {
+            "advanced": "Advanced",
+            "aria": "Advanced capabilities view"
+          },
+          "included": {
+            "label": "Included capabilities",
+            "missing": "Missing capabilities",
+            "activeTooltip": "Active on this agent.",
+            "inactiveTooltip": "Available, but not active on this agent.",
+            "unavailableTooltip": "Not enabled by the platform administrator for your team."
+          },
+          "sections": {
+            "dataKnowledge": "Data and knowledge",
+            "documentProduction": "Document production",
+            "intelligenceOrchestration": "Intelligence and orchestration",
+            "actionsIntegration": "Actions and integration"
+          },
+          "actionsIntegrationEmpty": "No capability in this section yet.",
+          "packs": {
+            "teamResources": {
+              "title": "Access to team resources",
+              "description": "Lets the agent use the team's resources to carry out its mission."
+            },
+            "conversationAttachments": {
+              "title": "Attachments in a conversation",
+              "description": "Allows adding documents to a conversation to use their information."
+            },
+            "documentReading": {
+              "title": "Document reading",
+              "description": "Lets the agent read a document verbatim and exhaustively extract information from it."
+            },
+            "wordDocument": {
+              "title": "Generate a Word document",
+              "description": "Ability to edit and generate a downloadable text document."
+            },
+            "powerpointDocument": {
+              "title": "Fill in a PowerPoint document",
+              "description": "Ability to fill a PPT file from a detailed template."
+            },
+            "reasoning": {
+              "title": "Reasoning",
+              "description": "Access to \"reasoning\" mode in the chat options."
+            }
+          }
         },
         "createdBy": "Created by {{user}}",
         "updatedBy": "Updated by {{user}}",
@@ -2034,15 +2089,15 @@
             "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
           },
           "reasoning": {
-            "label": "Reasoning",
-            "hint": "Let users turn the model's reasoning on for a single question, from the chat composer. Only appears when the model supports it and an administrator has enabled it."
+            "label": "Access deep reasoning",
+            "hint": "Access to \"deep reasoning\" mode in the chat options."
           },
           "reasoningDefaultOn": {
-            "label": "Reasoning on by default",
-            "hint": "Every new conversation with this agent starts with the composer's reasoning toggle already on. Users can still switch it off per question. Reasoning is slower and, on agents that call tools, can make the model repeat calls."
+            "label": "Deep reasoning on by default",
+            "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
           }
         },
-        "noTemplates": "No agent templates available — start a runtime pod.",
+        "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
         "templateBrowser": {
           "title": "Select an agent template",
           "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
@@ -2333,7 +2388,11 @@
           "upload": "Import",
           "manual": "Manual",
           "capture": "Capture"
-        }
+        },
+        "deleteTitle": "Delete evaluation",
+        "deleteMessage": "Delete evaluation {{id}}? This permanently removes it and every one of its runs, cases, metrics and events.",
+        "deleteSuccess": "Evaluation deleted",
+        "deleteError": "Failed to delete evaluation"
       },
       "evaluationCreate": {
         "title": "New evaluation",
@@ -2449,6 +2508,20 @@
           "tags_skipped": "Tags skipped",
           "docs_imported": "Documents imported",
           "docs_skipped": "Documents skipped"
+        }
+      },
+      "repair": {
+        "detailsTitle": "Repair report",
+        "counter": {
+          "metadata_documents": "Documents matching this source_tag",
+          "already_done": "Already marked done",
+          "eligible_with_vectors_and_content": "Vectors and content confirmed",
+          "repaired": "Repaired",
+          "missing_vectors": "Missing vectors (left untouched)",
+          "missing_content": "Missing content (left untouched)",
+          "tabular_excluded": "Tabular documents excluded (sql, out of scope)",
+          "failed_or_running_excluded": "Failed or running (left untouched)",
+          "errors": "Errors"
         }
       }
     }

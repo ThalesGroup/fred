@@ -661,7 +661,11 @@ class DocumentAccessCapability(
 
             Documents are rendered as "name [document_uid] (uploaded date)" —
             use that uid as the `document_uid` argument to summarize_document.
-            The bracketed identifiers are internal working ids for YOUR tool
+            Folder lines end with "/" and are rendered as "name [folder:id]/":
+            a folder id is NOT a document_uid — never pass it to
+            summarize_document (the call will fail). To summarize a folder's
+            content, summarize each document leaf under it instead. The
+            bracketed identifiers are internal working ids for YOUR tool
             calls only: NEVER repeat them in your answer to the user — always
             refer to documents by their display name.
 

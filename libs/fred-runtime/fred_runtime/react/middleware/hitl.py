@@ -130,12 +130,14 @@ def _single_call_question(call: GatedToolCall, *, is_fr: bool) -> str:
     if is_fr:
         return (
             f"L'agent souhaite exécuter « {display_name} ». "
-            "Cette action peut modifier un état ou déclencher une action externe. "
+            "Cette action peut modifier un état, déclencher une action externe "
+            "ou consommer beaucoup de tokens. "
             "Voulez-vous continuer ?"
         )
     return (
         f"The agent wants to execute {display_name}. "
-        "This may modify state or trigger an external action. "
+        "This may modify state, trigger an external action, or consume a "
+        "large number of tokens. "
         "Do you want to continue?"
     )
 
@@ -170,12 +172,14 @@ def _batch_question(calls: Sequence[GatedToolCall], *, is_fr: bool) -> str:
     if is_fr:
         return (
             f"L'agent souhaite exécuter {len(calls)} actions : {names}. "
-            "Ces actions peuvent modifier un état ou déclencher des actions externes. "
+            "Ces actions peuvent modifier un état, déclencher des actions externes "
+            "ou consommer beaucoup de tokens. "
             "Voulez-vous continuer ?"
         )
     return (
         f"The agent wants to execute {len(calls)} actions: {names}. "
-        "These may modify state or trigger external actions. "
+        "These may modify state, trigger external actions, or consume a "
+        "large number of tokens. "
         "Do you want to continue?"
     )
 
@@ -241,7 +245,7 @@ def build_tool_approval_request(
         choices = (
             HumanChoiceOption(
                 id="proceed",
-                label="Continuer",
+                label="Accepter",
                 description="Exécuter cet outil maintenant."
                 if len(calls) == 1
                 else "Exécuter ces outils maintenant.",
@@ -249,7 +253,7 @@ def build_tool_approval_request(
             ),
             HumanChoiceOption(
                 id="cancel",
-                label="Annuler",
+                label="Refuser",
                 description="Ne pas exécuter cet outil et laisser l'agent se replanifier."
                 if len(calls) == 1
                 else "Ne pas exécuter ces outils et laisser l'agent se replanifier.",
@@ -264,7 +268,7 @@ def build_tool_approval_request(
         choices = (
             HumanChoiceOption(
                 id="proceed",
-                label="Proceed",
+                label="Accept",
                 description="Run this tool now."
                 if len(calls) == 1
                 else "Run these tools now.",
@@ -272,7 +276,7 @@ def build_tool_approval_request(
             ),
             HumanChoiceOption(
                 id="cancel",
-                label="Cancel",
+                label="Reject",
                 description="Do not run this tool; let the agent replan."
                 if len(calls) == 1
                 else "Do not run these tools; let the agent replan.",

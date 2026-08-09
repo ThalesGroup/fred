@@ -29,9 +29,11 @@ import {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useSessionHistory } from "./useSessionHistory";
+import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
-import { toThreadMessages } from "./toThreadMessages";
+import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
+import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -272,6 +274,34 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const chatControlsRef = useRef(chatControls);
   chatControlsRef.current = chatControls;
 
+  // Live-turn indicator handed to useSessionHistory — its async closures need
+  // the CURRENT streaming state at response-arrival time, not the render-time
+  // value a plain boolean capture would freeze.
+  const waitResponseRef = useRef(waitResponse);
+  waitResponseRef.current = waitResponse;
+  const isTurnActive = useCallback(() => waitResponseRef.current, []);
+
+  // Mirrors read by the departure-snapshot cleanup below: a cleanup closure
+  // captures its own render's values, but must snapshot what is on screen at
+  // DEPARTURE time.
+  const displayedMessagesRef = useRef(messages);
+  displayedMessagesRef.current = messages;
+  const isLoadingHistoryRef = useRef(false);
+
+  // #2239: on leaving a session (switch or unmount), snapshot the displayed
+  // thread into the session-history cache — this cleanup runs BEFORE the next
+  // session's reset effect wipes the state, and it is what folds
+  // live-streamed turns into the cache without any extra fetch. Skipped while
+  // the initial history load is still in flight: caching a half-loaded thread
+  // would make the next visit render it as if it were complete.
+  useEffect(() => {
+    if (!sessionId) return;
+    return () => {
+      if (isLoadingHistoryRef.current) return;
+      setCachedSessionHistory(sessionId, displayedMessagesRef.current);
+    };
+  }, [sessionId]);
+
   const composer = useComposerSettings(sessionId, chatControls);
 
   useEffect(() => {
@@ -284,6 +314,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     }
     console.debug(`[useManagedChat] sessionId changed → reset() — sessionId=${sessionId ?? "null"}`);
     reset();
+    // reset() aborts any in-flight turn synchronously, but the waitResponse
+    // STATE only flips false on the next render — too late for the history
+    // effect running later in this same commit, whose isTurnActive() must
+    // already see "no live turn" or a cached thread would refuse to render.
+    waitResponseRef.current = false;
     setPendingHitl(null);
     setInput("");
     setSessionTitle(null);
@@ -325,12 +360,28 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const threadMessages = useMemo(() => toThreadMessages(messages, waitResponse), [messages, waitResponse]);
 
+  // History load/switch always REPLACES pendingHitl with whatever the loaded
+  // messages actually say — set when the trailing exchange has a HITL gate
+  // still open (no matching response yet), cleared (null) otherwise. Fixes
+  // refreshing mid-confirmation: the prompt used to simply vanish (live-only
+  // state, never reconstructed from history) and the gated tool stayed stuck
+  // rendering as "running" with no way to answer it.
+  const handleHistoryLoaded = useCallback(
+    (msgs: ChatMessage[]) => {
+      replaceAllMessages(msgs);
+      setPendingHitl(reconstructPendingHitl(msgs));
+    },
+    [replaceAllMessages],
+  );
+
   const { isLoading: isLoadingHistory } = useSessionHistory({
     sessionId,
     teamId,
     agentInstanceId,
-    onLoaded: replaceAllMessages,
+    onLoaded: handleHistoryLoaded,
+    isTurnActive,
   });
+  isLoadingHistoryRef.current = isLoadingHistory;
 
   const notifySessionSaveFailed = useCallback(
     (error: unknown) =>

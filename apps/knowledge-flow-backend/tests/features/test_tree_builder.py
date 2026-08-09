@@ -49,15 +49,21 @@ def test_leaf_includes_document_uid_so_callers_can_target_other_tools():
 
 def test_folder_renders_its_tag_id_so_callers_can_filter_on_it():
     """The folder line must expose the tag id -- it's what an agent passes back as
-    a document_library_tags_ids / tag_ids filter to scope a search to that folder."""
+    a document_library_tags_ids / tag_ids filter to scope a search to that folder.
+    The 'folder:' prefix keeps it distinguishable from a document uid: without it,
+    models pass the folder id to summarize_document and 403 (issue #2244)."""
     folders = [("Sales", ["doc-1"], "tag-sales"), ("Sales/HR", ["doc-2"], "tag-hr")]
     leaves = {"doc-1": ("Overview.pdf", None), "doc-2": ("Onboarding.pdf", None)}
 
     root = build_tree(folders=folders, leaves_by_uid=leaves)
     text, _ = render_tree(root, max_chars=10_000)
 
-    assert "Sales [tag-sales]/" in text
-    assert "HR [tag-hr]/" in text
+    assert "Sales [folder:tag-sales]/" in text
+    assert "HR [folder:tag-hr]/" in text
+    # The bare-bracket form is exactly the ambiguity that made a model
+    # summarize a folder -- it must not come back.
+    assert "[tag-sales]" not in text
+    assert "[tag-hr]" not in text
 
 
 def test_synthetic_parent_folder_has_no_tag_id():
@@ -71,7 +77,7 @@ def test_synthetic_parent_folder_has_no_tag_id():
 
     assert "Sales/" in text
     assert "Sales [" not in text
-    assert "HR [tag-hr]/" in text
+    assert "HR [folder:tag-hr]/" in text
 
 
 def test_folders_without_tag_id_stay_backward_compatible():

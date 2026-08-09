@@ -15,8 +15,9 @@
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDispatch } from "react-redux";
 import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice.ts";
@@ -30,6 +31,11 @@ import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
+import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
+import type { CapabilitySelectionState } from "./toolPackLogic.ts";
+import { CAP_DOCUMENT_ACCESS, CAP_PPT_FILLER, type ToolPack } from "./toolPacks.ts";
+import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
+import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./AgentFormBody.module.css";
 
@@ -112,6 +118,9 @@ type AgentFormBodyProps = {
   onReasoningDefaultOnChange: (v: boolean) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
+  /** Atomic replacement of the whole capability selection (ids + config +
+   *  reasoning) — used by the Simple "packs" view, which flips several at once. */
+  onCapabilitySelectionReplace: (next: CapabilitySelectionState) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
   onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
   onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
@@ -146,12 +155,16 @@ export function AgentFormBody({
   onReasoningDefaultOnChange,
   onTuningChange,
   onCapabilitySelectionChange,
+  onCapabilitySelectionReplace,
   onCapabilityConfigChange,
   onCapabilityAssetFileChange,
   onCapabilityBlockingErrorChange,
 }: AgentFormBodyProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  // Simple = new "capability packs" view (default); Advanced = the flat
+  // per-capability list. UI-only, reset to Simple on each mount (#2220).
+  const [capabilityView, setCapabilityView] = useState<"simple" | "advanced">("simple");
 
   // Resolve audit uids (created_by / updated_by) to display names (#1952).
   const auditUids = Array.from(
@@ -239,6 +252,40 @@ export function AgentFormBody({
         }
       />
     ));
+
+  // Per-pack options for the Simple capabilities view — each wired to the same
+  // capability config/asset state the Advanced view writes, so the two stay in
+  // sync. Only offered when the team can actually use the backing capability.
+  const renderPackOptions = (pack: ToolPack) => {
+    // Team resources → document_access folder scoping: the "restrict to specific
+    // folders" switch + the folder tree, same labels as Advanced but a leaner
+    // visual (see DocumentAccessPackOptions). The corpus intent uniquely
+    // identifies the team-resources pack.
+    if (pack.documentAccessIntent === "corpus" && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
+      return (
+        <DocumentAccessPackOptions
+          configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+          teamId={teamId}
+        />
+      );
+    }
+    // PowerPoint → the same mandatory-template upload as the Advanced ppt_filler
+    // card, wired to the same config/asset/blocking-error state so Save is gated
+    // identically.
+    if (pack.enablesCapabilityIds.includes(CAP_PPT_FILLER) && availableCapabilityIds.has(CAP_PPT_FILLER)) {
+      return (
+        <PptFillerPackOptions
+          disabled={isSubmitting}
+          configValues={capabilityConfigValues[CAP_PPT_FILLER] ?? {}}
+          assetFiles={capabilityAssetFiles[CAP_PPT_FILLER] ?? {}}
+          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_FILLER, slotKey, file)}
+          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_FILLER, message)}
+        />
+      );
+    }
+    return undefined;
+  };
 
   return (
     <div className={styles.body}>
@@ -331,69 +378,91 @@ export function AgentFormBody({
             {effectiveSection === "tools" && (
               <>
                 <CapabilitiesInfoBanner />
-                <ul className={styles.toolsList}>
-                  {/* REASON-01 level 3 (Amendment C) — always offered, regardless
+                <div className={styles.capabilitiesHeader}>
+                  <h2 className={styles.capabilitiesTitle}>{t("rework.teams.formAgent.capabilities.header")}</h2>
+                  <label className={styles.advancedToggle}>
+                    <span>{t("rework.teams.formAgent.capabilities.viewToggle.advanced")}</span>
+                    <Switch
+                      checked={capabilityView === "advanced"}
+                      onChange={() => setCapabilityView(capabilityView === "advanced" ? "simple" : "advanced")}
+                      disabled={isSubmitting}
+                      aria-label={t("rework.teams.formAgent.capabilities.viewToggle.aria")}
+                    />
+                  </label>
+                </div>
+                {capabilityView === "simple" ? (
+                  <SimpleCapabilitiesView
+                    availableIds={availableCapabilityIds}
+                    selection={{ selectedCapabilityIds, capabilityConfigValues, reasoningEnabled }}
+                    disabled={isSubmitting}
+                    onSelectionChange={onCapabilitySelectionReplace}
+                    renderPackOptions={renderPackOptions}
+                  />
+                ) : (
+                  <ul className={styles.toolsList}>
+                    {/* REASON-01 level 3 (Amendment C) — always offered, regardless
                     of the template's own capabilities, so it isn't gated behind
                     `capabilities.length > 0` like the ones below it. Same
                     CapabilityCard as every real capability; not one itself. */}
-                  <CapabilityCard
-                    name={t("rework.teams.formAgent.fields.reasoning.label")}
-                    description={t("rework.teams.formAgent.fields.reasoning.hint")}
-                    checked={reasoningEnabled}
-                    disabled={isSubmitting}
-                    onToggle={() => onReasoningEnabledChange(!reasoningEnabled)}
-                    subForm={
-                      reasoningEnabled && (
-                        <SwitchRow
-                          label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
-                          description={t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
-                          checked={reasoningDefaultOn}
-                          onChange={onReasoningDefaultOnChange}
+                    <CapabilityCard
+                      name={t("rework.teams.formAgent.fields.reasoning.label")}
+                      description={t("rework.teams.formAgent.fields.reasoning.hint")}
+                      checked={reasoningEnabled}
+                      disabled={isSubmitting}
+                      onToggle={() => onReasoningEnabledChange(!reasoningEnabled)}
+                      subForm={
+                        reasoningEnabled && (
+                          <SwitchRow
+                            label={t("rework.teams.formAgent.fields.reasoningDefaultOn.label")}
+                            description={t("rework.teams.formAgent.fields.reasoningDefaultOn.hint")}
+                            checked={reasoningDefaultOn}
+                            onChange={onReasoningDefaultOnChange}
+                          />
+                        )
+                      }
+                    />
+                    {capabilities.map((capability) => {
+                      const checked = selectedCapabilityIds.includes(capability.id);
+                      const configFields = capability.config_fields ?? [];
+                      const toggle = () => {
+                        const next = checked
+                          ? selectedCapabilityIds.filter((id) => id !== capability.id)
+                          : [...selectedCapabilityIds, capability.id];
+                        onCapabilitySelectionChange(next);
+                      };
+                      return (
+                        <CapabilityCard
+                          key={capability.id}
+                          name={t(capability.name, { defaultValue: capability.name })}
+                          description={t(capability.description, { defaultValue: capability.description })}
+                          checked={checked}
+                          disabled={isSubmitting}
+                          onToggle={toggle}
+                          subForm={
+                            checked &&
+                            configFields.length > 0 && (
+                              <CapabilityConfigForm
+                                capability={capability}
+                                configFields={configFields}
+                                configValues={capabilityConfigValues[capability.id] ?? {}}
+                                disabled={isSubmitting}
+                                teamId={teamId}
+                                assetFiles={capabilityAssetFiles[capability.id] ?? {}}
+                                onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                                onAssetFileChange={(slotKey, file) =>
+                                  onCapabilityAssetFileChange(capability.id, slotKey, file)
+                                }
+                                onBlockingErrorChange={(message) =>
+                                  onCapabilityBlockingErrorChange(capability.id, message)
+                                }
+                              />
+                            )
+                          }
                         />
-                      )
-                    }
-                  />
-                  {capabilities.map((capability) => {
-                    const checked = selectedCapabilityIds.includes(capability.id);
-                    const configFields = capability.config_fields ?? [];
-                    const toggle = () => {
-                      const next = checked
-                        ? selectedCapabilityIds.filter((id) => id !== capability.id)
-                        : [...selectedCapabilityIds, capability.id];
-                      onCapabilitySelectionChange(next);
-                    };
-                    return (
-                      <CapabilityCard
-                        key={capability.id}
-                        name={t(capability.name, { defaultValue: capability.name })}
-                        description={t(capability.description, { defaultValue: capability.description })}
-                        checked={checked}
-                        disabled={isSubmitting}
-                        onToggle={toggle}
-                        subForm={
-                          checked &&
-                          configFields.length > 0 && (
-                            <CapabilityConfigForm
-                              capability={capability}
-                              configFields={configFields}
-                              configValues={capabilityConfigValues[capability.id] ?? {}}
-                              disabled={isSubmitting}
-                              teamId={teamId}
-                              assetFiles={capabilityAssetFiles[capability.id] ?? {}}
-                              onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-                              onAssetFileChange={(slotKey, file) =>
-                                onCapabilityAssetFileChange(capability.id, slotKey, file)
-                              }
-                              onBlockingErrorChange={(message) =>
-                                onCapabilityBlockingErrorChange(capability.id, message)
-                              }
-                            />
-                          )
-                        }
-                      />
-                    );
-                  })}
-                </ul>
+                      );
+                    })}
+                  </ul>
+                )}
               </>
             )}
             {effectiveSection === "commitments" && (

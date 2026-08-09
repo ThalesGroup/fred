@@ -104,6 +104,12 @@ export default function CapabilitiesPage() {
   // reintroducing the exact Chromium forced-blur bug the exclusion above
   // was written to prevent.
   const inFlightDefaultOnIdRef = useRef<string | null>(null);
+  // Same guard pair, same reason, for the Modèles-tab reasoning Switch: it
+  // shares `Switch`, `isTogglingReasoning` spans every row like
+  // `isTogglingDefault` did, and `<html>` is still `overflow: hidden` — an
+  // undisabled just-clicked row here would blur+scrollIntoView identically.
+  const [togglingReasoningId, setTogglingReasoningId] = useState<string | null>(null);
+  const inFlightReasoningIdRef = useRef<string | null>(null);
 
   const allCapabilities = data?.items ?? [];
   // `kind` is optional on the generated type (added to the enablement item
@@ -155,6 +161,11 @@ export default function CapabilitiesPage() {
   };
 
   const applyReasoning = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
+    if (inFlightReasoningIdRef.current === capability.id) {
+      return;
+    }
+    inFlightReasoningIdRef.current = capability.id;
+    setTogglingReasoningId(capability.id);
     try {
       await setModelReasoning({
         capabilityId: capability.id,
@@ -167,6 +178,9 @@ export default function CapabilitiesPage() {
       });
     } catch {
       showError({ summary: t("rework.admin.capabilities.reasoningToggleError") });
+    } finally {
+      inFlightReasoningIdRef.current = null;
+      setTogglingReasoningId(null);
     }
   };
 
@@ -294,7 +308,7 @@ export default function CapabilitiesPage() {
                   <Tooltip text={t("rework.admin.capabilities.reasoningHint")}>
                     <Switch
                       checked={cap.reasoning_enabled ?? false}
-                      disabled={isTogglingReasoning}
+                      disabled={isTogglingReasoning && togglingReasoningId !== cap.id}
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
                       aria-label={t("rework.admin.capabilities.col.reasoning")}
                     />
