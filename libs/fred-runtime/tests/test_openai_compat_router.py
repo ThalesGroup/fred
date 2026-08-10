@@ -28,7 +28,11 @@ from __future__ import annotations
 
 import json
 
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from conftest import (
+    StaticChatModelFactory,
+    ToolFriendlyFakeChatModel,
+    migrate_test_config,
+)
 from fastapi.testclient import TestClient
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
@@ -74,7 +78,7 @@ def _build_test_config(tmp_path, *, openai_compat: bool = True) -> AgentPodConfi
     How to use it:
     - call once per test with pytest's `tmp_path`
     """
-    return AgentPodConfig.model_validate(
+    config = AgentPodConfig.model_validate(
         {
             "app": {
                 "name": "Test Pod",
@@ -107,6 +111,9 @@ def _build_test_config(tmp_path, *, openai_compat: bool = True) -> AgentPodConfi
             "storage": {"postgres": {"sqlite_path": str(tmp_path / "runtime.sqlite3")}},
         }
     )
+    # The pod refuses to start against an unmigrated database (#2290) —
+    # create the Alembic-owned schema first, as the deploy migration job does.
+    return migrate_test_config(config)
 
 
 # ---------------------------------------------------------------------------

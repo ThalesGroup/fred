@@ -25,6 +25,9 @@ Why this module exists:
 How to use it:
 - instantiate with an ``AsyncEngine`` from ``fred_core.sql.base_sql``
 - call ``save`` after each agent turn; call ``get`` to retrieve messages
+- the ``session_history`` schema must already exist: Alembic owns it in every
+  real deployment (``python -m fred_runtime migrate``), and tests call
+  ``create_history_schema`` explicitly
 
 Example:
     from fred_core.sql.base_sql import create_async_engine_from_config
@@ -39,7 +42,6 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -61,7 +63,6 @@ from fred_core.history.history_schema import (
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
 from fred_core.sql.async_session import make_session_factory, use_session
-from fred_core.sql.base_sql import advisory_lock_key, run_ddl_with_advisory_lock
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,46 @@ def _serialize_metadata(metadata: Any) -> dict:
     return {}
 
 
+def history_metadata() -> MetaData:
+    """
+    Return a ``MetaData`` holding only the ``session_history`` table.
+
+    Why this is scoped rather than ``Base.metadata``:
+    - ``SessionHistoryRow`` shares ``Base`` with tables owned by other backends
+      (users, session, teammetadata); creating from ``Base.metadata`` would
+      quietly materialize those too
+    """
+    metadata = MetaData()
+    SessionHistoryRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
+    return metadata
+
+
+async def create_history_schema(engine: AsyncEngine) -> None:
+    """
+    Create the ``session_history`` table on *engine* — tests and throwaway
+    databases only.
+
+    Scope — read before reaching for this:
+    - it exists for **fred-core's own unit tests**, which sit one layer below
+      the package that owns the migrations: fred-runtime holds the Alembic tree
+      for ``session_history``, and fred-core cannot import upwards to run it
+    - anything that can import fred-runtime must use
+      ``fred_runtime.migrations.upgrade_sqlite_database`` instead, which applies
+      the real tree — a second definition of the schema is precisely the
+      duplication issue #2290 removed from production, and it must not creep
+      back in through test helpers
+    - production DDL is owned by Alembic alone; the store creates nothing, on
+      any code path, and a real deployment gets its schema from
+      ``python -m fred_runtime migrate``
+
+    Example:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        await create_history_schema(engine)
+    """
+    async with engine.begin() as conn:
+        await conn.run_sync(history_metadata().create_all)
+
+
 class PostgresHistoryStore(BaseHistoryStore):
     """
     Postgres-backed implementation of ``BaseHistoryStore``.
@@ -144,9 +185,13 @@ class PostgresHistoryStore(BaseHistoryStore):
     - upsert on ``(session_id, user_id, rank)`` — retried writes are idempotent
 
     DDL:
-    - the canonical schema is still tracked by fred-runtime Alembic migrations
-    - the store also self-initializes the runtime-owned table on first use so a
-      fresh local SQLite database does not fail before the first write
+    - the schema is owned exclusively by fred-runtime's Alembic tree; the store
+      creates nothing, ever (issue #2290 — lazy ``create_all`` produced
+      databases with the right tables and an unstamped ``alembic_version``,
+      which no later ``alembic upgrade head`` could ever be applied to)
+    - a deployment that skipped its migrations is caught at pod startup by
+      ``fred_core.sql.require_tables``, not mid-request
+    - tests create the schema explicitly with ``create_history_schema``
 
     Why upsert rather than insert:
     - a turn can be retried (HITL resume, network retry) and the same messages
@@ -159,25 +204,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         self._engine = engine
         self._kpi = kpi
         self._sessions = make_session_factory(engine)
-        self._metadata = MetaData()
-        SessionHistoryRow.__table__.to_metadata(self._metadata)  # type: ignore[attr-defined]
-        self._ddl_lock_id = advisory_lock_key(SessionHistoryRow.__tablename__)
-        self._tables_ready = False
-        self._ddl_asyncio_lock = asyncio.Lock()
-
-    async def _ensure_tables(self) -> None:
-        if self._tables_ready:
-            return
-        async with self._ddl_asyncio_lock:
-            if self._tables_ready:
-                return
-            await run_ddl_with_advisory_lock(
-                engine=self._engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=self._metadata.create_all,
-                logger=logger,
-            )
-            self._tables_ready = True
 
     # ------------------------------------------------------------------
     # Write
@@ -210,7 +236,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         """
         if not messages:
             return
-        await self._ensure_tables()
         rows = [
             {
                 "session_id": session_id,
@@ -273,7 +298,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         Returns [] when no rows match — callers cannot distinguish "wrong owner"
         from "empty session" by design (avoids session-ID enumeration).
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             q = select(SessionHistoryRow).where(
                 SessionHistoryRow.session_id == session_id
@@ -334,7 +358,6 @@ class PostgresHistoryStore(BaseHistoryStore):
             sessions = await store.list_sessions(user_id="alice")
             # returns ["session-3", "session-1", ...]  most recent first
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(SessionHistoryRow.session_id)
@@ -356,7 +379,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         When user_id is provided, only rows belonging to that user are deleted.
         Returns the number of rows removed (0 when session not found or not owned).
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             where = [SessionHistoryRow.session_id == session_id]
             if user_id is not None:
@@ -374,7 +396,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         session: AsyncSession | None = None,
     ) -> bool:
         """Return True iff at least one history row exists for (session_id, user_id)."""
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(func.count()).where(
@@ -390,7 +411,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         session: AsyncSession | None = None,
     ) -> bool:
         """Return True iff any history row exists for ``session_id`` (any owner)."""
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(func.count()).where(
@@ -423,7 +443,6 @@ class PostgresHistoryStore(BaseHistoryStore):
             base = await store.next_rank(session_id="s1")
             # base = 0 for a new session, or MAX+1 for an existing one
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(func.max(SessionHistoryRow.rank)).where(
@@ -456,7 +475,6 @@ class PostgresHistoryStore(BaseHistoryStore):
             previous = await store.latest_exchange_id(session_id="s1")
             exchange_id = previous or str(uuid4())
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(SessionHistoryRow.exchange_id)
