@@ -5405,6 +5405,10 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     mock_config.app.default_team_max_resources_storage_size = 5368709120
     mock_config.app.personal_max_resources_storage_size = 5368709120
     mock_config.scheduler.enabled = False
+    # Avatar URLs go through ContentUrlResolver: a MagicMock strategy would look
+    # like "proxy" and demand a signing key.
+    mock_config.storage.content_storage.url_strategy = "presigned"
+    mock_config.app.base_url = "/control-plane/v1"
 
     fake_deps = TeamServiceDependencies(
         configuration=mock_config,
@@ -5482,6 +5486,10 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
     mock_config.app.default_team_max_resources_storage_size = 5368709120
     mock_config.app.personal_max_resources_storage_size = 5368709120
     mock_config.scheduler.enabled = False
+    # Avatar URLs go through ContentUrlResolver: a MagicMock strategy would look
+    # like "proxy" and demand a signing key.
+    mock_config.storage.content_storage.url_strategy = "presigned"
+    mock_config.app.base_url = "/control-plane/v1"
 
     fake_deps = TeamServiceDependencies(
         configuration=mock_config,

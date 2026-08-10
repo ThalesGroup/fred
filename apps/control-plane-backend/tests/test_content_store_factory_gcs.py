@@ -52,6 +52,31 @@ class _FakeClient:
         return object()
 
 
+def test_gcs_content_store_factory_starts_without_signing_email_in_proxy_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """url_strategy='proxy' is exactly the deployment that has no signBlob permission.
+
+    Team avatars are then streamed by the backend behind an application-signed URL,
+    so GCS never signs anything and the platform must boot without a signing SA
+    (CONTENT-URL-STRATEGY RFC).
+    """
+    monkeypatch.setattr(
+        gcs_content_store_module,
+        "build_gcs_client",
+        lambda project_id=None: _FakeClient(),
+    )
+    ctx = _context(monkeypatch)
+    ctx.configuration.storage.content_storage = GcsContentStorageConfig(
+        type="gcs", bucket_name="fred", url_strategy="proxy"
+    )
+
+    store = ctx.get_content_store()
+
+    assert isinstance(store, GcsContentStore)
+    assert store.signing_service_account_email is None
+
+
 def test_gcs_content_store_factory_builds_store_with_suffixed_bucket(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

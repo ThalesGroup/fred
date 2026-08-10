@@ -332,8 +332,21 @@ def _default_postgres_store() -> PostgresStoreConfig:
     )
 
 
+CONTENT_URL_STRATEGY_DESCRIPTION = (
+    "How browser-facing object URLs are produced (docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md). "
+    "'presigned' asks the storage backend for a real presigned URL — MinIO/S3, or GCS with a "
+    "signing service account. 'proxy' mints an application-signed URL served by this backend's "
+    "read-through object proxy, for deployments where presigning is unavailable (GCS without "
+    "iam.serviceAccounts.signBlob, local filesystem). 'proxy' requires the "
+    "CONTROL_PLANE_CONTENT_URL_SECRET signing key; startup fails clearly when it is unset."
+)
+
+
 class MinioContentStorageConfig(BaseModel):
     type: Literal["minio"]
+    url_strategy: Literal["presigned", "proxy"] = Field(
+        default="presigned", description=CONTENT_URL_STRATEGY_DESCRIPTION
+    )
     endpoint: str = Field(default="http://localhost:9000", description="MinIO API URL")
     access_key: str = Field(..., description="MinIO access key")
     secret_key: str | None = Field(
@@ -365,6 +378,9 @@ class MinioContentStorageConfig(BaseModel):
 
 class LocalContentStorageConfig(BaseModel):
     type: Literal["local"] = "local"
+    url_strategy: Literal["presigned", "proxy"] = Field(
+        default="presigned", description=CONTENT_URL_STRATEGY_DESCRIPTION
+    )
     root_path: str = Field(
         default=str(Path("~/.fred/control-plane/content-storage")),
         description="Local storage directory",
@@ -378,6 +394,9 @@ class GcsContentStorageConfig(BaseModel):
     """
 
     type: Literal["gcs"]
+    url_strategy: Literal["presigned", "proxy"] = Field(
+        default="presigned", description=CONTENT_URL_STRATEGY_DESCRIPTION
+    )
     bucket_name: str = Field(
         default="control-plane-content",
         description="Content store bucket name (suffix '-objects' is used for banner objects)",
@@ -390,8 +409,9 @@ class GcsContentStorageConfig(BaseModel):
         description=(
             "Service account email used to sign V4 signed URLs for browser-facing "
             "banner/logo images, via IAM signBlob under Workload Identity (no JSON "
-            "key). Required for content_storage.type=gcs; startup fails clearly when "
-            "omitted. The Workload Identity service account must hold "
+            "key). Required when url_strategy='presigned'; startup fails clearly when "
+            "omitted. Not needed with url_strategy='proxy'. "
+            "The Workload Identity service account must hold "
             "iam.serviceAccounts.signBlob on this account, which must have "
             "storage.objects.get on the objects bucket."
         ),
