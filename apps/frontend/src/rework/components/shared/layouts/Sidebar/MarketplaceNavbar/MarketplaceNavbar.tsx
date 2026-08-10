@@ -16,6 +16,7 @@ import styles from "./MarketplaceNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
 
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
@@ -31,7 +32,7 @@ export default function MarketplaceNavbar() {
 
   return (
     <div className={styles["marketplace-navbar-container"]}>
-      <div className={styles["marketplace-navbar-title"]}>{t("rework.sidebar.marketplace.title")}</div>
+      <NavPanelHeader title={t("rework.sidebar.marketplace.title")} />
       <NavigationMenu items={navigationItems} />
     </div>
   );
