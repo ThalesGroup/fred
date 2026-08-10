@@ -1529,6 +1529,7 @@
         "back": "Back to previous folder",
         "copyToTeam": "Copy to Team space",
         "delete": "Delete",
+        "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
         "download": "Download",
         "errorDetail": "Error details",
         "includeInSearch": "Include in search",
@@ -1551,7 +1552,7 @@
         "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
         "shareTitle": "Copy to Team space",
-        "stopIngestionMessage": "Interrupt the processing of \"{{name}}\"? The document will be marked as failed; you can reprocess it later.",
+        "stopIngestionMessage": "Interrupt the processing of \"{{name}}\"? The document and all its data (file, vectors, metadata) will be deleted.",
         "stopIngestionTitle": "Stop ingestion"
       },
       "errorModal": {

@@ -191,4 +191,23 @@ describe("DocumentWorkspace — stop a live ingestion", () => {
     const items = openMenu(moreButtons()[1]);
     expect(items.find((el) => el.textContent?.includes("rework.resources.action.stopIngestion"))).toBeUndefined();
   });
+
+  it("greys out 'Delete' while the ingestion is live — stop is the only exit", () => {
+    const items = openMenu(moreButtons()[0]);
+    const deleteItem = items.find((el) => el.textContent?.includes("rework.resources.action.delete"));
+    expect(deleteItem).toBeTruthy();
+    const li = deleteItem!.closest("li") ?? deleteItem!;
+    expect(li.getAttribute("data-disabled")).toBe("true");
+    // The reason is discoverable on hover (native title), not a permanent
+    // second line — per developer request on #2315.
+    expect(li.getAttribute("title")).toBe("rework.resources.action.deleteDisabledWhileProcessing");
+  });
+
+  it("keeps 'Delete' clickable for a document with no active task", () => {
+    const items = openMenu(moreButtons()[1]);
+    const deleteItem = items.find((el) => el.textContent?.includes("rework.resources.action.delete"));
+    expect(deleteItem).toBeTruthy();
+    const li = deleteItem!.closest("li") ?? deleteItem!;
+    expect(li.getAttribute("data-disabled")).toBe("false");
+  });
 });

@@ -1529,6 +1529,7 @@
         "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
+        "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
         "download": "Télécharger",
         "errorDetail": "Détail de l'erreur",
         "includeInSearch": "Inclure à la recherche",
@@ -1551,7 +1552,7 @@
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
         "shareTitle": "Copier dans l'espace d'équipe",
-        "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document passera en erreur ; vous pourrez le retraiter plus tard.",
+        "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document et toutes ses données (fichier, vecteurs, métadonnées) seront supprimés.",
         "stopIngestionTitle": "Arrêter l'ingestion"
       },
       "errorModal": {

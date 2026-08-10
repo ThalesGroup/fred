@@ -834,6 +834,13 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           label: t("rework.resources.action.delete"),
           icon: { category: "outlined", type: "delete" },
           destructive: true,
+          // #2315: while an ingestion is live, "stop" is the only exit — it
+          // cancels the workflow AND deletes the half-built document. A plain
+          // delete here would race the still-running workflow, which can
+          // re-write metadata/vectors right after the delete lands. Greyed
+          // with a hover tooltip explaining why, per developer request.
+          disabled: !!activeTask,
+          ...(activeTask ? { tooltip: t("rework.resources.action.deleteDisabledWhileProcessing") } : {}),
         },
       );
     }
