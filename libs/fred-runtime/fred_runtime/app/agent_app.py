@@ -2253,6 +2253,8 @@ async def _write_turn_history(
                     input_tokens=tu.get("input_tokens", 0),
                     output_tokens=tu.get("output_tokens", 0),
                     total_tokens=tu.get("total_tokens", 0),
+                    cache_read_tokens=tu.get("cache_read_tokens", 0),
+                    cache_creation_tokens=tu.get("cache_creation_tokens", 0),
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
