@@ -60,7 +60,7 @@ start and pod admission/SQL capacity require representative load evidence.
 | Runtime activation | Rebuild runtime/model wrapper/compiled agent; discover MCP tools on a token-scoped cache miss | Per-turn object churn; cold work multiplies by user token and pod | Partial logs only | [TURN-02](./TURN-02-mcp-cold-path-and-cache-scope.md), [TURN-08](./TURN-08-per-turn-runtime-rebuild.md) |
 | LLM | Async streaming through shared pool, explicit timeout | Pool max 500 / keepalive 200 in production catalog | Canonical metric for ReAct/Deep, not Graph | healthy base plus [TURN-03](./TURN-03-graph-runtime-observability-and-authz.md) |
 | Tool calls | ReAct/Deep recheck OpenFGA on every call; Graph calls tools directly | Security cost grows with tool-call count | Canonical metric/audit only for ReAct/Deep | [TURN-03](./TURN-03-graph-runtime-observability-and-authz.md), [TURN-04](./TURN-04-turn-resource-bounds.md) |
-| Token refresh | On a 401, synchronous Keycloak HTTP from an async call path | Can stop the pod event loop for up to 10 seconds | Error logs, no refresh timer | [TURN-07](./TURN-07-sync-token-refresh-in-async-path.md) |
+| Token refresh | ~~On a 401, synchronous Keycloak HTTP from an async call path~~ **fixed 2026-08-07** | Could stop the pod event loop for up to 10 seconds | `auth.token_refresh_latency_ms{status}` | [TURN-07](./TURN-07-sync-token-refresh-in-async-path.md) |
 | SSE and history | Retain all event payloads, then launch an untracked background write | Memory and pending tasks grow with concurrent/large turns | Turn latency excludes persistence completion | [TURN-05](./TURN-05-sse-buffering-and-history-backpressure.md) |
 | Shared capacity | SQL pool defaults to 5 + 10 overflow; Uvicorn concurrency limit is unset | No explicit admission bound at the pod | Pool telemetry exists but no proved envelope | [TURN-06](./TURN-06-admission-and-sql-capacity.md) |
 
@@ -79,12 +79,14 @@ This is a static call-budget estimate, not a production latency measurement.
 | TURN-04 | P1 | confirmed | A turn may send 500 history messages, has no default tool-call cap, and ignores the declared parallel-call policy |
 | TURN-05 | P2 | needs-load-test | SSE retains the full event stream and launches unbounded fire-and-forget history tasks |
 | TURN-06 | P1 | needs-load-test | Admission is unset while checkpoint/history traffic shares a default 15-connection SQL ceiling |
-| TURN-07 | P1 | confirmed | Expired-token recovery performs synchronous Keycloak HTTP inside async tool/client paths |
+| TURN-07 | P1 | confirmed — fixed 2026-08-07 | Expired-token recovery performs synchronous Keycloak HTTP inside async tool/client paths |
 | TURN-08 | P2 | needs-load-test | Runtime activation and ReAct compilation are repeated for every turn |
 
 `confirmed` means static inspection proves the code shape. It does not claim a
 measured p95/p99 regression. `needs-load-test` means the scaling mechanism is
 established, but the operational impact or safe capacity envelope is not.
+`fixed <date>` means the finding has landed a fix — see that dossier's
+**Resolution evidence** for what was proven and what still needs a live stack.
 
 ## Working protocol for Claude and Codex
 
