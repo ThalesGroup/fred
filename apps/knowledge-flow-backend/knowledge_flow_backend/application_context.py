@@ -565,13 +565,18 @@ class ApplicationContext:
                 public_secure=config.public_secure,
             )
         elif isinstance(config, GcsStorageConfig):
-            # Fail fast at startup: with url_strategy='presigned', GCS signed URLs are
-            # the only way the browser can fetch markdown media, so a missing signing SA
-            # must stop the boot with a clear message rather than surfacing later as an
-            # opaque runtime error. With url_strategy='proxy' those bytes go through the
-            # backend's signed object proxy instead and the platform boots without a
-            # signing SA — that is the deployment this strategy exists for. Tabular
-            # Parquet reads always sign internally, so they stay unavailable there.
+            # Config guard, *not* a startup check: with url_strategy='presigned', GCS
+            # signed URLs are the only way the browser can fetch markdown media, so a
+            # missing signing SA must be reported with a clear message. This factory is
+            # lazy, and the only eager call at startup is main.py's object-proxy mount,
+            # which sits inside the `url_strategy == "proxy"` branch — so in 'presigned'
+            # mode this raises on the *first* content-store use, not at boot: the app
+            # comes up and then fails every request that touches content storage. In
+            # 'proxy' mode the mount makes construction eager, so a bad store config
+            # there does stop the boot — and those bytes go through the backend's signed
+            # object proxy, so no signing SA is needed: that is the deployment this
+            # strategy exists for. Tabular Parquet reads always sign internally, so they
+            # stay unavailable there.
             if config.url_strategy == "presigned" and not config.signing_service_account_email:
                 raise ValueError(
                     "content_storage.type=gcs with url_strategy='presigned' requires "

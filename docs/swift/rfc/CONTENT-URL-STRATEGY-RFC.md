@@ -32,9 +32,12 @@ Two consequences today:
    is silently skipped, the original same-origin URL survives, and the
    unauthenticated `<img>` request is refused.
 
-2. **Control plane — the app will not start.** `app/context.py:258-266` fails fast
-   when a GCS content store is configured without `signing_service_account_email`.
-   Team avatars (`teams/service.py:1517`) are the only consumer.
+2. **Control plane — every team read fails.** `app/context.py:268-277` raises when
+   a GCS content store is configured without `signing_service_account_email`. The
+   app still boots: `get_content_store()` is lazy, so the guard fires on the first
+   content-store use — the first team read — and the platform answers 500 on
+   `GET /teams` from then on. Unusable, but not a boot failure. Team avatars
+   (`teams/service.py:1524`) are the only consumer.
 
 The same gap exists in local mode: `LocalContentStore.get_presigned_url`
 (`local_content_store.py:100`) and `FileSystemContentStore.get_presigned_url`
@@ -270,3 +273,14 @@ Implemented as designed. Four notes where the code says more than the RFC did:
    govern (§5 keeps it out of scope). `url_strategy: proxy` therefore lets the
    platform boot without `signing_service_account_email`, but tabular SQL preview
    remains unavailable on that deployment until the permission is granted.
+
+5. **The GCS signing-SA guard is not a startup check** — in either app, and it
+   never was (§1 above is corrected accordingly). Both content-store factories are
+   lazy, and the only eager call at startup sits inside the `url_strategy ==
+   "proxy"` mount branch, where the guard does not apply. So on GCS in `presigned`
+   mode without a signing SA the app boots and then answers 500 on every request
+   that touches content storage (verified: control-plane stayed up, then 500'd on
+   `GET /teams`). The platform is unusable, but it is not a boot failure. Making
+   the guard eager is a separate decision, deliberately not taken here. What *is*
+   checked at startup is the proxy signing secret: `read_signing_secret` runs at
+   mount time in the `proxy` branch of each app's `main.py`.

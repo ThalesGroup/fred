@@ -2465,10 +2465,15 @@ lifetime is shorter:
     `{app.base_url}/objects/{key}?token=…` and streams the bytes itself. For
     deployments where presigning is unavailable: GCS without
     `iam.serviceAccounts.signBlob`, or local filesystem storage.
-- **Startup validation moved, not removed:** `content_storage.type=gcs` still
-  fails fast without `signing_service_account_email` — but only under
-  `url_strategy=presigned`. Under `proxy`, `url_strategy=proxy` requires
-  `CONTROL_PLANE_CONTENT_URL_SECRET` instead, also checked at startup.
+- **Config validation narrowed, not removed:** `content_storage.type=gcs` still
+  rejects a missing `signing_service_account_email` — but only under
+  `url_strategy=presigned`. That guard is **not** a startup check: the content
+  store is built lazily, so on such a deployment the app boots normally and then
+  answers **500 on every team read** (the avatar URL is minted during the read).
+  Unusable, but not a boot failure — do not expect the pod to crash-loop. Under
+  `proxy` the signing SA is unnecessary and `CONTROL_PLANE_CONTENT_URL_SECRET` is
+  required instead; that one *is* checked at startup, when the proxy route is
+  mounted.
 - **TTL:** the avatar URL is now minted for **60 seconds** (was 1 hour). It is
   re-minted on every team read, so it only has to survive the render. Applies to
   both strategies.

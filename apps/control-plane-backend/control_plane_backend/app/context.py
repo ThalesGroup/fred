@@ -253,14 +253,18 @@ class ApplicationContext:
                     public_secure=cfg.public_secure,
                 )
             elif isinstance(cfg, GcsContentStorageConfig):
-                # Fail fast at startup: with url_strategy='presigned', banner/logo
-                # images are served straight to the browser via get_presigned_url,
-                # which needs a signing SA to mint V4 signed URLs via IAM signBlob
-                # (no per-feature flag to detect that usage later, so a missing email
-                # must stop the boot here rather than surfacing as an opaque runtime
-                # error on first team-banner render). With url_strategy='proxy' no URL
-                # is ever signed by GCS, so the signing SA is genuinely unnecessary —
-                # that is the deployment this strategy exists for.
+                # Config guard, *not* a startup check: with url_strategy='presigned',
+                # banner/logo images are served straight to the browser via
+                # get_presigned_url, which needs a signing SA to mint V4 signed URLs
+                # via IAM signBlob. This factory is lazy, and the only eager call at
+                # startup is main.py's object-proxy mount, which sits inside the
+                # `url_strategy == "proxy"` branch — so in 'presigned' mode this raises
+                # on the *first* content-store use (the first team read), not at boot:
+                # the app comes up and then answers 500 on every GET /teams. Unusable
+                # either way, but do not describe it as a boot failure. In 'proxy' mode
+                # the mount makes construction eager, so a bad store config there does
+                # stop the boot — and no URL is ever signed by GCS, so the signing SA is
+                # genuinely unnecessary: that is the deployment this strategy exists for.
                 if (
                     cfg.url_strategy == "presigned"
                     and not cfg.signing_service_account_email
