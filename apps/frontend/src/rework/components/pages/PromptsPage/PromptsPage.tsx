@@ -27,6 +27,7 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
 import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog.tsx";
 import PromptViewDialog from "./PromptViewDialog/PromptViewDialog.tsx";
+import DuplicatePromptDialog from "./DuplicatePromptDialog/DuplicatePromptDialog.tsx";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
@@ -41,6 +42,9 @@ import {
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
+  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
+  usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
+  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptsPage.module.scss";
@@ -68,6 +72,7 @@ export default function PromptsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptSummary | null>(null);
   const [viewingPrompt, setViewingPrompt] = useState<PromptSummary | null>(null);
+  const [duplicatingPrompt, setDuplicatingPrompt] = useState<PromptSummary | null>(null);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   // Which prompt id `form` is currently fully seeded for. RTK Query's
@@ -100,10 +105,22 @@ export default function PromptsPage() {
     { skip: !editingPrompt },
   );
 
+  // Duplicating needs the source's full text (the list projection only carries
+  // a preview), so fetch the detail for the prompt being duplicated.
+  const { data: duplicateDetail } = useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
+    { teamId: teamId || "", promptId: duplicatingPrompt?.id || "" },
+    { skip: !duplicatingPrompt },
+  );
+
   const [createPrompt, { isLoading: isCreating }] = usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation();
   const [updatePrompt, { isLoading: isUpdating }] =
     usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation();
   const [deletePrompt] = useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation();
+  const [publishPrompt] = usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation();
+  const [unpublishPrompt] = usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation();
+  const [recordPromptUse] = usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation();
+  const [duplicatePrompt, { isLoading: isDuplicating }] =
+    usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation();
 
   useEffect(() => {
     // `editingPrompt` must also be checked: `editDetail` is RTK Query's
@@ -182,8 +199,8 @@ export default function PromptsPage() {
     setSeededForId(null);
   };
 
-  const handleSubmit = async () => {
-    if (!teamId || !form.name.trim() || !form.text.trim()) return;
+  const performSave = async () => {
+    if (!teamId) return;
     try {
       if (editingPrompt) {
         await updatePrompt({
@@ -221,6 +238,23 @@ export default function PromptsPage() {
     }
   };
 
+  const handleSubmit = async () => {
+    if (!teamId || !form.name.trim() || !form.text.trim()) return;
+    // Editing a published prompt updates the live marketplace entry too — warn
+    // once before saving (spec: confirmation before saving a change to a
+    // published prompt).
+    if (editingPrompt?.published) {
+      showConfirmationDialog({
+        title: t("rework.teams.prompts.editPublishedDialog.title"),
+        message: t("rework.teams.prompts.editPublishedDialog.message"),
+        confirmButtonLabel: t("rework.teams.prompts.editPublishedDialog.confirm"),
+        onConfirm: performSave,
+      });
+      return;
+    }
+    await performSave();
+  };
+
   const handleDelete = (prompt: PromptSummary) => {
     if (!teamId) return;
     showConfirmationDialog({
@@ -241,6 +275,74 @@ export default function PromptsPage() {
         }
       },
     });
+  };
+
+  const handlePublish = (prompt: PromptSummary) => {
+    if (!teamId) return;
+    showConfirmationDialog({
+      title: t("rework.teams.prompts.publishDialog.title"),
+      message: t("rework.teams.prompts.publishDialog.message"),
+      confirmButtonLabel: t("rework.teams.prompts.publishDialog.confirm"),
+      onConfirm: async () => {
+        try {
+          await publishPrompt({ teamId, promptId: prompt.id }).unwrap();
+          showSuccess({ summary: t("rework.teams.prompts.publishDialog.successToast") });
+        } catch (error: unknown) {
+          const err = error as { data?: { detail?: string }; message?: string };
+          showError({
+            summary: t("rework.teams.prompts.publishDialog.errorToast"),
+            detail: err?.data?.detail || err?.message || String(error),
+          });
+        }
+      },
+    });
+  };
+
+  const handleUnpublish = (prompt: PromptSummary) => {
+    if (!teamId) return;
+    showConfirmationDialog({
+      criticalAction: true,
+      title: t("rework.teams.prompts.unpublishDialog.title"),
+      message: t("rework.teams.prompts.unpublishDialog.message"),
+      confirmButtonLabel: t("rework.teams.prompts.unpublishDialog.confirm"),
+      onConfirm: async () => {
+        try {
+          await unpublishPrompt({ teamId, promptId: prompt.id }).unwrap();
+          showSuccess({ summary: t("rework.teams.prompts.unpublishDialog.successToast") });
+        } catch (error: unknown) {
+          const err = error as { data?: { detail?: string }; message?: string };
+          showError({
+            summary: t("rework.teams.prompts.unpublishDialog.errorToast"),
+            detail: err?.data?.detail || err?.message || String(error),
+          });
+        }
+      },
+    });
+  };
+
+  const handleDuplicateConfirm = async (newName: string) => {
+    if (!teamId || !duplicateDetail) return;
+    try {
+      await duplicatePrompt({
+        teamId,
+        createPromptRequest: {
+          name: newName,
+          description: duplicateDetail.description || undefined,
+          category_id: duplicateDetail.category_id ?? null,
+          tags: duplicateDetail.tags ?? [],
+          text: duplicateDetail.text,
+        },
+      }).unwrap();
+      showSuccess({ summary: t("rework.teams.prompts.duplicateDialog.successToast") });
+      setDuplicatingPrompt(null);
+    } catch (error: unknown) {
+      const err = error as { data?: { detail?: string }; message?: string };
+      // Keep the dialog open on a name conflict so the user can pick another.
+      showError({
+        summary: t("rework.teams.prompts.duplicateDialog.errorToast"),
+        detail: err?.data?.detail || err?.message || String(error),
+      });
+    }
   };
 
   const promptsQueryState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
@@ -351,10 +453,16 @@ export default function PromptsPage() {
                 <PromptCard
                   key={prompt.id}
                   prompt={prompt}
+                  variant="team"
                   categoryName={(prompt.category_id && categoryNameById.get(prompt.category_id)) || null}
                   canManage={canManage}
+                  published={prompt.published}
                   onView={() => openView(prompt)}
                   onEdit={() => openPrompt(prompt)}
+                  onDuplicate={() => setDuplicatingPrompt(prompt)}
+                  onPublish={() => handlePublish(prompt)}
+                  onUnpublish={() => handleUnpublish(prompt)}
+                  onDelete={() => handleDelete(prompt)}
                 />
               ))}
             </div>
@@ -446,7 +554,18 @@ export default function PromptsPage() {
         teamId={teamId}
         promptId={viewingPrompt?.id ?? null}
         categories={categories}
+        onCopied={() => {
+          if (viewingPrompt) recordPromptUse({ teamId, promptId: viewingPrompt.id });
+        }}
         onClose={() => setViewingPrompt(null)}
+      />
+
+      <DuplicatePromptDialog
+        open={!!duplicatingPrompt}
+        initialName={duplicatingPrompt?.name ?? ""}
+        isSubmitting={isDuplicating || (!!duplicatingPrompt && !duplicateDetail)}
+        onCancel={() => setDuplicatingPrompt(null)}
+        onConfirm={handleDuplicateConfirm}
       />
     </div>
   );
