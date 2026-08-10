@@ -40,6 +40,7 @@ from fred_core.documents import PostgresDocumentMetadataStore as PostgresMetadat
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIWriter, build_kpi_writer
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
+from fred_core.store import ContentUrlResolver, read_signing_secret
 from fred_core.users.store.postgres_user_store import init_user_store
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -93,6 +94,11 @@ from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorSto
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
+
+# Signing key for application-signed object URLs (content_storage.url_strategy=proxy).
+# Per-app on purpose: a knowledge-flow token must never verify against control-plane
+# objects. Documented in config/.env.template.
+CONTENT_URL_SECRET_ENV = "KNOWLEDGE_FLOW_CONTENT_URL_SECRET"  # nosec B105  # pragma: allowlist secret
 
 # Default mapping for output processors by category
 DEFAULT_OUTPUT_PROCESSORS = {
@@ -289,6 +295,7 @@ class ApplicationContext:
     _resource_store_instance: Optional[BaseResourceStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _content_store_instance: Optional[BaseContentStore] = None
+    _content_url_resolver: Optional[ContentUrlResolver] = None
     _embedder_instance: Optional[Embeddings] = None
     _kpi_writer: Optional[BaseKPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
@@ -558,17 +565,22 @@ class ApplicationContext:
                 public_secure=config.public_secure,
             )
         elif isinstance(config, GcsStorageConfig):
-            # Fail fast at startup: GCS tabular Parquet reads need a signing SA to
-            # mint V4 signed URLs via IAM signBlob. There is no per-feature flag to
-            # detect tabular usage, so a missing email must stop the boot with a
-            # clear message rather than surfacing later as an opaque runtime error.
-            if not config.signing_service_account_email:
+            # Fail fast at startup: with url_strategy='presigned', GCS signed URLs are
+            # the only way the browser can fetch markdown media, so a missing signing SA
+            # must stop the boot with a clear message rather than surfacing later as an
+            # opaque runtime error. With url_strategy='proxy' those bytes go through the
+            # backend's signed object proxy instead and the platform boots without a
+            # signing SA — that is the deployment this strategy exists for. Tabular
+            # Parquet reads always sign internally, so they stay unavailable there.
+            if config.url_strategy == "presigned" and not config.signing_service_account_email:
                 raise ValueError(
-                    "content_storage.type=gcs requires 'signing_service_account_email' "
-                    "to sign V4 signed URLs for tabular Parquet reads (IAM signBlob under "
+                    "content_storage.type=gcs with url_strategy='presigned' requires "
+                    "'signing_service_account_email' to sign V4 signed URLs (IAM signBlob under "
                     "Workload Identity, no JSON key). Set it to the signing service account "
                     "that holds storage.objects.get on the objects bucket and on which the "
-                    "Workload Identity service account has iam.serviceAccounts.signBlob."
+                    "Workload Identity service account has iam.serviceAccounts.signBlob — or set "
+                    "content_storage.url_strategy='proxy' to serve browser-facing objects "
+                    "through the backend's signed object proxy instead."
                 )
             self._content_store_instance = GcsContentStore(
                 document_bucket=f"{config.bucket_name}-documents",
@@ -587,6 +599,30 @@ class ApplicationContext:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
 
         return self._content_store_instance
+
+    def get_content_url_resolver(self) -> ContentUrlResolver:
+        """
+        Return the resolver that turns an object key into a browser-facing URL.
+
+        Why this exists:
+        - Depending on `content_storage.url_strategy`, that URL is either a real
+          presigned URL minted by the storage backend, or an application-signed URL
+          served by this backend's object proxy (CONTENT-URL-STRATEGY RFC).
+        - Callers must have authorized the user for the object first — the URL is a
+          bearer capability in both modes, exactly like a presigned URL always was.
+
+        Built once and cached: it holds the content store and the signing key.
+        """
+        if self._content_url_resolver is None:
+            config = self.get_config()
+            strategy = config.content_storage.url_strategy
+            self._content_url_resolver = ContentUrlResolver(
+                strategy=strategy,
+                store=self.get_content_store(),
+                base_url=config.app.base_url,
+                secret=read_signing_secret(CONTENT_URL_SECRET_ENV) if strategy == "proxy" else None,
+            )
+        return self._content_url_resolver
 
     def get_file_store(self) -> BaseFileStore:
         """

@@ -18,21 +18,45 @@ import pytest
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import GcsStorageConfig
+from knowledge_flow_backend.core.stores.content import gcs_content_store as gcs_content_store_module
+from knowledge_flow_backend.core.stores.content.gcs_content_store import GcsContentStore
 
 
 def test_gcs_content_store_factory_fails_fast_without_signing_email(app_context: ApplicationContext):
     """A GCS content store without a signing SA email must refuse to build.
 
     Why this exists:
-    - tabular_store is always configured, so there is no per-feature flag to
-      detect tabular usage; a missing signing email is a deployment error that
-      must surface clearly at startup rather than as an opaque later failure.
+    - with url_strategy='presigned' there is no per-feature flag to detect which
+      feature will need a signed URL; a missing signing email is a deployment error
+      that must surface clearly at startup rather than as an opaque later failure.
     """
     config = app_context.get_config()
     config.content_storage = GcsStorageConfig(type="gcs", bucket_name="fred")
 
     with pytest.raises(ValueError, match="signing_service_account_email"):
         app_context.get_content_store()
+
+
+class _FakeGcsClient:
+    def bucket(self, name: str) -> object:
+        return object()
+
+
+def test_gcs_content_store_factory_starts_without_signing_email_in_proxy_mode(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch):
+    """url_strategy='proxy' is exactly the deployment that has no signBlob permission.
+
+    This is the point of CONTENT-URL-STRATEGY: browser-facing objects are streamed by
+    the backend behind an application-signed URL, so GCS never signs anything and the
+    platform must boot without a signing service account.
+    """
+    monkeypatch.setattr(gcs_content_store_module, "build_gcs_client", lambda project_id=None: _FakeGcsClient())
+    config = app_context.get_config()
+    config.content_storage = GcsStorageConfig(type="gcs", bucket_name="fred", url_strategy="proxy")
+
+    store = app_context.get_content_store()
+
+    assert isinstance(store, GcsContentStore)
+    assert store.object_bucket_name == "fred-objects"
 
 
 def test_get_content_store_builds_once_and_reuses_the_instance(app_context: ApplicationContext):
