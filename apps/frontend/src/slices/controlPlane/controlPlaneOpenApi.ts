@@ -355,6 +355,46 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.promptPromoteRequest,
       }),
     }),
+    postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: build.mutation<
+      PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiResponse,
+      PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/publish`,
+        method: "POST",
+      }),
+    }),
+    postUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPost: build.mutation<
+      PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiResponse,
+      PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/unpublish`,
+        method: "POST",
+      }),
+    }),
+    getMarketplacePromptsControlPlaneV1MarketplacePromptsGet: build.query<
+      GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiResponse,
+      GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/marketplace/prompts` }),
+    }),
+    postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: build.mutation<
+      PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse,
+      PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}/use`, method: "POST" }),
+    }),
+    postMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPost: build.mutation<
+      PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiResponse,
+      PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}/import`,
+        method: "POST",
+        body: queryArg.marketplaceImportRequest,
+      }),
+    }),
     getTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGet: build.query<
       GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiResponse,
       GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiArg
@@ -1150,6 +1190,31 @@ export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost
   teamId: string;
   promptId: string;
   promptPromoteRequest: PromptPromoteRequest;
+};
+export type PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiResponse =
+  /** status 200 Successful Response */ MarketplacePromptSummary[];
+export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiArg = void;
+export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse = unknown;
+export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg = {
+  promptId: string;
+};
+export type PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiResponse =
+  /** status 200 Successful Response */ MarketplaceImportResponse;
+export type PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiArg = {
+  promptId: string;
+  marketplaceImportRequest: MarketplaceImportRequest;
 };
 export type GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiResponse =
   /** status 200 Successful Response */ PromptCategorySummary[];
@@ -2085,6 +2150,7 @@ export type PromptSummary = {
   text_preview?: string | null;
   created_by?: string | null;
   version?: number;
+  published?: boolean;
   import_count?: number;
   session_count?: number;
   score?: number | null;
@@ -2121,6 +2187,7 @@ export type PromptDetail = {
   text_preview?: string | null;
   created_by?: string | null;
   version?: number;
+  published?: boolean;
   import_count?: number;
   session_count?: number;
   score?: number | null;
@@ -2144,6 +2211,39 @@ export type PromptScoreUpdateRequest = {
 };
 export type PromptPromoteRequest = {
   target_team_id: string;
+};
+export type MarketplacePromptSummary = {
+  id: string;
+  name: string;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  team_id: string;
+  text: string;
+  team_name: string;
+};
+export type MarketplaceImportResult = {
+  team_id: string;
+  prompt?: PromptSummary | null;
+  error?: string | null;
+};
+export type MarketplaceImportResponse = {
+  results: MarketplaceImportResult[];
+};
+export type MarketplaceImportRequest = {
+  target_team_ids: string[];
 };
 export type PromptCategorySummary = {
   id: string;
@@ -2839,6 +2939,12 @@ export const {
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
+  usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
+  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
+  useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  useLazyGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
+  usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation,
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   useLazyGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation,
