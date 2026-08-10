@@ -13,14 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage: a document excluded from search (source.retrievable === false)
-// shows an error-colored indicator icon at the end of its row, just left of
-// the Preview icon button — visible only for that state, not for a
-// retrievable (or not-yet-stamped) document. Also covers a tabular dataset
-// (CSV/XLSX, only the `sql` stage ever completes): `retrievable` stays false
-// there by design (RAG-DATASET-DISCOVERY-RFC.md, no vector chunks emitted
-// unless dataset pointer chunks are enabled), so the indicator must stay
-// hidden — it isn't a real exclusion for that content type.
+// Coverage (#2315 error detail): a failed document's row menu offers "Détail
+// de l'erreur", which opens a modal listing each failed stage with the message
+// persisted in `processing.errors`; a non-failed document's menu has no such
+// entry.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -37,33 +33,24 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
 
-const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
+const failedDoc = {
+  identity: { document_uid: "uid-failed", title: "Broken", document_name: "Broken.pdf", uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: false },
+  processing: {
+    stages: { preview: "failed", vector: "not_started" },
+    errors: { preview: "Execution timed_out" },
+  },
+  tags: { tag_ids: ["tag-cir"] },
+};
+
+const readyDoc = {
+  identity: { document_uid: "uid-ready", title: "Fine", document_name: "Fine.pdf", uploaded_by: null },
+  file: { file_type: "pdf", file_size_bytes: 1024 },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
   processing: { stages: { raw: "done", vector: "done" } },
   tags: { tag_ids: ["tag-cir"] },
-});
-
-const tabularDoc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.xlsx`, uploaded_by: null },
-  file: { file_type: "xlsx", file_size_bytes: 2048 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
-  processing: { stages: { raw: "done", sql: "done" } },
-  tags: { tag_ids: ["tag-cir"] },
-});
-
-// `retrievable` is stamped false at registration and only flips true once
-// vectorization completes (base_input_processor.py / vectorization_processor.py)
-// — so a still-processing document also has retrievable === false, without
-// anyone having excluded it.
-const processingDoc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
-  file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
-  processing: { stages: { raw: "done", vector: "in_progress" } },
-  tags: { tag_ids: ["tag-cir"] },
-});
+};
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
@@ -72,18 +59,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     refetch: () => {},
   }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
-    () => ({
-      unwrap: async () => ({
-        documents: [
-          doc("uid-excluded", "Excluded doc", false),
-          doc("uid-included", "Included doc", true),
-          doc("uid-unset", "Unset doc", undefined),
-          tabularDoc("uid-tabular", "Tabular doc"),
-          processingDoc("uid-processing", "Processing doc"),
-        ],
-        total: 5,
-      }),
-    }),
+    () => ({ unwrap: async () => ({ documents: [failedDoc, readyDoc], total: 2 }) }),
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
@@ -146,44 +122,46 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  document.querySelectorAll('[role="presentation"]').forEach((el) => el.remove());
 });
 
-function rowFor(name: string): HTMLElement {
-  const nameCell = [...container.querySelectorAll("span")].find((el) => el.textContent === name);
-  if (!nameCell) throw new Error(`row for "${name}" not found`);
-  const row = nameCell.closest('[class*="datatable-row"]');
-  if (!row) throw new Error(`row container for "${name}" not found`);
-  return row as HTMLElement;
+function moreButtons(): HTMLButtonElement[] {
+  return [...container.querySelectorAll('button[aria-label="rework.resources.action.more"]')] as HTMLButtonElement[];
 }
 
-describe("DocumentWorkspace — excluded-from-search row indicator", () => {
-  it("shows the indicator icon for a document excluded from search", () => {
-    expect(
-      rowFor("Excluded doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).not.toBeNull();
+/** The menu portals into document.body, outside `container`. */
+function openMenu(button: HTMLButtonElement): Element[] {
+  act(() => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  return [
+    ...document.querySelectorAll(
+      '[role="presentation"] [role="menuitem"], [role="presentation"] li, [role="presentation"] button',
+    ),
+  ];
+}
+
+describe("DocumentWorkspace — ingestion error detail", () => {
+  it("offers 'Error details' in a failed document's row menu and opens the modal with the stage message", () => {
+    // Row order matches the mocked `documents` array: failed doc first.
+    const items = openMenu(moreButtons()[0]);
+    const entry = items.find((el) => el.textContent?.includes("rework.resources.action.errorDetail"));
+    expect(entry).toBeTruthy();
+
+    act(() => {
+      entry!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog!.textContent).toContain("rework.resources.errorModal.title");
+    expect(dialog!.textContent).toContain("Broken.pdf");
+    expect(dialog!.textContent).toContain("preview");
+    expect(dialog!.textContent).toContain("Execution timed_out");
   });
 
-  it("hides the indicator for a retrievable document", () => {
-    expect(
-      rowFor("Included doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator when retrievable has never been stamped (undefined, not explicitly false)", () => {
-    expect(
-      rowFor("Unset doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator for a tabular dataset even though retrievable is false", () => {
-    expect(
-      rowFor("Tabular doc.xlsx").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator while the document is still processing, even though retrievable is false", () => {
-    expect(
-      rowFor("Processing doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
+  it("does not offer 'Error details' for a document that is not failed", () => {
+    const items = openMenu(moreButtons()[1]);
+    expect(items.find((el) => el.textContent?.includes("rework.resources.action.errorDetail"))).toBeUndefined();
   });
 });

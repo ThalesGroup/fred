@@ -53,6 +53,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
+  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
 }));
 vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [] }));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));

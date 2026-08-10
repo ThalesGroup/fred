@@ -13,14 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage: a document excluded from search (source.retrievable === false)
-// shows an error-colored indicator icon at the end of its row, just left of
-// the Preview icon button — visible only for that state, not for a
-// retrievable (or not-yet-stamped) document. Also covers a tabular dataset
-// (CSV/XLSX, only the `sql` stage ever completes): `retrievable` stays false
-// there by design (RAG-DATASET-DISCOVERY-RFC.md, no vector chunks emitted
-// unless dataset pointer chunks are enabled), so the indicator must stay
-// hidden — it isn't a real exclusion for that content type.
+// Coverage (#2315 live status): the row badge must reflect the LIVE ingestion
+// task from the SSE feed, not only the browse snapshot's `processing.stages`.
+// A document whose snapshot still reads "raw" but that has an active task
+// (target.type === "document", target.id === document_uid) renders
+// "processing" immediately; a document with no active task keeps deriving from
+// its snapshot ("raw"/"En attente"). This is the regression test for the
+// upload that used to sit on "En attente" for its whole run and jump straight
+// to done without ever showing "Traitement…".
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,35 +35,34 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+// The component reads the task feed through useSelector(selectActiveTasks) —
+// forward the (mocked) selector's own return value instead of a hardcoded [].
+vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
 
-const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
+const rawDoc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable },
-  processing: { stages: { raw: "done", vector: "done" } },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: false },
+  processing: { stages: {} },
   tags: { tag_ids: ["tag-cir"] },
 });
 
-const tabularDoc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.xlsx`, uploaded_by: null },
-  file: { file_type: "xlsx", file_size_bytes: 2048 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
-  processing: { stages: { raw: "done", sql: "done" } },
-  tags: { tag_ids: ["tag-cir"] },
-});
-
-// `retrievable` is stamped false at registration and only flips true once
-// vectorization completes (base_input_processor.py / vectorization_processor.py)
-// — so a still-processing document also has retrievable === false, without
-// anyone having excluded it.
-const processingDoc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
-  file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z", retrievable: false },
-  processing: { stages: { raw: "done", vector: "in_progress" } },
-  tags: { tag_ids: ["tag-cir"] },
-});
+const runningTask = {
+  taskId: "task-live",
+  kind: "ingestion",
+  target: { type: "document", id: "uid-live", label: "Live doc.pdf" },
+  owner: null,
+  localOnly: false,
+  state: "running",
+  progress: 0.4,
+  step: "processing",
+  error: null,
+  lastSeq: 3,
+  registeredAt: 0,
+  terminalAt: null,
+  acknowledgedAt: null,
+  warnings: null,
+};
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
@@ -74,14 +73,8 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     () => ({
       unwrap: async () => ({
-        documents: [
-          doc("uid-excluded", "Excluded doc", false),
-          doc("uid-included", "Included doc", true),
-          doc("uid-unset", "Unset doc", undefined),
-          tabularDoc("uid-tabular", "Tabular doc"),
-          processingDoc("uid-processing", "Processing doc"),
-        ],
-        total: 5,
+        documents: [rawDoc("uid-live", "Live doc"), rawDoc("uid-idle", "Idle doc")],
+        total: 2,
       }),
     }),
   ],
@@ -90,7 +83,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [] }));
+vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [runningTask] }));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
@@ -156,34 +149,13 @@ function rowFor(name: string): HTMLElement {
   return row as HTMLElement;
 }
 
-describe("DocumentWorkspace — excluded-from-search row indicator", () => {
-  it("shows the indicator icon for a document excluded from search", () => {
-    expect(
-      rowFor("Excluded doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).not.toBeNull();
+describe("DocumentWorkspace — live task drives the status badge", () => {
+  it("shows 'processing' for a document whose snapshot is raw but whose ingestion task is running", () => {
+    expect(rowFor("Live doc.pdf").textContent).toContain("rework.resources.status.processing");
   });
 
-  it("hides the indicator for a retrievable document", () => {
-    expect(
-      rowFor("Included doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator when retrievable has never been stamped (undefined, not explicitly false)", () => {
-    expect(
-      rowFor("Unset doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator for a tabular dataset even though retrievable is false", () => {
-    expect(
-      rowFor("Tabular doc.xlsx").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
-  });
-
-  it("hides the indicator while the document is still processing, even though retrievable is false", () => {
-    expect(
-      rowFor("Processing doc.pdf").querySelector('[aria-label="rework.resources.status.excludedFromSearch"]'),
-    ).toBeNull();
+  it("keeps deriving from the snapshot for a document with no active task", () => {
+    expect(rowFor("Idle doc.pdf").textContent).toContain("rework.resources.status.raw");
+    expect(rowFor("Idle doc.pdf").textContent).not.toContain("rework.resources.status.processing");
   });
 });
