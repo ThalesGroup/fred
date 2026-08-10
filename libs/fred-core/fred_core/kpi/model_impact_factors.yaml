@@ -20,9 +20,16 @@
 # `default` is the fallback row used for any `model_name` not listed below
 # (including turns with no recorded model_name at all). Leaving a model's
 # rates at 0.0 means "not populated yet", not "verified free".
+# `cost_per_1k_cached_input_tokens` (CACHE-01): rate for the portion of
+# input tokens served from a provider-side prompt cache — a subset of
+# input tokens, billed separately from cost_per_1k_input_tokens. Providers
+# typically bill this well below the fresh-input rate (e.g. Anthropic ~10%,
+# OpenAI ~50%) — left at 0.0 ("not populated yet") until a real per-model
+# rate is confirmed against the provider's current pricing page.
 models:
   default:
     cost_per_1k_input_tokens: 0.0
     cost_per_1k_output_tokens: 0.0
+    cost_per_1k_cached_input_tokens: 0.0
     co2e_grams_per_1k_tokens: 0.0
     kwh_per_1k_tokens: 0.0

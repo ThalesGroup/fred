@@ -78,6 +78,9 @@ async def query_token_usage_by_model(
                 "aggs": {
                     "sum_input": {"sum": {"field": "quantities.input_tokens"}},
                     "sum_output": {"sum": {"field": "quantities.output_tokens"}},
+                    "sum_cache_read": {
+                        "sum": {"field": "quantities.cache_read_tokens"}
+                    },
                 },
             }
         },
@@ -91,8 +94,12 @@ async def query_token_usage_by_model(
         model_name = str(bucket["key"])
         input_tokens = bucket["sum_input"]["value"]
         output_tokens = bucket["sum_output"]["value"]
+        cache_read_tokens = bucket["sum_cache_read"]["value"]
         estimate = estimate_green_cost(
-            model_name, input_tokens=input_tokens, output_tokens=output_tokens
+            model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
         )
         totals.append(
             (

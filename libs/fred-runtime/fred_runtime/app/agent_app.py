@@ -2311,6 +2311,7 @@ class _TurnOutcome:
     token_usage: dict[str, Any] | None
     input_tokens: int | None
     output_tokens: int | None
+    cache_read_tokens: int | None
     tool_count: int
     is_error: bool
     total_ms: int
@@ -2334,6 +2335,7 @@ def _parse_turn_outcome(
         token_usage=token_usage,
         input_tokens=token_usage.get("input_tokens") if token_usage else None,
         output_tokens=token_usage.get("output_tokens") if token_usage else None,
+        cache_read_tokens=token_usage.get("cache_read_tokens") if token_usage else None,
         tool_count=tool_count,
         is_error=is_error,
         total_ms=total_ms,
@@ -2479,6 +2481,7 @@ def _emit_turn_completed(
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
+                "cache_read_tokens": outcome.cache_read_tokens,
             },
             actor=KPIActor(type="human", user_id=user_id),
         )
