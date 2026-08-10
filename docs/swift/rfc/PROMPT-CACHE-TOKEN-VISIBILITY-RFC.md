@@ -1,6 +1,11 @@
 # Prompt-cache token visibility in Fred's token-usage pipeline
 
-**Status:** Draft, pending sign-off — not yet built
+**Status:** Partially implemented 2026-08-10 — extraction (§2 points 1-3) and
+cost-model wiring (§2 point 4, one of six dashboard presets from point 5) are
+done, see `RUNTIME-EXECUTION-CONTRACT.md` §8.45. Real per-model cached-input
+rates are still unpopulated (`model_impact_factors.yaml` ships `0.0`), the
+other five dashboard presets are unwired, and every §5 open question remains
+unresolved — this RFC stays open until those close.
 **ID:** `CACHE-01` (informal)
 **Author:** CohenOdelia / Claude Code
 **Date:** 2026-08-10

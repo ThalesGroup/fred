@@ -2582,6 +2582,50 @@ LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
 `test_capability_document_reading.py` (one-call path, empty/truncation/error
 shaping).
 
+### 8.45 ✅ Prompt-cache token visibility in `token_usage` and cost estimation — CACHE-01 (2026-08-10)
+
+**Surfaces prompt-cache detail Fred was already receiving but silently
+dropping.** LangChain's standardized `UsageMetadata.input_token_details` has
+carried `cache_creation`/`cache_read` since `langchain-core` 0.3.9, and
+`runtime_metadata_from_message` (`model_metadata.py`) already read the
+attribute carrying it — `normalize_token_usage` just never extracted the
+nested breakdown. See
+[`PROMPT-CACHE-TOKEN-VISIBILITY-RFC.md`](../rfc/PROMPT-CACHE-TOKEN-VISIBILITY-RFC.md)
+for the full design; open questions (distinct GreenOps rate for cached
+tokens, sovereign-model cache support, per-step trace display) remain
+unresolved there, not settled here.
+
+**Contract additions, both additive:**
+
+- `token_usage` (`ToolCallRuntimeEvent`/`FinalRuntimeEvent`, §5) gains two
+  keys: `cache_read_tokens`, `cache_creation_tokens` — always present
+  (default `0`), same dict shape, no schema break. Flows through
+  `normalize_token_usage`/`sum_token_usage` (`fred-runtime`) and
+  `ChatTokenUsage` (`fred-core`, persisted history) end to end; confirmed
+  surviving a page reload via the same `make_assistant_final`/
+  `_write_turn_history` path §8.38 fixed for the base fields.
+- `Quantities` (`fred-core` KPI event schema) gains `cache_read_tokens`.
+  `agent.turn_completed` now emits it as a quantity — one new Prometheus
+  counter series (`agent_turn_completed_quantity_cache_read_tokens_total`),
+  no new label, no cardinality change (same label set as `input_tokens`).
+- `ModelImpactFactors`/`estimate_green_cost` (`fred-core/kpi/model_impact_factors.py`)
+  gains `cost_per_1k_cached_input_tokens`; `cache_read_tokens` is billed at
+  that reduced rate instead of the full input rate, clamped to
+  `input_tokens` defensively. `cache_creation_tokens` is deliberately **not**
+  given a distinct rate — still billed as ordinary input (RFC scope
+  decision, not an oversight). One dashboard preset
+  (`token_usage_by_model.py`) is wired to the new quantity; the other five
+  token-usage presets are unchanged (still bill every input token at the
+  full rate — not a regression, just not yet upgraded).
+
+**Not done by this work:** real per-model `cost_per_1k_cached_input_tokens`
+rates — `model_impact_factors.yaml` still ships every rate at `0.0`
+("not populated yet"), so the mechanism is correct but every displayed cost
+figure is unchanged until an operator fills in real provider pricing. No
+distinct kWh/CO2e rate for cached tokens. No cache-hit ratio or
+cached-vs-fresh visual on `AnalyticsPage` — `TokenUsageImpact` just becomes
+more accurate once rates are populated, no new UI element shipped.
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`
