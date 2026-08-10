@@ -104,7 +104,7 @@ export function SessionAttachmentsDrawer({
                   <span className={styles.rowButtons}>
                     <IconButton
                       variant="icon"
-                      size="xs"
+                      size="2xs"
                       icon={{ category: "outlined", type: "delete" }}
                       aria-label={t("chatbot.sessionAttachments.deleteAria", { name: attachment.name })}
                       onClick={(event) => {

@@ -80,3 +80,17 @@
   color: var(--on-error-container);
   font: var(--font-body-medium);
 }
+
+/* Turn-crash error message: same error-container look, but the raw message can
+   be long/unwrapped (e.g. a provider JSON error), so preserve newlines and
+   break long tokens instead of overflowing the drawer. */
+.errorDetailBox {
+  border: 1px solid var(--error);
+  border-radius: var(--radius-m);
+  background: var(--error-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-error-container);
+  font: var(--font-body-medium);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

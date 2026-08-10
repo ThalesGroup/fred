@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, LinearProgress, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
+import { Spinner } from "../rework/components/shared/atoms/Spinner/Spinner";
+import styles from "./LoadingWithProgress.module.css";
 
 const LoadingWithProgress = () => {
+  const { t } = useTranslation();
+
   return (
-    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" mt={2}>
-      {/* Loading text */}
-      <Typography variant="body2" color="textSecondary" gutterBottom>
-        Loading, please wait...
-      </Typography>
-      {/* Progress bar */}
-      <LinearProgress color="warning" style={{ width: "100%", maxWidth: "200px" }} />
-    </Box>
+    <div className={styles.container} role="status">
+      <Spinner size={24} decorative />
+      <span className={styles.label}>{t("app.loading.generic")}</span>
+    </div>
   );
 };
 

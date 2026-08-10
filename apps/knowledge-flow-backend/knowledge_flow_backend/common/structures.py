@@ -565,10 +565,6 @@ class MCPConfig(BaseModel):
         default=True,
         description="Expose the Reports MCP server (Markdown-first report generation).",
     )
-    kpi_enabled: bool = Field(
-        default=True,
-        description="Expose the KPI MCP server for querying application KPIs.",
-    )
     tabular_enabled: bool = Field(
         default=True,
         description="Expose the Tabular MCP server for SQL/table exploration.",

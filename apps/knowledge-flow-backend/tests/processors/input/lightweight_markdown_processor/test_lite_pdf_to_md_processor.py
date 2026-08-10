@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """Regression tests for the fitz.Document lifecycle in LitePdfToMdProcessor /
-LitePdfMarkdownProcessor (the deprecated "v1" lite PDF path, still exercised
-by the offline procbench benchmark harness). All three methods used to open
-a fitz.Document via fitz.open() and never call .close() on it.
+LitePdfMarkdownProcessor (the deprecated "v1" lite PDF path, still part of
+`lightweight_markdown_processor`). All three methods used to open a
+fitz.Document via fitz.open() and never call .close() on it.
 """
 
 from pathlib import Path

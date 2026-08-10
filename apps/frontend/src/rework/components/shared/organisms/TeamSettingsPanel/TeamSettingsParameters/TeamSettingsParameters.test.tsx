@@ -41,11 +41,11 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useUpdateTeamMutation: () => [h.updateTeam, { isLoading: false }],
-  useUploadTeamBannerMutation: () => [vi.fn(), { isLoading: false }],
+  useUploadTeamAvatarMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
-  useFrontendProperties: () => ({ defaultTeamBannerFile: undefined }),
+  useFrontendProperties: () => ({ defaultTeamAvatarFile: undefined }),
 }));
 
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx", () => ({
@@ -208,20 +208,20 @@ describe("TeamSettingsParameters visibility", () => {
   });
 });
 
-describe("TeamSettingsParameters banner preview", () => {
-  it("shows an empty-state label when the team has no banner", () => {
+describe("TeamSettingsParameters avatar preview", () => {
+  it("shows an empty-state label when the team has no avatar", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
     expect(container.querySelector("img")).toBeNull();
-    expect(container.textContent).toContain("rework.teamSettings.parameters.teamBanner.noBanner");
+    expect(container.textContent).toContain("rework.teamSettings.parameters.teamAvatar.noAvatar");
   });
 
-  it("renders the banner image when the team has one", () => {
-    const team = { ...baseTeam("invite_only"), banner_image_url: "https://example.com/banner.png" };
+  it("renders the avatar image when the team has one", () => {
+    const team = { ...baseTeam("invite_only"), avatar_image_url: "https://example.com/banner.png" };
     render(<TeamSettingsParameters team={team} />);
 
     const img = container.querySelector("img");
     expect(img?.getAttribute("src")).toBe("https://example.com/banner.png");
-    expect(container.textContent).not.toContain("rework.teamSettings.parameters.teamBanner.noBanner");
+    expect(container.textContent).not.toContain("rework.teamSettings.parameters.teamAvatar.noAvatar");
   });
 });

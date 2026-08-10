@@ -71,6 +71,32 @@
   white-space: nowrap;
 }
 
+/* The Tooltip atom's own wrapper span is the actual flex item here (the icon
+ * below is its child, one level down) and ships with no flex-shrink of its
+ * own, so `.nameCell span`'s overflow: hidden above can still crush it to
+ * zero width in a narrow column with a long filename — this guards the flex
+ * item itself, same fixed-box intent as .rowIcon/.titleHintIcon below. */
+.titleHintWrapper {
+  flex-shrink: 0;
+}
+
+/* The embedded-title hint icon: same fixed-box treatment as .rowIcon so a
+ * narrow Name column/long filename can never crush or hide it — it's the
+ * filename label next to it that's allowed to truncate. */
+.titleHintIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--on-surface-retreat);
+}
+
+.titleHintIcon [class*="material-symbols"] {
+  font-size: 18px;
+}
+
 /* Taille/Création/Auteur: always readable on one line, never squeezed
  * to a second line under a fixed-width column. */
 .nowrapCell {

@@ -198,7 +198,7 @@ export default function TeamResourcesPage() {
       {rootTabs.length > 1 && (
         <ButtonGroup
           items={rootTabItems}
-          size="xs"
+          size="2xs"
           color="secondary"
           variant="tabs"
           aria-label={t("rework.resources.rootsAria")}

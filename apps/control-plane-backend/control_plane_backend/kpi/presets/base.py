@@ -34,11 +34,11 @@ class PresetDef:
     # `top_teams_by_sessions`) stays False; the router (`api.py`) rejects a
     # `team_id` query param for it with 400 rather than silently ignoring it.
     team_scopable: bool = False
-    # True only for the platform-wide admin section's presets (§2.4/§2.5 —
-    # `storage_by_team`/`team_activity_summary` at org scope): the router
-    # requires `can_manage_platform` instead of the usual `can_observe_platform`
-    # when `team_id` is None. Never affects the team-scoped check
-    # (`can_read_members`), which applies uniformly regardless of this flag.
+    # True only for the platform-wide admin section's presets (§2.4 —
+    # `storage_by_team` at org scope): the router requires `can_manage_platform`
+    # instead of the usual `can_observe_platform` when `team_id` is None. Never
+    # affects the team-scoped check (`can_read_members`), which applies
+    # uniformly regardless of this flag.
     platform_admin_only: bool = False
     # True only for the personal presets (§2.4 "Personal presets (Page 3)"):
     # the handler itself filters `WHERE dims.user_id = requesting_user.uid`,

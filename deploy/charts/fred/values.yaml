@@ -346,7 +346,6 @@ x-kf-storage: &kf-storage
 
 x-kf-mcp: &kf-mcp
   reports_enabled: true
-  kpi_enabled: true
   tabular_enabled: true
   text_enabled: true
   templates_enabled: true

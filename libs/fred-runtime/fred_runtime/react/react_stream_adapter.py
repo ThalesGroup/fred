@@ -49,13 +49,22 @@ from fred_sdk.contracts.runtime import HumanInputRequest
 from langchain_core.messages import AIMessageChunk, BaseMessage
 from pydantic import ValidationError
 
-from fred_runtime.runtime_support.model_metadata import (  # noqa: F401
+from fred_runtime.runtime_support.model_metadata import (
     normalize_token_usage,
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,
     sum_token_usage,
 )
 from fred_runtime.support.thinking import content_to_text
+
+# Re-exported for react_langchain_adapter.py, which imports these from this
+# module rather than from runtime_support.model_metadata directly.
+__all__ = [
+    "normalize_token_usage",
+    "runtime_metadata_from_message",
+    "runtime_metadata_from_stream_event",
+    "sum_token_usage",
+]
 
 
 def extract_messages_from_update(update: object) -> list[BaseMessage]:

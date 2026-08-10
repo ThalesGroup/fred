@@ -896,12 +896,6 @@
           "title": "Reports Enabled",
           "type": "boolean"
         },
-        "kpi_enabled": {
-          "default": true,
-          "description": "Expose the KPI MCP server for querying application KPIs.",
-          "title": "Kpi Enabled",
-          "type": "boolean"
-        },
         "tabular_enabled": {
           "default": true,
           "description": "Expose the Tabular MCP server for SQL/table exploration.",

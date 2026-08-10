@@ -75,7 +75,8 @@
   "app": {
     "loading": {
       "router": "Fred is starting...",
-      "ui": "Fred is getting the UI ready..."
+      "ui": "Fred is getting the UI ready...",
+      "generic": "Loading, please wait..."
     }
   },
   "appCard": {
@@ -203,6 +204,26 @@
         "summarize_max_chars": {
           "title": "Summary length cap",
           "description": "Default and hard maximum length (in characters) of summaries produced by the summarize_document tool. Leave empty to use the built-in default and honor the model's requested length."
+        }
+      }
+    },
+    "document_verbatim": {
+      "name": "Read a document verbatim",
+      "description": "Ability to read a document's exact text, page by page.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Page length",
+          "description": "Default and hard maximum length (in characters) of each page returned by the read_document tool. Leave empty to use the built-in default."
+        }
+      }
+    },
+    "document_extract": {
+      "name": "Extract information from a document",
+      "description": "Ability to exhaustively extract the requested information from a document, without missing anything.",
+      "fields": {
+        "require_confirmation": {
+          "title": "Require confirmation",
+          "description": "Pause for your proceed/cancel approval before each extraction. On by default — this capability is token-intensive; turn it off only for an agent whose usage you already trust."
         }
       }
     },
@@ -874,54 +895,6 @@
   "pageError": {
     "message": "Back to Home"
   },
-  "procbench": {
-    "browse": "Browse",
-    "clear": "Clear",
-    "col": {
-      "duration": "Duration",
-      "headings": "Headings",
-      "processor": "Processor",
-      "status": "Status",
-      "tokens": "Tokens (est)",
-      "words": "Words"
-    },
-    "description": "Upload a document (pdf, docx, pptx, csv, txt, md, xlsm, jsonl) and compare extraction quality and speed across processors.",
-    "detail": {
-      "collapseAll": "Collapse all",
-      "expandAll": "Expand all",
-      "title": "Run Detail"
-    },
-    "metricsTitle": "Processor Metrics",
-    "noFile": "No file selected",
-    "noMarkdown": "No markdown produced",
-    "openLatest": "Open latest run",
-    "persistLabel": "Save run",
-    "processorsCount": "{{count}} processor(s)",
-    "run": "Run Bench",
-    "runFailed": "Benchmark failed",
-    "runSuccess": "Benchmark complete",
-    "runSuccessDetail": "Processors executed successfully.",
-    "running": "Running...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processors",
-      "delete": "Delete",
-      "deleteFailed": "Failed to delete run",
-      "empty": "No saved runs yet.",
-      "file": "File",
-      "modified": "Modified",
-      "open": "Open",
-      "title": "Saved runs"
-    },
-    "summaryFor": "Summary for '{{name}}'",
-    "title": "Document Processor Bench",
-    "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
-    "uploadTitle": "Upload a document",
-    "view": {
-      "sideBySide": "Side by side",
-      "stacked": "Stacked"
-    }
-  },
   "profile": {
     "theme": {
       "dark": "Dark",
@@ -1364,7 +1337,10 @@
     "chatTrace": {
       "ariaLabel": "Agent reasoning trace",
       "awaitingConfirmation": "awaiting confirmation…",
+      "cancelledByUser": "cancelled by the user",
       "details": "Details",
+      "errorCopied": "Error message copied to clipboard",
+      "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
       "phase": {
@@ -1395,6 +1371,10 @@
       "lockInformation": "Read the Terms of Service before you can accept them",
       "title": "Terms of Service (ToS)",
       "validate": "Accept the TOS"
+    },
+    "hitlPrompt": {
+      "accepted": "Accepted",
+      "refused": "Refused"
     },
     "knowledgeHub": {
       "loading": "Loading..."
@@ -1436,11 +1416,28 @@
         "changelog": "What's new"
       }
     },
-    "profileMenu": {
-      "adminBadge": "admin",
-      "adminConsole": "Technical console",
-      "contactSupport": "Contact support",
+    "avatarCrop": {
+      "title": "Crop avatar",
+      "save": "Save",
+      "zoom": "Zoom"
+    },
+    "home": {
+      "title": "Home",
+      "searchPlaceholder": "Search a team",
+      "searchClear": "Clear search",
+      "yourTeams": "Your teams",
+      "pageTitle": "Home",
+      "pageSubtitle": "Select a space in the left panel to get started."
+    },
+    "mainNav": {
+      "ariaLabel": "Main navigation",
+      "home": "Home",
+      "marketplace": "Marketplace",
       "helpCenter": "Help Center",
+      "adminConsole": "Technical console"
+    },
+    "profileMenu": {
+      "contactSupport": "Contact support",
       "profile": "Profile"
     },
     "promptCategories": {
@@ -1525,6 +1522,7 @@
         "created": "Added on",
         "author": "Added by"
       },
+      "embeddedTitleHint": "Embedded title: {{title}}",
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
@@ -1702,6 +1700,7 @@
         "menu": {
           "resources": "Resources"
         },
+        "teamLabel": "Team",
         "userTeam": "Personal space"
       }
     },
@@ -1942,6 +1941,8 @@
           "explanation": "Override the default model for a specific runtime operation (e.g. planning), optionally refined further by purpose.",
           "operation": "Operation",
           "purpose": "Purpose (optional)",
+          "agent": "Agent (optional)",
+          "agentAny": "All agents",
           "targetProfileId": "Profile id",
           "targetProfilePlaceholder": "Select a model",
           "addRule": "Add rule"
@@ -1969,11 +1970,11 @@
           "public": "Public",
           "private": "Private"
         },
-        "teamBanner": {
-          "title": "Team banner",
+        "teamAvatar": {
+          "title": "Team avatar",
           "import": "Import",
           "hint": "JPEG, PNG, or WebP · 5 MB maximum",
-          "noBanner": "No banner selected"
+          "noAvatar": "No avatar selected"
         },
         "teamPrompt": {
           "label": "Team context (prompt)",
@@ -2051,6 +2052,10 @@
             "conversationAttachments": {
               "title": "Attachments in a conversation",
               "description": "Allows adding documents to a conversation to use their information."
+            },
+            "documentReading": {
+              "title": "Document reading",
+              "description": "Lets the agent read a document verbatim and exhaustively extract information from it."
             },
             "wordDocument": {
               "title": "Generate a Word document",

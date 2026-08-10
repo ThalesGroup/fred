@@ -20,7 +20,10 @@ import mimetypes
 from pathlib import Path
 
 from knowledge_flow_backend.application_context import get_configuration
-from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
+from knowledge_flow_backend.core.processors.input.common.image_describer import (
+    IMAGE_DESCRIPTION_UNAVAILABLE,
+    build_image_describer,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
     FastTextOptions,
@@ -81,7 +84,7 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
         describer = self._resolve_image_describer()
         if describer is not None:
             description = describer.describe(self._to_data_url(file_path)).strip()
-            if description and description != "Image description not available.":
+            if description and description != IMAGE_DESCRIPTION_UNAVAILABLE:
                 text = f"{text}\n\nVision summary:\n{description}"
 
         return FastTextResult(

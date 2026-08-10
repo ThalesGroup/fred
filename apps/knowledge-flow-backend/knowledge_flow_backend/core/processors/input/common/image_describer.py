@@ -14,6 +14,10 @@ from knowledge_flow_backend.core.processors.input.common.base_image_describer im
 
 logger = logging.getLogger(__name__)
 
+# Sentinel returned by VisionImageDescriber when description fails or comes back
+# empty. Callers use it to decide whether to inject the text into their output.
+IMAGE_DESCRIPTION_UNAVAILABLE = "Image description not available."
+
 VISION_DESCRIBE_PROMPT_V1 = """
 Describe the image.
 Start with this sentence: "There is an image showing".
@@ -177,7 +181,7 @@ class VisionImageDescriber(BaseImageDescriber):
             # NOTE: model kwargs already bound; no 'config' needed here.
             result = self.model.invoke(messages)
             text = _stringify_content(getattr(result, "content", "")).strip()
-            return text or "Image description not available."
+            return text or IMAGE_DESCRIPTION_UNAVAILABLE
         except Exception as e:
             logger.warning("Vision description failed: %s", e)
-            return "Image description not available."
+            return IMAGE_DESCRIPTION_UNAVAILABLE

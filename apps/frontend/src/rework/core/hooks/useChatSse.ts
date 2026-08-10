@@ -508,6 +508,19 @@ export function useChatSse(
             });
           }
           thoughtBufsRef.current.clear();
+          // Persist the crash in the chain of thought as an error entry (not
+          // just the transient toast): a trailing error row whose raw message is
+          // browsable in the trace drawer. The toast still fires for the
+          // immediate signal.
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank: rankRef.current++,
+            timestamp: ts,
+            role: "assistant",
+            channel: "error",
+            parts: [{ type: "text", text: event.message ?? "Agent execution error" }],
+          });
           onError?.(event.message ?? "Agent execution error");
           break;
         }
@@ -818,6 +831,30 @@ export function useChatSse(
       // signal-cancellable — silently dropping every send() attempt made in
       // the meantime.
       preflightOwnerRef.current = null;
+
+      // Optimistic cancel: flip every tool call this HITL prompt gated from
+      // "running" straight to a cancelled state, without waiting for the resume
+      // round-trip (which may even crash before resolving them). Each error
+      // tool_result flagged `cancelled_by_user` pairs with the dangling
+      // tool_call by call_id; a real result later would simply supersede it.
+      if (answer === "cancel") {
+        const cancelTs = new Date().toISOString();
+        const rankBase = Date.now();
+        (pending.payload.pending_calls ?? []).forEach((call, i) => {
+          if (!call.tool_call_id) return;
+          messagesRef.current = upsertOne(messagesRef.current, {
+            session_id: pending.session_id,
+            exchange_id: pending.exchange_id,
+            rank: rankBase + i,
+            timestamp: cancelTs,
+            role: "tool",
+            channel: "tool_result",
+            parts: [{ type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null }],
+            metadata: { extras: { cancelled_by_user: true } },
+          });
+        });
+        setMessages([...messagesRef.current]);
+      }
 
       try {
         await KeyCloakService.ensureFreshToken(30);
