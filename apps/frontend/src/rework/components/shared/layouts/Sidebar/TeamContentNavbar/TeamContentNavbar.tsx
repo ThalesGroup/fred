@@ -196,7 +196,7 @@ export default function TeamContentNavbar() {
       <Button
         color={"primary"}
         variant={"text"}
-        size={"medium"}
+        size={"small"}
         onClick={handleBack}
         icon={{ category: "outlined", type: "arrow_back", filled: true }}
       >
