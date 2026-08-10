@@ -121,16 +121,20 @@ Acceptance:
 - SDK tests continue to cover literal brace preservation
 - UI helper text matches the actual validator
 
-### 2.6 Marketplace (`PROMPT-06`)
+### 2.6 Marketplace (`PROMPT-06`) — SHIPPED 2026-08-10 (#2317)
 
-Add a separate published-prompt resource for global marketplace entries. This
-must remain copy-by-value:
+**Built, with a deliberate change from the sketch below. The durable design now
+lives in [`docs/swift/design/PROMPTS.md`](../design/PROMPTS.md) §6.1 — read that,
+not this.**
 
-- team prompt to marketplace creates a published snapshot
-- marketplace import copies text into the target context
-- editing a team prompt never mutates already-published marketplace entries
-
-The marketplace should not reuse mutable team prompt rows as global records.
+This section originally proposed a *separate published-prompt snapshot* so that
+editing a team prompt would never mutate an already-published entry. The shipped
+design instead uses a **live visibility flag** (`PromptRow.published`): the
+marketplace shows the team's own row, edits propagate immediately, and the usage
+counter is shared (total, global usage). The snapshot was found unnecessary
+because nothing persistently references the published row — *use* is a clipboard
+copy (no pointer) and *import* is copy-by-value (a fresh row via `promote`, with
+the counter reset). Import remains copy-by-value, as this section required.
 
 ### 2.7 Token KPI Aggregation (`PROMPT-07`)
 

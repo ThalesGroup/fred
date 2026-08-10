@@ -138,13 +138,43 @@ Renders a toggle button ("Pick from library"). When open, shows all available `C
 items (personal + team scope pooled by `GetContextPromptsEarly`) reusing the exact same `PromptCard`
 organism and `FilterChips` category filter bar as the team prompt library page (`PromptsPage`), for
 visual consistency between the two prompt-browsing surfaces (PROMPT-09 follow-up). `canManage` is
-always `false` here (no hover-edit pencil — picking, not managing) and the card's click handler is
+always `false` here (no more-menu — picking, not managing) and the card's click handler is
 rewired to `onSelect(id)` instead of opening the read-only view dialog. Categories come from
 `GetTeamPromptCategories` scoped to the current team; a pooled prompt whose `category_id` doesn't
 match any of those (e.g. a personal-scope prompt's own category) falls into the "Sans catégorie"
 bucket rather than crashing or mismatching. The scope badge ("personal"/"team") the old plain-grid
 version showed per card is gone — `PromptCard` doesn't render one, and reusing "the exact same card"
 was the explicit ask.
+
+---
+
+### `PromptCard` variants + `MarketplacePrompts` (PROMPT-06, #2317)
+
+**Location:** `src/rework/components/shared/organisms/PromptCard/PromptCard.tsx`,
+`src/rework/components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx`
+**Status:** `Functional`
+
+`PromptCard` gained a `variant` prop (`"team"` | `"marketplace"`). The former
+hover-edit pencil is now an always-visible **more-menu** (`IconButtonMenu`,
+`more_vert`), mirroring `AgentCard`:
+
+- **team** variant (team library): Edit / Duplicate / Publish|Unpublish / Delete,
+  and a bottom-right `storefront` "Published" chip (success-container tokens)
+  when the prompt is on the marketplace. Publish, unpublish, and saving an edit
+  to a published prompt each go through a confirmation dialog (the spec's
+  warnings). Duplicate reuses a prompt-flavoured fork of `DuplicateAgentDialog`.
+- **marketplace** variant: the header shows the **author team name** in place of
+  the category (each team has its own categories); the more-menu is Import
+  (+ Remove from marketplace for editors of the author team). Clicking the card
+  opens the read-only view whose only action is copy-to-clipboard — which records
+  a marketplace "use" toward the shared counter.
+
+`MarketplacePrompts` ("Prompts de la communauté") reuses the `MarketplaceTeams`
+header pattern (`h1` + `SearchInput`) and `FilterChips` (one chip per author
+team). Reached from a nav item under the teams marketplace (`MarketplaceNavbar`,
+`description` icon) at `/marketplace/prompts`. Import opens `ImportPromptDialog`:
+a multi-select of the personal space + every editable team, with an `xs`
+`SearchInput` filter.
 
 #### Open UX issues
 
