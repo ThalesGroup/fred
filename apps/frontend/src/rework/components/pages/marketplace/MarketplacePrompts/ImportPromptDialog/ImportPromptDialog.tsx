@@ -27,6 +27,8 @@ interface ImportPromptDialogProps {
   open: boolean;
   promptId: string | null;
   promptName: string;
+  /** The prompt's author team — shown in the list but not importable into. */
+  originTeamId?: string | null;
   onClose: () => void;
 }
 
@@ -36,7 +38,13 @@ const EDITOR_RELATIONS = new Set(["team_editor", "team_admin"]);
  * caller's own spaces: the personal space plus every team the caller can edit.
  * Import is a copy-by-value, so each target lands with a reset counter and an
  * `_imported-N` name (handled server-side). */
-export default function ImportPromptDialog({ open, promptId, promptName, onClose }: ImportPromptDialogProps) {
+export default function ImportPromptDialog({
+  open,
+  promptId,
+  promptName,
+  originTeamId,
+  onClose,
+}: ImportPromptDialogProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
@@ -139,12 +147,18 @@ export default function ImportPromptDialog({ open, promptId, promptName, onClose
               />
             </div>
             <div className={styles.teamList}>
-              {filteredTeams.map((team) => (
-                <label key={team.id} className={styles.row}>
-                  <Checkbox checked={selected.has(team.id)} onChange={() => toggle(team.id)} />
-                  <span className={styles.rowLabel}>{team.name}</span>
-                </label>
-              ))}
+              {filteredTeams.map((team) => {
+                const isOrigin = team.id === originTeamId;
+                return (
+                  <label key={team.id} className={styles.row} data-disabled={isOrigin || undefined}>
+                    <Checkbox checked={selected.has(team.id)} disabled={isOrigin} onChange={() => toggle(team.id)} />
+                    <span className={styles.rowLabel}>{team.name}</span>
+                    {isOrigin && (
+                      <span className={styles.originTag}>{t("rework.marketplace.prompts.import.originTeam")}</span>
+                    )}
+                  </label>
+                );
+              })}
               {filteredTeams.length === 0 && (
                 <p className={styles.empty}>{t("rework.marketplace.prompts.import.noTeams")}</p>
               )}

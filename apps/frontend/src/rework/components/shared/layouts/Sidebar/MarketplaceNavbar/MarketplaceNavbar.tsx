@@ -30,7 +30,7 @@ export default function MarketplaceNavbar() {
     {
       type: "link",
       label: t("rework.sidebar.marketplace.menu.prompts"),
-      icon: { category: "outlined", type: "description", filled: true },
+      icon: { category: "outlined", type: "edit_note", filled: true },
       linkProps: { to: "/marketplace/prompts" },
     },
   ];

@@ -1407,7 +1407,8 @@
           "clearSearch": "Effacer la recherche",
           "noTeams": "Aucune équipe ne correspond.",
           "successToast": "Prompt importé ({{count}})",
-          "errorToast": "Échec de l'import ({{count}})"
+          "errorToast": "Échec de l'import ({{count}})",
+          "originTeam": "Équipe d'origine"
         },
         "unpublish": {
           "title": "Retirer ce prompt de la marketplace ?",
@@ -1665,7 +1666,9 @@
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé"
-      }
+      },
+      "pageTitlePersonal": "Vos ressources personnelles",
+      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel."
     },
     "save": "Sauvegarder",
     "serviceNotice": {
@@ -1717,7 +1720,7 @@
       },
       "marketplace": {
         "menu": {
-          "teams": "Équipe",
+          "teams": "Équipes",
           "prompts": "Prompts"
         },
         "title": "Marketplace"
@@ -2043,7 +2046,8 @@
           "all": "Tous",
           "aria": "Filtrer par pod"
         },
-        "title": "Sollicitez vos {{agentsNicknamePlural}}"
+        "title": "Agents de l'équipe",
+        "titlePersonal": "Vos agents personnels"
       },
       "formAgent": {
         "advancedSettings": "Paramètres avancés",
@@ -2177,7 +2181,7 @@
           }
         },
         "clearSearch": "Effacer la recherche",
-        "create": "Nouveau prompt",
+        "create": "Créer prompt",
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "firstCreate": "Créer un prompt",
         "form": {
@@ -2190,7 +2194,7 @@
         "modalEdit": "Modifier le prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
         "searchPlaceholder": "Rechercher des prompts...",
-        "title": "Prompts",
+        "title": "Prompts de l'équipe",
         "view": {
           "closeAria": "Fermer",
           "copiedToast": "Copié dans le presse-papier",
@@ -2222,7 +2226,8 @@
           "title": "Enregistrer les modifications ?",
           "message": "Ce prompt est publié sur la marketplace. Vos modifications y seront immédiatement visibles pour tous les utilisateurs.",
           "confirm": "Enregistrer"
-        }
+        },
+        "titlePersonal": "Vos prompts personnels"
       }
     },
     "userSettings": {

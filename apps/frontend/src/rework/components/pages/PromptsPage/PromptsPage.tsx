@@ -63,7 +63,7 @@ const emptyForm: FormState = { name: "", description: "", category_id: null, tag
 const NO_CATEGORY_FILTER_ID = "__no_category__";
 
 export default function PromptsPage() {
-  const { teamId, selectedTeam } = useSelectedTeam();
+  const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
   const { canUpdateResources: canManage } = useTeamCapabilities(selectedTeam);
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
@@ -377,27 +377,28 @@ export default function PromptsPage() {
         <PageEmptyState
           icon="edit_note"
           message={t("rework.teams.prompts.noPrompt")}
-          action={{ label: t("rework.teams.prompts.firstCreate"), onClick: openCreate }}
+          action={canManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: openCreate } : undefined}
         />
       ) : (
         <>
-          {/* ── Toolbar: title + create button ── */}
+          {/* ── Toolbar: title + create button, then search + category
+              management grouped at the far right ── */}
           <div className={styles.pageTitle}>
-            <span>{t("rework.teams.prompts.title")}</span>
-            <Button
-              color="primary"
-              variant="filled"
-              size="medium"
-              icon={{ category: "outlined", type: "add" }}
-              onClick={openCreate}
-            >
-              {t("rework.teams.prompts.create")}
-            </Button>
-          </div>
-
-          {/* ── Search + category filters ── */}
-          <div className={styles.filterBar}>
-            <div className={styles.searchRow}>
+            <span className={styles.pageTitleText}>
+              {isPersonalTeam ? t("rework.teams.prompts.titlePersonal") : t("rework.teams.prompts.title")}
+            </span>
+            {canManage && (
+              <Button
+                color="primary"
+                variant="filled"
+                size="medium"
+                icon={{ category: "outlined", type: "add" }}
+                onClick={openCreate}
+              >
+                {t("rework.teams.prompts.create")}
+              </Button>
+            )}
+            <div className={styles.titleActions}>
               <div className={styles.searchBar}>
                 <SearchInput
                   value={search}
@@ -420,8 +421,11 @@ export default function PromptsPage() {
                 </Tooltip>
               )}
             </div>
+          </div>
 
-            {categories.length > 0 && (
+          {/* ── Category filter chips ── */}
+          {categories.length > 0 && (
+            <div className={styles.filterBar}>
               <FilterChips
                 options={[
                   {
@@ -442,8 +446,8 @@ export default function PromptsPage() {
                 showMoreLabel={(count) => `+${count}`}
                 showLessLabel="−"
               />
-            )}
-          </div>
+            </div>
+          )}
 
           {filtered.length === 0 ? (
             <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
@@ -456,6 +460,7 @@ export default function PromptsPage() {
                   variant="team"
                   categoryName={(prompt.category_id && categoryNameById.get(prompt.category_id)) || null}
                   canManage={canManage}
+                  publishable={!isPersonalTeam}
                   published={prompt.published}
                   onView={() => openView(prompt)}
                   onEdit={() => openPrompt(prompt)}

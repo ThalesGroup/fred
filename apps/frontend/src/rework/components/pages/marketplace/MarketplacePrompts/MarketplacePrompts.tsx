@@ -225,6 +225,7 @@ export default function MarketplacePrompts() {
         open={!!importingPrompt}
         promptId={importingPrompt?.id ?? null}
         promptName={importingPrompt?.name ?? ""}
+        originTeamId={importingPrompt?.team_id ?? null}
         onClose={() => setImportingPrompt(null)}
       />
     </div>

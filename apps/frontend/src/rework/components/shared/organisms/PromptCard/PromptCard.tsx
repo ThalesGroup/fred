@@ -33,6 +33,9 @@ export interface PromptCardProps {
   teamName?: string | null;
   /** team variant: caller can edit this team → shows the more-menu. */
   canManage?: boolean;
+  /** team variant: prompt can be published to the marketplace (team prompts
+   *  only — personal-space prompts stay private, so no publish action). */
+  publishable?: boolean;
   /** team variant: prompt is published → storefront chip + "unpublish" action. */
   published?: boolean;
   /** marketplace variant: caller is an editor of the author team → can remove it. */
@@ -53,6 +56,7 @@ export default function PromptCard({
   categoryName,
   teamName,
   canManage = false,
+  publishable = true,
   published = false,
   canRemoveFromMarketplace = false,
   onView,
@@ -105,27 +109,32 @@ export default function PromptCard({
         label: t("rework.teams.prompts.card.menu.duplicate"),
         icon: { category: "outlined", type: "content_copy" },
       },
-      published
-        ? {
-            key: "unpublish",
-            value: "unpublish",
-            label: t("rework.teams.prompts.card.menu.unpublish"),
-            icon: { category: "outlined", type: "storefront" },
-          }
-        : {
-            key: "publish",
-            value: "publish",
-            label: t("rework.teams.prompts.card.menu.publish"),
-            icon: { category: "outlined", type: "storefront" },
-          },
-      {
-        key: "delete",
-        value: "delete",
-        label: t("rework.teams.prompts.card.menu.delete"),
-        icon: { category: "outlined", type: "delete" },
-        destructive: true,
-      },
     );
+    // Personal-space prompts are not publishable — no publish/unpublish action.
+    if (publishable) {
+      options.push(
+        published
+          ? {
+              key: "unpublish",
+              value: "unpublish",
+              label: t("rework.teams.prompts.card.menu.unpublish"),
+              icon: { category: "outlined", type: "storefront" },
+            }
+          : {
+              key: "publish",
+              value: "publish",
+              label: t("rework.teams.prompts.card.menu.publish"),
+              icon: { category: "outlined", type: "storefront" },
+            },
+      );
+    }
+    options.push({
+      key: "delete",
+      value: "delete",
+      label: t("rework.teams.prompts.card.menu.delete"),
+      icon: { category: "outlined", type: "delete" },
+      destructive: true,
+    });
   }
 
   const handleMoreSelect = (action: MoreAction) => {

@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-  width: min(420px, 90vw);
+  width: 100%;
 }
 
 .subtitle {
@@ -29,20 +29,37 @@
   gap: var(--spacing-xs);
   transition: background-color 120ms ease;
   cursor: pointer;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-xs);
   padding: var(--spacing-2xs) var(--spacing-xs);
+  min-height: 32px;
 
   &:hover {
     background: var(--state-on-surface-hover);
   }
+
+  &[data-disabled] {
+    cursor: default;
+
+    &:hover {
+      background: transparent;
+    }
+  }
 }
 
 .rowLabel {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   color: var(--on-surface);
   font: var(--font-body-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.originTag {
+  flex-shrink: 0;
+  color: var(--primary);
+  font: var(--font-label-small);
 }
 
 .empty {

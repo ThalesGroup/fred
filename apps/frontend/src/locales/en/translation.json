@@ -1407,7 +1407,8 @@
           "clearSearch": "Clear search",
           "noTeams": "No team matches.",
           "successToast": "Prompt imported ({{count}})",
-          "errorToast": "Import failed ({{count}})"
+          "errorToast": "Import failed ({{count}})",
+          "originTeam": "Origin team"
         },
         "unpublish": {
           "title": "Remove this prompt from the marketplace?",
@@ -1665,7 +1666,9 @@
         "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
         "processStarted": "Processing started"
-      }
+      },
+      "pageTitlePersonal": "Your personal resources",
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
     },
     "save": "Save",
     "serviceNotice": {
@@ -2043,7 +2046,8 @@
           "all": "All",
           "aria": "Filter by pod"
         },
-        "title": "Chat with your {{agentsNicknamePlural}}"
+        "title": "Team agents",
+        "titlePersonal": "Your personal agents"
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
@@ -2177,7 +2181,7 @@
           }
         },
         "clearSearch": "Clear search",
-        "create": "New prompt",
+        "create": "Create prompt",
         "emptySearch": "No prompts match this search.",
         "firstCreate": "Create prompt",
         "form": {
@@ -2190,7 +2194,7 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
-        "title": "Prompts",
+        "title": "Team prompts",
         "view": {
           "closeAria": "Close",
           "copiedToast": "Copied to clipboard",
@@ -2222,7 +2226,8 @@
           "title": "Save changes?",
           "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
           "confirm": "Save"
-        }
+        },
+        "titlePersonal": "Your personal prompts"
       }
     },
     "userSettings": {
