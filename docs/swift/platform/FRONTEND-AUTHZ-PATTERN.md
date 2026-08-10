@@ -49,15 +49,22 @@ It replaces three former components (`AdminProtectedRoute`,
 `KpiObserverProtectedRoute`, the `resource`/`action` `ProtectedRoute`). Add a
 team-scoped variant only when a route genuinely needs one — none does today.
 
-**One documented asymmetry:** the 6 `/monitoring/*` dev/ops routes
+**Historical note (2026-08-08):** the 6 `/monitoring/*` dev/ops routes
 (`runtime`, `data`, `logs`, `rebac-backfill`, `processors`,
-`processors/runs/:id`) are `requires="admin"` on the frontend even though
-AUTHZ-05 review item 8a dropped backend enforcement on several of the APIs
-behind them to "authenticated only". This is deliberate: they are ops/dev
-tooling no normal team role has a reason to open, and gating them on
-`canAdmin` avoids exposing raw system internals to every authenticated user
-by default. If a non-admin ever needs one of these pages, that's a product
-decision to make explicitly, not a gate to quietly loosen.
+`processors/runs/:id`) used to be `requires="admin"` on the frontend even
+though AUTHZ-05 review item 8a dropped backend enforcement on several of the
+APIs behind them to "authenticated only" — deliberate, since they were
+ops/dev tooling no normal team role had a reason to open, and gating on
+`canAdmin` avoided exposing raw system internals to every authenticated user
+by default. All 6 are gone now, frontend and backend: `runtime`/`logs`
+followed the dead `monitoringApi` slice (2026-07-19); `processors`/
+`processors/runs/:id` (`ProcessorBench`) were dropped as dead code by #2296;
+`rebac-backfill` and `data` (`DataHub`'s `GET /documents/processing/graph`)
+followed once their frontend pages were confirmed to have zero remaining
+consumers, same session as this note. If dev/ops tooling like this is needed
+again, it gets redesigned from scratch and re-gated the same way — this
+asymmetry pattern (`canAdmin`-gate even where the backend doesn't strictly
+require it) is still the right default for that case.
 
 ## How to add a new capability
 

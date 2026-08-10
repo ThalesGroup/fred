@@ -72,7 +72,7 @@ export function HeadingWithAnchor({ level, children }: HeadingWithAnchorProps) {
         <Tooltip text={t("rework.helpCenter.copyHeadingLink")}>
           <IconButton
             variant="icon"
-            size="xs"
+            size="2xs"
             icon={{ category: "outlined", type: copied ? "check" : "link" }}
             aria-label={t("rework.helpCenter.copyHeadingLink")}
             onClick={copyLink}

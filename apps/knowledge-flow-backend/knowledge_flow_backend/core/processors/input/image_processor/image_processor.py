@@ -12,10 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import logging
+import mimetypes
+import threading
 from pathlib import Path
 
+from knowledge_flow_backend.application_context import get_configuration
+from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.common.image_describer import (
+    IMAGE_DESCRIPTION_UNAVAILABLE,
+    build_image_describer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +34,45 @@ SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", "
 
 class ImageProcessor(BaseMarkdownProcessor):
     """
-    Processor for image files that stores image metadata and generates a markdown file
-    with the image title/name for searching and indexing.
+    Processor for standalone image files ingested into a document library.
 
-    The image filename (without extension) is used as the searchable title/keyword.
-    For example: "Apple.png" -> title="Apple", "Nvidia.jpg" -> title="Nvidia"
+    The generated markdown always contains the filename-based title so the image
+    stays retrievable by name. When a vision model is configured, a vision
+    description is appended so the image content itself becomes searchable —
+    same behaviour as the fast-path FastLiteImageProcessor for chat attachments.
     """
 
-    description = "Processes image files and extracts metadata for searchable indexing."
+    description = "Processes image files into searchable markdown, with a vision description when a vision model is configured."
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Same reasoning as PdfMarkdownProcessor: this instance is a shared
+        # singleton (application_context.get_input_processor_instance) called from
+        # concurrent Temporal activity threads, and build_image_describer builds a
+        # real provider client — so build it once and reuse it.
+        self._image_describer: BaseImageDescriber | None = None
+        self._image_describer_lock = threading.Lock()
+        self._warned_missing_vision_model = False
+
+    def _resolve_image_describer(self) -> BaseImageDescriber | None:
+        if self._image_describer is not None:
+            return self._image_describer
+        vision_model = get_configuration().vision_model
+        if not vision_model:
+            if not self._warned_missing_vision_model:
+                logger.info("[PROCESSOR][IMAGE] Vision model missing; markdown keeps filename-based content only.")
+                self._warned_missing_vision_model = True
+            return None
+        with self._image_describer_lock:
+            if self._image_describer is None:
+                self._image_describer = build_image_describer(vision_model)
+        return self._image_describer
+
+    @staticmethod
+    def _to_data_url(file_path: Path) -> str:
+        mime = mimetypes.guess_type(file_path.name)[0] or "image/png"
+        encoded = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+        return f"data:{mime};base64,{encoded}"
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Check if the file is a valid image format."""
@@ -75,8 +115,8 @@ class ImageProcessor(BaseMarkdownProcessor):
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         """
-        Generate a minimal markdown file containing the image title and metadata.
-        This allows the image to be searchable by its filename.
+        Generate a markdown file with the image title, metadata and — when a
+        vision model is configured — a vision description of the image content.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
@@ -91,6 +131,12 @@ class ImageProcessor(BaseMarkdownProcessor):
 
 This is an image asset that can be used in templates. Search for "{image_title}" to find this image.
 """
+
+        describer = self._resolve_image_describer()
+        if describer is not None:
+            description = describer.describe(self._to_data_url(file_path)).strip()
+            if description and description != IMAGE_DESCRIPTION_UNAVAILABLE:
+                markdown_content += f"\n## Vision summary\n\n{description}\n"
 
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(markdown_content)

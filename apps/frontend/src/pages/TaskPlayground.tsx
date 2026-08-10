@@ -13,19 +13,6 @@
 // limitations under the License.
 
 import React from "react";
-import {
-  Box,
-  Button,
-  Chip,
-  Divider,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Slider,
-  Stack,
-  Typography,
-} from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
 import { taskRegistered, taskEventReceived, taskEvicted, selectVisibleTasks } from "../rework/features/tasks/taskSlice";
 import { TASK_KINDS } from "../rework/features/tasks/taskKinds";
@@ -33,9 +20,17 @@ import { TaskIndicator } from "../rework/components/shared/molecules/TaskIndicat
 import { TaskCard } from "../rework/components/shared/molecules/TaskCard/TaskCard";
 import { TaskStateBadge } from "../rework/components/shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "../rework/components/shared/atoms/TaskProgressBar/TaskProgressBar";
+import Select from "../rework/components/shared/molecules/Select/Select";
+import Button from "../rework/components/shared/atoms/Button/Button";
+import Chip from "../rework/components/shared/atoms/Chip/Chip";
 import type { TaskState } from "../rework/features/tasks/taskTypes";
+import styles from "./TaskPlayground.module.css";
+
 const KINDS = Object.keys(TASK_KINDS);
 const STATES: TaskState[] = ["pending", "running", "cancelling", "succeeded", "failed", "cancelled"];
+
+const KIND_OPTIONS = KINDS.map((k) => ({ value: k, label: k, key: k }));
+const STATE_OPTIONS = STATES.map((s) => ({ value: s, label: s, key: s }));
 
 const DEMO_LABELS = [
   "rapport-annuel-2025.pdf",
@@ -203,163 +198,130 @@ export default function TaskPlayground() {
   }
 
   return (
-    <Box p={3} display="grid" gap={3} maxWidth={900}>
-      <Typography variant="h5" fontWeight={600}>
-        Task atoms — playground
-      </Typography>
+    <div className={styles.page}>
+      <h1 className={styles.title}>Task atoms — playground</h1>
 
       {/* ── Controls ─────────────────────────────────────────────────── */}
-      <Box
-        display="grid"
-        gap={2}
-        gridTemplateColumns="160px 160px 1fr"
-        alignItems="center"
-        sx={{ p: 2, borderRadius: 2, border: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}
-      >
-        <FormControl size="small">
-          <InputLabel>Kind</InputLabel>
-          <Select label="Kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-            {KINDS.map((k) => (
-              <MenuItem key={k} value={k}>
-                {k}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl size="small">
-          <InputLabel>State</InputLabel>
-          <Select label="State" value={targetState} onChange={(e) => setTargetState(e.target.value as TaskState)}>
-            {STATES.map((s) => (
-              <MenuItem key={s} value={s}>
-                {s}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      <div className={styles.controlsPanel}>
+        <Select options={KIND_OPTIONS} value={kind} onChange={setKind} label="Kind" size="small" />
+        <Select options={STATE_OPTIONS} value={targetState} onChange={setTargetState} label="State" size="small" />
 
         {targetState === "running" ? (
-          <Box display="flex" alignItems="center" gap={1.5}>
+          <div className={styles.progressRow}>
             <Button
+              variant={indeterminate ? "filled" : "outlined"}
+              color="primary"
               size="small"
-              variant={indeterminate ? "contained" : "outlined"}
               onClick={() => setIndeterminate((v) => !v)}
-              sx={{ flexShrink: 0, minWidth: 0, fontSize: 11 }}
             >
               indét.
             </Button>
-            <Slider
-              size="small"
+            <input
+              type="range"
+              className={styles.rangeInput}
               min={0}
               max={1}
               step={0.01}
               value={progress}
               disabled={indeterminate}
-              onChange={(_, v) => setProgress(v as number)}
+              onChange={(e) => setProgress(Number(e.target.value))}
+              aria-label="Progress"
             />
-            <Typography variant="body2" sx={{ minWidth: 36, textAlign: "right", opacity: indeterminate ? 0.4 : 1 }}>
+            <span className={styles.progressValue} style={{ opacity: indeterminate ? 0.4 : 1 }}>
               {indeterminate ? "null" : `${Math.round(progress * 100)}%`}
-            </Typography>
-          </Box>
+            </span>
+          </div>
         ) : (
-          <Box />
+          <div />
         )}
 
-        <Stack direction="row" gap={1} sx={{ gridColumn: "1 / -1" }}>
-          <Button variant="outlined" size="small" onClick={inject}>
+        <div className={styles.actionsRow}>
+          <Button variant="outlined" color="primary" size="small" onClick={inject}>
             Injecter état sélectionné
           </Button>
-          <Button variant="contained" size="small" onClick={animate} disabled={animating}>
+          <Button variant="filled" color="primary" size="small" onClick={animate} disabled={animating}>
             Animer (0 → 100% → succès)
           </Button>
-          <Button variant="outlined" size="small" color="secondary" onClick={injectAll}>
+          <Button variant="outlined" color="secondary" size="small" onClick={injectAll}>
             Tous les états d'un coup
           </Button>
-          <Box flex={1} />
-          <Button variant="text" size="small" color="error" onClick={clearAll}>
+          <div className={styles.actionsSpacer} />
+          <Button variant="text" color="error" size="small" onClick={clearAll}>
             Tout effacer
           </Button>
-        </Stack>
-      </Box>
+        </div>
+      </div>
 
       {tasks.length === 0 && (
-        <Typography variant="body2" color="text.secondary">
-          Aucune tâche — cliquez sur "Injecter" ou "Animer" ci-dessus.
-        </Typography>
+        <p className={styles.emptyState}>Aucune tâche — cliquez sur "Injecter" ou "Animer" ci-dessus.</p>
       )}
 
       {tasks.length > 0 && (
         <>
           {/* ── TaskIndicator ─────────────────────────────────────────── */}
           <Section title="TaskIndicator" subtitle="sm + md — cliquer pour ouvrir le popover">
-            <Box display="flex" flexWrap="wrap" gap={3} alignItems="flex-end">
+            <div className={styles.indicatorGroup}>
               {tasks.map((t) => (
-                <Box key={t.taskId} display="flex" flexDirection="column" gap={0.75} alignItems="flex-start">
-                  <Typography variant="caption" color="text.secondary">
+                <div key={t.taskId} className={styles.indicatorItem}>
+                  <span className={styles.indicatorMeta}>
                     {t.state}
                     {t.progress !== null ? ` · ${Math.round(t.progress * 100)}%` : ""}
-                  </Typography>
-                  <Box display="flex" gap={1.5} alignItems="center">
+                  </span>
+                  <div className={styles.indicatorRow}>
                     <TaskIndicator taskId={t.taskId} size="sm" />
                     <TaskIndicator taskId={t.taskId} size="md" />
-                  </Box>
-                </Box>
+                  </div>
+                </div>
               ))}
-            </Box>
+            </div>
           </Section>
 
-          <Divider />
+          <hr className={styles.divider} />
 
           {/* ── TaskStateBadge + TaskProgressBar ──────────────────────── */}
           <Section title="TaskStateBadge + TaskProgressBar">
-            <Box display="grid" gap={1.5}>
+            <div className={styles.stateGrid}>
               {tasks.map((t) => (
-                <Box key={t.taskId} display="flex" gap={2} alignItems="center">
-                  <Box sx={{ width: 220 }}>
+                <div key={t.taskId} className={styles.stateRow}>
+                  <div className={styles.stateBadgeCell}>
                     <TaskStateBadge state={t.state} size="sm" />
-                  </Box>
-                  <Box flex={1}>
+                  </div>
+                  <div className={styles.stateProgressCell}>
                     <TaskProgressBar state={t.state} progress={t.progress} />
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 36, textAlign: "right" }}>
+                  </div>
+                  <span className={styles.statePercentCell}>
                     {t.progress !== null ? `${Math.round(t.progress * 100)}%` : "—"}
-                  </Typography>
-                  <Chip label={t.state} size="small" sx={{ minWidth: 90 }} />
-                </Box>
+                  </span>
+                  <Chip label={t.state} />
+                </div>
               ))}
-            </Box>
+            </div>
           </Section>
 
-          <Divider />
+          <hr className={styles.divider} />
 
           {/* ── TaskCard ──────────────────────────────────────────────── */}
           <Section title="TaskCard">
-            <Box display="flex" flexWrap="wrap" gap={2}>
+            <div className={styles.cardGrid}>
               {tasks.map((t) => (
                 <TaskCard key={t.taskId} task={t} />
               ))}
-            </Box>
+            </div>
           </Section>
         </>
       )}
-    </Box>
+    </div>
   );
 }
 
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <Box display="grid" gap={1.5}>
-      <Box>
-        <Typography variant="subtitle1" fontWeight={600}>
-          {title}
-        </Typography>
-        {subtitle && (
-          <Typography variant="caption" color="text.secondary">
-            {subtitle}
-          </Typography>
-        )}
-      </Box>
+    <div className={styles.section}>
+      <div>
+        <h2 className={styles.sectionTitle}>{title}</h2>
+        {subtitle && <span className={styles.sectionSubtitle}>{subtitle}</span>}
+      </div>
       {children}
-    </Box>
+    </div>
   );
 }

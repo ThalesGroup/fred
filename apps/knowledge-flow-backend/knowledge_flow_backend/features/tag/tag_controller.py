@@ -21,7 +21,6 @@ from fastapi.params import Query
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
-from pydantic import BaseModel
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     TagAlreadyExistsError,
@@ -44,14 +43,6 @@ from knowledge_flow_backend.features.tag.structure import (
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
-
-
-class RebacBackfillResponse(BaseModel):
-    rebac_enabled: bool
-    tags_seen: int
-    documents_seen: int
-    tag_owner_relations_created: int
-    tag_parent_relations_created: int
 
 
 class TagController:
@@ -221,17 +212,3 @@ class TagController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             await self.service.unshare_tag_with_user(user, tag_id, target_id, target_type.to_resource())
-
-        @router.post(
-            "/tags/rebac/backfill",
-            response_model=RebacBackfillResponse,
-            tags=["Tags"],
-            summary="Backfill ReBAC relations for existing tags and documents",
-        )
-        async def backfill_rebac_relations(user: KeycloakUser = Depends(get_current_user)):
-            """
-            Admin-only maintenance endpoint.
-            Scans existing tags/documents and recreates missing ReBAC relations (owners, tag->document).
-            """
-            result = await self.service.backfill_rebac_relations(user)
-            return RebacBackfillResponse(**result)

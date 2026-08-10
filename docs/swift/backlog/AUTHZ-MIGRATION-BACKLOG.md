@@ -44,7 +44,7 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 - [x] control-plane `users/api.py` CRUD (zero-authz) → `CAN_ADMINISTER_USERS`
 - [x] control-plane `import_export/api.py` (4) + `main.py` policies/lifecycle (3) + `tasks/api.py` (require_admin + admin bypass) + KF `tasks/controller.py` → `CAN_MANAGE_PLATFORM`
 - [x] `benchmark/controller.py` (5, zero-authz) → `CAN_RUN_BENCHMARK`
-- [ ] KF `metadata/service.py` audit/audit-fix + `tag_service.py` rebac/backfill → `CAN_MANAGE_PLATFORM` (in service files; do with Bucket B @authorize removal)
+- [ ] KF `metadata/service.py` audit/audit-fix → `CAN_MANAGE_PLATFORM` (in service files; do with Bucket B @authorize removal). `tag_service.py rebac/backfill` dropped 2026-08-08: the endpoint (dead UI, no consumer) was removed outright instead of reauthorized — see FRONTEND-BACKLOG.md.
 
 ## AUTHZ-04 — RBAC teardown
 - [ ] Remove `RBACProvider`, `authz_providers`, `authorize` decorator, `authorize_or_raise`, `is_authorized`, `require_admin`

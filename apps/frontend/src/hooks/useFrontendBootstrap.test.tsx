@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PR #2160 review (Codex, P1): `TeamSelectionNavbar` keeps this query
+// PR #2160 review (Codex, P1): `MainNavBar` keeps this query
 // permanently subscribed across every route, so RTK Query's unused-data
 // eviction never runs and tags alone only react to same-session mutations.
 // `refetchOnMountOrArgChange: 60` bounds the resulting staleness — this test

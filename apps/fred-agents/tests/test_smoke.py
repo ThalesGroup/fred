@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
@@ -142,7 +143,24 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
         "_build_chat_model_factory",
         lambda config: factory,
     )
-    config_file = Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
+    # Load the pod's real configuration.yaml but redirect the SQLite fallback
+    # path into `tmp_path`. Pointing CONFIG_FILE straight at the checked-in
+    # file (as before) made every "offline" smoke test share
+    # `~/.fred/fred-agents/runtime.sqlite3` with whatever `make run` dev pod
+    # happens to be running on this machine (any checkout, since the path is
+    # under `~`, not the repo) — SQLite has no busy-timeout/WAL here, so a
+    # concurrent writer intermittently trips "database is locked" and the
+    # turn surfaces as an unhandled execution error instead of `final`.
+    real_config_file = (
+        Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
+    )
+    config_payload = yaml.safe_load(real_config_file.read_text(encoding="utf-8"))
+    config_payload["storage"]["postgres"]["sqlite_path"] = str(
+        tmp_path / "runtime.sqlite3"
+    )
+    config_file = tmp_path / "configuration.yaml"
+    config_file.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
+
     offline_mcp_catalog = tmp_path / "mcp_catalog.yaml"
     offline_mcp_catalog.write_text(
         # Every id any registered template names in `default_mcp_servers` must
@@ -479,6 +497,63 @@ def test_fred_test_assistant_model_probe_uses_operation_aware_routing(
     assert "operation **`routing`**" in str(payloads[-1]["content"])
     assert "Routing probe model response." in str(payloads[-1]["content"])
     assert "routing" in factory.requested_operations
+
+
+def test_routing_probe_alpha_and_beta_register_as_distinct_agents_and_stream(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Verify both routing-probe identities register under distinct agent_ids
+    from one shared `RoutingProbeGraphAgent` class, and that a real streamed
+    turn on one of them runs all three phases end to end (#2267).
+
+    Why this test exists:
+    - the two probes are the first agents in this pod built by instantiating
+      one class twice with different `agent_id`s rather than subclassing —
+      this proves that pattern registers and executes cleanly through the
+      real FastAPI app, not just via the unit-level fakes in
+      test_routing_probe_graph.py
+
+    How to use it:
+    - run via `make test` from the `fred-agents` project
+    """
+
+    factory = RecordingStaticChatModelFactory(
+        ToolFriendlyFakeChatModel(responses=[AIMessage(content="Phase confirmed.")])
+    )
+    app = _build_offline_agents_app(monkeypatch, tmp_path, factory)
+
+    with TestClient(app) as client:
+        registered = client.get("/fred/agents/v2/agents").json()
+        assert "fred.github.routing_probe_alpha" in registered
+        assert "fred.github.routing_probe_beta" in registered
+
+        template_ids = {
+            template["template_agent_id"]
+            for template in client.get("/fred/agents/v2/agents/templates").json()
+        }
+        assert "fred.github.routing_probe_alpha" in template_ids
+        assert "fred.github.routing_probe_beta" in template_ids
+
+        stream_response = client.post(
+            "/fred/agents/v2/agents/execute/stream",
+            json={
+                "agent_id": "fred.github.routing_probe_alpha",
+                "input": "hello",
+                "session_id": "routing-probe-alpha-session",
+                "runtime_context": {"user_id": "routing-probe-user"},
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = _parse_sse_payloads(stream_response.text)
+    assert payloads
+    assert not any("error" in payload for payload in payloads)
+    final_content = str(payloads[-1]["content"])
+    assert "Routing" in final_content
+    assert "Planning" in final_content
+    assert "Execution" in final_content
+    assert factory.requested_operations == ["routing", "planning", "execution"]
 
 
 def test_mindmap_prompt_files_load_from_packaged_module() -> None:

@@ -32,7 +32,6 @@ from __future__ import annotations
 import io
 import json
 
-import fred_capability_ppt_filler.fill as fill_mod
 import pytest
 from deck_builders import (
     IMAGE_NOTES,
@@ -45,6 +44,7 @@ from deck_builders import (
     schema_slides,
     webp_bytes,
 )
+from fred_capability_ppt_filler import fill as fill_mod
 from fred_capability_ppt_filler.capability import (
     PPT_FILLER_TEMPLATE_KEY,
     PptFillerConfig,

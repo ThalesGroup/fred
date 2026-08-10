@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import TeamSelectionNavbar from "./TeamSelectionNavbar/TeamSelectionNavbar.tsx";
+import MainNavBar from "./MainNavBar/MainNavBar.tsx";
+import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
@@ -23,6 +24,7 @@ export default function Sidebar() {
   const { pathname } = useLocation();
 
   const getSidebarMode = (): SidebarMode => {
+    if (pathname.startsWith("/home")) return "HOME";
     if (pathname.startsWith("/marketplace")) return "MARKETPLACE";
     if (pathname.startsWith("/admin")) return "ADMIN";
     return "TEAM";
@@ -31,9 +33,10 @@ export default function Sidebar() {
 
   return (
     <div className={styles["sidebar-container"]}>
-      <div className={styles["team-selection-container"]}>
-        <TeamSelectionNavbar />
+      <div className={styles["main-nav-bar-container"]}>
+        <MainNavBar />
       </div>
+      {sidebarMode === "HOME" && <HomeNavPanel />}
       {sidebarMode === "TEAM" && <TeamContentNavbar />}
       {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
       {sidebarMode === "ADMIN" && <AdminNavbar />}
@@ -44,4 +47,4 @@ export default function Sidebar() {
   );
 }
 
-type SidebarMode = "TEAM" | "MARKETPLACE" | "ADMIN";
+type SidebarMode = "HOME" | "TEAM" | "MARKETPLACE" | "ADMIN";

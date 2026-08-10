@@ -1,7 +1,7 @@
 // NOT GENERATED. Safe to edit.
 import {
   controlPlaneApi as api,
-  UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg,
+  UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg,
 } from "./controlPlaneOpenApi";
 
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
@@ -130,13 +130,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: "LIST" },
       ],
     },
-    uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: {
-      query: (queryArg: UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg) => {
+    uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: {
+      query: (queryArg: UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg) => {
         const formData = new FormData();
-        formData.append("file", queryArg.bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost.file);
+        formData.append("file", queryArg.bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost.file);
 
         return {
-          url: `/control-plane/v1/teams/${queryArg.teamId}/banner`,
+          url: `/control-plane/v1/teams/${queryArg.teamId}/avatar`,
           method: "POST",
           body: formData,
         };
@@ -184,6 +184,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
+    },
+    // Agent templates' `available_capabilities` is what the agent edit
+    // form's "Capacités incluses" indicators read to decide whether a
+    // capability is available (green) or missing (red). This query carried
+    // no tags at all, so an admin enabling/disabling a capability never
+    // refreshed it — the cached list just sat there (up to
+    // `keepUnusedDataFor`, since `controlPlaneApi` has no
+    // refetchOnMount/Focus either) showing capabilities as missing that had
+    // just been turned on, until a full page reload wiped the whole store.
+    // Tagging it the same way the admin catalog query is tagged closes that
+    // gap for every consumer, not just the agent form (evaluation run
+    // creation reads the same field from the same query).
+    getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
     // Agent instances. `controlPlaneApi` has no refetchOnMount/Focus, so a
     // cached list only refreshes through tags. The managed chat reads this
@@ -294,7 +308,7 @@ export const {
   useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
-  useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation: useUploadTeamBannerMutation,
+  useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,
   useSearchCandidateTeamMembersControlPlaneV1TeamsTeamIdCandidateMembersGetQuery: useSearchCandidateTeamMembersQuery,
@@ -329,7 +343,6 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
-  useHandlerControlPlaneV1KpiPresetsTeamActivitySummaryGetQuery: useTeamActivitySummaryQuery,
   // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,

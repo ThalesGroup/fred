@@ -248,6 +248,24 @@ profiles:
         base_url: http://localhost:8383/v1
         api_key: key-1 # pragma: allowlist secret (fake key for the local mock server)
 
+  - profile_id: mock.chat.gpt4o
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-4o
+      settings:
+        base_url: http://localhost:8383/v1
+        api_key: key-1  # pragma: allowlist secret
+
+  - profile_id: mock.chat.latest
+    capability: chat
+    model:
+      provider: openai
+      name: chatgpt-4o-latest
+      settings:
+        base_url: http://localhost:8383/v1
+        api_key: key-1  # pragma: allowlist secret
+
   - profile_id: chat.anthropic.claude-sonnet
     capability: chat
     description: "Claude Sonnet 4.6 via Synapse Gateway (Anthropic-native). Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY in .env."

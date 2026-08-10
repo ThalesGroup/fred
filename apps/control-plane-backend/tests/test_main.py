@@ -829,6 +829,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "member_count": 1,
             "admins": [],
             "is_member": True,
+            "my_relations": ["team_editor"],
             "joining_mode": "invite_only",
             "visibility": "public",
             "max_resources_storage_size": 5368709120,
@@ -5174,12 +5175,15 @@ async def test_update_team_checks_can_update_info_permission(
             json={
                 "description": "Updated description",
                 "joining_mode": "open",
-                "banner_image_url": "https://example.test/banner.webp",
+                "avatar_image_url": "https://example.test/banner.webp",
             },
         )
 
     assert resp.status_code == 200
     assert captured_permissions == [[TeamPermission.CAN_UPDATE_INFO]]
+    # #2300 Option A: the public field is `avatar_image_url`, but update_team
+    # bridges it to the storage layer's legacy `banner_image_url` before the
+    # patch reaches the store — so the store still records `banner_image_url`.
     assert fake_metadata_store.calls == [
         (
             "thales",
@@ -5383,7 +5387,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
             return "https://example.test/banner.png"
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
-        return {}, {}
+        return {}, {}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {}
@@ -5436,7 +5440,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     assert len(teams) == 1
     assert teams[0].description == "desc"
     assert teams[0].joining_mode == JoiningMode.OPEN
-    assert teams[0].banner_image_url == "https://example.test/banner.png"
+    assert teams[0].avatar_image_url == "https://example.test/banner.png"
 
 
 @pytest.mark.asyncio
@@ -5457,7 +5461,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
         members = {"user-1", "marc"}
-        return {"team-1": members}, {"team-1": members}
+        return {"team-1": members}, {"team-1": members}, {"team-1": set()}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {
@@ -5507,7 +5511,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
 
 
 @pytest.mark.asyncio
-async def test_upload_team_banner_checks_can_update_info_permission(
+async def test_upload_team_avatar_checks_can_update_info_permission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _FakeContentStore:
@@ -5552,7 +5556,7 @@ async def test_upload_team_banner_checks_can_update_info_permission(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/control-plane/v1/teams/thales/banner",
+            "/control-plane/v1/teams/thales/avatar",
             files={"file": ("banner.png", b"\x89PNG\r\n\x1a\nbanner", "image/png")},
         )
 
@@ -5560,7 +5564,7 @@ async def test_upload_team_banner_checks_can_update_info_permission(
     assert captured_permissions == [[TeamPermission.CAN_UPDATE_INFO]]
     assert len(fake_content_store.calls) == 1
     object_key, uploaded_payload, uploaded_content_type = fake_content_store.calls[0]
-    assert object_key.startswith("teams/thales/banner-")
+    assert object_key.startswith("teams/thales/avatar-")
     assert object_key.endswith(".png")
     assert uploaded_content_type == "image/png"
     assert uploaded_payload.startswith(b"\x89PNG\r\n\x1a\n")
@@ -5570,7 +5574,7 @@ async def test_upload_team_banner_checks_can_update_info_permission(
 
 
 @pytest.mark.asyncio
-async def test_upload_team_banner_rejects_invalid_content_type(
+async def test_upload_team_avatar_rejects_invalid_content_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
@@ -5586,7 +5590,7 @@ async def test_upload_team_banner_rejects_invalid_content_type(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/control-plane/v1/teams/thales/banner",
+            "/control-plane/v1/teams/thales/avatar",
             files={"file": ("banner.txt", b"not-an-image", "text/plain")},
         )
 
@@ -5595,7 +5599,7 @@ async def test_upload_team_banner_rejects_invalid_content_type(
 
 
 @pytest.mark.asyncio
-async def test_upload_team_banner_rejects_file_too_large(
+async def test_upload_team_avatar_rejects_file_too_large(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
@@ -5612,7 +5616,7 @@ async def test_upload_team_banner_rejects_file_too_large(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/control-plane/v1/teams/thales/banner",
+            "/control-plane/v1/teams/thales/avatar",
             files={"file": ("banner.png", too_large_payload, "image/png")},
         )
 

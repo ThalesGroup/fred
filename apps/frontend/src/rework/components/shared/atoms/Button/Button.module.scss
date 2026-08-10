@@ -77,7 +77,8 @@
   --btn-outline: var(--on-surface);
 }
 
-.btn-xs {
+/* 24px tier, formerly `.btn-xs` (renamed #2298); Button uses `small` for 32px. */
+.btn-2xs {
   height: 1.5rem;
   --gap: var(--spacing-3xs);
 }
@@ -92,7 +93,7 @@
   --gap: var(--spacing-xs);
 }
 
-.btn-xs .state-layer.icon-none {
+.btn-2xs .state-layer.icon-none {
   --spacing-right: var(--spacing-xs);
   --spacing-left: var(--spacing-xs);
 }
@@ -107,7 +108,7 @@
   --spacing-left: var(--spacing-m);
 }
 
-.btn-xs .state-layer.icon-left {
+.btn-2xs .state-layer.icon-left {
   --spacing-right: var(--spacing-xs);
   --spacing-left: var(--spacing-2xs);
 }

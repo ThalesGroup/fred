@@ -150,7 +150,7 @@ export function DocRow({
             <Button
               color="on-surface"
               variant="outlined"
-              size="xs"
+              size="2xs"
               icon={{ category: "outlined", type: "auto_awesome" }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -184,7 +184,7 @@ export function DocRow({
                 <span key={searchable ? "searchable" : "excluded"} className={styles.searchableToggle}>
                   <IconButton
                     variant="icon"
-                    size="xs"
+                    size="2xs"
                     icon={{ category: "outlined", type: searchable ? "visibility" : "visibility_off" }}
                     aria-label={searchable ? t("documentLibrary.makeExcluded") : t("documentLibrary.makeSearchable")}
                     title={searchable ? t("documentLibrary.makeExcluded") : t("documentLibrary.makeSearchable")}
@@ -198,7 +198,7 @@ export function DocRow({
               {onDownload && (
                 <IconButton
                   variant="icon"
-                  size="xs"
+                  size="2xs"
                   icon={{ category: "outlined", type: "download" }}
                   aria-label={t("rework.resources.action.download")}
                   title={t("rework.resources.action.download")}
@@ -211,7 +211,7 @@ export function DocRow({
               {onDelete && (
                 <IconButton
                   variant="icon"
-                  size="xs"
+                  size="2xs"
                   icon={{ category: "outlined", type: "delete" }}
                   aria-label={t("rework.resources.action.delete")}
                   title={t("rework.resources.action.delete")}

@@ -81,6 +81,14 @@ class DocumentTreeResult(BaseModel):
     truncated: bool
 
 
+class ExtractDocumentResult(BaseModel):
+    document_uid: str
+    extraction: str = ""
+    item_count: int = 0
+    chunks_processed: int = 0
+    truncated: bool = False
+
+
 class KfDocumentClient(KfBaseClient):
     """
     Authenticated client for Knowledge Flow's document surface: raw-content
@@ -140,6 +148,28 @@ class KfDocumentClient(KfBaseClient):
             filename=filename,
             size=len(content),
         )
+
+    async def fetch_markdown(self, *, document_uid: str) -> str:
+        """Fetch a document's FULL parsed markdown (``output.md``) by uid.
+
+        Wire format (matches controller):
+          GET /markdown/{document_uid}
+          -> {"content": "<full markdown text>"}
+
+        Returns the whole document verbatim; the adapter owns pagination (this
+        client stays wire-format only). Knowledge Flow's per-document ReBAC
+        gates the read.
+        """
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path=f"/markdown/{document_uid}",
+            phase_name="kf_document_markdown_fetch",
+        )
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, dict):
+            return str(data.get("content", ""))
+        return str(data)
 
     async def tree(
         self,
@@ -211,3 +241,27 @@ class KfDocumentClient(KfBaseClient):
         )
         r.raise_for_status()
         return SummarizeDocumentResult.model_validate(r.json())
+
+    async def extract(
+        self,
+        *,
+        document_uid: str,
+        instruction: str,
+    ) -> ExtractDocumentResult:
+        """
+        Wire format (matches controller):
+          POST /documents/{document_uid}/extract
+          { "instruction": str }
+
+        Exhaustive server-side map-reduce over the whole document — long-running,
+        so it uses the same extended read timeout as summarize.
+        """
+        r = await self._request_with_token_refresh(
+            method="POST",
+            path=f"/documents/{document_uid}/extract",
+            phase_name="kf_document_extract",
+            json={"instruction": instruction},
+            read_timeout=self._summarize_read_timeout,
+        )
+        r.raise_for_status()
+        return ExtractDocumentResult.model_validate(r.json())

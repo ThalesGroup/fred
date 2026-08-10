@@ -25,7 +25,7 @@ To add cache invalidation for auto-generated endpoints:
 1. Add the tag type to `knowledgeFlowApi.ts`:
 
    ```typescript
-   tagTypes: ["BenchRun", "Team", "YourNewTag"];
+   tagTypes: ["Team", "TeamMember", "YourNewTag"];
    ```
 
 2. Enhance endpoints in `knowledgeFlowApiEnhancements.ts`:

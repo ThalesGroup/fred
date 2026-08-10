@@ -152,7 +152,9 @@ from ..integrations.v2_runtime.adapters import (
     AgentConfigAssetsAdapter,
     CompositeToolInvoker,
     DocumentContentAdapter,
+    DocumentExtractionAdapter,
     DocumentFolderAdapter,
+    DocumentMarkdownAdapter,
     DocumentSearchAdapter,
     DocumentSummarizeAdapter,
     DocumentTreeAdapter,
@@ -349,6 +351,7 @@ def _execute_response_adapter() -> TypeAdapter[Any]:
     cache = _execute_response_adapter_cache
     if cache is None or cache[0] is not union_token:
         cache = (union_token, TypeAdapter(RuntimeEvent | _RuntimeErrorPayload))
+        # codeql[py/unused-global-variable]
         _execute_response_adapter_cache = cache
     return cache[1]
 
@@ -752,6 +755,18 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    # Paginated full-markdown read (DOCREAD-01): powers document_verbatim,
+    # same private-binding doctrine.
+    document_markdown = DocumentMarkdownAdapter(
+        binding=binding,
+        settings=settings,
+    )
+    # Server-side exhaustive extraction (DOCREAD-01 Phase 2): powers
+    # document_extract's single-call path.
+    document_extraction = DocumentExtractionAdapter(
+        binding=binding,
+        settings=settings,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
@@ -811,6 +826,8 @@ def _build_runtime_services(
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
         document_tree=document_tree,
         document_summarize=document_summarize,
+        document_markdown=document_markdown,
+        document_extraction=document_extraction,
     )
 
 
@@ -2167,11 +2184,15 @@ async def _write_turn_history(
                 )
 
         elif kind == "awaiting_human":
-            # Store the full HITL gate definition — question and all choices —
-            # so audit logs and UI replay have the complete structured record.
+            # Store the full HITL gate definition — question, all choices, and
+            # the resume identity (interrupt_id/checkpoint_id/pending_calls) —
+            # so audit logs and UI replay have the complete structured record
+            # AND a reload while the gate is still open can reconstruct a
+            # working (not just readable) prompt.
             req = payload.get("request", {})
             question = req.get("question") or req.get("title") or "HITL pause"
             raw_choices = req.get("choices") or []
+            raw_pending_calls = req.get("pending_calls") or []
             messages.append(
                 make_hitl_request(
                     session_id,
@@ -2188,6 +2209,18 @@ async def _write_turn_history(
                     ],
                     stage=req.get("stage"),
                     title=req.get("title"),
+                    free_text=bool(req.get("free_text")),
+                    interrupt_id=req.get("interrupt_id"),
+                    checkpoint_id=req.get("checkpoint_id"),
+                    pending_calls=[
+                        {
+                            "tool_call_id": c.get("tool_call_id", ""),
+                            "tool_name": c.get("tool_name", ""),
+                            "args_preview": c.get("args_preview", ""),
+                        }
+                        for c in raw_pending_calls
+                        if isinstance(c, dict)
+                    ],
                 )
             )
             rank += 1

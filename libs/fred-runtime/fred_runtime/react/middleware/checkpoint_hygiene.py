@@ -90,7 +90,7 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
         # this (p = 1.7e-4). Raw reasoning blocks are still never replayed.
         messages = thread_reasoning_within_open_turn(messages)
         response = await handler(
-            request.override(messages=cast("list[AnyMessage]", messages))
+            request.override(messages=cast(list[AnyMessage], messages))
         )
         self._attach_tool_outputs(response, request)
         return response
