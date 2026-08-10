@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Drive a document's stuck processing stages to `failed` (GitHub #2279).
+"""Repair a document's surface when its ingestion ends outside the worker.
+
+Two cases share this module:
+  - executor-issued failure (GitHub #2279): drive the stuck `in_progress`
+    stages to `failed` so the UI stops reading "processing" forever;
+  - user-requested cancellation (GitHub #2315): erase the half-built document
+    entirely (content, vectors, tabular artifacts, metadata row, quota).
 
 Why this exists:
     A processing stage is persisted `in_progress` *before* the work starts
@@ -112,20 +118,72 @@ async def mark_in_progress_stages_failed(document_uid: str, error_message: str) 
     return True
 
 
-async def on_reconciled_terminal(run: "TaskRunRow", state: TaskState, message: str) -> None:
-    """`TaskService.on_reconciled_terminal` hook: fail the document's stuck stages.
+async def delete_cancelled_document(document_uid: str, created_by: str | None) -> bool:
+    """Erase every trace of a deliberately cancelled ingestion (GitHub #2315).
 
-    Only `failed` is acted on. A `cancelled` task is a user-requested stop, and
-    reconciliation already keeps those out of the failure counts
-    (`TaskService._reconciled_terminal`); painting the document red for a
-    deliberate cancellation would contradict that.
+    A cancelled first ingestion leaves a half-built document behind: raw bytes
+    in the content store, possibly vectors or tabular artifacts, and a metadata
+    row whose stages read `in_progress`. The product decision (#2315) is that a
+    user-requested stop means "as if it was never uploaded", so this reuses the
+    one strong-delete path — `MetadataService.delete_document_and_artifacts` —
+    which removes content, vectors, tabular artifacts and the metadata row, and
+    releases the storage quota, in the same order as a user-initiated delete.
+
+    Identity: the deletion runs as the task's creator (the uploader), so both
+    the ReBAC DELETE check and the quota release act on the right principal;
+    the internal admin identity is the fallback only when the run predates
+    creator tracking.
+
+    Known best-effort gap: the worker thread behind a cancelled activity cannot
+    be killed (`asyncio.to_thread`), so a write racing this deletion can leave
+    an orphan vector/content entry. Those are exactly what the corpus audit
+    tooling (`MetadataService.audit_stores`) reports.
+
+    Never raises. On any failure it degrades to marking the stuck stages
+    `failed`, so the document reads "failed" rather than processing forever.
     """
-    if state != TaskState.failed:
-        return
+    try:
+        from fred_core import NO_AUTHZ_CHECK_USER, KeycloakUser
+
+        from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
+
+        user = KeycloakUser(uid=created_by, username="ingestion-cancel-cleanup", roles=[], email=None) if created_by else NO_AUTHZ_CHECK_USER
+        try:
+            await MetadataService().delete_document_and_artifacts(user, document_uid)
+        except MetadataNotFound:
+            # Cancelled before registration finished — nothing was built, so
+            # there is nothing to clean.
+            logger.info("[DOC-CANCEL] document_uid=%s has no metadata; nothing to clean", document_uid)
+            return True
+        logger.info("[DOC-CANCEL] document_uid=%s fully deleted after cancelled ingestion", document_uid)
+        return True
+    except Exception:
+        logger.warning(
+            "[DOC-CANCEL] full cleanup failed for document_uid=%s — marking stages failed instead",
+            document_uid,
+            exc_info=True,
+        )
+        await mark_in_progress_stages_failed(document_uid, "Ingestion cancelled; automatic cleanup failed")
+        return False
+
+
+async def on_reconciled_terminal(run: "TaskRunRow", state: TaskState, message: str) -> None:
+    """`TaskService.on_reconciled_terminal` hook: repair the document's surface.
+
+    - `failed` (executor verdict: timed out, terminated, lost): the document
+      stays, with its stuck stages driven to `failed` so the UI stops reading
+      "processing" forever (#2279).
+    - `cancelled` (user-requested stop): the half-built document is deleted
+      entirely — content, vectors, metadata, quota (#2315). A deliberate stop
+      must not leave a red row behind, and it must not leave artifacts either.
+    """
     target = run.target or {}
     if target.get("type") != "document":
         return
     document_uid = target.get("id")
     if not document_uid:
         return
-    await mark_in_progress_stages_failed(document_uid, message)
+    if state == TaskState.failed:
+        await mark_in_progress_stages_failed(document_uid, message)
+    elif state == TaskState.cancelled:
+        await delete_cancelled_document(document_uid, run.created_by)

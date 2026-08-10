@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fred_core import (
@@ -12,12 +15,27 @@ from fred_core.tasks.authz import (
     authorize_task_stream,
     list_tasks_scoped,
 )
-from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse
+from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse, TaskState
 from fred_core.tasks.service import TaskNotAcknowledgeableError, TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
 from fred_core.tasks.store import TaskNotFoundError
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
+
+logger = logging.getLogger(__name__)
+
+# Fast-path convergence after a user-requested cancel (#2315): the OPS-04
+# sweeper would only reconcile the task after its grace window plus one sweep
+# interval (up to ~7 min), during which the row keeps reading "processing" and
+# the half-built document's cleanup hasn't run. Polling `reconcile_task` until
+# the executor reports the workflow closed drives the exact same reconciliation
+# path (terminal event + `on_reconciled_terminal` cleanup) within seconds of
+# the workflow actually stopping. The sweeper remains the durable backstop —
+# an API restart or timeout here loses nothing.
+_POST_CANCEL_RECONCILE_TIMEOUT_S = 180.0
+_POST_CANCEL_RECONCILE_POLL_S = 3.0
+# Strong refs so in-flight pollers aren't garbage-collected mid-loop.
+_post_cancel_tasks: set[asyncio.Task] = set()
 
 
 class TasksController:
@@ -82,6 +100,8 @@ class TasksController:
                 raise HTTPException(status_code=404, detail="Task not found")
             await authorize_task_mutation(user, run, get_rebac_engine())
             await self._service.cancel(task_id)
+            if run.execution_id:
+                self._schedule_post_cancel_reconcile(task_id)
             return {"task_id": task_id}
 
         @router.post(
@@ -107,3 +127,42 @@ class TasksController:
                 raise HTTPException(status_code=404, detail="Task not found")
             except TaskNotAcknowledgeableError:
                 raise HTTPException(status_code=409, detail="Task does not currently need attention")
+
+    def _schedule_post_cancel_reconcile(self, task_id: str) -> None:
+        task = asyncio.create_task(self._reconcile_after_cancel(task_id))
+        _post_cancel_tasks.add(task)
+        task.add_done_callback(_post_cancel_tasks.discard)
+
+    async def _reconcile_after_cancel(self, task_id: str) -> None:
+        """Poll until the cancelled workflow's closure is reflected on the task.
+
+        `reconcile_task` returns False while the executor still reports the
+        workflow as running (cancellation is cooperative) and True once it drove
+        the task terminal — which also fires the `on_reconciled_terminal`
+        cleanup. Every error is swallowed: this is an accelerator, the sweeper
+        owns correctness.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _POST_CANCEL_RECONCILE_TIMEOUT_S
+        while loop.time() < deadline:
+            await asyncio.sleep(_POST_CANCEL_RECONCILE_POLL_S)
+            try:
+                run = await self._service.get_run(task_id)
+                if run is None or TaskState(run.state).is_terminal:
+                    # The worker-side compensation (`emit_ingestion_task_event`
+                    # with state `cancelled`) already closed the task — and ran
+                    # the document cleanup with it. Nothing left to reconcile.
+                    return
+                if await self._service.reconcile_task(task_id):
+                    return
+            except Exception:
+                logger.warning(
+                    "[TASKS] post-cancel reconcile poll failed for task_id=%s; leaving it to the sweeper",
+                    task_id,
+                    exc_info=True,
+                )
+                return
+        logger.info(
+            "[TASKS] post-cancel reconcile timed out for task_id=%s; sweeper will finish it",
+            task_id,
+        )

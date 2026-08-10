@@ -26,6 +26,7 @@ from __future__ import annotations
 import pytest
 
 from knowledge_flow_backend.features.scheduler.workflow import (
+    _wf_exception_is_cancellation,
     _wf_final_revectorize_state,
     _wf_scope_resolution_failed_event_args,
     _wf_should_skip_revectorize,
@@ -82,3 +83,30 @@ def test_scope_resolution_failed_event_args_carries_the_real_exception_text() ->
 def test_scope_resolution_failed_event_args_falls_back_when_exception_has_no_message() -> None:
     args = _wf_scope_resolution_failed_event_args(RuntimeError(), "task-1")
     assert args[4] == "Failed to resolve revectorize scope"
+
+
+# ── #2315: telling a user cancel apart from a real failure in compensation ────
+
+
+def test_cancellation_detected_through_child_workflow_error_cause_chain() -> None:
+    # The real shape observed in production: cancelling the parent surfaces as
+    # ChildWorkflowError("Child Workflow execution cancelled") whose cause is a
+    # Temporal CancelledError — a plain Exception, invisible to `except`-level
+    # type checks without walking the chain.
+    from temporalio.exceptions import CancelledError as TemporalCancelledError
+
+    child_error = RuntimeError("Child Workflow execution cancelled")
+    child_error.__cause__ = TemporalCancelledError("cancelled")
+    assert _wf_exception_is_cancellation(child_error) is True
+
+
+def test_plain_failure_is_not_a_cancellation() -> None:
+    assert _wf_exception_is_cancellation(RuntimeError("worker exploded")) is False
+    assert _wf_exception_is_cancellation(None) is False
+
+
+def test_cancellation_cause_chain_walk_is_bounded() -> None:
+    # A pathological self-referencing cause chain must not loop forever.
+    error = RuntimeError("a")
+    error.__cause__ = error
+    assert _wf_exception_is_cancellation(error) is False

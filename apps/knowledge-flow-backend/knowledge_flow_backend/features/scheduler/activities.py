@@ -237,6 +237,22 @@ async def emit_ingestion_task_event(
 
         await mark_in_progress_stages_failed(document_uid, error or "Processing failed")
 
+    # #2315: a user-requested cancel means "as if never uploaded" -- erase the
+    # half-built document (content, vectors, tabular, metadata, quota) instead
+    # of leaving a red row. Runs worker-side so the list updates within seconds;
+    # API-side reconciliation (`document_failure.on_reconciled_terminal`) is the
+    # durable backstop when no worker is around to run this compensation.
+    if TaskState(state) == TaskState.cancelled and document_uid:
+        from knowledge_flow_backend.features.scheduler.document_failure import delete_cancelled_document
+
+        created_by: str | None = None
+        try:
+            run = await task_service.get_run(task_id)
+            created_by = run.created_by if run is not None else None
+        except Exception:
+            logger.warning("[SCHEDULER][ACTIVITY] could not resolve task creator for task_id=%s", task_id, exc_info=True)
+        await delete_cancelled_document(document_uid, created_by)
+
 
 @activity.defn
 async def fast_store_vectors(payload: dict) -> dict:
