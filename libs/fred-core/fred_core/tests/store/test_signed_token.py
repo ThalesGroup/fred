@@ -69,7 +69,7 @@ def test_tampered_signature_is_rejected():
 
 def test_token_minted_with_another_secret_is_rejected():
     token = make_signed_token([KEY], secret=SECRET, ttl_seconds=60, now=T0)
-    assert verify_signed_token(token, [KEY], secret="another-key", now=T0) is False  # nosec B106
+    assert verify_signed_token(token, [KEY], secret="another-key", now=T0) is False  # nosec B106  # pragma: allowlist secret
 
 
 @pytest.mark.parametrize("bad", ["", "garbage", "no-dot-here", "x.y", "999"])

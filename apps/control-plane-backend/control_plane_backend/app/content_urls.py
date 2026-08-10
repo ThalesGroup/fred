@@ -38,8 +38,8 @@ def build_content_url_resolver(
 ) -> ContentUrlResolver:
     """Return the resolver matching the configured `content_storage.url_strategy`.
 
-    Raises:
-        MissingSigningSecretError: `proxy` strategy with no signing key configured.
+    Raises `MissingSigningSecretError` when the strategy is `proxy` and no signing
+    key is configured for this application.
     """
 
     strategy = configuration.storage.content_storage.url_strategy

@@ -8900,3 +8900,81 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
     assert thales_row.admins == 1
     assert thales_row.agents == 2
     assert thales_row.prompts == 3
+
+
+@pytest.mark.asyncio
+async def test_object_proxy_is_mounted_and_serves_only_a_valid_signature(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`url_strategy=proxy` mounts the signed object proxy; `presigned` must not.
+
+    Covers the app-factory wiring end to end (CONTENT-URL-STRATEGY, #2318): the
+    route only exists in `proxy` mode, and even then the signature is the whole
+    authorization decision — there is no bearer token on an `<img>` request.
+    """
+    from io import BytesIO
+
+    from control_plane_backend.config.loader import load_configuration
+    from control_plane_backend.config.models import LocalContentStorageConfig
+    from fred_core.store import LocalContentStore, make_signed_token
+
+    secret = "proxy-mount-test-key"  # nosec B105  # pragma: allowlist secret
+    key = "teams/team-1/avatar-1.png"
+
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+    monkeypatch.setenv("CONTROL_PLANE_CONTENT_URL_SECRET", secret)
+    configuration = load_configuration()
+    configuration.storage.content_storage = LocalContentStorageConfig(
+        root_path=str(tmp_path), url_strategy="proxy"
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.main.load_configuration", lambda: configuration
+    )
+
+    LocalContentStore(root_path=str(tmp_path)).put_object(
+        key, BytesIO(b"avatar-bytes"), content_type="image/png"
+    )
+    app = create_app()
+    token = make_signed_token([key], secret=secret, ttl_seconds=60)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        served = await client.get(f"/control-plane/v1/objects/{key}?token={token}")
+        refused = await client.get(f"/control-plane/v1/objects/{key}?token=forged")
+
+    assert served.status_code == 200
+    assert served.content == b"avatar-bytes"
+    assert served.headers["cache-control"].startswith("private, max-age=")
+    assert refused.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_object_proxy_is_absent_under_the_presigned_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No dormant unauthenticated route in `presigned` mode (RFC §2.4)."""
+    from control_plane_backend.config.loader import load_configuration
+    from control_plane_backend.config.models import LocalContentStorageConfig
+
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+    configuration = load_configuration()
+    configuration.storage.content_storage = LocalContentStorageConfig(
+        root_path=str(tmp_path)
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.main.load_configuration", lambda: configuration
+    )
+
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/control-plane/v1/objects/teams/team-1/avatar.png")
+
+    # 404, not 403: the route does not exist at all. Asserted through a request
+    # because FastAPI keeps an included router as one nested `app.routes` entry,
+    # so scanning paths there passes whether or not the route is mounted.
+    assert configuration.storage.content_storage.url_strategy == "presigned"
+    assert response.status_code == 404

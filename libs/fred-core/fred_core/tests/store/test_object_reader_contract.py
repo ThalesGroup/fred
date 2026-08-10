@@ -34,7 +34,9 @@ _STORES = [LocalContentStore, MinioContentStore, GcsContentStore]
 @pytest.mark.parametrize("store_class", _STORES, ids=lambda cls: cls.__name__)
 def test_store_implements_the_object_reader_interface(store_class: type) -> None:
     for method in ("stat_object", "get_object_stream"):
-        assert callable(getattr(store_class, method, None)), f"{store_class.__name__}.{method} is missing"
+        assert callable(getattr(store_class, method, None)), (
+            f"{store_class.__name__}.{method} is missing"
+        )
 
     parameters = inspect.signature(store_class.get_object_stream).parameters
     assert {"key", "start", "length"} <= set(parameters)
