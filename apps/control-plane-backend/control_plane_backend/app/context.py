@@ -35,9 +35,9 @@ from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.app.content_urls import build_content_url_resolver
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
-from control_plane_backend.app.content_urls import build_content_url_resolver
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )

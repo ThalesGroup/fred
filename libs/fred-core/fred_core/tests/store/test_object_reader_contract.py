@@ -25,7 +25,6 @@ from __future__ import annotations
 import inspect
 
 import pytest
-
 from fred_core.store import GcsContentStore, LocalContentStore, MinioContentStore
 
 _STORES = [LocalContentStore, MinioContentStore, GcsContentStore]

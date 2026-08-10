@@ -23,7 +23,6 @@ from typing import BinaryIO, Optional
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-
 from fred_core.store.base_content_store import ObjectInfo
 from fred_core.store.object_proxy_router import build_object_proxy_router
 from fred_core.store.signed_token import make_signed_token

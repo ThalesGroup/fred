@@ -20,7 +20,6 @@ from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-
 from fred_core.store.content_url_resolver import ContentUrlResolver
 from fred_core.store.signed_token import verify_signed_token
 

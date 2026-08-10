@@ -24,11 +24,11 @@ from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ObjectReader, build_object_proxy_router, read_signing_secret
 from pydantic import BaseModel
 
-from control_plane_backend.app.content_urls import CONTENT_URL_SECRET_ENV
 from control_plane_backend.app.container import (
     build_application_container,
     initialize_shared_stores,
 )
+from control_plane_backend.app.content_urls import CONTENT_URL_SECRET_ENV
 from control_plane_backend.app.dependencies import (
     attach_application_container,
     get_application_configuration,

@@ -21,7 +21,6 @@ import hashlib
 import hmac
 
 import pytest
-
 from fred_core.store.signed_token import (
     MissingSigningSecretError,
     make_signed_token,
