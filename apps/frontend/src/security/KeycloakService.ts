@@ -17,8 +17,47 @@ import Keycloak, { KeycloakInstance } from "keycloak-js";
 let keycloakInstance: KeycloakInstance | null = null;
 let isSecurityEnabled = false;
 
+// keycloak-js's own floor: `updateToken` does `minValidity = minValidity || 5`,
+// so 0 does NOT mean "don't check" — it means five seconds. `isTokenExpired`
+// disagrees (0 is falsy there and subtracts nothing), so any threshold we test
+// must be coerced the same way before the two are compared.
+const KEYCLOAK_MIN_VALIDITY_FLOOR_S = 5;
+// keycloak-js's sentinel for "refresh regardless of what the token looks like"
+// (`if (minValidity == -1) { refreshToken = true; }`). The only force path it
+// offers.
+const KEYCLOAK_FORCE_REFRESH = -1;
+// Work rank for a forced refresh: strictly above any headroom threshold, so a
+// forced caller never reuses another chain and every other caller may reuse a
+// forced one (it produces a full-lifetime token).
+const KEYCLOAK_FORCE_WORK = Number.POSITIVE_INFINITY;
+
 // single-flight so concurrent calls don’t trigger multiple refreshes
 let refreshInFlight: Promise<boolean> | null = null;
+// True once keycloak-js has ended the session itself (clearToken → onAuthLogout,
+// e.g. after a refresh answered HTTP 400). Distinguishes "session died" from
+// "not logged in yet": keycloak-js sets `authenticated = false` in BOTH states,
+// so the fields alone cannot tell them apart, and GetTokenSecondsLeft must
+// report the first as dead (0) without reporting app bootstrap the same way.
+// Reset when a refreshed token is stored; a full login resets it with the page.
+let sessionDied = false;
+
+// The ONE owner of "the persisted token dies with the session". Every path
+// that ends a session (keycloak-js's own clearToken via onAuthLogout, Logout,
+// CallLogout) must go through this — a teardown path that skips it leaves an
+// orphaned bearer that GetToken()'s localStorage fallback will re-present and
+// the backend will accept via offline JWT validation.
+const clearPersistedToken = () => {
+  authEpoch += 1;
+  localStorage.removeItem("keycloak_token");
+};
+// The headroom the in-flight refresh was started with. A caller needing MORE
+// headroom cannot reuse a weaker in-flight check: a turn preflight asking for
+// 120 s would otherwise inherit an ordinary fetch's 30 s check and be told
+// "fresh" with only 30 s of validity.
+let refreshInFlightWork = 0;
+// Bumped whenever the session is deliberately torn down, so a refresh that
+// settles afterwards can tell it has been superseded.
+let authEpoch = 0;
 
 // keycloak-js's updateToken() has no built-in timeout — a dropped connection
 // or unresponsive Keycloak leaves it pending forever. Since `refreshInFlight`
@@ -137,6 +176,17 @@ export function createKeycloakInstance(keycloak_url: string, keycloak_client_id:
 
     keycloakInstance = new Keycloak({ url, realm, clientId: keycloak_client_id });
 
+    // keycloak-js clears its live token itself when a refresh comes back
+    // HTTP 400 (clearToken → onAuthLogout). Drop the persisted copy in the
+    // same breath: GetToken() falls back to localStorage, and an
+    // unexpired-but-orphaned bearer would otherwise keep authenticating
+    // requests (the backend validates JWTs offline) after Keycloak has
+    // already ended the session.
+    keycloakInstance.onAuthLogout = () => {
+      sessionDied = true;
+      clearPersistedToken();
+    };
+
     // Proactive refresh when KC tells us the token is expired
     keycloakInstance.onTokenExpired = () => {
       // try to refresh quietly; if it fails, KC will push to login on next API call
@@ -189,7 +239,7 @@ const Logout = () => {
     // Clear dev token + app state, stay on homepage.
     try {
       sessionStorage.clear();
-      localStorage.removeItem("keycloak_token");
+      clearPersistedToken();
       localStorage.removeItem(DEV_TOKEN_STORAGE_KEY);
     } finally {
       // No KC logout redirect in insecure mode.
@@ -201,7 +251,7 @@ const Logout = () => {
   if (!keycloakInstance) return;
   try {
     sessionStorage.clear();
-    localStorage.removeItem("keycloak_token");
+    clearPersistedToken();
   } finally {
     keycloakInstance.logout({ redirectUri: window.location.origin + "/" });
   }
@@ -217,20 +267,92 @@ const Logout = () => {
 export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
   if (!isSecurityEnabled || !keycloakInstance) return true;
 
-  // If a refresh is already running, await it
-  if (refreshInFlight) return refreshInFlight;
+  // Already enough headroom: keycloak-js would no-op anyway (it only refreshes
+  // when isTokenExpired(minValidity)), and settling it here means a caller
+  // needing MORE headroom never blocks on a weaker refresh.
+  //
+  // isTokenExpired THROWS (a bare string, 'Not authenticated') once
+  // clearToken() has run — keycloak-js does that itself after a refresh
+  // rejected with HTTP 400 ends the session. That state has no live token and
+  // no refresh token left to exchange, so it is this function's `false`, not
+  // an exception: dynamicBaseQuery awaits us with no catch, and an escaping
+  // throw would abort ordinary requests before their 401→logout recovery ran.
+  //
+  // `minValidity <= 0` means FORCE — the caller has already seen a 401, so the
+  // browser's own view of the token is exactly what it must not trust (clock
+  // skew against admission's `leeway=0`, an SSO logout elsewhere, realm key
+  // rotation). keycloak-js expresses that as `updateToken(-1)`, its only
+  // unconditional path; coercing 0 up to the 5 s floor merely moved the hole.
+  const forced = minValidity <= 0;
+  const effectiveMinValidity = forced ? KEYCLOAK_FORCE_REFRESH : Math.max(minValidity, KEYCLOAK_MIN_VALIDITY_FLOOR_S);
 
-  // Use KC.updateToken (it refreshes only if needed), raced against a timeout
-  // so a hung refresh resolves to "failed" instead of blocking forever.
-  refreshInFlight = Promise.race([
-    keycloakInstance.updateToken(minValidity).then((refreshed) => {
-      if (refreshed) {
-        localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
+  if (!forced) {
+    let hasHeadroom: boolean;
+    try {
+      hasHeadroom = !keycloakInstance.isTokenExpired(effectiveMinValidity);
+    } catch {
+      return false;
+    }
+    if (hasHeadroom) return true;
+  }
+
+  // Whether the token we hold NOW satisfies this particular caller. Deliberately
+  // evaluated per caller rather than baked into the shared chain: the chain
+  // answers only "did a refresh complete", and a caller's headroom is its own
+  // business. Folding the two together is what made a SUCCESSFUL refresh report
+  // failure to a post-401 caller (because some other caller's 120 s threshold
+  // was not met by a 60 s realm) and log the user out mid-session.
+  const satisfiedNow = (refreshed: boolean): boolean => {
+    if (!refreshed) return false;
+    // A forced refresh's contract is "you contacted Keycloak", not a lifetime.
+    if (forced) return true;
+    try {
+      return !keycloakInstance!.isTokenExpired(effectiveMinValidity);
+    } catch {
+      return false;
+    }
+  };
+
+  // Reuse an in-flight refresh only when it does at least as much WORK as this
+  // caller needs — ranked by work, not by threshold. A forced refresh is the
+  // most work there is, so it both reuses nothing and satisfies everyone.
+  // Ranking by threshold put force at 5 s, the weakest rung, so a forced caller
+  // silently piggy-backed on any chain in flight and never contacted Keycloak
+  // at all — the retry then replayed the dying bearer straight into a logout.
+  const requiredWork = forced ? KEYCLOAK_FORCE_WORK : effectiveMinValidity;
+  if (refreshInFlight && refreshInFlightWork >= requiredWork) {
+    return satisfiedNow(await refreshInFlight);
+  }
+
+  // Install our own chain, replacing any weaker one (whose waiters keep their
+  // promise). keycloak-js coalesces concurrent refreshes through its
+  // refreshQueue, so this costs no extra token request, and the
+  // ownership-checked finally below stops the older chain clearing this slot.
+  // Raced against a timeout so a hung refresh resolves "failed", not forever.
+  refreshInFlightWork = requiredWork;
+  // The session generation this refresh belongs to. A logout bumps it, so a
+  // response arriving after the user signed out cannot re-persist a live bearer
+  // over the copy `clearPersistedToken` just removed — the window is real
+  // because `logout()` navigates without cancelling in-flight XHRs.
+  const epochAtStart = authEpoch;
+  // Cleared when the race settles either way. Without this the loser timer
+  // still fired, logging "token refresh timed out" 8 s after every SUCCESSFUL
+  // refresh — noise in precisely the area (#2125) this work exists to make
+  // diagnosable, plus one stray timer retained per refresh for the tab's life.
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const chain: Promise<boolean> = Promise.race([
+    keycloakInstance.updateToken(effectiveMinValidity).then(() => {
+      if (authEpoch !== epochAtStart) {
+        // Superseded by a logout while this was in flight. Do not resurrect the
+        // persisted token and do not clear `sessionDied`.
+        return false;
       }
+      sessionDied = false;
+      localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
       return true;
     }),
     new Promise<boolean>((resolve) => {
-      setTimeout(() => {
+      timeoutHandle = setTimeout(() => {
         console.warn("[Keycloak] token refresh timed out after", TOKEN_REFRESH_TIMEOUT_MS, "ms");
         resolve(false);
       }, TOKEN_REFRESH_TIMEOUT_MS);
@@ -241,10 +363,17 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
       return false;
     })
     .finally(() => {
-      refreshInFlight = null;
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+      // Clear only if this chain still owns the slot, so a settling chain can
+      // never null out a newer one installed behind it.
+      if (refreshInFlight === chain) {
+        refreshInFlight = null;
+        refreshInFlightWork = 0;
+      }
     });
+  refreshInFlight = chain;
 
-  return refreshInFlight;
+  return satisfiedNow(await chain);
 }
 
 // ========================= Getters =========================
@@ -320,6 +449,53 @@ const GetTokenParsed = (): any => {
   return keycloakInstance?.tokenParsed ?? null;
 };
 
+/**
+ * Seconds until the current access token's `exp`, or null when there is no
+ * expiry constraint to enforce (security disabled, no token, no exp claim).
+ *
+ * Why: `ensureFreshToken` resolves false on refresh failure/timeout instead of
+ * rejecting, so callers about to start long-running work (an SSE agent turn)
+ * need to know whether the token they are left with is nearly dead — starting
+ * a turn with seconds of validity fails mid-stream with no recovery path.
+ * Applies keycloak-js's `timeSkew` so a drifting client clock does not report
+ * a dead token as alive (or vice versa), matching how its own
+ * `isTokenExpired` compares. Still intended for floor checks rather than exact
+ * scheduling — the skew estimate is refreshed only when a token is received.
+ */
+const GetTokenSecondsLeft = (): number | null => {
+  if (!isSecurityEnabled) return null; // dev token: intentionally long-lived
+  // Session ENDED (keycloak-js clearToken(), e.g. after a refresh HTTP 400):
+  // there is no live token to measure. Report it DEAD (0), not unconstrained
+  // (null) — callers use null as "no floor to enforce", and the turn preflight
+  // would otherwise proceed on the stale persisted copy of the token.
+  // `sessionDied` and not merely `!tokenParsed`: the token is also absent
+  // BEFORE init() has ever completed (app bootstrap, reload with check-sso in
+  // flight), and reporting that state as 0 would hard-refuse turns with
+  // "expires in 0s" for a session that is merely not established yet.
+  if (sessionDied && !keycloakInstance?.tokenParsed) return 0;
+  const exp = GetTokenParsed()?.exp;
+  if (typeof exp !== "number") return null;
+  // `timeSkew` cancels client-clock drift exactly as keycloak-js's own
+  // `isTokenExpired` does; without it a client running minutes fast reports a
+  // negative remaining life for a token the server still considers valid.
+  //
+  // A NULL skew is not zero skew — it is keycloak-js declaring the answer
+  // undeterminable (it only sets the field once a token arrives with a local
+  // timestamp, and its own isTokenExpired bails out in that window). Defaulting
+  // to 0 there turned a fast client clock into a large negative and hard-refused
+  // every turn with "expires in 0s" for a bearer the server still accepts, so
+  // report "no floor to enforce" instead and let the refresh decide.
+  // A NULL skew is keycloak-js declaring the answer undeterminable (it sets the
+  // field only once a token arrives with a local timestamp). Neither `?? 0` nor
+  // `null` is right: the first turns a fast client clock into a large negative,
+  // the second reads to callers as "no floor to enforce" — and keycloak-js
+  // itself treats this state as EXPIRED (`isTokenExpired` returns true when
+  // timeSkew == null). Report it DEAD so the caller's fail-closed floor fires.
+  const skew = keycloakInstance?.timeSkew;
+  if (typeof skew !== "number") return 0;
+  return exp - Date.now() / 1000 + skew;
+};
+
 export interface KeycloakRealmConfig {
   url: string;
   realm: string;
@@ -358,6 +534,7 @@ export const KeyCloakService = {
   GetRealmRoles,
   GetUserRoles,
   GetTokenParsed,
+  GetTokenSecondsLeft,
   ensureFreshToken,
   GetRefreshToken,
   GetKeycloakRealmConfig,
