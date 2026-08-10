@@ -37,6 +37,7 @@ class _FakeReader:
     def __init__(self, objects: dict[str, bytes]) -> None:
         self.objects = objects
         self.closed = 0
+        self.opened = 0
 
     def stat_object(self, key: str) -> ObjectInfo:
         if key not in self.objects:
@@ -53,6 +54,7 @@ class _FakeReader:
     ) -> BinaryIO:
         if key not in self.objects:
             raise FileNotFoundError(key)
+        self.opened += 1
         data = self.objects[key]
         window = (
             data[start or 0 :]
@@ -177,6 +179,56 @@ def test_out_of_bounds_range_is_416(client: TestClient):
 
     assert response.status_code == 416
     assert response.headers["content-range"] == f"bytes */{len(PAYLOAD)}"
+
+
+# --- HEAD parity: a real presigned URL answers HEAD, so this one must too -------
+
+
+def test_head_matches_get_headers_without_a_body(
+    client: TestClient, reader: _FakeReader
+):
+    url = _url()
+    get_response = client.get(url)
+    reader.closed = 0
+    reader.opened = 0
+
+    response = client.head(url)
+
+    assert response.status_code == 200
+    assert response.content == b""
+    for header in ("content-type", "accept-ranges", "etag", "content-length"):
+        assert response.headers[header] == get_response.headers[header]
+    assert response.headers["cache-control"].startswith("private, max-age=")
+    # stat_object is enough: HEAD must never open (or leak) an object stream.
+    assert reader.opened == 0
+    assert reader.closed == 0
+
+
+def test_head_with_an_invalid_token_is_refused(client: TestClient, reader: _FakeReader):
+    expired = make_signed_token(
+        [KEY], secret=SECRET, ttl_seconds=1, now=int(time.time()) - 120
+    )
+
+    assert client.head(f"/control-plane/v1/objects/{KEY}").status_code == 403
+    assert (
+        client.head(f"/control-plane/v1/objects/{KEY}?token={expired}").status_code
+        == 403
+    )
+    assert reader.opened == 0
+
+
+def test_head_on_a_missing_object_is_404(client: TestClient):
+    assert client.head(_url("teams/t1/missing.png")).status_code == 404
+
+
+def test_head_range_reports_the_same_206_as_get(client: TestClient):
+    headers = {"Range": "bytes=10-19"}
+
+    response = client.head(_url(), headers=headers)
+
+    assert response.status_code == 206
+    assert response.headers["content-range"] == f"bytes 10-19/{len(PAYLOAD)}"
+    assert response.content == b""
 
 
 def test_route_is_absent_from_the_openapi_schema(client: TestClient):

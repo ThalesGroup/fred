@@ -43,10 +43,11 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import BinaryIO, Iterator, Optional, Protocol
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 from fred_core.store.content_url_resolver import OBJECT_PROXY_PATH
@@ -138,96 +139,182 @@ def _chunks(stream: BinaryIO) -> Iterator[bytes]:
         yield chunk
 
 
+@dataclass(frozen=True)
+class _ResponsePlan:
+    """Everything a response needs, decided before any object body is opened.
+
+    Why this exists: `GET` and `HEAD` must answer with the same status and the
+    same headers — a real presigned MinIO/S3/GCS URL does, and the whole point of
+    the RFC is that `proxy` and `presigned` are interchangeable for consumers
+    (a caching proxy or a link checker must not be able to tell them apart).
+    Computing the plan once is what keeps the two handlers from drifting, and it
+    is `stat_object`-only, so `HEAD` never opens a stream.
+    """
+
+    key: str
+    status_code: int
+    headers: dict[str, str]
+    media_type: str
+    # Byte window a matching GET would stream; `start is None` means "whole object".
+    start: Optional[int]
+    length: Optional[int]
+    # Bytes a matching GET would send, whether or not it advertises Content-Length.
+    body_length: int
+
+
+def _plan_response(
+    *,
+    reader: ObjectReader,
+    secret: str,
+    object_key: str,
+    token: str,
+    range_header: Optional[str],
+) -> _ResponsePlan:
+    """Verify the capability and resolve status/headers, without reading any bytes.
+
+    Raises the same 400 / 403 / 404 / 416 `HTTPException`s the route answers with.
+    """
+
+    key = _validate_key(object_key)
+    if not verify_signed_token(token, [key], secret=secret):
+        # Never echo the token, and do not distinguish "expired" from "forged".
+        logger.info(
+            "[CONTENT][PROXY] refused object key=%s: invalid or expired signature",
+            key,
+        )
+        raise HTTPException(status_code=403, detail="Invalid or expired object URL")
+
+    try:
+        info = reader.stat_object(key)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Object not found") from exc
+
+    total_size = info.size
+    media_type = info.content_type or "application/octet-stream"
+    remaining_ttl = max((token_expiry(token) or 0) - int(time.time()), 0)
+    headers: dict[str, str] = {
+        "Accept-Ranges": "bytes",
+        # Cache no longer than the capability itself; `private` (not `public`)
+        # keeps a bearer URL out of shared proxy caches (RFC §2.4).
+        "Cache-Control": f"private, max-age={remaining_ttl}",
+    }
+    if info.etag:
+        headers["ETag"] = info.etag if info.etag.startswith('"') else f'"{info.etag}"'
+
+    window = _parse_range(range_header)
+    if window is None:
+        headers["Content-Length"] = str(total_size)
+        return _ResponsePlan(
+            key=key,
+            status_code=200,
+            headers=headers,
+            media_type=media_type,
+            start=None,
+            length=None,
+            body_length=total_size,
+        )
+
+    start, end = window
+    if start is None and end is not None:
+        # Suffix form `bytes=-N`
+        if end <= 0:
+            headers["Content-Range"] = f"bytes */{total_size}"
+            raise HTTPException(
+                status_code=416, detail="Range Not Satisfiable", headers=headers
+            )
+        start = max(total_size - end, 0)
+        end = total_size - 1
+    else:
+        if start is None or start >= total_size:
+            headers["Content-Range"] = f"bytes */{total_size}"
+            raise HTTPException(
+                status_code=416, detail="Range Not Satisfiable", headers=headers
+            )
+        end = total_size - 1 if end is None else min(end, total_size - 1)
+        if end < start:
+            headers["Content-Range"] = f"bytes */{total_size}"
+            raise HTTPException(
+                status_code=416, detail="Range Not Satisfiable", headers=headers
+            )
+
+    length = end - start + 1
+    headers["Content-Range"] = f"bytes {start}-{end}/{total_size}"
+    # No Content-Length on 206: avoids a server error when a client aborts early.
+    return _ResponsePlan(
+        key=key,
+        status_code=206,
+        headers=headers,
+        media_type=media_type,
+        start=start,
+        length=length,
+        body_length=length,
+    )
+
+
 def build_object_proxy_router(*, reader: ObjectReader, secret: str) -> APIRouter:
-    """Return a router serving `GET {OBJECT_PROXY_PATH}/{key}?token=…`.
+    """Return a router serving `GET`/`HEAD` `{OBJECT_PROXY_PATH}/{key}?token=…`.
 
     Mount it under the application's API prefix, and only when the configured
     `url_strategy` is `proxy`.
     """
 
     router = APIRouter()
+    path = f"{OBJECT_PROXY_PATH}/{{object_key:path}}"
 
-    # Sync handler on purpose: content stores are blocking (MinIO/GCS/disk), so
+    # Sync handlers on purpose: content stores are blocking (MinIO/GCS/disk), so
     # FastAPI runs the whole route in a worker thread instead of stalling the loop.
-    @router.get(f"{OBJECT_PROXY_PATH}/{{object_key:path}}", include_in_schema=False)
+    @router.get(path, include_in_schema=False)
     def serve_object(
         object_key: str,
         token: str = Query(default=""),
         range_header: Optional[str] = Header(default=None, alias="Range"),
     ) -> StreamingResponse:
-        key = _validate_key(object_key)
-        if not verify_signed_token(token, [key], secret=secret):
-            # Never echo the token, and do not distinguish "expired" from "forged".
-            logger.info(
-                "[CONTENT][PROXY] refused object key=%s: invalid or expired signature",
-                key,
+        plan = _plan_response(
+            reader=reader,
+            secret=secret,
+            object_key=object_key,
+            token=token,
+            range_header=range_header,
+        )
+        stream = (
+            reader.get_object_stream(plan.key)
+            if plan.start is None
+            else reader.get_object_stream(
+                plan.key, start=plan.start, length=plan.length
             )
-            raise HTTPException(status_code=403, detail="Invalid or expired object URL")
-
-        try:
-            info = reader.stat_object(key)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="Object not found") from exc
-
-        total_size = info.size
-        media_type = info.content_type or "application/octet-stream"
-        remaining_ttl = max((token_expiry(token) or 0) - int(time.time()), 0)
-        headers: dict[str, str] = {
-            "Accept-Ranges": "bytes",
-            # Cache no longer than the capability itself; `private` (not `public`)
-            # keeps a bearer URL out of shared proxy caches (RFC §2.4).
-            "Cache-Control": f"private, max-age={remaining_ttl}",
-        }
-        if info.etag:
-            headers["ETag"] = (
-                info.etag if info.etag.startswith('"') else f'"{info.etag}"'
-            )
-
-        window = _parse_range(range_header)
-        if window is None:
-            stream = reader.get_object_stream(key)
-            headers["Content-Length"] = str(total_size)
-            return StreamingResponse(
-                content=_chunks(stream),
-                media_type=media_type,
-                headers=headers,
-                status_code=200,
-                background=BackgroundTask(getattr(stream, "close", lambda: None)),
-            )
-
-        start, end = window
-        if start is None and end is not None:
-            # Suffix form `bytes=-N`
-            if end <= 0:
-                headers["Content-Range"] = f"bytes */{total_size}"
-                raise HTTPException(
-                    status_code=416, detail="Range Not Satisfiable", headers=headers
-                )
-            start = max(total_size - end, 0)
-            end = total_size - 1
-        else:
-            if start is None or start >= total_size:
-                headers["Content-Range"] = f"bytes */{total_size}"
-                raise HTTPException(
-                    status_code=416, detail="Range Not Satisfiable", headers=headers
-                )
-            end = total_size - 1 if end is None else min(end, total_size - 1)
-            if end < start:
-                headers["Content-Range"] = f"bytes */{total_size}"
-                raise HTTPException(
-                    status_code=416, detail="Range Not Satisfiable", headers=headers
-                )
-
-        length = end - start + 1
-        stream = reader.get_object_stream(key, start=start, length=length)
-        headers["Content-Range"] = f"bytes {start}-{end}/{total_size}"
-        # No Content-Length on 206: avoids a server error when a client aborts early.
+        )
         return StreamingResponse(
             content=_chunks(stream),
-            media_type=media_type,
-            headers=headers,
-            status_code=206,
+            media_type=plan.media_type,
+            headers=plan.headers,
+            status_code=plan.status_code,
             background=BackgroundTask(getattr(stream, "close", lambda: None)),
+        )
+
+    # Starlette does not derive HEAD from GET, and a presigned URL answers it, so
+    # the route would otherwise 405 in `proxy` mode only.
+    @router.head(path, include_in_schema=False)
+    def head_object(
+        object_key: str,
+        token: str = Query(default=""),
+        range_header: Optional[str] = Header(default=None, alias="Range"),
+    ) -> Response:
+        plan = _plan_response(
+            reader=reader,
+            secret=secret,
+            object_key=object_key,
+            token=token,
+            range_header=range_header,
+        )
+        headers = dict(plan.headers)
+        # GET omits Content-Length on 206 because an early client abort would look
+        # like a truncated body; a HEAD has no body to abort, so it advertises the
+        # length the matching GET would send — as a presigned S3/GCS HEAD does.
+        headers.setdefault("Content-Length", str(plan.body_length))
+        return Response(
+            status_code=plan.status_code,
+            headers=headers,
+            media_type=plan.media_type,
         )
 
     return router
