@@ -1505,7 +1505,63 @@
       "searchClear": "Effacer la recherche",
       "yourTeams": "Vos équipes",
       "pageTitle": "Accueil",
-      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer."
+      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer.",
+      "eyebrow": "Vue d'ensemble",
+      "greeting": "Bonjour",
+      "greetingNamed": "Bonjour, {{name}}",
+      "subtitle": "Un aperçu de votre activité et de son empreinte sur la plateforme.",
+      "responsible": {
+        "title": "IA responsable",
+        "tip": "Un prompt réutilisé consomme moins qu'une consigne reformulée à chaque fois. Piochez dans la marketplace plutôt que de repartir de zéro, et clôturez les conversations terminées.",
+        "ecoTipLabel": "Eco Tip",
+        "cleanup": {
+          "aria": "Supprimer toutes les conversations inactives",
+          "title": "Supprimer toutes les conversations inactives ?",
+          "message": "Vous êtes sur le point de supprimer définitivement toutes vos conversations inactives depuis plus de 5 jours, aussi bien dans votre espace personnel que dans vos équipes. Cette action est irréversible.",
+          "confirm": "Tout supprimer",
+          "toast": "Conversations inactives supprimées"
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 des prompts les plus utilisés",
+        "uses": "usages",
+        "weekDelta": "▲ {{count}} · 7 j",
+        "empty": "Aucun prompt n'a encore été publié dans la marketplace.",
+        "periodDelta": "▲ {{count}} · {{days}} j"
+      },
+      "period": {
+        "label": "Période",
+        "days": "{{count}} j",
+        "d7": "7 derniers jours",
+        "d30": "30 derniers jours",
+        "d90": "90 derniers jours"
+      },
+      "topAgents": {
+        "title": "Les agents que vous avez le plus utilisés",
+        "unit": "conv.",
+        "empty": "Aucun agent utilisé sur cette période."
+      },
+      "topTeams": {
+        "title": "Vos équipes les plus actives",
+        "unit": "conv.",
+        "empty": "Vous n'êtes membre d'aucune équipe.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Éditeur",
+          "team_analyst": "Analyste",
+          "team_member": "Membre"
+        }
+      },
+      "activity": {
+        "title": "Votre activité",
+        "conversations": "Nouvelles conversations",
+        "messages": "Messages envoyés",
+        "agents": "Agents utilisés",
+        "deltaUp": "▲ {{count}} %",
+        "deltaDown": "▼ {{count}} %",
+        "deltaFlat": "stable",
+        "vsPrevious": "vs période précédente"
+      }
     },
     "mainNav": {
       "ariaLabel": "Navigation principale",

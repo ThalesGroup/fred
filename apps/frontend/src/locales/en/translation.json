@@ -1505,7 +1505,63 @@
       "searchClear": "Clear search",
       "yourTeams": "Your teams",
       "pageTitle": "Home",
-      "pageSubtitle": "Select a space in the left panel to get started."
+      "pageSubtitle": "Select a space in the left panel to get started.",
+      "eyebrow": "Overview",
+      "greeting": "Hello",
+      "greetingNamed": "Hello, {{name}}",
+      "subtitle": "A look at your activity and its footprint on the platform.",
+      "responsible": {
+        "title": "Responsible AI",
+        "tip": "A reused prompt costs less than an instruction rewritten every time. Pick one from the marketplace instead of starting over, and close finished conversations.",
+        "ecoTipLabel": "Eco Tip",
+        "cleanup": {
+          "aria": "Delete all inactive conversations",
+          "title": "Delete all inactive conversations?",
+          "message": "You are about to permanently delete all your conversations inactive for more than 5 days, in your personal space as well as in your teams. This action cannot be undone.",
+          "confirm": "Delete all",
+          "toast": "Inactive conversations deleted"
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 most-used prompts",
+        "uses": "uses",
+        "weekDelta": "▲ {{count}} · 7d",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "periodDelta": "▲ {{count}} · {{days}}d"
+      },
+      "period": {
+        "label": "Period",
+        "days": "{{count}}d",
+        "d7": "Last 7 days",
+        "d30": "Last 30 days",
+        "d90": "Last 90 days"
+      },
+      "topAgents": {
+        "title": "Your most-used agents",
+        "unit": "conv.",
+        "empty": "No agent used in this period."
+      },
+      "topTeams": {
+        "title": "Your most active teams",
+        "unit": "conv.",
+        "empty": "You are not a member of any team.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Editor",
+          "team_analyst": "Analyst",
+          "team_member": "Member"
+        }
+      },
+      "activity": {
+        "title": "Your activity",
+        "conversations": "New conversations",
+        "messages": "Messages sent",
+        "agents": "Agents used",
+        "deltaUp": "▲ {{count}}%",
+        "deltaDown": "▼ {{count}}%",
+        "deltaFlat": "flat",
+        "vsPrevious": "vs previous period"
+      }
     },
     "mainNav": {
       "ariaLabel": "Main navigation",

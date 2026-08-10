@@ -53,7 +53,7 @@ export function TemplateBrowser({ templates, selectedId, onSelect }: TemplateBro
           <ButtonGroup
             items={podFilterItems}
             size="small"
-            color="primary"
+            color="secondary"
             variant="radio"
             aria-label={t("rework.teams.agents.podFilter.aria")}
             selectedIndex={activePodId ? podIds.indexOf(activePodId) + 1 : 0}

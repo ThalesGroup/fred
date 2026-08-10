@@ -456,7 +456,7 @@ export default function CapabilitiesPage() {
         tabs={
           <ButtonGroup
             size="small"
-            color="primary"
+            color="secondary"
             variant="radio"
             aria-label={t("rework.admin.capabilities.kindFilter.aria")}
             selectedIndex={KIND_FILTERS.indexOf(kindFilter)}

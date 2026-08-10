@@ -98,6 +98,7 @@ export const materialIcons = [
   "error_outline",
   "warning",
   "info",
+  "lightbulb",
   "find_in_page",
   "summarize",
   "table_chart",
