@@ -1399,15 +1399,15 @@
         "empty": "No prompt has been published to the marketplace yet.",
         "emptySearch": "No prompt matches this search.",
         "import": {
-          "title": "Import this prompt into a team",
-          "subtitle": "Select the spaces to import “{{name}}” into.",
-          "confirm": "Import",
+          "title": "Copy this prompt to a team",
+          "subtitle": "Select the spaces to copy “{{name}}” into.",
+          "confirm": "Copy",
           "personalSpace": "Personal space",
           "searchPlaceholder": "Search a team",
           "clearSearch": "Clear search",
           "noTeams": "No team matches.",
-          "successToast": "Prompt imported ({{count}})",
-          "errorToast": "Import failed ({{count}})",
+          "successToast": "Prompt copied ({{count}})",
+          "errorToast": "Copy failed ({{count}})",
           "originTeam": "Origin team"
         },
         "unpublish": {
@@ -2176,7 +2176,7 @@
             "publish": "Publish to marketplace",
             "unpublish": "Remove from marketplace",
             "delete": "Delete",
-            "import": "Import",
+            "import": "Copy to...",
             "removeFromMarketplace": "Remove from marketplace"
           }
         },

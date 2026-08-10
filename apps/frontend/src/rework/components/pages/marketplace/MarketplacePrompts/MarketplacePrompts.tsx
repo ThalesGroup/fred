@@ -55,7 +55,6 @@ export default function MarketplacePrompts() {
   const {
     data: prompts = [],
     isLoading,
-    isFetching,
     isUninitialized,
     isError,
   } = useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery();
@@ -130,7 +129,11 @@ export default function MarketplacePrompts() {
     });
   };
 
-  const queryState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
+  // Only gate the full-page spinner on the initial load (no data yet) — a
+  // background refetch (e.g. after recording a marketplace "use" on copy, or an
+  // unpublish/import) must not blank the page and unmount the open dialog,
+  // which caused a visible flicker. `isFetching` is intentionally omitted.
+  const queryState = getQueryUiState({ isLoading, isUninitialized, isError });
 
   if (queryState === "loading") {
     return (

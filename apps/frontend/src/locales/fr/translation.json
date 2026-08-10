@@ -1399,15 +1399,15 @@
         "empty": "Aucun prompt n'a encore été publié sur la marketplace.",
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "import": {
-          "title": "Importer ce prompt dans une équipe",
-          "subtitle": "Sélectionnez les espaces où importer « {{name}} ».",
-          "confirm": "Importer",
+          "title": "Copier ce prompt dans une équipe",
+          "subtitle": "Sélectionnez les espaces où copier « {{name}} ».",
+          "confirm": "Copier",
           "personalSpace": "Espace personnel",
           "searchPlaceholder": "Rechercher une équipe",
           "clearSearch": "Effacer la recherche",
           "noTeams": "Aucune équipe ne correspond.",
-          "successToast": "Prompt importé ({{count}})",
-          "errorToast": "Échec de l'import ({{count}})",
+          "successToast": "Prompt copié ({{count}})",
+          "errorToast": "Échec de la copie ({{count}})",
           "originTeam": "Équipe d'origine"
         },
         "unpublish": {
@@ -2176,7 +2176,7 @@
             "publish": "Publier sur la marketplace",
             "unpublish": "Retirer de la marketplace",
             "delete": "Supprimer",
-            "import": "Importer",
+            "import": "Copier dans...",
             "removeFromMarketplace": "Retirer de la marketplace"
           }
         },

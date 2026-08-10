@@ -89,7 +89,6 @@ export default function PromptsPage() {
   const {
     data: prompts = [],
     isLoading,
-    isFetching,
     isUninitialized,
     isError,
   } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "" }, { skip: !teamId });
@@ -345,7 +344,10 @@ export default function PromptsPage() {
     }
   };
 
-  const promptsQueryState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
+  // Full-page spinner only on the initial load (no data yet). A background
+  // refetch — e.g. after publish/unpublish/delete invalidates the list — must
+  // not blank the page (that flashed the whole list + any open dialog).
+  const promptsQueryState = getQueryUiState({ isLoading, isUninitialized, isError });
 
   if (!teamId) {
     return <div className={styles.pageError}>Missing team id in route.</div>;
