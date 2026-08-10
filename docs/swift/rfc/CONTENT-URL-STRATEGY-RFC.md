@@ -165,8 +165,9 @@ only ever narrow access; it grants nothing. In the object proxy the token is the
 sole grant. Consequences:
 
 1. **The signing secret becomes a credential.** The dev fallback at
-   `download_token.py:44` is tolerable for a narrowing token. For a granting token
-   it should hard-fail when `url_strategy == "proxy"` (see §6.2).
+   `download_token.py:44` is tolerable for a narrowing token but not for a
+   granting one. It is removed outright and replaced by `config/.env` +
+   `config/.env.template` entries, with a startup failure when unset (§6.2).
 2. **Per-app secrets.** The helper moves to `fred-core`; key material stays
    per-app, so a KF token is not valid against CP objects.
 3. **Key handling.** The object key is bound in the signature and must be resolved
@@ -192,31 +193,39 @@ sole grant. Consequences:
 - Helm — `url_strategy` added to `values-gcp.yaml` (CP and KF content_storage
   blocks) plus the per-app signing secret.
 
-## 6. Open questions
+## 6. Resolved decisions (signed off 2026-08-10)
 
-**6.1 Resolver placement across two store abstractions.** The repo has two
+**6.1 Resolver placement — standalone `fred-core` service.** The repo has two
 independent content-store families: `fred_core.store.ContentStore` (a 2-method
 `Protocol`, used by control-plane) and KF's much richer `BaseContentStore` ABC.
-Options: (a) resolver as a standalone `fred-core` service taking a store plus
-config, agnostic to which family; (b) a mixin both families adopt. (a) is less
-invasive and does not force convergence of the two hierarchies as a prerequisite;
-(b) is tidier long-term but expands scope. **Recommendation: (a).**
+A mixin adopted by both was considered and rejected: it would have to be wired
+into six store classes across two hierarchies with different constructors, each
+needing strategy, secret, and public base URL injected at construction — pushing
+key material into every storage class and redefining "content store" as something
+that also mints capability tokens. It would also modify a shared protocol and an
+ABC, dragging in a contract-doc update. The standalone resolver is purely
+additive and touches neither hierarchy.
 
-**6.2 Secret handling.** Does the shared helper hard-fail at startup when
-`url_strategy == "proxy"` and no secret is configured, or keep the warning-plus-dev-fallback
-behaviour? **Recommendation: hard-fail in `proxy` mode**, keep the fallback for
-`/fs/download`'s existing narrowing use.
+**6.2 Secret handling — hard-fail, and the dev fallback is removed entirely.**
+The `_DEV_FALLBACK` signing key at `download_token.py:44` is deleted rather than
+kept for `/fs/download`'s existing narrowing use. A hardcoded default signing key
+in shipped source is dangerous regardless of the route consuming it, and the repo
+already has the right mechanism for this: per-app `config/.env` files, with
+`config/.env.template` documenting each secret. The signing secret joins them.
 
-**6.3 Route visibility.** Should the proxy route appear in the generated OpenAPI
-spec and client? It is never called by generated frontend code — URLs arrive
-embedded in markdown or in a DTO field. **Recommendation: exclude from the schema**
-(`include_in_schema=False`), keeping the generated client identical between modes.
+Missing secret therefore raises at startup, not at first use, with an error naming
+the variable and the file to set it in — so a developer and an ops engineer both
+get an actionable message rather than a silent insecure default.
 
-**6.4 Object key opacity.** Should the URL carry the raw object key, or an opaque
-encoding of it? The signature makes tampering ineffective either way, but a raw key
-exposes internal layout (`{uid}/output/media/{filename}`). **Recommendation: raw
-key** — it is already visible in the current same-origin media URLs, and opacity
-here would be decoration rather than a control.
+**6.3 Route visibility — excluded from the OpenAPI schema.**
+`include_in_schema=False`. Generated frontend code never calls the route; URLs
+arrive embedded in markdown or in a DTO field. Keeps the generated client
+byte-identical between modes.
+
+**6.4 Object key — raw, not opaque.** The signature makes tampering ineffective
+either way, and the key is already visible in today's same-origin media URLs
+(`/knowledge-flow/v1/markdown/{uid}/media/{file}`). Opacity here would be
+decoration rather than a control.
 
 ## 7. Exit
 
