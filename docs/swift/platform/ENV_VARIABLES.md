@@ -62,6 +62,24 @@ Note:
 > `gcloud auth application-default login`. `GOOGLE_APPLICATION_CREDENTIALS` (§3.1)
 > remains an optional dev-only escape hatch pointing at a JSON key.
 
+### 1.4.1 URL Signing Keys
+
+HMAC keys used to sign time-limited, browser-facing URLs. **Per-app on purpose:**
+a knowledge-flow token must never verify against control-plane objects. There is
+no fallback key — a missing value raises with the variable name and the file to
+set it in. Generate with `openssl rand -hex 32`; the value must be identical
+across every replica of the same application, or a link minted by one pod fails
+to verify on another.
+
+| Variable                            | In templates    | Purpose                                                                                                                             |
+| ----------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `KNOWLEDGE_FLOW_DOWNLOAD_SECRET`    | knowledge-flow  | Signs `/fs/download` links (`path\|uid\|expiry`). Always required.                                                                   |
+| `KNOWLEDGE_FLOW_CONTENT_URL_SECRET` | knowledge-flow  | Signs object-proxy URLs for markdown media. Required when `content_storage.url_strategy=proxy`; checked at startup.                  |
+| `CONTROL_PLANE_CONTENT_URL_SECRET`  | control-plane   | Signs object-proxy URLs for team avatars. Required when `storage.content_storage.url_strategy=proxy`; checked at startup.            |
+
+See `docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md` for why `url_strategy=proxy`
+exists (GCS without `iam.serviceAccounts.signBlob`, local filesystem storage).
+
 ### 1.5 Observability / Tracing
 
 | Variable              | In templates | Purpose                                                           |

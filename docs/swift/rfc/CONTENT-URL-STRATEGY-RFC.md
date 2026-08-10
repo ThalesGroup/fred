@@ -1,6 +1,11 @@
 # RFC: Content URL strategy — application-signed proxy URLs when presigning is unavailable
 
-**Status:** proposed; open questions in §6 need sign-off before implementation
+**Status:** implemented 2026-08-10 (#2318). §6 signed off; nothing left open.
+Durable behaviour now lives in the compact docs —
+`docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` §39 (config field, avatar
+URL semantics and TTL) and `docs/swift/platform/ENV_VARIABLES.md` §1.4.1 (signing
+keys). This file is kept as the design record; see §8 for what changed on contact
+with the code.
 **Author:** fmuller
 **Date:** 2026-08-10
 **ID:** CONTENT-URL-STRATEGY
@@ -233,3 +238,35 @@ When `iam.serviceAccounts.signBlob` is granted on the GCP deployment: set
 `url_strategy: presigned` (or drop the field), redeploy. Nothing else changes —
 no code, no frontend, no contract. Removing the feature entirely is then deleting
 the field, the router factory, and the resolver's proxy branch.
+
+## 8. As built (2026-08-10, #2318)
+
+Implemented as designed. Four notes where the code says more than the RFC did:
+
+1. **The proxy needs a read interface the store protocols did not have.**
+   `fred_core.store.ContentStore` is a two-method write/URL `Protocol` (§5 keeps
+   it that way), so the router factory declares its own minimal `ObjectReader`
+   (`stat_object` + `get_object_stream`). Knowledge-flow's `BaseContentStore`
+   already satisfies it; fred-core's `LocalContentStore`/`MinioContentStore`/
+   `GcsContentStore` gained the two methods (additive, no protocol change), and
+   control-plane passes its store through a `cast` pinned by
+   `fred_core/tests/store/test_object_reader_contract.py`.
+
+2. **`Cache-Control: max-age` is derived from the token, not configured.** The
+   expiry travels in the token, so the proxy serves
+   `private, max-age=<remaining lifetime>` — a cached copy can never outlive the
+   capability that fetched it.
+
+3. **Knowledge-flow markdown media resolve to the `-objects` bucket, but the
+   media are written to the `-documents` bucket.** Pre-existing, independent of
+   this RFC: `get_presigned_url(f"{uid}/output/media/{file}")` has always signed
+   against the object bucket while `save_output`/`get_media` use the document
+   bucket, so the rewrite has been serving 404s on MinIO too. The proxy inherits
+   the same key, so markdown images stay broken until that mismatch is fixed —
+   tracked separately, not silently patched here.
+
+4. **Tabular Parquet reads still need a signing SA on GCS.** They sign
+   internally through `get_presigned_url_internal`, which `url_strategy` does not
+   govern (§5 keeps it out of scope). `url_strategy: proxy` therefore lets the
+   platform boot without `signing_service_account_email`, but tabular SQL preview
+   remains unavailable on that deployment until the permission is granted.
