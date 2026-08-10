@@ -470,6 +470,7 @@ class PromptSummary(BaseModel):
     text_preview: str | None = None
     created_by: str | None = None
     version: int = 1
+    published: bool = False
     import_count: int = 0
     session_count: int = 0
     score: float | None = None
@@ -484,6 +485,18 @@ class PromptDetail(PromptSummary):
 
     team_id: TeamId
     text: str
+
+
+class MarketplacePromptSummary(PromptDetail):
+    """One published prompt as shown in the global prompts marketplace.
+
+    Extends ``PromptDetail`` (full text is needed for the marketplace "copy to
+    clipboard" action) with the author team's display name, used both as the
+    card label and as the team filter chip. ``published`` is always ``True``
+    here.
+    """
+
+    team_name: str
 
 
 class ContextPromptSummary(BaseModel):
@@ -509,6 +522,32 @@ class PromptPromoteRequest(BaseModel):
     """Request body for promoting (copy-by-value) one prompt to another team."""
 
     target_team_id: str = Field(..., min_length=1)
+
+
+class MarketplaceImportRequest(BaseModel):
+    """Request body for importing a published prompt into one or more teams.
+
+    Copy-by-value into every target space the caller can edit (personal space
+    or a team where the caller is editor). Each copy is a fresh instance with a
+    reset usage counter; on name collision the server appends a ``_imported-N``
+    suffix.
+    """
+
+    target_team_ids: list[str] = Field(..., min_length=1)
+
+
+class MarketplaceImportResult(BaseModel):
+    """Outcome of importing a published prompt into one target space."""
+
+    team_id: str
+    prompt: PromptSummary | None = None
+    error: str | None = None
+
+
+class MarketplaceImportResponse(BaseModel):
+    """Per-target results of a marketplace import into several teams."""
+
+    results: list[MarketplaceImportResult]
 
 
 class CreatePromptRequest(BaseModel):
