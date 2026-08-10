@@ -35,11 +35,13 @@
 applications:
   control-plane-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
-    # The GSA needs roles/storage.objectAdmin on the content bucket, and
-    # iam.serviceAccounts.signBlob on the signing service account below
-    # (typically roles/iam.serviceAccountTokenCreator) — team banner/logo
-    # images are served straight to the browser via a V4 signed URL, so this
-    # signing account is required, not just an internal nicety (see
+    # The GSA needs roles/storage.objectAdmin on the content bucket. It does NOT
+    # need iam.serviceAccounts.signBlob while content_storage.url_strategy is
+    # "proxy": team banner/logo images are streamed by the backend behind an
+    # application-signed URL rather than a GCS V4 signed URL. Grant signBlob
+    # (typically roles/iam.serviceAccountTokenCreator) on the signing service
+    # account when flipping back to "presigned" (see
+    # docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md and
     # docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
     serviceAccount:
       annotations:
@@ -51,25 +53,37 @@ applications:
         # bucket_name is suffixed at runtime → -objects (team banners/logos).
         content_storage:
           type: gcs
+          # Browser-facing team banner/logo URLs are served by this backend's
+          # signed object proxy instead of GCS V4 signed URLs, because this
+          # deployment does not hold iam.serviceAccounts.signBlob (see
+          # docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md). Requires
+          # CONTROL_PLANE_CONTENT_URL_SECRET in dotenv below. Flip back to
+          # "presigned" (and set signing_service_account_email) once the
+          # permission is granted — nothing else changes.
+          url_strategy: proxy
           bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. <GCP_PROJECT_ID>-cp-content
           project_id: "" # optional; inferred from ADC when empty
-          # Required: service account used to sign V4 signed URLs for
-          # browser-facing banner/logo images via IAM signBlob (keyless).
-          # Startup fails clearly if unset. It needs storage.objects.get on the
-          # -objects bucket; the GSA above needs iam.serviceAccounts.signBlob
-          # on it. May be the GSA itself (self-signing).
-          signing_service_account_email: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+          # Only needed with url_strategy: presigned — the service account used
+          # to sign V4 signed URLs for browser-facing banner/logo images via IAM
+          # signBlob (keyless). It needs storage.objects.get on the -objects
+          # bucket; the GSA above needs iam.serviceAccounts.signBlob on it. May
+          # be the GSA itself (self-signing).
+          signing_service_account_email: ""
 
     dotenv:
       KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
       FRED_POSTGRES_PASSWORD: ""
       OPENFGA_API_TOKEN: ""
+      # Signs the team avatar URLs served by the object proxy (url_strategy: proxy).
+      # `openssl rand -hex 32`, identical across replicas; startup fails when unset.
+      CONTROL_PLANE_CONTENT_URL_SECRET: ""
 
   knowledge-flow-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
-    # The GSA needs roles/storage.objectAdmin on the content + fs buckets, and
-    # iam.serviceAccounts.signBlob on the signing service account below
-    # (typically roles/iam.serviceAccountTokenCreator) for tabular signed URLs.
+    # The GSA needs roles/storage.objectAdmin on the content + fs buckets. It also
+    # needs iam.serviceAccounts.signBlob on a signing service account (typically
+    # roles/iam.serviceAccountTokenCreator) for tabular signed URLs — until that is
+    # granted, content_storage.url_strategy: proxy keeps everything else working.
     serviceAccount:
       annotations:
         iam.gke.io/gcp-service-account: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
@@ -79,13 +93,22 @@ applications:
       # bucket_name is suffixed at runtime → -documents / -objects / -files.
       content_storage:
         type: gcs
+        # Markdown media (<img> in a document preview) is served by this backend's
+        # signed object proxy instead of GCS V4 signed URLs, because this deployment
+        # does not hold iam.serviceAccounts.signBlob (see
+        # docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md). Requires
+        # KNOWLEDGE_FLOW_CONTENT_URL_SECRET in dotenv below.
+        # ⚠️ Tabular Parquet reads always sign internally, so they stay unavailable
+        # until signing_service_account_email is set and url_strategy flips back to
+        # "presigned".
+        url_strategy: proxy
         bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. <GCP_PROJECT_ID>-content
         project_id: "" # optional; inferred from ADC when empty
-        # Required: service account used to sign V4 signed URLs for tabular
-        # Parquet reads via IAM signBlob (keyless). Startup fails clearly if unset.
+        # Only needed with url_strategy: presigned (and for tabular Parquet reads) —
+        # the service account used to sign V4 signed URLs via IAM signBlob (keyless).
         # It needs storage.objects.get on the -objects bucket; the GSA above needs
         # iam.serviceAccounts.signBlob on it. May be the GSA itself (self-signing).
-        signing_service_account_email: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+        signing_service_account_email: ""
 
       # --- Virtual filesystem: native GCS ---
       filesystem:
@@ -137,3 +160,8 @@ applications:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       FRED_POSTGRES_PASSWORD: ""
       OPENFGA_API_TOKEN: ""
+      # Signs the markdown media URLs served by the object proxy (url_strategy: proxy).
+      # `openssl rand -hex 32`, identical across replicas; startup fails when unset.
+      KNOWLEDGE_FLOW_CONTENT_URL_SECRET: ""
+      # Signs /fs/download links — required in every deployment (no fallback key).
+      KNOWLEDGE_FLOW_DOWNLOAD_SECRET: ""
