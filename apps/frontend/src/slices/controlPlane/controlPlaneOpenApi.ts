@@ -379,6 +379,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/marketplace/prompts` }),
     }),
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: build.query<
+      GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiResponse,
+      GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}` }),
+    }),
     postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: build.mutation<
       PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse,
       PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg
@@ -1206,6 +1212,11 @@ export type PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublish
 export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiResponse =
   /** status 200 Successful Response */ MarketplacePromptSummary[];
 export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiArg = void;
+export type GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiResponse =
+  /** status 200 Successful Response */ MarketplacePromptDetail;
+export type GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiArg = {
+  promptId: string;
+};
 export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse = unknown;
 export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg = {
   promptId: string;
@@ -2231,6 +2242,27 @@ export type MarketplacePromptSummary = {
   created_at?: string | null;
   updated_at?: string | null;
   team_id: string;
+  team_name: string;
+};
+export type MarketplacePromptDetail = {
+  id: string;
+  name: string;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  team_id: string;
   text: string;
   team_name: string;
 };
@@ -2943,6 +2975,8 @@ export const {
   usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
   useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
   useLazyGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
+  useLazyGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
   usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
   usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation,
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,

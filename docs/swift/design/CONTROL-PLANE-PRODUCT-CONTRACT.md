@@ -625,7 +625,9 @@ managed agent instances:
 - `PromptCategorySummary`
 - `CreatePromptCategoryRequest`
 - `UpdatePromptCategoryRequest`
-- `MarketplacePromptSummary` (PROMPT-06 — `PromptDetail` + author `team_name`)
+- `MarketplacePromptSummary` (PROMPT-06 — `PromptSummary` + `team_id` +
+  author `team_name`; preview only, no full text)
+- `MarketplacePromptDetail` (PROMPT-06 — `PromptDetail` + `team_name`; full text)
 - `MarketplaceImportRequest` / `MarketplaceImportResponse` (PROMPT-06)
 
 Rules:
@@ -2480,9 +2482,11 @@ published row. Durable design: `docs/swift/design/PROMPTS.md` §6.1.
 edits propagate immediately and `session_count` is shared between origin-team
 and external usage (total, global usage). Import resets the counter (copy-by-value).
 
-**New types.** `MarketplacePromptSummary` (= `PromptDetail` + `team_name`, the
-author team's display name), `MarketplaceImportRequest { target_team_ids }`,
-`MarketplaceImportResponse { results: [{ team_id, prompt?, error? }] }`.
+**New types.** `MarketplacePromptSummary` (= `PromptSummary` + `team_id` +
+`team_name`; preview only, no full text), `MarketplacePromptDetail`
+(= `PromptDetail` + `team_name`; full text), `MarketplaceImportRequest
+{ target_team_ids }`, `MarketplaceImportResponse { results: [{ team_id,
+prompt?, error? }] }`.
 
 **Endpoints.**
 
@@ -2490,14 +2494,19 @@ author team's display name), `MarketplaceImportRequest { target_team_ids }`,
   `.../unpublish` — flip the flag; `can_update_resources` on the author team.
   Publishing a personal-space prompt is rejected (400).
 - `GET /control-plane/v1/marketplace/prompts` — every published prompt across
-  all teams, `session_count` DESC, each with `team_name`. Any authenticated
-  user; **not team-scoped** (the first prompt read that intentionally bypasses
-  team membership, gated only on the `published` flag).
+  all teams, `session_count` DESC, each with `team_name`, **preview text only**
+  (the listing payload stays small however many prompts are published). Any
+  authenticated user; **not team-scoped** (the first prompt read that
+  intentionally bypasses team membership, gated only on the `published` flag).
+- `GET /control-plane/v1/marketplace/prompts/{prompt_id}` — one published
+  prompt's full text (`MarketplacePromptDetail`), fetched on demand when a card
+  is opened. Any authenticated user; published prompts only (else 404).
 - `POST /control-plane/v1/marketplace/prompts/{prompt_id}/use` — increment the
   shared counter without team membership; published prompts only (else 404).
 - `POST /control-plane/v1/marketplace/prompts/{prompt_id}/import` — copy-by-value
-  into each `target_team_ids` the caller can edit. Each target is authorized
-  independently (`can_update_resources`); an unauthorized/unknown target yields a
+  into each `target_team_ids` the caller can edit. Targets are deduped and
+  imported **concurrently**; each is authorized independently
+  (`can_update_resources`), and an unauthorized/unknown target yields a
   per-target `error` rather than failing the whole request. Name collisions in a
   target team are avoided with an `_imported-N` suffix.
 

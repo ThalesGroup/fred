@@ -25,6 +25,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import {
   type MarketplacePromptSummary,
+  useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
   useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
   usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
   usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
@@ -61,6 +62,16 @@ export default function MarketplacePrompts() {
 
   const [recordUse] = usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation();
   const [unpublishPrompt] = usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation();
+
+  // The listing carries only previews; fetch the full text on demand when a
+  // card is opened, for the read-only view's copy-to-clipboard action.
+  const { data: rawViewDetail } = useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery(
+    { promptId: viewingPrompt?.id || "" },
+    { skip: !viewingPrompt },
+  );
+  // Guard against RTK Query serving the previous prompt's detail while the new
+  // one is still in flight (same stale-result guard as PromptViewDialog).
+  const viewDetail = rawViewDetail && rawViewDetail.id === viewingPrompt?.id ? rawViewDetail : undefined;
 
   // Teams the caller can edit → they may remove that team's prompts from the
   // marketplace directly from here (UX convenience).
@@ -194,12 +205,12 @@ export default function MarketplacePrompts() {
       <PromptViewDialog
         open={!!viewingPrompt}
         preloadedDetail={
-          viewingPrompt
+          viewDetail
             ? {
-                id: viewingPrompt.id,
-                name: viewingPrompt.name,
-                description: viewingPrompt.description,
-                text: viewingPrompt.text,
+                id: viewDetail.id,
+                name: viewDetail.name,
+                description: viewDetail.description,
+                text: viewDetail.text,
               }
             : null
         }

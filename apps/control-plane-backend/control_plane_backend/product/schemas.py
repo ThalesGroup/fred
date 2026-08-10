@@ -487,13 +487,27 @@ class PromptDetail(PromptSummary):
     text: str
 
 
-class MarketplacePromptSummary(PromptDetail):
-    """One published prompt as shown in the global prompts marketplace.
+class MarketplacePromptSummary(PromptSummary):
+    """One published prompt card in the global prompts marketplace listing.
 
-    Extends ``PromptDetail`` (full text is needed for the marketplace "copy to
-    clipboard" action) with the author team's display name, used both as the
-    card label and as the team filter chip. ``published`` is always ``True``
-    here.
+    Extends the lightweight ``PromptSummary`` (``text_preview`` only, not the
+    full text) with the author team id and display name — the name is both the
+    card label and the team filter chip. The full prompt text is fetched on
+    demand via ``MarketplacePromptDetail`` when a card is opened, so the listing
+    payload stays small even with many published prompts. ``published`` is
+    always ``True`` here.
+    """
+
+    team_id: TeamId
+    team_name: str
+
+
+class MarketplacePromptDetail(PromptDetail):
+    """Full published prompt (with text) for the marketplace read-only view.
+
+    Fetched on demand when a marketplace card is opened, so the "copy to
+    clipboard" action has the full text without the listing carrying every
+    prompt's text. Adds the author team display name.
     """
 
     team_name: str

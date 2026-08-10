@@ -71,6 +71,7 @@ from control_plane_backend.product.schemas import (
     FrontendUserAuthConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    MarketplacePromptDetail,
     MarketplacePromptSummary,
     PermissionSummary,
     PromptCategorySummary,
@@ -3630,10 +3631,13 @@ async def list_marketplace_prompts(
 ) -> list[MarketplacePromptSummary]:
     """Return every published prompt across all teams, with the author team name.
 
-    Ordered by shared usage (most-used first). The author team's display name is
-    resolved once for the whole page and used as both the card label and the
-    team filter chip; if a team's metadata is missing the raw team id is used as
-    a fallback so a prompt is never dropped from the listing.
+    Ordered by shared usage (most-used first). Carries only ``text_preview`` —
+    the full prompt text is fetched on demand via ``get_marketplace_prompt`` when
+    a card is opened, so the listing payload stays small however many prompts
+    are published. The author team's display name is resolved once for the whole
+    page (single batched lookup, no N+1) and used as both the card label and the
+    team filter chip; a missing team's raw id is used as a fallback so a prompt
+    is never dropped from the listing.
     """
 
     store = deps.get_prompt_store()
@@ -3646,13 +3650,36 @@ async def list_marketplace_prompts(
 
     results: list[MarketplacePromptSummary] = []
     for record in records:
-        detail = _prompt_record_to_detail(record)
+        summary = _prompt_record_to_summary(record)
         meta = metadata.get(record.team_id)
         team_name = meta.name if meta is not None else str(record.team_id)
         results.append(
-            MarketplacePromptSummary(**detail.model_dump(), team_name=team_name)
+            MarketplacePromptSummary(
+                **summary.model_dump(), team_id=record.team_id, team_name=team_name
+            )
         )
     return results
+
+
+async def get_marketplace_prompt(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> MarketplacePromptDetail | None:
+    """Return one published prompt with its full text and author team name.
+
+    Fetched on demand when a marketplace card is opened (the listing carries
+    only previews). Any authenticated user may read it — gated only on the
+    prompt being published. Returns ``None`` when the prompt is missing or not
+    published (the route maps this to 404).
+    """
+
+    record = await get_published_prompt(prompt_id, deps)
+    if record is None:
+        return None
+    detail = _prompt_record_to_detail(record)
+    meta = await deps.get_team_metadata_store().get_by_team_id(record.team_id)
+    team_name = meta.name if meta is not None else str(record.team_id)
+    return MarketplacePromptDetail(**detail.model_dump(), team_name=team_name)
 
 
 async def record_marketplace_prompt_use(

@@ -303,6 +303,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
             ]
           : [{ type: "ControlPlanePrompt" as const, id: "MARKETPLACE" }],
     },
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
+    },
     postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlanePrompt", id: arg.promptId },

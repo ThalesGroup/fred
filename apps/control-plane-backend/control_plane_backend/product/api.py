@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import (
@@ -44,6 +45,7 @@ from control_plane_backend.product.schemas import (
     MarketplaceImportRequest,
     MarketplaceImportResponse,
     MarketplaceImportResult,
+    MarketplacePromptDetail,
     MarketplacePromptSummary,
     PromptCategorySummary,
     PromptDetail,
@@ -76,6 +78,7 @@ from control_plane_backend.product.service import (
     delete_prompt_category,
     delete_session_attachment,
     enroll_agent_instance,
+    get_marketplace_prompt,
     get_prompt,
     get_runtime_binding_for_team,
     get_session,
@@ -1047,6 +1050,37 @@ async def get_marketplace_prompts(
     return await list_marketplace_prompts(deps)
 
 
+@router.get(
+    "/marketplace/prompts/{prompt_id}",
+    response_model=MarketplacePromptDetail,
+    response_model_exclude_none=True,
+    summary="Get one published marketplace prompt, with its full text.",
+)
+async def get_marketplace_prompt_detail(
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> MarketplacePromptDetail:
+    """
+    Return one published prompt's full text (the listing carries only previews).
+
+    Fetched on demand when a marketplace card is opened, so the "copy to
+    clipboard" action has the full text. Any authenticated user may read it,
+    gated only on the prompt being published; an unpublished/unknown id is 404.
+
+    Example:
+    - ``GET /control-plane/v1/marketplace/prompts/abc-123``
+    """
+
+    detail = await get_marketplace_prompt(prompt_id, deps)
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Published prompt {prompt_id!r} not found in the marketplace.",
+        )
+    return detail
+
+
 @router.post(
     "/marketplace/prompts/{prompt_id}/use",
     response_class=Response,
@@ -1103,8 +1137,7 @@ async def post_marketplace_prompt_import(
       ``{ "target_team_ids": ["personal", "bid-and-capture"] }``
     """
 
-    results: list[MarketplaceImportResult] = []
-    for raw_team_id in body.target_team_ids:
+    async def import_into(raw_team_id: str) -> MarketplaceImportResult:
         try:
             target_team_id = await require_team_access(
                 user,
@@ -1113,22 +1146,23 @@ async def post_marketplace_prompt_import(
                 required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
             )
         except HTTPException as exc:
-            results.append(
-                MarketplaceImportResult(team_id=raw_team_id, error=str(exc.detail))
-            )
-            continue
+            return MarketplaceImportResult(team_id=raw_team_id, error=str(exc.detail))
         try:
             summary = await import_published_prompt_into_team(
                 user, prompt_id, target_team_id, deps
             )
-            results.append(
-                MarketplaceImportResult(team_id=str(target_team_id), prompt=summary)
-            )
+            return MarketplaceImportResult(team_id=str(target_team_id), prompt=summary)
         except PromptRequestError as exc:
-            results.append(
-                MarketplaceImportResult(team_id=str(target_team_id), error=str(exc))
-            )
-    return MarketplaceImportResponse(results=results)
+            return MarketplaceImportResult(team_id=str(target_team_id), error=str(exc))
+
+    # Dedupe (preserving order) so two imports into the same team can't race on
+    # the `_imported-N` suffix; distinct targets have no ordering dependency, so
+    # run them concurrently.
+    unique_team_ids = list(dict.fromkeys(body.target_team_ids))
+    results = await asyncio.gather(
+        *(import_into(raw_team_id) for raw_team_id in unique_team_ids)
+    )
+    return MarketplaceImportResponse(results=list(results))
 
 
 @router.get(

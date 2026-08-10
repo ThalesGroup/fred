@@ -232,13 +232,18 @@ Endpoints:
   400 on publish).
 - `GET /control-plane/v1/marketplace/prompts` — every published prompt across
   all teams, most-used first, each with the author team's display name; any
-  authenticated user (not team-scoped).
+  authenticated user (not team-scoped). Carries only `text_preview` — the
+  listing payload stays small however many prompts are published.
+- `GET /control-plane/v1/marketplace/prompts/{prompt_id}` — one published
+  prompt's full text, fetched on demand when a card is opened (for the copy
+  action); any authenticated user, published prompts only.
 - `POST /control-plane/v1/marketplace/prompts/{prompt_id}/use` — increment the
   shared counter without requiring team membership (published prompts only).
 - `POST /control-plane/v1/marketplace/prompts/{prompt_id}/import` — copy-by-value
-  into every `target_team_ids` the caller can edit; each target is authorized
-  independently (per-target `can_update_resources`, per-target result), and a
-  name collision in a target team is avoided with an `_imported-N` suffix.
+  into every `target_team_ids` the caller can edit; targets are deduped and
+  imported concurrently, each authorized independently (per-target
+  `can_update_resources`, per-target result), and a name collision in a target
+  team is avoided with an `_imported-N` suffix.
 
 There is no moderation surface in v1; unpublish is available to editors of the
 author team, including directly from the marketplace (UX convenience).
