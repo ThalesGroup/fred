@@ -14,9 +14,13 @@
 
 from __future__ import annotations
 
+import io
+import mimetypes
 from datetime import timedelta
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Optional
+
+from fred_core.store.base_content_store import ObjectInfo
 
 
 class LocalContentStore:
@@ -85,6 +89,48 @@ class LocalContentStore:
         if isinstance(payload, str):
             payload = payload.encode("utf-8")
         path.write_bytes(payload)
+
+    def stat_object(self, key: str) -> ObjectInfo:
+        """Return size/content-type/etag for `key`, for the object proxy.
+
+        Raises:
+            FileNotFoundError: object does not exist.
+        """
+
+        path = self._safe_under_root(key)
+        if not path.is_file():
+            raise FileNotFoundError(f"Object not found: {key}")
+        stat = path.stat()
+        content_type, _ = mimetypes.guess_type(path.name)
+        return ObjectInfo(
+            key=key,
+            size=stat.st_size,
+            content_type=content_type,
+            etag=f"{stat.st_mtime_ns:x}-{stat.st_size:x}",
+        )
+
+    def get_object_stream(
+        self, key: str, *, start: Optional[int] = None, length: Optional[int] = None
+    ) -> BinaryIO:
+        """Return a readable stream over `key`, optionally windowed to a byte range.
+
+        Raises:
+            FileNotFoundError: object does not exist.
+        """
+
+        path = self._safe_under_root(key)
+        if not path.is_file():
+            raise FileNotFoundError(f"Object not found: {key}")
+        handle = path.open("rb")
+        if start:
+            handle.seek(start)
+        if length is None:
+            return handle
+        try:
+            window = handle.read(length)
+        finally:
+            handle.close()
+        return io.BytesIO(window)
 
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)

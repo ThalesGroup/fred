@@ -17,13 +17,48 @@ from __future__ import annotations
 import io
 import logging
 from datetime import timedelta
-from typing import BinaryIO
+from typing import Any, BinaryIO, Optional, cast
 from urllib.parse import urlparse
 
 from minio import Minio
 from minio.error import S3Error
 
+from fred_core.store.base_content_store import ObjectInfo
+
 logger = logging.getLogger(__name__)
+
+_NOT_FOUND_CODES = {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}
+
+
+class _MinioObjectStream(io.RawIOBase):
+    """File-like view over a MinIO response that releases the connection on close.
+
+    Why this exists:
+    - `Minio.get_object` hands back an urllib3 response that must be both closed
+      and released; wrapping it keeps that pairing in one place so streaming
+      callers only have to call `close()`.
+    """
+
+    def __init__(self, response: Any) -> None:
+        self._response = response
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:  # type: ignore[override] - accepts any writable buffer
+        chunk = self._response.read(len(buffer))
+        count = len(chunk)
+        buffer[:count] = chunk
+        return count
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        try:
+            self._response.close()
+            self._response.release_conn()
+        finally:
+            super().close()
 
 
 def _clean_endpoint(endpoint: str) -> str:
@@ -156,6 +191,52 @@ class MinioContentStore:
             content_type=content_type or "application/octet-stream",
         )
 
+    def stat_object(self, key: str) -> ObjectInfo:
+        """Return size/content-type/etag for `key`, for the object proxy.
+
+        Raises:
+            FileNotFoundError: object or bucket does not exist.
+        """
+
+        object_name = self._normalize_key(key)
+        try:
+            stat = self.client.stat_object(self.object_bucket, object_name)
+        except S3Error as exc:
+            if getattr(exc, "code", "") in _NOT_FOUND_CODES:
+                raise FileNotFoundError(f"Object not found: {key}") from exc
+            raise
+        if stat.size is None:
+            raise RuntimeError(f"MinIO stat returned no size for '{object_name}'")
+        return ObjectInfo(
+            key=key,
+            size=stat.size,
+            content_type=stat.content_type,
+            etag=stat.etag,
+        )
+
+    def get_object_stream(
+        self, key: str, *, start: Optional[int] = None, length: Optional[int] = None
+    ) -> BinaryIO:
+        """Return a readable stream over `key`, optionally windowed to a byte range.
+
+        Raises:
+            FileNotFoundError: object or bucket does not exist.
+        """
+
+        object_name = self._normalize_key(key)
+        try:
+            response = self.client.get_object(
+                self.object_bucket,
+                object_name,
+                offset=start or 0,
+                length=length or 0,
+            )
+        except S3Error as exc:
+            if getattr(exc, "code", "") in _NOT_FOUND_CODES:
+                raise FileNotFoundError(f"Object not found: {key}") from exc
+            raise
+        return cast(BinaryIO, io.BufferedReader(_MinioObjectStream(response)))
+
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)
     ) -> str:
@@ -182,11 +263,7 @@ class MinioContentStore:
                 expires=expires,
             )
         except S3Error as exc:
-            if getattr(exc, "code", "") in {
-                "NoSuchKey",
-                "NoSuchObject",
-                "NoSuchBucket",
-            }:
+            if getattr(exc, "code", "") in _NOT_FOUND_CODES:
                 raise FileNotFoundError(f"Object not found: {key}") from exc
             logger.error("Failed to generate presigned URL for key=%s: %s", key, exc)
             raise
