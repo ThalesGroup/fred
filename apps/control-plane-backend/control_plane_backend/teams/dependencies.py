@@ -9,7 +9,7 @@ from fred_core import (
     RebacEngine,
 )
 from fred_core.scheduler import SchedulerBackend
-from fred_core.store import ContentStore
+from fred_core.store import ContentStore, ContentUrlResolver
 from fred_core.teams.metadata_store import TeamMetadataStore
 
 from control_plane_backend.app.container import ControlPlaneContainer
@@ -73,6 +73,10 @@ class TeamServiceDependencies:
     get_prompt_store: Callable[[], PromptStore]
     get_prompt_category_store: Callable[[], PromptCategoryStore]
     get_content_store: Callable[[], ContentStore]
+    # Cached on the container: the resolver re-reads `url_strategy` and the signing
+    # secret from the environment when it is built, so a team read must not rebuild
+    # one per request (`app/content_urls.py`: one factory, one reading of the config).
+    get_content_url_resolver: Callable[[], ContentUrlResolver]
     get_session_store: Callable[[], BaseSessionStore]
     get_purge_queue_store: Callable[[], PurgeQueueStore]
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
@@ -189,6 +193,7 @@ def build_team_service_dependencies(
         get_prompt_store=container.get_prompt_store,
         get_prompt_category_store=container.get_prompt_category_store,
         get_content_store=container.get_content_store,
+        get_content_url_resolver=container.get_content_url_resolver,
         get_session_store=container.get_session_store,
         get_purge_queue_store=container.get_purge_queue_store,
         get_policy_catalog=container.get_policy_catalog,

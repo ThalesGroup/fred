@@ -35,7 +35,6 @@ from fred_core.store import ContentUrlResolver
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from sqlalchemy.exc import IntegrityError
 
-from control_plane_backend.app.content_urls import build_content_url_resolver
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -1461,9 +1460,7 @@ async def _enrich_teams_with_membership(
     if not teams_metadata:
         return []
 
-    url_resolver = build_content_url_resolver(
-        deps.configuration, deps.get_content_store()
-    )
+    url_resolver = deps.get_content_url_resolver()
     team_ids: list[TeamId] = [metadata.id for metadata in teams_metadata]
     (
         team_admin_ids_map,
@@ -1692,9 +1689,7 @@ async def _build_team_with_permissions(
         is_member=user.uid in member_ids,
         my_relations=roles_by_user.get(user.uid, set()),
         admin_summaries=admin_summaries,
-        url_resolver=build_content_url_resolver(
-            deps.configuration, deps.get_content_store()
-        ),
+        url_resolver=deps.get_content_url_resolver(),
         default_max_resources_storage_size=deps.configuration.app.default_team_max_resources_storage_size,
     )
     # `my_relations` now rides along on the base `Team` (via `team.model_dump()`),

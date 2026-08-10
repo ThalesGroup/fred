@@ -262,6 +262,7 @@ def _deps(
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),
+        get_content_url_resolver=cast(Any, object),
         get_session_store=get_session_store,
         get_purge_queue_store=get_purge_queue_store,
         get_policy_catalog=get_policy_catalog,

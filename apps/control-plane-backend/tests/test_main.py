@@ -5377,6 +5377,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
     """AUTHZ-05 review item 9: `_enrich_teams_with_membership` renders directly off
     the `TeamMetadata` rows it's handed (description/joining_mode/banner) — there is
     no separate Keycloak-group-summary type or admin fetch anymore."""
+    from control_plane_backend.app.content_urls import build_content_url_resolver
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
     from control_plane_backend.teams.service import _enrich_teams_with_membership
 
@@ -5418,6 +5419,9 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
+        get_content_url_resolver=lambda: build_content_url_resolver(
+            mock_config, cast(Any, _FakeContentStore())
+        ),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
@@ -5454,6 +5458,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
     """Admin dedupe still applies: legacy relations naming a username alongside
     newer relations naming the canonical user id must render as one admin, even
     though admin ids now resolve purely through `_bulk_team_membership`."""
+    from control_plane_backend.app.content_urls import build_content_url_resolver
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
     from control_plane_backend.teams.service import _enrich_teams_with_membership
 
@@ -5499,6 +5504,9 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
+        get_content_url_resolver=lambda: build_content_url_resolver(
+            mock_config, cast(Any, _FakeContentStore())
+        ),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
@@ -5819,6 +5827,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, object()),
+        get_content_url_resolver=cast(Any, object),
         get_session_store=cast(Any, lambda: fake_session_store),
         get_purge_queue_store=cast(Any, lambda: fake_queue_store),
         get_policy_catalog=cast(Any, object),
