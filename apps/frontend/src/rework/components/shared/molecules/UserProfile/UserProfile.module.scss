@@ -6,7 +6,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
-  transition: background-color 120ms ease;
   cursor: pointer;
   border: none;
   border-radius: var(--spacing-xs);
@@ -18,8 +17,10 @@
   text-align: left;
 }
 
+/* Standard hover state layer: an 8% on-surface (neutral) layer over the
+   resting surface, no animation — matches every other hoverable tile. */
 .trigger:hover {
-  background-color: var(--surface-container-high);
+  background-image: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover));
 }
 
 .identity {
