@@ -37,6 +37,7 @@ import inspect
 import json
 import logging
 import os
+import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Protocol, TypedDict, cast
@@ -977,6 +978,28 @@ class DocumentFolderAdapter(DocumentFolderPort):
         )
 
 
+_URL_IN_TEXT = re.compile(r"https?://\S+")
+_REDACTED_URL = "[redacted url]"
+
+
+def _redact_urls(text: str) -> str:
+    """Strip absolute URLs from text destined for the model or chat history.
+
+    Why it exists:
+    - downstream error strings name internal service hosts, ports and routes.
+      They travel further than a log line: `_document_tool_failure` renders them
+      into the tool result the LLM reads and the trace block that is persisted.
+
+    The placeholder is not angle-bracketed: the chat renderer treats
+    `<redacted-url>` as an unknown HTML tag and drops it, leaving what looks
+    like a truncated error.
+
+    How to use it:
+    - `detail = _redact_urls(str(exc))`
+    """
+    return _URL_IN_TEXT.sub(_REDACTED_URL, text).strip()
+
+
 def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     """
     Map an httpx transport failure onto the SDK-typed `DocumentPortCallError`
@@ -988,7 +1011,14 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     status_code = (
         exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
     )
-    detail = str(exc).strip() or type(exc).__name__
+    # `str(exc)` on an httpx error embeds the full request URL — for
+    # HTTPStatusError, "Client error '401 Unauthorized' for url
+    # 'http://knowledge-flow:8111/knowledge-flow/v1/vector/search'". This detail
+    # is rendered into the model-facing tool message AND persisted in chat
+    # history, so the internal service host, port and route would reach the LLM
+    # context and the trace of every user who triggers a downstream failure.
+    # Status and exception type carry the diagnosis without the topology.
+    detail = _redact_urls(str(exc).strip()) or type(exc).__name__
     return DocumentPortCallError(detail, timed_out=timed_out, status_code=status_code)
 
 
