@@ -19,11 +19,12 @@ import tempfile
 
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
-from temporalio import activity
+from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.activity_utils import (
     await_with_heartbeat,
+    document_still_registered,
     to_thread_with_heartbeat,
 )
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
@@ -133,6 +134,13 @@ async def pull_input_process(
     ingestion_service = get_ingestion_service()
 
     try:
+        # #2315: a retry attempt can start after the cancel cleanup erased the
+        # document — stamping `in_progress` here would resurrect the row.
+        if not await document_still_registered(metadata.document_uid):
+            raise exceptions.ApplicationError(
+                f"Document {metadata.document_uid} was deleted mid-flight; nothing to process.",
+                non_retryable=True,
+            )
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
         await ingestion_service.save_metadata(user, metadata=metadata)
 
@@ -180,9 +188,14 @@ async def pull_input_process(
                 },
             )
 
-        if not ingestion_service.context.is_tabular_file(metadata.document_name):
-            metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-        await ingestion_service.save_metadata(user, metadata=metadata)
+        # #2315: the unkillable worker thread can finish long after a cancel
+        # deleted the document — this upsert would resurrect the deleted row.
+        if await document_still_registered(metadata.document_uid):
+            if not ingestion_service.context.is_tabular_file(metadata.document_name):
+                metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+            await ingestion_service.save_metadata(user, metadata=metadata)
+        else:
+            logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] uid=%s deleted mid-flight; results discarded", metadata.document_uid)
         logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
         emit_temporal_activity_result_kpis(
             phase="input",
@@ -195,7 +208,8 @@ async def pull_input_process(
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
         try:
-            await ingestion_service.save_metadata(user, metadata=metadata)
+            if await document_still_registered(metadata.document_uid):
+                await ingestion_service.save_metadata(user, metadata=metadata)
         except Exception:
             logger.exception(
                 "[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] failed to persist error state uid=%s",

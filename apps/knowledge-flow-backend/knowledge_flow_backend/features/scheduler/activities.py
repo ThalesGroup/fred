@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
+from knowledge_flow_backend.features.scheduler.activity_utils import document_still_registered
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
 )
@@ -124,6 +125,14 @@ async def _output_process_impl(
                 output_stage = ProcessingStage.VECTORIZED
                 file_name_for_processing = preview_file.name
 
+            # #2315: a retry (or a queued attempt) can start after the cancel
+            # cleanup erased the document — stamping `in_progress` here would
+            # resurrect the row.
+            if not await document_still_registered(metadata.document_uid):
+                raise exceptions.ApplicationError(
+                    f"Document {metadata.document_uid} was deleted mid-flight; nothing to process.",
+                    non_retryable=True,
+                )
             metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
             await save_metadata(file.processed_by, metadata=metadata)
 
@@ -147,8 +156,13 @@ async def _output_process_impl(
                 file.profile,
             )
 
-            # Save the updated metadata
-            await save_metadata(file.processed_by, metadata=metadata)
+            # Save the updated metadata — unless the document was deleted while
+            # the (unkillable) processing thread was still working (#2315): the
+            # upsert would resurrect the deleted row.
+            if await document_still_registered(metadata.document_uid):
+                await save_metadata(file.processed_by, metadata=metadata)
+            else:
+                logger.info("[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] uid=%s deleted mid-flight; results discarded", metadata.document_uid)
 
         logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
         emit_temporal_activity_result_kpis(
@@ -164,7 +178,8 @@ async def _output_process_impl(
         stage = output_stage or ProcessingStage.PREVIEW_READY
         metadata.mark_stage_error(stage, error_message)
         try:
-            await save_metadata(file.processed_by, metadata=metadata)
+            if await document_still_registered(metadata.document_uid):
+                await save_metadata(file.processed_by, metadata=metadata)
         except Exception:
             logger.exception(
                 "[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed to persist error state uid=%s",

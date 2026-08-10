@@ -129,3 +129,32 @@ async def to_thread_with_heartbeat(
         heartbeat_details=heartbeat_details,
         heartbeat_interval_seconds=heartbeat_interval_seconds,
     )
+
+
+def _resolve_metadata_store():
+    """Late-bound store lookup — also the seam tests patch (same pattern as
+    `document_failure._resolve_store`)."""
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    return ApplicationContext.get_instance().get_metadata_store()
+
+
+async def document_still_registered(document_uid: str) -> bool:
+    """True while the document's metadata row still exists.
+
+    Why (#2315): cancelling an ingestion deletes the document, but the thread
+    behind a cancelled activity is unkillable (`asyncio.to_thread`) and can
+    outlive both the workflow and the cancel cleanup. The end-of-activity
+    `save_metadata` is an upsert, so persisting results for a deleted document
+    silently resurrects the row — stuck "processing" forever, invisible to
+    every repair path. Ingestion activities call this right before writing
+    metadata and discard their results when the document is gone.
+
+    Best-effort by design: an unreachable store reads as "still registered" —
+    a transient read failure must never discard a legitimate save.
+    """
+    try:
+        store = _resolve_metadata_store()
+        return await store.get_metadata_by_uid(document_uid) is not None
+    except Exception:
+        return True

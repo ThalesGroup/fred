@@ -65,6 +65,13 @@ def _user() -> KeycloakUser:
     )
 
 
+async def _document_always_registered(document_uid: str) -> bool:
+    """Neutralize the #2315 deleted-mid-flight guard: these tests never create
+    a metadata row, and the guard would otherwise (correctly) abort the
+    activity before the behavior under test runs."""
+    return True
+
+
 @pytest.mark.asyncio
 async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     """
@@ -119,6 +126,13 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "knowledge_flow_backend.features.scheduler.push_files_activities.tempfile.TemporaryDirectory",
         lambda prefix="": tracked_dir,
+    )
+    # #2315 guard: this test never registers "doc-push" in a metadata store, so
+    # the deleted-mid-flight check would (correctly) abort the activity — keep
+    # the document "registered" so the test still exercises temp cleanup.
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.push_files_activities.document_still_registered",
+        _document_always_registered,
     )
 
     result = await push_input_process(
@@ -194,6 +208,10 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
         lambda prefix="": tracked_dir,
     )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.activities.document_still_registered",
+        _document_always_registered,
+    )
 
     result = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
 
@@ -265,6 +283,10 @@ async def test_output_process_and_trusted_variant_call_the_right_save_metadata(t
     monkeypatch.setattr(
         "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
         lambda prefix="": _TrackedTemporaryDirectory(tmp_path / "worker-output-checked"),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.activities.document_still_registered",
+        _document_always_registered,
     )
 
     monkeypatch.setattr(
