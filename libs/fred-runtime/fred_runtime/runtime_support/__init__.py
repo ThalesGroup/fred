@@ -32,10 +32,14 @@ from .request_context_helpers import (
     should_skip_rag_search,
 )
 from .sql_checkpointer import FredSqlCheckpointer
-from .user_token_refresher import refresh_user_access_token_from_keycloak
+from .user_token_refresher import (
+    aclose_token_refresh_client,
+    refresh_user_access_token_from_keycloak,
+)
 
 __all__ = [
     "FredSqlCheckpointer",
+    "aclose_token_refresh_client",
     "refresh_user_access_token_from_keycloak",
     "RuntimeContextProvider",
     "set_attachments_markdown",

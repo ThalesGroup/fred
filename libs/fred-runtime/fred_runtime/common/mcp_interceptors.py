@@ -11,6 +11,10 @@ from typing import Awaitable, Callable
 import httpx
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 
+from fred_runtime.common.structures import (
+    TokenRefreshCallback,
+    resolve_refresh_result,
+)
 from fred_runtime.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
@@ -23,11 +27,11 @@ class ExpiredTokenRetryInterceptor:
     """
     Intercepts MCP tool calls; on expired-token 401 it refreshes the token and retries once.
 
-    - Uses agent-provided `refresh_user_access_token` callback (sync) to fetch a new token.
+    - Awaits the agent-provided `refresh_user_access_token` callback to fetch a new token.
     - Injects the fresh Authorization header on retry only (does not mutate base connection).
     """
 
-    def __init__(self, refresh_token_cb: Callable[[], str]):
+    def __init__(self, refresh_token_cb: TokenRefreshCallback):
         self._refresh = refresh_token_cb
 
     async def __call__(
@@ -49,7 +53,7 @@ class ExpiredTokenRetryInterceptor:
             )
 
             try:
-                new_token = self._refresh()
+                new_token = await resolve_refresh_result(self._refresh(), self)
             except Exception as refresh_err:  # noqa: BLE001
                 logger.error(
                     "[MCP][%s] Token refresh failed; not retrying: %s",

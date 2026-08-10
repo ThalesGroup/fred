@@ -20,7 +20,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Iterable
-from typing import Any, Callable, List, Optional, Tuple, cast
+from typing import Any, List, Optional, Tuple, cast
 
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 from fred_sdk.contracts.models import (
@@ -37,6 +37,7 @@ from fred_runtime.common.mcp_utils import (
     MCPConnectionError,
     get_connected_mcp_client_for_agent,
 )
+from fred_runtime.common.structures import TokenRefreshCallback
 from fred_runtime.common.tool_node_utils import create_mcp_tool_node
 from fred_runtime.runtime_context import get_runtime_context
 
@@ -336,8 +337,8 @@ class MCPRuntime:
             refresh_cb_attr = getattr(
                 self.agent_instance, "refresh_user_access_token", None
             )
-            refresh_cb: Callable[[], str] | None = (
-                cast(Callable[[], str], refresh_cb_attr)
+            refresh_cb: TokenRefreshCallback | None = (
+                cast(TokenRefreshCallback, refresh_cb_attr)
                 if callable(refresh_cb_attr)
                 else None
             )
