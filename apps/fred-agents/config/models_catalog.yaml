@@ -54,6 +54,27 @@ profiles:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
         reasoning_effort: high
+        # CACHE-01: prompt caching runs entirely on Mistral's own
+        # infrastructure — nothing in Fred "activates" it. Mistral
+        # opportunistically caches repeated prompt prefixes on its own even
+        # with no prompt_cache_key set (confirmed: cache hits observed with
+        # this setting left disabled). Whatever tokens Mistral does serve
+        # from cache are billed at ~10% of the normal input-token price —
+        # that 10% is a fixed price, unrelated to whether a key is set.
+        # extra_body.prompt_cache_key is only an optional hint: a stable,
+        # deliberately-chosen string (static — same value for every
+        # session/user on this profile) that Mistral's docs say increases
+        # the *chance* of a hit, without a guarantee or a published number.
+        # We have not isolated its effect ourselves — our own tests
+        # confounded "key present" with "calls fired in quick succession",
+        # so we can't attribute the cache-rate difference we saw to the key
+        # specifically rather than to timing alone. Left unset here:
+        # flipping it changes the average cache-hit rate (and so the real
+        # Mistral bill) for every user on this profile — a product/FinOps
+        # call separate from this branch's cache *visibility* work, best
+        # made with a proper before/after measurement, not assumed.
+        # extra_body:
+        #   prompt_cache_key: "fred-chat-mistral-small"
 
   - profile_id: language.mistral.small
     capability: language
@@ -64,8 +85,6 @@ profiles:
       settings:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
-        extra_body:
-          prompt_cache_key: "fred-language-mistral-small"
 
   - profile_id: default.chat.openai.prod
     capability: chat
