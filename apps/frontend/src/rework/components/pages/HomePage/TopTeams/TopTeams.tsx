@@ -32,10 +32,11 @@ interface TopTeamsProps {
   period: HomePeriod;
 }
 
-/** Home page — the teams the current user has been most active in over the
- * period (live: self-scoped `user_top_teams` preset — the caller's own turn
- * count per team). The team list, avatar and roles are the caller's real
- * membership from bootstrap; the personal space is excluded. */
+/** Home page — the caller's own activity across the spaces they belong to over
+ * the period (live: self-scoped `user_top_teams` preset — their own turn count
+ * per team). The list, avatar and roles are their real membership from
+ * bootstrap; the personal space is included in the ranking (shown without a
+ * role sublabel, since collaboration roles don't apply there). */
 export default function TopTeams({ period }: TopTeamsProps) {
   const { t } = useTranslation();
   const { availableTeams } = useFrontendBootstrap();
@@ -47,11 +48,13 @@ export default function TopTeams({ period }: TopTeamsProps) {
   // in a team they belong to).
   const activityByTeamId = useMemo(() => new Map((data?.rows ?? []).map((row) => [row.label, row.value])), [data]);
 
-  const memberTeams = availableTeams.filter((team) => team.is_member && !isPersonalTeamId(team.id));
+  const memberTeams = availableTeams.filter((team) => team.is_member);
 
   const items: RankedItem[] = memberTeams
     .map((team) => {
-      const roles = ROLE_ORDER.filter((role) => (team.my_relations ?? []).includes(role));
+      // Collaboration roles are meaningless for the personal space — omit them.
+      const isPersonal = isPersonalTeamId(team.id);
+      const roles = isPersonal ? [] : ROLE_ORDER.filter((role) => (team.my_relations ?? []).includes(role));
       const avatar = team.avatar_image_url ? (
         <img className={styles.avatar} src={team.avatar_image_url} alt="" aria-hidden="true" />
       ) : (

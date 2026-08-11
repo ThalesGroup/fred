@@ -1561,7 +1561,7 @@
         "empty": "Aucun agent utilisé sur cette période."
       },
       "topTeams": {
-        "title": "Vos équipes les plus actives",
+        "title": "Votre activité au sein de vos équipes",
         "unit": "conv.",
         "empty": "Vous n'êtes membre d'aucune équipe.",
         "role": {

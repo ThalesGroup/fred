@@ -69,8 +69,8 @@ export default function HomePage() {
       <ResponsibleAiSection period={period} />
 
       <div className={styles.cols}>
-        <TopAgents period={period} />
         <TopTeams period={period} />
+        <TopAgents period={period} />
       </div>
 
       <MarketplaceTopPrompts period={period} />
