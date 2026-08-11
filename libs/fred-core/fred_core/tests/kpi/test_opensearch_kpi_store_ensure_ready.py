@@ -33,7 +33,6 @@ import copy
 from typing import Any, Dict, List, cast
 
 import pytest
-
 from fred_core.kpi.opensearch_kpi_store import KPI_INDEX_MAPPING, OpenSearchKPIStore
 from fred_core.store import MappingValidationError
 
