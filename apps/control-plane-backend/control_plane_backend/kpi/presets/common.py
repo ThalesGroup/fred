@@ -14,8 +14,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import AwareDatetime, BaseModel
 
 
@@ -105,16 +103,5 @@ class TeamStorageResponse(BaseModel):
     with every other preset, not used to filter this query)."""
 
     rows: list[TeamStorageRow]
-    since: AwareDatetime
-    until: AwareDatetime
-
-
-class TeamActivitySummaryResponse(BaseModel):
-    """One team's activity trend — team_admin's governance-focused Activités
-    panel content (KPI-ANALYTICS-RFC.md §2.5)."""
-
-    last_active_at: AwareDatetime | None  # None = no session ever recorded
-    sessions_in_range: int
-    trend: Literal["active", "quiet"]  # "active" = >=1 session in range
     since: AwareDatetime
     until: AwareDatetime

@@ -1,0 +1,50 @@
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+}
+
+.loadingScreen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--surface-main);
+  min-height: 100vh;
+  color: var(--on-surface);
+}
+
+.logoBadge {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-s) var(--spacing-l);
+  width: 170px;
+}
+
+.logo {
+  filter: drop-shadow(var(--shadow-m));
+  animation: pulse 1.8s ease-in-out infinite;
+  width: 68px;
+  height: 68px;
+}
+
+.srOnly {
+  position: absolute;
+  margin: -1px;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  white-space: nowrap;
+}

@@ -896,12 +896,6 @@
           "title": "Reports Enabled",
           "type": "boolean"
         },
-        "kpi_enabled": {
-          "default": true,
-          "description": "Expose the KPI MCP server for querying application KPIs.",
-          "title": "Kpi Enabled",
-          "type": "boolean"
-        },
         "tabular_enabled": {
           "default": true,
           "description": "Expose the Tabular MCP server for SQL/table exploration.",
@@ -1786,7 +1780,7 @@
         },
         "activity_heartbeat_timeout": {
           "default": "5m",
-          "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+          "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
           "title": "Activity Heartbeat Timeout",
           "type": "string"
         },

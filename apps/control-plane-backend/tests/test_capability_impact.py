@@ -96,7 +96,7 @@ def _patch_availability(
 
     # `_available_capability_ids_by_source` is imported lazily from
     # product.service INSIDE the impact functions, so patch it at the source.
-    import control_plane_backend.product.service as product_service
+    from control_plane_backend.product import service as product_service
 
     monkeypatch.setattr(
         product_service, "_available_capability_ids_by_source", _fake_available

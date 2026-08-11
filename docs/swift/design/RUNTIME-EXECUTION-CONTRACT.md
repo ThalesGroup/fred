@@ -2501,6 +2501,151 @@ the `folder:` form. Regression tests:
 
 ---
 
+### 8.43 ✅ `DocumentMarkdownPort` — paginated full-content read for capabilities (DOCREAD-01, 2026-08-07)
+
+**New optional port on `RuntimeServices` (`fred-sdk`
+`contracts/runtime.py`).** `document_summarize` returns a lossy overview and
+the model cannot tell it only saw a summary — so "what does the first paragraph
+say?" or "list ALL the requirements" answers come out half-complete. The three
+existing document ports could not close this: `document_summarize` is
+deliberately lossy, `document_content` returns the original uploaded **bytes**
+(a PDF/DOCX blob the model can't read as text), and `document_search` returns
+only the top-k relevant chunks. Knowledge Flow already stores the full parsed
+markdown (`output.md`, un-truncated under the default ingestion config) and
+serves it at `GET /knowledge-flow/v1/markdown/{uid}` — it just wasn't reachable
+through a capability-safe port.
+
+`DocumentMarkdownPort.fetch_markdown(document_uid, *, offset, max_chars) ->
+DocumentMarkdownResult{text, offset, next_offset, total_chars}` exposes it under
+the same doctrine as the other document ports (scope parameters only; the
+per-turn binding and access token stay private to the adapter; KF per-document
+ReBAC is the gate). **Pagination is the contract's point:** each call returns one
+bounded window and `next_offset` (None at end of document), so an exhaustive
+read can never silently stop half-way — the failure mode §8.42/§8.27 work around
+downstream, addressed here at the source. Wiring: `DocumentMarkdownAdapter`
+(`adapters.py`) fetches the whole markdown once via
+`KfDocumentClient.fetch_markdown` (KF client stays wire-format only), memoises it
+per uid on the per-turn instance, and slices adapter-side (`paginate_markdown`,
+a pure helper) — KF has no page parameter today. Injected in `agent_app.py`'s
+`RuntimeServices` assembly (turn-time path only; the save-time services subset
+does not carry it). Additive and optional, so no existing runtime breaks.
+
+**Consumers (DOCREAD-01):** two admin-gated capabilities, `document_verbatim`
+(tool `read_document`, positional verbatim slice) and `document_extract` (tool
+`extract_from_document`, exhaustive enumeration), both on this one port and
+differing only in tool intent and how the continuation footer is worded. The
+frontend Simple view groups them under one `document_reading` tool pack while the
+Advanced view keeps each toggle independent (front-only presentation, no backend
+change). Phase 1 relies on the agent paging to completion (guided by
+`next_offset`); a server-side map-reduce extraction endpoint is the deliberately
+deferred Phase 2 if that proves unreliable on very large documents. Tests:
+`test_capability_document_reading.py` (pagination contract, both tools' footers,
+config cap, error shaping), `test_capability_endpoints_1974.py` (pod advertises
+the pair).
+
+---
+
+### 8.44 ✅ `DocumentExtractionPort` — server-side exhaustive extraction (DOCREAD-01 Phase 2, 2026-08-07)
+
+**Moves `document_extract` off client-side paging.** The Phase 1 tool
+(§8.43) had the agent page the whole document into its own context and
+accumulate — a burst of token-heavy model calls that tripped the provider's
+rate limit (observed live: Mistral `mistral-small-latest` returned HTTP 429
+`code=1300` mid-turn on a multi-page extraction). Root cause is structural, not
+a bug: exhaustive extraction over a big document is inherently many LLM calls,
+and doing them agent-side re-sends the growing context each round.
+
+**New optional port `DocumentExtractionPort.extract(document_uid, *,
+instruction) -> DocumentExtractionResult`** (`fred-sdk`) runs the whole
+map-reduce **server-side in Knowledge Flow**, in ONE agent tool call. KF's new
+`POST /knowledge-flow/v1/documents/{uid}/extract` (`ExtractService` +
+`DocumentExtractor`) maps over EVERY chunk (no salience pruning — deliberately
+NOT `SmartDocSummarizer`, which keeps only top-N shards and compresses at
+reduce, dropping items) and reduces by concatenate + case-insensitive de-dupe,
+never summarizing. The map phase runs with **bounded concurrency
+(`_MAP_CONCURRENCY=3`) and 429-aware retry/backoff** (respects `Retry-After`,
+exponential + jitter) so a throttling provider slows the extraction rather than
+failing the turn (DOCREAD-01 #2). Document text is resolved through
+`SummarizeService.get_document_text`, so the corpus/session-attachment access
+rules stay single-sourced. `document_verbatim`'s positional read stays on the
+paginated `document_markdown` port; only exhaustive extraction moved.
+
+Wiring mirrors the summarize path: `KfDocumentClient.extract` (extended read
+timeout), `DocumentExtractionAdapter`, injected in `agent_app.py`'s turn-time
+`RuntimeServices`. The `document_extract` capability tool is now one call
+returning the consolidated list; its `page_max_chars` config field was removed
+(server owns paging). Additive/optional — no existing runtime path changes.
+Tuning knobs (concurrency, retry, input cap) are module constants pending live
+calibration against real provider limits, and the map remains inherently
+LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
+`test_document_extractor.py` (exhaustive de-dupe, NONE handling, 429 retry),
+`test_capability_document_reading.py` (one-call path, empty/truncation/error
+shaping).
+
+---
+
+### 8.45 ✅ Alembic owns `session_history` DDL; an unmigrated pod fails at startup (issue #2290, 2026-08-07)
+
+**Extends §8.33.** `PostgresHistoryStore` used to call `_ensure_tables()` —
+`metadata.create_all` under a Postgres advisory lock — from every read and
+write path (`save`, `get`, `list_sessions`, `delete_session`,
+`session_belongs_to_user`, `session_exists`, `next_rank`,
+`latest_exchange_id`), in parallel with the Alembic tree that already owns the
+same schema (`libs/fred-runtime/alembic/versions/a1e2f3c4d5b6_*`,
+`b2f3a4e5c6d7_*`, `c3d4b5a6f7e8_*`). Hit in production: an install that skipped
+its migration job worked — the store silently made the table — but
+`alembic_version_runtime` was never stamped, so the first `alembic upgrade head`
+needed for anything else replayed from the first revision and died on "table
+already exists". The operator was left with a working database and a migration
+tree that could never be applied, recoverable only by hand-stamping.
+
+**What changed.** `_ensure_tables()` and all eight call sites are gone; the
+store creates nothing, on any path. `PodApplicationContext.initialize_sql()`
+now calls `fred_core.sql.require_tables` once, right after the §8.33
+connectivity ping and before the checkpointer/history store are published: a
+missing `session_history` raises `SchemaNotMigratedError` naming the table and
+the exact fix (`python -m fred_runtime migrate`), so the lifespan aborts and
+the replica never becomes Ready. This is startup-only work — nothing was added
+to the per-turn path; the eight per-call `await self._ensure_tables()` guards
+were in fact removed from it. A database whose tables exist but whose version
+table is unstamped (the pre-#2290 state) still boots, with a warning naming the
+recovery path.
+
+**Tests run the real migrations, not hand-rolled DDL.** Every pod-booting test
+applies fred-runtime's Alembic tree to its SQLite file through
+`fred_runtime.migrations.upgrade_sqlite_database` (`DATABASE_URL` override, run
+off-loop because Alembic's online runner calls `asyncio.run`) — used by
+`libs/fred-runtime/tests/conftest.py`'s `migrate_test_config` and by
+`apps/fred-agents/tests/test_smoke.py`. Cost is ~30ms per database once imports
+are warm, and the payoff is that the suite proves the migration tree produces a
+schema the pod can boot against, leaving `alembic_version_runtime` stamped at
+head exactly like a real install. Re-introducing `metadata.create_all` in test
+setup would recreate, in test code, the second schema definition this entry
+removed from production.
+
+The one exception is `fred_core.history.create_history_schema`, for fred-core's
+own unit tests: fred-core sits below the package that owns the Alembic tree and
+cannot import upwards to run it. Anything that *can* import fred-runtime must
+use `upgrade_sqlite_database`.
+
+Note for test authors: a suite that boots a pod against a **persistent** SQLite
+file (`apps/fred-agents/config/configuration.yaml` points at
+`~/.fred/fred-agents/runtime.sqlite3`) must migrate it itself. Such a file left
+over from before this change already contains `session_history`, so the guard
+stays quiet locally and fires only on a clean runner — which is exactly how this
+was missed locally and caught by CI.
+
+Operator recovery path (which revision to stamp, by columns present):
+[`ops/DATABASE_MIGRATIONS.md`](../ops/DATABASE_MIGRATIONS.md).
+
+**Deliberately out of scope:** `SqlCheckpointer._ensure_tables()`
+(`fred_runtime/runtime_support/sql_checkpointer.py`, ~12 call sites plus three
+direct calls from `agent_app.py`) has the identical pattern and is tracked
+separately — its tables are in no Alembic tree yet, so removing lazy creation
+there needs migrations written first.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

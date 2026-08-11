@@ -48,9 +48,7 @@ vi.mock("src/hooks/useFrontendBootstrap", () => ({
 
 vi.mock("src/hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({
-    defaultTeamBannerFile: undefined,
     defaultTeamAvatarFile: undefined,
-    defaultPersonalBannerFile: undefined,
     defaultPersonalAvatarFile: undefined,
   }),
 }));

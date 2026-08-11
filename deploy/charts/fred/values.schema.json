@@ -4539,7 +4539,7 @@
                             },
                             "activity_heartbeat_timeout": {
                               "default": "5m",
-                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
                               "title": "Activity Heartbeat Timeout",
                               "type": "string"
                             },
@@ -4707,7 +4707,7 @@
                             },
                             "activity_heartbeat_timeout": {
                               "default": "5m",
-                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
                               "title": "Activity Heartbeat Timeout",
                               "type": "string"
                             },
@@ -4875,7 +4875,7 @@
                             },
                             "activity_heartbeat_timeout": {
                               "default": "5m",
-                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
                               "title": "Activity Heartbeat Timeout",
                               "type": "string"
                             },
@@ -6854,12 +6854,6 @@
                       "default": true,
                       "description": "Expose the Reports MCP server (Markdown-first report generation).",
                       "title": "Reports Enabled",
-                      "type": "boolean"
-                    },
-                    "kpi_enabled": {
-                      "default": true,
-                      "description": "Expose the KPI MCP server for querying application KPIs.",
-                      "title": "Kpi Enabled",
                       "type": "boolean"
                     },
                     "tabular_enabled": {
@@ -9118,7 +9112,7 @@
                             },
                             "activity_heartbeat_timeout": {
                               "default": "5m",
-                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
                               "title": "Activity Heartbeat Timeout",
                               "type": "string"
                             },
@@ -9286,7 +9280,7 @@
                             },
                             "activity_heartbeat_timeout": {
                               "default": "5m",
-                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
                               "title": "Activity Heartbeat Timeout",
                               "type": "string"
                             },
@@ -9454,7 +9448,7 @@
                             },
                             "activity_heartbeat_timeout": {
                               "default": "5m",
-                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+                              "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
                               "title": "Activity Heartbeat Timeout",
                               "type": "string"
                             },
@@ -11433,12 +11427,6 @@
                       "default": true,
                       "description": "Expose the Reports MCP server (Markdown-first report generation).",
                       "title": "Reports Enabled",
-                      "type": "boolean"
-                    },
-                    "kpi_enabled": {
-                      "default": true,
-                      "description": "Expose the KPI MCP server for querying application KPIs.",
-                      "title": "Kpi Enabled",
                       "type": "boolean"
                     },
                     "tabular_enabled": {

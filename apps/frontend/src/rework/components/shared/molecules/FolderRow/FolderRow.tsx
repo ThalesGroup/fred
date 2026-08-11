@@ -96,7 +96,7 @@ export function FolderRow({
             {onUpload && (
               <IconButton
                 variant="icon"
-                size="xs"
+                size="2xs"
                 icon={{ category: "outlined", type: "attach_file" }}
                 aria-label={t("rework.resources.action.addFile")}
                 title={t("rework.resources.action.addFile")}
@@ -109,7 +109,7 @@ export function FolderRow({
             {onCreateSubfolder && (
               <IconButton
                 variant="icon"
-                size="xs"
+                size="2xs"
                 icon={{ category: "outlined", type: "create_new_folder" }}
                 aria-label={t("rework.resources.action.newSubfolder", { name })}
                 title={t("rework.resources.action.newSubfolder", { name })}
@@ -121,7 +121,7 @@ export function FolderRow({
             )}
             {onDelete && (
               <DeleteIconButton
-                size="xs"
+                size="2xs"
                 aria-label={t("rework.resources.action.delete")}
                 title={t("rework.resources.action.delete")}
                 onClick={(e) => {

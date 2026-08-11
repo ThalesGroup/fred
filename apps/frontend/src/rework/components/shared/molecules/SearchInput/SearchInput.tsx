@@ -42,6 +42,14 @@ export default function SearchInput({
 }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // On the compact field tiers (`xs` = 32px, `2xs` = 24px) a 32px clear button
+  // would overflow the field, so it shrinks to the 24px `2xs` icon button and
+  // the reserved right padding shrinks to match. Every other size keeps the
+  // original 32px clear + 2rem reserve — existing call sites are unchanged.
+  const compact = size === "xs" || size === "2xs";
+  const clearSize: ComponentSize = compact ? "2xs" : "small";
+  const clearReserve = compact ? "1.5rem" : "2rem";
+
   return (
     <div className={styles.wrapper}>
       <TextInput
@@ -54,13 +62,13 @@ export default function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        style={value ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined}
+        style={value ? { paddingRight: `calc(var(--spacing-2xs) + ${clearReserve} + var(--spacing-xs))` } : undefined}
       />
       {value && (
         <span className={styles.clear}>
           <IconButton
             type="button"
-            size="small"
+            size={clearSize}
             color="on-surface-retreat"
             variant="icon"
             icon={{ category: "outlined", type: "close" }}

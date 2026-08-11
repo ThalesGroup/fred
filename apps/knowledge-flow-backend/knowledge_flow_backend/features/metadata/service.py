@@ -36,9 +36,6 @@ from fred_core.common.team_id import TeamId
 from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from fred_core.documents.document_structures import (
     DocumentMetadata,
-    ProcessingGraph,
-    ProcessingGraphEdge,
-    ProcessingGraphNode,
     ProcessingStage,
     ProcessingStatus,
 )
@@ -47,11 +44,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.structures import (
-    ClickHouseVectorStorageConfig,
-    OpenSearchVectorIndexConfig,
-    PgVectorStorageConfig,
-)
+from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels, with_label_added, with_label_removed
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
@@ -369,145 +362,6 @@ class MetadataService:
         logger.info("[MetadataService] The vector store does not support retrieving chunk")
         return None
 
-    async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
-        """
-        Build a lightweight processing graph for all documents visible to the user.
-
-        The graph connects:
-        - document nodes to vector_index nodes when the document has been vectorized
-        - document nodes to table nodes when the document has been SQL indexed
-        """
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-
-        try:
-            docs = await self.metadata_store.get_all_metadata({})
-        except MetadataDeserializationError as e:
-            logger.error(f"[Metadata] Deserialization error while building processing graph: {e}")
-            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
-        except Exception as e:
-            logger.error(f"Error retrieving metadata for processing graph: {e}")
-            raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
-
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            visible_docs = docs
-        else:
-            authorized_doc_ids = {d.id for d in authorized_doc_ref}
-            visible_docs = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
-
-        # Lazy-load optional stores only if needed
-        def ensure_vector_store():
-            if self.vector_store is None:
-                try:
-                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                except Exception as e:
-                    logger.warning(f"[GRAPH] Could not initialize vector store for graph: {e}")
-            return self.vector_store
-
-        nodes: list[ProcessingGraphNode] = []
-        edges: list[ProcessingGraphEdge] = []
-
-        # Vector backend info (for UI diagnostics)
-        vector_backend: str | None = None
-        vector_detail: str | None = None
-        embedding_model_name: str | None = getattr(self.config.embedding_model, "name", None)
-        try:
-            vs_cfg = self.config.storage.vector_store
-            if isinstance(vs_cfg, OpenSearchVectorIndexConfig):
-                vector_backend = "opensearch"
-                vector_detail = f"index={vs_cfg.index}"
-            elif isinstance(vs_cfg, PgVectorStorageConfig):
-                vector_backend = "pgvector"
-                vector_detail = f"collection={vs_cfg.collection_name}"
-            elif isinstance(vs_cfg, ClickHouseVectorStorageConfig):
-                vector_backend = "clickhouse"
-                vector_detail = f"table={vs_cfg.table}"
-            else:
-                vector_backend = type(vs_cfg).__name__
-                vector_detail = None
-        except Exception as e:
-            logger.debug("[GRAPH] Unable to resolve vector backend info: %s", e)
-
-        for metadata in visible_docs:
-            doc_uid = metadata.document_uid
-            doc_node_id = f"doc:{doc_uid}"
-
-            nodes.append(
-                ProcessingGraphNode(
-                    id=doc_node_id,
-                    kind="document",
-                    label=metadata.document_name,
-                    document_uid=doc_uid,
-                    file_type=metadata.file.file_type,
-                    source_tag=metadata.source.source_tag,
-                    version=getattr(metadata.identity, "version", 0),
-                )
-            )
-
-            stages = metadata.processing.stages or {}
-
-            # --- Vector index node (per-document) ---------------------------------
-            if stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE:
-                vector_store = ensure_vector_store()
-                vector_count: int | None = None
-                if vector_store is not None and hasattr(vector_store, "get_document_chunk_count"):
-                    try:
-                        vector_count = int(vector_store.get_document_chunk_count(document_uid=doc_uid))  # type: ignore[attr-defined]
-                    except Exception as e:
-                        logger.warning(f"[GRAPH] Failed to count vectors for document '{doc_uid}': {e}")
-
-                vec_node_id = f"vec:{doc_uid}"
-                nodes.append(
-                    ProcessingGraphNode(
-                        id=vec_node_id,
-                        kind="vector_index",
-                        label=f"Vectors for {metadata.document_name}",
-                        document_uid=doc_uid,
-                        vector_count=vector_count,
-                        backend=vector_backend,
-                        backend_detail=vector_detail,
-                        embedding_model=embedding_model_name,
-                    )
-                )
-                edges.append(
-                    ProcessingGraphEdge(
-                        source=doc_node_id,
-                        target=vec_node_id,
-                        kind="vectorized",
-                    )
-                )
-
-            # --- SQL table nodes (one per dataset table) ---------------------------
-            if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE:
-                artifact = read_tabular_artifact(metadata)
-                multi_artifact = read_tabular_multi_artifact(metadata)
-                if artifact is not None:
-                    table_facts = [(artifact.dataset_uid, artifact.row_count)]
-                elif multi_artifact is not None:
-                    table_facts = [(table.query_alias, table.row_count) for table in multi_artifact.tables]
-                else:
-                    table_facts = []
-                for table_name, row_count in table_facts:
-                    table_node_id = f"table:{table_name}"
-                    nodes.append(
-                        ProcessingGraphNode(
-                            id=table_node_id,
-                            kind="table",
-                            label=table_name,
-                            document_uid=doc_uid,
-                            table_name=table_name,
-                            row_count=row_count,
-                        )
-                    )
-                    edges.append(
-                        ProcessingGraphEdge(
-                            source=doc_node_id,
-                            target=table_node_id,
-                            kind="sql_indexed",
-                        )
-                    )
-
-        return ProcessingGraph(nodes=nodes, edges=edges)
-
     async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token: str | None = None) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, new_tag_id, consistency_token=consistency_token)
 
@@ -576,7 +430,7 @@ class MetadataService:
                         logger.warning(f"Could not delete vector of'{metadata.document_name}': {e}")
 
                 if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
-                    await self._delete_tabular_artifacts(metadata)
+                    await self._delete_tabular_artifacts(metadata.document_uid, metadata=metadata)
 
                 # Promote an alternate version (version=1) to base if present
                 if getattr(metadata.identity, "version", 0) == 0:
@@ -647,7 +501,7 @@ class MetadataService:
             logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
             raise MetadataUpdateError(f"Failed to remove tag: {e}")
 
-    async def _delete_tabular_artifacts(self, metadata: DocumentMetadata) -> None:
+    async def _delete_tabular_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None) -> None:
         """
         Delete dataset-centric tabular artifacts linked to one document.
 
@@ -657,25 +511,31 @@ class MetadataService:
 
         How to use:
         - Call during destructive metadata cleanup paths only.
+        - `metadata` is an optimization, not a requirement: with it, a document
+          carrying no tabular payload skips the listing entirely. Without it
+          (the row is already gone) the prefix is derived from the uid alone
+          and listed unconditionally — an empty prefix simply deletes nothing.
         """
 
-        artifact = read_tabular_artifact(metadata)
-        multi_artifact = read_tabular_multi_artifact(metadata)
-        if artifact is None and multi_artifact is None:
-            logger.info("[TABULAR] No %s/%s payload found for '%s'", TABULAR_EXTENSION_KEY, TABULAR_MULTI_EXTENSION_KEY, metadata.document_name)
-            return
+        if metadata is not None:
+            artifact = read_tabular_artifact(metadata)
+            multi_artifact = read_tabular_multi_artifact(metadata)
+            if artifact is None and multi_artifact is None:
+                logger.info("[TABULAR] No %s/%s payload found for '%s'", TABULAR_EXTENSION_KEY, TABULAR_MULTI_EXTENSION_KEY, metadata.document_name)
+                return
 
+        label = metadata.document_name if metadata else document_uid
         prefix = document_artifact_prefix(
             artifacts_prefix=self.config.storage.tabular_store.artifacts_prefix,
-            document_uid=metadata.document_uid,
+            document_uid=document_uid,
         )
 
         try:
             for stored_object in self.content_store.list_objects(prefix):
                 self.content_store.delete_object(stored_object.key)
-            logger.info("[TABULAR] Deleted tabular artifacts linked to '%s'", metadata.document_name)
+            logger.info("[TABULAR] Deleted tabular artifacts linked to '%s'", label)
         except Exception as e:
-            logger.warning("Could not delete tabular artifacts for '%s': %s", metadata.document_name, e)
+            logger.warning("Could not delete tabular artifacts for '%s': %s", label, e)
 
     async def delete_document_and_artifacts(
         self,
@@ -701,47 +561,100 @@ class MetadataService:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+        await self._delete_document_and_artifacts(actor_uid=user.uid, document_uid=document_uid)
 
+    async def delete_document_and_artifacts_trusted(self, actor_uid: str, document_uid: str) -> None:
+        """Same as `delete_document_and_artifacts`, but skips the per-document
+        `DocumentPermission.DELETE` check — same trust convention as
+        `save_document_metadata_trusted`.
+
+        Why this exists: the cancel-an-ingestion cleanup
+        (`features/scheduler/document_failure.py`) is a system obligation, not a
+        user action. Authorization already happened at the cancel endpoint
+        (`authorize_task_mutation`), and by the time the cleanup runs the
+        uploader's ReBAC state may have moved on — they left the team, the
+        tuple went with them — which must not strand a half-built document plus
+        its content and vectors on disk.
+
+        `actor_uid` is the real uploader, so the storage quota is released from
+        the account it was charged to; it is an attribution, not a permission.
+        Never call this from a router or any other user-facing service.
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+        await self._delete_document_and_artifacts(actor_uid=actor_uid, document_uid=document_uid)
+
+    async def purge_document_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None) -> None:
+        """Delete everything a document produced outside its metadata row.
+
+        Vectors, tabular Parquet revisions and stored content — the one
+        definition of "the document's artifacts", so a new artifact kind is
+        added here and every caller gets it.
+
+        Addressed by uid, and callable when the metadata row is already gone:
+        that is the case of a writer compensating for a document deleted under
+        it (its thread could not be stopped, see
+        `IngestionService.persist_progress`). Pass `metadata` when it is known
+        so each delete can be skipped for a stage the document never reached;
+        without it every store is asked, which is the safe default.
+
+        Best-effort per store and never raises: a document whose row is already
+        gone must not be blocked from having its bytes reclaimed because one
+        store is briefly unavailable.
+        """
+        stages = metadata.processing.stages if metadata else {}
+        label = metadata.document_name if metadata else document_uid
+
+        if not metadata or ProcessingStage.VECTORIZED in stages:
+            try:
+                await asyncio.to_thread(self._vector_store().delete_vectors_for_document, document_uid=document_uid)
+                logger.info("[METADATA] Deleted vectors for document '%s'", label)
+            except Exception as exc:
+                logger.warning("Could not delete vectors for '%s': %s", label, exc)
+
+        if not metadata or ProcessingStage.SQL_INDEXED in stages:
+            await self._delete_tabular_artifacts(document_uid, metadata=metadata)
+
+        try:
+            await asyncio.to_thread(self.content_store.delete_content, document_uid)
+            logger.info("[CONTENT] Deleted content for document '%s'", label)
+        except Exception as exc:
+            logger.warning("[CONTENT] Could not delete content for '%s': %s", label, exc)
+
+    def _vector_store(self) -> BaseVectorStore:
+        """Resolve the vector store in whichever process is running.
+
+        `get_vector_store` only returns an already-built instance and raises
+        otherwise — true in a worker that has not vectorized anything yet, which
+        is exactly where cancelled-ingestion cleanup runs. Fall back to the
+        build-on-demand accessor every scheduler activity uses, or the delete
+        would be skipped and the vectors silently orphaned.
+        """
+        context = ApplicationContext.get_instance()
+        if self.vector_store is None:
+            try:
+                self.vector_store = context.get_vector_store()
+            except ValueError:
+                self.vector_store = context.get_create_vector_store(context.get_embedder())
+        return self.vector_store
+
+    async def _delete_document_and_artifacts(self, *, actor_uid: str, document_uid: str) -> None:
         try:
             metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
             if metadata is None:
                 raise MetadataNotFound(f"No document found with UID {document_uid}")
 
-            if ProcessingStage.VECTORIZED in metadata.processing.stages:
-                if self.vector_store is None:
-                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                try:
-                    self.vector_store.delete_vectors_for_document(document_uid=metadata.document_uid)
-                    logger.info(
-                        "[METADATA] Deleted vectors for document '%s'",
-                        metadata.document_name,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Could not delete vectors for '%s': %s",
-                        metadata.document_name,
-                        exc,
-                    )
-
-            if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
-                await self._delete_tabular_artifacts(metadata)
-
-            if self.content_store is not None:
-                try:
-                    self.content_store.delete_content(metadata.document_uid)
-                    logger.info(
-                        "[CONTENT] Deleted content for document '%s'",
-                        metadata.document_name,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "[CONTENT] Could not delete content for '%s': %s",
-                        metadata.document_name,
-                        exc,
-                    )
-
             deleted_tag_ids = set(metadata.tags.tag_ids or []) if metadata.tags else set()
-            await self._delete_and_release(metadata, tag_ids=deleted_tag_ids, user_id=user.uid)
+            # The row goes first, and that ordering is load-bearing: it is the
+            # fence a writer racing this deletion tests against. Purging
+            # artifacts first would leave the row alive for the seconds that
+            # takes, so a late `update_metadata` would report success, the
+            # writer would believe it won, and the bytes it wrote after the
+            # purge would survive with no row pointing at them (#2315). With the
+            # row gone first, every later writer is guaranteed to see "deleted"
+            # and discard its own output.
+            await self._delete_and_release(metadata, tag_ids=deleted_tag_ids, user_id=actor_uid)
+            await self.purge_document_artifacts(document_uid, metadata=metadata)
 
             for tag_id in deleted_tag_ids:
                 await self._remove_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
@@ -996,7 +909,37 @@ class MetadataService:
         """
         await self._persist_metadata_and_follow_up(user, metadata)
 
-    async def _persist_metadata_and_follow_up(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
+    async def update_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
+        """Persist a document the caller already read, never creating one.
+
+        Returns False when the document was deleted meanwhile — the write and
+        every follow-up (quota, ReBAC, tag timestamps, KPI) are then skipped.
+
+        Use this from anything that updates a document in flight, ingestion
+        activities above all: their work runs in a thread Python cannot kill, so
+        a cancelled activity keeps computing and would otherwise resurrect the
+        document its cancellation just deleted (#2315, see
+        `BaseDocumentMetadataStore.update_metadata`).
+        """
+        if metadata.tags:
+            for tag_id in metadata.tags.tag_ids:
+                await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+        return await self._persist_metadata_and_follow_up(user, metadata, update_only=True)
+
+    async def update_document_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
+        """`update_document_metadata` without the per-tag permission check —
+        same trust rationale as `save_document_metadata_trusted`."""
+        return await self._persist_metadata_and_follow_up(user, metadata, update_only=True)
+
+    async def _persist_metadata_and_follow_up(self, user: KeycloakUser, metadata: DocumentMetadata, *, update_only: bool = False) -> bool:
+        """Persist metadata and run every follow-up that must accompany it.
+
+        Returns True when the document was persisted. Only an `update_only`
+        call can return False, meaning the document no longer exists: nothing
+        was written and no follow-up ran, which is the point — crediting quota
+        or re-linking ReBAC for a deleted document is exactly the damage the
+        conditional UPDATE prevents.
+        """
         try:
             prev_metadata = None
             try:
@@ -1009,7 +952,15 @@ class MetadataService:
                 )
 
             # Save the metadata first
-            await self.metadata_store.save_metadata(metadata)
+            if update_only:
+                if not await self.metadata_store.update_metadata(metadata):
+                    logger.info(
+                        "[METADATA] document_uid=%s no longer exists; update and follow-ups skipped",
+                        metadata.document_uid,
+                    )
+                    return False
+            else:
+                await self.metadata_store.save_metadata(metadata)
             if prev_metadata is None:
                 try:
                     from fred_core.kpi import KPIActor
@@ -1053,6 +1004,7 @@ class MetadataService:
             if metadata.tags:
                 await self._update_tag_timestamps(user, metadata.tags.tag_ids)
             await self._prune_stale_tabular_artifacts(metadata)
+            return True
 
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")

@@ -43,6 +43,7 @@ class DocumentMetadataRow(Base):
 
 # GIN index for fast array containment queries on PostgreSQL.
 # Ignored on SQLite (no GIN support).
+# codeql[py/unused-global-variable]
 _tag_ids_gin_index = Index(
     "idx_metadata_tag_ids_gin",
     DocumentMetadataRow.tag_ids,

@@ -30,7 +30,9 @@ import pytest
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy import service as routing_policy_service
 from control_plane_backend.routing_policy.schemas import (
+    AmbiguousOperationRuleError,
     DuplicateOperationRuleError,
+    DuplicateRuleIdError,
     ProfileNotUsableError,
     UnknownProfileError,
     UpdateTeamRoutingPolicyRequest,
@@ -48,10 +50,19 @@ def _user() -> KeycloakUser:
 
 
 def _rule(
-    rule_id: str, *, operation: str, purpose: str | None, target: str
+    rule_id: str,
+    *,
+    operation: str | None,
+    purpose: str | None,
+    target: str,
+    agent_id: str | None = None,
 ) -> TeamOperationRouteRule:
     return TeamOperationRouteRule(
-        rule_id=rule_id, operation=operation, purpose=purpose, target_profile_id=target
+        rule_id=rule_id,
+        operation=operation,
+        purpose=purpose,
+        agent_id=agent_id,
+        target_profile_id=target,
     )
 
 
@@ -329,7 +340,7 @@ async def test_duplicate_rule_id_rejected() -> None:
             ),
         ]
     )
-    with pytest.raises(DuplicateOperationRuleError):
+    with pytest.raises(DuplicateRuleIdError):
         await routing_policy_service.update_team_routing_policy(
             _user(), TeamId("team-1"), request, deps
         )
@@ -350,6 +361,58 @@ async def test_duplicate_operation_purpose_pair_rejected() -> None:
         await routing_policy_service.update_team_routing_policy(
             _user(), TeamId("team-1"), request, deps
         )
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_equal_specificity_tie_rejected() -> None:
+    """One rule pins (operation, agent_id), another pins (purpose, agent_id)
+    for the same agent — both specificity 2, both would match a request
+    carrying that operation, purpose, and agent_id at once. The resolver has
+    no defined winner for that, so the write must be rejected rather than
+    silently resolved by declaration order."""
+    deps = _deps(store=_FakeStore(), rebac=None)
+    request = UpdateTeamRoutingPolicyRequest(
+        operation_rules=[
+            _rule(
+                "r1",
+                operation="planning",
+                purpose=None,
+                target="chat.openai.gpt5",
+                agent_id="rico",
+            ),
+            _rule(
+                "r2",
+                operation=None,
+                purpose="critical",
+                target="chat.openai.gpt4o",
+                agent_id="rico",
+            ),
+        ]
+    )
+    with pytest.raises(AmbiguousOperationRuleError):
+        await routing_policy_service.update_team_routing_policy(
+            _user(), TeamId("team-1"), request, deps
+        )
+
+
+@pytest.mark.asyncio
+async def test_equal_specificity_non_overlapping_rules_allowed() -> None:
+    """Two rules with equal specificity but disjoint concrete values on a
+    shared field (different operations) can never both match one request —
+    not ambiguous, must not be rejected."""
+    deps = _deps(store=_FakeStore(), rebac=_FakeRebacAllowAll())
+    request = UpdateTeamRoutingPolicyRequest(
+        operation_rules=[
+            _rule("r1", operation="planning", purpose=None, target="chat.openai.gpt4o"),
+            _rule(
+                "r2", operation="summarize", purpose=None, target="chat.openai.gpt4o"
+            ),
+        ]
+    )
+    result = await routing_policy_service.update_team_routing_policy(
+        _user(), TeamId("team-1"), request, deps
+    )
+    assert len(result.operation_rules) == 2
 
 
 @pytest.mark.asyncio

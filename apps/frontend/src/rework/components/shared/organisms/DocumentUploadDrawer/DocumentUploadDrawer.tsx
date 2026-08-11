@@ -255,7 +255,7 @@ export function DocumentUploadDrawer({
             </div>
             <IconButton
               variant="icon"
-              size="xs"
+              size="2xs"
               icon={{ category: "outlined", type: "close" }}
               aria-label={t("common.close")}
               onClick={handleClose}
@@ -310,7 +310,7 @@ export function DocumentUploadDrawer({
                       <span className={styles.fileSize}>{formatBytes(f.size)}</span>
                       <IconButton
                         variant="icon"
-                        size="xs"
+                        size="2xs"
                         icon={{ category: "outlined", type: "close" }}
                         aria-label={`Remove ${f.name}`}
                         onClick={(e) => {

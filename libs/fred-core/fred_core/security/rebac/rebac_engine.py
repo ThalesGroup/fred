@@ -222,21 +222,25 @@ class OrganizationPermission(str, Enum):
     # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
     # capability (platform_admin included via the platform_observer union) —
     # the one relation for cross-user / platform-wide KPI observation. Gates
-    # both the standalone KPI dashboard (`/monitoring/kpis`) and the
-    # control-plane Analytics presets (`/admin/analytics`). AUTHZ-05 review
-    # item 16: previously split into a second, platform_admin-only
-    # `CAN_READ_KPI_GLOBAL` (legacy READ_GLOBAL) for the Analytics presets —
-    # retired as a duplicate of this relation the RFC never asked for; today
-    # `/admin/analytics` and `/monitoring/kpis` show the same platform-wide
+    # the control-plane Analytics presets (`/admin/analytics`) and the raw
+    # OpenSearch Ops surface. The raw Prometheus Ops surface is
+    # authentication-only and is not gated by this relation. AUTHZ-05 review
+    # item 16: previously split into a second,
+    # platform_admin-only `CAN_READ_KPI_GLOBAL` (legacy READ_GLOBAL) for the
+    # Analytics presets — retired as a duplicate of this relation the RFC
+    # never asked for; today `/admin/analytics` shows the same platform-wide
     # recap to both platform_admin and platform_observer. When the Analytics
     # dashboard grows admin-only technical panels, gate those specific
     # widgets on a new, narrower capability — don't resurrect this split.
+    # Retired 2026-08-08: this relation also used to gate the standalone KPI
+    # dashboard (`/monitoring/kpis`, backed by `POST /knowledge-flow/v1/kpi/query`)
+    # — both were removed once the control-plane Analytics presets fully
+    # superseded them.
     CAN_OBSERVE_PLATFORM = "can_observe_platform"
 
     # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"
-    CAN_RUN_BENCHMARK = "can_run_benchmark"
 
     # Direct check against the raw `platform_observer` relation — not a
     # computed capability. Used to derive display-only frontend flags

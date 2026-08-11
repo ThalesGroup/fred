@@ -20,11 +20,9 @@ from typing import Optional
 from uuid import uuid4
 
 from fred_core import (
-    ORGANIZATION_ID,
     AuthorizationError,
     FileTypeBucket,
     KeycloakUser,
-    OrganizationPermission,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -39,7 +37,6 @@ from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.core.stores.resources.base_resource_store import ResourceNotFoundError
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
@@ -397,7 +394,7 @@ class TagService:
         Removes any user-tag relation regardless of the level originally assigned.
         """
         await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
-        for relation in UserTagRelation:
+        for relation in list(UserTagRelation):
             await self.rebac.delete_relation(
                 Relation(
                     subject=RebacReference(type=target_type, id=target_id),
@@ -432,108 +429,6 @@ class TagService:
         tag = await self._tag_store.get_tag_by_id(tag_id)
         tag.updated_at = datetime.now()
         await self._tag_store.update_tag_by_id(tag_id, tag)
-
-    async def backfill_rebac_relations(self, user: KeycloakUser) -> dict:
-        """
-        Recreate missing ReBAC relations for existing tags and their documents.
-        Intended for migrations when enabling ReBAC on an existing instance.
-        """
-        await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-        # If ReBAC is disabled, no-op but stay consistent with other calls.
-        if getattr(self.rebac, "enabled", True) is False:
-            return {
-                "rebac_enabled": False,
-                "tags_seen": 0,
-                "documents_seen": 0,
-                "resources_seen": 0,
-                "tag_owner_relations_created": 0,
-                "tag_parent_relations_created": 0,
-            }
-
-        tags = await self._tag_store.list_all_tags()
-        tag_owner_relations_created = 0
-        tag_parent_relations_created = 0
-        documents_seen = 0
-        resources_seen = 0
-
-        # Access underlying stores directly to avoid permission-filtered queries during migration.
-        metadata_store = self.document_metadata_service.metadata_store
-        resource_store = self.resource_service._resource_store
-
-        for tag in tags:
-            try:
-                await self.rebac.add_relation(
-                    Relation(
-                        subject=RebacReference(type=Resource.USER, id=tag.owner_id),
-                        relation=RelationType.OWNER,
-                        resource=RebacReference(type=Resource.TAGS, id=tag.id),
-                    ),
-                    actor_uid=user.uid,
-                )
-                tag_owner_relations_created += 1
-            except Exception as exc:
-                logger.warning("Failed to backfill owner relation for tag %s: %s", tag.id, exc)
-
-            # Tags drive parent relations depending on their type (documents vs other resources)
-            if tag.type == TagType.DOCUMENT:
-                try:
-                    docs = await metadata_store.get_metadata_in_tag(tag.id)
-                except Exception as exc:
-                    logger.warning("Failed to list documents for tag %s during backfill: %s", tag.id, exc)
-                    continue
-
-                for doc in docs:
-                    doc_uid = getattr(doc, "document_uid", None) or getattr(doc.identity, "document_uid", None)
-                    if not doc_uid:
-                        continue
-                    documents_seen += 1
-                    try:
-                        await self.rebac.add_relation(
-                            Relation(
-                                subject=RebacReference(type=Resource.TAGS, id=tag.id),
-                                relation=RelationType.PARENT,
-                                resource=RebacReference(type=Resource.DOCUMENTS, id=doc_uid),
-                            ),
-                            actor_uid=user.uid,
-                        )
-                        tag_parent_relations_created += 1
-                    except Exception as exc:
-                        logger.warning("Failed to backfill tag->document relation for tag %s doc %s: %s", tag.id, doc_uid, exc)
-            elif tag.type == TagType.CHAT_CONTEXT:
-                try:
-                    resources = await resource_store.get_resources_in_tag(tag.id)
-                except ResourceNotFoundError:
-                    resources = []
-                except Exception as exc:
-                    logger.warning("Failed to list resources for tag %s during backfill: %s", tag.id, exc)
-                    continue
-
-                for res in resources:
-                    resources_seen += 1
-                    try:
-                        await self.rebac.add_relation(
-                            Relation(
-                                subject=RebacReference(type=Resource.TAGS, id=tag.id),
-                                relation=RelationType.PARENT,
-                                resource=RebacReference(type=Resource.RESOURCES, id=res.id),
-                            ),
-                            actor_uid=user.uid,
-                        )
-                        tag_parent_relations_created += 1
-                    except Exception as exc:
-                        logger.warning("Failed to backfill tag->resource relation for tag %s resource %s: %s", tag.id, res.id, exc)
-            else:
-                # No parent relations to backfill for other tag types.
-                continue
-
-        return {
-            "rebac_enabled": True,
-            "tags_seen": len(tags),
-            "documents_seen": documents_seen,
-            "resources_seen": resources_seen,
-            "tag_owner_relations_created": tag_owner_relations_created,
-            "tag_parent_relations_created": tag_parent_relations_created,
-        }
 
     # ---------- Internals / helpers ----------
 

@@ -75,7 +75,8 @@
   "app": {
     "loading": {
       "router": "Fred démarre...",
-      "ui": "Fred prépare l'interface..."
+      "ui": "Fred prépare l'interface...",
+      "generic": "Chargement, veuillez patienter..."
     }
   },
   "appCard": {
@@ -203,6 +204,26 @@
         "summarize_max_chars": {
           "title": "Longueur maximale du résumé",
           "description": "Longueur par défaut et maximale (en caractères) des résumés produits par l'outil summarize_document. Laisser vide pour utiliser la valeur par défaut intégrée et respecter la longueur demandée par le modèle."
+        }
+      }
+    },
+    "document_verbatim": {
+      "name": "Verbatim document",
+      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "fields": {
+        "page_max_chars": {
+          "title": "Longueur de page",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+        }
+      }
+    },
+    "document_extract": {
+      "name": "Extraction d'information d'un document",
+      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "fields": {
+        "require_confirmation": {
+          "title": "Confirmation requise",
+          "description": "Met en pause avant chaque extraction pour recueillir votre approbation (continuer/annuler). Activé par défaut — cette capacité consomme beaucoup de tokens ; à désactiver uniquement pour un agent dont l'usage est déjà éprouvé."
         }
       }
     },
@@ -874,54 +895,6 @@
   "pageError": {
     "message": "Retour à la page d'accueil"
   },
-  "procbench": {
-    "browse": "Parcourir",
-    "clear": "Effacer",
-    "col": {
-      "duration": "Durée",
-      "headings": "Titres",
-      "processor": "Processeur",
-      "status": "Statut",
-      "tokens": "Jetons (est)",
-      "words": "Mots"
-    },
-    "description": "Ajoutez un document (PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL) et comparez la qualité et la vitesse d'extraction entre processeurs.",
-    "detail": {
-      "collapseAll": "Tout replier",
-      "expandAll": "Tout déplier",
-      "title": "Détail de l'exécution"
-    },
-    "metricsTitle": "Métriques des processeurs",
-    "noFile": "Aucun fichier sélectionné",
-    "noMarkdown": "Aucun markdown produit",
-    "openLatest": "Ouvrir la dernière exécution",
-    "persistLabel": "Enregistrer l'exécution",
-    "processorsCount": "{{count}} processeur(s)",
-    "run": "Lancer le banc",
-    "runFailed": "Échec du banc",
-    "runSuccess": "Banc terminé",
-    "runSuccessDetail": "Processeurs exécutés avec succès.",
-    "running": "Exécution...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processeurs",
-      "delete": "Supprimer",
-      "deleteFailed": "Échec de la suppression",
-      "empty": "Aucune exécution enregistrée.",
-      "file": "Fichier",
-      "modified": "Modifié",
-      "open": "Ouvrir",
-      "title": "Exécutions enregistrées"
-    },
-    "summaryFor": "Résumé pour '{{name}}'",
-    "title": "Banc de test des processeurs",
-    "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
-    "uploadTitle": "Ajouter un document",
-    "view": {
-      "sideBySide": "Côte à côte",
-      "stacked": "Empilé"
-    }
-  },
   "profile": {
     "theme": {
       "dark": "Sombre",
@@ -1364,7 +1337,10 @@
     "chatTrace": {
       "ariaLabel": "Trace de raisonnement de l'agent",
       "awaitingConfirmation": "en attente de confirmation…",
+      "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
+      "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
       "phase": {
@@ -1395,6 +1371,10 @@
       "lockInformation": "Lire les CGU avant de pouvoir les accepter",
       "title": "Conditions Générales d'Utilisation (CGU)",
       "validate": "Accepter les CGU"
+    },
+    "hitlPrompt": {
+      "accepted": "Accepté",
+      "refused": "Refusé"
     },
     "knowledgeHub": {
       "loading": "Chargement..."
@@ -1436,11 +1416,28 @@
         "changelog": "Nouveautés"
       }
     },
-    "profileMenu": {
-      "adminBadge": "admin",
-      "adminConsole": "Console technique",
-      "contactSupport": "Contacter le support",
+    "avatarCrop": {
+      "title": "Recadrer l'avatar",
+      "save": "Enregistrer",
+      "zoom": "Zoom"
+    },
+    "home": {
+      "title": "Accueil",
+      "searchPlaceholder": "Rechercher une équipe",
+      "searchClear": "Effacer la recherche",
+      "yourTeams": "Vos équipes",
+      "pageTitle": "Accueil",
+      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer."
+    },
+    "mainNav": {
+      "ariaLabel": "Navigation principale",
+      "home": "Accueil",
+      "marketplace": "Marketplace",
       "helpCenter": "Centre d'aide",
+      "adminConsole": "Console technique"
+    },
+    "profileMenu": {
+      "contactSupport": "Contacter le support",
       "profile": "Profil"
     },
     "promptCategories": {
@@ -1525,12 +1522,14 @@
         "created": "Ajouté le",
         "author": "Ajouté par"
       },
+      "embeddedTitleHint": "Titre intégré au fichier : {{title}}",
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
         "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
+        "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
         "more": "Plus d'actions",
@@ -1540,7 +1539,8 @@
         "process": "Traiter",
         "rename": "Renommer",
         "reprocess": "Retraiter",
-        "searchable": "Exclure de la recherche"
+        "searchable": "Exclure de la recherche",
+        "stopIngestion": "Arrêter l'ingestion"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
@@ -1550,7 +1550,12 @@
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
-        "shareTitle": "Copier dans l'espace d'équipe"
+        "shareTitle": "Copier dans l'espace d'équipe",
+        "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document et toutes ses données (fichier, vecteurs, métadonnées) seront supprimés.",
+        "stopIngestionTitle": "Arrêter l'ingestion"
+      },
+      "errorTooltip": {
+        "stage": "Étape : {{stage}}"
       },
       "empty": {
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
@@ -1612,6 +1617,7 @@
       "status": {
         "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
+        "justDone": "Terminé",
         "processing": "Traitement...",
         "raw": "En attente",
         "ready": "Prêt"
@@ -1648,7 +1654,9 @@
         "deleteFolderSuccess": "Dossier supprimé",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
-        "processStarted": "Traitement lancé"
+        "processStarted": "Traitement lancé",
+        "stopIngestionError": "Impossible d'arrêter l'ingestion",
+        "stopIngestionRequested": "Arrêt de l'ingestion demandé"
       }
     },
     "save": "Sauvegarder",
@@ -1710,6 +1718,7 @@
         "menu": {
           "resources": "Ressources"
         },
+        "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
       }
     },
@@ -1881,7 +1890,7 @@
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
-      "team_admin": "Administrateur",
+      "team_admin": "Admin",
       "team_editor": "Editeur",
       "team_analyst": "Analyste",
       "team_member": "Membre"
@@ -1950,6 +1959,8 @@
           "explanation": "Remplacer le modèle par défaut pour une opération runtime spécifique (ex. planning), éventuellement affinée par un objectif (purpose).",
           "operation": "Opération",
           "purpose": "Objectif (optionnel)",
+          "agent": "Agent (optionnel)",
+          "agentAny": "Tous les agents",
           "targetProfileId": "Identifiant du profil",
           "targetProfilePlaceholder": "Sélectionner un modèle",
           "addRule": "Ajouter une règle"
@@ -1977,11 +1988,11 @@
           "public": "Publique",
           "private": "Privée"
         },
-        "teamBanner": {
-          "title": "Bannière de l'équipe",
+        "teamAvatar": {
+          "title": "Avatar de l'équipe",
           "import": "Importer",
           "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
-          "noBanner": "Aucune bannière sélectionnée"
+          "noAvatar": "Aucun avatar sélectionné"
         },
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
@@ -2059,6 +2070,10 @@
             "conversationAttachments": {
               "title": "Pièces jointes à une conversation",
               "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
+            },
+            "documentReading": {
+              "title": "Lecture de documents",
+              "description": "Permet à l'agent de lire un document mot à mot et d'en extraire des informations de façon exhaustive."
             },
             "wordDocument": {
               "title": "Générer un document Word",

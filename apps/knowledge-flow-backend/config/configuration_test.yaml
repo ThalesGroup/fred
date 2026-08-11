@@ -336,7 +336,6 @@ storage:
 
 mcp:
   reports_enabled: true
-  kpi_enabled: true
   tabular_enabled: true
   text_enabled: true
   templates_enabled: true

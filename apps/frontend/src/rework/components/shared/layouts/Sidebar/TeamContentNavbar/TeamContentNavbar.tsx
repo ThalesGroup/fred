@@ -26,7 +26,6 @@ import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -47,7 +46,7 @@ export default function TeamContentNavbar() {
   const { pathname } = location;
   const navigate = useNavigate();
 
-  const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings, bannerColor, bannerStyle } = useSelectedTeam();
+  const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
 
   // "Back" from a focused view (settings / usage) always returns to the team's
   // main content view — a fixed, predictable destination. `navigate(-1)` was
@@ -87,6 +86,9 @@ export default function TeamContentNavbar() {
   // summary (it mounts earlier than the settings page) and shows the "no
   // elevated role" fallback for every user until the real fetch lands.
   const relationsLoaded = !!selectedTeam && "my_relations" in selectedTeam;
+  // Plain "Admin · Analyste"-style text, priority-sorted (admin > editor >
+  // analyst); no shield glyph — the team panel header keeps the roles line
+  // typographic only, matching the Home team list item (#2298).
   const roleLabel = (() => {
     const priority: Record<string, number> = { team_admin: 0, team_editor: 1, team_analyst: 2 };
     const heldRoles = (selectedTeam?.my_relations ?? [])
@@ -94,20 +96,7 @@ export default function TeamContentNavbar() {
       .slice()
       .sort((a, b) => priority[a] - priority[b]);
     if (heldRoles.length === 0) return t("rework.teamRoles.team_member");
-    const labelText = heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
-    // team_admin sorts first (priority 0), so when held it's always the
-    // opening token of `labelText` — the shield only needs to prefix the
-    // whole string, same glyph as the TeamSelectionItem admin badge (#2100)
-    // minus its circular background/outline.
-    if (heldRoles[0] !== "team_admin") return labelText;
-    return (
-      <span className={styles.roleLabelWithIcon}>
-        <span className={styles.roleLabelAdminIcon} aria-hidden="true">
-          <Icon category="outlined" type="shield" filled />
-        </span>
-        {labelText}
-      </span>
-    );
+    return heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
   })();
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 
@@ -207,7 +196,7 @@ export default function TeamContentNavbar() {
       <Button
         color={"primary"}
         variant={"text"}
-        size={"medium"}
+        size={"small"}
         onClick={handleBack}
         icon={{ category: "outlined", type: "arrow_back", filled: true }}
       >
@@ -217,40 +206,43 @@ export default function TeamContentNavbar() {
   );
 
   return (
-    <div className={styles.teamContentNavbarContainer}>
-      <div className={styles.bannerContainer} style={bannerStyle}>
-        <div className={styles.teamNameContainer}>
-          <span className={styles.teamName}>
+    <div className={styles.mainNavPanel}>
+      {/* Team panel header (#2298): flat surface-container-high header. For a
+          real team it shows the "Equipe" kicker, the team name and the user's
+          roles; for the personal space, just the "Espace personnel" name (no
+          kicker/roles). Present in both normal and settings/usage mode so the
+          user always sees where they are. The gear opens team settings for a
+          team, or the usage dashboard for the personal space. */}
+      <div className={styles.teamPanelHeader}>
+        <div className={styles.teamPanelHeaderText}>
+          {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.teamLabel")}</span>}
+          <span className={styles.teamPanelName}>
             {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
           </span>
-          {canOpenTeamSettings && !inSettings && (
-            <span className={styles["user-settings-button-container"]}>
-              <IconButton
-                size={"small"}
-                color={"on-surface"}
-                variant={"icon"}
-                icon={{ category: "outlined", type: "settings", filled: true }}
-                style={{ color: bannerColor?.onSolid }}
-                onClick={() => navigate(settingsBase)}
-                title={t("rework.teamSettings.navigation.settings")}
-              />
-            </span>
-          )}
-          {isPersonalTeam && !inUsage && (
-            <span className={styles["user-settings-button-container"]}>
-              <IconButton
-                size={"small"}
-                color={"on-surface"}
-                variant={"icon"}
-                icon={{ category: "outlined", type: "settings", filled: true }}
-                style={{ color: bannerColor?.onSolid }}
-                onClick={() => navigate(usageBase)}
-                title={t("rework.teamUsage.title")}
-              />
-            </span>
-          )}
+          {showRoleLabel && <span className={styles.teamPanelRoles}>{roleLabel}</span>}
         </div>
-        {showRoleLabel && <span className={styles.teamRoleLabel}>{roleLabel}</span>}
+        {!isPersonalTeam && canOpenTeamSettings && !inSettings && (
+          <span className={styles.teamPanelSettingsButton}>
+            <IconButton
+              size={"small"}
+              variant={"icon"}
+              icon={{ category: "outlined", type: "settings", filled: true }}
+              onClick={() => navigate(settingsBase)}
+              title={t("rework.teamSettings.navigation.settings")}
+            />
+          </span>
+        )}
+        {isPersonalTeam && !inUsage && (
+          <span className={styles.teamPanelSettingsButton}>
+            <IconButton
+              size={"small"}
+              variant={"icon"}
+              icon={{ category: "outlined", type: "settings", filled: true }}
+              onClick={() => navigate(usageBase)}
+              title={t("rework.teamUsage.title")}
+            />
+          </span>
+        )}
       </div>
       <div className={styles.navigationContainer}>
         {inSettings || (inUsage && !isPersonalTeam) ? (

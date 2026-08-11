@@ -37,7 +37,6 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
 )
 from fred_sdk.contracts.models import TeamScopePolicy
-from fred_sdk.contracts.prompt_utils import validate_prompt_template
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -1077,13 +1076,9 @@ def _validate_tuning_field_values(
                 _fail(key, f"expected a string for type {field.type!r}")
             if field.pattern is not None and re.fullmatch(field.pattern, value) is None:
                 _fail(key, f"value does not match pattern {field.pattern!r}")
-            if field.type == "prompt":
-                prompt_errors = validate_prompt_template(value)
-                if prompt_errors:
-                    details = "; ".join(
-                        f"'{e.pattern}': {e.reason}" for e in prompt_errors
-                    )
-                    _fail(key, f"invalid template syntax — {details}")
+            # `prompt` fields carry no token validation (#2277): the runtime
+            # renderer substitutes only PROMPT_SAFE_TOKENS and leaves every other
+            # `{…}` verbatim, so an unknown token is harmless rather than invalid.
         elif field.type == "select":
             if not isinstance(value, str):
                 _fail(key, "expected a string for type 'select'")
@@ -3262,37 +3257,6 @@ async def get_runtime_binding_for_team(
 # ---------------------------------------------------------------------------
 
 
-def _validate_prompt_library_text(
-    *,
-    text: str,
-    context_label: str,
-) -> None:
-    """
-    Validate one saved prompt-library text payload before persistence.
-
-    Why this function exists:
-    - managed-agent tuning validation already protects inline `prompts.*`
-      values, but the prompt library needs the same persistence-time safety at
-      its own CRUD boundary
-
-    How to use it:
-    - call before creating or updating one `Prompt` record
-    - invalid template syntax raises `PromptRequestError(http_status=422)`
-
-    Example:
-    - `_validate_prompt_library_text(text=request.text, context_label="prompt create")`
-    """
-
-    prompt_errors = validate_prompt_template(text)
-    if not prompt_errors:
-        return
-    details = "; ".join(f"'{error.pattern}': {error.reason}" for error in prompt_errors)
-    raise PromptRequestError(
-        f"Invalid prompt template during {context_label}: {details}.",
-        http_status=422,
-    )
-
-
 def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
     """Project one stored prompt record into the list/command summary shape.
 
@@ -3386,17 +3350,12 @@ async def create_prompt(
 
     How to use it:
     - call from the prompt-library POST route after team membership is checked
-    - invalid template syntax raises `PromptRequestError(422)`
     - duplicate prompt names inside the same team raise `PromptRequestError(409)`
 
     Example:
     - `summary = await create_prompt(user=user, team_id=team_id, request=body, deps=deps)`
     """
 
-    _validate_prompt_library_text(
-        text=request.text,
-        context_label=f"prompt create for team {team_id!r}",
-    )
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=team_id,
@@ -3510,17 +3469,12 @@ async def update_prompt(
     How to use it:
     - call from the prompt PUT route after team membership is checked
     - returns `None` when the prompt does not belong to `team_id`
-    - invalid template syntax raises `PromptRequestError(422)`
     - duplicate names raise `PromptRequestError(409)`
 
     Example:
     - `summary = await update_prompt(team_id, prompt_id, request, deps)`
     """
 
-    _validate_prompt_library_text(
-        text=request.text,
-        context_label=f"prompt update for team {team_id!r}",
-    )
     try:
         updated = await deps.get_prompt_store().update(
             prompt_id,

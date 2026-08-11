@@ -24,8 +24,10 @@ from control_plane_backend.product.dependencies import (
     get_product_service_dependencies,
 )
 from control_plane_backend.routing_policy.schemas import (
+    AmbiguousOperationRuleError,
     AvailableModelProfileList,
     DuplicateOperationRuleError,
+    DuplicateRuleIdError,
     ProfileNotUsableError,
     TeamRoutingPolicy,
     UnknownProfileError,
@@ -64,6 +66,18 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(DuplicateOperationRuleError)
     async def duplicate_operation_rule_handler(
         _request, exc: DuplicateOperationRuleError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(DuplicateRuleIdError)
+    async def duplicate_rule_id_handler(
+        _request, exc: DuplicateRuleIdError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(AmbiguousOperationRuleError)
+    async def ambiguous_operation_rule_handler(
+        _request, exc: AmbiguousOperationRuleError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 

@@ -10,6 +10,16 @@
 **/*.err
 **/*.pid
 
+# Ignore the per-project alembic.ini symlinks (NOT the real file at the repo root).
+# alembic.ini exists once, at the root; apps/control-plane-backend, apps/knowledge-flow-backend
+# and libs/fred-runtime each carry a symlink to it purely for local-dev ergonomics (so a bare
+# `alembic ...` works from the project directory). Kaniko copies symlinks verbatim instead of
+# resolving them, so letting one into the build context lands a DANGLING link in the image.
+# Keeping them out of the context means every Dockerfile-prod can just COPY the real root file
+# to where it is needed — no per-image "rm the broken link first" dance.
+apps/*/alembic.ini
+libs/*/alembic.ini
+
 # Ignore build artifacts
 build/
 dist/

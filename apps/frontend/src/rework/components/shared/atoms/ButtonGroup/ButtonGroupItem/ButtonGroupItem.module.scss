@@ -35,7 +35,8 @@
     color: var(--icon-color);
   }
 
-  &[data-size="xs"] {
+  /* 24px tier, formerly `xs` (renamed #2298); this component uses `small` for 32px. */
+  &[data-size="2xs"] {
     height: 1.5rem;
     --lateral-padding: var(--spacing-xs);
 

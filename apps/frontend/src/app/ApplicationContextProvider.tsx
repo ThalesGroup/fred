@@ -31,7 +31,7 @@ const getSystemDarkMode = (): boolean => {
 /**
  * Computes the effective dark mode based on theme mode and system preference
  */
-const computeDarkMode = (themeMode: ThemeMode, systemDarkMode: boolean): boolean => {
+export const computeDarkMode = (themeMode: ThemeMode, systemDarkMode: boolean): boolean => {
   if (themeMode === "system") {
     return systemDarkMode;
   }

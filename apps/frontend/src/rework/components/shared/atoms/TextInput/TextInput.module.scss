@@ -163,7 +163,36 @@
   }
 }
 
+/* Compact field tier — 2rem/32px (#2298). `xs` is the shared 32px "compact
+ * field" size (also what Select's `xs` already is); the former 24px `xs` moved
+ * to `2xs` below and its call sites were migrated. Used by the Home nav-panel
+ * search, which needs a field smaller than `small` (40px). Tighter metrics than
+ * the taller tiers: 8px edge padding, 8px icon→text gap, body-medium text. */
 .input[data-size="xs"] {
+  input {
+    padding-left: var(--spacing-xs);
+    height: 2rem;
+    font: var(--font-body-medium);
+  }
+
+  /* 8px edge + icon glyph (1.125rem) + 8px gap before the text. Needs the same
+   * `.field:has(.icon)` shape as the base rule to out-specify it. */
+  .field:has(.icon) input {
+    padding-left: calc(var(--spacing-xs) + 1.125rem + var(--spacing-xs));
+  }
+
+  .icon {
+    padding-left: var(--spacing-xs);
+    height: 2rem;
+    font-size: 1.125rem;
+  }
+
+  .suffix {
+    height: 2rem;
+  }
+}
+
+.input[data-size="2xs"] {
   input {
     height: 1.5rem;
   }

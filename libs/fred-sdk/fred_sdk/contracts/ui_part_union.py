@@ -97,6 +97,7 @@ def rebuild_ui_part_union(extra_parts: Sequence[type[BaseModel]] = ()) -> None:
             members.append(part)
     if tuple(members) == _current_members:
         return  # already the registered union — keep validators/caches warm
+    # codeql[py/unused-global-variable]
     _current_members = tuple(members)
     union = members[0] if len(members) == 1 else Union[tuple(members)]
     new_alias = Annotated[union, Field(discriminator="type")]

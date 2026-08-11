@@ -4,7 +4,7 @@
   gap: var(--spacing-m);
   margin: 0 auto;
   width: 100%;
-  max-width: 720px;
+  max-width: 1000px;
 }
 
 .form-section {
@@ -30,9 +30,9 @@
 
 .rule-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(180px, 1.2fr) auto;
   align-items: end;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-s);
 }
 
 .actions-row {

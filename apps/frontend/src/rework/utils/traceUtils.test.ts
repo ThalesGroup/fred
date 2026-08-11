@@ -7,6 +7,8 @@ import {
   groupTraceEntries,
   humanizeToolName,
   isDocumentTreeTool,
+  entryLabel,
+  isCancelledByUser,
   isTraceChannel,
   isFinalChannel,
   isSummarizeDocumentTool,
@@ -244,6 +246,38 @@ describe("statusForEntry", () => {
   it("returns 'error' for an error-channel message", () => {
     const m = msg({ channel: "error" });
     expect(statusForEntry({ kind: "solo", message: m })).toBe("error");
+  });
+
+  it("keeps a turn-crash error line short and copyable (DOCREAD-01)", () => {
+    const raw = 'Error code: 429 - {"message":"Rate limit exceeded"}';
+    const entry = { kind: "solo", message: textMsg(raw, { channel: "error" }) } as const;
+    // Line: no raw dump inline (the row renders a localized short indication);
+    // drawer: the raw message is what gets copied.
+    expect(primaryTextForEntry(entry)).toBe("");
+    expect(toolCopyText(entry)).toBe(raw);
+    expect(entryLabel(entry)).toBe("Error");
+  });
+});
+
+describe("isCancelledByUser", () => {
+  it("flags a combo whose result is marked cancelled_by_user", () => {
+    const call = toolCallMsg("c1", "extract_from_document");
+    const result = msg({
+      channel: "tool_result",
+      role: "tool",
+      parts: [{ type: "tool_result", call_id: "c1", ok: false, content: "", latency_ms: null }],
+      metadata: { extras: { cancelled_by_user: true } },
+    });
+    const entry = { kind: "combo", call, result } as const;
+    expect(isCancelledByUser(entry)).toBe(true);
+    // Still a red (error) dot, but distinguishable from a genuine tool failure.
+    expect(statusForEntry(entry)).toBe("error");
+  });
+
+  it("is false for a normal failed tool result and for the crash line", () => {
+    const call = toolCallMsg("c1", "x");
+    expect(isCancelledByUser({ kind: "combo", call, result: toolResultMsg("c1", "boom", false) })).toBe(false);
+    expect(isCancelledByUser({ kind: "solo", message: textMsg("err", { channel: "error" }) })).toBe(false);
   });
 
   it("returns 'ok' for a completed solo thought", () => {

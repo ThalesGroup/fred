@@ -1,4 +1,7 @@
-.teamContentNavbarContainer {
+/* The main nav panel — the second column that swaps content by mainNavBar
+ * selection (team nav here, Home team list, marketplace, admin). Renamed from
+ * `teamContentNavbarContainer` (#2298): it is no longer team-only. */
+.mainNavPanel {
   display: flex;
   flex-direction: column;
   width: 240px;
@@ -6,91 +9,58 @@
   min-height: 0;
 }
 
-/* Background and text colour are set inline from the configured team asset.
- * The team banner is intentionally taller than the marketplace/admin headers
- * (88px vs 56px) to give the team identity more presence — matching the
- * original design. Column layout (#2100): the name/gear row sits at the top,
- * the role label at the bottom — `justify-content: space-between` spaces the
- * two rows across the fixed height without needing to size either by hand. */
-.bannerContainer {
+/* Team panel header (#2298): flat header that replaces the coloured banner for
+ * real teams — 16px left / 8px right / 8px top-bottom padding on a
+ * surface-container-high surface. Labels on the left, settings gear on the
+ * right, vertically centred. */
+.teamPanelHeader {
   display: flex;
-  position: relative;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background-color: var(--surface-container-high);
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-m);
+  min-height: 48px;
+  color: var(--on-surface);
+}
+
+/* The three stacked labels (kicker / name / roles), gap 0. min-width: 0 lets
+ * each label ellipsize instead of pushing the gear off the row. */
+.teamPanelHeaderText {
+  display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  border-radius: 0 0 var(--radius-s) var(--radius-s);
-  background-position: center;
-  background-size: cover;
-  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
-  height: 88px;
+  gap: 0;
+  min-width: 0;
 }
 
-/* Legibility scrim: a subtle dark gradient rising from the bottom edge keeps
- * the white banner text and icons readable over light or busy custom banner
- * images (`banner_image_url`), while barely dimming the darker brand-gradient
- * fallback. Anchored to the bottom so it only touches the strip where the
- * team name sits, leaving the top of the image clean. */
-.bannerContainer::before {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.2) 45%, transparent 75%);
-  pointer-events: none;
-  content: "";
+.teamPanelKicker {
+  overflow: hidden;
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Fixed to the gear IconButton's own height ("small" = 2rem) so the row's
- * height — and therefore the top-aligned team name's vertical position —
- * never changes depending on whether the gear icon is actually rendered
- * (it's hidden while `inSettings`). Without this, the name shifted up when
- * settings opened, because the row shrank to the text's own shorter height. */
-.teamNameContainer {
+.teamPanelName {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamPanelRoles {
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Never shrink the gear below its 2rem footprint when the team name is long. */
+.teamPanelSettingsButton {
   display: flex;
-  position: relative;
-  justify-content: space-between;
-  align-items: start;
-  z-index: 1;
-  width: 100%;
-  min-height: 2rem;
-  font: var(--font-title-medium);
-}
-
-/* Small drop shadow on the team name, on top of the scrim, so the white text
- * stays crisp even against a light patch of a custom banner image. */
-.teamName {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
-}
-
-/* Roles the current user holds on this team, e.g. "Admin · Analyst" or
- * "Member" (#2100) — bottom-left of the banner, below the name/gear row. */
-.teamRoleLabel {
-  display: flex;
-  position: relative;
-  align-items: center;
-  z-index: 1;
-  color: inherit;
-  font: var(--font-label-medium);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
-}
-
-/* Shield glyph prefixing the role label when the user holds team_admin —
- * same glyph/color/size as the TeamSelectionItem admin badge, without its
- * circular background/outline (#2100 follow-up). */
-.roleLabelWithIcon {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-3xs);
-}
-
-.roleLabelAdminIcon {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  margin-right: var(--spacing-3xs);
-  height: 1em; /* match the label text's own height — 1.33em (its line-height)
-   * made the icon's box taller than the text next to it, pushing that text
-   * upward inside the row. */
-  color: var(--secondary);
-  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .navigationContainer {
@@ -103,5 +73,6 @@
 /* "Back" out of team settings, above the settings section menu. */
 .settings-back-container {
   display: flex;
-  padding: var(--spacing-xs) 0 var(--spacing-xs) var(--spacing-xs);
+  background-color: var(--surface-container);
+  padding: var(--spacing-2xs) 0 var(--spacing-2xs) var(--spacing-2xs);
 }
