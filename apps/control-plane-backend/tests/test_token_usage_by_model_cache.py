@@ -23,11 +23,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from fred_core.kpi.model_impact_factors import ModelImpactFactors
-
 from control_plane_backend.kpi.presets.token_usage_by_model import (
     query_token_usage_by_model,
 )
+from fred_core.kpi.model_impact_factors import ModelImpactFactors
 
 
 class _FakeSearchClient:
