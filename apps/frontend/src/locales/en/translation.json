@@ -1563,6 +1563,7 @@
       "topTeams": {
         "title": "Your activity across your teams",
         "unit": "conv.",
+        "personalSpace": "Personal space",
         "empty": "You are not a member of any team.",
         "role": {
           "team_admin": "Admin",

@@ -52,23 +52,25 @@ export default function TopTeams({ period }: TopTeamsProps) {
 
   const items: RankedItem[] = memberTeams
     .map((team) => {
-      // Collaboration roles are meaningless for the personal space — omit them.
+      // Collaboration roles are meaningless for the personal space — omit them,
+      // and show it as "Espace personnel" rather than its backend team name.
       const isPersonal = isPersonalTeamId(team.id);
+      const displayName = isPersonal ? t("rework.home.topTeams.personalSpace") : team.name;
       const roles = isPersonal ? [] : ROLE_ORDER.filter((role) => (team.my_relations ?? []).includes(role));
       const avatar = team.avatar_image_url ? (
         <img className={styles.avatar} src={team.avatar_image_url} alt="" aria-hidden="true" />
       ) : (
         <TeamInitials
           className={styles.avatar}
-          name={team.name}
+          name={displayName}
           size="small"
           shape="square"
-          color={teamColor(team.name)}
+          color={teamColor(displayName)}
         />
       );
       return {
         key: team.id,
-        label: team.name,
+        label: displayName,
         sublabel: roles.length ? roles.map((role) => t(`rework.home.topTeams.role.${role}`)).join(" · ") : undefined,
         value: activityByTeamId.get(team.id) ?? 0,
         unit: t("rework.home.topTeams.unit"),
