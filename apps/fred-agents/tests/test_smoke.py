@@ -210,7 +210,15 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
     if sqlite_path:
         upgrade_sqlite_database(sqlite_path)
 
-    return create_app()
+    # config/configuration.yaml points storage.postgres.sqlite_path at a fixed
+    # path under the developer/runner home dir. Every test in this module (and
+    # every other pytest process on the same machine) would otherwise share
+    # that one file, which surfaces as intermittent "database is locked"
+    # errors under aiosqlite. Route each test at its own tmp_path file instead.
+    resolved_config = load_agent_pod_config()
+    resolved_config.storage.postgres.sqlite_path = str(tmp_path / "runtime.sqlite3")
+
+    return create_app(config=resolved_config)
 
 
 def _parse_sse_payloads(stream_text: str) -> list[dict[str, object]]:
