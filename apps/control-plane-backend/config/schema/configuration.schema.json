@@ -736,7 +736,21 @@
               "type": "null"
             }
           ],
+          "default": null,
           "title": "Password"
+        },
+        "password_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+          "title": "Password Env"
         },
         "echo": {
           "default": false,

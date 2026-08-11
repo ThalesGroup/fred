@@ -61,7 +61,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
 
     async def fake_emit_sql_pool_kpis(interval_s: float, writer, engine, pool_name: str) -> None:
         """Record SQL pool KPI scheduling inputs without touching a real database."""
-        observed["sql_pool_kpi"] = (interval_s, writer, engine, pool_name)
+        observed.setdefault("sql_pool_kpi", []).append((interval_s, writer, engine, pool_name))
         await asyncio.sleep(0)
 
     async def fake_shutdown(self) -> None:
@@ -81,6 +81,9 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     monkeypatch.setattr(main_worker_module, "emit_sql_pool_kpis", fake_emit_sql_pool_kpis)
     monkeypatch.setattr(ApplicationContext, "get_kpi_writer", lambda self: writer_sentinel)
     monkeypatch.setattr(ApplicationContext, "get_pg_async_engine", lambda self: engine_sentinel)
+    # A dedicated task engine (OPS-04, #2170) — distinct object, so the second sampler runs.
+    task_engine_sentinel = object()
+    monkeypatch.setattr(ApplicationContext, "get_task_pg_async_engine", lambda self: task_engine_sentinel)
     monkeypatch.setattr(ApplicationContext, "shutdown", fake_shutdown)
 
     ApplicationContext.reset_instance()
@@ -92,8 +95,51 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     prom_cfg = config.observability.kpi.prometheus
     assert observed["metrics_server"] == (prom_cfg.port, prom_cfg.address)
     assert observed["process_kpi"] == (10.0, writer_sentinel)
-    assert observed["sql_pool_kpi"] == (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres")
+    # Both pools sampled, each under its own name. Without the distinct `pool` label these
+    # two series would collapse onto one Gauge, last write wins (OPS-04, #2170).
+    assert observed["sql_pool_kpi"] == [
+        (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres"),
+        (10.0, writer_sentinel, task_engine_sentinel, "knowledge-flow-tasks-postgres"),
+    ]
     assert observed["temporal_config"] == config.scheduler.temporal
     assert observed["max_concurrent_workflow_tasks"] == 4
     assert observed["max_concurrent_activities"] == 6
     assert observed["shutdown_called"] is True
+
+
+@pytest.mark.asyncio
+async def test_worker_samples_one_pool_when_task_database_is_not_configured(monkeypatch):
+    """Under the `task_postgres`-unset fallback both accessors return the SAME engine.
+
+    Emitting it twice would publish a single pool under two names, so every
+    `process.db_pool.*` series for 'knowledge-flow-tasks-postgres' would silently be a
+    duplicate of the shared one (OPS-04, issue #2170).
+    """
+    from types import SimpleNamespace
+
+    from knowledge_flow_backend import main_worker as main_worker_module
+
+    emitted: list[str] = []
+
+    async def fake_emit_process_kpis(interval_s, writer):
+        await asyncio.sleep(0)
+
+    async def fake_emit_sql_pool_kpis(interval_s, writer, engine, pool_name: str):
+        emitted.append(pool_name)
+        await asyncio.sleep(0)
+
+    monkeypatch.setattr(main_worker_module, "emit_process_kpis", fake_emit_process_kpis)
+    monkeypatch.setattr(main_worker_module, "emit_sql_pool_kpis", fake_emit_sql_pool_kpis)
+
+    shared = object()
+    ctx = SimpleNamespace(
+        get_kpi_writer=object,
+        get_pg_async_engine=lambda: shared,
+        get_task_pg_async_engine=lambda: shared,  # the fallback: same object
+    )
+    configuration = SimpleNamespace(observability=SimpleNamespace(kpi=SimpleNamespace(process_metrics_interval_sec=10)))
+
+    tasks = main_worker_module._start_worker_kpi_tasks(configuration, ctx)  # type: ignore[arg-type]
+    await asyncio.gather(*tasks)
+
+    assert emitted == ["knowledge-flow-postgres"], "the fallback must not publish one pool twice"

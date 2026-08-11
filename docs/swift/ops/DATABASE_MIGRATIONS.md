@@ -15,6 +15,51 @@ Each backend that owns database tables has its own Alembic setup under `<backend
 ORM models are registered in each backend's `alembic/env.py` so that autogenerate can
 detect differences between the code and the live database.
 
+> **One chain per database, not per backend.** Alembic opens exactly one connection per
+> `env.py`, so a backend that owns tables in two databases needs two chains.
+> `knowledge-flow-backend` is the one such backend today (OPS-04, issue #2170):
+>
+> | Chain | Config | Database | Tables | Version table |
+> | --- | --- | --- | --- | --- |
+> | `alembic/` | `pyproject.toml` `[tool.alembic]` | shared `fred` | `resource`, `tag`, `metadata` | `alembic_version_knowledge_flow` |
+> | `alembic_tasks/` | `alembic_tasks.ini` | dedicated `knowledge_flow` | `task_run`, `task_event_log` | `alembic_version_knowledge_flow_tasks` |
+>
+> `make db-upgrade` runs the first; **`make db-upgrade-tasks` runs the second**. Upgrading
+> only the first leaves the task database un-migrated. The task chain refuses to run when
+> `storage.task_postgres` is unset, rather than falling back to the shared database where
+> control-plane owns those tables.
+>
+> The task chain has its own targets, but **not** a twin of every `db-*` target, and the
+> two naming shapes differ — operational targets take a `-tasks` suffix, check targets
+> infix it:
+>
+> | Shared chain | Task chain |
+> | --- | --- |
+> | `db-upgrade` | `db-upgrade-tasks` |
+> | `db-migrate` | `db-migrate-tasks` |
+> | `db-downgrade` | `db-downgrade-tasks` |
+> | `db-history` | `db-history-tasks` |
+> | `db-check-heads` | `db-check-**tasks**-heads` |
+> | `db-check-sqlite` | `db-check-**tasks**-sqlite` |
+> | `db-check-postgres` | `db-check-**tasks**-postgres` |
+> | `db-stamp`, `db-snapshots`, `db-check-migrations`, `db-check-postgres-full` | *no equivalent* |
+>
+> `db-stamp` has no twin deliberately: it registers a database that predates Alembic, and
+> the task database is always created by the chain itself. Note `make db-check-migrations`
+> covers only the shared chain — CI exercises the task chain through the repo-root
+> `db-check-combined-heads` / `db-check-combined-sqlite` targets instead.
+>
+> Each chain must pass a `MetaData` scoped to the tables it owns, built with
+> `Table.to_metadata()` — `fred_core`'s declarative `Base` is a single registry shared by
+> every backend, and Alembic applies its name filters only to the connection side, never
+> to the metadata side. See `libs/fred-runtime/alembic/env.py` for the reference pattern.
+>
+> The same split applies to the **boot path**, not just to Alembic: `knowledge-flow`'s
+> `main.py` creates the task tables against the task engine and every other `CoreBase`
+> table against the shared engine. A single `create_all(CoreBase.metadata)` on the shared
+> engine — what it did before OPS-04 — recreates `task_run`/`task_event_log` in `fred` on
+> the next restart, undoing the split no matter what the migrations did.
+
 ## Configuration
 
 Alembic connects to the PostgreSQL instance defined in the config file pointed to by
@@ -266,3 +311,100 @@ For each backend, compare the dump of your DB vs dump of the migrations:
 
 - If you have a perfect match -> stamp on the migration id
 - No perfect match -> find the closest one, migrate by hand to the closest one then stamp on the migration id
+
+---
+
+## Moving existing task rows into the Knowledge Flow task database (OPS-04, issue #2170)
+
+Enabling `storage.task_postgres` only changes where rows are written **from then on**. Rows
+already in the shared `fred` database stay there: invisible to Knowledge Flow's `GET /tasks`,
+still returned by control-plane's, and never reached by Knowledge Flow's reconciliation
+sweeper — so a non-terminal row stranded there stays non-terminal forever.
+
+This procedure moves them. It is operator-driven and deliberately not automated: the fred-core
+task tables carry **no per-service discriminator** (that is the premise of #2170), so nothing
+in the schema can tell you which rows belong to which backend.
+
+### Step 1 — decide the allowlist, do not assume it
+
+`kind` is the only usable signal. As of this writing the production emitters are:
+
+| `kind` | Emitted by |
+|---|---|
+| `ingestion` | **Knowledge Flow** (control-plane references it in tests only) |
+| `migration`, `erasure` | control-plane |
+| `evaluation` | the evaluation backend (its own database) |
+| `log` | declared in fred-core, emitted by no application |
+
+**Verify against your own data before trusting that table** — a `kind` added after this was
+written lands in the wrong bucket silently:
+
+```sql
+SELECT kind, state, count(*) FROM task_run GROUP BY kind, state ORDER BY 1,2;
+```
+
+Everything below uses `kind IN ('ingestion')`. Widen it only for kinds you have confirmed are
+Knowledge Flow's. Getting this wrong moves control-plane's rows out of its own database.
+
+### Step 2 — quiesce
+
+Stop ingestion and let non-terminal `task_run` rows reach a terminal state. A task whose
+`task_run` row moves while its worker is still emitting events raises `TaskNotFoundError`,
+which fails the Temporal activity and the workflow with it.
+
+### Step 3 — copy (both databases, one admin role)
+
+The `knowledge_flow` role cannot connect to `fred` by design, so run this as the Postgres
+admin. Three details are not optional:
+
+- **Explicit column lists on both sides.** `\copy` is positional and the column *ordinals
+  differ* between the two databases — a bare `\copy task_run` silently writes values into the
+  wrong columns.
+- **`id` is omitted from `task_event_log`.** It is a generated column; copying it drags the
+  source values in without advancing the target sequence, and the next insert collides.
+- **`task_run` before `task_event_log`**, and delete in the reverse order.
+
+```bash
+RUN_COLS="task_id,kind,state,seq,progress,step,detail,error,target,execution_id,created_by,team_id,scheduled_for,created_at,updated_at,acknowledged_at,acknowledged_by"
+EVT_COLS="task_id,kind,seq,state,progress,step,detail,error,target,owner,emitted_at"
+
+psql -U admin -d fred -Atc \
+  "\\copy (SELECT $RUN_COLS FROM task_run WHERE kind IN ('ingestion')) TO STDOUT WITH (FORMAT csv)" > mv_task_run.csv
+psql -U admin -d fred -Atc \
+  "\\copy (SELECT $EVT_COLS FROM task_event_log WHERE task_id IN (SELECT task_id FROM task_run WHERE kind IN ('ingestion'))) TO STDOUT WITH (FORMAT csv)" > mv_task_event_log.csv
+
+psql -U admin -d knowledge_flow -c "\\copy task_run ($RUN_COLS) FROM STDIN WITH (FORMAT csv)" < mv_task_run.csv
+psql -U admin -d knowledge_flow -c "\\copy task_event_log ($EVT_COLS) FROM STDIN WITH (FORMAT csv)" < mv_task_event_log.csv
+```
+
+### Step 4 — verify BEFORE deleting
+
+Counts must match what you extracted, and the sequence must be healthy:
+
+```sql
+-- in knowledge_flow
+SELECT kind, state, count(*) FROM task_run GROUP BY 1,2 ORDER BY 1,2;
+SELECT count(*) FROM task_event_log;
+-- ids must be freshly assigned, not the source values
+SELECT min(id), max(id) FROM task_event_log;
+```
+
+Do not proceed until these are right. The copy is idempotent to re-run only if you truncate
+the target first — re-running it as-is duplicates rows.
+
+### Step 5 — delete from the shared database
+
+```sql
+-- events first: they reference task_run
+DELETE FROM task_event_log
+ WHERE task_id IN (SELECT task_id FROM task_run WHERE kind IN ('ingestion'));
+DELETE FROM task_run WHERE kind IN ('ingestion');
+```
+
+Reconcile: `fred` should retain exactly the other backends' kinds, and the two databases'
+combined counts should equal what you started with.
+
+> Verified end-to-end against a clean local stack (2026-08-02): 3 `task_run` rows
+> (2 `ingestion`, 1 `migration`) and 4 events in `fred` → 2 rows + 3 events moved to
+> `knowledge_flow` with event ids reassigned from 1 and the sequence still healthy, the
+> `migration` row and its event untouched in `fred`, no row lost or duplicated.

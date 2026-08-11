@@ -68,5 +68,16 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # Check the table explicitly rather than reusing `_task_run_indexes()`. That helper
+    # returns the sentinel `{_INDEX_NAME}` when `task_run` is absent, which reads as
+    # "already done, skip" for upgrade() but as "present, drop it" here — the two
+    # directions need opposite answers from the same missing table. Since OPS-04 (#2170)
+    # gave knowledge-flow its own task database, `task_run` is legitimately absent from
+    # this chain's database, so `alembic downgrade` hit `UndefinedObjectError: index
+    # "uq_task_run_single_active_migration" does not exist`. Same guard shape as the
+    # sibling migrations 1c9a54674ebf and d96d9ae21375.
+    inspector = sa.inspect(op.get_bind())
+    if "task_run" not in inspector.get_table_names():
+        return
     if _INDEX_NAME in _task_run_indexes():
         op.drop_index(_INDEX_NAME, table_name="task_run")

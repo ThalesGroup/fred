@@ -55,7 +55,7 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
         return []
 
     kpi_writer = app_context.get_kpi_writer()
-    return [
+    tasks = [
         asyncio.create_task(emit_process_kpis(interval_s, kpi_writer)),
         asyncio.create_task(
             emit_sql_pool_kpis(
@@ -66,6 +66,22 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
             )
         ),
     ]
+    # The worker writes every task event, so the dedicated task pool (OPS-04, #2170) is
+    # if anything hotter here than in the API. Sampled only when it is a distinct engine —
+    # under the `task_postgres`-unset fallback both accessors return the same object, and
+    # emitting it twice would publish one pool under two names.
+    if app_context.get_task_pg_async_engine() is not app_context.get_pg_async_engine():
+        tasks.append(
+            asyncio.create_task(
+                emit_sql_pool_kpis(
+                    interval_s,
+                    kpi_writer,
+                    app_context.get_task_pg_async_engine(),
+                    pool_name="knowledge-flow-tasks-postgres",
+                )
+            )
+        )
+    return tasks
 
 
 async def main() -> None:

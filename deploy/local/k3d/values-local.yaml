@@ -143,6 +143,29 @@ x-kf-storage: &kf-storage
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
+  # Dedicated database for task_run / task_event_log (OPS-04, issue #2170).
+  #
+  # Left commented out because this stack does not itself create the database — the
+  # matching `fred-deployment-factory` k3d chart does, but only when Postgres initialises
+  # an EMPTY data directory: its init SQL is mounted into /docker-entrypoint-initdb.d,
+  # which the Postgres entrypoint runs once, at initdb. On a cluster whose PVC already
+  # exists, a redeploy re-renders that ConfigMap and creates nothing, so the database must
+  # be created by hand (or the cluster wiped) before enabling this.
+  #
+  # Enabling it also requires POSTGRES_KNOWLEDGE_FLOW_PASSWORD in the dotenv blocks below
+  # and a migration command that runs both Alembic chains — see the same block in
+  # deploy/charts/fred/values.yaml for the full checklist.
+  # task_postgres:
+  #   host: postgres
+  #   port: 5432
+  #   database: knowledge_flow
+  #   username: knowledge_flow
+  #   password_env: POSTGRES_KNOWLEDGE_FLOW_PASSWORD # pragma: allowlist secret
+  #   pool_size: 2
+  #   max_overflow: 0
+  #   pool_timeout: 30
+  #   pool_recycle: 1800
+  #   pool_pre_ping: true
   opensearch:
     host: https://opensearch:9200
     secure: true

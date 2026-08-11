@@ -48,3 +48,35 @@ check-chart-values: $(SCRIPTS_UV_READY) ## Validate deploy/charts/fred/values.ya
 	$(if $(_ALL_BACKEND_SCHEMAS_PRESENT), \
 		$(SCRIPTS_UV) run $(_CHECK_CHART_VALUES_SCRIPT) "$(_CHART_SCHEMA_FILE)" "$(_CHART_VALUES_FILE)", \
 		echo "Skipping chart values check: not all backend schemas are present.")
+
+# The two deployment overlays are the files an operator actually edits, yet nothing
+# validated them (issue #2170 review). They are PARTIAL — Helm merges them over values.yaml
+# — so they only mean anything merged, hence `--merge-over`.
+#
+# This target FAILS on error, like every other check here — it is simply not wired into
+# `code-quality` or CI yet.
+#
+# BLOCKED ON a schema-generation defect, which is the real root cause and needs its own
+# issue: `generate_chart_schema.py` emits a schema STRICTER than the Pydantic models it is
+# generated from. Helm merges maps key-by-key, so an overlay flipping `metadata_store.type`
+# from duckdb to postgres leaves the base's `duckdb_path` behind; the generated schema
+# rejects that leftover key while Pydantic's discriminated union ignores it (verified:
+# PostgresTableConfig validates fine with a stray duckdb_path). So the overlays are correct
+# and the schema is wrong. Until that is fixed this target reports failures the application
+# does not share.
+#
+# TO PROMOTE once the schema defect is fixed: add `check-chart-overlays` to the
+# `check-chart-values` prerequisites (and to Check-config-schema.yml alongside it). Nothing
+# else needs to change — the target already exits non-zero on a real failure.
+_CHART_OVERLAY_FILES := \
+	$(_CHART_REPO_ROOT)/deploy/charts/fred/values-gcp.yaml \
+	$(_CHART_REPO_ROOT)/deploy/local/k3d/values-local.yaml
+
+.PHONY: check-chart-overlays
+check-chart-overlays: $(SCRIPTS_UV_READY) ## Validate values-gcp/values-local MERGED over values.yaml (not yet in CI — see comment)
+	$(if $(_ALL_BACKEND_SCHEMAS_PRESENT), \
+		set -e; for f in $(_CHART_OVERLAY_FILES); do \
+			$(SCRIPTS_UV) run $(_CHECK_CHART_VALUES_SCRIPT) "$(_CHART_SCHEMA_FILE)" "$$f" \
+				--merge-over "$(_CHART_VALUES_FILE)"; \
+		done, \
+		echo "Skipping chart overlay check: not all backend schemas are present.")

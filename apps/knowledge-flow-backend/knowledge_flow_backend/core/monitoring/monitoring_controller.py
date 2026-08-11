@@ -39,10 +39,53 @@ logger = logging.getLogger(__name__)
 # backend surfaces as a failed check, never as a hung request.
 _READINESS_TIMEOUT_S = 6.0
 
+# Probes that are REPORTED but never make the pod unready.
+#
+# Readiness answers one question: should the Service route traffic here? A dependency
+# only some endpoints need must not answer "no" on behalf of all the others. The task
+# database (OPS-04, issue #2170) backs `GET /tasks`, task SSE and ingestion *start* —
+# document search, upload, tag and metadata reads never touch it. Failing readiness on
+# it would pull every pod out of the Service after ~100s (failureThreshold 10 ×
+# periodSeconds 10) and turn a partial outage into a total one.
+#
+# The signal is not lost: the failing check still appears in the body with ok=false and
+# its error, still logs a warning, and is still what an operator or a status script
+# reads. Only the HTTP status and the Kubernetes verdict are left alone.
+_ADVISORY_PROBES = frozenset({"postgres_tasks"})
+
+# Every probe — advisory or blocking — shares `_READINESS_TIMEOUT_S`.
+#
+# Deliberately NOT a shorter budget for advisory probes. The reasoning that tempts one:
+# `_run_checks` gathers concurrently, so /ready's latency is the slowest probe, and kubelet
+# abandons the request at its own `timeoutSeconds` and records a FAILED probe regardless of
+# the 200 that would have come back — so an advisory probe that is slow takes the pod down
+# via the very response that says "keep routing to me".
+#
+# That failure is real, but the fix belongs in the chart, not here: readinessProbe sets
+# `timeoutSeconds: 8` (> this budget) so a slow advisory probe still answers in time and a
+# blocking one can still spend its full budget before answering 503 honestly. Tightening the
+# budget here instead would fire on load rather than on failure — `_check_postgres_tasks`
+# does byte-identical work to `_check_postgres` but against a 2-connection pool with
+# `pool_pre_ping`, so two concurrent task writes are enough to blow a short budget and emit
+# `ready_degraded` plus a WARNING every `periodSeconds`, indistinguishable from a real outage.
+#
+# If you change `timeoutSeconds` in deploy/charts/fred/values.yaml, keep it above this.
+
+# Server + database identity, for proving the task engine really is a second database.
+# `system_identifier` identifies the *server cluster*; `inet_server_addr()` would not —
+# it reports the address the client connected to, so the same server answers 127.0.0.1
+# in-cluster and its routable IP from outside, and two spellings of one host would look
+# like two servers. Both are readable by an ordinary (non-superuser) login role.
+_PG_IDENTITY_SQL = text("SELECT (SELECT system_identifier FROM pg_control_system()) AS server_id, current_database() AS db")
+
 
 class MonitoringController:
     def __init__(self, app: APIRouter, application_context: Optional[ApplicationContext] = None):
         self._ctx = application_context
+        # None = not yet determined. Identity cannot change under a running process, so it
+        # is resolved once and cached — a per-probe pair of extra connections against a
+        # deliberately small pool would fire on load rather than on failure.
+        self._task_db_is_distinct: Optional[bool] = None
 
         @app.get("/healthz")
         async def healthz():
@@ -51,9 +94,23 @@ class MonitoringController:
         @app.get("/ready")
         async def ready():
             checks = await self._run_checks()
-            all_ok = all(c.get("ok", False) for c in checks.values()) if checks else True
-            body = {"status": "ready" if all_ok else "degraded", "checks": checks}
-            return JSONResponse(status_code=200 if all_ok else 503, content=body)
+            # Only non-advisory failures make the pod unready — see _ADVISORY_PROBES.
+            blocking_ok = all(c.get("ok", False) for name, c in checks.items() if name not in _ADVISORY_PROBES)
+            advisory_failures = [name for name, c in checks.items() if name in _ADVISORY_PROBES and not c.get("ok", False)]
+
+            if not blocking_ok:
+                status = "degraded"
+            elif advisory_failures:
+                # Serving, but a non-essential dependency is down. Distinct from "ready"
+                # so a dashboard or status script can tell the two apart at a glance.
+                status = "ready_degraded"
+            else:
+                status = "ready"
+
+            body: dict = {"status": status, "checks": checks}
+            if advisory_failures:
+                body["advisory_failures"] = advisory_failures
+            return JSONResponse(status_code=200 if blocking_ok else 503, content=body)
 
     async def _run_checks(self) -> dict:
         if self._ctx is None:
@@ -61,6 +118,7 @@ class MonitoringController:
 
         probes: dict[str, Callable[[], Awaitable[object | None]]] = {
             "postgres": self._check_postgres,
+            "postgres_tasks": self._check_postgres_tasks,
             "opensearch": self._check_opensearch,
             "openfga": self._check_openfga,
             "gcs_filesystem": self._check_gcs_filesystem,
@@ -102,6 +160,47 @@ class MonitoringController:
         engine = self._context.get_pg_async_engine()
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
+
+    async def _check_postgres_tasks(self) -> None:
+        """Probe the dedicated task database (OPS-04, issue #2170).
+
+        Without this, a pod whose task database is down — or whose
+        POSTGRES_KNOWLEDGE_FLOW_PASSWORD was rotated — reports nothing at all about it,
+        while every `GET /tasks`, task SSE stream and ingestion start returns 500 and the
+        shared engine that used to be the only thing checked stays perfectly healthy.
+
+        ADVISORY (see `_ADVISORY_PROBES`): a failure here is reported in the body and
+        logged, but does NOT make the pod unready. Document search, upload, tag and
+        metadata reads do not touch this database, and taking every pod out of the
+        Service would convert a partial outage into a total one.
+
+        Skipped rather than duplicated when `storage.task_postgres` is unset: the task
+        engine is then the shared engine, which `_check_postgres` already covers.
+
+        Also the only check that can prove the two engines address *different* databases.
+        `StorageConfig._task_postgres_must_be_a_different_database` compares how the blocks
+        are spelled, so `localhost` and `127.0.0.1` pass it; only asking both servers who
+        they are settles it, and getting it wrong silently restores the duplicate rows this
+        whole change removes.
+        """
+        ctx = self._context
+        if ctx.get_config().storage.task_postgres is None:
+            raise _SkippedCheck("task_postgres not configured; shares the main postgres engine")
+        engine = ctx.get_task_pg_async_engine()
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+            if self._task_db_is_distinct is None and conn.dialect.name == "postgresql":
+                task_identity = (await conn.execute(_PG_IDENTITY_SQL)).one()
+                async with ctx.get_pg_async_engine().connect() as shared_conn:
+                    shared_identity = (await shared_conn.execute(_PG_IDENTITY_SQL)).one()
+                self._task_db_is_distinct = tuple(task_identity) != tuple(shared_identity)
+        if self._task_db_is_distinct is False:
+            raise RuntimeError(
+                "storage.task_postgres resolves to the SAME database as storage.postgres "
+                "(same server system_identifier and current_database), however differently the two "
+                "blocks are spelled. Control-plane and Knowledge Flow are reading each other's task "
+                "rows and the Activity page shows every task twice (OPS-04, issue #2170)."
+            )
 
     async def _check_opensearch(self) -> None:
         try:

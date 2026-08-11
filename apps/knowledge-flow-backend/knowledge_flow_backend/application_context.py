@@ -34,7 +34,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
-from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig
+from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresStoreConfig, PostgresTableConfig
 from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents import PostgresDocumentMetadataStore as PostgresMetadataStore
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIWriter, build_kpi_writer
@@ -294,6 +294,7 @@ class ApplicationContext:
     _rebac_engine: Optional[RebacEngine] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
     _pg_async_engine: Optional[AsyncEngine] = None
+    _task_pg_async_engine: Optional[AsyncEngine] = None
     _task_service_instance: Optional[Any] = None
 
     def __init__(self, configuration: Configuration):
@@ -511,6 +512,64 @@ class ApplicationContext:
         logger.info("[SQL] Shared Postgres async initialized.")
         init_user_store(pg_async_engine)
         return pg_async_engine
+
+    def get_task_pg_config(self) -> PostgresStoreConfig:
+        """Connection config for the database holding `task_run` / `task_event_log`.
+
+        The single place the "dedicated database, else the shared one" rule is expressed.
+        Both the engine and the SSE bus DSN derive from it: they must name the SAME
+        database, because `PostgresEventBus` uses LISTEN/NOTIFY and notification channels
+        are per-database. Deriving them independently is how they drift, and the failure
+        is silent — events still persist and replay while live streaming delivers nothing.
+        """
+        return self.configuration.storage.task_postgres or self.configuration.storage.postgres
+
+    def get_task_pg_async_engine(self) -> AsyncEngine:
+        """Async engine for the task tables (`task_run` / `task_event_log`) only.
+
+        Why a second engine (OPS-04, issue #2170): knowledge-flow shares its main
+        Postgres database with control-plane, and both persist tasks through the same
+        `fred_core.tasks` tables, which carry no per-service discriminator. Sharing one
+        database therefore makes each backend's `GET /tasks` return the other's rows, and
+        the Activity page — which queries both and merges — shows every task twice.
+        `storage.task_postgres` points the task tables at a database of knowledge-flow's
+        own; `metadata_store` / `tag_store` / `resource_store` deliberately keep using the
+        shared engine, because control-plane's platform import/export writes those tables
+        in the same transaction as its own.
+
+        Deliberately does NOT go through `_init_pg_async_engine`: that helper also calls
+        `init_user_store()`, which assigns a module-level global in fred-core. Routing the
+        task engine through it would repoint the process-wide user store at a database
+        that has no `users` table.
+        """
+        if self._task_pg_async_engine is not None:
+            return self._task_pg_async_engine
+
+        task_cfg = self.configuration.storage.task_postgres
+        if task_cfg is None:
+            # Falls back to the shared database so an image can be deployed before the
+            # dedicated database is provisioned. The duplicate-row bug persists until it is.
+            logger.warning(
+                "[SQL] storage.task_postgres is not configured — task_run/task_event_log will "
+                "share the '%s' database with control-plane. The Activity page will keep showing "
+                "duplicate task rows until a dedicated database is provisioned (issue #2170).",
+                self.configuration.storage.postgres.database,
+            )
+            self._task_pg_async_engine = self.get_pg_async_engine()
+            return self._task_pg_async_engine
+
+        task_engine = create_async_engine_from_config(task_cfg)
+
+        def _dispose_task_async_engine():
+            try:
+                asyncio.run(task_engine.dispose())
+            except Exception:
+                logger.debug("[SQL] Task async engine dispose at exit failed", exc_info=True)
+
+        atexit.register(_dispose_task_async_engine)
+        logger.info("[SQL] Dedicated task Postgres async engine initialized (database=%s).", task_cfg.database)
+        self._task_pg_async_engine = task_engine
+        return self._task_pg_async_engine
 
     def get_log_store(self) -> BaseLogStore:
         """
@@ -844,10 +903,11 @@ class ApplicationContext:
         config = self.get_config()
         temporal_provider = TemporalClientProvider(config.scheduler.temporal) if backend == SchedulerBackend.TEMPORAL else None
         self._task_service_instance = TaskService.build(
-            engine=self.get_pg_async_engine(),
+            engine=self.get_task_pg_async_engine(),
             backend=backend,
+            # Same database as the engine, by construction — see get_task_pg_config().
+            postgres_dsn=(self.get_task_pg_config().dsn() if backend == SchedulerBackend.TEMPORAL else None),
             temporal_client_provider=temporal_provider,
-            postgres_dsn=config.storage.postgres.dsn() if backend == SchedulerBackend.TEMPORAL else None,
             # #2279: when Temporal ends an execution on its own (TIMED_OUT because
             # no worker could pick the work up), no worker code runs to record the
             # failure. Reconciliation holds the verdict API-side; this hook is what
@@ -1284,6 +1344,27 @@ class ApplicationContext:
                 await self._rebac_engine.close()
             except Exception:
                 logger.debug("[REBAC] Failed to close ReBAC engine", exc_info=True)
+
+        # Dedicated task PG engine. Disposed before the shared one, and only when it is a
+        # distinct engine — under the `task_postgres`-unset fallback both slots hold the
+        # same object. `dispose()` is idempotent (it replaces the pool rather than
+        # invalidating the engine), so a second call is harmless but not free: it builds a
+        # fresh pool only to abandon it. The guard keeps shutdown to exactly one dispose
+        # per real engine.
+        if self._task_pg_async_engine is not None:
+            try:
+                if self._task_pg_async_engine is not self._pg_async_engine:
+                    await self._task_pg_async_engine.dispose()
+            except Exception:
+                # Never let the newest engine's teardown abort the rest of shutdown. This
+                # block runs FIRST, so a raising dispose() — an asyncpg close error, or
+                # cancellation during a hard SIGTERM — would otherwise skip the shared
+                # engine's dispose and the OpenSearch client close below, cleanup that ran
+                # unconditionally before the task database existed. Same swallow-and-log
+                # shape as the ReBAC engine block above.
+                logger.debug("[SQL] task engine dispose failed during shutdown", exc_info=True)
+            finally:
+                self._task_pg_async_engine = None
 
         # Async PG engine
         if self._pg_async_engine is not None:

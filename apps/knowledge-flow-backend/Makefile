@@ -18,6 +18,76 @@ export ENV_FILE
 
 PADDLE_MODELS_DIR ?= ./models
 
+##@ Database Migrations — dedicated task database (OPS-04, #2170)
+
+# Knowledge Flow migrates TWO databases: the shared `fred` one (tag/metadata/resource,
+# driven by alembic.mk's db-* targets) and its own task database (task_run/task_event_log).
+# Alembic opens one connection per env.py, so the second database needs its own chain,
+# configured by alembic_tasks.ini. These targets mirror alembic.mk's, suffixed `-tasks`.
+
+# Pin the profile the TASK-chain targets read. Without this, alembic.mk leaves
+# ALEMBIC_CONFIG_FILE empty and CONFIG_FILE falls through to whatever config/.env holds — so
+# `make db-upgrade-tasks` migrated a different database depending on the developer's .env,
+# and only a profile declaring `storage.task_postgres` works at all (the shipped
+# configuration.yaml and configuration_test.yaml do not).
+#
+# TARGET-SPECIFIC, not a file-wide `:=`. A global assignment would also capture the shared
+# chain's db-upgrade/db-migrate/db-downgrade and silently override a CONFIG_FILE the
+# developer deliberately set in config/.env (load_dotenv runs with override=False, so the
+# recipe's value wins) — migrating the wrong database with no indication the profile was
+# substituted. Overridable per invocation:
+#   make db-upgrade-tasks ALEMBIC_CONFIG_FILE=./config/configuration_worker.yaml
+db-upgrade-tasks db-migrate-tasks db-downgrade-tasks db-history-tasks \
+db-check-tasks-heads db-check-tasks-sqlite db-check-tasks-postgres: \
+	ALEMBIC_CONFIG_FILE := ./config/configuration_prod.yaml
+
+TASKS_ALEMBIC := $(UV) run alembic -c alembic_tasks.ini
+TASKS_SQLITE_TEST_DB := $(TARGET)/test_migrations_tasks.db
+
+.PHONY: db-upgrade-tasks
+db-upgrade-tasks: dev ## apply pending migrations to the dedicated task database
+	$(ALEMBIC_CONFIG_ENV) $(TASKS_ALEMBIC) upgrade head
+
+.PHONY: db-migrate-tasks
+db-migrate-tasks: dev ## generate a task-database migration (usage: make db-migrate-tasks MSG="...")
+	$(ALEMBIC_CONFIG_ENV) $(TASKS_ALEMBIC) revision --autogenerate -m "$(MSG)"
+
+.PHONY: db-downgrade-tasks
+db-downgrade-tasks: dev ## roll back the last task-database migration
+	$(ALEMBIC_CONFIG_ENV) $(TASKS_ALEMBIC) downgrade -1
+
+.PHONY: db-history-tasks
+db-history-tasks: dev ## show task-database migration history
+	$(ALEMBIC_CONFIG_ENV) $(TASKS_ALEMBIC) history --verbose
+
+.PHONY: db-check-tasks-heads
+db-check-tasks-heads: dev ## assert the task chain has exactly one Alembic head
+	@echo "Checking for single Alembic head (task database)..."
+	@heads=$$(DATABASE_URL="sqlite+aiosqlite:///unused" $(TASKS_ALEMBIC) heads | grep -c '(head)'); \
+	if [ "$$heads" -ne 1 ]; then \
+		echo "Expected 1 head, found $$heads"; exit 1; \
+	fi
+	@echo "Single head confirmed (task database)."
+
+.PHONY: db-check-tasks-sqlite
+db-check-tasks-sqlite: dev ## validate the task chain against a throwaway SQLite database
+	@echo "SQLite migration checks (task database)..."
+	@mkdir -p $(TARGET)
+	@rm -f $(TASKS_SQLITE_TEST_DB)
+	DATABASE_URL="sqlite+aiosqlite:///$(TASKS_SQLITE_TEST_DB)" $(TASKS_ALEMBIC) upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(TASKS_SQLITE_TEST_DB)" $(TASKS_ALEMBIC) check
+	DATABASE_URL="sqlite+aiosqlite:///$(TASKS_SQLITE_TEST_DB)" $(TASKS_ALEMBIC) downgrade base
+	@rm -f $(TASKS_SQLITE_TEST_DB)
+	@echo "SQLite migration checks passed (task database)."
+
+.PHONY: db-check-tasks-postgres
+db-check-tasks-postgres: dev ## validate the task chain against PostgreSQL (assumes the container is running)
+	@echo "PostgreSQL migration checks (task database)..."
+	DATABASE_URL="$(PG_TEST_URL)" $(TASKS_ALEMBIC) upgrade head
+	DATABASE_URL="$(PG_TEST_URL)" $(TASKS_ALEMBIC) check
+	DATABASE_URL="$(PG_TEST_URL)" $(TASKS_ALEMBIC) downgrade base
+	@echo "PostgreSQL migration checks passed (task database)."
+
 ##@ Run
 
 .PHONY: download-models

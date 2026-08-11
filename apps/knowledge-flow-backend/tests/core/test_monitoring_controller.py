@@ -20,14 +20,18 @@ reports which one is down (503) instead of silently hanging or always returning 
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import yaml
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
-from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
+from knowledge_flow_backend.core.monitoring.monitoring_controller import _READINESS_TIMEOUT_S, MonitoringController
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 class _AsyncCM:
@@ -59,8 +63,15 @@ def _healthy_context() -> SimpleNamespace:
     gcs_content = MagicMock()
     gcs_content.health_check = MagicMock(return_value={"backend": "gcs", "buckets": ["docs", "objs"]})
 
+    # storage.task_postgres unset → the task-database probe reports "skipped", because the
+    # task engine is then the shared engine that the `postgres` probe already covers
+    # (OPS-04, issue #2170).
+    config = SimpleNamespace(storage=SimpleNamespace(task_postgres=None))
+
     return SimpleNamespace(
         get_pg_async_engine=lambda: engine,
+        get_task_pg_async_engine=lambda: engine,
+        get_config=lambda: config,
         get_opensearch_client=lambda: opensearch,
         get_rebac_engine=lambda: rebac,
         get_filesystem=lambda: gcs_fs,
@@ -124,6 +135,78 @@ def test_ready_skips_non_gcs_backend() -> None:
     fs_check = resp.json()["checks"]["gcs_filesystem"]
     assert fs_check["ok"] is True
     assert "skipped" in fs_check
+
+
+def test_ready_skips_task_postgres_probe_when_not_configured() -> None:
+    """Absent `storage.task_postgres`, the task engine IS the shared engine, so probing it
+    again would only double-count the same dependency."""
+    with _client(_healthy_context()) as client:
+        resp = client.get("/knowledge-flow/v1/ready")
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["checks"]["postgres_tasks"]["ok"] is True
+    assert body["checks"]["postgres_tasks"]["skipped"]
+
+
+def _task_db_down_context() -> SimpleNamespace:
+    ctx = _healthy_context()
+    ctx.get_config = lambda: SimpleNamespace(storage=SimpleNamespace(task_postgres=object()))
+    failing = MagicMock()
+    failing.connect = MagicMock(side_effect=RuntimeError("task database unreachable"))
+    ctx.get_task_pg_async_engine = lambda: failing
+    return ctx
+
+
+def test_task_database_outage_is_reported_but_does_not_make_the_pod_unready() -> None:
+    """The task database is ADVISORY: reported, never fatal to readiness.
+
+    Document search, upload, tag and metadata reads never touch it, so answering 503
+    would pull every pod out of the Service (~100s at failureThreshold 10 ×
+    periodSeconds 10) and turn a partial outage into a total one (OPS-04, #2170).
+    """
+    with _client(_task_db_down_context()) as client:
+        resp = client.get("/knowledge-flow/v1/ready")
+
+    body = resp.json()
+    assert resp.status_code == 200, "an advisory failure must not remove the pod from the Service"
+    assert body["status"] == "ready_degraded", "…but it must be visibly distinct from a clean 'ready'"
+    assert body["advisory_failures"] == ["postgres_tasks"]
+    # The signal is preserved in full: the failure and its cause are still reported.
+    assert body["checks"]["postgres_tasks"]["ok"] is False
+    assert "task database unreachable" in body["checks"]["postgres_tasks"]["error"]
+    # The shared database is fine — only the task database is down.
+    assert body["checks"]["postgres"]["ok"] is True
+
+
+def test_a_blocking_dependency_still_makes_the_pod_unready_alongside_an_advisory_one() -> None:
+    """Advisory handling must not weaken the real gate."""
+    ctx = _task_db_down_context()
+    failing = MagicMock()
+    failing.health_check = MagicMock(side_effect=RuntimeError("GCS bucket unreachable"))
+    ctx.get_content_store = lambda: failing
+
+    with _client(ctx) as client:
+        resp = client.get("/knowledge-flow/v1/ready")
+
+    body = resp.json()
+    assert resp.status_code == 503
+    assert body["status"] == "degraded"
+    assert body["checks"]["gcs_content_store"]["ok"] is False
+    assert body["checks"]["postgres_tasks"]["ok"] is False
+
+
+def test_chart_readiness_timeout_exceeds_probe_budget() -> None:
+    """kubelet's `timeoutSeconds` must stay above the in-process probe budget.
+
+    `_run_checks` gathers concurrently, so /ready costs as much as its slowest probe. If
+    kubelet gives up first it records a FAILED probe regardless of the 200 that was about
+    to come back — and a slow ADVISORY probe would then take the pod out of the Service
+    through the very response that says "keep routing to me", defeating `_ADVISORY_PROBES`
+    entirely. The module comment states this requirement; nothing enforced it.
+    """
+    values = yaml.safe_load((_REPO_ROOT / "deploy/charts/fred/values.yaml").read_text())
+    data = values["applications"]["knowledge-flow-backend"]["probes"]["readinessProbe"]["data"]
+    assert data["timeoutSeconds"] > _READINESS_TIMEOUT_S, "readinessProbe.timeoutSeconds must exceed _READINESS_TIMEOUT_S — see monitoring_controller.py"
 
 
 if __name__ == "__main__":  # pragma: no cover

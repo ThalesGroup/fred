@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
-import fred_core.documents.document_models  # noqa: F401 — registers metadata + tag tables with CoreBase (via fred_core.documents.__init__)
-import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
-from fred_core.models.base import Base as CoreBase
+from fred_core.documents.document_models import DocumentMetadataRow
+from fred_core.documents.tag_models import TagRow
 from fred_core.sql import make_alembic_env
+from sqlalchemy import MetaData
 
 import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401
 from alembic import context
@@ -37,9 +37,27 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Build a MetaData scoped to the tables Knowledge Flow owns in the SHARED `fred` database.
+#
+# `DocumentMetadataRow`/`TagRow` share CoreBase with tables owned by other backends
+# (session, teammetadata, users — control-plane) and, since OPS-04 / issue #2170, with
+# task_run/task_event_log, which now live in Knowledge Flow's own dedicated database and
+# are migrated by the separate `alembic_tasks` chain. Passing `CoreBase.metadata` directly
+# would make this chain claim all of them: `alembic check` reports drift for tables it does
+# not own, and `--autogenerate` emits spurious create/drop operations for them.
+#
+# Note the include_name/table-name filter in make_alembic_env cannot substitute for this.
+# Alembic filters the *connection* side by name, but builds the metadata side from
+# `sorted_tables` unfiltered, so an unwanted table in the MetaData is still requested.
+# Same reasoning and same pattern as libs/fred-runtime/alembic/env.py.
+_knowledge_flow_metadata = MetaData()
+for _table in Base.metadata.tables.values():
+    _table.to_metadata(_knowledge_flow_metadata)
+DocumentMetadataRow.__table__.to_metadata(_knowledge_flow_metadata)  # type: ignore[attr-defined]
+TagRow.__table__.to_metadata(_knowledge_flow_metadata)  # type: ignore[attr-defined]
+
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    # Both metadata objects so autogenerate sees KFB tables and shared task tables.
-    target_metadata=[Base.metadata, CoreBase.metadata],
+    target_metadata=_knowledge_flow_metadata,
     get_postgres_config=lambda: load_configuration().storage.postgres,
     version_table="alembic_version_knowledge_flow",
 )

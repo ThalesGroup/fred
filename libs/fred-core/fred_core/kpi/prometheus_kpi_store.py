@@ -57,8 +57,22 @@ logger = logging.getLogger(__name__)
 #   `_pdf_kpi_timer` call sites) — deliberately a distinct label from
 #   `runtime_stage` so a Grafana `runtime_stage` variable/query never mixes
 #   TURN-01's auth stages with Knowledge Flow's PDF pipeline stages.
+#   `pool` names a SQLAlchemy connection pool ("knowledge-flow-postgres",
+#   "knowledge-flow-tasks-postgres", …) on the `process.db_pool.*` gauges: a closed,
+#   deployment-time set of a handful of values, no tenancy or user data, only meaningful
+#   in aggregate. Listed here so the label is not silently stripped IF those gauges ever
+#   reach this sink.
+#   NOTE they do not today: `index_event` below drops every `process.*` metric before
+#   Prometheus (they are considered covered by the prometheus_client process collector),
+#   so db_pool telemetry currently lands only in logs/OpenSearch. That exclusion is
+#   pre-existing and applies to every pool equally — lifting it is its own decision, not
+#   OPS-04's. What this entry guarantees is that when it is lifted, a process owning more
+#   than one pool (Knowledge Flow since issue #2170) does not silently collapse both onto
+#   one Gauge whose value is whichever sampler wrote last — worse than no metric, because
+#   it reads healthy while alternating between two unrelated pools.
 PROMETHEUS_ALLOWED_LABELS = frozenset(
     {
+        "pool",
         "tool_name",
         "status",
         "error_code",

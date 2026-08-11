@@ -1560,7 +1560,21 @@
               "type": "null"
             }
           ],
+          "default": null,
           "title": "Password"
+        },
+        "password_env": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+          "title": "Password Env"
         },
         "echo": {
           "default": false,
@@ -2165,6 +2179,18 @@
       "properties": {
         "postgres": {
           "$ref": "#/$defs/PostgresStoreConfig"
+        },
+        "task_postgres": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PostgresStoreConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Dedicated Postgres database for task_run / task_event_log (OPS-04). Knowledge Flow shares `postgres` with control-plane for tag/metadata/resource, so its task tables must live elsewhere or both backends read each other's rows. Unset falls back to `postgres` \u2014 the pre-OPS-04 shared behaviour, which duplicates task rows on the Activity page."
         },
         "opensearch": {
           "anyOf": [

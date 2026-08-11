@@ -23,6 +23,7 @@ from sqlalchemy import (
     Float,
     Index,
     Integer,
+    MetaData,
     String,
     Text,
     UniqueConstraint,
@@ -138,3 +139,46 @@ class TaskEventLogRow(Base):
     emitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+
+
+# ── canonical ownership of the task tables ────────────────────────────────────
+#
+# The single answer to "which tables does fred_core.tasks own?". Consumers must not
+# re-enumerate the classes: a backend that persists tasks in a database of its own
+# (knowledge-flow, OPS-04 / issue #2170) has to partition its schema on exactly this
+# set — once to decide which tables its Alembic chain migrates, and again to decide
+# which tables its boot-time `create_all` puts in which database. Two hand-written
+# enumerations drift the moment a third task table is added here: the new table gets
+# created in the shared database and migrated in the dedicated one, silently
+# reintroducing the split this ownership boundary exists to prevent.
+# Private: the two public entry points below (`TASK_TABLE_NAMES`, `task_metadata()`) are
+# what consumers need. Exporting the ORM classes as a tuple as well would be a third way
+# to ask the same question, with no caller.
+_TASK_TABLES: tuple[type[Base], ...] = (TaskRunRow, TaskEventLogRow)
+
+TASK_TABLE_NAMES: frozenset[str] = frozenset(m.__tablename__ for m in _TASK_TABLES)
+
+
+def task_metadata() -> MetaData:
+    """A `MetaData` holding only the task tables, for an Alembic chain that owns them.
+
+    Why this exists: `fred_core`'s declarative `Base` is one registry shared by every
+    backend, so passing `Base.metadata` to Alembic makes a chain claim tables it does
+    not own. Alembic applies its name filters only to the *connection* side and builds
+    the metadata side from `sorted_tables` unfiltered, so an unwanted table left in the
+    MetaData is still emitted as a create — `include_name` cannot substitute for this.
+
+    Usage, in an `alembic/env.py`::
+
+        run_migrations_offline, run_migrations_online = make_alembic_env(
+            target_metadata=task_metadata(),
+            get_postgres_config=...,
+            version_table="alembic_version_<backend>_tasks",
+        )
+    """
+    scoped = MetaData()
+    for name in sorted(TASK_TABLE_NAMES):
+        # Via the registry rather than `Model.__table__`: declarative types the latter as
+        # FromClause, which has no `to_metadata`.
+        Base.metadata.tables[name].to_metadata(scoped)
+    return scoped

@@ -1,7 +1,7 @@
 # RFC OPS-04 — Unified Task Event Stream & Worker-Action Audit
 
 **ID:** OPS-04  
-**Status:** confirmed (core: §1–§2, §4–§7) — 2026-06-16 · rev. 2 (2026-07-07): worker-action audit + shared Activity surface — proposed · rev. 3 (2026-07-25): persisted acknowledgement — proposed, driven by OBSERV-02's role-based dashboard finalization (§2.10) · **rev. 4 (2026-07-27): per-service task persistence, rejects rev. 2's central-ownership/`RemoteTaskClient` design (§2.6/§2.9) — confirmed**  
+**Status:** confirmed (core: §1–§2, §4–§7) — 2026-06-16 · rev. 2 (2026-07-07): worker-action audit + shared Activity surface — proposed · rev. 3 (2026-07-25): persisted acknowledgement — proposed, driven by OBSERV-02's role-based dashboard finalization (§2.10) · **rev. 4 (2026-07-27): per-service task persistence, rejects rev. 2's central-ownership/`RemoteTaskClient` design (§2.6/§2.9) — confirmed** · rev. 4.1 (2026-08-01): §2.9's knowledge-flow half shipped with issue #2170 (see `docs/swift/ops/DATABASE_MIGRATIONS.md`); **still open** is the matching `fred-deployment-factory` provisioning — a dedicated `knowledge_flow` database + role across docker-compose, the GKE Helm chart and k3d. The two repos release independently and either order is safe, but neither half fixes the duplicate rows alone  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-06-04  
 
@@ -409,16 +409,15 @@ The correction is emitted as a normal `TaskEvent` via `TaskService.record(...)`,
 
 **Each backend persists its own `task_run`/`task_event_log`, in its own database, and serves its
 own `GET /tasks`/SSE.** No new machinery: this is exactly `TaskStore`/`TaskService` as they exist
-today (`libs/fred-core/fred_core/tasks/store.py`) — the fix is entirely at the infrastructure
-layer, not the application layer. control-plane already correctly owns its copy (the `fred`
-database it was created in). knowledge-flow needs its **own dedicated database**, mirroring the
-one `evaluation` already has: provision `POSTGRES_KNOWLEDGE_FLOW_DB`/`_USER`/`_PASSWORD` the same
-way `86f2c3b` (`fred-deployment-factory`) provisioned `POSTGRES_EVALUATION_DB`, wire a second
+today (`libs/fred-core/fred_core/tasks/store.py`) — `TaskService.build` already takes the engine as
+a parameter. control-plane already correctly owns its copy (the `fred` database it was created
+in). knowledge-flow needs its **own dedicated database**: provision
+`POSTGRES_KNOWLEDGE_FLOW_DB`/`_USER`/`_PASSWORD` in `fred-deployment-factory`, wire a second
 engine in knowledge-flow's `ApplicationContext` (its `metadata_store`/`tag_store`/`resource_store`
-keep using the existing shared engine — only `get_task_service()` moves), and give knowledge-flow's
-Alembic chain a real `CREATE TABLE` for `task_run`/`task_event_log` on that new database (today it
-only carries `ALTER` migrations, because it has always silently ridden on control-plane's copy —
-see the rev. 4 amendment above).
+keep using the existing shared engine — only `get_task_service()` moves), and give knowledge-flow a
+**second** Alembic chain carrying a real `CREATE TABLE` for `task_run`/`task_event_log` on that new
+database (its existing chain only carries `ALTER` migrations, because it has always silently ridden
+on control-plane's copy — see the rev. 4 amendment above).
 
 **Why not co-locate knowledge-flow's task tables with its `tag`/`document_metadata` tables in the
 shared database instead of a second dedicated one?** Because nothing requires it: unlike
@@ -428,6 +427,9 @@ rev. 4 amendment above), `task_run` writes always go through `TaskService.record
 any such transaction, in every producer, today. There is no atomicity requirement pulling task
 rows into the shared database — keeping them there was simply an infrastructure default nobody
 had reconsidered.
+
+Implemented (issue #2170) — see `docs/swift/ops/DATABASE_MIGRATIONS.md` and
+`docs/swift/platform/DEPLOYMENT_GUIDE.md` for what actually ships.
 
 **The Activity page stays multi-source, by design, not as a stopgap** (corrects §3.4's "Rev. 2:
 single-source" text below): the frontend already queries each backend's own `GET /tasks`

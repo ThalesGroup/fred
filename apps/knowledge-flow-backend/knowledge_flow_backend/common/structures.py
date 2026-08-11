@@ -828,8 +828,19 @@ DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Fiel
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
+    task_postgres: Optional[PostgresStoreConfig] = Field(
+        default=None,
+        description=(
+            "Dedicated Postgres database for task_run / task_event_log (OPS-04). "
+            "Knowledge Flow shares `postgres` with control-plane for tag/metadata/resource, "
+            "so its task tables must live elsewhere or both backends read each other's rows. "
+            "Unset falls back to `postgres` — the pre-OPS-04 shared behaviour, which duplicates "
+            "task rows on the Activity page."
+        ),
+    )
     opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
     clickhouse: Optional[ClickHouseStoreConfig] = Field(default=None, description="Optional ClickHouse store")
+
     resource_store: StoreConfig
     tag_store: StoreConfig
     metadata_store: StoreConfig
@@ -839,6 +850,42 @@ class StorageConfig(BaseModel):
     )
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
+
+    @model_validator(mode="after")
+    def _task_postgres_must_be_a_different_database(self) -> "StorageConfig":
+        """Reject a `task_postgres` block that names the same database as `postgres`.
+
+        The whole point of OPS-04 (#2170) is that the two backends stop sharing one
+        `task_run` table. Copying the `postgres` block and forgetting to change
+        `database` is the obvious way to get this wrong, and every other signal stays
+        green: the engine builds, `/ready` passes, migrations succeed, and the only
+        symptom is duplicated rows on an admin page nobody watches during a rollout.
+        Omitting the block entirely is a supported fallback and warns at startup —
+        naming the shared database explicitly is always a mistake, so fail on it.
+
+        Static and therefore partial: it compares how the two blocks are *spelled*, so
+        normalizing case, whitespace and a trailing FQDN dot is as far as it goes. Two
+        different spellings of one server (`localhost` vs `127.0.0.1`, a CNAME vs its
+        target) pass here and no static check can catch them — real identity is tested at
+        runtime by the advisory `postgres_tasks` probe in `monitoring_controller.py`.
+        """
+        task = self.task_postgres
+        if task is None:
+            return self
+        task_host = (task.host or "").strip().rstrip(".").lower()
+        shared_host = (self.postgres.host or "").strip().rstrip(".").lower()
+        same_sqlite = task.sqlite_path is not None and task.sqlite_path == self.postgres.sqlite_path
+        same_postgres = task.sqlite_path is None and self.postgres.sqlite_path is None and (task_host, task.port, task.database) == (shared_host, self.postgres.port, self.postgres.database)
+        if same_sqlite or same_postgres:
+            target = task.sqlite_path or f"{task.host}:{task.port}/{task.database}"
+            raise ValueError(
+                f"storage.task_postgres points at the same database as storage.postgres ({target}). "
+                "The task tables must live in a database of Knowledge Flow's own, or control-plane "
+                "and Knowledge Flow keep reading each other's task rows and the Activity page shows "
+                "every task twice (OPS-04, issue #2170). Point it at a dedicated database, or remove "
+                "the block entirely to fall back to the shared one deliberately."
+            )
+        return self
 
 
 class TabularQueryConfig(BaseModel):

@@ -41,6 +41,31 @@ def _strip_helm_anchors(values: object) -> object:
     return values
 
 
+def _deep_merge(base: object, overlay: object) -> object:
+    """Merge `overlay` over `base` the way Helm merges successive -f files.
+
+    Helm's rule: maps merge key-by-key, everything else (scalars, lists) is replaced
+    wholesale by the later file. Overlays like values-gcp.yaml and values-local.yaml are
+    *partial* — they carry only the keys they change — so validating one on its own reports
+    every required property that lives in the base as missing. What ships is the merge, so
+    that is what has to satisfy the schema.
+
+    An explicit null in the overlay DELETES the key rather than setting it to None — that
+    is Helm's documented behaviour, and without it this merge validates a document Helm
+    would never render (an overlay clearing an inherited `duckdb_path` would be checked
+    with the key still present).
+    """
+    if isinstance(base, dict) and isinstance(overlay, dict):
+        merged = dict(base)
+        for key, value in overlay.items():
+            if value is None:
+                merged.pop(key, None)
+            else:
+                merged[key] = _deep_merge(merged[key], value) if key in merged else value
+        return merged
+    return overlay
+
+
 def _validate(instance: object, schema: dict) -> list[str]:
     from jsonschema import Draft7Validator
 
@@ -56,22 +81,35 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Validate Helm values.yaml against values.schema.json")
     parser.add_argument("schema", help="Path to values.schema.json")
     parser.add_argument("values", help="Path to values.yaml")
+    parser.add_argument(
+        "--merge-over",
+        metavar="BASE_VALUES",
+        help=(
+            "Treat `values` as a partial Helm overlay and validate it merged over BASE_VALUES, "
+            "as `helm -f BASE_VALUES -f values` would render it."
+        ),
+    )
     args = parser.parse_args()
 
     schema = _load_json(Path(args.schema))
-    raw = _load_yaml(Path(args.values))
-    values = _strip_helm_anchors(raw)
+    values = _strip_helm_anchors(_load_yaml(Path(args.values)))
+
+    label = args.values
+    if args.merge_over:
+        base = _strip_helm_anchors(_load_yaml(Path(args.merge_over)))
+        values = _deep_merge(base, values)
+        label = f"{args.values} (merged over {args.merge_over})"
 
     errors = _validate(values, schema)
 
     if errors:
-        print(f"FAIL  {args.values}")
+        print(f"FAIL  {label}")
         for err in errors:
             print(err)
         print("\nValues validation failed. Fix the errors above or update the schema.")
         sys.exit(1)
 
-    print(f"OK    {args.values}")
+    print(f"OK    {label}")
     print("\nValues file is valid.")
 
 

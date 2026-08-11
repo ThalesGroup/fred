@@ -24,6 +24,7 @@ from .gcs_client import build_gcs_client
 from .lru_cache import ThreadSafeLRUCache
 from .resilient_sink import ResilientSinkStore
 from .structures import (
+    DEFAULT_POSTGRES_PASSWORD_ENV,
     BaseModelWithId,
     DuckdbStoreConfig,
     KpiLogSinkConfig,
@@ -44,6 +45,7 @@ from .team_id import TeamId, is_personal_team_id, personal_team_id
 from .utils import raise_internal_error
 
 __all__ = [
+    "DEFAULT_POSTGRES_PASSWORD_ENV",
     "BaseModelWithId",
     "ConfigFiles",
     "DuckdbStoreConfig",

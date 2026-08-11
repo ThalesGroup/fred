@@ -17,7 +17,6 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
@@ -35,7 +34,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.sql import ClauseElement
 
-from fred_core.common import PostgresStoreConfig
+from fred_core.common import DEFAULT_POSTGRES_PASSWORD_ENV, PostgresStoreConfig
 
 logger = logging.getLogger(__name__)
 
@@ -201,11 +200,28 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
             )
             raise
 
-    if not os.getenv("FRED_POSTGRES_PASSWORD"):
+    # PostgresStoreConfig resolves `password` from the environment at validation time —
+    # from FRED_POSTGRES_PASSWORD, or from `password_env` when this config names its own
+    # database's role. Check the resolved value, not one hard-coded variable, or a config
+    # pointing at a second database fails whenever the first one's password is unset.
+    if not config.password:
+        # Which database and which variable are carried by the RuntimeError below, not by
+        # this log line. Not because it hides them — this is fatal, so the traceback lands
+        # in the same log a moment later — but because CodeQL's
+        # py/clear-text-logging-sensitive-data rule flags any `password*` identifier
+        # reaching an explicit log sink, and the rule is right to be blunt: a static
+        # analyser cannot safely tell "the secret" from "the name of the secret".
+        # The values themselves are safe to surface (an env var NAME and a database name,
+        # both already in values.yaml and ENV_VARIABLES.md) and naming them is what makes
+        # the error actionable, now that knowledge-flow has two Postgres configs.
+        env_var = config.password_env or DEFAULT_POSTGRES_PASSWORD_ENV
         logger.error(
-            "[TASKS][STORE] Missing FRED_POSTGRES_PASSWORD environment variable (required for Postgres task store)"
+            "[SQL][AsyncEngine] No password configured for the Postgres database; "
+            "its required environment variable is unset"
         )
-        raise RuntimeError("FRED_POSTGRES_PASSWORD is required for Postgres task store")
+        raise RuntimeError(
+            f"{env_var} is required to connect to Postgres database {config.database!r}"
+        )
     missing = [
         name
         for name in ("host", "database", "username")

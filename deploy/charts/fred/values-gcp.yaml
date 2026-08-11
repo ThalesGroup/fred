@@ -101,6 +101,23 @@ applications:
           port: 5432
           database: fred
           username: fred
+        # Dedicated database for task_run / task_event_log (OPS-04, issue #2170).
+        # This overlay sets `storage` inline, so it does NOT inherit the x-kf-storage
+        # anchor in values.yaml — the block has to be repeated here. Uncomment once the
+        # database and role exist, set POSTGRES_KNOWLEDGE_FLOW_PASSWORD, and run the
+        # second Alembic chain; see values.yaml for the full checklist. Until then task
+        # rows stay in the shared `fred` database and the Activity page shows duplicates.
+        # task_postgres:
+        #   host: "<POSTGRES_HOST>"
+        #   port: 5432
+        #   database: knowledge_flow
+        #   username: knowledge_flow
+        #   password_env: POSTGRES_KNOWLEDGE_FLOW_PASSWORD # pragma: allowlist secret
+        #   pool_size: 2
+        #   max_overflow: 0
+        #   pool_timeout: 30
+        #   pool_recycle: 1800
+        #   pool_pre_ping: true
         resource_store:
           type: "postgres"
         tag_store:

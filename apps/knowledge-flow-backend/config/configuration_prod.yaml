@@ -412,6 +412,35 @@ storage:
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
+  # Dedicated database for task_run / task_event_log (OPS-04, issue #2170).
+  # The `fred` database above is shared with control-plane, and the fred-core task tables
+  # carry no per-service discriminator — sharing them makes each backend's GET /tasks
+  # return the other's rows, which the Activity page renders as duplicates.
+  #
+  # DISABLED BY DEFAULT — this file cannot create the database. Enabling it requires ALL of:
+  #   1. the `knowledge_flow` database + role provisioned (fred-deployment-factory owns this;
+  #      its initdb hook only runs on an empty Postgres data dir, so an existing local stack
+  #      needs the post-install job run explicitly);
+  #   2. POSTGRES_KNOWLEDGE_FLOW_PASSWORD present in config/.env — note `make setup-env`
+  #      only fills keys that already exist as KEY="", so a .env created before OPS-04 will
+  #      NOT gain it automatically;
+  #   3. `make db-upgrade-tasks` run against that database;
+  #   4. the API and the Temporal worker enabled together — a split leaves them writing task
+  #      rows to two different databases.
+  # Until then the task tables stay in the shared `fred` database (pre-OPS-04 behaviour,
+  # duplicate rows included). Same default and same reasoning as
+  # deploy/charts/fred/values.yaml.
+  # task_postgres:
+  #   host: localhost
+  #   port: 5432
+  #   database: knowledge_flow
+  #   username: knowledge_flow
+  #   password_env: POSTGRES_KNOWLEDGE_FLOW_PASSWORD # pragma: allowlist secret
+  #   pool_size: 2
+  #   max_overflow: 0
+  #   pool_timeout: 30
+  #   pool_recycle: 1800
+  #   pool_pre_ping: true
   opensearch:
     host: https://localhost:9200
     secure: true

@@ -98,6 +98,15 @@ Files of interest:
 - `knowledge-flow-backend/config/configuration.yaml`
 - Password mapping to remember:
   - **Core Postgres (metadata/tags/vector, etc.)** → `storage.postgres` → `FRED_POSTGRES_PASSWORD` (or `password:` in YAML).
+  - **Knowledge Flow task Postgres** (`task_run` / `task_event_log`) → `storage.task_postgres` → the variable named by its `password_env`, conventionally `POSTGRES_KNOWLEDGE_FLOW_PASSWORD`.
+    - A **second, dedicated database**, because the core one is shared with control-plane and the task tables carry no per-service discriminator — sharing them makes each backend's `GET /tasks` return the other's rows, which the Activity page renders as duplicates (OPS-04, issue #2170).
+    - Provision it like the `evaluation` database, in `fred-deployment-factory`. Set the block identically for the **API and the worker** — they read different config files, and a mismatch makes every task event raise `TaskNotFoundError` while live SSE silently delivers nothing.
+    - Migrate it with `make db-upgrade-tasks`; the plain `make db-upgrade` covers only the shared database.
+    - Omit the block and Knowledge Flow falls back to the shared database, logging a warning at startup — the pre-OPS-04 behaviour, duplicates included. It is **commented out in every shipped config and values file**, because nothing in the `fred` repo can create the database — enabling it against a database that does not exist turns a working deploy into a CrashLoop.
+    - **Cutover is one-way and only fixes rows written from then on.** Task rows already in the shared database stay there. Plan for three consequences before flipping the flag:
+      - **Drain first.** A task whose `task_run` row is in the shared database but whose later events are written to the new one raises `TaskNotFoundError`, failing the Temporal activity and with it the ingestion workflow. Quiesce ingestion and let non-terminal `task_run` rows reach a terminal state before enabling, and enable the API and worker together — a rolling update that leaves them split does the same thing.
+      - **History moves out of view.** Knowledge Flow's `GET /tasks` reads only the new database, so pre-cutover Knowledge Flow tasks disappear from its Activity list while control-plane's `GET /tasks` keeps returning them — now attributed to the wrong service. Deleting the stranded Knowledge Flow rows from the shared database is the operator's call; nothing does it automatically.
+      - **Stale rows are never reconciled.** Knowledge Flow's reconciliation sweeper queries the new database, so a non-terminal row left in the shared one stays non-terminal forever.
 
 **Tabular runtime** → `storage.tabular_store` + shared `content_storage`.
   - In this recommended dataset-centric design, there is no dedicated tabular SQL database.

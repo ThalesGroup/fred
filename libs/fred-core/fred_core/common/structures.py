@@ -15,6 +15,7 @@
 import os
 from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional, Union
+from urllib.parse import quote
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -121,6 +122,11 @@ class DuckdbStoreConfig(BaseModel):
     duckdb_path: str = Field(..., description="Path to the DuckDB database file.")
 
 
+# Password env var used by every service that talks to a single Postgres database.
+# Per-database overrides go through PostgresStoreConfig.password_env.
+DEFAULT_POSTGRES_PASSWORD_ENV = "FRED_POSTGRES_PASSWORD"  # nosec B105 # pragma: allowlist secret - env var name, not a secret
+
+
 class PostgresStoreConfig(BaseModel):
     type: Literal["postgres"] = "postgres"
     host: Optional[str] = Field(default=None, description="PostgreSQL host")
@@ -131,8 +137,14 @@ class PostgresStoreConfig(BaseModel):
     )
     database: Optional[str] = None
     username: Optional[str] = None
-    password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("FRED_POSTGRES_PASSWORD")
+    password: Optional[str] = None
+    password_env: Optional[str] = Field(
+        default=None,
+        description=(
+            "Name of the environment variable holding this database's password. "
+            "Unset means FRED_POSTGRES_PASSWORD. Set it only when one service "
+            "connects to several Postgres databases under different roles."
+        ),
     )
     echo: bool = Field(default=False, description="SQLAlchemy echo flag.")
     pool_size: Optional[int] = Field(
@@ -158,11 +170,64 @@ class PostgresStoreConfig(BaseModel):
         default=None, description="Optional connect_args passed to SQLAlchemy."
     )
 
+    @model_validator(mode="after")
+    def _resolve_password_from_env(self) -> "PostgresStoreConfig":
+        """Fill ``password`` from the environment when the config does not carry one.
+
+        Why: passwords are never written into config files — they arrive as env vars.
+        A service that talks to a single database reads ``FRED_POSTGRES_PASSWORD``
+        (unchanged behaviour). A service that talks to several databases under
+        different roles sets ``password_env`` per block, e.g.::
+
+            storage:
+              postgres:                       # reads FRED_POSTGRES_PASSWORD
+                database: fred
+              task_postgres:
+                database: knowledge_flow
+                password_env: POSTGRES_KNOWLEDGE_FLOW_PASSWORD
+
+        An explicit ``password`` in the config always wins — including an explicit
+        ``None``, which means "no password", not "go and find one".
+
+        This reproduces the semantics of the ``default_factory`` it replaced, which a
+        plain ``if self.password is None`` would not:
+
+        - it resolves only when the field was genuinely **unset**, so an explicit
+          ``password=None`` stays ``None``;
+        - it writes through ``__dict__`` rather than by attribute assignment, so the
+          field does not join ``model_fields_set``. Assigning normally would make
+          ``model_dump(exclude_unset=True)`` — "dump only what was configured" —
+          start emitting the live secret for every backend using this model.
+        """
+        if "password" not in self.__pydantic_fields_set__:
+            self.__dict__["password"] = os.getenv(
+                self.password_env or DEFAULT_POSTGRES_PASSWORD_ENV
+            )
+        return self
+
+    def _userinfo(self) -> str:
+        """Percent-encoded ``user:password`` for the DSN's userinfo section.
+
+        Credentials are operator-chosen and routinely contain URL-reserved characters.
+        Interpolated raw, they do not fail loudly — they re-parse the URL: a password of
+        ``p@ss/wo:rd`` makes everything after the first ``@`` look like the host, so the
+        connection silently targets the wrong server with a truncated password.
+
+        ``None`` becomes an empty password rather than the literal string ``"None"``.
+        The engine factory rejects a missing password before it gets here, but
+        ``dsn()`` is also consumed directly by ``PostgresEventBus``, which bypasses that
+        factory — an empty password fails authentication loudly, ``"None"`` would be
+        offered as a real one.
+        """
+        return f"{quote(self.username or '', safe='')}:{quote(self.password or '', safe='')}"
+
     def dsn(self) -> str:
-        return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        return (
+            f"postgresql://{self._userinfo()}@{self.host}:{self.port}/{self.database}"
+        )
 
     def async_dsn(self) -> str:
-        return f"postgresql+asyncpg://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        return f"postgresql+asyncpg://{self._userinfo()}@{self.host}:{self.port}/{self.database}"
 
 
 class PostgresTableConfig(BaseModel):

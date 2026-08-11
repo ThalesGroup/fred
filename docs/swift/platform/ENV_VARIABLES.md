@@ -51,6 +51,7 @@ Note:
 | Variable                    | In templates                  | Purpose                                                      |
 | --------------------------- | ----------------------------- | ------------------------------------------------------------ |
 | `FRED_POSTGRES_PASSWORD`    | agentic, knowledge-flow       | Main Postgres password.                                      |
+| `POSTGRES_KNOWLEDGE_FLOW_PASSWORD` | knowledge-flow         | Password for knowledge-flow's dedicated task database (`task_run` / `task_event_log`, OPS-04 #2170). Named by `storage.task_postgres.password_env`; set the same value for the API and the worker. |
 | `TABULAR_POSTGRES_PASSWORD` | knowledge-flow                | Tabular store Postgres password.                             |
 | `OPENSEARCH_PASSWORD`       | agentic, knowledge-flow       | OpenSearch authentication.                                   |
 | `MINIO_SECRET_KEY`          | knowledge-flow, control-plane | MinIO secret for content storage backends when `type=minio`. Not required for `type=gcs` or `type=local`. |

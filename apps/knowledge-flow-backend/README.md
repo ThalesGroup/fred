@@ -70,6 +70,21 @@ The default configuration is developer-friendly and only uses local stores. See 
 - **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.
   - User/host/db come from `storage.postgres` in `configuration*.yaml`.
   - Password comes from `FRED_POSTGRES_PASSWORD` (or an explicit `password:` in the YAML).
+  - This database is **shared with control-plane**, which is why the task tables below are not in it.
+- **Task storage (`storage.task_postgres`)**: used only by `task_run` / `task_event_log` (OPS-04, issue #2170).
+  - A database of Knowledge Flow's own. The `fred_core` task tables carry no per-service
+    discriminator, so keeping them in the shared database makes each backend's `GET /tasks` return
+    the other's rows — the Activity page then shows every task twice.
+  - Password comes from the variable named by `password_env` (`POSTGRES_KNOWLEDGE_FLOW_PASSWORD`),
+    because this database has its own role.
+  - Migrated by its own Alembic chain: `make db-upgrade-tasks` (config: `alembic_tasks.ini`).
+    The main `make db-upgrade` still migrates tag/metadata/resource in the shared database.
+  - **The API and the worker must agree on this block.** They load different config files
+    (`configuration_prod.yaml` vs `configuration_worker.yaml`); if they diverge, the API creates the
+    task row in one database and the worker writes events to another, so every event raises
+    `TaskNotFoundError` and live SSE silently delivers nothing (`LISTEN`/`NOTIFY` is per-database).
+  - If omitted, Knowledge Flow falls back to `storage.postgres` and logs a warning at startup —
+    the pre-OPS-04 behaviour, which reintroduces the duplicate rows.
 - **Tabular artifacts (`storage.tabular_store` + `content_storage`)**: CSV ingestion writes Parquet artifacts into the shared content store object area.
   - Runtime query limits come from `storage.tabular_store` in `configuration*.yaml`.
   - The CSV-to-Parquet path is DuckDB-native and avoids loading the full dataset into a pandas DataFrame.

@@ -92,7 +92,7 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent), fi
 	@for dir in $(ENV_APPS); do \
 		f="$$dir/config/.env"; \
 		[ -f "$$f" ] || continue; \
-		for key in FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD OPENFGA_API_TOKEN MINIO_SECRET_KEY KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET; do \
+		for key in FRED_POSTGRES_PASSWORD POSTGRES_KNOWLEDGE_FLOW_PASSWORD OPENSEARCH_PASSWORD OPENFGA_API_TOKEN MINIO_SECRET_KEY KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET; do \
 			if grep -q "^$$key=\"\"" "$$f" 2>/dev/null; then \
 				sed -i "s/^$$key=\"\"/$$key=\"Azerty123_\"/" "$$f"; \
 			fi; \
@@ -225,6 +225,7 @@ RT_UV                := libs/fred-runtime/.venv/bin/uv
 db-check-combined-heads: ## assert each migratable backend has exactly one Alembic head (no branch conflicts)
 	$(MAKE) -C apps/control-plane-backend db-check-heads
 	$(MAKE) -C apps/knowledge-flow-backend db-check-heads
+	$(MAKE) -C apps/knowledge-flow-backend db-check-tasks-heads
 	$(MAKE) -C libs/fred-runtime db-check-heads
 
 .PHONY: db-check-combined-postgres-up
@@ -252,6 +253,8 @@ db-check-combined-sqlite: ## upgrade control-plane, knowledge-flow, and fred-run
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
 	@echo "=== Combined SQLite migration check passed ==="
+	@echo "=== Knowledge Flow task-database chain (separate database by design, OPS-04) ==="
+	$(MAKE) -C apps/knowledge-flow-backend db-check-tasks-sqlite
 
 .PHONY: db-check-combined-postgres
 db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade control-plane, knowledge-flow, and fred-runtime against the same DB, check for drift, then downgrade
@@ -268,6 +271,12 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
 	@echo "=== Combined migration check passed ==="
+	# Knowledge Flow's task chain owns task_run/task_event_log in a database of its own
+	# (OPS-04, #2170), so it is deliberately NOT part of the combined run above — that run
+	# proves three backends can co-migrate ONE database, and control-plane already creates
+	# task_run there. Run it here, after the downgrades, while the database is empty again.
+	@echo "=== Knowledge Flow task-database chain (separate database by design) ==="
+	$(MAKE) -C apps/knowledge-flow-backend db-check-tasks-postgres
 	$(MAKE) db-check-combined-postgres-down
 
 include scripts/makefiles/help.mk

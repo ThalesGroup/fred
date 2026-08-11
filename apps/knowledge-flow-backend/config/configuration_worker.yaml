@@ -316,6 +316,25 @@ storage:
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
+  # Dedicated database for task_run / task_event_log (OPS-04, issue #2170).
+  # MUST match configuration_prod.yaml's block exactly — enable and disable the two
+  # together. The API creates the task_run row and the worker writes its events: if the two
+  # processes point at different databases, every worker event raises TaskNotFoundError and
+  # live SSE silently delivers nothing (LISTEN/NOTIFY channels are per-database).
+  #
+  # DISABLED BY DEFAULT for the same reason as configuration_prod.yaml — see the enablement
+  # checklist there. See knowledge-flow's README.
+  # task_postgres:
+  #   host: localhost
+  #   port: 5432
+  #   database: knowledge_flow
+  #   username: knowledge_flow
+  #   password_env: POSTGRES_KNOWLEDGE_FLOW_PASSWORD # pragma: allowlist secret
+  #   pool_size: 2
+  #   max_overflow: 0
+  #   pool_timeout: 30
+  #   pool_recycle: 1800
+  #   pool_pre_ping: true
   opensearch:
     host: https://localhost:9200
     secure: true

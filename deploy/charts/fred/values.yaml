@@ -314,6 +314,39 @@ x-kf-storage: &kf-storage
     port: 5432
     database: fred
     username: admin
+  # Dedicated database for task_run / task_event_log (OPS-04, issue #2170).
+  #
+  # Left commented out because THIS CHART CANNOT CREATE THE DATABASE — it has no
+  # provisioning hook; `fred-deployment-factory` owns that. Enabling the block below
+  # against a database that does not exist turns a working deploy into a CrashLoop, so
+  # the default stays on the shared `fred` database (knowledge-flow logs a warning at
+  # startup, and the Activity page keeps showing each task twice until this is enabled).
+  #
+  # To enable, all three of these are required together:
+  #   1. uncomment this block and point it at the provisioned database;
+  #   2. set POSTGRES_KNOWLEDGE_FLOW_PASSWORD in the `dotenv` block of BOTH the
+  #      knowledge-flow-backend and knowledge-flow-worker applications below;
+  #   3. run the second Alembic chain, which the default migration Job does NOT run —
+  #      override the knowledge-flow-backend migration command:
+  #        migration:
+  #          enabled: true
+  #          command: ["sh", "-c"]
+  #          args: ["alembic upgrade head && alembic -c alembic_tasks.ini upgrade head"]
+  #
+  # Keep pool_size/max_overflow explicit. Unset, fred-core defaults to 5+10 = 15
+  # connections per pool, and a second pool across backend + worker replicas can push a
+  # default Postgres `max_connections=100` over the edge for every service on the server.
+  # task_postgres:
+  #   host: localhost
+  #   port: 5432
+  #   database: knowledge_flow
+  #   username: knowledge_flow
+  #   password_env: POSTGRES_KNOWLEDGE_FLOW_PASSWORD # pragma: allowlist secret
+  #   pool_size: 2
+  #   max_overflow: 0
+  #   pool_timeout: 30
+  #   pool_recycle: 1800
+  #   pool_pre_ping: true
   opensearch:
     host: https://localhost:9200
     secure: true
@@ -1153,7 +1186,11 @@ applications:
     job:
       enabled: false
     migration:
-      enabled: false    # Enable when knowledge-flow-backend gets Alembic migrations
+      # knowledge-flow HAS Alembic migrations (the comment that used to say otherwise was
+      # stale). Left off by default so an operator opts in deliberately. Note the default
+      # command runs only the shared-database chain; the dedicated task database needs the
+      # second chain too — see the x-kf-storage anchor above for the override.
+      enabled: false
       scaleDown: true
       backoffLimit: 3
     rollingUpdate:
@@ -1259,6 +1296,15 @@ applications:
             path: /knowledge-flow/v1/ready
             port: 8111
           periodSeconds: 10
+          # MUST exceed the server-side probe budget (_READINESS_TIMEOUT_S = 6s in
+          # monitoring_controller.py). Kubernetes defaults timeoutSeconds to 1, which would
+          # record a FAILED probe on any slow dependency regardless of the HTTP status —
+          # including the 200 that the advisory task-database probe deliberately returns
+          # (OPS-04, issue #2170). At the default, a merely *slow* task database would take
+          # knowledge-flow out of the Service in failureThreshold x periodSeconds = 100s,
+          # turning a partial outage into a total one — the exact opposite of the advisory
+          # probe's purpose.
+          timeoutSeconds: 8
       startupProbe:
         enabled: false
     securityContext:
@@ -1336,6 +1382,8 @@ applications:
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
+      # Only used when storage.task_postgres is enabled in the x-kf-storage anchor (#2170).
+      POSTGRES_KNOWLEDGE_FLOW_PASSWORD: ""
 
   # ── 3.4 Knowledge Flow Worker (Temporal) ───────────────────────────
   # Toggle Temporal worker pod deployment.
@@ -1512,6 +1560,8 @@ applications:
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
+      # Only used when storage.task_postgres is enabled in the x-kf-storage anchor (#2170).
+      POSTGRES_KNOWLEDGE_FLOW_PASSWORD: ""
 
   # ── 3.5 Control Plane Backend ─────────────────────────────────────
   control-plane-backend:

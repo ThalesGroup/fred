@@ -54,7 +54,11 @@ async def test_instant_query_serializes_body_and_auth_header() -> None:
 
 
 @pytest.mark.asyncio
-async def test_targets_uses_basic_auth_when_configured() -> None:
+async def test_targets_uses_basic_auth_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    # PrometheusConfig defaults bearer_token from PROMETHEUS_BEARER_TOKEN, and
+    # bearer wins over basic auth. A developer .env that sets it would silently
+    # turn this into a bearer-auth test, so pin the ambient environment.
+    monkeypatch.delenv("PROMETHEUS_BEARER_TOKEN", raising=False)
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -83,7 +87,8 @@ async def test_targets_uses_basic_auth_when_configured() -> None:
 
 
 @pytest.mark.asyncio
-async def test_targets_uses_admin_as_default_basic_auth_username() -> None:
+async def test_targets_uses_admin_as_default_basic_auth_username(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PROMETHEUS_BEARER_TOKEN", raising=False)
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

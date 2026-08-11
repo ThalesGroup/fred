@@ -94,6 +94,50 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
+async def create_core_tables(application_context: ApplicationContext) -> None:
+    """Create fred-core's tables, routing the task tables to the task database (OPS-04, #2170).
+
+    Before this split, `create_all(CoreBase.metadata)` on the shared engine put
+    `task_run`/`task_event_log` into the database knowledge-flow shares with control-plane —
+    which is what made each backend's `GET /tasks` return the other's rows and the Activity
+    page render every task twice. Every other CoreBase table is created exactly as before.
+
+    The partition is driven by `fred_core.tasks`' own declaration of what it owns, never by a
+    list repeated here: a third task table added there must land in the dedicated database
+    automatically, or it is silently created in the shared one.
+
+    Module-level rather than inlined in the lifespan so it can be tested directly — this is
+    the guard for #2170's core invariant, and a revert to a single `create_all` has to go
+    through this function. See tests/core/test_application_context_task_database.py.
+    """
+    from fred_core.models.base import Base as CoreBase
+    from fred_core.tasks import TASK_TABLE_NAMES
+
+    all_tables = CoreBase.metadata.sorted_tables
+    task_tables = [t for t in all_tables if t.name in TASK_TABLE_NAMES]
+    shared_tables = [t for t in all_tables if t.name not in TASK_TABLE_NAMES]
+
+    async with application_context.get_pg_async_engine().begin() as conn:
+        await conn.run_sync(CoreBase.metadata.create_all, tables=shared_tables)
+
+    # When storage.task_postgres is unset this is the same engine as above, so the
+    # pre-OPS-04 behaviour (task tables in the shared database) is preserved verbatim.
+    #
+    # A dedicated task database is NOT a hard startup dependency: alembic_tasks/ owns the
+    # real schema in production, so this create_all is belt-and-braces, and the
+    # `postgres_tasks` readiness probe is deliberately advisory. Raising here would put the
+    # whole API pod into CrashLoopBackOff — taking document search, upload and metadata down
+    # — for a database only /tasks and ingestion start need. Same treatment as
+    # get_task_service() further down the lifespan.
+    try:
+        async with application_context.get_task_pg_async_engine().begin() as conn:
+            await conn.run_sync(CoreBase.metadata.create_all, tables=task_tables)
+    except Exception:
+        if application_context.get_task_pg_async_engine() is application_context.get_pg_async_engine():
+            raise  # fallback path: this IS the shared database, keep failing fast
+        logger.warning("OPS-04: task database unavailable — task tables not created; /tasks and ingestion start will fail until it recovers", exc_info=True)
+
+
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -132,29 +176,44 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        import fred_core.tasks.orm_models  # noqa: F401 — registers ORM models with CoreBase
-        from fred_core.models.base import Base as CoreBase
-
-        async with application_context.get_pg_async_engine().begin() as conn:
-            await conn.run_sync(CoreBase.metadata.create_all)
+        await create_core_tables(application_context)
 
         # SIGUSR1/SIGUSR2 manual triggers + optional periodic gc.collect()+
         # malloc_trim() mitigation (fred_core.diagnostics, ISSUE-010).
         gc_diagnostics = install_gc_diagnostics()
 
         process_kpi_task = None
-        db_pool_kpi_task = None
+        db_pool_kpi_tasks: list[asyncio.Task] = []
         interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
         if interval_s > 0:
             process_kpi_task = asyncio.create_task(emit_process_kpis(interval_s, application_context.get_kpi_writer()))
-            db_pool_kpi_task = asyncio.create_task(
-                emit_sql_pool_kpis(
-                    interval_s,
-                    application_context.get_kpi_writer(),
-                    application_context.get_pg_async_engine(),
-                    pool_name="knowledge-flow-postgres",
+            db_pool_kpi_tasks.append(
+                asyncio.create_task(
+                    emit_sql_pool_kpis(
+                        interval_s,
+                        application_context.get_kpi_writer(),
+                        application_context.get_pg_async_engine(),
+                        pool_name="knowledge-flow-postgres",
+                    )
                 )
             )
+            # The dedicated task database (OPS-04, #2170) is a second pool, sized
+            # independently, and saturating it stalls every task write and SSE stream for
+            # 30s before raising — invisible on the shared pool's gauges. Sampled only
+            # when it is genuinely a distinct engine: under the `task_postgres`-unset
+            # fallback both accessors return the same object, and emitting it twice would
+            # publish one pool under two names.
+            if application_context.get_task_pg_async_engine() is not application_context.get_pg_async_engine():
+                db_pool_kpi_tasks.append(
+                    asyncio.create_task(
+                        emit_sql_pool_kpis(
+                            interval_s,
+                            application_context.get_kpi_writer(),
+                            application_context.get_task_pg_async_engine(),
+                            pool_name="knowledge-flow-tasks-postgres",
+                        )
+                    )
+                )
 
         # OPS-04: periodically reconcile abandoned tasks (e.g. worker down past the
         # workflow timeout) against their executors so they never stay pending forever.
@@ -180,10 +239,10 @@ def create_app() -> FastAPI:
                 process_kpi_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await process_kpi_task
-            if db_pool_kpi_task:
-                db_pool_kpi_task.cancel()
+            for pool_task in db_pool_kpi_tasks:
+                pool_task.cancel()
                 with suppress(asyncio.CancelledError):
-                    await db_pool_kpi_task
+                    await pool_task
             await gc_diagnostics.stop()
             await application_context.shutdown()
 

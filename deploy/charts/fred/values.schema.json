@@ -1366,7 +1366,21 @@
                               "type": "null"
                             }
                           ],
+                          "default": null,
                           "title": "Password"
+                        },
+                        "password_env": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+                          "title": "Password Env"
                         },
                         "echo": {
                           "default": false,
@@ -5889,7 +5903,21 @@
                               "type": "null"
                             }
                           ],
+                          "default": null,
                           "title": "Password"
+                        },
+                        "password_env": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+                          "title": "Password Env"
                         },
                         "echo": {
                           "default": false,
@@ -5980,6 +6008,193 @@
                       "title": "PostgresStoreConfig",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "task_postgres": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "type": {
+                              "const": "postgres",
+                              "default": "postgres",
+                              "title": "Type",
+                              "type": "string"
+                            },
+                            "host": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "PostgreSQL host",
+                              "title": "Host"
+                            },
+                            "port": {
+                              "default": 5432,
+                              "title": "Port",
+                              "type": "integer"
+                            },
+                            "sqlite_path": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Path to the SQLite database file (for local dev/testing).",
+                              "title": "Sqlite Path"
+                            },
+                            "database": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "title": "Database"
+                            },
+                            "username": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "title": "Username"
+                            },
+                            "password": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "title": "Password"
+                            },
+                            "password_env": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+                              "title": "Password Env"
+                            },
+                            "echo": {
+                              "default": false,
+                              "description": "SQLAlchemy echo flag.",
+                              "title": "Echo",
+                              "type": "boolean"
+                            },
+                            "pool_size": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional pool size for the engine.",
+                              "title": "Pool Size"
+                            },
+                            "max_overflow": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional max_overflow for SQLAlchemy pool (defaults to SQLAlchemy's 10 if unset).",
+                              "title": "Max Overflow"
+                            },
+                            "pool_timeout": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Seconds to wait for a connection from the pool before timing out.",
+                              "title": "Pool Timeout"
+                            },
+                            "pool_recycle": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Recycle connections after this many seconds (prevents stale TCP / server timeouts).",
+                              "title": "Pool Recycle"
+                            },
+                            "pool_pre_ping": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Enable SQLAlchemy pool_pre_ping to evict stale connections.",
+                              "title": "Pool Pre Ping"
+                            },
+                            "connect_args": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": true,
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional connect_args passed to SQLAlchemy.",
+                              "title": "Connect Args"
+                            }
+                          },
+                          "title": "PostgresStoreConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Dedicated Postgres database for task_run / task_event_log (OPS-04). Knowledge Flow shares `postgres` with control-plane for tag/metadata/resource, so its task tables must live elsewhere or both backends read each other's rows. Unset falls back to `postgres` \u2014 the pre-OPS-04 shared behaviour, which duplicates task rows on the Activity page."
                     },
                     "opensearch": {
                       "anyOf": [
@@ -10462,7 +10677,21 @@
                               "type": "null"
                             }
                           ],
+                          "default": null,
                           "title": "Password"
+                        },
+                        "password_env": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+                          "title": "Password Env"
                         },
                         "echo": {
                           "default": false,
@@ -10553,6 +10782,193 @@
                       "title": "PostgresStoreConfig",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "task_postgres": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "type": {
+                              "const": "postgres",
+                              "default": "postgres",
+                              "title": "Type",
+                              "type": "string"
+                            },
+                            "host": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "PostgreSQL host",
+                              "title": "Host"
+                            },
+                            "port": {
+                              "default": 5432,
+                              "title": "Port",
+                              "type": "integer"
+                            },
+                            "sqlite_path": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Path to the SQLite database file (for local dev/testing).",
+                              "title": "Sqlite Path"
+                            },
+                            "database": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "title": "Database"
+                            },
+                            "username": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "title": "Username"
+                            },
+                            "password": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "title": "Password"
+                            },
+                            "password_env": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+                              "title": "Password Env"
+                            },
+                            "echo": {
+                              "default": false,
+                              "description": "SQLAlchemy echo flag.",
+                              "title": "Echo",
+                              "type": "boolean"
+                            },
+                            "pool_size": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional pool size for the engine.",
+                              "title": "Pool Size"
+                            },
+                            "max_overflow": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional max_overflow for SQLAlchemy pool (defaults to SQLAlchemy's 10 if unset).",
+                              "title": "Max Overflow"
+                            },
+                            "pool_timeout": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Seconds to wait for a connection from the pool before timing out.",
+                              "title": "Pool Timeout"
+                            },
+                            "pool_recycle": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Recycle connections after this many seconds (prevents stale TCP / server timeouts).",
+                              "title": "Pool Recycle"
+                            },
+                            "pool_pre_ping": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Enable SQLAlchemy pool_pre_ping to evict stale connections.",
+                              "title": "Pool Pre Ping"
+                            },
+                            "connect_args": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": true,
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional connect_args passed to SQLAlchemy.",
+                              "title": "Connect Args"
+                            }
+                          },
+                          "title": "PostgresStoreConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Dedicated Postgres database for task_run / task_event_log (OPS-04). Knowledge Flow shares `postgres` with control-plane for tag/metadata/resource, so its task tables must live elsewhere or both backends read each other's rows. Unset falls back to `postgres` \u2014 the pre-OPS-04 shared behaviour, which duplicates task rows on the Activity page."
                     },
                     "opensearch": {
                       "anyOf": [
@@ -13055,7 +13471,21 @@
                               "type": "null"
                             }
                           ],
+                          "default": null,
                           "title": "Password"
+                        },
+                        "password_env": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+                          "title": "Password Env"
                         },
                         "echo": {
                           "default": false,
@@ -15016,7 +15446,21 @@
                               "type": "null"
                             }
                           ],
+                          "default": null,
                           "title": "Password"
+                        },
+                        "password_env": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Name of the environment variable holding this database's password. Unset means FRED_POSTGRES_PASSWORD. Set it only when one service connects to several Postgres databases under different roles.",
+                          "title": "Password Env"
                         },
                         "echo": {
                           "default": false,
