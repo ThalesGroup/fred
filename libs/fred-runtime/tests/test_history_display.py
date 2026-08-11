@@ -39,8 +39,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
-import pytest
-from fred_runtime.cli.history_display import print_history, run_single_turn
+from fred_runtime.cli.history_display import run_single_turn
 from fred_runtime.cli.pod_client import AgentPodClient
 
 BASE_URL = "http://test-pod/fred/agents/v2"
@@ -270,75 +269,3 @@ def test_legacy_graph_v2_resume_still_forwards_checkpoint_id_not_interrupt_id() 
     resume_body = pod.request_bodies[1]
     assert resume_body["checkpoint_id"] == "cp-legacy-123"
     assert "interrupt_id" not in resume_body
-
-
-# ---------------------------------------------------------------------------
-# CACHE-01: /history shows cache_read_tokens per message, not just in/out
-# ---------------------------------------------------------------------------
-
-
-def test_print_history_shows_cache_read_tokens_when_present(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A routing-vs-planning verification pass reads `/history` per message
-    (model + tokens) to confirm which model answered which phase — the
-    cache figure must ride along the same line, not require devtools."""
-
-    print_history(
-        [
-            {
-                "rank": 0,
-                "role": "assistant",
-                "channel": "final",
-                "exchange_id": "ex-1",
-                "parts": [{"type": "text", "text": "hello"}],
-                "metadata": {
-                    "model": "mistral-small-latest",
-                    "token_usage": {
-                        "input_tokens": 1000,
-                        "output_tokens": 20,
-                        "cache_read_tokens": 800,
-                    },
-                },
-            }
-        ],
-        session_id="sess-cache-01",
-        color_enabled=False,
-    )
-
-    out = capsys.readouterr().out
-    assert "mistral-small-latest" in out
-    assert "1000↑ 20↓ (800 cached)" in out
-
-
-def test_print_history_omits_cache_segment_when_zero_or_absent(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """No clutter for providers/messages with no cache detail — matches the
-    pre-CACHE-01 line exactly, no bare '(0 cached)' noise."""
-
-    print_history(
-        [
-            {
-                "rank": 0,
-                "role": "assistant",
-                "channel": "final",
-                "exchange_id": "ex-1",
-                "parts": [{"type": "text", "text": "hello"}],
-                "metadata": {
-                    "model": "mistral-medium-latest",
-                    "token_usage": {
-                        "input_tokens": 50,
-                        "output_tokens": 10,
-                        "cache_read_tokens": 0,
-                    },
-                },
-            }
-        ],
-        session_id="sess-cache-01-b",
-        color_enabled=False,
-    )
-
-    out = capsys.readouterr().out
-    assert "50↑ 10↓" in out
-    assert "cached" not in out

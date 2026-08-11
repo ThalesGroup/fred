@@ -35,24 +35,3 @@ def resolved_model_name(response: BaseMessage) -> str | None:
         return None
     name = metadata.get("model_name") or metadata.get("model")
     return name if isinstance(name, str) and name.strip() else None
-
-
-def resolved_token_usage(response: BaseMessage) -> tuple[int | None, int | None]:
-    """`(input_tokens, cache_read_tokens)` off one LangChain response (CACHE-01).
-
-    Reads `usage_metadata` directly — the same standardized LangChain shape
-    (`input_token_details.cache_read`) fred-runtime's `normalize_token_usage`
-    reads — kept as a local, dependency-free read (see module docstring)
-    rather than importing fred-runtime's helper.
-    """
-
-    usage = getattr(response, "usage_metadata", None)
-    if not isinstance(usage, dict):
-        return (None, None)
-    input_tokens = usage.get("input_tokens")
-    details = usage.get("input_token_details")
-    cache_read = details.get("cache_read") if isinstance(details, dict) else None
-    return (
-        input_tokens if isinstance(input_tokens, int) else None,
-        cache_read if isinstance(cache_read, int) else None,
-    )

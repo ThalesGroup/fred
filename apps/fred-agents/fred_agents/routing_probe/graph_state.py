@@ -39,10 +39,6 @@ class PhaseRecord(BaseModel):
     operation: str
     model_name: str
     reply: str
-    # CACHE-01: input/cache_read tokens for this one phase's call — None when
-    # no model was configured or the provider didn't report cache detail.
-    input_tokens: int | None = None
-    cache_read_tokens: int | None = None
 
 
 class RoutingProbeState(BaseModel):

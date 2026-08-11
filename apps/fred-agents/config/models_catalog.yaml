@@ -64,6 +64,8 @@ profiles:
       settings:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
+        extra_body:
+          prompt_cache_key: "fred-language-mistral-small"
 
   - profile_id: default.chat.openai.prod
     capability: chat

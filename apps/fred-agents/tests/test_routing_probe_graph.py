@@ -77,36 +77,6 @@ async def test_routing_step_records_resolved_model_name() -> None:
 
 
 @pytest.mark.asyncio
-async def test_routing_step_records_cache_read_tokens() -> None:
-    """
-    CACHE-01: a phase step must read input_tokens/cache_read straight off
-    usage_metadata.input_token_details — the same standardized LangChain
-    shape fred-runtime's normalize_token_usage reads — so the probe's table
-    can show whether a phase's call was served from the provider's cache.
-    """
-    state = RoutingProbeState(latest_user_text="hello")
-    context = _FakeContext(
-        model=object(),
-        response=AIMessage(
-            content="Confirmed: planning phase.",
-            response_metadata={"model_name": "mistral-small"},
-            usage_metadata={
-                "input_tokens": 1000,
-                "output_tokens": 20,
-                "total_tokens": 1020,
-                "input_token_details": {"cache_read": 800, "cache_creation": 0},
-            },
-        ),
-    )
-
-    result = await routing_step(state, cast(GraphNodeContext, context))
-
-    records = cast(list[PhaseRecord], result.state_update["phase_records"])
-    assert records[0].input_tokens == 1000
-    assert records[0].cache_read_tokens == 800
-
-
-@pytest.mark.asyncio
 async def test_routing_step_degrades_gracefully_without_a_model() -> None:
     """
     Verify the probe stays runnable on a pod with no chat model configured,
