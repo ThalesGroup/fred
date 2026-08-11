@@ -1531,7 +1531,6 @@
         "delete": "Delete",
         "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
         "download": "Download",
-        "errorDetail": "Error details",
         "includeInSearch": "Include in search",
         "more": "More actions",
         "newFolder": "New folder",
@@ -1555,9 +1554,8 @@
         "stopIngestionMessage": "Interrupt the processing of \"{{name}}\"? The document and all its data (file, vectors, metadata) will be deleted.",
         "stopIngestionTitle": "Stop ingestion"
       },
-      "errorModal": {
-        "empty": "No error details were recorded for this document.",
-        "title": "Error details"
+      "errorTooltip": {
+        "stage": "Stage: {{stage}}"
       },
       "empty": {
         "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
@@ -1611,6 +1609,7 @@
       "status": {
         "excludedFromSearch": "Excluded from search",
         "failed": "Error",
+        "justDone": "Done",
         "processing": "Processing...",
         "raw": "Pending",
         "ready": "Ready"

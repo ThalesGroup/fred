@@ -27,6 +27,66 @@
   color: var(--on-error-container);
 }
 
+/* Session-only "just finished" success badge — see StatusChip's justCompleted. */
+.chip[data-variant="done"] {
+  background: var(--success-container);
+  color: var(--on-success-container);
+}
+
+/* "Just finished" badge on the otherwise-silent ready state: a small pop-in
+ * so a completion that happens under the user's eyes draws a glance, without
+ * turning into a permanent green checkmark column (a refresh clears it). */
+.justDone {
+  display: inline-flex;
+  animation: pop-in 0.25s ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Hover detail of a failed ingestion (#2315): per-stage messages inside the
+ * shared Tooltip's rich-content panel. The rich panel deliberately ships with
+ * zero padding (the content owns its internal spacing), so it is restated
+ * here. Capped height with its own scrollbar so a many-stage failure cannot
+ * cover the rows around it. */
+.errorTooltip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: var(--spacing-s);
+  max-width: 32rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.errorEntry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+}
+
+.errorStage {
+  color: var(--error);
+  font: var(--font-label-large);
+}
+
+.errorMessage {
+  margin: 0;
+  font: var(--font-body-medium);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* "Fait respirer" the pending icon: a slow, gradual pulse — distinct from
  * TaskIndicator's faster 1.4s pulse, since this one should read as patient
  * waiting, not urgent activity. */

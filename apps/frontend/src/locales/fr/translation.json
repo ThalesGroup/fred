@@ -1531,7 +1531,6 @@
         "delete": "Supprimer",
         "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
         "download": "Télécharger",
-        "errorDetail": "Détail de l'erreur",
         "includeInSearch": "Inclure à la recherche",
         "more": "Plus d'actions",
         "newFolder": "Nouveau dossier",
@@ -1555,9 +1554,8 @@
         "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document et toutes ses données (fichier, vecteurs, métadonnées) seront supprimés.",
         "stopIngestionTitle": "Arrêter l'ingestion"
       },
-      "errorModal": {
-        "empty": "Aucun détail d'erreur n'a été enregistré pour ce document.",
-        "title": "Détail de l'erreur"
+      "errorTooltip": {
+        "stage": "Étape : {{stage}}"
       },
       "empty": {
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
@@ -1611,6 +1609,7 @@
       "status": {
         "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
+        "justDone": "Terminé",
         "processing": "Traitement...",
         "raw": "En attente",
         "ready": "Prêt"

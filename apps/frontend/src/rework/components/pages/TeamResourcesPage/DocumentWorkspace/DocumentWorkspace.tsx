@@ -44,7 +44,7 @@ import {
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { buildTree, collectDescendantTagIds, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
-import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
@@ -58,7 +58,6 @@ import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
 import { isPdfFile } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
-import IngestionErrorModal from "../IngestionErrorModal/IngestionErrorModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
@@ -105,7 +104,7 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
 
-type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "errorDetail" | "stopIngestion";
+type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
@@ -209,7 +208,6 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
   >(null);
   // Document whose per-stage ingestion errors are being shown (#2315).
-  const [errorDetailDoc, setErrorDetailDoc] = useState<DocumentMetadata | null>(null);
   // "Just reprocessed" rows pinned to "processing" (#1903-era gap): the
   // reprocess route (`POST /process-documents`) returns only the Temporal
   // workflow id — unlike uploads it creates no TaskService task the SSE task
@@ -235,6 +233,18 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     }
     return byUid;
   }, [activeTasks]);
+  // Documents whose ingestion finished during THIS browser session — they get
+  // a small "just finished" dot on their otherwise-silent ready state. The
+  // task feed lives in Redux memory, so a refresh clears the set by itself;
+  // that ephemerality is the feature (spot what just finished), not a bug.
+  const allTasks = useSelector(selectAllTasks);
+  const justCompletedDocUids = useMemo(() => {
+    const uids = new Set<string>();
+    for (const task of allTasks) {
+      if (task.state === "succeeded" && task.target?.type === "document" && task.target.id) uids.add(task.target.id);
+    }
+    return uids;
+  }, [allTasks]);
   // A just-reprocessed doc must read as "processing" even though its stale
   // `processing.stages` snapshot hasn't caught up yet — see reprocessOverrides
   // above. Centralized here since every status-driven cell (menu label,
@@ -766,16 +776,8 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     const status = getDocStatus(doc);
     const activeTask = activeDocTaskByUid.get(doc.identity.document_uid);
     const options: OptionModel<DocMenuAction>[] = [];
-    // Read-only, like download — the per-stage messages are already in the
-    // browse response, no extra permission is exercised by showing them.
-    if (status === "failed") {
-      options.push({
-        value: "errorDetail",
-        key: "errorDetail",
-        label: t("rework.resources.action.errorDetail"),
-        icon: { category: "outlined", type: "error_outline" },
-      });
-    }
+    // No "error detail" entry here: the per-stage messages ride the "failed"
+    // StatusChip itself, on hover (#2315).
     if (canCreateFolder) {
       options.push({
         value: "rename",
@@ -965,7 +967,13 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       size: "8rem",
       cellRenderer: (row) => {
         if (row.kind !== "document") return null;
-        return <StatusChip status={getDocStatus(row.doc)} />;
+        return (
+          <StatusChip
+            status={getDocStatus(row.doc)}
+            errors={row.doc.processing?.errors}
+            justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
+          />
+        );
       },
     },
     {
@@ -1031,7 +1039,6 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                   if (value === "download") void commands.download(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
-                  if (value === "errorDetail") setErrorDetailDoc(row.doc);
                   if (value === "stopIngestion") confirmStopIngestion(row.doc);
                   if (value === "delete" && currentTag) {
                     showConfirmationDialog({
@@ -1219,7 +1226,6 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           }}
         />
       )}
-      <IngestionErrorModal doc={errorDetailDoc} onClose={() => setErrorDetailDoc(null)} />
     </div>
   );
 }

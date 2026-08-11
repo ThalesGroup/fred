@@ -83,7 +83,10 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [cancelTask],
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [runningTask] }));
+vi.mock("../../../../features/tasks/taskSlice", () => ({
+  selectActiveTasks: () => [runningTask],
+  selectAllTasks: () => [],
+}));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({

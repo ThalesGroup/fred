@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage (#2315 error detail): a failed document's row menu offers "Détail
-// de l'erreur", which opens a modal listing each failed stage with the message
-// persisted in `processing.errors`; a non-failed document's menu has no such
-// entry.
+// Coverage (#2315 error detail): hovering a failed document's "failed" status
+// chip shows each failed stage with the message persisted in
+// `processing.errors` — the detail rides the chip itself, with no menu entry
+// and no modal (the row menu must not offer one).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,7 +29,13 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({
+    // Appends interpolation values so assertions can see them (the stage label
+    // renders as `t("...errorTooltip.stage", { stage })`).
+    t: (key: string, params?: Record<string, unknown>) =>
+      params && "stage" in params ? `${key} ${String(params.stage)}` : key,
+    i18n: { language: "en" },
+  }),
 }));
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
 
@@ -66,7 +72,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [] }));
+vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [], selectAllTasks: () => [] }));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
@@ -141,27 +147,27 @@ function openMenu(button: HTMLButtonElement): Element[] {
   ];
 }
 
-describe("DocumentWorkspace — ingestion error detail", () => {
-  it("offers 'Error details' in a failed document's row menu and opens the modal with the stage message", () => {
-    // Row order matches the mocked `documents` array: failed doc first.
-    const items = openMenu(moreButtons()[0]);
-    const entry = items.find((el) => el.textContent?.includes("rework.resources.action.errorDetail"));
-    expect(entry).toBeTruthy();
+describe("DocumentWorkspace — ingestion error detail on the status chip", () => {
+  it("shows each failed stage and its message when hovering the failed chip", () => {
+    const chip = [...container.querySelectorAll("span")].find((el) =>
+      el.textContent?.includes("rework.resources.status.failed"),
+    );
+    expect(chip).toBeTruthy();
 
+    // React derives onMouseEnter from the bubbling `mouseover` (see Tooltip.test).
     act(() => {
-      entry!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      chip!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
     });
 
-    const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog).not.toBeNull();
-    expect(dialog!.textContent).toContain("rework.resources.errorModal.title");
-    expect(dialog!.textContent).toContain("Broken.pdf");
-    expect(dialog!.textContent).toContain("preview");
-    expect(dialog!.textContent).toContain("Execution timed_out");
+    const tooltip = document.querySelector('[role="tooltip"]');
+    expect(tooltip).not.toBeNull();
+    expect(tooltip!.textContent).toContain("preview");
+    expect(tooltip!.textContent).toContain("Execution timed_out");
   });
 
-  it("does not offer 'Error details' for a document that is not failed", () => {
-    const items = openMenu(moreButtons()[1]);
+  it("no longer offers an 'Error details' entry in the failed document's row menu", () => {
+    const items = openMenu(moreButtons()[0]);
+    expect(items.length).toBeGreaterThan(0);
     expect(items.find((el) => el.textContent?.includes("rework.resources.action.errorDetail"))).toBeUndefined();
   });
 });
