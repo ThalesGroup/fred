@@ -66,6 +66,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
     },
+    // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
+      providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
+    },
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: {
+      invalidatesTags: [{ type: "ControlPlaneSession", id: "INACTIVE" }],
+    },
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
     },
@@ -426,6 +433,9 @@ export const {
   // Home dashboard leaderboard — top agents / top teams (#2298).
   useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery: useUserTopAgentsQuery,
   useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery: useUserTopTeamsQuery,
+  // Home cleanup tool — inactive conversations across spaces + bulk delete (#2298).
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery: useMyInactiveSessionsQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation: useBulkDeleteMySessionsMutation,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,

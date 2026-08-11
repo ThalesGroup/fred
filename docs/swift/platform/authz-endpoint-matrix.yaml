@@ -211,6 +211,16 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/me/inactive-sessions
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/me/sessions/bulk-delete
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/policies/purge
     review_status: pending_review
     required_permission: pending_review

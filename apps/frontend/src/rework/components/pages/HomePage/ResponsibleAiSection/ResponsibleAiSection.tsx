@@ -20,13 +20,22 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { IconType } from "@shared/utils/Type.ts";
-import { useUserTokenUsageOverTimeQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { isPersonalTeamId } from "@shared/utils/teamId.ts";
+import {
+  useBulkDeleteMySessionsMutation,
+  useMyInactiveSessionsQuery,
+  useUserTokenUsageOverTimeQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
 import { formatCompactTokens, homePeriodRange } from "../homePeriod.ts";
-import CleanupDialog, { type CleanupGroup } from "../CleanupDialog/CleanupDialog.tsx";
+import CleanupDialog, { type CleanupGroup, type CleanupItem } from "../CleanupDialog/CleanupDialog.tsx";
 import styles from "./ResponsibleAiSection.module.scss";
 
 const nf = (maximumFractionDigits: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits });
+
+// A conversation counts as inactive after this many days without activity.
+const INACTIVE_DAYS = 5;
 
 type IndicatorTone = "warn" | "info" | "eco";
 type CleanupKind = "conversations" | "files";
@@ -42,16 +51,14 @@ interface Indicator {
   info?: boolean;
 }
 
-// PLACEHOLDER DATA — the two cleanup indicators below (inactive conversations,
-// unused personal files) still need aggregation the frontend doesn't have yet:
-// inactive-session and unused-file counts (control-plane / knowledge-flow).
-// Wired to static example values for the prototype; swap for real period-scoped
-// queries before shipping. The tokens + footprint tiles, by contrast, are LIVE:
-// built from the `user_token_usage_over_time` KPI preset (see below).
+// The "inactive conversations" tile + its cleanup dialog are LIVE (the
+// `me/inactive-sessions` endpoint, see the component). The "unused files" tile
+// below is still PLACEHOLDER — documents carry no last-used timestamp yet, so
+// "unused for 15 days" isn't computable; wired to static example values for the
+// prototype.
 //
 // The period (7/30/90 j) is the LOOK-BACK WINDOW, not the inactivity threshold:
-// - a conversation is "inactive" after 5 days with no activity (hardcoded here,
-//   to be made configurable later),
+// - a conversation is "inactive" after 5 days with no activity,
 // - a file is "unused" after 15 days without being used (hardcoded, likewise).
 // Widening the window can only add matches, so these counts are monotonic
 // non-decreasing as the period grows.
@@ -61,83 +68,29 @@ interface Indicator {
 // deliberately excluded — they are shared, "unused" there is a collective (not
 // personal) notion, and deletion is permission-gated. (Conversations, by
 // contrast, span the personal space AND every team the user belongs to.)
-const CLEANUP_INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
-  7: [
-    {
-      tone: "warn",
-      icon: "forum",
-      value: "4 conversations inactives",
-      caption: "depuis plus de 5 jours",
-      cleanupKind: "conversations",
-    },
-    {
-      tone: "warn",
-      icon: "description",
-      value: "6 fichiers personnels non utilisés (90 Mo)",
-      caption: "depuis plus de 15 jours",
-      cleanupKind: "files",
-    },
-  ],
-  30: [
-    {
-      tone: "warn",
-      icon: "forum",
-      value: "17 conversations inactives",
-      caption: "depuis plus de 5 jours",
-      cleanupKind: "conversations",
-    },
-    {
-      tone: "warn",
-      icon: "description",
-      value: "19 fichiers personnels non utilisés (260 Mo)",
-      caption: "depuis plus de 15 jours",
-      cleanupKind: "files",
-    },
-  ],
-  90: [
-    {
-      tone: "warn",
-      icon: "forum",
-      value: "39 conversations inactives",
-      caption: "depuis plus de 5 jours",
-      cleanupKind: "conversations",
-    },
-    {
-      tone: "warn",
-      icon: "description",
-      value: "37 fichiers personnels non utilisés (540 Mo)",
-      caption: "depuis plus de 15 jours",
-      cleanupKind: "files",
-    },
-  ],
+const FILES_INDICATOR_BY_PERIOD: Record<HomePeriod, Indicator> = {
+  7: {
+    tone: "warn",
+    icon: "description",
+    value: "6 fichiers personnels non utilisés (90 Mo)",
+    caption: "depuis plus de 15 jours",
+    cleanupKind: "files",
+  },
+  30: {
+    tone: "warn",
+    icon: "description",
+    value: "19 fichiers personnels non utilisés (260 Mo)",
+    caption: "depuis plus de 15 jours",
+    cleanupKind: "files",
+  },
+  90: {
+    tone: "warn",
+    icon: "description",
+    value: "37 fichiers personnels non utilisés (540 Mo)",
+    caption: "depuis plus de 15 jours",
+    cleanupKind: "files",
+  },
 };
-
-// PLACEHOLDER — the cleanup tools list example items. Real data: inactive
-// sessions grouped by space (personal + each team), and unused personal files.
-const INACTIVE_CONVERSATIONS: CleanupGroup[] = [
-  {
-    key: "personal",
-    label: "Espace personnel",
-    items: [
-      { id: "c1", title: "Analyse d'appel d'offres — SNCF", meta: "Rédacteur AO" },
-      { id: "c2", title: "Brainstorm nommage produit", meta: "Créatif" },
-      { id: "c3", title: "Résumé de réunion Q2", meta: "Assistant réunion" },
-    ],
-  },
-  {
-    key: "bid",
-    label: "Bid & Capture",
-    items: [
-      { id: "c4", title: "Réponse technique — Région Grand Est", meta: "Rédacteur AO" },
-      { id: "c5", title: "Relecture du mémoire technique", meta: "Analyste documentaire" },
-    ],
-  },
-  {
-    key: "mkt",
-    label: "Marketing",
-    items: [{ id: "c6", title: "Idées de slogans — campagne été", meta: "Créatif" }],
-  },
-];
 
 const UNUSED_FILES: CleanupGroup[] = [
   {
@@ -195,19 +148,81 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
       ? "—"
       : `≈ ${nf(1).format(usage.co2e)} g CO₂e · ${nf(2).format(usage.kwh)} kWh`;
 
+  // LIVE — the caller's inactive conversations across every space, over the
+  // period. The count feeds the tile; the same rows, grouped by space, feed the
+  // cleanup dialog. team_id → display name comes from bootstrap.
+  const { availableTeams } = useFrontendBootstrap();
+  const teamNameById = useMemo(() => new Map(availableTeams.map((tm) => [tm.id, tm.name])), [availableTeams]);
+  const {
+    data: inactiveData,
+    isLoading: inactiveLoading,
+    isError: inactiveError,
+  } = useMyInactiveSessionsQuery(
+    { periodDays: period, inactiveDays: INACTIVE_DAYS },
+    { refetchOnMountOrArgChange: 300 },
+  );
+  const [bulkDeleteSessions] = useBulkDeleteMySessionsMutation();
+
+  const { conversationGroups, teamIdBySession } = useMemo(() => {
+    const sessions = inactiveData?.sessions ?? [];
+    const label = (teamId: string) =>
+      isPersonalTeamId(teamId) ? t("rework.home.topTeams.personalSpace") : (teamNameById.get(teamId) ?? teamId);
+    const itemsByTeam = new Map<string, CleanupItem[]>();
+    const teamBySession = new Map<string, string>();
+    for (const s of sessions) {
+      teamBySession.set(s.session_id, s.team_id);
+      const items = itemsByTeam.get(s.team_id) ?? [];
+      items.push({ id: s.session_id, title: s.title || "Conversation sans titre", meta: s.agent_name ?? undefined });
+      itemsByTeam.set(s.team_id, items);
+    }
+    // Personal space first, then teams alphabetically.
+    const groups: CleanupGroup[] = [...itemsByTeam.entries()]
+      .sort(
+        ([a], [b]) => Number(!isPersonalTeamId(a)) - Number(!isPersonalTeamId(b)) || label(a).localeCompare(label(b)),
+      )
+      .map(([teamId, items]) => ({ key: teamId, label: label(teamId), items }));
+    return { conversationGroups: groups, teamIdBySession: teamBySession };
+  }, [inactiveData, teamNameById, t]);
+
+  const conversationsCount = inactiveData?.sessions.length ?? 0;
+  const conversationsValue = inactiveLoading
+    ? "…"
+    : inactiveError
+      ? "—"
+      : `${conversationsCount} conversation${conversationsCount > 1 ? "s" : ""} inactive${conversationsCount > 1 ? "s" : ""}`;
+
   const indicators: Indicator[] = [
-    ...CLEANUP_INDICATORS_BY_PERIOD[period],
+    {
+      tone: "warn",
+      icon: "forum",
+      value: conversationsValue,
+      caption: "depuis plus de 5 jours",
+      cleanupKind: "conversations",
+    },
+    FILES_INDICATOR_BY_PERIOD[period],
     { tone: "info", icon: "show_chart", value: tokensValue, caption: `consommés sur les ${period} derniers jours` },
     { tone: "eco", icon: "cloud", value: footprintValue, caption: "empreinte estimée de vos échanges", info: true },
   ];
 
   const isFiles = cleanupKind === "files";
 
-  const handleCleanupConfirm = (ids: string[]) => {
-    // PLACEHOLDER: no bulk delete endpoint exists yet. Wire the real deletion
-    // (personal space + teams for conversations; personal space for files) here.
-    showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: ids.length }) });
+  const handleCleanupConfirm = async (ids: string[]) => {
+    const kind = cleanupKind;
     setCleanupKind(null);
+    if (kind === "conversations") {
+      const sessions = ids
+        .map((id) => ({ session_id: id, team_id: teamIdBySession.get(id) }))
+        .filter((ref): ref is { session_id: string; team_id: string } => Boolean(ref.team_id));
+      try {
+        const res = await bulkDeleteSessions({ bulkDeleteSessionsRequest: { sessions } }).unwrap();
+        showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: res.deleted.length }) });
+      } catch {
+        // The list is left intact; the tag invalidation keeps it truthful.
+      }
+      return;
+    }
+    // PLACEHOLDER (files): no deletion endpoint yet — see FILES_INDICATOR note.
+    showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: ids.length }) });
   };
 
   return (
@@ -265,7 +280,7 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
             ? "rework.home.responsible.cleanupFiles.subtitle"
             : "rework.home.responsible.cleanupConversations.subtitle",
         )}
-        groups={isFiles ? UNUSED_FILES : INACTIVE_CONVERSATIONS}
+        groups={isFiles ? UNUSED_FILES : conversationGroups}
         emptyLabel={t(
           isFiles ? "rework.home.responsible.cleanupFiles.empty" : "rework.home.responsible.cleanupConversations.empty",
         )}

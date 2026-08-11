@@ -485,6 +485,28 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
     }),
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/inactive-sessions`,
+        params: {
+          period_days: queryArg.periodDays,
+          inactive_days: queryArg.inactiveDays,
+        },
+      }),
+    }),
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: build.mutation<
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse,
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/sessions/bulk-delete`,
+        method: "POST",
+        body: queryArg.bulkDeleteSessionsRequest,
+      }),
+    }),
     getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: build.query<
       GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse,
       GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg
@@ -1402,6 +1424,17 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionListItem[];
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
+};
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
+  /** status 200 Successful Response */ InactiveSessionsResponse;
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
+  periodDays?: number;
+  inactiveDays?: number;
+};
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse =
+  /** status 200 Successful Response */ BulkDeleteSessionsResponse;
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg = {
+  bulkDeleteSessionsRequest: BulkDeleteSessionsRequest;
 };
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
   /** status 200 Successful Response */ SessionListItem;
@@ -2631,6 +2664,27 @@ export type CreateSessionRequest = {
   agent_instance_id?: string | null;
   title?: string | null;
 };
+export type InactiveSessionItem = {
+  session_id: string;
+  team_id: string;
+  title?: string | null;
+  agent_name?: string | null;
+  updated_at?: string | null;
+};
+export type InactiveSessionsResponse = {
+  sessions: InactiveSessionItem[];
+};
+export type BulkDeleteSessionsResponse = {
+  deleted: string[];
+  failed: string[];
+};
+export type BulkDeleteSessionRef = {
+  session_id: string;
+  team_id: string;
+};
+export type BulkDeleteSessionsRequest = {
+  sessions: BulkDeleteSessionRef[];
+};
 export type UpdateSessionRequest = {
   /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */
   updated_at?: string | null;
@@ -3299,6 +3353,9 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
