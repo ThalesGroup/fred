@@ -65,13 +65,6 @@ def _user() -> KeycloakUser:
     )
 
 
-async def _document_always_registered(document_uid: str) -> bool:
-    """Neutralize the #2315 deleted-mid-flight guard: these tests never create
-    a metadata row, and the guard would otherwise (correctly) abort the
-    activity before the behavior under test runs."""
-    return True
-
-
 @pytest.mark.asyncio
 async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     """
@@ -95,8 +88,8 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         def __init__(self) -> None:
             self.context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
 
-        async def save_metadata(self, user, metadata) -> None:
-            return None
+        async def persist_progress(self, user, metadata) -> bool:
+            return True
 
         def process_input(self, user, input_path, output_dir, metadata, profile) -> None:
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -126,13 +119,6 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "knowledge_flow_backend.features.scheduler.push_files_activities.tempfile.TemporaryDirectory",
         lambda prefix="": tracked_dir,
-    )
-    # #2315 guard: this test never registers "doc-push" in a metadata store, so
-    # the deleted-mid-flight check would (correctly) abort the activity — keep
-    # the document "registered" so the test still exercises temp cleanup.
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.scheduler.push_files_activities.document_still_registered",
-        _document_always_registered,
     )
 
     result = await push_input_process(
@@ -174,8 +160,8 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     )
 
     class _FakeService:
-        async def save_metadata(self, user, metadata) -> None:
-            return None
+        async def persist_progress(self, user, metadata) -> bool:
+            return True
 
         def get_local_copy(self, user, metadata, working_dir) -> pathlib.Path:
             input_dir = working_dir / "input"
@@ -208,10 +194,6 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
         lambda prefix="": tracked_dir,
     )
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.scheduler.activities.document_still_registered",
-        _document_always_registered,
-    )
 
     result = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
 
@@ -221,15 +203,15 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_output_process_and_trusted_variant_call_the_right_save_metadata(tmp_path, monkeypatch):
+async def test_output_process_and_trusted_variant_call_the_right_metadata_writer(tmp_path, monkeypatch):
     """MIGR-07 CSV/cross-team fix, regression guard for the activity split:
 
     `output_process` (normal per-document ingestion, used by the `OutputProcess`
     workflow) must always persist through the permission-checked
-    `save_metadata` — never the trusted variant, or a caller with no ReBAC
+    `persist_progress` — never the trusted variant, or a caller with no ReBAC
     grant on the document's tags could silently write it anyway.
     `output_process_trusted` (corpus-revectorize migration path only) must
-    always go through `save_metadata_trusted` — never the checked one, or the
+    always go through `persist_progress_trusted` — never the checked one, or the
     whole point of the trusted path (letting a root/platform admin
     revectorize documents outside their own teams) breaks again.
     """
@@ -249,11 +231,13 @@ async def test_output_process_and_trusted_variant_call_the_right_save_metadata(t
             self.checked_calls = 0
             self.trusted_calls = 0
 
-        async def save_metadata(self, user, metadata) -> None:
+        async def persist_progress(self, user, metadata) -> bool:
             self.checked_calls += 1
+            return True
 
-        async def save_metadata_trusted(self, user, metadata) -> None:
+        async def persist_progress_trusted(self, user, metadata) -> bool:
             self.trusted_calls += 1
+            return True
 
         def get_local_copy(self, user, metadata, working_dir) -> pathlib.Path:
             input_dir = working_dir / "input"
@@ -283,10 +267,6 @@ async def test_output_process_and_trusted_variant_call_the_right_save_metadata(t
     monkeypatch.setattr(
         "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
         lambda prefix="": _TrackedTemporaryDirectory(tmp_path / "worker-output-checked"),
-    )
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.scheduler.activities.document_still_registered",
-        _document_always_registered,
     )
 
     monkeypatch.setattr(

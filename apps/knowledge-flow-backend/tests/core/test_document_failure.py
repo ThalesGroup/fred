@@ -159,9 +159,8 @@ async def test_hook_deletes_document_on_cancellation(monkeypatch):
     deleted: list[tuple[str, str | None]] = []
     failed: list[str] = []
 
-    async def _delete_spy(document_uid: str, created_by: str | None) -> bool:
+    async def _delete_spy(document_uid: str, created_by: str | None) -> None:
         deleted.append((document_uid, created_by))
-        return True
 
     async def _fail_spy(document_uid: str, message: str) -> bool:
         failed.append(document_uid)
@@ -197,9 +196,8 @@ async def test_hook_is_a_noop(monkeypatch, state, target):
         called.append(document_uid)
         return True
 
-    async def _delete_spy(document_uid: str, created_by: str | None) -> bool:
+    async def _delete_spy(document_uid: str, created_by: str | None) -> None:
         called.append(document_uid)
-        return True
 
     monkeypatch.setattr(document_failure, "mark_in_progress_stages_failed", _spy)
     monkeypatch.setattr(document_failure, "delete_cancelled_document", _delete_spy)
@@ -213,7 +211,7 @@ async def test_hook_is_a_noop(monkeypatch, state, target):
 
 
 class _StubMetadataService:
-    """Stands in for MetadataService — records the (user, uid) it was asked to delete."""
+    """Stands in for MetadataService — records the (actor_uid, uid) it deleted."""
 
     calls: list[tuple[str, str]] = []
     error: Exception | None = None
@@ -221,10 +219,10 @@ class _StubMetadataService:
     def __init__(self) -> None:  # mirrors the real no-arg constructor
         pass
 
-    async def delete_document_and_artifacts(self, user, document_uid: str) -> None:
+    async def delete_document_and_artifacts_trusted(self, actor_uid: str, document_uid: str) -> None:
         if _StubMetadataService.error is not None:
             raise _StubMetadataService.error
-        _StubMetadataService.calls.append((user.uid, document_uid))
+        _StubMetadataService.calls.append((actor_uid, document_uid))
 
 
 @pytest.fixture
@@ -238,10 +236,10 @@ def metadata_service(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_cancelled_document_runs_as_the_uploader(metadata_service):
-    assert await delete_cancelled_document("doc-1", created_by="user-42") is True
-    # ReBAC DELETE check and quota release both act on the uploader, not a
-    # synthetic admin.
+async def test_delete_cancelled_document_attributes_the_release_to_the_uploader(metadata_service):
+    await delete_cancelled_document("doc-1", created_by="user-42")
+    # Trusted path (the cancel endpoint already authorized this), with the
+    # uploader passed for quota attribution — never a fabricated principal.
     assert metadata_service.calls == [("user-42", "doc-1")]
 
 
@@ -252,7 +250,7 @@ async def test_delete_cancelled_document_missing_metadata_is_clean(metadata_serv
     metadata_service.error = MetadataNotFound("gone")
 
     # Cancelled before registration finished: nothing was built, nothing to do.
-    assert await delete_cancelled_document("doc-1", created_by="user-42") is True
+    await delete_cancelled_document("doc-1", created_by="user-42")
 
 
 @pytest.mark.asyncio
@@ -268,5 +266,5 @@ async def test_delete_cancelled_document_falls_back_to_failed_stages(metadata_se
 
     # Cleanup failure must never strand the document as "processing" — it
     # degrades to the #2279 red-row path.
-    assert await delete_cancelled_document("doc-1", created_by="user-42") is False
+    await delete_cancelled_document("doc-1", created_by="user-42")
     assert fallback == [("doc-1", "Ingestion cancelled; automatic cleanup failed")]

@@ -15,7 +15,7 @@ from fred_core.tasks.authz import (
     authorize_task_stream,
     list_tasks_scoped,
 )
-from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse, TaskState
+from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse
 from fred_core.tasks.service import TaskNotAcknowledgeableError, TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
 from fred_core.tasks.store import TaskNotFoundError
@@ -24,24 +24,28 @@ from knowledge_flow_backend.application_context import ApplicationContext, get_r
 
 logger = logging.getLogger(__name__)
 
-# Fast-path convergence after a user-requested cancel (#2315): the OPS-04
-# sweeper would only reconcile the task after its grace window plus one sweep
-# interval (up to ~7 min), during which the row keeps reading "processing" and
-# the half-built document's cleanup hasn't run. Polling `reconcile_task` until
-# the executor reports the workflow closed drives the exact same reconciliation
-# path (terminal event + `on_reconciled_terminal` cleanup) within seconds of
-# the workflow actually stopping. The sweeper remains the durable backstop —
-# an API restart or timeout here loses nothing.
+# Fast-path convergence after a user-requested cancel (#2315): cancellation is
+# cooperative, so nothing is terminal when the endpoint returns, and the OPS-04
+# sweeper only reconciles a task after its grace window plus one sweep interval
+# (up to ~7 min) — the row reads "processing" for all of it and the half-built
+# document is not cleaned up. Polling `reconcile_task` drives the exact same
+# reconciliation path within seconds of the workflow actually stopping. The
+# sweeper stays the durable backstop: an API restart, a timeout here, or a
+# cancel served by another replica loses nothing.
+#
+# Backoff rather than a flat interval: convergence is usually a few seconds, and
+# when it is not, polling faster does not help. Doubling from 1s caps a 3-minute
+# watch at ~8 polls instead of 60.
 _POST_CANCEL_RECONCILE_TIMEOUT_S = 180.0
-_POST_CANCEL_RECONCILE_POLL_S = 3.0
-# Strong refs so in-flight pollers aren't garbage-collected mid-loop.
-_post_cancel_tasks: set[asyncio.Task] = set()
+_POST_CANCEL_RECONCILE_INITIAL_POLL_S = 1.0
+_POST_CANCEL_RECONCILE_MAX_POLL_S = 30.0
 
 
 class TasksController:
     def __init__(self, router: APIRouter) -> None:
         app_context = ApplicationContext.get_instance()
         self._service: TaskService = app_context.get_task_service()
+        self._post_cancel_watchers: dict[str, asyncio.Task] = {}
 
         @router.get(
             "/tasks",
@@ -129,30 +133,32 @@ class TasksController:
                 raise HTTPException(status_code=409, detail="Task does not currently need attention")
 
     def _schedule_post_cancel_reconcile(self, task_id: str) -> None:
+        """Watch one cancelled task until it converges — at most one watcher per
+        task, so a retried or double-clicked cancel does not fan out."""
+        if task_id in self._post_cancel_watchers:
+            return
         task = asyncio.create_task(self._reconcile_after_cancel(task_id))
-        _post_cancel_tasks.add(task)
-        task.add_done_callback(_post_cancel_tasks.discard)
+        # Strong ref so the watcher is not garbage-collected mid-loop.
+        self._post_cancel_watchers[task_id] = task
+        task.add_done_callback(lambda _, tid=task_id: self._post_cancel_watchers.pop(tid, None))
 
     async def _reconcile_after_cancel(self, task_id: str) -> None:
         """Poll until the cancelled workflow's closure is reflected on the task.
 
         `reconcile_task` returns False while the executor still reports the
-        workflow as running (cancellation is cooperative) and True once it drove
-        the task terminal — which also fires the `on_reconciled_terminal`
-        cleanup. Every error is swallowed: this is an accelerator, the sweeper
-        owns correctness.
+        workflow as running, and True once it drove the task terminal — which
+        also fires the document cleanup. It no-ops on an already-terminal task,
+        so the worker-side compensation winning the race just ends the watch on
+        the next tick. Every error is swallowed: this is an accelerator, the
+        sweeper owns correctness.
         """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + _POST_CANCEL_RECONCILE_TIMEOUT_S
+        delay = _POST_CANCEL_RECONCILE_INITIAL_POLL_S
         while loop.time() < deadline:
-            await asyncio.sleep(_POST_CANCEL_RECONCILE_POLL_S)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, _POST_CANCEL_RECONCILE_MAX_POLL_S)
             try:
-                run = await self._service.get_run(task_id)
-                if run is None or TaskState(run.state).is_terminal:
-                    # The worker-side compensation (`emit_ingestion_task_event`
-                    # with state `cancelled`) already closed the task — and ran
-                    # the document cleanup with it. Nothing left to reconcile.
-                    return
                 if await self._service.reconcile_task(task_id):
                     return
             except Exception:

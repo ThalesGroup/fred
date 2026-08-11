@@ -33,14 +33,13 @@ Change this boundary only together with a Temporal integration test, since it
 alters runtime deserialization and the sandbox import set.
 """
 
-import asyncio
 import hashlib
 from datetime import timedelta
 from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import CancelledError as TemporalCancelledError
+from temporalio.exceptions import is_cancelled_exception
 
 
 def _wf_get(item: Any, key: str, default=None):
@@ -126,24 +125,26 @@ def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
     return default_seconds
 
 
-def _wf_exception_is_cancellation(exc: BaseException | None) -> bool:
-    """True when an exception (or anything on its cause chain) is a cancellation.
+def _wf_file_terminal_event_args(exc: BaseException, task_id: str, document_uid: Any, display_name: Any) -> list[Any]:
+    """Build the `emit_ingestion_task_event` args for a per-file pipeline that
+    ended on an exception.
 
-    Why this exists (#2315): cancelling the parent workflow surfaces in the
-    per-file compensation as a `ChildWorkflowError` — a plain `Exception` whose
-    *cause* is a Temporal `CancelledError` — so `except Exception` cannot tell a
-    deliberate user stop from a real failure without walking the chain. Emitting
-    `failed` for a cancellation both paints the row red and closes the task
-    before API-side reconciliation can classify it as `cancelled` and run the
-    document cleanup.
+    Cancellation is reported as `cancelled`, never `failed` (#2315): a user stop
+    must not paint the row red, and the terminal state decides what the event's
+    handler does with the document — fail its stuck stages, or erase it.
+    Detection is the SDK's own `is_cancelled_exception`, which knows the shape
+    this arrives in (a `ChildWorkflowError` whose direct cause is a Temporal
+    `CancelledError`); an arbitrary `__cause__` walk would also match a genuine
+    failure that merely carries a cancellation somewhere below it, and deleting
+    the user's document on that reading is not a mistake worth risking.
+
+    Pure so the rule is stated once and unit-testable without a Temporal
+    environment — same shape as `_wf_scope_resolution_failed_event_args`.
     """
-    seen = 0
-    while exc is not None and seen < 10:  # bounded: __cause__ chains are short, never trust them blindly
-        if isinstance(exc, (asyncio.CancelledError, TemporalCancelledError)):
-            return True
-        exc = exc.__cause__
-        seen += 1
-    return False
+    if is_cancelled_exception(exc):
+        return [task_id, "cancelled", None, None, "Ingestion cancelled", 0, 1, 0, document_uid, display_name]
+    error_str = str(exc).strip() or "Processing failed"
+    return [task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name]
 
 
 def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
@@ -524,27 +525,12 @@ class ProcessPullFile:
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                # #2315: a user-requested cancel reaches this handler as a
-                # ChildWorkflowError (a plain Exception whose cause is a
-                # CancelledError) — report it as `cancelled`, never `failed`:
-                # the compensation activity then erases the half-built document
-                # instead of painting the row red, and the task closes with the
-                # state reconciliation would have chosen anyway.
-                if _wf_exception_is_cancellation(exc):
-                    await workflow.execute_activity(
-                        "emit_ingestion_task_event",
-                        args=[task_id, "cancelled", None, None, "Ingestion cancelled", 0, 1, 0, document_uid, display_name],
-                        schedule_to_close_timeout=timedelta(hours=1),
-                        retry_policy=RetryPolicy(maximum_attempts=1),
-                    )
-                else:
-                    error_str = str(exc).strip() or "Processing failed"
-                    await workflow.execute_activity(
-                        "emit_ingestion_task_event",
-                        args=[task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name],
-                        schedule_to_close_timeout=timedelta(hours=1),
-                        retry_policy=RetryPolicy(maximum_attempts=1),
-                    )
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=_wf_file_terminal_event_args(exc, task_id, document_uid, display_name),
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
             raise
 
 
@@ -630,27 +616,12 @@ class ProcessPushFile:
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                # #2315: a user-requested cancel reaches this handler as a
-                # ChildWorkflowError (a plain Exception whose cause is a
-                # CancelledError) — report it as `cancelled`, never `failed`:
-                # the compensation activity then erases the half-built document
-                # instead of painting the row red, and the task closes with the
-                # state reconciliation would have chosen anyway.
-                if _wf_exception_is_cancellation(exc):
-                    await workflow.execute_activity(
-                        "emit_ingestion_task_event",
-                        args=[task_id, "cancelled", None, None, "Ingestion cancelled", 0, 1, 0, document_uid, display_name],
-                        schedule_to_close_timeout=timedelta(hours=1),
-                        retry_policy=RetryPolicy(maximum_attempts=1),
-                    )
-                else:
-                    error_str = str(exc).strip() or "Processing failed"
-                    await workflow.execute_activity(
-                        "emit_ingestion_task_event",
-                        args=[task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name],
-                        schedule_to_close_timeout=timedelta(hours=1),
-                        retry_policy=RetryPolicy(maximum_attempts=1),
-                    )
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=_wf_file_terminal_event_args(exc, task_id, document_uid, display_name),
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
             raise
 
 

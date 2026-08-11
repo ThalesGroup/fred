@@ -70,10 +70,10 @@ def _resolve_store() -> "BaseDocumentMetadataStore":
 async def mark_in_progress_stages_failed(document_uid: str, error_message: str) -> bool:
     """Mark every still-`in_progress` stage of ``document_uid`` as `failed`.
 
-    Returns True when the document was actually updated. A document with no
-    `in_progress` stage is left untouched and returns False -- this is the
-    common case (the activity already recorded its own error, or the work
-    completed), and rewriting it would clobber a more precise error message.
+    Returns True when the document was actually updated -- a document with no
+    `in_progress` stage is left untouched, which is both the common case (the
+    activity already recorded its own, more precise error) and what makes this
+    safe to run from the worker and the API for the same task.
 
     Never raises: the caller is always on a failure path already.
     """
@@ -118,45 +118,36 @@ async def mark_in_progress_stages_failed(document_uid: str, error_message: str) 
     return True
 
 
-async def delete_cancelled_document(document_uid: str, created_by: str | None) -> bool:
+async def delete_cancelled_document(document_uid: str, created_by: str | None) -> None:
     """Erase every trace of a deliberately cancelled ingestion (GitHub #2315).
 
     A cancelled first ingestion leaves a half-built document behind: raw bytes
     in the content store, possibly vectors or tabular artifacts, and a metadata
-    row whose stages read `in_progress`. The product decision (#2315) is that a
-    user-requested stop means "as if it was never uploaded", so this reuses the
-    one strong-delete path — `MetadataService.delete_document_and_artifacts` —
-    which removes content, vectors, tabular artifacts and the metadata row, and
-    releases the storage quota, in the same order as a user-initiated delete.
+    row whose stages read `in_progress`. "Stop" means "as if it was never
+    uploaded", so this reuses the one strong-delete path, which also releases
+    the storage quota and removes the ReBAC parent links.
 
-    Identity: the deletion runs as the task's creator (the uploader), so both
-    the ReBAC DELETE check and the quota release act on the right principal;
-    the internal admin identity is the fallback only when the run predates
-    creator tracking.
+    Trusted: authorization happened at the cancel endpoint, and by now the
+    uploader's ReBAC state may have moved on — that must not strand the
+    document. `created_by` is passed for quota attribution only.
 
-    Known best-effort gap: the worker thread behind a cancelled activity cannot
-    be killed (`asyncio.to_thread`), so a write racing this deletion can leave
-    an orphan vector/content entry. Those are exactly what the corpus audit
-    tooling (`MetadataService.audit_stores`) reports.
+    Racing writers are handled, not tolerated: the metadata row is deleted
+    first, so an activity whose (unkillable) thread finishes afterwards sees
+    its conditional update fail, cannot re-create the document, and discards
+    the artifacts it wrote (`IngestionService.persist_progress`). The corpus
+    audit stays the backstop for whatever that discard could not reach.
 
-    Never raises. On any failure it degrades to marking the stuck stages
-    `failed`, so the document reads "failed" rather than processing forever.
+    Never raises. On failure it degrades to marking the stuck stages `failed`,
+    so the document reads "failed" rather than processing forever.
     """
+    from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
+
     try:
-        from fred_core import NO_AUTHZ_CHECK_USER, KeycloakUser
-
-        from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
-
-        user = KeycloakUser(uid=created_by, username="ingestion-cancel-cleanup", roles=[], email=None) if created_by else NO_AUTHZ_CHECK_USER
-        try:
-            await MetadataService().delete_document_and_artifacts(user, document_uid)
-        except MetadataNotFound:
-            # Cancelled before registration finished — nothing was built, so
-            # there is nothing to clean.
-            logger.info("[DOC-CANCEL] document_uid=%s has no metadata; nothing to clean", document_uid)
-            return True
+        await MetadataService().delete_document_and_artifacts_trusted(created_by or "internal-admin", document_uid)
         logger.info("[DOC-CANCEL] document_uid=%s fully deleted after cancelled ingestion", document_uid)
-        return True
+    except MetadataNotFound:
+        # Cancelled before registration finished — nothing was built to clean.
+        logger.info("[DOC-CANCEL] document_uid=%s has no metadata; nothing to clean", document_uid)
     except Exception:
         logger.warning(
             "[DOC-CANCEL] full cleanup failed for document_uid=%s — marking stages failed instead",
@@ -164,26 +155,37 @@ async def delete_cancelled_document(document_uid: str, created_by: str | None) -
             exc_info=True,
         )
         await mark_in_progress_stages_failed(document_uid, "Ingestion cancelled; automatic cleanup failed")
-        return False
+
+
+async def repair_document_after_terminal(document_uid: str, state: TaskState, message: str, *, created_by: str | None) -> None:
+    """Bring a document back in line with its task's terminal state.
+
+    The one policy, shared by the two paths that can observe a terminal task —
+    the workflow's own compensation activity (fast, needs a live worker) and
+    API-side reconciliation (slower, works with no worker at all). Both call
+    here so the two can never drift apart.
+
+    - `failed`: keep the document, drive its stuck stages to `failed` so the UI
+      stops reading "processing" forever (#2279).
+    - `cancelled`: erase it — content, vectors, metadata, quota (#2315).
+    - `succeeded`: nothing to repair.
+
+    Idempotent, since both paths may well run: failing stages no-ops once none
+    is `in_progress`, and the delete no-ops once the document is gone.
+    """
+    if state == TaskState.failed:
+        await mark_in_progress_stages_failed(document_uid, message)
+    elif state == TaskState.cancelled:
+        await delete_cancelled_document(document_uid, created_by)
 
 
 async def on_reconciled_terminal(run: "TaskRunRow", state: TaskState, message: str) -> None:
-    """`TaskService.on_reconciled_terminal` hook: repair the document's surface.
-
-    - `failed` (executor verdict: timed out, terminated, lost): the document
-      stays, with its stuck stages driven to `failed` so the UI stops reading
-      "processing" forever (#2279).
-    - `cancelled` (user-requested stop): the half-built document is deleted
-      entirely — content, vectors, metadata, quota (#2315). A deliberate stop
-      must not leave a red row behind, and it must not leave artifacts either.
-    """
+    """`TaskService.on_reconciled_terminal` hook — the reconciliation-side entry
+    into `repair_document_after_terminal`; unwraps the run's document target."""
     target = run.target or {}
     if target.get("type") != "document":
         return
     document_uid = target.get("id")
     if not document_uid:
         return
-    if state == TaskState.failed:
-        await mark_in_progress_stages_failed(document_uid, message)
-    elif state == TaskState.cancelled:
-        await delete_cancelled_document(document_uid, run.created_by)
+    await repair_document_after_terminal(document_uid, state, message, created_by=run.created_by)

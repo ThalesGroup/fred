@@ -18,7 +18,7 @@ import asyncio
 from contextlib import suppress
 from typing import Any, Awaitable, Callable, TypeVar
 
-from temporalio import activity
+from temporalio import activity, exceptions
 
 T = TypeVar("T")
 
@@ -131,30 +131,20 @@ async def to_thread_with_heartbeat(
     )
 
 
-def _resolve_metadata_store():
-    """Late-bound store lookup — also the seam tests patch (same pattern as
-    `document_failure._resolve_store`)."""
-    from knowledge_flow_backend.application_context import ApplicationContext
+def raise_if_document_deleted(persisted: bool, document_uid: str) -> None:
+    """Abort the activity when the document it was about to process is gone.
 
-    return ApplicationContext.get_instance().get_metadata_store()
+    Takes the result of an `IngestionService.persist_progress` call: False
+    means the document was deleted meanwhile (a cancelled ingestion erases it,
+    #2315). Non-retryable — retrying cannot bring the document back, and the
+    work would be thrown away again.
 
-
-async def document_still_registered(document_uid: str) -> bool:
-    """True while the document's metadata row still exists.
-
-    Why (#2315): cancelling an ingestion deletes the document, but the thread
-    behind a cancelled activity is unkillable (`asyncio.to_thread`) and can
-    outlive both the workflow and the cancel cleanup. The end-of-activity
-    `save_metadata` is an upsert, so persisting results for a deleted document
-    silently resurrects the row — stuck "processing" forever, invisible to
-    every repair path. Ingestion activities call this right before writing
-    metadata and discard their results when the document is gone.
-
-    Best-effort by design: an unreachable store reads as "still registered" —
-    a transient read failure must never discard a legitimate save.
+    Only for the up-front stage stamp, to skip work that is already pointless.
+    Later writes just let `persist_progress` return False: it discards the
+    artifacts they wrote and the activity finishes normally.
     """
-    try:
-        store = _resolve_metadata_store()
-        return await store.get_metadata_by_uid(document_uid) is not None
-    except Exception:
-        return True
+    if not persisted:
+        raise exceptions.ApplicationError(
+            f"Document {document_uid} was deleted mid-flight; nothing to process.",
+            non_retryable=True,
+        )

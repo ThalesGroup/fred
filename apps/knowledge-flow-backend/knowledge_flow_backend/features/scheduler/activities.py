@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-from knowledge_flow_backend.features.scheduler.activity_utils import document_still_registered
+from knowledge_flow_backend.features.scheduler.activity_utils import raise_if_document_deleted
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
 )
@@ -50,7 +50,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
         metadata,
         accept_memory_storage,
         ingestion_service=ingestion_service,
-        save_metadata=ingestion_service.save_metadata,
+        persist_progress=ingestion_service.persist_progress,
     )
 
 
@@ -77,7 +77,7 @@ async def output_process_trusted(file: FileToProcess, metadata: DocumentMetadata
         metadata,
         accept_memory_storage,
         ingestion_service=ingestion_service,
-        save_metadata=ingestion_service.save_metadata_trusted,
+        persist_progress=ingestion_service.persist_progress_trusted,
     )
 
 
@@ -87,7 +87,7 @@ async def _output_process_impl(
     accept_memory_storage: bool,
     *,
     ingestion_service: Any,
-    save_metadata: Callable[..., Awaitable[None]],
+    persist_progress: Callable[..., Awaitable[bool]],
 ) -> DocumentMetadata:
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
@@ -125,16 +125,8 @@ async def _output_process_impl(
                 output_stage = ProcessingStage.VECTORIZED
                 file_name_for_processing = preview_file.name
 
-            # #2315: a retry (or a queued attempt) can start after the cancel
-            # cleanup erased the document — stamping `in_progress` here would
-            # resurrect the row.
-            if not await document_still_registered(metadata.document_uid):
-                raise exceptions.ApplicationError(
-                    f"Document {metadata.document_uid} was deleted mid-flight; nothing to process.",
-                    non_retryable=True,
-                )
             metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
-            await save_metadata(file.processed_by, metadata=metadata)
+            raise_if_document_deleted(await persist_progress(file.processed_by, metadata=metadata), metadata.document_uid)
 
             if output_stage == ProcessingStage.VECTORIZED:
                 from knowledge_flow_backend.common.structures import InMemoryVectorStorage
@@ -156,13 +148,8 @@ async def _output_process_impl(
                 file.profile,
             )
 
-            # Save the updated metadata — unless the document was deleted while
-            # the (unkillable) processing thread was still working (#2315): the
-            # upsert would resurrect the deleted row.
-            if await document_still_registered(metadata.document_uid):
-                await save_metadata(file.processed_by, metadata=metadata)
-            else:
-                logger.info("[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] uid=%s deleted mid-flight; results discarded", metadata.document_uid)
+            # Save the updated metadata
+            await persist_progress(file.processed_by, metadata=metadata)
 
         logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
         emit_temporal_activity_result_kpis(
@@ -178,8 +165,7 @@ async def _output_process_impl(
         stage = output_stage or ProcessingStage.PREVIEW_READY
         metadata.mark_stage_error(stage, error_message)
         try:
-            if await document_still_registered(metadata.document_uid):
-                await save_metadata(file.processed_by, metadata=metadata)
+            await persist_progress(file.processed_by, metadata=metadata)
         except Exception:
             logger.exception(
                 "[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed to persist error state uid=%s",
@@ -241,32 +227,24 @@ async def emit_ingestion_task_event(
     task_service = ApplicationContext.get_instance().get_task_service()
     await task_service.record(event)
 
-    # #2279: the task row is not what the library renders -- the document's
-    # processing stages are, and a stage persisted `in_progress` before the work
-    # started stays that way when the failure came from outside the activity
-    # (e.g. a child workflow Temporal timed out). Fail those stages here too, so
-    # the row does not keep reading "processing" once the task leaves the active
-    # list. Best-effort: never let it mask the failure being reported.
-    if TaskState(state) == TaskState.failed and document_uid:
-        from knowledge_flow_backend.features.scheduler.document_failure import mark_in_progress_stages_failed
+    # The task row is not what the library renders -- the document's processing
+    # stages are, and a terminal task leaves them stale: `in_progress` forever
+    # after an executor-side failure (#2279), or pointing at a document the user
+    # asked to stop building (#2315). Repair the document through the one policy
+    # both this compensation and API-side reconciliation share. Running it here
+    # too is what makes the list update within seconds; reconciliation is the
+    # backstop for when no worker is around to run this at all. Best-effort by
+    # contract -- it must never mask the state being reported.
+    if TaskState(state).is_terminal and document_uid:
+        from knowledge_flow_backend.features.scheduler.document_failure import repair_document_after_terminal
 
-        await mark_in_progress_stages_failed(document_uid, error or "Processing failed")
-
-    # #2315: a user-requested cancel means "as if never uploaded" -- erase the
-    # half-built document (content, vectors, tabular, metadata, quota) instead
-    # of leaving a red row. Runs worker-side so the list updates within seconds;
-    # API-side reconciliation (`document_failure.on_reconciled_terminal`) is the
-    # durable backstop when no worker is around to run this compensation.
-    if TaskState(state) == TaskState.cancelled and document_uid:
-        from knowledge_flow_backend.features.scheduler.document_failure import delete_cancelled_document
-
-        created_by: str | None = None
-        try:
-            run = await task_service.get_run(task_id)
-            created_by = run.created_by if run is not None else None
-        except Exception:
-            logger.warning("[SCHEDULER][ACTIVITY] could not resolve task creator for task_id=%s", task_id, exc_info=True)
-        await delete_cancelled_document(document_uid, created_by)
+        run = await task_service.get_run(task_id)
+        await repair_document_after_terminal(
+            document_uid,
+            TaskState(state),
+            error or "Processing failed",
+            created_by=run.created_by if run is not None else None,
+        )
 
 
 @activity.defn
