@@ -462,17 +462,44 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // deletes their documents (TagPermission.DELETE, tag_service.py), so this is
   // safe to offer for both empty and populated folders — the confirmation
   // message just makes the blast radius explicit before it happens.
+  //
+  // That number is counted at click time over the folder AND its sub-folders,
+  // never read from the tag list's `item_ids`, which was wrong in both
+  // directions. Too high: `item_ids` only refreshes when this workspace itself
+  // mutates something, so a document the backend removed on its own — a
+  // cancelled ingestion erasing its half-built document (#2315), the OPS-04
+  // sweeper — stayed counted, and the dialog announced 4 documents for a folder
+  // showing 1. Too low: it covers the folder's own documents only, while
+  // `delete_tag` recurses into every sub-tag — under-announcing what is about
+  // to be destroyed, which is the direction that actually costs data.
   const confirmDeleteFolder = useCallback(
-    (node: TagNode) => {
+    async (node: TagNode) => {
       const tag = node.tagsHere[0];
       if (!tag) return;
-      const docCount = tag.item_ids?.length ?? 0;
+      // One `total` per tag in the subtree, `limit: 1` so the response carries a
+      // count and not a page of documents. Summing across the subtree cannot
+      // double-count: a document is tagged into exactly one folder, the same
+      // invariant the folder-size column relies on.
+      let docCount: number | null = null;
+      try {
+        const pages = await Promise.all(
+          collectDescendantTagIds(node).map((tagId) =>
+            browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
+          ),
+        );
+        docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
+      } catch {
+        // Counting failed — still offer the deletion, but promise no number
+        // rather than a number that might be wrong.
+      }
       showConfirmationDialog({
         title: t("rework.resources.confirm.deleteFolderTitle"),
         message:
-          docCount > 0
-            ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
-            : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
+          docCount === null || (docCount === 0 && node.children.size > 0)
+            ? t("rework.resources.confirm.deleteFolderMessageUnknownCount", { name: node.name })
+            : docCount > 0
+              ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
+              : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
         onConfirm: () =>
           void deleteTag({ tagId: tag.id })
             .unwrap()
@@ -491,7 +518,17 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             }),
       });
     },
-    [deleteTag, showConfirmationDialog, showSuccess, showError, t, refetchTags, currentFolderFull, navigateTo],
+    [
+      browseDocumentsByTag,
+      deleteTag,
+      showConfirmationDialog,
+      showSuccess,
+      showError,
+      t,
+      refetchTags,
+      currentFolderFull,
+      navigateTo,
+    ],
   );
 
   // Cooperative cancel of the live ingestion task backing this row (#2315) —
@@ -1033,7 +1070,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               onSelect={(value) => {
                 if (row.kind === "folder") {
                   if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
-                  if (value === "delete") confirmDeleteFolder(row.node);
+                  if (value === "delete") void confirmDeleteFolder(row.node);
                 } else {
                   if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                   if (value === "download") void commands.download(row.doc);

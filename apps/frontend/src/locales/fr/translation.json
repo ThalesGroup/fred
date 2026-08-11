@@ -1547,6 +1547,7 @@
         "deleteBulkMessage": "Retirer {{count}} documents de ce dossier ?",
         "deleteTitle": "Retirer le document",
         "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
+        "deleteFolderMessageUnknownCount": "Supprimer « {{name}} » et tout son contenu ? Cette action est irréversible.",
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
