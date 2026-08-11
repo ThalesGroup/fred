@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -20,9 +20,13 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { IconType } from "@shared/utils/Type.ts";
+import { useUserTokenUsageOverTimeQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { HomePeriod } from "../HomePage.tsx";
+import { formatCompactTokens, homePeriodRange } from "../homePeriod.ts";
 import CleanupDialog, { type CleanupGroup } from "../CleanupDialog/CleanupDialog.tsx";
 import styles from "./ResponsibleAiSection.module.scss";
+
+const nf = (maximumFractionDigits: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits });
 
 type IndicatorTone = "warn" | "info" | "eco";
 type CleanupKind = "conversations" | "files";
@@ -38,11 +42,12 @@ interface Indicator {
   info?: boolean;
 }
 
-// PLACEHOLDER DATA — these metrics need aggregation the frontend doesn't have
-// yet: inactive-session and unused-file counts (control-plane / knowledge-flow),
-// token usage over the period (KPI preset `user_token_usage_over_time`), and a
-// derived CO2 estimate. Wired to static example values for the prototype; swap
-// for real period-scoped queries before shipping.
+// PLACEHOLDER DATA — the two cleanup indicators below (inactive conversations,
+// unused personal files) still need aggregation the frontend doesn't have yet:
+// inactive-session and unused-file counts (control-plane / knowledge-flow).
+// Wired to static example values for the prototype; swap for real period-scoped
+// queries before shipping. The tokens + footprint tiles, by contrast, are LIVE:
+// built from the `user_token_usage_over_time` KPI preset (see below).
 //
 // The period (7/30/90 j) is the LOOK-BACK WINDOW, not the inactivity threshold:
 // - a conversation is "inactive" after 5 days with no activity (hardcoded here,
@@ -56,7 +61,7 @@ interface Indicator {
 // deliberately excluded — they are shared, "unused" there is a collective (not
 // personal) notion, and deletion is permission-gated. (Conversations, by
 // contrast, span the personal space AND every team the user belongs to.)
-const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
+const CLEANUP_INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
   7: [
     {
       tone: "warn",
@@ -71,14 +76,6 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
       value: "6 fichiers personnels non utilisés (90 Mo)",
       caption: "depuis plus de 15 jours",
       cleanupKind: "files",
-    },
-    { tone: "info", icon: "show_chart", value: "280 k tokens", caption: "consommés sur les 7 derniers jours" },
-    {
-      tone: "eco",
-      icon: "cloud",
-      value: "≈ 26 g CO₂e · 0,2 kWh",
-      caption: "empreinte estimée de vos échanges",
-      info: true,
     },
   ],
   30: [
@@ -96,14 +93,6 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
       caption: "depuis plus de 15 jours",
       cleanupKind: "files",
     },
-    { tone: "info", icon: "show_chart", value: "1,2 M tokens", caption: "consommés sur les 30 derniers jours" },
-    {
-      tone: "eco",
-      icon: "cloud",
-      value: "≈ 110 g CO₂e · 0,9 kWh",
-      caption: "empreinte estimée de vos échanges",
-      info: true,
-    },
   ],
   90: [
     {
@@ -119,14 +108,6 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
       value: "37 fichiers personnels non utilisés (540 Mo)",
       caption: "depuis plus de 15 jours",
       cleanupKind: "files",
-    },
-    { tone: "info", icon: "show_chart", value: "3,4 M tokens", caption: "consommés sur les 90 derniers jours" },
-    {
-      tone: "eco",
-      icon: "cloud",
-      value: "≈ 320 g CO₂e · 2,6 kWh",
-      caption: "empreinte estimée de vos échanges",
-      info: true,
     },
   ],
 };
@@ -183,7 +164,42 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
   const { showSuccess } = useToast();
   const [footprintInfoOpen, setFootprintInfoOpen] = useState(false);
   const [cleanupKind, setCleanupKind] = useState<CleanupKind | null>(null);
-  const indicators = INDICATORS_BY_PERIOD[period];
+
+  // LIVE — personal token usage + its green-cost estimate over the period, from
+  // the self-scoped `user_token_usage_over_time` preset (the server already
+  // derives co2e/kwh per bucket). Memoise the range on `period`: a fresh `until`
+  // every render would change the cache key and refetch in a loop. TTL 300s per
+  // KPI-ANALYTICS-RFC.md §2.6, same as the analytics pages.
+  const range = useMemo(() => homePeriodRange(period), [period]);
+  const {
+    data: usageData,
+    isLoading: usageLoading,
+    isError: usageError,
+  } = useUserTokenUsageOverTimeQuery(range, { refetchOnMountOrArgChange: 300 });
+
+  const usage = useMemo(() => {
+    const rows = usageData?.rows ?? [];
+    return {
+      tokens: rows.reduce((acc, r) => acc + (r.value ?? 0), 0),
+      co2e: rows.reduce((acc, r) => acc + (r.co2e_grams ?? 0), 0),
+      kwh: rows.reduce((acc, r) => acc + (r.kwh ?? 0), 0),
+    };
+  }, [usageData]);
+
+  // "…" while the first fetch resolves, "—" if the KPI service is unavailable
+  // (OpenSearch down → 503); otherwise the real aggregate.
+  const tokensValue = usageLoading ? "…" : usageError ? "—" : `${formatCompactTokens(usage.tokens)} tokens`;
+  const footprintValue = usageLoading
+    ? "…"
+    : usageError
+      ? "—"
+      : `≈ ${nf(1).format(usage.co2e)} g CO₂e · ${nf(2).format(usage.kwh)} kWh`;
+
+  const indicators: Indicator[] = [
+    ...CLEANUP_INDICATORS_BY_PERIOD[period],
+    { tone: "info", icon: "show_chart", value: tokensValue, caption: `consommés sur les ${period} derniers jours` },
+    { tone: "eco", icon: "cloud", value: footprintValue, caption: "empreinte estimée de vos échanges", info: true },
+  ];
 
   const isFiles = cleanupKind === "files";
 
@@ -204,7 +220,7 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
       <div className={styles.card}>
         <div className={styles.grid}>
           {indicators.map((ind) => (
-            <div key={ind.value} className={styles.ind}>
+            <div key={ind.icon} className={styles.ind}>
               <span className={styles.ic}>
                 <Icon category="outlined" type={ind.icon} />
               </span>
