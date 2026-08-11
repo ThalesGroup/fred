@@ -19,15 +19,14 @@ import {
   useUserAgentsUsedTotalQuery,
   useUserMessagesTotalQuery,
   useUserSessionsTotalQuery,
-  useUserTokenUsageOverTimeQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { HomePeriod } from "../HomePage.tsx";
-import { formatCompactTokens, homePeriodRange } from "../homePeriod.ts";
+import { homePeriodRange } from "../homePeriod.ts";
 import styles from "./ActivityKpis.module.scss";
 
 const numberFmt = new Intl.NumberFormat("fr-FR");
 
-type KpiKey = "conversations" | "messages" | "agents" | "tokens";
+type KpiKey = "conversations" | "messages" | "agents";
 type Direction = "up" | "down" | "flat" | "new";
 
 interface KpiView {
@@ -39,9 +38,6 @@ interface KpiView {
   /** Signed absolute change vs the previous window, shown alongside the % (and
    * used as the "+N" jump when there's no baseline). */
   delta: number;
-  /** Tokens have no period-over-period delta preset, so that card shows the
-   * value alone — no trend chip. Defaults to shown. */
-  showTrend?: boolean;
 }
 
 // Each preset returns { value, delta } where value = count over [D-N, D] and
@@ -112,20 +108,11 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
   const sessions = useUserSessionsTotalQuery(range, opts);
   const messages = useUserMessagesTotalQuery(range, opts);
   const agents = useUserAgentsUsedTotalQuery(range, opts);
-  // Tokens come from the time-series preset (no scalar+delta), so this card is
-  // the running total over the period without a trend chip.
-  const tokens = useUserTokenUsageOverTimeQuery(range, opts);
-  const tokensValue = tokens.isLoading
-    ? "…"
-    : tokens.isError
-      ? "—"
-      : formatCompactTokens((tokens.data?.rows ?? []).reduce((sum, r) => sum + (r.value ?? 0), 0));
 
   const kpis: KpiView[] = [
     buildKpi("conversations", sessions),
     buildKpi("messages", messages),
     buildKpi("agents", agents),
-    { key: "tokens", value: tokensValue, dir: "flat", magnitude: 0, delta: 0, showTrend: false },
   ];
 
   return (
@@ -137,7 +124,6 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
 
       <div className={styles.grid}>
         {kpis.map((kpi) => {
-          const showTrend = kpi.showTrend !== false;
           // Every chip shares the neutral secondary styling; "new" reuses one.
           const styleClass = kpi.dir === "new" ? styles.up : styles[kpi.dir];
           const deltaText =
@@ -153,11 +139,9 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
             <div key={kpi.key} className={styles.card}>
               <div className={styles.top}>
                 <span className={styles.label}>{t(`rework.home.activity.${kpi.key}`)}</span>
-                {showTrend && (
-                  <span className={`${styles.delta} ${styleClass}`} title={t("rework.home.activity.vsPrevious")}>
-                    {deltaText}
-                  </span>
-                )}
+                <span className={`${styles.delta} ${styleClass}`} title={t("rework.home.activity.vsPrevious")}>
+                  {deltaText}
+                </span>
               </div>
               <div className={styles.value}>{kpi.value}</div>
               <div className={styles.caption}>{t("rework.home.activity.periodCaption", { count: period })}</div>

@@ -28,7 +28,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
-import { homePeriodRange } from "../homePeriod.ts";
+import { formatCompactTokens, homePeriodRange } from "../homePeriod.ts";
 import CleanupDialog, { type CleanupGroup, type CleanupItem } from "../CleanupDialog/CleanupDialog.tsx";
 import styles from "./ResponsibleAiSection.module.scss";
 
@@ -64,11 +64,11 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
   const [footprintInfoOpen, setFootprintInfoOpen] = useState(false);
   const [cleanupKind, setCleanupKind] = useState<CleanupKind | null>(null);
 
-  // LIVE — the green-cost estimate of the user's token usage over the period.
-  // The `user_token_usage_over_time` preset already derives co2e/kwh per bucket
-  // server-side (the raw token total itself now lives in the activity row).
-  // Memoise the range on `period`: a fresh `until` every render would change the
-  // cache key and refetch in a loop. TTL 300s (KPI-ANALYTICS-RFC.md §2.6).
+  // LIVE — the user's token usage + its green-cost estimate over the period,
+  // from the self-scoped `user_token_usage_over_time` preset (the server derives
+  // co2e/kwh per bucket). Memoise the range on `period`: a fresh `until` every
+  // render would change the cache key and refetch in a loop. TTL 300s
+  // (KPI-ANALYTICS-RFC.md §2.6).
   const range = useMemo(() => homePeriodRange(period), [period]);
   const {
     data: usageData,
@@ -76,9 +76,10 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
     isError: usageError,
   } = useUserTokenUsageOverTimeQuery(range, { refetchOnMountOrArgChange: 300 });
 
-  const footprint = useMemo(() => {
+  const usage = useMemo(() => {
     const rows = usageData?.rows ?? [];
     return {
+      tokens: rows.reduce((acc, r) => acc + (r.value ?? 0), 0),
       co2e: rows.reduce((acc, r) => acc + (r.co2e_grams ?? 0), 0),
       kwh: rows.reduce((acc, r) => acc + (r.kwh ?? 0), 0),
     };
@@ -86,11 +87,12 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
 
   // "…" while the first fetch resolves, "—" if the KPI service is unavailable
   // (OpenSearch down → 503); otherwise the real aggregate.
+  const tokensValue = usageLoading ? "…" : usageError ? "—" : `${formatCompactTokens(usage.tokens)} tokens`;
   const footprintValue = usageLoading
     ? "…"
     : usageError
       ? "—"
-      : `≈ ${nf(1).format(footprint.co2e)} g CO₂e · ${nf(2).format(footprint.kwh)} kWh`;
+      : `≈ ${nf(1).format(usage.co2e)} g CO₂e · ${nf(2).format(usage.kwh)} kWh`;
 
   // LIVE — the caller's inactive conversations across every space. Deliberately
   // NOT period-scoped (unlike the tiles above): a cleanup tool should surface
@@ -142,6 +144,7 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
       caption: "depuis plus de 5 jours",
       cleanupKind: "conversations",
     },
+    { tone: "info", icon: "show_chart", value: tokensValue, caption: `consommés sur les ${period} derniers jours` },
     { tone: "eco", icon: "cloud", value: footprintValue, caption: "empreinte estimée de vos échanges", info: true },
   ];
 

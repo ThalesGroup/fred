@@ -1572,7 +1572,6 @@
         "conversations": "Nouvelles conversations",
         "messages": "Messages envoyés",
         "agents": "Agents utilisés",
-        "tokens": "Tokens consommés",
         "deltaUp": "▲ {{count}} % ({{abs}})",
         "deltaDown": "▼ {{count}} % ({{abs}})",
         "deltaFlat": "stable",
