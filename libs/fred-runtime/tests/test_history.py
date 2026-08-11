@@ -31,7 +31,11 @@ import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from conftest import (
+    StaticChatModelFactory,
+    ToolFriendlyFakeChatModel,
+    migrate_test_config,
+)
 from fastapi.testclient import TestClient
 from fred_core.history.history_schema import (
     Channel,
@@ -75,7 +79,7 @@ class _PingAgent(ReActAgent):
 
 def _build_config(tmp_path) -> AgentPodConfig:
     """Build a minimal offline pod config backed by SQLite."""
-    return AgentPodConfig.model_validate(
+    config = AgentPodConfig.model_validate(
         {
             "app": {
                 "name": "Test Pod",
@@ -108,6 +112,9 @@ def _build_config(tmp_path) -> AgentPodConfig:
             "platform": {"control_plane_url": None},
         }
     )
+    # The pod refuses to start against an unmigrated database (#2290) —
+    # create the Alembic-owned schema first, as the deploy migration job does.
+    return migrate_test_config(config)
 
 
 def _make_app(monkeypatch, tmp_path):
@@ -815,16 +822,23 @@ def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> Non
     )
 
 
-def test_fresh_sqlite_startup_initializes_history_table(monkeypatch, tmp_path) -> None:
+def test_migrated_sqlite_startup_reads_and_writes_history(
+    monkeypatch, tmp_path
+) -> None:
     """
-    A fresh SQLite-backed pod startup must initialize the history table before
-    the first history query or write.
+    A migrated SQLite-backed pod must serve the first history query and write
+    against the Alembic-owned ``session_history`` table.
 
     Why this test exists:
-    - local runtime startup can create the SQLite file before any runtime
-      Alembic command has been run
-    - the first history operation is often ``next_rank()``, which previously
-      failed with ``no such table: session_history``
+    - the store no longer creates that table itself (#2290 — lazy ``create_all``
+      left production databases with an unstamped ``alembic_version`` that no
+      later ``alembic upgrade head`` could be applied to); the schema now comes
+      from `python -m fred_runtime migrate`, stood in for here by
+      ``migrate_test_config``
+    - the first history operation is often ``next_rank()``: this asserts the
+      full read/write path works on a freshly migrated database
+    - the unmigrated case is covered by ``test_context.py``, which asserts
+      startup aborts rather than failing mid-request
     """
     app = _make_app(monkeypatch, tmp_path)
 

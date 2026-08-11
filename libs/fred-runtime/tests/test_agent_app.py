@@ -29,7 +29,11 @@ from typing import Any, cast
 
 import httpx
 import pytest
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from conftest import (
+    StaticChatModelFactory,
+    ToolFriendlyFakeChatModel,
+    migrate_test_config,
+)
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
@@ -255,7 +259,7 @@ def _build_test_config(
     """
 
     prometheus_enabled = metrics_backend == "prometheus"
-    return AgentPodConfig.model_validate(
+    config = AgentPodConfig.model_validate(
         {
             "app": {
                 "name": "Test Pod",
@@ -300,6 +304,9 @@ def _build_test_config(
             },
         }
     )
+    # The pod refuses to start against an unmigrated database (#2290) —
+    # create the Alembic-owned schema first, as the deploy migration job does.
+    return migrate_test_config(config)
 
 
 def test_create_agent_app_lifespan_fails_when_sql_storage_is_unreachable(
