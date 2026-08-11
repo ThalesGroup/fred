@@ -1580,7 +1580,6 @@
         "deltaUp": "▲ {{count}} %",
         "deltaDown": "▼ {{count}} %",
         "deltaFlat": "stable",
-        "deltaNew": "nouveau",
         "vsPrevious": "vs période précédente",
         "periodCaption": "sur les {{count}} derniers jours"
       }

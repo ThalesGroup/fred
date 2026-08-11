@@ -44,7 +44,8 @@ interface KpiView {
 // change" contract as every other scalar preset:
 //   prev = value − delta
 //   prev > 0  → pct = round(delta / prev × 100), sign drives ▲/▼, capped ±999
-//   prev == 0 && value > 0 → "new" (no meaningful %), shown as a positive chip
+//   prev == 0 && value > 0 → "new": no meaningful % (would divide by zero), so
+//                            show the absolute jump instead (e.g. "+244")
 //   prev == 0 && value == 0 → flat
 type KpiQuery = {
   data?: { value?: number | null; delta?: number | null } | undefined;
@@ -62,7 +63,12 @@ function buildKpi(key: KpiKey, q: KpiQuery): KpiView {
   let dir: Direction = "flat";
   let magnitude = 0;
   if (prev <= 0) {
-    dir = value > 0 ? "new" : "flat";
+    // No baseline to compare against — carry the absolute count so the chip can
+    // read "+244" rather than an undefined percentage.
+    if (value > 0) {
+      dir = "new";
+      magnitude = value;
+    }
   } else {
     const pct = Math.round((delta / prev) * 100);
     if (pct > 0) {
@@ -110,13 +116,13 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
 
       <div className={styles.grid}>
         {kpis.map((kpi) => {
-          // "new" reuses the positive (green) chip styling.
+          // Every chip shares the neutral secondary styling; "new" reuses one.
           const styleClass = kpi.dir === "new" ? styles.up : styles[kpi.dir];
           const deltaText =
             kpi.dir === "flat"
               ? t("rework.home.activity.deltaFlat")
               : kpi.dir === "new"
-                ? t("rework.home.activity.deltaNew")
+                ? `+${numberFmt.format(kpi.magnitude)}`
                 : t(`rework.home.activity.delta${kpi.dir === "up" ? "Up" : "Down"}`, { count: kpi.magnitude });
           return (
             <div key={kpi.key} className={styles.card}>
