@@ -13,10 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the toolbar swap: "Nouveau dossier"/"Ajouter des fichiers" are
-// not useful once the user is selecting rows to bulk-act on, so the bulk
-// actions bar (delete/exclude) replaces them entirely instead of the two
-// sitting side by side, for as long as at least one row is selected.
+// Coverage: a document whose ingestion succeeded during this browser session
+// (its SSE task reached `succeeded`) shows a "just finished" success badge on
+// its otherwise-silent ready state; documents with no such task show nothing.
+// The marker's ephemerality (gone on refresh) needs no test — it *is* the
+// Redux store's own lifetime.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -31,15 +32,33 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+// The workspace reads the task store through mocked selectors that ignore
+// state; real selectors reached by other components fall back to [].
+vi.mock("react-redux", () => ({
+  useSelector: (sel: () => unknown) => {
+    try {
+      return sel();
+    } catch {
+      return [];
+    }
+  },
+}));
 
-const doc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
+const justDoneDoc = {
+  identity: { document_uid: "uid-done", title: "Fresh", document_name: "Fresh.pdf", uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z" },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
   processing: { stages: { raw: "done", vector: "done" } },
   tags: { tag_ids: ["tag-cir"] },
-});
+};
+
+const olderReadyDoc = {
+  identity: { document_uid: "uid-old", title: "Old", document_name: "Old.pdf", uploaded_by: null },
+  file: { file_type: "pdf", file_size_bytes: 1024 },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
+  processing: { stages: { raw: "done", vector: "done" } },
+  tags: { tag_ids: ["tag-cir"] },
+};
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
@@ -48,14 +67,18 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     refetch: () => {},
   }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
-    () => ({ unwrap: async () => ({ documents: [doc("uid-1", "Report")], total: 1 }) }),
+    () => ({ unwrap: async () => ({ documents: [justDoneDoc, olderReadyDoc], total: 2 }) }),
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [], selectAllTasks: () => [] }));
+vi.mock("../../../../features/tasks/taskSlice", () => ({
+  selectActiveTasks: () => [],
+  // One ingestion finished during this session, targeting uid-done.
+  selectAllTasks: () => [{ id: "task-1", state: "succeeded", target: { type: "document", id: "uid-done" } }],
+}));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
@@ -99,7 +122,6 @@ beforeEach(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
 
-  // Navigate into "CIR" — its documents only load once it's the current folder.
   const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
@@ -114,44 +136,19 @@ afterEach(() => {
   container.remove();
 });
 
-function rowCheckbox(): HTMLInputElement {
-  // [0] is the header's "select all"; [1] is the one doc row in this fixture.
-  const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
-  const box = boxes[1];
-  if (!box) throw new Error("row checkbox not rendered");
-  return box as HTMLInputElement;
-}
+describe("DocumentWorkspace — 'just finished' badge on the ready state", () => {
+  it("marks only the document whose ingestion succeeded this session", () => {
+    const badges = [...container.querySelectorAll('[data-variant="done"]')];
+    expect(badges).toHaveLength(1);
+    expect(badges[0].textContent).toContain("rework.resources.status.justDone");
 
-describe("DocumentWorkspace toolbar — bulk actions replace new-folder/add-file while selecting", () => {
-  it("hides new-folder/add-file and shows bulk actions once a row is selected", () => {
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
-
-    act(() => {
-      rowCheckbox().click();
-    });
-
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
-    expect(
-      container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]'),
-    ).not.toBeNull();
-  });
-
-  it("restores new-folder/add-file once the selection is cleared", () => {
-    act(() => {
-      rowCheckbox().click();
-    });
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
-
-    act(() => {
-      rowCheckbox().click(); // untoggle
-    });
-
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+    // The badge sits in the row of the just-finished document, not the old
+    // one: the first ancestor wide enough to contain the file name must
+    // contain only Fresh.pdf (were the badge misplaced, that ancestor would
+    // be a container spanning both rows).
+    let doneRow: Element | null = badges[0];
+    while (doneRow && !doneRow.textContent?.includes("Fresh.pdf")) doneRow = doneRow.parentElement;
+    expect(doneRow).not.toBeNull();
+    expect(doneRow!.textContent).not.toContain("Old.pdf");
   });
 });

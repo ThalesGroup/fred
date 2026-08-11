@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the toolbar swap: "Nouveau dossier"/"Ajouter des fichiers" are
-// not useful once the user is selecting rows to bulk-act on, so the bulk
-// actions bar (delete/exclude) replaces them entirely instead of the two
-// sitting side by side, for as long as at least one row is selected.
+// Coverage (#2315 error detail): hovering a failed document's "failed" status
+// chip shows each failed stage with the message persisted in
+// `processing.errors` — the detail rides the chip itself, with no menu entry
+// and no modal (the row menu must not offer one).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,17 +29,34 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({
+    // Appends interpolation values so assertions can see them (the stage label
+    // renders as `t("...errorTooltip.stage", { stage })`).
+    t: (key: string, params?: Record<string, unknown>) =>
+      params && "stage" in params ? `${key} ${String(params.stage)}` : key,
+    i18n: { language: "en" },
+  }),
 }));
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
 
-const doc = (uid: string, name: string) => ({
-  identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
+const failedDoc = {
+  identity: { document_uid: "uid-failed", title: "Broken", document_name: "Broken.pdf", uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z" },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: false },
+  processing: {
+    stages: { preview: "failed", vector: "not_started" },
+    errors: { preview: "Execution timed_out" },
+  },
+  tags: { tag_ids: ["tag-cir"] },
+};
+
+const readyDoc = {
+  identity: { document_uid: "uid-ready", title: "Fine", document_name: "Fine.pdf", uploaded_by: null },
+  file: { file_type: "pdf", file_size_bytes: 1024 },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
   processing: { stages: { raw: "done", vector: "done" } },
   tags: { tag_ids: ["tag-cir"] },
-});
+};
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
@@ -48,7 +65,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     refetch: () => {},
   }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
-    () => ({ unwrap: async () => ({ documents: [doc("uid-1", "Report")], total: 1 }) }),
+    () => ({ unwrap: async () => ({ documents: [failedDoc, readyDoc], total: 2 }) }),
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
@@ -99,7 +116,6 @@ beforeEach(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
 
-  // Navigate into "CIR" — its documents only load once it's the current folder.
   const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
@@ -112,46 +128,46 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  document.querySelectorAll('[role="presentation"]').forEach((el) => el.remove());
 });
 
-function rowCheckbox(): HTMLInputElement {
-  // [0] is the header's "select all"; [1] is the one doc row in this fixture.
-  const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
-  const box = boxes[1];
-  if (!box) throw new Error("row checkbox not rendered");
-  return box as HTMLInputElement;
+function moreButtons(): HTMLButtonElement[] {
+  return [...container.querySelectorAll('button[aria-label="rework.resources.action.more"]')] as HTMLButtonElement[];
 }
 
-describe("DocumentWorkspace toolbar — bulk actions replace new-folder/add-file while selecting", () => {
-  it("hides new-folder/add-file and shows bulk actions once a row is selected", () => {
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
+/** The menu portals into document.body, outside `container`. */
+function openMenu(button: HTMLButtonElement): Element[] {
+  act(() => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  return [
+    ...document.querySelectorAll(
+      '[role="presentation"] [role="menuitem"], [role="presentation"] li, [role="presentation"] button',
+    ),
+  ];
+}
 
+describe("DocumentWorkspace — ingestion error detail on the status chip", () => {
+  it("shows each failed stage and its message when hovering the failed chip", () => {
+    const chip = [...container.querySelectorAll("span")].find((el) =>
+      el.textContent?.includes("rework.resources.status.failed"),
+    );
+    expect(chip).toBeTruthy();
+
+    // React derives onMouseEnter from the bubbling `mouseover` (see Tooltip.test).
     act(() => {
-      rowCheckbox().click();
+      chip!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
     });
 
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
-    expect(
-      container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]'),
-    ).not.toBeNull();
+    const tooltip = document.querySelector('[role="tooltip"]');
+    expect(tooltip).not.toBeNull();
+    expect(tooltip!.textContent).toContain("preview");
+    expect(tooltip!.textContent).toContain("Execution timed_out");
   });
 
-  it("restores new-folder/add-file once the selection is cleared", () => {
-    act(() => {
-      rowCheckbox().click();
-    });
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
-
-    act(() => {
-      rowCheckbox().click(); // untoggle
-    });
-
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+  it("no longer offers an 'Error details' entry in the failed document's row menu", () => {
+    const items = openMenu(moreButtons()[0]);
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.find((el) => el.textContent?.includes("rework.resources.action.errorDetail"))).toBeUndefined();
   });
 });

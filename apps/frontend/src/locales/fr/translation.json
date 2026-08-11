@@ -1529,6 +1529,7 @@
         "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
+        "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
         "more": "Plus d'actions",
@@ -1538,7 +1539,8 @@
         "process": "Traiter",
         "rename": "Renommer",
         "reprocess": "Retraiter",
-        "searchable": "Exclure de la recherche"
+        "searchable": "Exclure de la recherche",
+        "stopIngestion": "Arrêter l'ingestion"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
@@ -1548,7 +1550,12 @@
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
-        "shareTitle": "Copier dans l'espace d'équipe"
+        "shareTitle": "Copier dans l'espace d'équipe",
+        "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document et toutes ses données (fichier, vecteurs, métadonnées) seront supprimés.",
+        "stopIngestionTitle": "Arrêter l'ingestion"
+      },
+      "errorTooltip": {
+        "stage": "Étape : {{stage}}"
       },
       "empty": {
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
@@ -1602,6 +1609,7 @@
       "status": {
         "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
+        "justDone": "Terminé",
         "processing": "Traitement...",
         "raw": "En attente",
         "ready": "Prêt"
@@ -1638,7 +1646,9 @@
         "deleteFolderSuccess": "Dossier supprimé",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
-        "processStarted": "Traitement lancé"
+        "processStarted": "Traitement lancé",
+        "stopIngestionError": "Impossible d'arrêter l'ingestion",
+        "stopIngestionRequested": "Arrêt de l'ingestion demandé"
       }
     },
     "save": "Sauvegarder",

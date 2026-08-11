@@ -1529,6 +1529,7 @@
         "back": "Back to previous folder",
         "copyToTeam": "Copy to Team space",
         "delete": "Delete",
+        "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
         "download": "Download",
         "includeInSearch": "Include in search",
         "more": "More actions",
@@ -1538,7 +1539,8 @@
         "process": "Process",
         "rename": "Rename",
         "reprocess": "Reprocess",
-        "searchable": "Exclude from search"
+        "searchable": "Exclude from search",
+        "stopIngestion": "Stop ingestion"
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
@@ -1548,7 +1550,12 @@
         "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
         "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
-        "shareTitle": "Copy to Team space"
+        "shareTitle": "Copy to Team space",
+        "stopIngestionMessage": "Interrupt the processing of \"{{name}}\"? The document and all its data (file, vectors, metadata) will be deleted.",
+        "stopIngestionTitle": "Stop ingestion"
+      },
+      "errorTooltip": {
+        "stage": "Stage: {{stage}}"
       },
       "empty": {
         "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
@@ -1602,6 +1609,7 @@
       "status": {
         "excludedFromSearch": "Excluded from search",
         "failed": "Error",
+        "justDone": "Done",
         "processing": "Processing...",
         "raw": "Pending",
         "ready": "Ready"
@@ -1638,7 +1646,9 @@
         "deleteFolderSuccess": "Folder deleted",
         "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
-        "processStarted": "Processing started"
+        "processStarted": "Processing started",
+        "stopIngestionError": "Could not stop the ingestion",
+        "stopIngestionRequested": "Ingestion stop requested"
       }
     },
     "save": "Save",

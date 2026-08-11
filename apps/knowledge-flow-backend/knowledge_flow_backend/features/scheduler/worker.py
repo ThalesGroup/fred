@@ -23,6 +23,7 @@ It is launched in a background thread from main.py during application startup.
 
 import concurrent.futures
 import logging
+from datetime import timedelta
 
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -154,6 +155,15 @@ async def run_worker(
         activity_executor=executor,
         max_concurrent_workflow_tasks=workflow_task_concurrency,
         max_concurrent_activities=activity_concurrency,
+        # Heartbeat responses are how the server tells a running activity it was
+        # cancelled, and the SDK throttles outgoing heartbeats — by default to
+        # min(80% of heartbeat_timeout, 60s), i.e. one per minute with our 300s
+        # timeouts, no matter how often the activity calls heartbeat(). That
+        # throttle IS the cancellation latency: a user's stop took ~40s to reach
+        # the vectorization stage (#2315). 5s makes a cancel land in seconds for
+        # one cheap RPC per running activity every 5s.
+        max_heartbeat_throttle_interval=timedelta(seconds=5),
+        default_heartbeat_throttle_interval=timedelta(seconds=5),
     )
 
     logger.info("[SCHEDULER] Temporal worker is now running and ready to receive ingestion jobs.")

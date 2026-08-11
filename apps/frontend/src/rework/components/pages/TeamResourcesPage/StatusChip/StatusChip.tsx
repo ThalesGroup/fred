@@ -16,10 +16,19 @@ import { useTranslation } from "react-i18next";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import styles from "./StatusChip.module.css";
 
 interface StatusChipProps {
   status: DocStatus;
+  /** Per-stage messages from `processing.errors`; shown on hover when failed (#2315). */
+  errors?: Record<string, string> | null;
+  /** The document's ingestion succeeded during this browser session (its SSE
+   *  task reached `succeeded`). Marks the otherwise-silent "ready" state with
+   *  a success badge so a user who just launched uploads can spot what
+   *  finished. Session-only by design: the task feed lives in Redux memory,
+   *  so a page refresh clears the marker without any timer or persistence. */
+  justCompleted?: boolean;
 }
 
 const ICON_SIZE = 12;
@@ -30,13 +39,30 @@ const ICON_SIZE = 12;
  * state that needs the user's attention. Deliberately a new piece rather than
  * a `DocStatusBadge` prop toggle, so the existing always-visible dot+label
  * rendering used elsewhere is untouched.
+ *
+ * A failed chip carries its own explanation: hovering it lists each failed
+ * pipeline stage with the message the backend persisted in `processing.errors`
+ * (`mark_stage_error`, document_structures.py). The data is already in the
+ * browse response every row renders from — no click, no menu entry, no modal.
+ * Stage keys are shown as-is: they are backend pipeline identifiers
+ * (preview/vector/sql/…), useful verbatim in a support ticket.
  */
-export function StatusChip({ status }: StatusChipProps) {
+export function StatusChip({ status, errors, justCompleted }: StatusChipProps) {
   const { t } = useTranslation();
-  if (status === "ready") return null;
+  if (status === "ready") {
+    if (!justCompleted) return null;
+    return (
+      <span className={styles.justDone}>
+        <span className={styles.chip} data-variant="done">
+          <Icon category="outlined" type="check_circle" />
+          {t("rework.resources.status.justDone")}
+        </span>
+      </span>
+    );
+  }
 
   const variant = status === "raw" ? "pending" : status;
-  return (
+  const chip = (
     <span className={styles.chip} data-variant={variant}>
       {variant === "processing" ? (
         <Spinner size={ICON_SIZE} />
@@ -49,5 +75,27 @@ export function StatusChip({ status }: StatusChipProps) {
       )}
       {t(`rework.resources.status.${status}`)}
     </span>
+  );
+
+  const errorEntries = status === "failed" ? Object.entries(errors ?? {}) : [];
+  if (errorEntries.length === 0) return chip;
+
+  return (
+    <Tooltip
+      content={
+        <dl className={styles.errorTooltip}>
+          {errorEntries.map(([stage, message]) => (
+            <div key={stage} className={styles.errorEntry}>
+              {/* The raw key alone ("preview", "vector") reads as jargon —
+                  labelling it as a pipeline stage tells the user what failed. */}
+              <dt className={styles.errorStage}>{t("rework.resources.errorTooltip.stage", { stage })}</dt>
+              <dd className={styles.errorMessage}>{message}</dd>
+            </div>
+          ))}
+        </dl>
+      }
+    >
+      {chip}
+    </Tooltip>
   );
 }

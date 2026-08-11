@@ -24,8 +24,10 @@ mirroring the existing `_wf_*` helpers.
 from __future__ import annotations
 
 import pytest
+from temporalio.exceptions import ApplicationError, CancelledError, ChildWorkflowError
 
 from knowledge_flow_backend.features.scheduler.workflow import (
+    _wf_file_terminal_event_args,
     _wf_final_revectorize_state,
     _wf_scope_resolution_failed_event_args,
     _wf_should_skip_revectorize,
@@ -82,3 +84,52 @@ def test_scope_resolution_failed_event_args_carries_the_real_exception_text() ->
 def test_scope_resolution_failed_event_args_falls_back_when_exception_has_no_message() -> None:
     args = _wf_scope_resolution_failed_event_args(RuntimeError(), "task-1")
     assert args[4] == "Failed to resolve revectorize scope"
+
+
+# ── #2315: telling a user cancel apart from a real failure in compensation ────
+
+
+def _child_workflow_error(message: str, cause: Exception) -> ChildWorkflowError:
+    """The real shape the compensation handler sees: a per-file child failure
+    reaches the parent wrapped in a ChildWorkflowError, so the cancel-vs-failure
+    verdict has to come from the wrapper's cause, not its type."""
+    error = ChildWorkflowError(
+        message,
+        namespace="default",
+        workflow_id="ProcessPushFile-0-abc",
+        run_id="run-1",
+        workflow_type="PushInputProcess",
+        initiated_event_id=1,
+        started_event_id=2,
+        retry_state=None,
+    )
+    error.__cause__ = cause
+    return error
+
+
+def test_cancelled_child_workflow_reports_cancelled_not_failed() -> None:
+    # A user stop must never read as an error: the state decides whether the
+    # event handler fails the document's stages or erases the document.
+    args = _wf_file_terminal_event_args(_child_workflow_error("Child Workflow execution cancelled", CancelledError("cancelled")), "task-1", "doc-1", "report.pdf")
+    assert args[1] == "cancelled"
+    assert args[4] == "Ingestion cancelled"
+    # Not counted as a failure in the task's own tallies.
+    assert args[7] == 0
+
+
+def test_genuine_child_failure_reports_failed_with_its_message() -> None:
+    args = _wf_file_terminal_event_args(_child_workflow_error("Child Workflow execution failed", ApplicationError("worker exploded")), "task-1", "doc-1", "report.pdf")
+    assert args[1] == "failed"
+    assert args[4] == "Child Workflow execution failed"
+    assert args[7] == 1
+
+
+def test_plain_failure_reports_failed() -> None:
+    args = _wf_file_terminal_event_args(RuntimeError("boom"), "task-1", "doc-1", "report.pdf")
+    assert args[1] == "failed"
+    assert args[4] == "boom"
+
+
+def test_failure_without_a_message_still_carries_one() -> None:
+    args = _wf_file_terminal_event_args(RuntimeError(), "task-1", "doc-1", "report.pdf")
+    assert args[4] == "Processing failed"

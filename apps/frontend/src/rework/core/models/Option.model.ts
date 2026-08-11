@@ -23,4 +23,7 @@ export interface OptionModel<T = string> {
   description?: string;
   /** Renders the item's label/icon in the error color (e.g. a "Delete" action). */
   destructive?: boolean;
+  /** Native hover tooltip (HTML `title`) — e.g. why a disabled item is disabled.
+   *  Unlike `description` (always-visible second line), this only shows on hover. */
+  tooltip?: string;
 }

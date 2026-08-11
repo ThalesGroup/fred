@@ -130,6 +130,36 @@ class BaseDocumentMetadataStore:
         - Overwrites existing metadata if the same UID already exists.
         - Adds a new entry otherwise.
 
+        Use this only where creating the document is a legitimate outcome
+        (registration). Anything updating a document it already read must use
+        `update_metadata`, or a late writer can re-create a deleted document.
+
+        :raises ValueError: if 'document_uid' is missing.
+        """
+
+    @abstractmethod
+    async def update_metadata(
+        self, metadata: DocumentMetadata, session: AsyncSession | None = None
+    ) -> bool:
+        """
+        Update an existing metadata entry, never creating one.
+
+        Returns True when a row was updated, False when the document no longer
+        exists. Implementations MUST make that determination atomically (a
+        single conditional UPDATE, not a read followed by a save) — same rule,
+        and the same reason, as `delete_metadata` below.
+
+        The caller that must not resurrect a document is a long-running writer
+        that cannot be stopped: an ingestion activity runs its work in a thread
+        (`asyncio.to_thread`), which Python cannot kill, so it keeps going after
+        a cancellation deleted the document and then persists what it computed.
+        Through `save_metadata` that write re-creates the row — stuck
+        `in_progress` forever, and, because the service sees no previous
+        metadata, it also re-credits storage quota, re-adds the ReBAC parent
+        link and emits a document-created KPI for a document the user deleted
+        (#2315). A conditional UPDATE makes the whole class impossible rather
+        than narrowing its window.
+
         :raises ValueError: if 'document_uid' is missing.
         """
 

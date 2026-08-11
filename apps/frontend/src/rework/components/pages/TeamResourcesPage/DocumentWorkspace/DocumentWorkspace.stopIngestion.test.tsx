@@ -13,12 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the row "more" menu's process/reprocess label: a document that
-// has already been ingested (deriveDocStatus === "ready") must offer
-// "Reprocess", not "Process" — the same action (POST /process-documents) is
-// re-running an already-successful pipeline, not a first ingestion, and the
-// two must read differently or a user reasonably assumes "Process" means the
-// file was never ingested.
+// Coverage (#2315 stop ingestion): a document with a live pending/running
+// ingestion task offers "Arrêter l'ingestion" in its row menu; selecting it
+// asks for confirmation, and confirming calls the task-cancel endpoint with
+// the task id resolved from the SSE feed. A document with no active task has
+// no such entry.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -33,15 +32,37 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+// Forward the (mocked) selector's own return value — the live task map is the
+// unit under test here.
+vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
 
-const doc = (uid: string, name: string, stages: Record<string, string>) => ({
+const rawDoc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z" },
-  processing: { stages },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: false },
+  processing: { stages: {} },
   tags: { tag_ids: ["tag-cir"] },
 });
+
+const runningTask = {
+  taskId: "task-to-cancel",
+  kind: "ingestion",
+  target: { type: "document", id: "uid-running", label: "Running doc.pdf" },
+  owner: null,
+  localOnly: false,
+  state: "running",
+  progress: null,
+  step: "processing",
+  error: null,
+  lastSeq: 2,
+  registeredAt: 0,
+  terminalAt: null,
+  acknowledgedAt: null,
+  warnings: null,
+};
+
+const cancelTask = vi.fn(() => ({ unwrap: async () => ({}) }));
+const showConfirmationDialog = vi.fn();
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
@@ -52,7 +73,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     () => ({
       unwrap: async () => ({
-        documents: [doc("uid-ready", "Ready doc", { raw: "done", vector: "done" }), doc("uid-raw", "Raw doc", {})],
+        documents: [rawDoc("uid-running", "Running doc"), rawDoc("uid-norun", "Quiet doc")],
         total: 2,
       }),
     }),
@@ -60,9 +81,12 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
-  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
+  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [cancelTask],
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [], selectAllTasks: () => [] }));
+vi.mock("../../../../features/tasks/taskSlice", () => ({
+  selectActiveTasks: () => [runningTask],
+  selectAllTasks: () => [],
+}));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
@@ -76,7 +100,7 @@ vi.mock("../../../../../components/documents/common/useDocumentCommands", () => 
   }),
 }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
-  useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
+  useConfirmationDialog: () => ({ showConfirmationDialog }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -99,6 +123,8 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(async () => {
+  cancelTask.mockClear();
+  showConfirmationDialog.mockClear();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -106,7 +132,6 @@ beforeEach(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
 
-  // Navigate into "CIR" — its documents only load once it's the current folder.
   const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
@@ -127,36 +152,65 @@ function moreButtons(): HTMLButtonElement[] {
 }
 
 /** The menu portals into document.body, outside `container`. */
-function openMenuAndReadProcessLabel(button: HTMLButtonElement): string {
+function openMenu(button: HTMLButtonElement): Element[] {
   act(() => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
-  const items = [
+  return [
     ...document.querySelectorAll(
       '[role="presentation"] [role="menuitem"], [role="presentation"] li, [role="presentation"] button',
     ),
   ];
-  const item = items.find(
-    (el) =>
-      el.textContent?.includes("rework.resources.action.reprocess") ||
-      el.textContent?.includes("rework.resources.action.process"),
-  );
-  if (!item) throw new Error("process/reprocess menu item not found");
-  return item.textContent ?? "";
 }
 
-// Skipped 2026-07-30: the "Traiter"/"Retraiter" menu entry is hidden behind
-// SHOW_REPROCESS_ACTION (DocumentWorkspace.tsx) pending a keep/remove call —
-// re-enable this suite in lockstep with that flag, don't delete it.
-describe.skip("DocumentWorkspace row menu — process/reprocess label", () => {
-  it("shows 'Reprocess' for an already-ingested (ready) document", () => {
-    // Row order matches the mocked `documents` array: ready doc first.
-    const label = openMenuAndReadProcessLabel(moreButtons()[0]);
-    expect(label.endsWith("rework.resources.action.reprocess")).toBe(true);
+describe("DocumentWorkspace — stop a live ingestion", () => {
+  it("offers 'Stop ingestion' for a document with a running task, and cancels its task on confirm", async () => {
+    // Row order matches the mocked `documents` array: running doc first.
+    const items = openMenu(moreButtons()[0]);
+    const entry = items.find((el) => el.textContent?.includes("rework.resources.action.stopIngestion"));
+    expect(entry).toBeTruthy();
+
+    act(() => {
+      entry!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(showConfirmationDialog).toHaveBeenCalledTimes(1);
+    const dialogArgs = showConfirmationDialog.mock.calls[0][0] as {
+      title: string;
+      message: string;
+      onConfirm: () => void;
+    };
+    expect(dialogArgs.title).toBe("rework.resources.confirm.stopIngestionTitle");
+    // Nothing is cancelled before the user confirms.
+    expect(cancelTask).not.toHaveBeenCalled();
+
+    await act(async () => {
+      dialogArgs.onConfirm();
+    });
+    expect(cancelTask).toHaveBeenCalledWith({ taskId: "task-to-cancel" });
   });
 
-  it("keeps 'Process' for a document not yet ingested", () => {
-    const label = openMenuAndReadProcessLabel(moreButtons()[1]);
-    expect(label.endsWith("rework.resources.action.process")).toBe(true);
+  it("does not offer 'Stop ingestion' for a document with no active task", () => {
+    const items = openMenu(moreButtons()[1]);
+    expect(items.find((el) => el.textContent?.includes("rework.resources.action.stopIngestion"))).toBeUndefined();
+  });
+
+  it("greys out 'Delete' while the ingestion is live — stop is the only exit", () => {
+    const items = openMenu(moreButtons()[0]);
+    const deleteItem = items.find((el) => el.textContent?.includes("rework.resources.action.delete"));
+    expect(deleteItem).toBeTruthy();
+    const li = deleteItem!.closest("li") ?? deleteItem!;
+    expect(li.getAttribute("data-disabled")).toBe("true");
+    // The reason is discoverable on hover (native title), not a permanent
+    // second line — per developer request on #2315.
+    expect(li.getAttribute("title")).toBe("rework.resources.action.deleteDisabledWhileProcessing");
+  });
+
+  it("keeps 'Delete' clickable for a document with no active task", () => {
+    const items = openMenu(moreButtons()[1]);
+    const deleteItem = items.find((el) => el.textContent?.includes("rework.resources.action.delete"));
+    expect(deleteItem).toBeTruthy();
+    const li = deleteItem!.closest("li") ?? deleteItem!;
+    expect(li.getAttribute("data-disabled")).toBe("false");
   });
 });
