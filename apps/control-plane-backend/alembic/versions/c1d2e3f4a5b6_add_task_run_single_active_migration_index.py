@@ -68,6 +68,7 @@ def upgrade() -> None:
             "task_run",
             ["kind"],
             unique=True,
+            sqlite_where=sa.text(_WHERE_CLAUSE),
             postgresql_where=sa.text(_WHERE_CLAUSE),
         )
 

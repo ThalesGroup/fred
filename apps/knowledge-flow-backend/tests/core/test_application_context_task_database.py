@@ -354,3 +354,95 @@ def test_task_run_index_migrations_are_no_ops_when_the_table_is_absent(tmp_path)
                 mod.downgrade()
 
         assert "task_run" not in sa.inspect(conn).get_table_names(), "a guard created task_run instead of skipping"
+
+
+def test_task_run_index_migrations_tolerate_existing_same_kind_rows_on_sqlite(tmp_path):
+    """Two non-terminal rows of one kind must survive the index migrations on SQLite.
+
+    `e2f3a4b5c6d7` passed only `postgresql_where`. SQLAlchemy silently drops
+    dialect-prefixed kwargs on other dialects, so on SQLite the predicate vanished and the
+    index landed as an unconditional `UNIQUE (kind)`. On a database already holding two
+    non-terminal `ingestion` rows the upgrade then aborted with `UNIQUE constraint failed:
+    task_run.kind` — stranding the chain *before* the repair revision `f7a8b9c0d1e2` could
+    ever run, so migrations were permanently blocked rather than merely wrong.
+
+    Nothing else covers this: `db-check-combined-sqlite` migrates an empty database, where
+    an unconditional unique index is created happily and the defect is invisible.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    import sqlalchemy as sa
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    versions = Path(__file__).resolve().parents[2] / "alembic" / "versions"
+    # Order matters: the defect is that the FIRST of these aborts, so the second never runs.
+    ordered = [
+        "e2f3a4b5c6d7_add_task_run_single_active_migration_index.py",
+        "f7a8b9c0d1e2_repair_task_run_single_active_migration_index.py",
+    ]
+
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'seeded.db'}")
+    with engine.begin() as conn:
+        conn.execute(sa.text("CREATE TABLE task_run (id TEXT PRIMARY KEY, kind TEXT NOT NULL, state TEXT NOT NULL)"))
+        conn.execute(sa.text("INSERT INTO task_run (id, kind, state) VALUES ('a', 'ingestion', 'running'), ('b', 'ingestion', 'pending')"))
+
+        migration_ctx = MigrationContext.configure(conn)
+        for name in ordered:
+            path = versions / name
+            spec = importlib.util.spec_from_file_location(path.stem, path)
+            assert spec and spec.loader
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            with Operations.context(migration_ctx):
+                mod.upgrade()
+
+        assert conn.execute(sa.text("SELECT count(*) FROM task_run")).scalar_one() == 2, "the migrations dropped rows"
+        # And the index that landed is the intended partial one, not `UNIQUE (kind)`: a
+        # third non-terminal ingestion row still inserts.
+        conn.execute(sa.text("INSERT INTO task_run (id, kind, state) VALUES ('c', 'ingestion', 'running')"))
+
+
+def test_repair_migration_is_a_no_op_on_postgres_in_both_directions():
+    """`f7a8b9c0d1e2` must emit nothing on Postgres — and the two directions must agree.
+
+    The repair exists for a SQLite-only defect, and since OPS-04 this chain no longer owns
+    `task_run`: on a deployment still sharing the `fred` database that table is
+    control-plane's, so any DDL here takes ACCESS EXCLUSIVE on another service's live table.
+
+    Gating only `upgrade()` is worse than gating neither. `e2f3a4b5c6d7` owns the index on
+    Postgres, so an ungated `downgrade()` drops it and a gated `upgrade()` then declines to
+    put it back: `make db-downgrade` (a documented operator procedure) followed by a
+    re-upgrade silently and permanently destroys the single-active-migration constraint.
+    Verified against PG 16: ungated, the round trip ends with the index gone and two
+    non-terminal `kind='migration'` rows accepted.
+
+    A mock engine keeps this offline while still presenting a real `postgresql` dialect —
+    the gate is the only thing standing between the call and `sa.inspect()`, which a
+    MockConnection cannot satisfy, so removing it fails this test rather than skipping it.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    import sqlalchemy as sa
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    emitted: list[str] = []
+    mock_engine = sa.create_mock_engine("postgresql+psycopg://", lambda sql, *a, **kw: emitted.append(str(sql)))
+
+    path = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "f7a8b9c0d1e2_repair_task_run_single_active_migration_index.py"
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    ctx = MigrationContext.configure(connection=mock_engine)  # type: ignore[arg-type]
+    with Operations.context(ctx):
+        mod.upgrade()
+        mod.downgrade()
+
+    assert emitted == [], f"the repair migration emitted DDL on Postgres: {emitted}"
