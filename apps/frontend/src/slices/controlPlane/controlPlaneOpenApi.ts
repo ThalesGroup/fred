@@ -900,6 +900,32 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsUserTopAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTopTeamsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_teams`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGet: build.query<
       HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse,
       HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg
@@ -1672,6 +1698,26 @@ export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
 export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserTopAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -2991,6 +3037,17 @@ export type MultiSeriesTimeSeriesResponse = {
   until: string;
   interval: string;
 };
+export type UserTopAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  value: number;
+};
+export type UserTopAgentsResponse = {
+  rows: UserTopAgentRow[];
+  since: string;
+  until: string;
+};
 export type TeamStorageRow = {
   team_id: string;
   label: string;
@@ -3306,6 +3363,10 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
