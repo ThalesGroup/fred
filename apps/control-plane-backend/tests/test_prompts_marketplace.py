@@ -16,12 +16,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
-from fred_core.common import TeamId
-from sqlalchemy.ext.asyncio import create_async_engine
-
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.product.service import _next_imported_name
 from control_plane_backend.prompts.store import PromptRecord, PromptStore
+from fred_core.common import TeamId
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest_asyncio.fixture
