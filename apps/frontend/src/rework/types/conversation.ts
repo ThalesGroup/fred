@@ -95,6 +95,10 @@ export interface TokenUsage {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  /** CACHE-01: portion of input_tokens served from the provider's prompt
+   *  cache — a subset of input_tokens, not additional tokens. Undefined for
+   *  providers that don't report cache detail. */
+  cache_read_tokens?: number;
 }
 
 export const DEFAULT_CONVERSATION_SETTINGS: ConversationSettings = {

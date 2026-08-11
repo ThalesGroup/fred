@@ -12,10 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { Channel, ChatMessage, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
+import type {
+  Channel,
+  ChatMessage,
+  ChatTokenUsage,
+  ToolCallPart,
+  ToolResultPart,
+} from "../../slices/agentic/agenticOpenApi";
 import type { VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import type { TokenUsage } from "@rework/types/conversation";
+
+// CACHE-01: `agenticOpenApi.ts` is generated from the archived `agentic-backend`
+// (PLATFORM_RUNTIME_MAP.md: "removed... no longer active") and predates
+// cache_read_tokens. The live swift runtime (fred-runtime) already sends it —
+// useChatSse.ts forwards it onto this same ChatTokenUsage shape. Narrow local
+// type + cast at the one read site, not a hand-edit of the generated file.
+type ChatTokenUsageWithCache = ChatTokenUsage & { cache_read_tokens?: number };
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -212,12 +225,13 @@ export function toolResultLatencyMs(result: ChatMessage): number | null {
 // Usage of the model call that decided to make this tool call (TRACE-01) —
 // carried on the tool_call message's metadata, not the result's.
 export function toolCallTokenUsage(call: ChatMessage): TokenUsage | null {
-  const tu = call.metadata?.token_usage;
+  const tu = call.metadata?.token_usage as ChatTokenUsageWithCache | null | undefined;
   if (!tu) return null;
   return {
     input_tokens: tu.input_tokens ?? 0,
     output_tokens: tu.output_tokens ?? 0,
     total_tokens: tu.total_tokens ?? 0,
+    cache_read_tokens: tu.cache_read_tokens,
   };
 }
 

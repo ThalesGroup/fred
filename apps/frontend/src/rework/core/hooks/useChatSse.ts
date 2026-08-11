@@ -19,7 +19,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type { ChatMessage, FinishReason } from "../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, ChatTokenUsage, FinishReason } from "../../../slices/agentic/agenticOpenApi";
 import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
@@ -72,6 +72,25 @@ type AnyRuntimeEvent =
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
   | ({ kind: "execution_error" } & RuntimeErrorEvent);
+
+// CACHE-01: the legacy agentic-backend-generated `ChatTokenUsage` predates
+// cache_read_tokens (agentic-backend itself is archived per
+// PLATFORM_RUNTIME_MAP.md — its generated client just hasn't been extended).
+// `event.token_usage` here is the live swift runtime's dict, which already
+// carries it. Widened return type + no inline literal at the call site keeps
+// this additive without triggering an excess-property error against the
+// stale generated shape.
+function chatTokenUsageWithCache(
+  raw: Record<string, number> | null | undefined,
+): (ChatTokenUsage & { cache_read_tokens?: number }) | null {
+  if (!raw) return null;
+  return {
+    input_tokens: raw["input_tokens"] ?? 0,
+    output_tokens: raw["output_tokens"] ?? 0,
+    total_tokens: raw["total_tokens"] ?? 0,
+    cache_read_tokens: raw["cache_read_tokens"],
+  };
+}
 
 // ── HITL event/payload (#2216) ──────────────────────────────────────────────
 //
@@ -317,15 +336,10 @@ export function useChatSse(
             channel: "final",
             parts,
             metadata: {
+              model: event.model_name ?? null,
               finish_reason: (event.finish_reason as FinishReason | null) ?? null,
               sources: event.sources ?? [],
-              token_usage: event.token_usage
-                ? {
-                    input_tokens: event.token_usage["input_tokens"] ?? 0,
-                    output_tokens: event.token_usage["output_tokens"] ?? 0,
-                    total_tokens: event.token_usage["total_tokens"] ?? 0,
-                  }
-                : null,
+              token_usage: chatTokenUsageWithCache(event.token_usage),
               extras: {},
             },
           });
@@ -349,15 +363,7 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
-            metadata: event.token_usage
-              ? {
-                  token_usage: {
-                    input_tokens: event.token_usage["input_tokens"] ?? 0,
-                    output_tokens: event.token_usage["output_tokens"] ?? 0,
-                    total_tokens: event.token_usage["total_tokens"] ?? 0,
-                  },
-                }
-              : undefined,
+            metadata: event.token_usage ? { token_usage: chatTokenUsageWithCache(event.token_usage) } : undefined,
           });
           break;
         }

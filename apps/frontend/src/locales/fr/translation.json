@@ -324,7 +324,9 @@
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
       "total_one": "Total : {{count}} token",
-      "total_other": "Total : {{count}} tokens"
+      "total_other": "Total : {{count}} tokens",
+      "cached_one": "{{count}} token servi depuis le cache du fournisseur",
+      "cached_other": "{{count}} tokens servis depuis le cache du fournisseur"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {

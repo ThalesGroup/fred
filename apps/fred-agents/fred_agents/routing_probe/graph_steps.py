@@ -36,7 +36,7 @@ from fred_sdk import (
 )
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from fred_agents.model_metadata import resolved_model_name
+from fred_agents.model_metadata import resolved_model_name, resolved_token_usage
 
 from .graph_state import PhaseRecord, RoutingProbeState
 
@@ -82,11 +82,14 @@ def _make_phase_step(phase: str, operation: str):
             if isinstance(response.content, str)
             else str(response.content)
         )
+        input_tokens, cache_read_tokens = resolved_token_usage(response)
         record = PhaseRecord(
             phase=phase,
             operation=operation,
             model_name=resolved_model_name(response) or "(unknown)",
             reply=reply.strip(),
+            input_tokens=input_tokens,
+            cache_read_tokens=cache_read_tokens,
         )
         return StepResult(
             state_update={"phase_records": [*state.phase_records, record]}
@@ -124,11 +127,14 @@ async def finalize_step(
     lines = [
         "**Routing probe — model resolved per phase:**",
         "",
-        "| Phase | Operation | Model resolved | Reply |",
-        "|---|---|---|---|",
+        "| Phase | Operation | Model resolved | Input tokens | Cache read | Reply |",
+        "|---|---|---|---|---|---|",
     ]
     lines += [
-        f"| {r.phase} | `{r.operation}` | `{r.model_name}` | {r.reply} |"
+        f"| {r.phase} | `{r.operation}` | `{r.model_name}` "
+        f"| {r.input_tokens if r.input_tokens is not None else '-'} "
+        f"| {r.cache_read_tokens if r.cache_read_tokens is not None else '-'} "
+        f"| {r.reply} |"
         for r in state.phase_records
     ]
     return StepResult(

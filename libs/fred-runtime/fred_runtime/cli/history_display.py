@@ -203,9 +203,11 @@ def print_history(
             meta_parts.append(meta["model"])
         tu = meta.get("token_usage")
         if tu:
-            meta_parts.append(
-                f"{tu.get('input_tokens', 0)}↑ {tu.get('output_tokens', 0)}↓"
-            )
+            usage_str = f"{tu.get('input_tokens', 0)}↑ {tu.get('output_tokens', 0)}↓"
+            cache_read = tu.get("cache_read_tokens")
+            if cache_read:
+                usage_str += f" ({cache_read} cached)"
+            meta_parts.append(usage_str)
         meta_str = ""
         if meta_parts:
             meta_str = "  " + colorize(
