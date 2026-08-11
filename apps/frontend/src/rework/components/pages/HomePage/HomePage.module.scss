@@ -16,9 +16,9 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-m);
   margin: 0 auto;
-  padding: var(--spacing-2xl) var(--spacing-l) var(--spacing-3xl);
+  padding: var(--spacing-l);
   width: 100%;
   max-width: 1160px;
   height: 100%;
