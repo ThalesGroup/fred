@@ -80,20 +80,19 @@ def _session(
     )
 
 
-def test_list_inactive_filters_window_and_resolves_agent(monkeypatch) -> None:
+def test_list_inactive_filters_by_cutoff_and_resolves_agent(monkeypatch) -> None:
     teams = [SimpleNamespace(id="personal-user-1"), SimpleNamespace(id="team-a")]
 
     sessions_by_team = {
         "personal-user-1": [
             _session("recent", "personal-user-1", "ag1", days_ago=1),  # too fresh (<5d)
-            _session("stale", "personal-user-1", "ag1", days_ago=10),  # in window
-            _session(
-                "ancient", "personal-user-1", "ag1", days_ago=40
-            ),  # older than 30d
+            _session("stale", "personal-user-1", "ag1", days_ago=10),  # inactive
+            # No period floor — even a very old conversation must surface.
+            _session("ancient", "personal-user-1", "ag1", days_ago=400),  # inactive
         ],
         "team-a": [
-            _session("team-stale", "team-a", "ag2", days_ago=8),  # in window
-            _session("no-agent", "team-a", None, days_ago=9),  # in window, no agent
+            _session("team-stale", "team-a", "ag2", days_ago=8),  # inactive
+            _session("no-agent", "team-a", None, days_ago=9),  # inactive, no agent
         ],
     }
 
@@ -116,22 +115,22 @@ def test_list_inactive_filters_window_and_resolves_agent(monkeypatch) -> None:
     }
 
     result = _run(
-        service.list_inactive_sessions(
-            _user(), _deps(agents), period_days=30, inactive_days=5
-        )
+        service.list_inactive_sessions(_user(), _deps(agents), inactive_days=5)
     )
 
     by_id = {s.session_id: s for s in result.sessions}
-    # Only the three sessions inside [now-30d, now-5d] survive.
-    assert set(by_id) == {"stale", "team-stale", "no-agent"}
+    # Everything older than the 5-day cutoff survives — only "recent" is dropped,
+    # and "ancient" is kept despite being 400 days old (no period bound).
+    assert set(by_id) == {"stale", "team-stale", "no-agent", "ancient"}
     assert by_id["stale"].agent_name == "Rédacteur AO"
     assert by_id["team-stale"].agent_name == "Analyste"
     assert by_id["no-agent"].agent_name is None
-    # Newest-first ordering (team-stale @8d before no-agent @9d before stale @10d).
+    # Newest-first ordering (8d, 9d, 10d, 400d).
     assert [s.session_id for s in result.sessions] == [
         "team-stale",
         "no-agent",
         "stale",
+        "ancient",
     ]
 
 

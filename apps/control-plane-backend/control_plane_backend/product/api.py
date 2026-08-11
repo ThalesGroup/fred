@@ -1434,20 +1434,17 @@ async def get_team_sessions(
 )
 async def get_my_inactive_sessions(
     deps: ProductDependencies,
-    period_days: Annotated[int, Query(ge=1, le=365)] = 30,
     inactive_days: Annotated[int, Query(ge=1, le=365)] = 5,
     user: KeycloakUser = Depends(get_current_user),
 ) -> InactiveSessionsResponse:
     """Every conversation the caller owns that has had no activity for more than
-    `inactive_days`, last touched within the `period_days` look-back window,
-    across their personal space and each team they belong to.
+    `inactive_days`, across their personal space and each team they belong to.
 
-    Self-scoped: only the caller's own sessions are returned (the service filters
-    by `user_id`), so no per-team permission gate is needed here.
+    Not period-scoped — a cleanup tool surfaces every stale conversation however
+    old. Self-scoped: only the caller's own sessions are returned (the service
+    filters by `user_id`), so no per-team permission gate is needed here.
     """
-    return await list_inactive_sessions(
-        user, deps, period_days=period_days, inactive_days=inactive_days
-    )
+    return await list_inactive_sessions(user, deps, inactive_days=inactive_days)
 
 
 @router.post(

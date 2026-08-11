@@ -492,7 +492,6 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/me/inactive-sessions`,
         params: {
-          period_days: queryArg.periodDays,
           inactive_days: queryArg.inactiveDays,
         },
       }),
@@ -1428,7 +1427,6 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
   /** status 200 Successful Response */ InactiveSessionsResponse;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
-  periodDays?: number;
   inactiveDays?: number;
 };
 export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse =

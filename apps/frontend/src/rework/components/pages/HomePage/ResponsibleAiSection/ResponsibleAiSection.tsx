@@ -148,19 +148,18 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
       ? "—"
       : `≈ ${nf(1).format(usage.co2e)} g CO₂e · ${nf(2).format(usage.kwh)} kWh`;
 
-  // LIVE — the caller's inactive conversations across every space, over the
-  // period. The count feeds the tile; the same rows, grouped by space, feed the
-  // cleanup dialog. team_id → display name comes from bootstrap.
+  // LIVE — the caller's inactive conversations across every space. Deliberately
+  // NOT period-scoped (unlike the tiles above): a cleanup tool should surface
+  // every stale conversation, however old, so the user can clear as much as
+  // possible. The count feeds the tile; the same rows, grouped by space, feed
+  // the cleanup dialog. team_id → display name comes from bootstrap.
   const { availableTeams } = useFrontendBootstrap();
   const teamNameById = useMemo(() => new Map(availableTeams.map((tm) => [tm.id, tm.name])), [availableTeams]);
   const {
     data: inactiveData,
     isLoading: inactiveLoading,
     isError: inactiveError,
-  } = useMyInactiveSessionsQuery(
-    { periodDays: period, inactiveDays: INACTIVE_DAYS },
-    { refetchOnMountOrArgChange: 300 },
-  );
+  } = useMyInactiveSessionsQuery({ inactiveDays: INACTIVE_DAYS }, { refetchOnMountOrArgChange: 300 });
   const [bulkDeleteSessions] = useBulkDeleteMySessionsMutation();
 
   const { conversationGroups, teamIdBySession } = useMemo(() => {

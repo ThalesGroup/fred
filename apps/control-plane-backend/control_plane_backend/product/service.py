@@ -4151,22 +4151,20 @@ async def list_inactive_sessions(
     user: KeycloakUser,
     deps: ProductServiceDependencies,
     *,
-    period_days: int,
     inactive_days: int,
 ) -> InactiveSessionsResponse:
     """The caller's conversations that have gone quiet, across every space they
     belong to (personal + each team) — home dashboard cleanup tool (#2298).
 
     "Inactive" = no activity for more than `inactive_days` (updated_at older than
-    the cutoff). `period_days` is the look-back window (the home period selector):
-    only conversations last touched within it are considered, so the count grows
-    monotonically as the window widens and every home stat stays period-scoped.
-    The agent display name is resolved here (one batch lookup per space) so the
-    frontend cleanup list needs no extra call.
+    the cutoff). Deliberately NOT period-scoped: a cleanup tool should surface
+    every stale conversation, however old, so the user can clear as much as
+    possible — the home period selector doesn't apply here. The agent display
+    name is resolved here (one batch lookup per space) so the cleanup list needs
+    no extra call.
     """
     now = _utcnow()
     cutoff = now - timedelta(days=inactive_days)
-    floor = now - timedelta(days=period_days)
 
     teams = await list_teams_from_service(user, deps.team_dependencies)
 
@@ -4177,8 +4175,7 @@ async def list_inactive_sessions(
         inactive = [
             s
             for s in sessions
-            if s.updated_at is not None
-            and floor <= _as_aware_utc(s.updated_at) <= cutoff
+            if s.updated_at is not None and _as_aware_utc(s.updated_at) <= cutoff
         ]
         if not inactive:
             return []
