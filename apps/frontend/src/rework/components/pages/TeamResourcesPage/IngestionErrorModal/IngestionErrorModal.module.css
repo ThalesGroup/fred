@@ -13,49 +13,11 @@
  * limitations under the License.
  */
 
-/* Mirrors RenameModal/CreateFolderModal's shell so every centred modal looks identical. */
-.overlay {
-  display: flex;
-  position: fixed;
-  justify-content: center;
-  align-items: center;
-  z-index: 1300;
-  inset: 0;
-  background-color: var(--scrim);
-}
-
-.dialog {
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-l);
-  border-radius: var(--radius-m);
-  background-color: var(--surface-container-high);
-  width: min(520px, 90vw);
-  color: var(--on-surface);
-}
-
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-s);
-  padding: var(--spacing-m);
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-s);
-}
-
-.title {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-medium);
-}
+/* Body content only — the dialog shell (overlay, panel, title, action bar)
+ * belongs to the shared Dialog molecule. */
 
 .documentName {
-  margin: 0;
+  margin: 0 0 var(--spacing-s);
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
   overflow-wrap: anywhere;
@@ -93,12 +55,4 @@
   font: var(--font-body-medium);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-xs);
-  border-top: 1px solid var(--outline-retreat);
-  padding: var(--spacing-s) var(--spacing-m);
 }

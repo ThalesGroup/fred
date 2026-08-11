@@ -200,6 +200,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // here like any other navigation, so this stack alone can't answer that.
   const [, setNavigationHistory] = useState<(string | null)[]>([]);
   const [perTag, setPerTag] = useState<Record<string, PageState>>({});
+  // Latest page offsets, for the status-poll interval below: it reads them when
+  // it fires, and must not resubscribe every time a page loads.
+  const perTagRef = useRef(perTag);
+  perTagRef.current = perTag;
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
   const [renameTarget, setRenameTarget] = useState<
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
@@ -349,18 +353,28 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // Port of main's DocumentLibraryList polling loop: while any loaded row is
   // (or is pinned) "processing", reload the folder pages showing it so the
   // badge flips to Ready/Failed without a manual refresh.
+  const pendingTagIds = useMemo(
+    () =>
+      Object.entries(perTag)
+        .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
+        .map(([tagId]) => tagId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getDocStatus is
+    // rebuilt every render; its inputs (perTag, the overrides and the live task
+    // map) are the real dependencies.
+    [perTag, reprocessOverrides, activeDocTaskByUid],
+  );
+  // Keyed on the ids themselves, not the array identity: the live task map is a
+  // new object on every SSE event, and depending on it directly tore down and
+  // restarted the interval on each one — so during a bulk ingestion, when this
+  // refresh matters most, the 3s never elapsed and the folder never reloaded.
+  const pendingTagKey = pendingTagIds.join(",");
   useEffect(() => {
-    const pendingTagIds = Object.entries(perTag)
-      .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
-      .map(([tagId]) => tagId);
-    if (pendingTagIds.length === 0) return;
+    if (!pendingTagKey) return;
     const interval = setInterval(() => {
-      for (const tagId of pendingTagIds) void loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
+      for (const tagId of pendingTagKey.split(",")) void loadTagPage(tagId, perTagRef.current[tagId]?.offset ?? 0);
     }, DOC_STATUS_POLL_MS);
     return () => clearInterval(interval);
-    // activeDocTaskByUid: getDocStatus now also reads the live task map, so a
-    // row can turn "processing" (and need polling) without perTag changing.
-  }, [perTag, reprocessOverrides, loadTagPage, activeDocTaskByUid]);
+  }, [pendingTagKey, loadTagPage, perTagRef]);
 
   const commands = useDocumentCommands({
     refetchTags,
@@ -499,14 +513,11 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     [activeDocTaskByUid, cancelTask, showConfirmationDialog, showSuccess, showError, t],
   );
 
+  // Derived from the same map the badge and the row menu read, so "this row has
+  // a live ingestion" has one definition in this page instead of three.
   const runningDocIds = useMemo(
-    () =>
-      new Set(
-        activeTasks
-          .filter((task) => task.target?.type === "document" && task.state !== "failed")
-          .map((task) => task.target?.id),
-      ),
-    [activeTasks],
+    () => new Set([...activeDocTaskByUid].filter(([, task]) => task.state !== "failed").map(([uid]) => uid)),
+    [activeDocTaskByUid],
   );
 
   const prevRunningDocIdsRef = useMemo(() => ({ current: new Set<string | undefined>() }), []);

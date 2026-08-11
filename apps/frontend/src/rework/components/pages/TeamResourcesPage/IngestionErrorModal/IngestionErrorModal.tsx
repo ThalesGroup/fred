@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { Portal } from "@shared/utils/Portal.tsx";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./IngestionErrorModal.module.css";
 
@@ -36,68 +33,32 @@ interface IngestionErrorModalProps {
  */
 export default function IngestionErrorModal({ doc, onClose }: IngestionErrorModalProps) {
   const { t } = useTranslation();
-  const open = doc !== null;
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
-
   if (!doc) return null;
 
   const errors = Object.entries(doc.processing?.errors ?? {});
 
   return (
-    <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={onClose}>
-        <div
-          className={styles.dialog}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ingestion-error-title"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className={styles.body}>
-            <div className={styles.header}>
-              <p id="ingestion-error-title" className={styles.title}>
-                {t("rework.resources.errorModal.title")}
-              </p>
-              <IconButton
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "close" }}
-                aria-label={t("common.close")}
-                onClick={onClose}
-              />
+    <Dialog
+      open
+      title={t("rework.resources.errorModal.title")}
+      confirmLabel={t("common.close")}
+      onConfirm={onClose}
+      onCancel={onClose}
+      hideCancel
+    >
+      <p className={styles.documentName}>{doc.identity.document_name}</p>
+      {errors.length === 0 ? (
+        <p className={styles.empty}>{t("rework.resources.errorModal.empty")}</p>
+      ) : (
+        <dl className={styles.errorList}>
+          {errors.map(([stage, message]) => (
+            <div key={stage} className={styles.errorEntry}>
+              <dt className={styles.stage}>{stage}</dt>
+              <dd className={styles.message}>{message}</dd>
             </div>
-
-            <p className={styles.documentName}>{doc.identity.document_name}</p>
-
-            {errors.length === 0 ? (
-              <p className={styles.empty}>{t("rework.resources.errorModal.empty")}</p>
-            ) : (
-              <dl className={styles.errorList}>
-                {errors.map(([stage, message]) => (
-                  <div key={stage} className={styles.errorEntry}>
-                    <dt className={styles.stage}>{stage}</dt>
-                    <dd className={styles.message}>{message}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-          </div>
-
-          <div className={styles.actions}>
-            <Button color="on-surface" variant="outlined" size="medium" onClick={onClose}>
-              {t("common.close")}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Portal>
+          ))}
+        </dl>
+      )}
+    </Dialog>
   );
 }
