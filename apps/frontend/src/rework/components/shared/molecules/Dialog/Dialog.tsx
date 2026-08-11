@@ -33,6 +33,9 @@ interface DialogProps {
   cancelLabel?: string;
   /** Disables the confirm button (e.g. empty/invalid input, request in flight). */
   confirmDisabled?: boolean;
+  /** Hide the cancel button for a single-action dialog (e.g. an info dialog
+   *  whose only action is "Got it"). Escape and click-outside still dismiss. */
+  hideCancel?: boolean;
 }
 
 /**
@@ -54,6 +57,7 @@ export function Dialog({
   onCancel,
   cancelLabel,
   confirmDisabled = false,
+  hideCancel = false,
 }: DialogProps) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -86,9 +90,11 @@ export function Dialog({
           </div>
           <div className={styles.content}>{children}</div>
           <div className={styles.actions}>
-            <Button color="on-surface" variant="text" size="medium" onClick={onCancel}>
-              {cancelLabel ?? t("common.cancel")}
-            </Button>
+            {!hideCancel && (
+              <Button color="on-surface" variant="text" size="medium" onClick={onCancel}>
+                {cancelLabel ?? t("common.cancel")}
+              </Button>
+            )}
             <Button color="primary" variant="filled" size="medium" disabled={confirmDisabled} onClick={onConfirm}>
               {confirmLabel}
             </Button>

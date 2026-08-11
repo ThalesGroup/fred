@@ -49,7 +49,7 @@ export default function TopTeams({ period }: TopTeamsProps) {
 
   const items: RankedItem[] = memberTeams
     .map((team) => {
-      const topRole = ROLE_ORDER.find((role) => (team.my_relations ?? []).includes(role));
+      const roles = ROLE_ORDER.filter((role) => (team.my_relations ?? []).includes(role));
       const avatar = team.avatar_image_url ? (
         <img className={styles.avatar} src={team.avatar_image_url} alt="" aria-hidden="true" />
       ) : (
@@ -64,7 +64,7 @@ export default function TopTeams({ period }: TopTeamsProps) {
       return {
         key: team.id,
         label: team.name,
-        sublabel: topRole ? t(`rework.home.topTeams.role.${topRole}`) : undefined,
+        sublabel: roles.length ? roles.map((role) => t(`rework.home.topTeams.role.${role}`)).join(" · ") : undefined,
         value: Math.round((baseActivity(team.id) * period) / 7),
         unit: t("rework.home.topTeams.unit"),
         leading: avatar,

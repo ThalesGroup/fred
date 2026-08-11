@@ -19,7 +19,7 @@
 .card {
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
-  background: var(--surface-container-highest);
+  background: var(--surface-container-high);
   padding: var(--spacing-m);
 }
 
@@ -34,7 +34,7 @@
   align-items: flex-start;
   gap: var(--spacing-s);
   border-radius: var(--radius-s);
-  background: var(--surface-container-high);
+  background: var(--surface-container-low);
   padding: var(--spacing-s);
 }
 
@@ -78,6 +78,38 @@
   vertical-align: -3px;
   margin-right: 4px;
   font-size: 15px;
+}
+
+/* ── Footprint info dialog ─────────────────────────────────────────────────── */
+
+.infoBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: 100%;
+}
+
+.infoBody p {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.infoSubhead {
+  margin-top: var(--spacing-2xs);
+  color: var(--on-surface);
+  font: var(--font-title-small-emphasized);
+}
+
+.infoList {
+  margin: 0;
+  padding-left: var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.infoList li {
+  margin-top: var(--spacing-2xs);
 }
 
 @media (max-width: 640px) {

@@ -1520,6 +1520,17 @@
           "message": "You are about to permanently delete all your conversations inactive for more than 5 days, in your personal space as well as in your teams. This action cannot be undone.",
           "confirm": "Delete all",
           "toast": "Inactive conversations deleted"
+        },
+        "footprintInfo": {
+          "aria": "How is this estimate calculated?",
+          "title": "Where does this estimate come from?",
+          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
+          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "limitsTitle": "Good to keep in mind",
+          "limit1": "It's an estimate, not an exact measurement.",
+          "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
+          "limit3": "The goal is to give an order of magnitude to raise awareness, not a precise figure.",
+          "confirm": "Got it"
         }
       },
       "topPrompts": {
@@ -1560,7 +1571,8 @@
         "deltaUp": "▲ {{count}}%",
         "deltaDown": "▼ {{count}}%",
         "deltaFlat": "flat",
-        "vsPrevious": "vs previous period"
+        "vsPrevious": "vs previous period",
+        "periodCaption": "over the last {{count}} days"
       }
     },
     "mainNav": {

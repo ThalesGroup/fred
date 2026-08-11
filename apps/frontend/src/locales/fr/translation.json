@@ -1520,6 +1520,17 @@
           "message": "Vous êtes sur le point de supprimer définitivement toutes vos conversations inactives depuis plus de 5 jours, aussi bien dans votre espace personnel que dans vos équipes. Cette action est irréversible.",
           "confirm": "Tout supprimer",
           "toast": "Conversations inactives supprimées"
+        },
+        "footprintInfo": {
+          "aria": "Comment est calculée cette estimation ?",
+          "title": "D'où vient cette estimation ?",
+          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA à partir de la quantité de texte traité (ce qu'on appelle les « tokens »). Plus vous échangez de texte avec l'IA, plus la consommation estimée augmente.",
+          "convert": "Cette énergie est ensuite convertie en CO₂ selon l'électricité utilisée pour faire fonctionner l'IA.",
+          "limitsTitle": "Ce qu'il faut garder en tête",
+          "limit1": "C'est une estimation, pas une mesure exacte.",
+          "limit2": "La consommation réelle dépend des serveurs, du modèle d'IA et de la région où il fonctionne.",
+          "limit3": "L'objectif est de donner un ordre de grandeur pour sensibiliser, pas un chiffre précis.",
+          "confirm": "J'ai compris"
         }
       },
       "topPrompts": {
@@ -1560,7 +1571,8 @@
         "deltaUp": "▲ {{count}} %",
         "deltaDown": "▼ {{count}} %",
         "deltaFlat": "stable",
-        "vsPrevious": "vs période précédente"
+        "vsPrevious": "vs période précédente",
+        "periodCaption": "sur les {{count}} derniers jours"
       }
     },
     "mainNav": {

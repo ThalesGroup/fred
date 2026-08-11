@@ -12,10 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  type MarketplacePromptSummary,
+  useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
+  useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { HomePeriod } from "../HomePage.tsx";
+import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
 import Sparkline from "../Sparkline/Sparkline.tsx";
 import styles from "./MarketplaceTopPrompts.module.scss";
 
@@ -47,6 +54,17 @@ export default function MarketplaceTopPrompts({ period }: MarketplaceTopPromptsP
   const { data: prompts = [] } = useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery();
   const top = [...prompts].sort((a, b) => (b.session_count ?? 0) - (a.session_count ?? 0)).slice(0, TOP_N);
 
+  const [viewingPrompt, setViewingPrompt] = useState<MarketplacePromptSummary | null>(null);
+  const [recordUse] = usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation();
+
+  // Same read-only view as the marketplace: fetch the full text on demand when a
+  // card is opened, guarding against a stale previous-prompt result.
+  const { data: rawViewDetail } = useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery(
+    { promptId: viewingPrompt?.id || "" },
+    { skip: !viewingPrompt },
+  );
+  const viewDetail = rawViewDetail && rawViewDetail.id === viewingPrompt?.id ? rawViewDetail : undefined;
+
   return (
     <section className={styles.section} aria-label={t("rework.home.topPrompts.title")}>
       <div className={styles.head}>
@@ -63,7 +81,14 @@ export default function MarketplaceTopPrompts({ period }: MarketplaceTopPromptsP
             const series = mockWeekSeries(uses);
             const weekDelta = series[series.length - 1] - series[0];
             return (
-              <div key={prompt.id} className={styles.card}>
+              <div
+                key={prompt.id}
+                className={styles.card}
+                role="button"
+                tabIndex={0}
+                onClick={() => setViewingPrompt(prompt)}
+                onKeyDown={(e) => e.key === "Enter" && setViewingPrompt(prompt)}
+              >
                 <span className={styles.team}>{prompt.team_name}</span>
                 <span className={styles.name}>{prompt.name}</span>
                 <div className={styles.foot}>
@@ -83,6 +108,25 @@ export default function MarketplaceTopPrompts({ period }: MarketplaceTopPromptsP
           })}
         </div>
       )}
+
+      <PromptViewDialog
+        open={!!viewingPrompt}
+        preloadedDetail={
+          viewDetail
+            ? {
+                id: viewDetail.id,
+                name: viewDetail.name,
+                description: viewDetail.description,
+                text: viewDetail.text,
+              }
+            : null
+        }
+        chipLabel={viewingPrompt?.team_name ?? null}
+        onCopied={() => {
+          if (viewingPrompt) recordUse({ promptId: viewingPrompt.id });
+        }}
+        onClose={() => setViewingPrompt(null)}
+      />
     </section>
   );
 }

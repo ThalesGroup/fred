@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
+import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { IconType } from "@shared/utils/Type.ts";
 import type { HomePeriod } from "../HomePage.tsx";
@@ -32,6 +34,8 @@ interface Indicator {
   action?: string;
   /** Shows the "delete all unused conversations" affordance on this tile. */
   cleanup?: boolean;
+  /** Shows an info button opening the footprint-methodology dialog. */
+  info?: boolean;
 }
 
 // PLACEHOLDER DATA — these metrics need aggregation the frontend doesn't have
@@ -46,6 +50,14 @@ interface Indicator {
 // - a file is "unused" after 15 days without being used (hardcoded, likewise).
 // Widening the window can only add matches, so these counts are monotonic
 // non-decreasing as the period grows.
+//
+// SCOPE — the "files" indicator counts the caller's PERSONAL space only
+// (personal-<uid>): it is their own storage, freely deletable ("free up your
+// storage"). Team files are deliberately excluded — they are shared, "unused"
+// there is a collective (not personal) notion, and deletion is permission-
+// gated. A team-level "unused team resources" signal, if ever needed, belongs
+// in a separate editor/admin-facing indicator. (Conversations, by contrast,
+// span the personal space AND every team the user belongs to.)
 const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
   7: [
     {
@@ -59,12 +71,18 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
     {
       tone: "warn",
       icon: "description",
-      value: "6 fichiers · 90 Mo",
+      value: "6 fichiers personnels · 90 Mo",
       caption: "jamais utilisés depuis plus de 15 jours",
       action: "Supprimer pour libérer votre stockage",
     },
     { tone: "info", icon: "show_chart", value: "280 k tokens", caption: "consommés sur les 7 derniers jours" },
-    { tone: "eco", icon: "cloud", value: "≈ 26 g CO₂e · 0,2 kWh", caption: "empreinte estimée de vos échanges" },
+    {
+      tone: "eco",
+      icon: "cloud",
+      value: "≈ 26 g CO₂e · 0,2 kWh",
+      caption: "empreinte estimée de vos échanges",
+      info: true,
+    },
   ],
   30: [
     {
@@ -78,12 +96,18 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
     {
       tone: "warn",
       icon: "description",
-      value: "19 fichiers · 260 Mo",
+      value: "19 fichiers personnels · 260 Mo",
       caption: "jamais utilisés depuis plus de 15 jours",
       action: "Supprimer pour libérer votre stockage",
     },
     { tone: "info", icon: "show_chart", value: "1,2 M tokens", caption: "consommés sur les 30 derniers jours" },
-    { tone: "eco", icon: "cloud", value: "≈ 110 g CO₂e · 0,9 kWh", caption: "empreinte estimée de vos échanges" },
+    {
+      tone: "eco",
+      icon: "cloud",
+      value: "≈ 110 g CO₂e · 0,9 kWh",
+      caption: "empreinte estimée de vos échanges",
+      info: true,
+    },
   ],
   90: [
     {
@@ -97,12 +121,18 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
     {
       tone: "warn",
       icon: "description",
-      value: "37 fichiers · 540 Mo",
+      value: "37 fichiers personnels · 540 Mo",
       caption: "jamais utilisés depuis plus de 15 jours",
       action: "Supprimer pour libérer votre stockage",
     },
     { tone: "info", icon: "show_chart", value: "3,4 M tokens", caption: "consommés sur les 90 derniers jours" },
-    { tone: "eco", icon: "cloud", value: "≈ 320 g CO₂e · 2,6 kWh", caption: "empreinte estimée de vos échanges" },
+    {
+      tone: "eco",
+      icon: "cloud",
+      value: "≈ 320 g CO₂e · 2,6 kWh",
+      caption: "empreinte estimée de vos échanges",
+      info: true,
+    },
   ],
 };
 
@@ -117,6 +147,7 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { showSuccess } = useToast();
+  const [footprintInfoOpen, setFootprintInfoOpen] = useState(false);
   const indicators = INDICATORS_BY_PERIOD[period];
 
   const handleCleanup = () => {
@@ -171,10 +202,40 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
                   />
                 </Tooltip>
               )}
+              {ind.info && (
+                <IconButton
+                  size="small"
+                  color="on-surface-retreat"
+                  variant="icon"
+                  icon={{ category: "outlined", type: "info" }}
+                  aria-label={t("rework.home.responsible.footprintInfo.aria")}
+                  onClick={() => setFootprintInfoOpen(true)}
+                />
+              )}
             </div>
           ))}
         </div>
       </div>
+
+      <Dialog
+        open={footprintInfoOpen}
+        title={t("rework.home.responsible.footprintInfo.title")}
+        confirmLabel={t("rework.home.responsible.footprintInfo.confirm")}
+        hideCancel
+        onConfirm={() => setFootprintInfoOpen(false)}
+        onCancel={() => setFootprintInfoOpen(false)}
+      >
+        <div className={styles.infoBody}>
+          <p>{t("rework.home.responsible.footprintInfo.how")}</p>
+          <p>{t("rework.home.responsible.footprintInfo.convert")}</p>
+          <p className={styles.infoSubhead}>{t("rework.home.responsible.footprintInfo.limitsTitle")}</p>
+          <ul className={styles.infoList}>
+            <li>{t("rework.home.responsible.footprintInfo.limit1")}</li>
+            <li>{t("rework.home.responsible.footprintInfo.limit2")}</li>
+            <li>{t("rework.home.responsible.footprintInfo.limit3")}</li>
+          </ul>
+        </div>
+      </Dialog>
     </section>
   );
 }

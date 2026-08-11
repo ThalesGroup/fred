@@ -21,12 +21,12 @@ import RankedList, { type RankedItem } from "../RankedList/RankedList.tsx";
 // endpoint yet (`top_agents_by_conversations` is platform-scoped). Base counts
 // are the 7-day figures; the period scales them up (more days → more usage), so
 // the ranking is period-scoped. Swap for a real user-scoped KPI before shipping.
-const AGENTS: { name: string; role: string; base: number }[] = [
-  { name: "Rédacteur d'appel d'offres", role: "Rédaction", base: 20 },
-  { name: "Analyste documentaire", role: "Analyse doc", base: 14 },
-  { name: "Créatif — nommage & slogans", role: "Créatif", base: 10 },
-  { name: "Traducteur juridique", role: "Traduction", base: 8 },
-  { name: "Assistant réunion", role: "Productivité", base: 6 },
+const AGENTS: { name: string; team: string; base: number }[] = [
+  { name: "Rédacteur d'appel d'offres", team: "Bid & Capture", base: 20 },
+  { name: "Analyste documentaire", team: "Conformité & RH", base: 14 },
+  { name: "Créatif — nommage & slogans", team: "Marketing", base: 10 },
+  { name: "Traducteur juridique", team: "Legal", base: 8 },
+  { name: "Assistant réunion", team: "Communication", base: 6 },
 ];
 
 interface TopAgentsProps {
@@ -39,7 +39,7 @@ export default function TopAgents({ period }: TopAgentsProps) {
   const items: RankedItem[] = AGENTS.map((a) => ({
     key: a.name,
     label: a.name,
-    sublabel: a.role,
+    sublabel: a.team,
     value: Math.round((a.base * period) / 7),
     unit: t("rework.home.topAgents.unit"),
   }));

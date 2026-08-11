@@ -20,14 +20,31 @@ import styles from "./ActivityKpis.module.scss";
 interface Kpi {
   key: "conversations" | "messages" | "agents";
   value: string;
-  /** Percentage change vs the previous same-length period; sign drives direction. */
+  /** Percentage change vs the previous same-length window; sign drives direction. */
   delta: number;
 }
 
-// PLACEHOLDER DATA — activity counts and their period-over-period deltas need
-// user-scoped KPI presets (messages_over_time, sessions_over_time,
-// top_agents_by_conversations). Static example values per period for the
-// prototype; swap for real queries before shipping.
+// PLACEHOLDER DATA — static example values per period for the prototype; swap
+// for real user-scoped queries before shipping.
+//
+// Trend chip = trailing-window vs previous equal-length window (validated
+// design). For today = D and a selected period of N days:
+//   - value ("current")  = sum/count over [D-N, D]
+//   - baseline ("prev")  = same metric over [D-2N, D-N]
+//   - delta% = round((current - prev) / prev * 100); the sign drives ▲/▼.
+// So 7 j compares the last 7 days to the 7 days before, 30 j the last 30 to the
+// prior 30, etc. — consistent with the "sur les X derniers jours" caption.
+//
+// Edge cases: prev == 0 && current > 0 -> show a "new" marker, not a %;
+// prev == 0 && current == 0 -> flat (0%); round to an integer and optionally
+// cap the displayed magnitude (e.g. ">999%").
+//
+// Per metric, over each window:
+//   - conversations -> count of sessions created (sessions_over_time)
+//   - messages      -> count of messages sent (messages_over_time)
+//   - agents        -> count of DISTINCT agents used (not a plain sum;
+//                      derive from top_agents_by_conversations / a distinct
+//                      user-scoped aggregation)
 const KPIS_BY_PERIOD: Record<HomePeriod, Kpi[]> = {
   7: [
     { key: "conversations", value: "24", delta: 18 },
@@ -80,7 +97,7 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
                 </span>
               </div>
               <div className={styles.value}>{kpi.value}</div>
-              <div className={styles.caption}>{t("rework.home.activity.vsPrevious")}</div>
+              <div className={styles.caption}>{t("rework.home.activity.periodCaption", { count: period })}</div>
             </div>
           );
         })}
