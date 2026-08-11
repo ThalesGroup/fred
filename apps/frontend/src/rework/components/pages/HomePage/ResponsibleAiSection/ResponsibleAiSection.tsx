@@ -17,23 +17,23 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { IconType } from "@shared/utils/Type.ts";
 import type { HomePeriod } from "../HomePage.tsx";
+import CleanupDialog, { type CleanupGroup } from "../CleanupDialog/CleanupDialog.tsx";
 import styles from "./ResponsibleAiSection.module.scss";
 
 type IndicatorTone = "warn" | "info" | "eco";
+type CleanupKind = "conversations" | "files";
 
 interface Indicator {
   tone: IndicatorTone;
   icon: IconType;
   value: string;
   caption: string;
-  action?: string;
-  /** Shows the "delete all unused conversations" affordance on this tile. */
-  cleanup?: boolean;
+  /** Opens the matching cleanup tool from this tile. */
+  cleanupKind?: CleanupKind;
   /** Shows an info button opening the footprint-methodology dialog. */
   info?: boolean;
 }
@@ -52,28 +52,25 @@ interface Indicator {
 // non-decreasing as the period grows.
 //
 // SCOPE — the "files" indicator counts the caller's PERSONAL space only
-// (personal-<uid>): it is their own storage, freely deletable ("free up your
-// storage"). Team files are deliberately excluded — they are shared, "unused"
-// there is a collective (not personal) notion, and deletion is permission-
-// gated. A team-level "unused team resources" signal, if ever needed, belongs
-// in a separate editor/admin-facing indicator. (Conversations, by contrast,
-// span the personal space AND every team the user belongs to.)
+// (personal-<uid>): it is their own storage, freely deletable. Team files are
+// deliberately excluded — they are shared, "unused" there is a collective (not
+// personal) notion, and deletion is permission-gated. (Conversations, by
+// contrast, span the personal space AND every team the user belongs to.)
 const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
   7: [
     {
       tone: "warn",
       icon: "forum",
-      value: "4 conversations",
-      caption: "sans activité depuis plus de 5 jours",
-      action: "Faire le tri pour alléger la plateforme",
-      cleanup: true,
+      value: "4 conversations inactives",
+      caption: "depuis plus de 5 jours",
+      cleanupKind: "conversations",
     },
     {
       tone: "warn",
       icon: "description",
-      value: "6 fichiers personnels · 90 Mo",
-      caption: "jamais utilisés depuis plus de 15 jours",
-      action: "Supprimer pour libérer votre stockage",
+      value: "6 fichiers personnels non utilisés (90 Mo)",
+      caption: "depuis plus de 15 jours",
+      cleanupKind: "files",
     },
     { tone: "info", icon: "show_chart", value: "280 k tokens", caption: "consommés sur les 7 derniers jours" },
     {
@@ -88,17 +85,16 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
     {
       tone: "warn",
       icon: "forum",
-      value: "17 conversations",
-      caption: "sans activité depuis plus de 5 jours",
-      action: "Faire le tri pour alléger la plateforme",
-      cleanup: true,
+      value: "17 conversations inactives",
+      caption: "depuis plus de 5 jours",
+      cleanupKind: "conversations",
     },
     {
       tone: "warn",
       icon: "description",
-      value: "19 fichiers personnels · 260 Mo",
-      caption: "jamais utilisés depuis plus de 15 jours",
-      action: "Supprimer pour libérer votre stockage",
+      value: "19 fichiers personnels non utilisés (260 Mo)",
+      caption: "depuis plus de 15 jours",
+      cleanupKind: "files",
     },
     { tone: "info", icon: "show_chart", value: "1,2 M tokens", caption: "consommés sur les 30 derniers jours" },
     {
@@ -113,17 +109,16 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
     {
       tone: "warn",
       icon: "forum",
-      value: "39 conversations",
-      caption: "sans activité depuis plus de 5 jours",
-      action: "Faire le tri pour alléger la plateforme",
-      cleanup: true,
+      value: "39 conversations inactives",
+      caption: "depuis plus de 5 jours",
+      cleanupKind: "conversations",
     },
     {
       tone: "warn",
       icon: "description",
-      value: "37 fichiers personnels · 540 Mo",
-      caption: "jamais utilisés depuis plus de 15 jours",
-      action: "Supprimer pour libérer votre stockage",
+      value: "37 fichiers personnels non utilisés (540 Mo)",
+      caption: "depuis plus de 15 jours",
+      cleanupKind: "files",
     },
     { tone: "info", icon: "show_chart", value: "3,4 M tokens", caption: "consommés sur les 90 derniers jours" },
     {
@@ -136,6 +131,46 @@ const INDICATORS_BY_PERIOD: Record<HomePeriod, Indicator[]> = {
   ],
 };
 
+// PLACEHOLDER — the cleanup tools list example items. Real data: inactive
+// sessions grouped by space (personal + each team), and unused personal files.
+const INACTIVE_CONVERSATIONS: CleanupGroup[] = [
+  {
+    key: "personal",
+    label: "Espace personnel",
+    items: [
+      { id: "c1", title: "Analyse d'appel d'offres — SNCF", meta: "Rédacteur AO" },
+      { id: "c2", title: "Brainstorm nommage produit", meta: "Créatif" },
+      { id: "c3", title: "Résumé de réunion Q2", meta: "Assistant réunion" },
+    ],
+  },
+  {
+    key: "bid",
+    label: "Bid & Capture",
+    items: [
+      { id: "c4", title: "Réponse technique — Région Grand Est", meta: "Rédacteur AO" },
+      { id: "c5", title: "Relecture du mémoire technique", meta: "Analyste documentaire" },
+    ],
+  },
+  {
+    key: "mkt",
+    label: "Marketing",
+    items: [{ id: "c6", title: "Idées de slogans — campagne été", meta: "Créatif" }],
+  },
+];
+
+const UNUSED_FILES: CleanupGroup[] = [
+  {
+    key: "personal",
+    label: "Espace personnel",
+    items: [
+      { id: "f1", title: "rapport-annuel-2024.pdf", meta: "18 Mo" },
+      { id: "f2", title: "notes-brouillon.docx", meta: "2 Mo" },
+      { id: "f3", title: "export-donnees-clients.xlsx", meta: "7 Mo" },
+      { id: "f4", title: "presentation-produit-v1.pptx", meta: "24 Mo" },
+    ],
+  },
+];
+
 interface ResponsibleAiSectionProps {
   period: HomePeriod;
 }
@@ -145,23 +180,18 @@ interface ResponsibleAiSectionProps {
  * the selected period. */
 export default function ResponsibleAiSection({ period }: ResponsibleAiSectionProps) {
   const { t } = useTranslation();
-  const { showConfirmationDialog } = useConfirmationDialog();
   const { showSuccess } = useToast();
   const [footprintInfoOpen, setFootprintInfoOpen] = useState(false);
+  const [cleanupKind, setCleanupKind] = useState<CleanupKind | null>(null);
   const indicators = INDICATORS_BY_PERIOD[period];
 
-  const handleCleanup = () => {
-    showConfirmationDialog({
-      criticalAction: true,
-      title: t("rework.home.responsible.cleanup.title"),
-      message: t("rework.home.responsible.cleanup.message"),
-      confirmButtonLabel: t("rework.home.responsible.cleanup.confirm"),
-      onConfirm: () => {
-        // PLACEHOLDER: no bulk "delete inactive conversations" endpoint exists
-        // yet. Wire it (personal space + every team, > 5 days inactive) here.
-        showSuccess({ summary: t("rework.home.responsible.cleanup.toast") });
-      },
-    });
+  const isFiles = cleanupKind === "files";
+
+  const handleCleanupConfirm = (ids: string[]) => {
+    // PLACEHOLDER: no bulk delete endpoint exists yet. Wire the real deletion
+    // (personal space + teams for conversations; personal space for files) here.
+    showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: ids.length }) });
+    setCleanupKind(null);
   };
 
   return (
@@ -181,24 +211,16 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
               <div className={styles.body}>
                 <div className={styles.value}>{ind.value}</div>
                 <div className={styles.caption}>{ind.caption}</div>
-                {ind.action && (
-                  <div className={styles.action}>
-                    <span className={styles.actionIcon}>
-                      <Icon category="outlined" type="lightbulb" />
-                    </span>
-                    <span>{ind.action}</span>
-                  </div>
-                )}
               </div>
-              {ind.cleanup && (
-                <Tooltip text={t("rework.home.responsible.cleanup.aria")}>
+              {ind.cleanupKind && (
+                <Tooltip text={t("rework.home.responsible.cleanupTool.aria")}>
                   <IconButton
                     size="small"
-                    color="error"
+                    color="on-surface-retreat"
                     variant="icon"
-                    icon={{ category: "outlined", type: "delete_forever" }}
-                    aria-label={t("rework.home.responsible.cleanup.aria")}
-                    onClick={handleCleanup}
+                    icon={{ category: "outlined", type: "delete_sweep" }}
+                    aria-label={t("rework.home.responsible.cleanupTool.aria")}
+                    onClick={() => setCleanupKind(ind.cleanupKind ?? null)}
                   />
                 </Tooltip>
               )}
@@ -216,6 +238,24 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
           ))}
         </div>
       </div>
+
+      <CleanupDialog
+        open={cleanupKind !== null}
+        title={t(
+          isFiles ? "rework.home.responsible.cleanupFiles.title" : "rework.home.responsible.cleanupConversations.title",
+        )}
+        subtitle={t(
+          isFiles
+            ? "rework.home.responsible.cleanupFiles.subtitle"
+            : "rework.home.responsible.cleanupConversations.subtitle",
+        )}
+        groups={isFiles ? UNUSED_FILES : INACTIVE_CONVERSATIONS}
+        emptyLabel={t(
+          isFiles ? "rework.home.responsible.cleanupFiles.empty" : "rework.home.responsible.cleanupConversations.empty",
+        )}
+        onConfirm={handleCleanupConfirm}
+        onClose={() => setCleanupKind(null)}
+      />
 
       <Dialog
         open={footprintInfoOpen}

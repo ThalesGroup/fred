@@ -1512,15 +1512,6 @@
       "subtitle": "Un aperçu de votre activité et de son empreinte sur la plateforme.",
       "responsible": {
         "title": "IA responsable",
-        "tip": "Un prompt réutilisé consomme moins qu'une consigne reformulée à chaque fois. Piochez dans la marketplace plutôt que de repartir de zéro, et clôturez les conversations terminées.",
-        "ecoTipLabel": "Eco Tip",
-        "cleanup": {
-          "aria": "Supprimer toutes les conversations inactives",
-          "title": "Supprimer toutes les conversations inactives ?",
-          "message": "Vous êtes sur le point de supprimer définitivement toutes vos conversations inactives depuis plus de 5 jours, aussi bien dans votre espace personnel que dans vos équipes. Cette action est irréversible.",
-          "confirm": "Tout supprimer",
-          "toast": "Conversations inactives supprimées"
-        },
         "footprintInfo": {
           "aria": "Comment est calculée cette estimation ?",
           "title": "D'où vient cette estimation ?",
@@ -1531,6 +1522,23 @@
           "limit2": "La consommation réelle dépend des serveurs, du modèle d'IA et de la région où il fonctionne.",
           "limit3": "L'objectif est de donner un ordre de grandeur pour sensibiliser, pas un chiffre précis.",
           "confirm": "J'ai compris"
+        },
+        "cleanupTool": {
+          "aria": "Nettoyer",
+          "confirmAll": "Tout supprimer",
+          "confirm": "Supprimer ({{count}})",
+          "cancel": "Annuler",
+          "toast": "{{count}} élément(s) supprimé(s)"
+        },
+        "cleanupConversations": {
+          "title": "Nettoyer les conversations inactives",
+          "subtitle": "Ces conversations n'ont plus d'activité depuis plus de 5 jours. Tout est sélectionné — décochez ce que vous souhaitez conserver.",
+          "empty": "Aucune conversation inactive à nettoyer."
+        },
+        "cleanupFiles": {
+          "title": "Nettoyer les fichiers non utilisés",
+          "subtitle": "Ces fichiers personnels ne sont plus utilisés depuis plus de 15 jours. Tout est sélectionné — décochez ce que vous souhaitez conserver.",
+          "empty": "Aucun fichier non utilisé à nettoyer."
         }
       },
       "topPrompts": {

@@ -1512,15 +1512,6 @@
       "subtitle": "A look at your activity and its footprint on the platform.",
       "responsible": {
         "title": "Responsible AI",
-        "tip": "A reused prompt costs less than an instruction rewritten every time. Pick one from the marketplace instead of starting over, and close finished conversations.",
-        "ecoTipLabel": "Eco Tip",
-        "cleanup": {
-          "aria": "Delete all inactive conversations",
-          "title": "Delete all inactive conversations?",
-          "message": "You are about to permanently delete all your conversations inactive for more than 5 days, in your personal space as well as in your teams. This action cannot be undone.",
-          "confirm": "Delete all",
-          "toast": "Inactive conversations deleted"
-        },
         "footprintInfo": {
           "aria": "How is this estimate calculated?",
           "title": "Where does this estimate come from?",
@@ -1531,6 +1522,23 @@
           "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
           "limit3": "The goal is to give an order of magnitude to raise awareness, not a precise figure.",
           "confirm": "Got it"
+        },
+        "cleanupTool": {
+          "aria": "Clean up",
+          "confirmAll": "Delete all",
+          "confirm": "Delete ({{count}})",
+          "cancel": "Cancel",
+          "toast": "{{count}} item(s) deleted"
+        },
+        "cleanupConversations": {
+          "title": "Clean up inactive conversations",
+          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
+          "empty": "No inactive conversation to clean up."
+        },
+        "cleanupFiles": {
+          "title": "Clean up unused files",
+          "subtitle": "These personal files haven't been used for more than 15 days. Everything is selected — untick whatever you want to keep.",
+          "empty": "No unused file to clean up."
         }
       },
       "topPrompts": {

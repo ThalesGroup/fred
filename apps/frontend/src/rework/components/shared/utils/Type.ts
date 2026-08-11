@@ -55,6 +55,7 @@ export const materialIcons = [
   "radio_button_unchecked",
   "folder",
   "delete",
+  "delete_sweep",
   "infos",
   "person",
   "person_add",

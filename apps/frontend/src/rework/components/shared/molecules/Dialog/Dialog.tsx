@@ -15,6 +15,7 @@
 import { ReactNode, useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import { ColorTheme } from "@shared/utils/Type";
 import { Portal } from "@shared/utils/Portal";
 import styles from "./Dialog.module.css";
 
@@ -36,6 +37,13 @@ interface DialogProps {
   /** Hide the cancel button for a single-action dialog (e.g. an info dialog
    *  whose only action is "Got it"). Escape and click-outside still dismiss. */
   hideCancel?: boolean;
+  /** Confirm button color. Defaults to "primary"; use "error" for a destructive
+   *  action that still needs the Dialog's free-form body (which ConfirmationDialog
+   *  can't host). */
+  confirmColor?: ColorTheme;
+  /** Widen the dialog beyond the default 400px (still capped at 90vw), for
+   *  content that needs room — e.g. a selectable list. */
+  maxWidth?: number;
 }
 
 /**
@@ -58,6 +66,8 @@ export function Dialog({
   cancelLabel,
   confirmDisabled = false,
   hideCancel = false,
+  confirmColor = "primary",
+  maxWidth,
 }: DialogProps) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -81,6 +91,7 @@ export function Dialog({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          style={maxWidth ? { width: `min(${maxWidth}px, 90vw)` } : undefined}
           onClick={(e) => e.stopPropagation()}
         >
           <div className={styles.titleContainer}>
@@ -95,7 +106,7 @@ export function Dialog({
                 {cancelLabel ?? t("common.cancel")}
               </Button>
             )}
-            <Button color="primary" variant="filled" size="medium" disabled={confirmDisabled} onClick={onConfirm}>
+            <Button color={confirmColor} variant="filled" size="medium" disabled={confirmDisabled} onClick={onConfirm}>
               {confirmLabel}
             </Button>
           </div>
