@@ -156,16 +156,19 @@ export default function CleanupDialog({
                         <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
                       </span>
                     </div>
-                    {expanded &&
-                      group.items.map((item) => (
-                        <label key={item.id} className={styles.row}>
-                          <Checkbox checked={selected.has(item.id)} onChange={() => toggle(item.id)} />
-                          <span className={styles.rowText}>
-                            <span className={styles.rowTitle}>{item.title}</span>
-                            {item.meta && <span className={styles.rowMeta}>{item.meta}</span>}
-                          </span>
-                        </label>
-                      ))}
+                    <div className={styles.items} data-expanded={expanded} aria-hidden={!expanded}>
+                      <div className={styles.itemsInner}>
+                        {group.items.map((item) => (
+                          <label key={item.id} className={styles.row}>
+                            <Checkbox checked={selected.has(item.id)} onChange={() => toggle(item.id)} />
+                            <span className={styles.rowText}>
+                              <span className={styles.rowTitle}>{item.title}</span>
+                              {item.meta && <span className={styles.rowMeta}>{item.meta}</span>}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
