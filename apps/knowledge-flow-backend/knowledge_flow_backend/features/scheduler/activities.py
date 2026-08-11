@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-from knowledge_flow_backend.features.scheduler.activity_utils import raise_if_document_deleted
+from knowledge_flow_backend.features.scheduler.activity_utils import raise_if_document_deleted, to_thread_with_heartbeat
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
 )
@@ -102,8 +102,22 @@ async def _output_process_impl(
             output_dir = working_dir / "output"
             document_name = metadata.document_name
 
-            # For both push and pull, restore what was saved (input/output)
-            await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
+            # For both push and pull, restore what was saved (input/output).
+            # to_thread_with_heartbeat, not bare to_thread, here and for
+            # process_output below — and not only for progress reporting: the
+            # heartbeat responses are ALSO the channel Temporal uses to tell a
+            # running activity it was cancelled. A bare to_thread never
+            # heartbeats, so this activity sailed through a user's cancel and
+            # vectorized 4038 chunks for a document already deleted (#2315).
+            # The wrapper additionally scopes a cancellation signal the worker
+            # thread checks between batches (`common/cancellation.py`).
+            await to_thread_with_heartbeat(
+                ingestion_service.get_local_copy,
+                file.processed_by,
+                metadata,
+                working_dir,
+                heartbeat_details={"stage": "output_restore", "document_uid": metadata.document_uid},
+            )
             output_dir.mkdir(parents=True, exist_ok=True)
 
             app_context = ApplicationContext.get_instance()
@@ -138,14 +152,21 @@ async def _output_process_impl(
                         non_retryable=True,
                     )
 
-            # Proceed with the output processing
-            metadata = await asyncio.to_thread(
+            # Proceed with the output processing (vectorization / SQL indexing —
+            # the longest-running, most expensive stage; see the comment above).
+            metadata = await to_thread_with_heartbeat(
                 ingestion_service.process_output,
                 file.processed_by,
                 file_name_for_processing,
                 output_dir,
                 metadata,
                 file.profile,
+                heartbeat_details={"stage": "output_process", "document_uid": metadata.document_uid},
+                # The vectorization loop checks cancellation checkpoints, so on
+                # cancel the activity waits (bounded) for the thread's last
+                # write before letting the workflow purge — without this the
+                # purge raced the still-writing thread (#2315).
+                drain_on_cancel=True,
             )
 
             # Save the updated metadata

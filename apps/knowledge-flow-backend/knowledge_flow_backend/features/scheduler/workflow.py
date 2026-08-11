@@ -370,6 +370,9 @@ class PullInputProcess:
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=_wf_activity_retry_policy(file),
+            # See OutputProcess below: compensation must run after the activity
+            # actually finished cancelling, not concurrently with it.
+            cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
 
@@ -404,6 +407,9 @@ class PushInputProcess:
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=_wf_activity_retry_policy(file),
+            # See OutputProcess below: compensation must run after the activity
+            # actually finished cancelling, not concurrently with it.
+            cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
 
@@ -426,7 +432,24 @@ class OutputProcess:
             "output_process",
             args=[file, metadata, False],
             schedule_to_close_timeout=timedelta(hours=1),
+            # Same heartbeat contract as the input activities: the activity now
+            # heartbeats (`to_thread_with_heartbeat`), which is also how Temporal
+            # delivers cancellation to it — without a heartbeating activity, a
+            # user's cancel never reached the vectorization stage and it ran to
+            # completion for a deleted document (#2315). The timeout additionally
+            # frees the slot when a worker dies mid-output.
+            heartbeat_timeout=timedelta(seconds=300),
             retry_policy=_wf_activity_retry_policy(file),
+            # WAIT, not the default TRY_CANCEL: with TRY_CANCEL the workflow
+            # resumed (and its compensation purged the document's artifacts)
+            # while the activity's worker thread was still writing — vectors
+            # observed landing *after* the purge, orphaned (#2315). WAIT holds
+            # the workflow until the activity finished cancelling (the activity
+            # drains its thread, see to_thread_with_heartbeat), restoring the
+            # order "last write, then cleanup". It also lets the SDK complete
+            # the activity as *cancelled* (quiet DEBUG) instead of "failed"
+            # with a CancelledError stacktrace at WARNING.
+            cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
 
