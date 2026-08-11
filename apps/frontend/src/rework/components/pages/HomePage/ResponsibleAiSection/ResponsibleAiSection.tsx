@@ -28,7 +28,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
-import { formatCompactTokens, homePeriodRange } from "../homePeriod.ts";
+import { homePeriodRange } from "../homePeriod.ts";
 import CleanupDialog, { type CleanupGroup, type CleanupItem } from "../CleanupDialog/CleanupDialog.tsx";
 import styles from "./ResponsibleAiSection.module.scss";
 
@@ -38,7 +38,7 @@ const nf = (maximumFractionDigits: number) => new Intl.NumberFormat("fr-FR", { m
 const INACTIVE_DAYS = 5;
 
 type IndicatorTone = "warn" | "info" | "eco";
-type CleanupKind = "conversations" | "files";
+type CleanupKind = "conversations";
 
 interface Indicator {
   tone: IndicatorTone;
@@ -50,60 +50,6 @@ interface Indicator {
   /** Shows an info button opening the footprint-methodology dialog. */
   info?: boolean;
 }
-
-// The "inactive conversations" tile + its cleanup dialog are LIVE (the
-// `me/inactive-sessions` endpoint, see the component). The "unused files" tile
-// below is still PLACEHOLDER — documents carry no last-used timestamp yet, so
-// "unused for 15 days" isn't computable; wired to static example values for the
-// prototype.
-//
-// The period (7/30/90 j) is the LOOK-BACK WINDOW, not the inactivity threshold:
-// - a conversation is "inactive" after 5 days with no activity,
-// - a file is "unused" after 15 days without being used (hardcoded, likewise).
-// Widening the window can only add matches, so these counts are monotonic
-// non-decreasing as the period grows.
-//
-// SCOPE — the "files" indicator counts the caller's PERSONAL space only
-// (personal-<uid>): it is their own storage, freely deletable. Team files are
-// deliberately excluded — they are shared, "unused" there is a collective (not
-// personal) notion, and deletion is permission-gated. (Conversations, by
-// contrast, span the personal space AND every team the user belongs to.)
-const FILES_INDICATOR_BY_PERIOD: Record<HomePeriod, Indicator> = {
-  7: {
-    tone: "warn",
-    icon: "description",
-    value: "6 fichiers personnels non utilisés (90 Mo)",
-    caption: "depuis plus de 15 jours",
-    cleanupKind: "files",
-  },
-  30: {
-    tone: "warn",
-    icon: "description",
-    value: "19 fichiers personnels non utilisés (260 Mo)",
-    caption: "depuis plus de 15 jours",
-    cleanupKind: "files",
-  },
-  90: {
-    tone: "warn",
-    icon: "description",
-    value: "37 fichiers personnels non utilisés (540 Mo)",
-    caption: "depuis plus de 15 jours",
-    cleanupKind: "files",
-  },
-};
-
-const UNUSED_FILES: CleanupGroup[] = [
-  {
-    key: "personal",
-    label: "Espace personnel",
-    items: [
-      { id: "f1", title: "rapport-annuel-2024.pdf", meta: "18 Mo" },
-      { id: "f2", title: "notes-brouillon.docx", meta: "2 Mo" },
-      { id: "f3", title: "export-donnees-clients.xlsx", meta: "7 Mo" },
-      { id: "f4", title: "presentation-produit-v1.pptx", meta: "24 Mo" },
-    ],
-  },
-];
 
 interface ResponsibleAiSectionProps {
   period: HomePeriod;
@@ -118,11 +64,11 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
   const [footprintInfoOpen, setFootprintInfoOpen] = useState(false);
   const [cleanupKind, setCleanupKind] = useState<CleanupKind | null>(null);
 
-  // LIVE — personal token usage + its green-cost estimate over the period, from
-  // the self-scoped `user_token_usage_over_time` preset (the server already
-  // derives co2e/kwh per bucket). Memoise the range on `period`: a fresh `until`
-  // every render would change the cache key and refetch in a loop. TTL 300s per
-  // KPI-ANALYTICS-RFC.md §2.6, same as the analytics pages.
+  // LIVE — the green-cost estimate of the user's token usage over the period.
+  // The `user_token_usage_over_time` preset already derives co2e/kwh per bucket
+  // server-side (the raw token total itself now lives in the activity row).
+  // Memoise the range on `period`: a fresh `until` every render would change the
+  // cache key and refetch in a loop. TTL 300s (KPI-ANALYTICS-RFC.md §2.6).
   const range = useMemo(() => homePeriodRange(period), [period]);
   const {
     data: usageData,
@@ -130,10 +76,9 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
     isError: usageError,
   } = useUserTokenUsageOverTimeQuery(range, { refetchOnMountOrArgChange: 300 });
 
-  const usage = useMemo(() => {
+  const footprint = useMemo(() => {
     const rows = usageData?.rows ?? [];
     return {
-      tokens: rows.reduce((acc, r) => acc + (r.value ?? 0), 0),
       co2e: rows.reduce((acc, r) => acc + (r.co2e_grams ?? 0), 0),
       kwh: rows.reduce((acc, r) => acc + (r.kwh ?? 0), 0),
     };
@@ -141,12 +86,11 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
 
   // "…" while the first fetch resolves, "—" if the KPI service is unavailable
   // (OpenSearch down → 503); otherwise the real aggregate.
-  const tokensValue = usageLoading ? "…" : usageError ? "—" : `${formatCompactTokens(usage.tokens)} tokens`;
   const footprintValue = usageLoading
     ? "…"
     : usageError
       ? "—"
-      : `≈ ${nf(1).format(usage.co2e)} g CO₂e · ${nf(2).format(usage.kwh)} kWh`;
+      : `≈ ${nf(1).format(footprint.co2e)} g CO₂e · ${nf(2).format(footprint.kwh)} kWh`;
 
   // LIVE — the caller's inactive conversations across every space. Deliberately
   // NOT period-scoped (unlike the tiles above): a cleanup tool should surface
@@ -198,30 +142,20 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
       caption: "depuis plus de 5 jours",
       cleanupKind: "conversations",
     },
-    FILES_INDICATOR_BY_PERIOD[period],
-    { tone: "info", icon: "show_chart", value: tokensValue, caption: `consommés sur les ${period} derniers jours` },
     { tone: "eco", icon: "cloud", value: footprintValue, caption: "empreinte estimée de vos échanges", info: true },
   ];
 
-  const isFiles = cleanupKind === "files";
-
   const handleCleanupConfirm = async (ids: string[]) => {
-    const kind = cleanupKind;
     setCleanupKind(null);
-    if (kind === "conversations") {
-      const sessions = ids
-        .map((id) => ({ session_id: id, team_id: teamIdBySession.get(id) }))
-        .filter((ref): ref is { session_id: string; team_id: string } => Boolean(ref.team_id));
-      try {
-        const res = await bulkDeleteSessions({ bulkDeleteSessionsRequest: { sessions } }).unwrap();
-        showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: res.deleted.length }) });
-      } catch {
-        // The list is left intact; the tag invalidation keeps it truthful.
-      }
-      return;
+    const sessions = ids
+      .map((id) => ({ session_id: id, team_id: teamIdBySession.get(id) }))
+      .filter((ref): ref is { session_id: string; team_id: string } => Boolean(ref.team_id));
+    try {
+      const res = await bulkDeleteSessions({ bulkDeleteSessionsRequest: { sessions } }).unwrap();
+      showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: res.deleted.length }) });
+    } catch {
+      // The list is left intact; the tag invalidation keeps it truthful.
     }
-    // PLACEHOLDER (files): no deletion endpoint yet — see FILES_INDICATOR note.
-    showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: ids.length }) });
   };
 
   return (
@@ -271,18 +205,10 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
 
       <CleanupDialog
         open={cleanupKind !== null}
-        title={t(
-          isFiles ? "rework.home.responsible.cleanupFiles.title" : "rework.home.responsible.cleanupConversations.title",
-        )}
-        subtitle={t(
-          isFiles
-            ? "rework.home.responsible.cleanupFiles.subtitle"
-            : "rework.home.responsible.cleanupConversations.subtitle",
-        )}
-        groups={isFiles ? UNUSED_FILES : conversationGroups}
-        emptyLabel={t(
-          isFiles ? "rework.home.responsible.cleanupFiles.empty" : "rework.home.responsible.cleanupConversations.empty",
-        )}
+        title={t("rework.home.responsible.cleanupConversations.title")}
+        subtitle={t("rework.home.responsible.cleanupConversations.subtitle")}
+        groups={conversationGroups}
+        emptyLabel={t("rework.home.responsible.cleanupConversations.empty")}
         onConfirm={handleCleanupConfirm}
         onClose={() => setCleanupKind(null)}
       />

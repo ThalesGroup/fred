@@ -1534,11 +1534,6 @@
           "title": "Nettoyer les conversations inactives",
           "subtitle": "Ces conversations n'ont plus d'activité depuis plus de 5 jours. Tout est sélectionné — décochez ce que vous souhaitez conserver.",
           "empty": "Aucune conversation inactive à nettoyer."
-        },
-        "cleanupFiles": {
-          "title": "Nettoyer les fichiers non utilisés",
-          "subtitle": "Ces fichiers personnels ne sont plus utilisés depuis plus de 15 jours. Tout est sélectionné — décochez ce que vous souhaitez conserver.",
-          "empty": "Aucun fichier non utilisé à nettoyer."
         }
       },
       "topPrompts": {
@@ -1577,6 +1572,7 @@
         "conversations": "Nouvelles conversations",
         "messages": "Messages envoyés",
         "agents": "Agents utilisés",
+        "tokens": "Tokens consommés",
         "deltaUp": "▲ {{count}} % ({{abs}})",
         "deltaDown": "▼ {{count}} % ({{abs}})",
         "deltaFlat": "stable",

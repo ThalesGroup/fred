@@ -1534,11 +1534,6 @@
           "title": "Clean up inactive conversations",
           "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
           "empty": "No inactive conversation to clean up."
-        },
-        "cleanupFiles": {
-          "title": "Clean up unused files",
-          "subtitle": "These personal files haven't been used for more than 15 days. Everything is selected — untick whatever you want to keep.",
-          "empty": "No unused file to clean up."
         }
       },
       "topPrompts": {
@@ -1577,6 +1572,7 @@
         "conversations": "New conversations",
         "messages": "Messages sent",
         "agents": "Agents used",
+        "tokens": "Tokens used",
         "deltaUp": "▲ {{count}}% ({{abs}})",
         "deltaDown": "▼ {{count}}% ({{abs}})",
         "deltaFlat": "flat",
