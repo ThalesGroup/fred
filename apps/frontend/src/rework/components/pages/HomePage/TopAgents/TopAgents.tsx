@@ -14,6 +14,7 @@
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import { useUserTopAgentsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
@@ -27,7 +28,8 @@ interface TopAgentsProps {
 
 /** Home page — the agents the current user used most over the period (live:
  * self-scoped `user_top_agents` preset, ranked by turn count). The origin team
- * comes back as a team_id, resolved to its display name via bootstrap. */
+ * comes back as a team_id, resolved to its display name via bootstrap — the
+ * personal space shows as "Espace personnel", not its backend team name. */
 export default function TopAgents({ period }: TopAgentsProps) {
   const { t } = useTranslation();
   const { availableTeams } = useFrontendBootstrap();
@@ -39,10 +41,16 @@ export default function TopAgents({ period }: TopAgentsProps) {
 
   const teamNameById = useMemo(() => new Map(availableTeams.map((team) => [team.id, team.name])), [availableTeams]);
 
+  const teamLabel = (teamId: string | null | undefined): string | undefined => {
+    if (!teamId) return undefined;
+    if (isPersonalTeamId(teamId)) return t("rework.home.topTeams.personalSpace");
+    return teamNameById.get(teamId);
+  };
+
   const items: RankedItem[] = (data?.rows ?? []).map((row) => ({
     key: row.agent_instance_id,
     label: row.agent_name,
-    sublabel: row.team_id ? teamNameById.get(row.team_id) : undefined,
+    sublabel: teamLabel(row.team_id),
     value: row.value,
     unit: t("rework.home.topAgents.unit"),
   }));
