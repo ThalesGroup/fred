@@ -26,7 +26,7 @@ from fred_core.kpi.kpi_reader_structures import (
     KPIQueryResultRow,
 )
 from fred_core.kpi.kpi_writer_structures import KPIEvent
-from fred_core.store import validate_index_mapping
+from fred_core.store import ensure_index_mapping
 
 logger = logging.getLogger(__name__)
 
@@ -175,74 +175,17 @@ class OpenSearchKPIStore(BaseKPIStore):
                 logger.info("[OPENSEARCH][KPI] created index '%s'", self.index)
             else:
                 logger.info("[OPENSEARCH][KPI] index '%s' already exists.", self.index)
-                # CTRLP-12: session_id was added to KPI_INDEX_MAPPING for RGPD
-                # conversation erasure. Existing indices predate it, so add it
-                # additively (put_mapping) before validation — otherwise startup
-                # fails with "Missing nested field: 'dims.session_id'".
-                self._ensure_dim_mapping("session_id", {"type": "keyword"})
-                self._ensure_dim_mapping("service", {"type": "keyword"})
-                self._ensure_dim_mapping("team_id", {"type": "keyword"})
-                self._ensure_dim_mapping("agent_instance_id", {"type": "keyword"})
-                self._ensure_dim_mapping("template_agent_id", {"type": "keyword"})
-                self._ensure_dim_mapping("agent_instance_name", {"type": "keyword"})
-                self._ensure_dim_mapping("runtime_id", {"type": "keyword"})
-                self._ensure_dim_mapping("model_name", {"type": "keyword"})
-                self._ensure_dim_mapping("finish_reason", {"type": "keyword"})
-                self._ensure_dim_mapping("system_prompt_chars", {"type": "keyword"})
-                self._ensure_dim_mapping("template_id", {"type": "keyword"})
-                self._ensure_dim_mapping("source_runtime_id", {"type": "keyword"})
-                # OBSERV-02: quantities.input_tokens/output_tokens were written by
-                # agent.turn_completed since Phase 7 but never mapped, so they were
-                # unaggregatable. Added additively for existing indices.
-                self._ensure_quantities_mapping("input_tokens", {"type": "long"})
-                self._ensure_quantities_mapping("output_tokens", {"type": "long"})
-                # Validate existing mapping matches expected mapping
-                validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
+                # Repair, then validate. An index created by an older version is
+                # missing whatever KPI_INDEX_MAPPING gained since (CTRLP-12's
+                # `dims.session_id`, OBSERV-02's `quantities.*_tokens`, and
+                # whatever the next dim turns out to be) — all of them fields
+                # `put_mapping` can add in place, none of them worth taking
+                # startup down for. What remains fatal is the drift it cannot
+                # repair. See `ensure_index_mapping`.
+                ensure_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:
             logger.error("[OPENSEARCH][KPI] ensure_ready failed: %s", e)
             raise
-
-    def _ensure_dim_mapping(self, name: str, mapping: Dict[str, Any]) -> None:
-        try:
-            current_mapping_resp = self.client.indices.get_mapping(index=self.index)
-            current_mapping = current_mapping_resp.get(self.index, {}).get(
-                "mappings", {}
-            )
-            dims_props = (
-                current_mapping.get("properties", {})
-                .get("dims", {})
-                .get("properties", {})
-            )
-            if name in dims_props:
-                return
-            body = {"properties": {"dims": {"properties": {name: mapping}}}}
-            self.client.indices.put_mapping(index=self.index, body=body)
-            logger.info("[OPENSEARCH][KPI] added dims.%s mapping", name)
-        except OpenSearchException as e:
-            logger.warning(
-                "[OPENSEARCH][KPI] failed to add dims.%s mapping: %s", name, e
-            )
-
-    def _ensure_quantities_mapping(self, name: str, mapping: Dict[str, Any]) -> None:
-        try:
-            current_mapping_resp = self.client.indices.get_mapping(index=self.index)
-            current_mapping = current_mapping_resp.get(self.index, {}).get(
-                "mappings", {}
-            )
-            quantities_props = (
-                current_mapping.get("properties", {})
-                .get("quantities", {})
-                .get("properties", {})
-            )
-            if name in quantities_props:
-                return
-            body = {"properties": {"quantities": {"properties": {name: mapping}}}}
-            self.client.indices.put_mapping(index=self.index, body=body)
-            logger.info("[OPENSEARCH][KPI] added quantities.%s mapping", name)
-        except OpenSearchException as e:
-            logger.warning(
-                "[OPENSEARCH][KPI] failed to add quantities.%s mapping: %s", name, e
-            )
 
     # -- writes ----------------------------------------------------------------
     def index_event(self, event: KPIEvent) -> None:

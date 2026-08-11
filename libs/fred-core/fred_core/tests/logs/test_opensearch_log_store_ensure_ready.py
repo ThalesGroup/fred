@@ -18,7 +18,11 @@
 already created. An existing index predates it, so `ensure_ready` must add
 it additively (put_mapping) — otherwise `category` silently falls under
 `dynamic="false"` and is never indexed for search, the same class of gap
-`OpenSearchKPIStore._ensure_dim_mapping` closes for `dims.session_id`.
+`ensure_index_mapping` closes for the KPI index's `dims.session_id`.
+
+Since 2026-08-11 the store no longer patches `category` by name: it diffs the
+live index against `LOG_INDEX_MAPPING`, so the *next* field added there is
+covered without anyone remembering to register it.
 """
 
 from __future__ import annotations
@@ -97,6 +101,25 @@ def test_ensure_ready_adds_missing_category_mapping_on_existing_index() -> None:
     indices = cast(_FakeIndices, cast(_FakeClient, store.client).indices)
     assert len(indices.put_calls) == 1
     assert indices.put_calls[0] == {"properties": {"category": {"type": "keyword"}}}
+
+
+def test_ensure_ready_adds_any_missing_field_not_just_category() -> None:
+    """The migration is a diff, not a hand-kept list of one field name.
+
+    `category` was simply the first field to be added late; a store that patches
+    it by name leaves every later addition silently unindexed under
+    `dynamic="false"`.
+    """
+    mappings = copy.deepcopy(LOG_INDEX_MAPPING["mappings"])
+    mappings["properties"].pop("category", None)
+    mappings["properties"].pop("logger", None)
+    store = _store_on_existing_index(mappings)
+
+    store.ensure_ready()
+
+    indices = cast(_FakeIndices, cast(_FakeClient, store.client).indices)
+    assert len(indices.put_calls) == 1
+    assert set(indices.put_calls[0]["properties"]) == {"category", "logger"}
 
 
 def test_ensure_ready_is_noop_put_when_category_already_present() -> None:
