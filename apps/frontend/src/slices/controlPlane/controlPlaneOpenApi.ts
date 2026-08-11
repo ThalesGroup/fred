@@ -861,6 +861,45 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsUserSessionsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_sessions_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserMessagesTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_messages_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_agents_used_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGet: build.query<
       HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse,
       HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg
@@ -1603,6 +1642,36 @@ export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
 export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -3231,6 +3300,12 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,

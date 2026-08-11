@@ -1579,6 +1579,7 @@
         "deltaUp": "▲ {{count}}%",
         "deltaDown": "▼ {{count}}%",
         "deltaFlat": "flat",
+        "deltaNew": "new",
         "vsPrevious": "vs previous period",
         "periodCaption": "over the last {{count}} days"
       }

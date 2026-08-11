@@ -12,56 +12,69 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import {
+  useUserAgentsUsedTotalQuery,
+  useUserMessagesTotalQuery,
+  useUserSessionsTotalQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { HomePeriod } from "../HomePage.tsx";
+import { homePeriodRange } from "../homePeriod.ts";
 import styles from "./ActivityKpis.module.scss";
 
-interface Kpi {
-  key: "conversations" | "messages" | "agents";
+const numberFmt = new Intl.NumberFormat("fr-FR");
+
+type KpiKey = "conversations" | "messages" | "agents";
+type Direction = "up" | "down" | "flat" | "new";
+
+interface KpiView {
+  key: KpiKey;
   value: string;
-  /** Percentage change vs the previous same-length window; sign drives direction. */
-  delta: number;
+  dir: Direction;
+  /** Absolute percentage magnitude, capped, for the up/down chips only. */
+  magnitude: number;
 }
 
-// PLACEHOLDER DATA — static example values per period for the prototype; swap
-// for real user-scoped queries before shipping.
-//
-// Trend chip = trailing-window vs previous equal-length window (validated
-// design). For today = D and a selected period of N days:
-//   - value ("current")  = sum/count over [D-N, D]
-//   - baseline ("prev")  = same metric over [D-2N, D-N]
-//   - delta% = round((current - prev) / prev * 100); the sign drives ▲/▼.
-// So 7 j compares the last 7 days to the 7 days before, 30 j the last 30 to the
-// prior 30, etc. — consistent with the "sur les X derniers jours" caption.
-//
-// Edge cases: prev == 0 && current > 0 -> show a "new" marker, not a %;
-// prev == 0 && current == 0 -> flat (0%); round to an integer and optionally
-// cap the displayed magnitude (e.g. ">999%").
-//
-// Per metric, over each window:
-//   - conversations -> count of sessions created (sessions_over_time)
-//   - messages      -> count of messages sent (messages_over_time)
-//   - agents        -> count of DISTINCT agents used (not a plain sum;
-//                      derive from top_agents_by_conversations / a distinct
-//                      user-scoped aggregation)
-const KPIS_BY_PERIOD: Record<HomePeriod, Kpi[]> = {
-  7: [
-    { key: "conversations", value: "24", delta: 18 },
-    { key: "messages", value: "312", delta: 9 },
-    { key: "agents", value: "7", delta: 0 },
-  ],
-  30: [
-    { key: "conversations", value: "96", delta: 11 },
-    { key: "messages", value: "1 280", delta: 14 },
-    { key: "agents", value: "11", delta: 22 },
-  ],
-  90: [
-    { key: "conversations", value: "264", delta: 7 },
-    { key: "messages", value: "3 620", delta: -5 },
-    { key: "agents", value: "14", delta: 8 },
-  ],
+// Each preset returns { value, delta } where value = count over [D-N, D] and
+// delta = value − count over the previous equal window [D-2N, D-N] (validated
+// design, backend query_user_*_total). We turn that absolute delta into the
+// ▲/▼ % chip here — one place, so the backend stays on the same "value + net
+// change" contract as every other scalar preset:
+//   prev = value − delta
+//   prev > 0  → pct = round(delta / prev × 100), sign drives ▲/▼, capped ±999
+//   prev == 0 && value > 0 → "new" (no meaningful %), shown as a positive chip
+//   prev == 0 && value == 0 → flat
+type KpiQuery = {
+  data?: { value?: number | null; delta?: number | null } | undefined;
+  isLoading: boolean;
+  isError: boolean;
 };
+
+function buildKpi(key: KpiKey, q: KpiQuery): KpiView {
+  if (q.isLoading) return { key, value: "…", dir: "flat", magnitude: 0 };
+  const value = q.data?.value;
+  if (q.isError || value == null) return { key, value: "—", dir: "flat", magnitude: 0 };
+
+  const delta = q.data?.delta ?? 0;
+  const prev = value - delta;
+  let dir: Direction = "flat";
+  let magnitude = 0;
+  if (prev <= 0) {
+    dir = value > 0 ? "new" : "flat";
+  } else {
+    const pct = Math.round((delta / prev) * 100);
+    if (pct > 0) {
+      dir = "up";
+      magnitude = Math.min(pct, 999);
+    } else if (pct < 0) {
+      dir = "down";
+      magnitude = Math.min(Math.abs(pct), 999);
+    }
+  }
+  return { key, value: numberFmt.format(value), dir, magnitude };
+}
 
 interface ActivityKpisProps {
   period: HomePeriod;
@@ -69,10 +82,24 @@ interface ActivityKpisProps {
 
 /** Home page — top row of activity indicators (new conversations, messages
  * sent, agents used) over the selected period, each with its change vs the
- * previous same-length period. */
+ * previous same-length period. Live: self-scoped KPI presets (#2298). */
 export default function ActivityKpis({ period }: ActivityKpisProps) {
   const { t } = useTranslation();
-  const kpis = KPIS_BY_PERIOD[period];
+
+  // Memoise the range on `period`: a fresh `until` every render would change
+  // the RTK Query cache key and refetch in a loop. TTL 300s (KPI-ANALYTICS-RFC
+  // §2.6), same as the analytics pages.
+  const range = useMemo(() => homePeriodRange(period), [period]);
+  const opts = { refetchOnMountOrArgChange: 300 };
+  const sessions = useUserSessionsTotalQuery(range, opts);
+  const messages = useUserMessagesTotalQuery(range, opts);
+  const agents = useUserAgentsUsedTotalQuery(range, opts);
+
+  const kpis: KpiView[] = [
+    buildKpi("conversations", sessions),
+    buildKpi("messages", messages),
+    buildKpi("agents", agents),
+  ];
 
   return (
     <section className={styles.section} aria-label={t("rework.home.activity.title")}>
@@ -83,16 +110,19 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
 
       <div className={styles.grid}>
         {kpis.map((kpi) => {
-          const dir = kpi.delta > 0 ? "up" : kpi.delta < 0 ? "down" : "flat";
+          // "new" reuses the positive (green) chip styling.
+          const styleClass = kpi.dir === "new" ? styles.up : styles[kpi.dir];
           const deltaText =
-            dir === "flat"
+            kpi.dir === "flat"
               ? t("rework.home.activity.deltaFlat")
-              : t(`rework.home.activity.delta${dir === "up" ? "Up" : "Down"}`, { count: Math.abs(kpi.delta) });
+              : kpi.dir === "new"
+                ? t("rework.home.activity.deltaNew")
+                : t(`rework.home.activity.delta${kpi.dir === "up" ? "Up" : "Down"}`, { count: kpi.magnitude });
           return (
             <div key={kpi.key} className={styles.card}>
               <div className={styles.top}>
                 <span className={styles.label}>{t(`rework.home.activity.${kpi.key}`)}</span>
-                <span className={`${styles.delta} ${styles[dir]}`} title={t("rework.home.activity.vsPrevious")}>
+                <span className={`${styles.delta} ${styleClass}`} title={t("rework.home.activity.vsPrevious")}>
                   {deltaText}
                 </span>
               </div>

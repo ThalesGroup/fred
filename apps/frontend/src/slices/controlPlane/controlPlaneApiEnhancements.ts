@@ -419,6 +419,10 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
+  // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery: useUserAgentsUsedTotalQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,

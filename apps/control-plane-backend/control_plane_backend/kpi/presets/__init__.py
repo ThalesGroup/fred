@@ -51,6 +51,11 @@ from control_plane_backend.kpi.presets.top_teams_by_sessions import (
 from control_plane_backend.kpi.presets.unique_users_total import (
     UNIQUE_USERS_TOTAL_PRESET,
 )
+from control_plane_backend.kpi.presets.user_activity import (
+    USER_AGENTS_USED_TOTAL_PRESET,
+    USER_MESSAGES_TOTAL_PRESET,
+    USER_SESSIONS_TOTAL_PRESET,
+)
 from control_plane_backend.kpi.presets.user_token_usage_by_agent import (
     USER_TOKEN_USAGE_BY_AGENT_PRESET,
 )
@@ -72,6 +77,9 @@ PRESETS: list[PresetDef] = [
     AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,
     TOP_AGENTS_BY_CONVERSATIONS_PRESET,
     DOCUMENTS_TOTAL_PRESET,
+    USER_SESSIONS_TOTAL_PRESET,
+    USER_MESSAGES_TOTAL_PRESET,
+    USER_AGENTS_USED_TOTAL_PRESET,
     USER_TOKEN_USAGE_OVER_TIME_PRESET,
     USER_TOKEN_USAGE_BY_AGENT_PRESET,
     USER_TOKEN_USAGE_BY_MODEL_PRESET,

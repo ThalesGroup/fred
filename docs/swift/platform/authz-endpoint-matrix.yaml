@@ -166,6 +166,21 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/user_agents_used_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_messages_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_sessions_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/user_token_usage_by_agent
     review_status: pending_review
     required_permission: pending_review
