@@ -50,23 +50,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-.up {
-  background: var(--success-container);
-  color: var(--success);
-}
-
-.down {
-  background: var(--error-container);
-  color: var(--error);
-}
-
+/* Trend chips are intentionally neutral — the arrow shows direction, but the
+   colour makes no value judgment (using the platform more or less is neither
+   good nor bad). Same secondary tone for up / down / flat / new. */
+.up,
+.down,
 .flat {
-  background: var(--surface-container);
-  color: var(--on-surface-muted);
-}
-
-:root[data-theme="dark"] .up {
-  color: var(--on-success-container);
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
 }
 
 .value {
