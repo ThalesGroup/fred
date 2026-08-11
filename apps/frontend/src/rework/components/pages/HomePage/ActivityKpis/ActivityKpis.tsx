@@ -35,6 +35,9 @@ interface KpiView {
   dir: Direction;
   /** Absolute percentage magnitude, capped, for the up/down chips only. */
   magnitude: number;
+  /** Signed absolute change vs the previous window, shown alongside the % (and
+   * used as the "+N" jump when there's no baseline). */
+  delta: number;
 }
 
 // Each preset returns { value, delta } where value = count over [D-N, D] and
@@ -54,9 +57,9 @@ type KpiQuery = {
 };
 
 function buildKpi(key: KpiKey, q: KpiQuery): KpiView {
-  if (q.isLoading) return { key, value: "…", dir: "flat", magnitude: 0 };
+  if (q.isLoading) return { key, value: "…", dir: "flat", magnitude: 0, delta: 0 };
   const value = q.data?.value;
-  if (q.isError || value == null) return { key, value: "—", dir: "flat", magnitude: 0 };
+  if (q.isError || value == null) return { key, value: "—", dir: "flat", magnitude: 0, delta: 0 };
 
   const delta = q.data?.delta ?? 0;
   const prev = value - delta;
@@ -79,7 +82,12 @@ function buildKpi(key: KpiKey, q: KpiQuery): KpiView {
       magnitude = Math.min(Math.abs(pct), 999);
     }
   }
-  return { key, value: numberFmt.format(value), dir, magnitude };
+  return { key, value: numberFmt.format(value), dir, magnitude, delta };
+}
+
+/** Signed absolute change, e.g. "+244" / "-133". */
+function formatSignedDelta(delta: number): string {
+  return delta > 0 ? `+${numberFmt.format(delta)}` : numberFmt.format(delta);
 }
 
 interface ActivityKpisProps {
@@ -122,8 +130,11 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
             kpi.dir === "flat"
               ? t("rework.home.activity.deltaFlat")
               : kpi.dir === "new"
-                ? `+${numberFmt.format(kpi.magnitude)}`
-                : t(`rework.home.activity.delta${kpi.dir === "up" ? "Up" : "Down"}`, { count: kpi.magnitude });
+                ? formatSignedDelta(kpi.delta)
+                : t(`rework.home.activity.delta${kpi.dir === "up" ? "Up" : "Down"}`, {
+                    count: kpi.magnitude,
+                    abs: formatSignedDelta(kpi.delta),
+                  });
           return (
             <div key={kpi.key} className={styles.card}>
               <div className={styles.top}>
