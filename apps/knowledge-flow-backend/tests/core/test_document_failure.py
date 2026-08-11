@@ -33,6 +33,7 @@ from fred_core.documents.document_structures import (
 )
 from fred_core.tasks.models import TaskState
 
+from knowledge_flow_backend.features.metadata import service as metadata_service_module
 from knowledge_flow_backend.features.scheduler import document_failure
 from knowledge_flow_backend.features.scheduler.document_failure import (
     delete_cancelled_document,
@@ -227,8 +228,6 @@ class _StubMetadataService:
 
 @pytest.fixture
 def metadata_service(monkeypatch):
-    import knowledge_flow_backend.features.metadata.service as metadata_service_module
-
     _StubMetadataService.calls = []
     _StubMetadataService.error = None
     monkeypatch.setattr(metadata_service_module, "MetadataService", _StubMetadataService)
@@ -245,9 +244,7 @@ async def test_delete_cancelled_document_attributes_the_release_to_the_uploader(
 
 @pytest.mark.asyncio
 async def test_delete_cancelled_document_missing_metadata_is_clean(metadata_service):
-    from knowledge_flow_backend.features.metadata.service import MetadataNotFound
-
-    metadata_service.error = MetadataNotFound("gone")
+    metadata_service.error = metadata_service_module.MetadataNotFound("gone")
 
     # Cancelled before registration finished: nothing was built, nothing to do.
     await delete_cancelled_document("doc-1", created_by="user-42")
