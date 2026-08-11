@@ -22,6 +22,7 @@ from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.cancellation import WorkCancelled
 from knowledge_flow_backend.core.processors.output.base_output_processor import (
     BaseOutputProcessor,
     VectorProcessingError,
@@ -219,6 +220,27 @@ class VectorizationProcessor(BaseOutputProcessor):
                 else:
                     vectors_count = chunks_count
                 logger.debug(f"Documents added to Vector Store: {result}")
+            except WorkCancelled:
+                # The user cancelled the ingestion and the indexing loop stopped
+                # at its checkpoint. Delete whatever this run already wrote: the
+                # compensation purge may have run while we were still writing,
+                # so self-cleaning here is the only ordering-proof way to leave
+                # no orphan vectors behind. Expected path — one line, no
+                # stacktrace, no error KPI (the task-level KPI records the
+                # cancellation).
+                logger.info(
+                    "Vectorization cancelled for document_uid=%s; deleting the partial vectors this run wrote",
+                    doc_uid,
+                )
+                try:
+                    self.vector_store.delete_vectors_for_document(document_uid=doc_uid)
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Could not delete partial vectors for document_uid=%s after cancellation: %s",
+                        doc_uid,
+                        cleanup_error,
+                    )
+                raise
             except Exception as e:
                 logger.exception("Failed to add documents to Vector Store")
                 # Emit KPI with status=error before raising
@@ -261,6 +283,15 @@ class VectorizationProcessor(BaseOutputProcessor):
             )
             return metadata
 
+        except WorkCancelled:
+            # Already logged (and self-cleaned) at the indexing site; propagate
+            # untouched so nothing upstream mistakes a cancel for a failure.
+            raise
+        except VectorProcessingError:
+            # Already logged with its KPI at the failure site above; re-logging
+            # and re-wrapping here produced a second full stacktrace and a
+            # duplicate error KPI for every vectorization failure.
+            raise
         except Exception as e:
             logger.exception("Unexpected error during vectorization")
             # Emit failure KPI for any other error path

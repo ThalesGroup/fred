@@ -37,13 +37,15 @@ import {
   type OwnerFilter,
   type TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { buildTree, collectDescendantTagIds, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
-import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
@@ -101,6 +103,8 @@ interface DocumentWorkspaceProps {
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
+
+type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
@@ -195,10 +199,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // here like any other navigation, so this stack alone can't answer that.
   const [, setNavigationHistory] = useState<(string | null)[]>([]);
   const [perTag, setPerTag] = useState<Record<string, PageState>>({});
+  // Latest page offsets, for the status-poll interval below: it reads them when
+  // it fires, and must not resubscribe every time a page loads.
+  const perTagRef = useRef(perTag);
+  perTagRef.current = perTag;
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
   const [renameTarget, setRenameTarget] = useState<
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
   >(null);
+  // Document whose per-stage ingestion errors are being shown (#2315).
   // "Just reprocessed" rows pinned to "processing" (#1903-era gap): the
   // reprocess route (`POST /process-documents`) returns only the Temporal
   // workflow id — unlike uploads it creates no TaskService task the SSE task
@@ -209,12 +218,41 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [reprocessOverrides, setReprocessOverrides] = useState<Record<string, { snapshot: string; deadline: number }>>(
     {},
   );
+  // The live ingestion task backing each row, keyed by document uid (#2315).
+  // The browse snapshot's `processing.stages` lags the worker — a stage is
+  // stamped `in_progress` only once the activity starts, and nothing refetches
+  // the row before the task finishes — so deriving the badge from the snapshot
+  // alone reads "raw" for the whole run (and a short run never shows
+  // "processing" at all). The SSE task feed already carries the live state
+  // with `target.id = document_uid`; the same map also resolves which task the
+  // row's stop-ingestion action must cancel.
+  const activeDocTaskByUid = useMemo(() => {
+    const byUid = new Map<string, TaskViewModel>();
+    for (const task of activeTasks) {
+      if (task.target?.type === "document" && task.target.id) byUid.set(task.target.id, task);
+    }
+    return byUid;
+  }, [activeTasks]);
+  // Documents whose ingestion finished during THIS browser session — they get
+  // a small "just finished" dot on their otherwise-silent ready state. The
+  // task feed lives in Redux memory, so a refresh clears the set by itself;
+  // that ephemerality is the feature (spot what just finished), not a bug.
+  const allTasks = useSelector(selectAllTasks);
+  const justCompletedDocUids = useMemo(() => {
+    const uids = new Set<string>();
+    for (const task of allTasks) {
+      if (task.state === "succeeded" && task.target?.type === "document" && task.target.id) uids.add(task.target.id);
+    }
+    return uids;
+  }, [allTasks]);
   // A just-reprocessed doc must read as "processing" even though its stale
   // `processing.stages` snapshot hasn't caught up yet — see reprocessOverrides
   // above. Centralized here since every status-driven cell (menu label,
   // StatusChip, excluded-from-search gating) needs the same override applied.
   const getDocStatus = (doc: DocumentMetadata): DocStatus =>
-    reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
+    reprocessOverrides[doc.identity.document_uid]
+      ? "processing"
+      : deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
@@ -239,6 +277,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
+  const [cancelTask] = useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation();
 
   const currentNode = currentFolderFull ? findNode(tree, currentFolderFull) : tree;
   const currentTag = currentNode.tagsHere[0] ?? null;
@@ -324,16 +363,28 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // Port of main's DocumentLibraryList polling loop: while any loaded row is
   // (or is pinned) "processing", reload the folder pages showing it so the
   // badge flips to Ready/Failed without a manual refresh.
+  const pendingTagIds = useMemo(
+    () =>
+      Object.entries(perTag)
+        .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
+        .map(([tagId]) => tagId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getDocStatus is
+    // rebuilt every render; its inputs (perTag, the overrides and the live task
+    // map) are the real dependencies.
+    [perTag, reprocessOverrides, activeDocTaskByUid],
+  );
+  // Keyed on the ids themselves, not the array identity: the live task map is a
+  // new object on every SSE event, and depending on it directly tore down and
+  // restarted the interval on each one — so during a bulk ingestion, when this
+  // refresh matters most, the 3s never elapsed and the folder never reloaded.
+  const pendingTagKey = pendingTagIds.join(",");
   useEffect(() => {
-    const pendingTagIds = Object.entries(perTag)
-      .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
-      .map(([tagId]) => tagId);
-    if (pendingTagIds.length === 0) return;
+    if (!pendingTagKey) return;
     const interval = setInterval(() => {
-      for (const tagId of pendingTagIds) void loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
+      for (const tagId of pendingTagKey.split(",")) void loadTagPage(tagId, perTagRef.current[tagId]?.offset ?? 0);
     }, DOC_STATUS_POLL_MS);
     return () => clearInterval(interval);
-  }, [perTag, reprocessOverrides, loadTagPage]);
+  }, [pendingTagKey, loadTagPage, perTagRef]);
 
   const commands = useDocumentCommands({
     refetchTags,
@@ -411,17 +462,44 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // deletes their documents (TagPermission.DELETE, tag_service.py), so this is
   // safe to offer for both empty and populated folders — the confirmation
   // message just makes the blast radius explicit before it happens.
+  //
+  // That number is counted at click time over the folder AND its sub-folders,
+  // never read from the tag list's `item_ids`, which was wrong in both
+  // directions. Too high: `item_ids` only refreshes when this workspace itself
+  // mutates something, so a document the backend removed on its own — a
+  // cancelled ingestion erasing its half-built document (#2315), the OPS-04
+  // sweeper — stayed counted, and the dialog announced 4 documents for a folder
+  // showing 1. Too low: it covers the folder's own documents only, while
+  // `delete_tag` recurses into every sub-tag — under-announcing what is about
+  // to be destroyed, which is the direction that actually costs data.
   const confirmDeleteFolder = useCallback(
-    (node: TagNode) => {
+    async (node: TagNode) => {
       const tag = node.tagsHere[0];
       if (!tag) return;
-      const docCount = tag.item_ids?.length ?? 0;
+      // One `total` per tag in the subtree, `limit: 1` so the response carries a
+      // count and not a page of documents. Summing across the subtree cannot
+      // double-count: a document is tagged into exactly one folder, the same
+      // invariant the folder-size column relies on.
+      let docCount: number | null = null;
+      try {
+        const pages = await Promise.all(
+          collectDescendantTagIds(node).map((tagId) =>
+            browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
+          ),
+        );
+        docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
+      } catch {
+        // Counting failed — still offer the deletion, but promise no number
+        // rather than a number that might be wrong.
+      }
       showConfirmationDialog({
         title: t("rework.resources.confirm.deleteFolderTitle"),
         message:
-          docCount > 0
-            ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
-            : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
+          docCount === null || (docCount === 0 && node.children.size > 0)
+            ? t("rework.resources.confirm.deleteFolderMessageUnknownCount", { name: node.name })
+            : docCount > 0
+              ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
+              : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
         onConfirm: () =>
           void deleteTag({ tagId: tag.id })
             .unwrap()
@@ -440,17 +518,53 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             }),
       });
     },
-    [deleteTag, showConfirmationDialog, showSuccess, showError, t, refetchTags, currentFolderFull, navigateTo],
+    [
+      browseDocumentsByTag,
+      deleteTag,
+      showConfirmationDialog,
+      showSuccess,
+      showError,
+      t,
+      refetchTags,
+      currentFolderFull,
+      navigateTo,
+    ],
   );
 
+  // Cooperative cancel of the live ingestion task backing this row (#2315) —
+  // the task id comes from the same SSE map the status badge reads. The cancel
+  // is a request, not the outcome: the row keeps reading "processing" until the
+  // executor's verdict lands (the OPS-04 sweeper flips the task to `cancelled`
+  // and fails the document's stuck stages via `on_reconciled_terminal`,
+  // document_failure.py), so the toast is the only immediate acknowledgement.
+  const confirmStopIngestion = useCallback(
+    (doc: DocumentMetadata) => {
+      const task = activeDocTaskByUid.get(doc.identity.document_uid);
+      if (!task) return;
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.stopIngestionTitle"),
+        message: t("rework.resources.confirm.stopIngestionMessage", { name: documentDisplayName(doc) }),
+        onConfirm: () =>
+          void cancelTask({ taskId: task.taskId })
+            .unwrap()
+            .then(() => showSuccess?.({ summary: t("rework.resources.toast.stopIngestionRequested") }))
+            .catch((e: unknown) => {
+              showError?.({
+                summary: t("validation.error"),
+                detail:
+                  (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.stopIngestionError"),
+              });
+            }),
+      });
+    },
+    [activeDocTaskByUid, cancelTask, showConfirmationDialog, showSuccess, showError, t],
+  );
+
+  // Derived from the same map the badge and the row menu read, so "this row has
+  // a live ingestion" has one definition in this page instead of three.
   const runningDocIds = useMemo(
-    () =>
-      new Set(
-        activeTasks
-          .filter((task) => task.target?.type === "document" && task.state !== "failed")
-          .map((task) => task.target?.id),
-      ),
-    [activeTasks],
+    () => new Set([...activeDocTaskByUid].filter(([, task]) => task.state !== "failed").map(([uid]) => uid)),
+    [activeDocTaskByUid],
   );
 
   const prevRunningDocIdsRef = useMemo(() => ({ current: new Set<string | undefined>() }), []);
@@ -692,14 +806,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     ];
   };
 
-  const moreOptionsForDoc = (
-    doc: DocumentMetadata,
-  ): OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] => {
+  const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<DocMenuAction>[] => {
     // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
     // document that already succeeded, not a first ingestion. Any other status
     // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
     const status = getDocStatus(doc);
-    const options: OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] = [];
+    const activeTask = activeDocTaskByUid.get(doc.identity.document_uid);
+    const options: OptionModel<DocMenuAction>[] = [];
+    // No "error detail" entry here: the per-stage messages ride the "failed"
+    // StatusChip itself, on hover (#2315).
     if (canCreateFolder) {
       options.push({
         value: "rename",
@@ -750,12 +865,32 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               },
             ]
           : []),
+        // Only while the backing task is genuinely stoppable — `cancelling`
+        // means a stop was already requested, offering a second one is noise.
+        ...(activeTask && (activeTask.state === "pending" || activeTask.state === "running")
+          ? [
+              {
+                value: "stopIngestion" as const,
+                key: "stopIngestion",
+                label: t("rework.resources.action.stopIngestion"),
+                icon: { category: "outlined" as const, type: "stop" as const },
+                destructive: true,
+              },
+            ]
+          : []),
         {
           value: "delete",
           key: "delete",
           label: t("rework.resources.action.delete"),
           icon: { category: "outlined", type: "delete" },
           destructive: true,
+          // #2315: while an ingestion is live, "stop" is the only exit — it
+          // cancels the workflow AND deletes the half-built document. A plain
+          // delete here would race the still-running workflow, which can
+          // re-write metadata/vectors right after the delete lands. Greyed
+          // with a hover tooltip explaining why, per developer request.
+          disabled: !!activeTask,
+          ...(activeTask ? { tooltip: t("rework.resources.action.deleteDisabledWhileProcessing") } : {}),
         },
       );
     }
@@ -860,11 +995,22 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       },
     },
     {
+      // Fixed for the same header/body dual-grid reason as the actions column
+      // below. Sized for the widest chip — FR "Traitement..." with its spinner
+      // (~100px) — which 6rem clipped; the shorter Erreur/En attente chips
+      // masked that until the live-task wiring (#2315) made "processing"
+      // actually render here.
       label: "",
-      size: "6rem",
+      size: "8rem",
       cellRenderer: (row) => {
         if (row.kind !== "document") return null;
-        return <StatusChip status={getDocStatus(row.doc)} />;
+        return (
+          <StatusChip
+            status={getDocStatus(row.doc)}
+            errors={row.doc.processing?.errors}
+            justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
+          />
+        );
       },
     },
     {
@@ -912,7 +1058,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                 />
               </Tooltip>
             )}
-            <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
+            <IconButtonMenu<DocMenuAction>
               iconButton={{
                 color: "on-surface-retreat",
                 variant: "icon",
@@ -924,12 +1070,13 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               onSelect={(value) => {
                 if (row.kind === "folder") {
                   if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
-                  if (value === "delete") confirmDeleteFolder(row.node);
+                  if (value === "delete") void confirmDeleteFolder(row.node);
                 } else {
                   if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                   if (value === "download") void commands.download(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
+                  if (value === "stopIngestion") confirmStopIngestion(row.doc);
                   if (value === "delete" && currentTag) {
                     showConfirmationDialog({
                       title: t("rework.resources.confirm.deleteTitle"),

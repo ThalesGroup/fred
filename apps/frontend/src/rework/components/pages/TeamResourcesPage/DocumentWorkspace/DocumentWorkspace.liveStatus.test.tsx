@@ -13,10 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the toolbar swap: "Nouveau dossier"/"Ajouter des fichiers" are
-// not useful once the user is selecting rows to bulk-act on, so the bulk
-// actions bar (delete/exclude) replaces them entirely instead of the two
-// sitting side by side, for as long as at least one row is selected.
+// Coverage (#2315 live status): the row badge must reflect the LIVE ingestion
+// task from the SSE feed, not only the browse snapshot's `processing.stages`.
+// A document whose snapshot still reads "raw" but that has an active task
+// (target.type === "document", target.id === document_uid) renders
+// "processing" immediately; a document with no active task keeps deriving from
+// its snapshot ("raw"/"En attente"). This is the regression test for the
+// upload that used to sit on "En attente" for its whole run and jump straight
+// to done without ever showing "Traitement…".
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -31,15 +35,34 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+// The component reads the task feed through useSelector(selectActiveTasks) —
+// forward the (mocked) selector's own return value instead of a hardcoded [].
+vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
 
-const doc = (uid: string, name: string) => ({
+const rawDoc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
-  source: { date_added_to_kb: "2026-07-01T00:00:00Z" },
-  processing: { stages: { raw: "done", vector: "done" } },
+  source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: false },
+  processing: { stages: {} },
   tags: { tag_ids: ["tag-cir"] },
 });
+
+const runningTask = {
+  taskId: "task-live",
+  kind: "ingestion",
+  target: { type: "document", id: "uid-live", label: "Live doc.pdf" },
+  owner: null,
+  localOnly: false,
+  state: "running",
+  progress: 0.4,
+  step: "processing",
+  error: null,
+  lastSeq: 3,
+  registeredAt: 0,
+  terminalAt: null,
+  acknowledgedAt: null,
+  warnings: null,
+};
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
@@ -48,14 +71,22 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     refetch: () => {},
   }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
-    () => ({ unwrap: async () => ({ documents: [doc("uid-1", "Report")], total: 1 }) }),
+    () => ({
+      unwrap: async () => ({
+        documents: [rawDoc("uid-live", "Live doc"), rawDoc("uid-idle", "Idle doc")],
+        total: 2,
+      }),
+    }),
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [], selectAllTasks: () => [] }));
+vi.mock("../../../../features/tasks/taskSlice", () => ({
+  selectActiveTasks: () => [runningTask],
+  selectAllTasks: () => [],
+}));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
@@ -99,7 +130,6 @@ beforeEach(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
 
-  // Navigate into "CIR" — its documents only load once it's the current folder.
   const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
@@ -114,44 +144,21 @@ afterEach(() => {
   container.remove();
 });
 
-function rowCheckbox(): HTMLInputElement {
-  // [0] is the header's "select all"; [1] is the one doc row in this fixture.
-  const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
-  const box = boxes[1];
-  if (!box) throw new Error("row checkbox not rendered");
-  return box as HTMLInputElement;
+function rowFor(name: string): HTMLElement {
+  const nameCell = [...container.querySelectorAll("span")].find((el) => el.textContent === name);
+  if (!nameCell) throw new Error(`row for "${name}" not found`);
+  const row = nameCell.closest('[class*="datatable-row"]');
+  if (!row) throw new Error(`row container for "${name}" not found`);
+  return row as HTMLElement;
 }
 
-describe("DocumentWorkspace toolbar — bulk actions replace new-folder/add-file while selecting", () => {
-  it("hides new-folder/add-file and shows bulk actions once a row is selected", () => {
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
-
-    act(() => {
-      rowCheckbox().click();
-    });
-
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
-    expect(
-      container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]'),
-    ).not.toBeNull();
+describe("DocumentWorkspace — live task drives the status badge", () => {
+  it("shows 'processing' for a document whose snapshot is raw but whose ingestion task is running", () => {
+    expect(rowFor("Live doc.pdf").textContent).toContain("rework.resources.status.processing");
   });
 
-  it("restores new-folder/add-file once the selection is cleared", () => {
-    act(() => {
-      rowCheckbox().click();
-    });
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
-
-    act(() => {
-      rowCheckbox().click(); // untoggle
-    });
-
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+  it("keeps deriving from the snapshot for a document with no active task", () => {
+    expect(rowFor("Idle doc.pdf").textContent).toContain("rework.resources.status.raw");
+    expect(rowFor("Idle doc.pdf").textContent).not.toContain("rework.resources.status.processing");
   });
 });

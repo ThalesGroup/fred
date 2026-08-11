@@ -18,7 +18,16 @@ import logging
 from typing import Any, List, Optional, cast
 
 from pydantic import ValidationError
-from sqlalchemy import BigInteger, CursorResult, bindparam, delete, func, select, text
+from sqlalchemy import (
+    BigInteger,
+    CursorResult,
+    bindparam,
+    delete,
+    func,
+    select,
+    text,
+    update,
+)
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -293,10 +302,44 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             if row is None:
                 row = DocumentMetadataRow(document_uid=uid)
                 s.add(row)
-            row.source_tag = metadata.source.source_tag
-            row.date_added_to_kb = metadata.source.date_added_to_kb
-            row.tag_ids = list(metadata.tags.tag_ids or [])
-            row.doc = self._to_dict(metadata)
+            self._apply(row, metadata)
+
+    async def update_metadata(
+        self, metadata: DocumentMetadata, session: AsyncSession | None = None
+    ) -> bool:
+        """Update one metadata row, reporting whether the document still existed.
+
+        A single conditional UPDATE rather than `get` + save: a writer that
+        outlived the document's deletion (see the base-class contract) must not
+        be able to re-create it, and a read-then-write only narrows that window
+        instead of closing it.
+        """
+        uid = self._require_uid(metadata)
+        async with use_session(self._sessions, session) as s:
+            # cast: AsyncSession.execute is typed as returning Result, but a DML
+            # statement always yields a CursorResult, which is what carries rowcount.
+            result = cast(
+                CursorResult[Any],
+                await s.execute(
+                    update(DocumentMetadataRow)
+                    .where(DocumentMetadataRow.document_uid == uid)
+                    .values(
+                        source_tag=metadata.source.source_tag,
+                        date_added_to_kb=metadata.source.date_added_to_kb,
+                        tag_ids=list(metadata.tags.tag_ids or []),
+                        doc=self._to_dict(metadata),
+                    )
+                ),
+            )
+            return result.rowcount > 0
+
+    def _apply(self, row: DocumentMetadataRow, metadata: DocumentMetadata) -> None:
+        """Copy a metadata payload onto a row — the column list `update_metadata`
+        must stay in sync with."""
+        row.source_tag = metadata.source.source_tag
+        row.date_added_to_kb = metadata.source.date_added_to_kb
+        row.tag_ids = list(metadata.tags.tag_ids or [])
+        row.doc = self._to_dict(metadata)
 
     async def bulk_mark_vector_done(
         self,

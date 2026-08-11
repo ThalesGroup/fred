@@ -39,6 +39,7 @@ from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import is_cancelled_exception
 
 
 def _wf_get(item: Any, key: str, default=None):
@@ -122,6 +123,28 @@ def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
         # Missing/invalid input: fall through to default_seconds below.
         pass
     return default_seconds
+
+
+def _wf_file_terminal_event_args(exc: BaseException, task_id: str, document_uid: Any, display_name: Any) -> list[Any]:
+    """Build the `emit_ingestion_task_event` args for a per-file pipeline that
+    ended on an exception.
+
+    Cancellation is reported as `cancelled`, never `failed` (#2315): a user stop
+    must not paint the row red, and the terminal state decides what the event's
+    handler does with the document — fail its stuck stages, or erase it.
+    Detection is the SDK's own `is_cancelled_exception`, which knows the shape
+    this arrives in (a `ChildWorkflowError` whose direct cause is a Temporal
+    `CancelledError`); an arbitrary `__cause__` walk would also match a genuine
+    failure that merely carries a cancellation somewhere below it, and deleting
+    the user's document on that reading is not a mistake worth risking.
+
+    Pure so the rule is stated once and unit-testable without a Temporal
+    environment — same shape as `_wf_scope_resolution_failed_event_args`.
+    """
+    if is_cancelled_exception(exc):
+        return [task_id, "cancelled", None, None, "Ingestion cancelled", 0, 1, 0, document_uid, display_name]
+    error_str = str(exc).strip() or "Processing failed"
+    return [task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name]
 
 
 def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
@@ -347,6 +370,9 @@ class PullInputProcess:
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=_wf_activity_retry_policy(file),
+            # See OutputProcess below: compensation must run after the activity
+            # actually finished cancelling, not concurrently with it.
+            cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
 
@@ -381,6 +407,9 @@ class PushInputProcess:
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=_wf_activity_retry_policy(file),
+            # See OutputProcess below: compensation must run after the activity
+            # actually finished cancelling, not concurrently with it.
+            cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
 
@@ -403,7 +432,24 @@ class OutputProcess:
             "output_process",
             args=[file, metadata, False],
             schedule_to_close_timeout=timedelta(hours=1),
+            # Same heartbeat contract as the input activities: the activity now
+            # heartbeats (`to_thread_with_heartbeat`), which is also how Temporal
+            # delivers cancellation to it — without a heartbeating activity, a
+            # user's cancel never reached the vectorization stage and it ran to
+            # completion for a deleted document (#2315). The timeout additionally
+            # frees the slot when a worker dies mid-output.
+            heartbeat_timeout=timedelta(seconds=300),
             retry_policy=_wf_activity_retry_policy(file),
+            # WAIT, not the default TRY_CANCEL: with TRY_CANCEL the workflow
+            # resumed (and its compensation purged the document's artifacts)
+            # while the activity's worker thread was still writing — vectors
+            # observed landing *after* the purge, orphaned (#2315). WAIT holds
+            # the workflow until the activity finished cancelling (the activity
+            # drains its thread, see to_thread_with_heartbeat), restoring the
+            # order "last write, then cleanup". It also lets the SDK complete
+            # the activity as *cancelled* (quiet DEBUG) instead of "failed"
+            # with a CancelledError stacktrace at WARNING.
+            cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
 
@@ -502,10 +548,9 @@ class ProcessPullFile:
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                error_str = str(exc).strip() or "Processing failed"
                 await workflow.execute_activity(
                     "emit_ingestion_task_event",
-                    args=[task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name],
+                    args=_wf_file_terminal_event_args(exc, task_id, document_uid, display_name),
                     schedule_to_close_timeout=timedelta(hours=1),
                     retry_policy=RetryPolicy(maximum_attempts=1),
                 )
@@ -594,10 +639,9 @@ class ProcessPushFile:
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                error_str = str(exc).strip() or "Processing failed"
                 await workflow.execute_activity(
                     "emit_ingestion_task_event",
-                    args=[task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name],
+                    args=_wf_file_terminal_event_args(exc, task_id, document_uid, display_name),
                     schedule_to_close_timeout=timedelta(hours=1),
                     retry_policy=RetryPolicy(maximum_attempts=1),
                 )
