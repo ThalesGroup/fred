@@ -21,7 +21,3 @@
   align-items: center;
   gap: var(--spacing-s);
 }
-
-.turn:hover .footer {
-  opacity: 1;
-}

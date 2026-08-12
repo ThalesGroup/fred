@@ -119,7 +119,7 @@ export const AssistantTurn = memo(function AssistantTurn({
 
       {!isStreaming && text && (
         <div className={styles.footer}>
-          <ActionBar actions={actions} />
+          <ActionBar actions={actions} alwaysVisible />
           {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
         </div>
       )}
