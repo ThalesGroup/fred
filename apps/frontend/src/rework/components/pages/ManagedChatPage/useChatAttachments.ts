@@ -17,6 +17,7 @@ import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import { useFastIngestKnowledgeFlowV1FastIngestPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
@@ -60,7 +61,7 @@ function emitLocalTaskEvent(
       state,
       seq: state === "running" ? 0 : 1,
       timestamp: new Date().toISOString(),
-      progress: state === "succeeded" ? 100 : state === "failed" ? null : 10,
+      progress: state === "succeeded" ? 1 : state === "failed" ? null : 0.1,
       step,
       error,
       target,
@@ -68,6 +69,11 @@ function emitLocalTaskEvent(
       detail: null,
     }),
   );
+}
+
+function formatAttachmentError(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message;
+  return normalizeApiError(err).detail ?? fallback;
 }
 
 function toSessionAttachment(payload: SessionAttachmentApiPayload): SessionAttachment {
@@ -299,19 +305,18 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             ),
           );
         } catch (err) {
+          const errorMessage = formatAttachmentError(err, t("chatbot.errors.attachmentUploadFailedDetail"));
           emitLocalTaskEvent(
             dispatch,
             localTaskId,
             "failed",
             { type: "attachment", id, label: file.name },
             t("chatbot.attachments.processingFailed"),
-            err instanceof Error ? err.message : String(err),
+            errorMessage,
           );
           setAttachments((prev) =>
             prev.map((attachment) =>
-              attachment.id === id
-                ? { ...attachment, status: "error", error: err instanceof Error ? err.message : String(err) }
-                : attachment,
+              attachment.id === id ? { ...attachment, status: "error", error: errorMessage } : attachment,
             ),
           );
         }
