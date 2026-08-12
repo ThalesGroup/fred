@@ -192,6 +192,9 @@ class _FakeTreePort(DocumentTreePort):
             raise self._error
         return self._result
 
+    async def list_by_label(self, **kwargs: Any):
+        raise NotImplementedError("list_by_label is not used by document_access")
+
 
 def _capability_tools(
     cap: DocumentAccessCapability, ctx: CapabilityContext[Any, Any]
