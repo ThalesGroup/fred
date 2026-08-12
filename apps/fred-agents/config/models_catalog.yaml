@@ -22,7 +22,7 @@ profiles:
     # Non-reasoning model: structured output (JSON) and tool loops are reliable.
     # A reasoning model (mistral-small-2603 + reasoning_effort) emits its content
     # as `thinking` blocks → structured/JSON parsing fails ("expected value at
-    # line 1 column 1"), and the tool loop re-issues calls (see ISSUE-005).
+    # line 1 column 1"), and the tool loop re-issues calls (see GH #1780).
     model:
       provider: openai
       name: mistral-medium-latest

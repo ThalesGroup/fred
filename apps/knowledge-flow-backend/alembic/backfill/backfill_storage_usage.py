@@ -132,7 +132,7 @@ async def calculate_ingested_documents_sizes(session: AsyncSession, rebac) -> tu
             # usage that no route can ever release. The live accounting does not
             # charge these documents either, so skipping keeps this script and the
             # runtime in agreement. Making untagged documents impossible to
-            # create in the first place is tracked in docs/swift/issues/.
+            # create in the first place is not yet tracked as a GitHub issue.
             skipped_untagged += 1
             skipped_untagged_bytes += doc_size
             continue
