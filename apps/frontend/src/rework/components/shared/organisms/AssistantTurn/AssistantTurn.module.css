@@ -20,13 +20,18 @@
   /* HorizontalScrollRow defaults handle the scroll + gradient fade */
 }
 
+/* Same reveal contract as UserTurn's actions: reserved space (no layout
+   shift), faded in on hover or keyboard focus only. */
 .footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
+  opacity: 0;
+  transition: opacity 150ms ease;
 }
 
-.turn:hover .footer {
+.turn:hover .footer,
+.turn:focus-within .footer {
   opacity: 1;
 }
