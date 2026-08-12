@@ -39,6 +39,16 @@
   line-height: 1;
 }
 
+.model {
+  font-weight: 600;
+  line-height: 1;
+}
+
+.state {
+  color: var(--on-surface-retreat);
+  line-height: 1;
+}
+
 .chevron {
   display: flex;
   flex-shrink: 0;

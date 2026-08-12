@@ -88,17 +88,19 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
     expect(render([reasoningControl()], false, true)).toContain("disabled");
   });
 
-  it("leads the button with the model identity when served", () => {
+  it("leads the button with the bold model identity and a muted state", () => {
     const html = render(
       [reasoningControl({ default: false, effort: "high", model_id: "model__openai__mistral-small-latest" })],
       true,
     );
-    expect(html).toContain("Mistral Small · chatbot.composerSettings.reasoningHigh");
+    // Two spans, weight/color contrast as the separator (no middot).
+    expect(html).toMatch(/Mistral Small Latest<\/span>.*chatbot\.composerSettings\.reasoningHigh/);
+    expect(html).not.toContain("·");
   });
 
   it("keeps the bare reasoning labels when no model is served", () => {
     const html = render([reasoningControl({ default: false, effort: "high" })], false);
-    expect(html).not.toContain("·");
+    expect(html).not.toContain("Mistral");
   });
 
   it("owns the reasoning_toggle promotion out of the tune popover", () => {
@@ -122,9 +124,24 @@ describe("effortLabelKey", () => {
 });
 
 describe("modelLabelFromCapabilityId (temporary heuristic until multi-model)", () => {
-  it("prettifies the model segment and drops the 'latest' suffix", () => {
-    expect(modelLabelFromCapabilityId("model__openai__mistral-small-latest")).toBe("Mistral Small");
-    expect(modelLabelFromCapabilityId("model__openai__gpt-5.1")).toBe("Gpt 5 1");
+  it("handles the major providers' real model names", () => {
+    // OpenAI — version dots survive, GPT/ChatGPT cased, "latest" kept.
+    expect(modelLabelFromCapabilityId("model__openai__gpt-4o")).toBe("GPT 4o");
+    expect(modelLabelFromCapabilityId("model__openai__gpt-4.1-mini")).toBe("GPT 4.1 Mini");
+    expect(modelLabelFromCapabilityId("model__openai__gpt-5.1")).toBe("GPT 5.1");
+    expect(modelLabelFromCapabilityId("model__openai__o3")).toBe("O3");
+    expect(modelLabelFromCapabilityId("model__openai__chatgpt-4o-latest")).toBe("ChatGPT 4o Latest");
+    // Anthropic — release date stamps dropped, versions kept.
+    expect(modelLabelFromCapabilityId("model__anthropic__claude-fable-5")).toBe("Claude Fable 5");
+    expect(modelLabelFromCapabilityId("model__anthropic__claude-haiku-4-5-20251001")).toBe("Claude Haiku 4 5");
+    // Mistral — the fleet, incl. the catalog's own entry.
+    expect(modelLabelFromCapabilityId("model__openai__mistral-small-latest")).toBe("Mistral Small Latest");
+    expect(modelLabelFromCapabilityId("model__mistral__codestral-latest")).toBe("Codestral Latest");
+    expect(modelLabelFromCapabilityId("model__mistral__open-mixtral-8x7b")).toBe("Open Mixtral 8x7B");
+    // Google / Meta / DeepSeek.
+    expect(modelLabelFromCapabilityId("model__google__gemini-2.5-pro")).toBe("Gemini 2.5 Pro");
+    expect(modelLabelFromCapabilityId("model__ollama__llama-3.3-70b-instruct")).toBe("Llama 3.3 70B Instruct");
+    expect(modelLabelFromCapabilityId("model__deepseek__deepseek-r1")).toBe("DeepSeek R1");
   });
 
   it("rejects anything that is not a model capability id", () => {
