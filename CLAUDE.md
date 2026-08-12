@@ -66,7 +66,7 @@ Run this audit before any implementation, spec, or doc change.
 work. `docs/swift/PMO-BOARD.md` and `docs/swift/data/sprint.yaml` were removed
 (2026-07-21) — they duplicated GitHub without ever being kept current. **GitHub
 Issues + Milestones are the single source of
-truth for sprints, issues, and milestones** (run `gh milestone list --state open`
+truth for sprints, issues, and milestones** (run `gh api "repos/:owner/:repo/milestones?state=open"`
 to see which ones are current — do not hardcode milestone names in this file,
 they close and get replaced). Before starting anything, check
 `gh issue list` (by title keyword or milestone) for an existing issue covering
@@ -142,7 +142,7 @@ Decision tree for every piece of new content:
       → write/update the compact doc directly (design/contract doc, or the
         relevant component doc). No RFC needed — note why in the close-out.
     New feature, endpoint, or component?
-      → check for an existing GitHub issue (see `gh milestone list --state open`).
+      → check for an existing GitHub issue (see `gh api "repos/:owner/:repo/milestones?state=open"`).
         Stop until developer confirms.
     Code style, typing, or testing rule?
       → docs/CONVENTIONS.md
@@ -172,7 +172,7 @@ touched, which tests added, which docs updated. **Do not begin until confirmed.*
 One sentence of approval is enough.
 
 **Step 3.5 — GitHub issue (execution handoff).** Most work starts from an
-existing GitHub issue (check `gh milestone list --state open` for the
+existing GitHub issue (check `gh api "repos/:owner/:repo/milestones?state=open"` for the
 current milestone) — that's the
 normal case, use it. If none exists for the task, offer to create one before
 implementing. If Step 1 produced an RFC, link it in the issue. Do not
@@ -249,7 +249,7 @@ own `**Status:**` line (if any) tracks the design.
 For team activity, current focus, and where the real work lives: read
 `docs/swift/STATUS.md` first — it is intentionally thin and points to GitHub.
 For the actual list of active/open work, query GitHub directly:
-`gh milestone list --state open` for the current milestones, then
+`gh api "repos/:owner/:repo/milestones?state=open"` for the current milestones, then
 `gh issue list --milestone "<name>"`. Do not expect `STATUS.md` to mirror
 issue content — it won't, by design.
 
@@ -344,7 +344,7 @@ Do not silently expand scope. Do not silently delete content.
 | OpenAI/Codex agent instructions          | `AGENT.md`, `AGENTS.md`                               |
 | Gemini agent instructions                | `GEMINI.md`                                           |
 | Team activity, current focus (thin — points to GitHub) | `docs/swift/STATUS.md`                  |
-| Active work, milestones (check `gh milestone list --state open`) | GitHub Issues/Milestones (`gh issue list`) |
+| Active work, milestones (check `gh api "repos/:owner/:repo/milestones?state=open"`) | GitHub Issues/Milestones (`gh issue list`) |
 | Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
