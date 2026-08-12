@@ -561,6 +561,7 @@
     "downloadStarting": "Préparation du téléchargement...",
     "dropFiles": "Déposez vos fichiers ici",
     "excessSize": "Dépassement : ",
+    "folderRequired": "Seuls les fichiers contenus dans un dossier peuvent être ajoutés ici — les fichiers seuls ont été ignorés.",
     "folders": "Dossiers",
     "ingestionMode": "Mode d'ingestion",
     "keywords": "Mots-clés",
@@ -1532,6 +1533,13 @@
       },
       "embeddedTitleHint": "Titre intégré au fichier : {{title}}",
       "dropInFolder": "Déposez vos fichiers pour les ajouter à « {{folder}} »",
+      "dropAtRoot": "Déposez un dossier pour le créer ici avec son arborescence",
+      "rootDrop": {
+        "rejectedTitle": "Déposez un dossier",
+        "rejectedDetail": "Les fichiers seuls ne peuvent pas être déposés à la racine — déposez un dossier (il deviendra une bibliothèque), ou déposez les fichiers dans un dossier existant.",
+        "skippedDetail_one": "{{count}} fichier seul a été ignoré — seul le contenu des dossiers déposés a été conservé.",
+        "skippedDetail_other": "{{count}} fichiers seuls ont été ignorés — seul le contenu des dossiers déposés a été conservé."
+      },
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",

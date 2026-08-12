@@ -50,6 +50,11 @@ interface DocumentUploadDrawerProps {
    * caller (it knows the tag tree); absent => structure is ignored and every file
    * lands flat in the destination folder, the historical behavior. */
   ensureFolderPath?: (segments: string[]) => Promise<string | null>;
+  /** Destination with no tag of its own (the corpus root): every file must sit
+   * inside a dropped folder — its chain becomes the file's library — because a
+   * loose file would upload tagless and be invisible in the corpus. Loose
+   * files are filtered out of the list (with a toast when it happens). */
+  requireFolderPerFile?: boolean;
 }
 
 /**
@@ -103,6 +108,7 @@ export function DocumentUploadDrawer({
   destinationPath,
   initialFiles,
   ensureFolderPath,
+  requireFolderPerFile,
 }: DocumentUploadDrawerProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
@@ -145,10 +151,14 @@ export function DocumentUploadDrawer({
   const [isLoading, setIsLoading] = useState(false);
 
   // Seed on open only: `files` stays local state afterwards (user can still add
-  // or remove entries), and closing resets it via handleClose as usual.
+  // or remove entries), and closing resets it via handleClose as usual. The
+  // caller already filters loose files out of a root-drop seed — the filter
+  // here is for any other opener of a tagless destination.
   useEffect(() => {
-    if (isOpen && initialFiles?.length) setFiles(initialFiles);
-  }, [isOpen, initialFiles]);
+    if (isOpen && initialFiles?.length) {
+      setFiles(requireFolderPerFile ? initialFiles.filter((f) => relativeDirSegments(f).length > 0) : initialFiles);
+    }
+  }, [isOpen, initialFiles, requireFolderPerFile]);
 
   const resolvedTeamId = teamId ?? "personal";
   const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId });
@@ -177,9 +187,16 @@ export function DocumentUploadDrawer({
     // Enter/Space opens the file dialog (react-dropzone), so adding files no
     // longer depends on a mouse/drag. Focus-visible styling lives in the CSS.
     onDrop: (accepted) => {
+      const usable = requireFolderPerFile ? accepted.filter((f) => relativeDirSegments(f).length > 0) : accepted;
+      if (usable.length < accepted.length) {
+        showError?.({
+          summary: t("documentLibrary.uploadDrawerTitle"),
+          detail: t("documentLibrary.folderRequired"),
+        });
+      }
       setFiles((prev) => {
         const existing = new Set(prev.map((f) => `${f.name}-${f.size}-${f.lastModified}`));
-        return [...prev, ...accepted.filter((f) => !existing.has(`${f.name}-${f.size}-${f.lastModified}`))];
+        return [...prev, ...usable.filter((f) => !existing.has(`${f.name}-${f.size}-${f.lastModified}`))];
       });
     },
   });

@@ -147,6 +147,25 @@ describe("DocumentUploadDrawer nested-folder saves", () => {
     expect(container.textContent).not.toContain("documentLibrary.nestedFoldersHint");
   });
 
+  it("filters loose files out of the seed when requireFolderPerFile is set (tagless destination)", async () => {
+    render(
+      <DocumentUploadDrawer
+        isOpen
+        onClose={() => {}}
+        requireFolderPerFile
+        ensureFolderPath={async (segments: string[]) => `tag-${segments.join("-")}`}
+        initialFiles={[fileAt("root.pdf", "./root.pdf"), fileAt("a.pdf", "/batch/a.pdf")]}
+      />,
+    );
+
+    expect(container.textContent).toContain("batch/a.pdf");
+    expect(container.textContent).not.toContain("root.pdf");
+
+    await clickSave();
+    expect(probe.scheduled.map((s) => s.name)).toEqual(["a.pdf"]);
+    expect(probe.scheduled[0].metadata.tags).toEqual(["tag-batch"]);
+  });
+
   it("aborts the save (nothing uploaded, drawer open) when folder resolution fails", async () => {
     const onClose = vi.fn();
     render(

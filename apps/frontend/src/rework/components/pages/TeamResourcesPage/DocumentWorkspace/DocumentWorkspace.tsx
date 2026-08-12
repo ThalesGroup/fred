@@ -25,6 +25,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
+import { relativeDirSegments } from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
 import {
   DocumentViewer,
   DocumentViewerModeToggle,
@@ -166,7 +167,7 @@ function rowLabel(row: Row): string {
  */
 function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarn } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
@@ -353,12 +354,25 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     });
   }, []);
 
-  // Load the current folder's document page on entry (and once when its tag
-  // first resolves) — mirrors the old "load on expand" behavior, now scoped
-  // to whichever single folder is being viewed.
+  // Load the current folder's document page on EVERY entry, not just the first:
+  // a folder opened while its files were still uploading (or their fresh ReBAC
+  // tuples still propagating server-side) would otherwise stay frozen on that
+  // first empty snapshot forever — none of the other refresh paths retries a
+  // page that doesn't yet SHOW the document (the 3s poll needs a visible
+  // processing row, useRefetchOnTaskSuccess needs the doc already in the page,
+  // useNotifyOnNewTaskTarget fires before this page exists). loadTagPage keeps
+  // the previous rows while reloading, so re-entering an already-loaded folder
+  // refreshes without a flash of empty.
+  const currentTagId = currentTag?.id ?? null;
   useEffect(() => {
-    if (currentTag && !perTag[currentTag.id]) void loadTagPage(currentTag.id, 0);
-  }, [currentTag, perTag, loadTagPage]);
+    if (currentTagId) void loadTagPage(currentTagId, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
+    // folder identity alone: one load per ENTRY is the contract, so nothing
+    // else may retrigger it. loadTagPage is deliberately not a dep — its
+    // identity tracks rowsPerPage (whose change already reloads explicitly
+    // via handleRowsPerPageChange), and any harness that rebuilds the browse
+    // trigger per render would otherwise refire this into a reload loop.
+  }, [currentTagId]);
 
   // Drop an override once the backend visibly re-stamped the document (its
   // fresh stages no longer match the click-time snapshot — the real derived
@@ -397,11 +411,20 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     // map) are the real dependencies.
     [perTag, reprocessOverrides, activeDocTaskByUid],
   );
+  // While any ingestion is live, poll the folder being viewed too, even if its
+  // loaded page shows no processing row yet: a subfolder entered before its
+  // files' uploads (or their fresh ReBAC tuples) landed keeps an empty
+  // snapshot that no other refresh path retries — this loop picks the rows up
+  // as they become visible, with their live "processing" badge.
+  const pollTagIds =
+    activeDocTaskByUid.size > 0 && currentTagId && !pendingTagIds.includes(currentTagId)
+      ? [...pendingTagIds, currentTagId]
+      : pendingTagIds;
   // Keyed on the ids themselves, not the array identity: the live task map is a
   // new object on every SSE event, and depending on it directly tore down and
   // restarted the interval on each one — so during a bulk ingestion, when this
   // refresh matters most, the 3s never elapsed and the folder never reloaded.
-  const pendingTagKey = pendingTagIds.join(",");
+  const pendingTagKey = pollTagIds.join(",");
   useEffect(() => {
     if (!pendingTagKey) return;
     const interval = setInterval(() => {
@@ -598,13 +621,33 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     for (const { tagId, offset } of pages) void loadTagPage(tagId, offset);
   }, [runningDocIds, perTag, loadTagPage, prevRunningDocIdsRef]);
 
-  /** Seed the ingestion drawer with an OS-file drop, targeting `node`. */
-  const openDrawerWithDroppedFiles = (event: React.DragEvent, node: TagNode) => {
+  /** Seed the ingestion drawer with an OS-file drop, targeting `node`.
+   * `requireDir` (the corpus root, where a file can only live inside a
+   * library): keep only files that came out of a dropped folder — their
+   * chain becomes the library — and reject loose ones, with a toast. */
+  const openDrawerWithDroppedFiles = (event: React.DragEvent, node: TagNode, requireDir = false) => {
     event.preventDefault();
     // fromEvent must start synchronously: the DataTransfer entries needed to
     // walk a dropped directory are dead once the drop handler has returned.
     void fromEvent(event.nativeEvent).then((items) => {
-      const dropped = items.filter((item): item is File => item instanceof File);
+      let dropped = items.filter((item): item is File => item instanceof File);
+      if (requireDir) {
+        const foldered = dropped.filter((file) => relativeDirSegments(file).length > 0);
+        if (foldered.length === 0) {
+          if (dropped.length > 0)
+            showError?.({
+              summary: t("rework.resources.rootDrop.rejectedTitle"),
+              detail: t("rework.resources.rootDrop.rejectedDetail"),
+            });
+          return;
+        }
+        if (foldered.length < dropped.length)
+          showWarn?.({
+            summary: t("rework.resources.rootDrop.rejectedTitle"),
+            detail: t("rework.resources.rootDrop.skippedDetail", { count: dropped.length - foldered.length }),
+          });
+        dropped = foldered;
+      }
       if (dropped.length === 0) return;
       setDropTargetNode(node);
       setDroppedFiles(dropped);
@@ -1233,9 +1276,12 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // The full page is a drop surface for the folder being viewed — the drill-down
   // model shows one folder at a time, so "drop anywhere" reads as "add to this
   // folder". Folder rows keep their own (more specific) drop target above this
-  // one. Same CAN_UPDATE_RESOURCES gate as the toolbar upload action, and only
-  // inside a folder: the corpus root has no tag to attach plain files to.
-  const pageDroppable = !!currentTag && canCreateFolder;
+  // one. Same CAN_UPDATE_RESOURCES gate as the toolbar upload action. At the
+  // corpus root there is no tag to attach plain files to, so only dropped
+  // FOLDERS are accepted there — each one becomes a library mirroring its
+  // structure (openDrawerWithDroppedFiles filters loose files out).
+  const atRoot = !currentFolderFull;
+  const pageDroppable = canCreateFolder && (!!currentTag || atRoot);
   const pageDropProps = pageDroppable
     ? {
         onDragOver: (event: React.DragEvent) => {
@@ -1253,7 +1299,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         },
         onDrop: (event: React.DragEvent) => {
           setPageDragOver(false);
-          openDrawerWithDroppedFiles(event, currentNode);
+          openDrawerWithDroppedFiles(event, currentNode, atRoot);
         },
       }
     : {};
@@ -1342,7 +1388,11 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       {pageDragActive && (
         <div className={styles.pageDropOverlay} aria-hidden>
           <Icon category="outlined" type="upload" />
-          <span>{t("rework.resources.dropInFolder", { folder: currentNode.name })}</span>
+          <span>
+            {atRoot
+              ? t("rework.resources.dropAtRoot")
+              : t("rework.resources.dropInFolder", { folder: currentNode.name })}
+          </span>
         </div>
       )}
 
@@ -1379,6 +1429,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         destinationPath={uploadTargetNode.full || undefined}
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
         ensureFolderPath={canCreateFolder ? ensureFolderPath : undefined}
+        requireFolderPerFile={!uploadTargetTag}
         onUploadComplete={() => {
           if (uploadTargetTag) void loadTagPage(uploadTargetTag.id, perTag[uploadTargetTag.id]?.offset ?? 0);
           void refetchTags();
