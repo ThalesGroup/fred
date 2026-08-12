@@ -173,6 +173,28 @@ apparently don't get caught by the merge itself, only by review.
 
 ## Frontend regression risk (HITL / optimistic UI)
 
+### 8. FOUND 2026-08-12 — abort before `onAccepted()` is silently treated as "accepted," dropping the HITL prompt
+`useChatSse.ts:1174`, `sendHitlResume`'s catch block. `onAccepted()`
+(`streamToMessages` line 694) fires only once `fetch()` resolves 2xx with a
+body — i.e. only once the runtime has actually taken the resume. The catch
+block does `if (status === 409 || aborted) { acceptedByRuntime = true; }`
+unconditionally for any `AbortError`, regardless of whether `onAccepted()`
+ever ran. If the abort fires BEFORE `fetch()` resolves, `acceptedByRuntime`
+was still `false` (correctly meaning "never reached the runtime") and this
+line forces it `true` anyway — the prompt is not restored, no error is
+shown (aborts are explicitly excluded from `onError?.(...)`), and the
+checkpoint stays paused server-side with no way to answer it short of a
+reload. The existing comment's rationale ("abort may land after the resume
+was delivered") only justifies the AFTER-`onAccepted()` case, where
+`acceptedByRuntime` is already `true` from the callback — making the forced
+assignment redundant there and only actually changing behavior for the
+BEFORE case, which is exactly the case that should restore the prompt. Fix:
+only `status === 409` should force `acceptedByRuntime = true`; let `aborted`
+fall through to whatever the flag already holds.
+
+Filed with full acceptance-test breakdown (abort-before / abort-after / 409)
+in [issue #2337](https://github.com/ThalesGroup/fred/issues/2337).
+
 ### 6. HITL restore guard checks `exchange_id` only, not "is the last message already the cancellation for this call"
 `useManagedChat.ts` `restoreIfStillWanted` (~line 594) vs. `useChatSse.ts`
 `sendHitlResume`'s optimistic `cancelled_by_user` insert (~line 1081). Path:
