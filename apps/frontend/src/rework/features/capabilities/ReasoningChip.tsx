@@ -12,29 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The per-question reasoning control (REASON-01 level 4): an always-visible
-// chip anchored at the right edge of the composer's bottomRow (RichInputField's
-// `rightExtraSlot`, just before the mic/send group). Claude's composer is the
-// UI reference, faithfully: the chip shows the MODEL IDENTITY plus the
-// reasoning state ("Mistral Small · Activé"), and its menu holds ONE switch
-// row — label + trailing toggle, flipped in place, popover stays open so the
-// user can keep composing — under a muted header stating the trade-off
-// (more thorough, slower). The switch row reuses the exact affordance of the
-// retired tune-menu row (`MenuPopoverItem trailingToggle`, role
-// menuitemcheckbox): one on/off setting, the same switch here, on the agent
-// form, and on the admin models page — never a checkbox, never an options
-// list.
+// The per-question reasoning control (REASON-01 level 4), styled after the
+// designer's Composer.html mockup (2026-08-12): a plain TEXT BUTTON with a
+// chevron at the right edge of the composer's bottomRow (RichInputField's
+// `rightExtraSlot`, before the mic). The button reads "Raisonnement" when off
+// and the model's effort level when on ("Élevé"); its menu opens above,
+// right-aligned, with the effort/latency explainer as a muted header and two
+// check-circle rows: Désactivé, and the ON row labeled with the level.
 //
-// Deliberately ON/OFF only — a per-question EFFORT picker was built and
-// withdrawn the same day (2026-08-12): providers disagree on the accepted
-// values (Mistral small 400s on low/medium; RUNTIME-EXECUTION-CONTRACT §8.48).
-// The effort a reasoning turn runs with is the ops-authored `reasoning_effort`
-// in the routed profile's settings, full stop.
-//
-// Multi-model readiness (deliberately NOT displayed yet): the model identity
-// arrives as a plain `modelProfileId` prop, so when model selection ships as
-// a Fred feature this menu grows a model section fed by real catalog display
-// names and `modelLabelFromProfileId` dies — nothing else moves.
+// The level shown is the model's own ops-authored `settings.reasoning_effort`
+// — the single source of truth (no separate supported-efforts declaration) —
+// served on the control's `params.effort`. The wire stays the tri-state
+// boolean: picking the level row means `reasoning: true` and the pod applies
+// the live settings value; no per-question effort override exists
+// (RUNTIME-EXECUTION-CONTRACT §8.48 records why: providers 400 on values
+// they don't support). No effort in params = generic "Activé" label.
 //
 // `COMPOSER_CHIP_WIDGETS` is the single source of truth for which widget ids
 // are promoted out of the "tune" popover: `ComposerControlSlot` excludes them
@@ -45,7 +37,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
@@ -54,23 +45,13 @@ import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
 
-/**
- * Human-ish label for a routing profile id — "chat.mistral.small" → "Mistral
- * Small". TEMPORARY heuristic: profile ids are ops-authored routing keys, not
- * display names; the multi-model feature will serve real catalog names and
- * replace this. Null in → null out (no team default profile: routing falls to
- * the pod's YAML rules, whose identity the frontend cannot know).
- */
-export function modelLabelFromProfileId(profileId: string | null | undefined): string | null {
-  if (!profileId) return null;
-  const segments = profileId.split(".").filter(Boolean);
-  // Leading capability/tier qualifiers ("chat", "default") are routing
-  // vocabulary, not identity — drop them, keep provider/model words.
-  while (segments.length > 1 && ["chat", "default", "language", "vision", "embedding"].includes(segments[0])) {
-    segments.shift();
-  }
-  if (segments.length === 0) return null;
-  return segments.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+/** i18n key for one ops-authored effort value; null for unknown/absent values
+ *  (the caller then falls back to the generic On label). Exported for tests. */
+export function effortLabelKey(effort: unknown): string | null {
+  if (effort === "low") return "chatbot.composerSettings.reasoningLow";
+  if (effort === "medium") return "chatbot.composerSettings.reasoningMedium";
+  if (effort === "high") return "chatbot.composerSettings.reasoningHigh";
+  return null;
 }
 
 interface ReasoningChipProps {
@@ -78,15 +59,11 @@ interface ReasoningChipProps {
   chatControls: readonly ChatControlDescriptor[];
   /** Shared composer state (same object passed to ComposerControlSlot). */
   composer: ChatTurnControlComposerState;
-  /** Team default chat profile id (`ExecutionPreparation.chat_default_profile_id`)
-   *  — the session's model identity, shown on the chip. Null hides the model
-   *  segment (identity unknown frontend-side). */
-  modelProfileId?: string | null;
-  /** Mirrors the add/tune menu buttons: no toggling while a response streams. */
+  /** Mirrors the add/tune menu buttons: no picking while a response streams. */
   disabled?: boolean;
 }
 
-export function ReasoningChip({ chatControls, composer, modelProfileId = null, disabled = false }: ReasoningChipProps) {
+export function ReasoningChip({ chatControls, composer, disabled = false }: ReasoningChipProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -115,36 +92,40 @@ export function ReasoningChip({ chatControls, composer, modelProfileId = null, d
 
   // Only agents whose author enabled reasoning (and with a platform-enabled
   // reasoning model) emit the platform reasoning_toggle control — no control,
-  // no chip, same gate the tune-menu row used.
-  const offersReasoning = chatControls.some((control) => control.widget === "reasoning_toggle");
-  if (!offersReasoning) return null;
+  // no button, same gate the tune-menu row used.
+  const control = chatControls.find((entry) => entry.widget === "reasoning_toggle");
+  if (!control) return null;
 
   const on = composer.reasoning;
   const title = t("chatbot.composerSettings.reasoningRowLabel");
-  const stateLabel = t(on ? "chatbot.composerSettings.reasoningOn" : "chatbot.composerSettings.reasoningOff");
-  const modelLabel = modelLabelFromProfileId(modelProfileId);
+  const levelKey = effortLabelKey((control.params as { effort?: unknown } | undefined)?.effort);
+  const onLabel = levelKey ? t(levelKey) : t("chatbot.composerSettings.reasoningOn");
+  const offLabel = t("chatbot.composerSettings.reasoningOff");
+
+  const pick = (next: boolean) => {
+    composer.onReasoningChange(next);
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   return (
     <div ref={containerRef} className={styles.wrap}>
-      <Tooltip text={title}>
-        <button
-          ref={triggerRef}
-          type="button"
-          className={styles.chip}
-          data-open={open}
-          data-accent={on || undefined}
-          disabled={disabled}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label={`${title}: ${stateLabel}`}
-          onClick={() => setOpen((current) => !current)}
-        >
-          <span className={styles.icon}>
-            <Icon category="outlined" type="auto_awesome" />
-          </span>
-          <span className={styles.value}>{modelLabel ? `${modelLabel} · ${stateLabel}` : stateLabel}</span>
-        </button>
-      </Tooltip>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={styles.trigger}
+        data-open={open}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`${title}: ${on ? onLabel : offLabel}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={styles.value}>{on ? onLabel : title}</span>
+        <span className={styles.chevron}>
+          <Icon category="outlined" type="keyboard_arrow_down" />
+        </span>
+      </button>
 
       {open && (
         <div className={styles.menu}>
@@ -154,16 +135,22 @@ export function ReasoningChip({ chatControls, composer, modelProfileId = null, d
             groups={[
               [
                 <MenuPopoverItem
-                  key="reasoning"
-                  icon={{ category: "outlined", type: "auto_awesome" }}
-                  label={title}
-                  // A switch, like the agent-form and admin-side reasoning
-                  // controls it continues — the row IS the control, it opens
-                  // no submenu, and the popover stays open: flip it and keep
-                  // composing (Claude's "Thinking" toggle behaves the same).
-                  trailingToggle
+                  key="off"
+                  role="option"
+                  label={offLabel}
+                  selected={!on}
+                  accentSelected
+                  trailingIcon={!on ? "check_circle" : undefined}
+                  onClick={() => pick(false)}
+                />,
+                <MenuPopoverItem
+                  key="on"
+                  role="option"
+                  label={onLabel}
                   selected={on}
-                  onClick={() => composer.onReasoningChange(!on)}
+                  accentSelected
+                  trailingIcon={on ? "check_circle" : undefined}
+                  onClick={() => pick(true)}
                 />,
               ],
             ]}

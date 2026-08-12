@@ -305,12 +305,7 @@ export default function ManagedChatPage() {
         ) : undefined
       }
       rightExtraSlot={
-        <ReasoningChip
-          chatControls={chat.chatControls}
-          composer={composerState}
-          modelProfileId={chat.chatDefaultProfileId}
-          disabled={composerControlsDisabled}
-        />
+        <ReasoningChip chatControls={chat.chatControls} composer={composerState} disabled={composerControlsDisabled} />
       }
       leftSlot={
         <>

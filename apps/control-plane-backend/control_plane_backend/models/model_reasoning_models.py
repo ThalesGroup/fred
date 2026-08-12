@@ -45,6 +45,19 @@ class ModelReasoningRow(Base):
     __tablename__ = "model_reasoning"
 
     model_capability_id: Mapped[str] = mapped_column(String, primary_key=True)
+    default_effort: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment=(
+            "The model's ops-authored settings.reasoning_effort, SNAPSHOTTED "
+            "from the catalog entry when reasoning was (re-)toggled — the "
+            "composer menu displays it as the level a reasoning turn runs "
+            "with, and the send path never fetches the catalog. NULL = the "
+            "thinking profile ships no effort ('unknown', generic On label). "
+            "Refreshed at the next admin re-toggle; display-only, the pod "
+            "always applies the live settings value."
+        ),
+    )
     reasoning_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

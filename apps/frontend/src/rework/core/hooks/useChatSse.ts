@@ -311,12 +311,6 @@ export function useChatSse(
   // resolves each descriptor's `widget` id against the chat-turn-control
   // registry (plugin first, then the capability-agnostic stock kit).
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
-  // Team default chat profile (TEAM-ROUTING-POLICY §8), surfaced for DISPLAY
-  // only (the composer's reasoning chip shows the model identity, Claude-style).
-  // Null when the team has no default: routing then falls to the pod's own
-  // YAML rules, whose identity the frontend cannot know today — the upcoming
-  // multi-model feature will replace this with real catalog display names.
-  const [chatDefaultProfileId, setChatDefaultProfileId] = useState<string | null>(null);
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
@@ -328,7 +322,6 @@ export function useChatSse(
   const applyPreparation = useCallback(
     (prep: ExecutionPreparation) => {
       setChatControls(prep.chat_controls ?? []);
-      setChatDefaultProfileId(prep.chat_default_profile_id ?? null);
       // #1979: publish the instance-bound capability route base URLs so each
       // capability's generated RTK slice can reach its pod routes directly.
       dispatch(setCapabilityBaseUrls(prep.capability_base_urls ?? {}));
@@ -349,7 +342,6 @@ export function useChatSse(
     thoughtBufsRef.current.clear();
     setAll([]);
     setChatControls([]);
-    setChatDefaultProfileId(null);
   }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
 
@@ -1229,7 +1221,6 @@ export function useChatSse(
     messages,
     waitResponse,
     chatControls,
-    chatDefaultProfileId,
     prepareChatControls,
     send,
     sendHitlResume,

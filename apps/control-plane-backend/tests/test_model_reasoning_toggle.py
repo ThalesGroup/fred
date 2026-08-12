@@ -113,6 +113,31 @@ async def test_a_stored_false_is_indistinguishable_from_no_row(tmp_path) -> None
     assert await store.list_enabled_model_ids() == {THINKING_MODEL}
 
 
+@pytest.mark.asyncio
+async def test_default_effort_snapshot_round_trips(tmp_path) -> None:
+    # The composer menu's level label comes from this toggle-time snapshot of
+    # the model's own settings.reasoning_effort (single source of truth — no
+    # separate supported-efforts declaration); NULL must read back as "no
+    # effort key", never as a level.
+    store = await _make_store(tmp_path)
+
+    await store.set_enabled(
+        model_capability_id=THINKING_MODEL,
+        reasoning_enabled=True,
+        updated_by="admin-1",
+        default_effort="high",
+    )
+    assert await store.list_enabled_default_efforts() == {THINKING_MODEL: "high"}
+
+    await store.set_enabled(
+        model_capability_id=THINKING_MODEL,
+        reasoning_enabled=True,
+        updated_by="admin-1",
+        default_effort=None,
+    )
+    assert await store.list_enabled_default_efforts() == {THINKING_MODEL: None}
+
+
 # ---------------------------------------------------------------------------
 # Service — aptitude is declared, never granted (§5.3)
 # ---------------------------------------------------------------------------
@@ -136,6 +161,8 @@ def _model_entry(
 class _RecordingStore:
     def __init__(self, enabled: set[str] | None = None) -> None:
         self.writes: list[tuple[str, bool]] = []
+        # (model_id, effort) captured by set_enabled — the display snapshot.
+        self.effort_snapshots: list[tuple[str, str | None]] = []
         self._enabled = enabled or set()
 
     async def set_enabled(
@@ -144,12 +171,17 @@ class _RecordingStore:
         model_capability_id: str,
         reasoning_enabled: bool,
         updated_by: str | None,
+        default_effort: str | None = None,
     ) -> bool:
         self.writes.append((model_capability_id, reasoning_enabled))
+        self.effort_snapshots.append((model_capability_id, default_effort))
         return reasoning_enabled
 
     async def list_enabled_model_ids(self) -> set[str]:
         return set(self._enabled)
+
+    async def list_enabled_default_efforts(self) -> dict[str, str | None]:
+        return {model_id: None for model_id in self._enabled}
 
 
 class _FakeDeps:
@@ -430,6 +462,45 @@ def test_control_is_emitted_when_every_gate_is_open() -> None:
     # Author-settable since Amendment B, but this stays the value an author
     # who does nothing gets.
     assert control.params == {"default": False}
+
+
+def test_params_effort_carries_the_models_own_level() -> None:
+    # The menu's ON row is labeled with the level the turn actually runs with
+    # — the model's ops-authored settings.reasoning_effort, snapshotted at
+    # toggle time.
+    from control_plane_backend.product.service import _platform_reasoning_control
+
+    control = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL],
+        default_efforts_by_model={THINKING_MODEL: "high"},
+    )
+
+    assert control is not None
+    assert control.params == {"default": False, "effort": "high"}
+
+
+def test_params_effort_omitted_when_unknown_or_ambiguous() -> None:
+    # No effort key on the profile, or two enabled models disagreeing — the
+    # composer then shows a generic On label instead of a wrong level.
+    from control_plane_backend.product.service import _platform_reasoning_control
+
+    unknown = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL],
+        default_efforts_by_model={THINKING_MODEL: None},
+    )
+    assert unknown is not None and unknown.params == {"default": False}
+
+    ambiguous = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
+        default_efforts_by_model={THINKING_MODEL: "high", PLAIN_MODEL: "medium"},
+    )
+    assert ambiguous is not None and ambiguous.params == {"default": False}
 
 
 # ---------------------------------------------------------------------------

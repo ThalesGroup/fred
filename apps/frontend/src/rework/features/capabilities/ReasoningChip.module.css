@@ -1,57 +1,53 @@
-/* Same pill geometry as ContextualPicker's chip so the composer's chips read
-   as one family; active state = primary text/icon over the selected layer. */
+/* Composer.html mockup (2026-08-12): a plain text button + chevron, no pill —
+   hover surfaces like the composer's icon buttons, menu opens above-right. */
 .wrap {
   position: relative;
   flex-shrink: 0;
 }
 
-.chip {
+.trigger {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2xs);
   cursor: pointer;
   border: none;
-  border-radius: var(--radius-full);
-  background: var(--surface-container-low);
+  border-radius: var(--radius-s);
+  background: transparent;
   padding: 0 var(--spacing-s);
-  height: 32px;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
+  height: 38px;
+  color: var(--on-surface);
+  font: var(--font-label-large);
   white-space: nowrap;
 }
 
-.chip:hover {
+.trigger:hover,
+.trigger[data-open="true"] {
   background: var(--state-on-surface-hover);
 }
 
-.chip[data-open="true"],
-.chip[data-accent="true"] {
-  background: var(--state-primary-selected);
-  color: var(--primary);
-}
-
-.chip:disabled {
+.trigger:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.chip:focus-visible {
+.trigger:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-.icon {
+.value {
+  line-height: 1;
+}
+
+.chevron {
   display: flex;
   flex-shrink: 0;
   justify-content: center;
   align-items: center;
-  width: 18px;
-  height: 18px;
-  font-size: 18px;
-}
-
-.value {
-  line-height: 1;
+  width: 16px;
+  height: 16px;
+  color: var(--on-surface-retreat);
+  font-size: 16px;
 }
 
 .description {
@@ -65,7 +61,6 @@
   position: absolute;
   right: 0;
   bottom: calc(100% + var(--spacing-xs));
-  /* Above Tooltip's z-index (1500) — same rationale as ContextualPicker. */
   z-index: 1600;
-  min-width: 240px;
+  min-width: 260px;
 }

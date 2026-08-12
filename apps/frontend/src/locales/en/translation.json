@@ -403,7 +403,10 @@
       "reasoningRowLabel": "Reasoning",
       "reasoningOff": "Off",
       "reasoningOn": "On",
-      "reasoningHint": "Reasoning gives more thorough answers, but takes longer to respond.",
+      "reasoningLow": "Low",
+      "reasoningMedium": "Medium",
+      "reasoningHigh": "High",
+      "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
       "selectLibraryFirst": "Select a library first."
     },
     "conversationAriaLabel": "Conversation",

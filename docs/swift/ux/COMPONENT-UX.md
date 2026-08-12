@@ -210,15 +210,19 @@ shared molecule.
 
 As of REASON-01 (#2166) the platform contributed its first non-capability control: a
 `Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
-**gone from the tune menu**: reasoning is now an **on/off picker chip**
-(`features/capabilities/ReasoningChip.tsx`, a `ContextualPicker`) pinned at the
-composer's **right edge** next to mic/send (Claude's composer is the visual
-reference). The chip text leads with the session's model identity plus the state
-("Mistral Small · Activé"); its menu header states the trade-off ("more thorough,
-slower") above the two options Désactivé / Activé. Deliberately no effort levels:
-a same-day effort picker was withdrawn (providers reject values they don't
-support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48); the effort used is always the
-ops-authored one on the routed model profile.
+**gone from the tune menu**: reasoning is now a **plain text button + chevron**
+(`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
+edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
+reference. The button reads "Raisonnement" when off and the model's effort
+level when on ("Élevé"); its menu opens above, right-aligned, with the
+effort/latency explainer as a muted header and two check-circle rows:
+Désactivé, and the ON row labeled with the level. The level is the model's own
+ops-authored `settings.reasoning_effort` (single source of truth, served on
+`params.effort`; generic "Activé" when absent) — deliberately NOT a
+low/medium/high picker: a same-day effort picker was withdrawn (providers 400
+on values they don't support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48), so the
+wire stays the on/off tri-state and the pod always applies the live settings
+value.
 The chip renders in primary/selected colors whenever an effort level is active.
 Multi-model is deliberately NOT displayed yet — the model identity arrives as a
 plain profile-id prop so the menu can grow a model section when that feature ships.
