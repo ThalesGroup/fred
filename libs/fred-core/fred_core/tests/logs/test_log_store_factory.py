@@ -14,13 +14,15 @@
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 from fred_core.common.resilient_sink import ResilientSinkStore
 from fred_core.common.structures import OpenSearchIndexConfig, OpenSearchStoreConfig
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.log_structures import InMemoryLogStorageConfig
 from fred_core.logs.memory_log_store import RamLogStore
-from fred_core.logs.opensearch_log_store import OpenSearchLogStore
+from fred_core.logs.opensearch_log_store import LOG_INDEX_MAPPING, OpenSearchLogStore
 
 
 def _fake_opensearch_client(*args: object, **kwargs: object) -> object:
@@ -29,15 +31,15 @@ def _fake_opensearch_client(*args: object, **kwargs: object) -> object:
             return True
 
         def get_mapping(self, index: str) -> dict:
-            # Already has `category` — ensure_ready's migration is a no-op;
-            # the migration itself is covered by
-            # test_opensearch_log_store_ensure_ready.py.
-            return {
-                index: {"mappings": {"properties": {"category": {"type": "keyword"}}}}
-            }
+            # An index already matching LOG_INDEX_MAPPING — ensure_ready's
+            # migration is a no-op here; the migration itself is covered by
+            # test_opensearch_log_store_ensure_ready.py. It must be the whole
+            # expected mapping, not just the one field the migration used to
+            # look at: ensure_index_mapping now patches anything absent.
+            return {index: {"mappings": copy.deepcopy(LOG_INDEX_MAPPING["mappings"])}}
 
         def put_mapping(self, index: str, body: dict) -> None:
-            raise AssertionError("must not migrate a mapping that already has category")
+            raise AssertionError("must not migrate an index that is already current")
 
     class _Client:
         indices = _Indices()

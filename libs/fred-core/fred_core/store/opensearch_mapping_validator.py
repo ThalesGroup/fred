@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+from opensearchpy import OpenSearchException
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +24,90 @@ class MappingValidationError(Exception):
     """Exception raised when OpenSearch index mapping validation fails."""
 
 
+def ensure_index_mapping(
+    client,  # OpenSearch client instance (avoiding circular import)
+    index_name: str,
+    expected_mapping: Dict[str, Any],
+    *,
+    validate: bool = True,
+    strict: bool = True,
+) -> None:
+    """Reconcile a live index with the mapping the code expects, then validate it.
+
+    This is what a store's `ensure_ready` should call on an index that already
+    exists. An index created by an older version lacks every field the expected
+    mapping has gained since, and under `dynamic: "false"` those fields are
+    silently never indexed — or, when the store validates strictly, take startup
+    down with "Missing nested field: '<x>'" and no recovery but deleting the
+    index. Adding them with `put_mapping` is purely additive and idempotent, so
+    the reconcile runs first and validation only ever judges what is left.
+
+    Which fields to add is *diffed* against `expected_mapping`, never listed by
+    hand: the KPI store used to enumerate the names it knew to be recent, and
+    the field that forgot to register itself there crashed every pre-existing
+    index (2026-08-11). See `missing_mapping_branches` for what the diff
+    deliberately leaves alone (type drift, which `put_mapping` cannot fix).
+
+    One `get_mapping` in the steady state: the same response feeds the diff and
+    the validation. A boot that actually patches something re-reads, so the
+    validation judges the live index rather than an optimistic local merge.
+
+    The reconcile is best-effort — an OpenSearch failure here is logged and
+    validation still runs, because "Missing nested field: 'dims.session_id'"
+    names the problem better than a failed put_mapping does.
+
+    Args:
+        client: OpenSearch client instance
+        index_name: Name of the index to reconcile
+        expected_mapping: Expected mapping structure (with "mappings" key)
+        validate: Run `validate_index_mapping` after the reconcile. False for a
+            store that wants its index repaired but not its startup blocked.
+        strict: Passed through to `validate_index_mapping`.
+    """
+    current_mapping: Optional[Dict[str, Any]] = None
+    try:
+        current_mapping = (
+            client.indices.get_mapping(index=index_name)
+            .get(index_name, {})
+            .get("mappings", {})
+        )
+        missing = missing_mapping_branches(
+            expected_mapping.get("mappings", {}).get("properties", {}),
+            (current_mapping or {}).get("properties", {}),
+        )
+        if missing:
+            client.indices.put_mapping(index=index_name, body={"properties": missing})
+            current_mapping = None  # the live mapping moved on — re-read it below
+            logger.info(
+                "[OPENSEARCH][MAPPING] index '%s': added %s",
+                index_name,
+                ", ".join(_leaf_paths(missing)),
+            )
+    except OpenSearchException as e:
+        logger.warning(
+            "[OPENSEARCH][MAPPING] index '%s': could not add missing fields: %s",
+            index_name,
+            e,
+        )
+        current_mapping = None
+
+    if validate:
+        validate_index_mapping(
+            client,
+            index_name,
+            expected_mapping,
+            strict=strict,
+            current_mapping=current_mapping,
+        )
+
+
 def validate_index_mapping(
     client,  # OpenSearch client instance (avoiding circular import)
     index_name: str,
     expected_mapping: Dict[str, Any],
     strict: bool = True,
     allow_missing_fields: bool = False,
+    current_mapping: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Validate that an existing OpenSearch index has the expected field mappings.
@@ -38,18 +118,23 @@ def validate_index_mapping(
         expected_mapping: Expected mapping structure (with "mappings" key)
         strict: If True, raises exception on critical mismatches. If False, only logs warnings.
         allow_missing_fields: If True, missing fields only generate warnings. If False, they are errors.
+        current_mapping: The index's live "mappings" block, when the caller has
+            just read it (`ensure_index_mapping`) — saves a second round trip.
 
     Raises:
         MappingValidationError: When critical mapping mismatches are found
     """
     try:
-        # Get current mapping from OpenSearch
-        current_mapping_resp = client.indices.get_mapping(index=index_name)
-        current_mapping = current_mapping_resp.get(index_name, {}).get("mappings", {})
+        if current_mapping is None:
+            # Get current mapping from OpenSearch
+            current_mapping_resp = client.indices.get_mapping(index=index_name)
+            current_mapping = current_mapping_resp.get(index_name, {}).get(
+                "mappings", {}
+            )
 
         # Extract expected properties
         expected_properties = expected_mapping.get("mappings", {}).get("properties", {})
-        current_properties = current_mapping.get("properties", {})
+        current_properties = (current_mapping or {}).get("properties", {})
 
         # Validate field mappings
         mismatches: List[str] = []
@@ -96,6 +181,56 @@ def validate_index_mapping(
             raise MappingValidationError(
                 f"Mapping validation failed for index '{index_name}': {e}"
             ) from e
+
+
+def missing_mapping_branches(
+    expected_properties: Dict[str, Any], current_properties: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Return the part of `expected_properties` that the live index does not have.
+
+    The result is a `properties` sub-tree ready to hand to `put_mapping`: only
+    the branches that are strictly absent, each carried with its full expected
+    definition. Empty when the live index already covers everything. Callers
+    normally want `ensure_index_mapping`, which wraps this with the I/O.
+
+    A field whose *type* drifted is deliberately left alone: `put_mapping`
+    cannot change an existing field's type, and including it would make
+    OpenSearch reject the whole request, so the legitimately-missing siblings
+    in the same call would be lost too. `validate_index_mapping` reports that
+    case, which is the actionable error anyway.
+    """
+    missing: Dict[str, Any] = {}
+    for name, expected_field in expected_properties.items():
+        current_field = current_properties.get(name)
+        if current_field is None:
+            missing[name] = expected_field
+            continue
+
+        expected_nested = expected_field.get("properties")
+        if not expected_nested:
+            # Leaf already present — type drift is the validator's business.
+            continue
+        if not isinstance(current_field.get("properties"), dict):
+            # Expected an object, live index has something else: unpatchable.
+            continue
+
+        nested = missing_mapping_branches(expected_nested, current_field["properties"])
+        if nested:
+            missing[name] = {"properties": nested}
+    return missing
+
+
+def _leaf_paths(properties: Dict[str, Any], prefix: str = "") -> List[str]:
+    """Dotted paths of every leaf in a `properties` tree, for the log line."""
+    paths: List[str] = []
+    for name, field in properties.items():
+        path = f"{prefix}{name}"
+        nested = field.get("properties")
+        if isinstance(nested, dict) and nested:
+            paths.extend(_leaf_paths(nested, f"{path}."))
+        else:
+            paths.append(path)
+    return paths
 
 
 def _get_field_type(field_config: Dict[str, Any]) -> str | None:
