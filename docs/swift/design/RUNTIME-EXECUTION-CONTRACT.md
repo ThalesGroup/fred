@@ -2730,11 +2730,14 @@ size-budgeted folder tree) and single-document lookup.
    explicit, accurate omission signal.
 2. `CorpusTreeService._resolve_leaves` now calls new
    `MetadataService.get_documents_by_uids` (indexed `get_metadata_by_uids`,
-   ReBAC-filtered after fetch) instead of the full-table scan. KNOWN GAP: this
-   sends the whole uid collection as one `IN (...)` query, unchunked — bounded
-   in practice by `_MAX_FOLDERS` (10,000 folders) but not hardened against an
-   exceptionally large distinct-document count hitting a driver bind-parameter
-   ceiling. Not hit by any known corpus size; flagged on the method itself.
+   ReBAC-filtered after fetch) instead of the full-table scan.
+   `get_metadata_by_uids` and its label-hydration query
+   (`_hydrate_labels`, `postgres_document_store.py`) both chunk their
+   `document_uid IN (...)` statements at `_BULK_UPDATE_CHUNK_SIZE` — the
+   same constant `bulk_mark_vector_done` already chunks its updates with —
+   so a tree spanning the full `_MAX_FOLDERS` (10,000 folders) stays well
+   clear of a driver bind-parameter ceiling instead of sending one unbounded
+   query.
 3. **New port method** `DocumentTreePort.list_by_label(*, label, offset=0,
    limit=50) -> DocumentLabelPageResult` (`fred-sdk/contracts/runtime.py`) —
    flat, exhaustive, paginated label resolution, on the SAME port/adapter/
