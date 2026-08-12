@@ -16,7 +16,9 @@
   padding: 0 var(--spacing-s);
   height: 38px;
   color: var(--on-surface);
-  font: var(--font-label-large);
+  /* Same font as the chat message being typed (RichInputField's textarea):
+     plain regular text, never the weight-500 label tokens that read as bold. */
+  font: var(--font-body-medium);
   white-space: nowrap;
 }
 
@@ -40,12 +42,13 @@
 }
 
 .model {
-  font-weight: 600;
   line-height: 1;
 }
 
 .state {
-  color: var(--on-surface-retreat);
+  /* One step fainter than retreat in both themes — the colour contrast alone
+     separates the model name from the reasoning state. */
+  color: var(--on-surface-muted);
   line-height: 1;
 }
 

@@ -135,10 +135,11 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
   const levelKey = effortLabelKey(params?.effort);
   const onLabel = levelKey ? t(levelKey) : t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
-  // Model identity first, Claude-style ("Mistral Small Latest Élevé": model
-  // BOLD, reasoning state regular + muted — the weight/color contrast is the
-  // separator) — read-only today, the model picker slot tomorrow. Without an
-  // unambiguous model the button falls back to the mockup's bare labels.
+  // Model identity first, Claude-style ("Mistral Small Latest Élevé"): model
+  // in the regular button text, reasoning state one step fainter
+  // (--on-surface-muted) — the color contrast is the separator. Read-only
+  // today, the model picker slot tomorrow. Without an unambiguous model the
+  // button falls back to the mockup's bare labels.
   const modelLabel = modelLabelFromCapabilityId(params?.model_id);
   const stateLabel = on ? onLabel : offLabel;
 
