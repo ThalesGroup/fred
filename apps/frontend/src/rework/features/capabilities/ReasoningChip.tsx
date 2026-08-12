@@ -45,6 +45,22 @@ import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
 
+/** Display label derived from a `model__{provider}__{name}` capability id —
+ *  "model__openai__mistral-small-latest" → "Mistral Small" (a trailing
+ *  "latest" is provider versioning noise, dropped). TEMPORARY heuristic until
+ *  the multi-model feature serves real catalog display names — the button is
+ *  deliberately shaped as the future model picker (model identity first,
+ *  reasoning state second). Exported for tests. */
+export function modelLabelFromCapabilityId(modelId: unknown): string | null {
+  if (typeof modelId !== "string") return null;
+  const parts = modelId.split("__");
+  if (parts.length < 3 || parts[0] !== "model") return null;
+  const words = parts.slice(2).join("__").split(/[-_.]/).filter(Boolean);
+  if (words[words.length - 1]?.toLowerCase() === "latest") words.pop();
+  if (words.length === 0) return null;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
 /** i18n key for one ops-authored effort value; null for unknown/absent values
  *  (the caller then falls back to the generic On label). Exported for tests. */
 export function effortLabelKey(effort: unknown): string | null {
@@ -98,9 +114,15 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
 
   const on = composer.reasoning;
   const title = t("chatbot.composerSettings.reasoningRowLabel");
-  const levelKey = effortLabelKey((control.params as { effort?: unknown } | undefined)?.effort);
+  const params = control.params as { effort?: unknown; model_id?: unknown } | undefined;
+  const levelKey = effortLabelKey(params?.effort);
   const onLabel = levelKey ? t(levelKey) : t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
+  // Model identity first, Claude-style ("Mistral Small · Élevé") — read-only
+  // today, the model picker slot tomorrow. Without an unambiguous model the
+  // button falls back to the mockup's bare reasoning labels.
+  const modelLabel = modelLabelFromCapabilityId(params?.model_id);
+  const buttonLabel = modelLabel ? `${modelLabel} · ${on ? onLabel : offLabel}` : on ? onLabel : title;
 
   const pick = (next: boolean) => {
     composer.onReasoningChange(next);
@@ -121,7 +143,7 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
         aria-label={`${title}: ${on ? onLabel : offLabel}`}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className={styles.value}>{on ? onLabel : title}</span>
+        <span className={styles.value}>{buttonLabel}</span>
         <span className={styles.chevron}>
           <Icon category="outlined" type="keyboard_arrow_down" />
         </span>

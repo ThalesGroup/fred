@@ -213,10 +213,14 @@ As of REASON-01 (#2166) the platform contributed its first non-capability contro
 **gone from the tune menu**: reasoning is now a **plain text button + chevron**
 (`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
 edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button reads "Raisonnement" when off and the model's effort
-level when on ("Élevé"); its menu opens above, right-aligned, with the
-effort/latency explainer as a muted header and two check-circle rows:
-Désactivé, and the ON row labeled with the level. The level is the model's own
+reference. The button leads with the MODEL IDENTITY (`params.model_id`, the
+single enabled reasoning model — read-only today, the model picker slot once
+multi-model ships, each model carrying its own reasoning mode): "Mistral
+Small · Élevé" when on, "Mistral Small · Désactivé" when off (bare
+"Raisonnement"/level labels when no unambiguous model is served); its menu
+opens above, right-aligned, with the effort/latency explainer as a muted
+header and two check-circle rows: Désactivé, and the ON row labeled with the
+level. The level is the model's own
 ops-authored `settings.reasoning_effort` (single source of truth, served on
 `params.effort`; generic "Activé" when absent) — deliberately NOT a
 low/medium/high picker: a same-day effort picker was withdrawn (providers 400

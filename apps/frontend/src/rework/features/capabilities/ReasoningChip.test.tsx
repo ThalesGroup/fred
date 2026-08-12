@@ -20,7 +20,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { COMPOSER_CHIP_WIDGETS, ReasoningChip, effortLabelKey } from "./ReasoningChip";
+import { COMPOSER_CHIP_WIDGETS, ReasoningChip, effortLabelKey, modelLabelFromCapabilityId } from "./ReasoningChip";
 import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 
@@ -88,6 +88,19 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
     expect(render([reasoningControl()], false, true)).toContain("disabled");
   });
 
+  it("leads the button with the model identity when served", () => {
+    const html = render(
+      [reasoningControl({ default: false, effort: "high", model_id: "model__openai__mistral-small-latest" })],
+      true,
+    );
+    expect(html).toContain("Mistral Small · chatbot.composerSettings.reasoningHigh");
+  });
+
+  it("keeps the bare reasoning labels when no model is served", () => {
+    const html = render([reasoningControl({ default: false, effort: "high" })], false);
+    expect(html).not.toContain("·");
+  });
+
   it("owns the reasoning_toggle promotion out of the tune popover", () => {
     // ComposerControlSlot and ManagedChatPage filter on this set; the button
     // and the filters must agree or the setting shows up twice (or nowhere).
@@ -105,5 +118,17 @@ describe("effortLabelKey", () => {
     // — they fall back to the generic On label.
     expect(effortLabelKey("xhigh")).toBeNull();
     expect(effortLabelKey(undefined)).toBeNull();
+  });
+});
+
+describe("modelLabelFromCapabilityId (temporary heuristic until multi-model)", () => {
+  it("prettifies the model segment and drops the 'latest' suffix", () => {
+    expect(modelLabelFromCapabilityId("model__openai__mistral-small-latest")).toBe("Mistral Small");
+    expect(modelLabelFromCapabilityId("model__openai__gpt-5.1")).toBe("Gpt 5 1");
+  });
+
+  it("rejects anything that is not a model capability id", () => {
+    expect(modelLabelFromCapabilityId("document_access")).toBeNull();
+    expect(modelLabelFromCapabilityId(undefined)).toBeNull();
   });
 });

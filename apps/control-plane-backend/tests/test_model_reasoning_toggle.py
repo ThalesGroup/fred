@@ -460,8 +460,9 @@ def test_control_is_emitted_when_every_gate_is_open() -> None:
     # Default OFF is a safety decision, not a style one: Amendment C measured
     # reasoning re-issuing duplicate tool calls in 10/10 turns on this stack.
     # Author-settable since Amendment B, but this stays the value an author
-    # who does nothing gets.
-    assert control.params == {"default": False}
+    # who does nothing gets. The single enabled model rides along as the
+    # button's identity.
+    assert control.params == {"default": False, "model_id": THINKING_MODEL}
 
 
 def test_params_effort_carries_the_models_own_level() -> None:
@@ -478,7 +479,40 @@ def test_params_effort_carries_the_models_own_level() -> None:
     )
 
     assert control is not None
-    assert control.params == {"default": False, "effort": "high"}
+    assert control.params == {
+        "default": False,
+        "effort": "high",
+        "model_id": THINKING_MODEL,
+    }
+
+
+def test_params_model_id_carries_the_single_enabled_model() -> None:
+    # The button leads with the model identity ("Mistral Small · Élevé") —
+    # emitted only when unambiguous (exactly one enabled reasoning model);
+    # multi-model will turn this into the model picker's value.
+    from control_plane_backend.product.service import _platform_reasoning_control
+
+    single = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL],
+        default_efforts_by_model={THINKING_MODEL: "high"},
+    )
+    assert single is not None
+    assert single.params == {
+        "default": False,
+        "effort": "high",
+        "model_id": THINKING_MODEL,
+    }
+
+    two = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
+        default_efforts_by_model={THINKING_MODEL: "high", PLAIN_MODEL: "high"},
+    )
+    assert two is not None
+    assert "model_id" not in (two.params or {})
 
 
 def test_params_effort_omitted_when_unknown_or_ambiguous() -> None:
@@ -492,7 +526,10 @@ def test_params_effort_omitted_when_unknown_or_ambiguous() -> None:
         reasoning_enabled_model_ids=[THINKING_MODEL],
         default_efforts_by_model={THINKING_MODEL: None},
     )
-    assert unknown is not None and unknown.params == {"default": False}
+    assert unknown is not None and unknown.params == {
+        "default": False,
+        "model_id": THINKING_MODEL,
+    }
 
     ambiguous = _platform_reasoning_control(
         reasoning_enabled=True,
@@ -521,7 +558,7 @@ def test_author_can_preselect_reasoning_on_new_conversations() -> None:
     )
 
     assert control is not None
-    assert control.params == {"default": True}
+    assert control.params == {"default": True, "model_id": THINKING_MODEL}
 
 
 def test_preselect_cannot_conjure_a_control_the_gates_refused() -> None:

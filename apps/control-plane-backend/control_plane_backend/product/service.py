@@ -992,6 +992,17 @@ def _platform_reasoning_control(
         if value is not None
     }
     effort = distinct_efforts.pop() if len(distinct_efforts) == 1 else None
+    # The model identity the composer button displays next to the reasoning
+    # state ("Mistral Small · Élevé") — the enabled reasoning model's own
+    # capability id, emitted when it is unambiguous (exactly one enabled).
+    # Multi-model is coming (the button becomes a model picker, with a
+    # per-model reasoning mode); until then the frontend derives a display
+    # label from this id and shows it read-only.
+    model_id = (
+        reasoning_enabled_model_ids[0]
+        if len(reasoning_enabled_model_ids) == 1
+        else None
+    )
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -1004,6 +1015,7 @@ def _platform_reasoning_control(
         params={
             "default": reasoning_default_on,
             **({"effort": effort} if effort else {}),
+            **({"model_id": model_id} if model_id else {}),
         },
     )
 
