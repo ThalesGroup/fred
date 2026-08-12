@@ -26,9 +26,16 @@ interface TokenUsageBadgeProps {
 export function TokenUsageBadge({ usage, variant = "inline" }: TokenUsageBadgeProps) {
   const { t } = useTranslation();
 
+  const cached = usage.cache_read_tokens;
+
   const breakdown = (
     <>
       <span className={styles.segment}>↑{usage.input_tokens.toLocaleString()}</span>
+      {!!cached && (
+        <span className={styles.segment} title={t("chatbot.conversationTokenUsage.cached", { count: cached })}>
+          ⚡{cached.toLocaleString()}
+        </span>
+      )}
       <span className={styles.sep}>·</span>
       <span className={styles.segment}>↓{usage.output_tokens.toLocaleString()}</span>
     </>

@@ -17,31 +17,20 @@
 // the exact place chat parts used to be pre-folded lossily (links only) and
 // must now retain every ui_part raw, unknown kinds included.
 
-import type { ChatMessage, VectorSearchHit } from "../../../../slices/agentic/agenticOpenApi";
+import type {
+  ChatMessage,
+  HitlRequestPart,
+  HitlResponsePart,
+  VectorSearchHit,
+} from "../../../../slices/runtime/runtimeOpenApi";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { isTraceChannel, textOf, uiPartsOf } from "../../../utils/traceUtils";
 
-// Raw shape of a persisted `HitlRequestPart` (fred-core `history_schema.py`).
-// Hand-cast, matching this file's existing `RespPart` precedent: `agenticOpenApi.ts`
-// has no live regeneration target (no `make update-*-api` target touches it — see
-// `hitlResponseKey`'s docstring for the sibling case) and its `ChatMessage.parts`
-// union predates these hitl part kinds, so a generated type isn't available here.
-type ReqPart = {
-  question?: string;
-  choices?: Array<{ id: string; label: string }>;
-  title?: string | null;
-  stage?: string | null;
-  free_text?: boolean;
-  interrupt_id?: string | null;
-  checkpoint_id?: string | null;
-  pending_calls?: Array<{ tool_call_id?: string; tool_name?: string; args_preview?: string }>;
-};
-
-function hitlRequestPart(m: ChatMessage): ReqPart | undefined {
-  return m.parts?.[0] as unknown as ReqPart | undefined;
+function hitlRequestPart(m: ChatMessage): HitlRequestPart | undefined {
+  return m.parts?.[0] as HitlRequestPart | undefined;
 }
 
 // Groups messages by exchange_id, preserving first-appearance order — the exact
@@ -182,8 +171,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     }
 
     if (hitlRespMsg) {
-      type RespPart = { label?: string | null; choice_id?: string };
-      const part = hitlRespMsg.parts?.[0] as unknown as RespPart | undefined;
+      const part = hitlRespMsg.parts?.[0] as HitlResponsePart | undefined;
       result.push({
         id: `${eid}:hitl_resp`,
         role: "hitl_response",

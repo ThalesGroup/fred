@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
-import { agenticApi } from "../slices/agentic/agenticApi.ts";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
 import { evaluationApi } from "../slices/evaluation/evaluationApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
@@ -51,7 +50,6 @@ const combinedReducer = combineReducers({
       .addCase("decrementIgnoredRefresh", (state) => state - 1),
   ),
   [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
-  [agenticApi.reducerPath]: agenticApi.reducer,
   [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
   [evaluationApi.reducerPath]: evaluationApi.reducer,
   tasks: taskSlice.reducer,
@@ -70,7 +68,6 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       knowledgeFlowApi.middleware,
-      agenticApi.middleware,
       controlPlaneApi.middleware,
       evaluationApi.middleware,
       demoEchoCapabilityApi.middleware,

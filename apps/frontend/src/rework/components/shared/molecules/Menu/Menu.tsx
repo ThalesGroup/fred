@@ -87,6 +87,7 @@ const MenuInternal = <T,>({
             id={itemId}
             label={option.label}
             description={option.description}
+            title={option.tooltip}
             icon={option.icon}
             disabled={option.disabled}
             destructive={option.destructive}

@@ -3047,6 +3047,50 @@ LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
 `test_capability_document_reading.py` (one-call path, empty/truncation/error
 shaping).
 
+### 8.45 ✅ Prompt-cache token visibility in `token_usage` and cost estimation — CACHE-01 (2026-08-10)
+
+**Surfaces prompt-cache detail Fred was already receiving but silently
+dropping.** LangChain's standardized `UsageMetadata.input_token_details` has
+carried `cache_creation`/`cache_read` since `langchain-core` 0.3.9, and
+`runtime_metadata_from_message` (`model_metadata.py`) already read the
+attribute carrying it — `normalize_token_usage` just never extracted the
+nested breakdown. See
+[`PROMPT-CACHE-TOKEN-VISIBILITY-RFC.md`](../rfc/PROMPT-CACHE-TOKEN-VISIBILITY-RFC.md)
+for the full design; open questions (distinct GreenOps rate for cached
+tokens, sovereign-model cache support, per-step trace display) remain
+unresolved there, not settled here.
+
+**Contract additions, both additive:**
+
+- `token_usage` (`ToolCallRuntimeEvent`/`FinalRuntimeEvent`, §5) gains two
+  keys: `cache_read_tokens`, `cache_creation_tokens` — always present
+  (default `0`), same dict shape, no schema break. Flows through
+  `normalize_token_usage`/`sum_token_usage` (`fred-runtime`) and
+  `ChatTokenUsage` (`fred-core`, persisted history) end to end; confirmed
+  surviving a page reload via the same `make_assistant_final`/
+  `_write_turn_history` path §8.38 fixed for the base fields.
+- `Quantities` (`fred-core` KPI event schema) gains `cache_read_tokens`.
+  `agent.turn_completed` now emits it as a quantity — one new Prometheus
+  counter series (`agent_turn_completed_quantity_cache_read_tokens_total`),
+  no new label, no cardinality change (same label set as `input_tokens`).
+- `ModelImpactFactors`/`estimate_green_cost` (`fred-core/kpi/model_impact_factors.py`)
+  gains `cost_per_1k_cached_input_tokens`; `cache_read_tokens` is billed at
+  that reduced rate instead of the full input rate, clamped to
+  `input_tokens` defensively. `cache_creation_tokens` is deliberately **not**
+  given a distinct rate — still billed as ordinary input (RFC scope
+  decision, not an oversight). One dashboard preset
+  (`token_usage_by_model.py`) is wired to the new quantity; the other five
+  token-usage presets are unchanged (still bill every input token at the
+  full rate — not a regression, just not yet upgraded).
+
+**Not done by this work:** real per-model `cost_per_1k_cached_input_tokens`
+rates — `model_impact_factors.yaml` still ships every rate at `0.0`
+("not populated yet"), so the mechanism is correct but every displayed cost
+figure is unchanged until an operator fills in real provider pricing. No
+distinct kWh/CO2e rate for cached tokens. No cache-hit ratio or
+cached-vs-fresh visual on `AnalyticsPage` — `TokenUsageImpact` just becomes
+more accurate once rates are populated, no new UI element shipped.
+
 ---
 
 ### 8.45 ✅ Alembic owns `session_history` DDL; an unmigrated pod fails at startup (issue #2290, 2026-08-07)
@@ -3108,6 +3152,172 @@ Operator recovery path (which revision to stamp, by columns present):
 direct calls from `agent_app.py`) has the identical pattern and is tracked
 separately — its tables are in no Alembic tree yet, so removing lazy creation
 there needs migrations written first.
+
+---
+
+### 8.46 ✅ `FinishReason` — normalized, Fred-owned enum replaces the raw provider string (issue #1840, 2026-08-11)
+
+**Closes FRONT-05 (`FRONTEND-BACKLOG.md §7`).** The frontend's last remaining
+import from the retired `agentic-backend` client was `FinishReason` — a named
+6-value enum that client happened to expose, with nothing equivalent on the
+runtime side (`ChatMetadata.finish_reason` was a plain `Optional[str]`,
+whatever the LLM provider reported verbatim).
+
+**Why a raw passthrough was the wrong shape.** Providers report this under
+different keys and vocabularies — OpenAI: `response_metadata["finish_reason"]
+= "stop"/"length"/"tool_calls"`; Anthropic:
+`response_metadata["stop_reason"] = "end_turn"/"max_tokens"/"tool_use"`
+(**a different key entirely** — Fred only ever read `"finish_reason"`, so
+every Claude-backed turn silently had `finish_reason = None` before this fix);
+Gemini/Vertex: `"STOP"`/`"MAX_TOKENS"`, or `"UNKNOWN_<n>"` when the installed
+SDK doesn't recognize an enum value the API returned. That last case means the
+raw value space is open-ended by construction — no closed type can enumerate
+it, on the frontend or the backend.
+
+**What changed.**
+
+- `fred_core.history.history_schema` (`libs/fred-core`) gains `FinishReason(str,
+  Enum)` — `stop | length | content_filter | tool_calls | error | other` — and
+  `coerce_finish_reason(raw)`, a case-insensitive alias table mapping every
+  known provider value onto it. Anything not in the table (a new provider, a
+  new SDK enum value, a typo) maps to `other` rather than raising — this is a
+  deliberate, designed fallback, not an accidental gap.
+- `ChatMetadata.finish_reason` is now `Optional[FinishReason]`, with a
+  `field_validator(mode="before")` calling `coerce_finish_reason` — applied on
+  **both** construction and `.model_validate()` (read), so a history row
+  persisted before this change, still holding a raw provider string, loads
+  without error instead of failing validation.
+- `fred_sdk.contracts.runtime.FinalRuntimeEvent.finish_reason` (the live SSE
+  contract) is now `FinishReason | None`, with the same tolerant
+  `field_validator` — this is a separate Pydantic model from `ChatMetadata`
+  (one is the live event, one is persisted history), so both needed the fix;
+  fixing only one would have made the live view and a reloaded conversation
+  disagree on the same turn's value.
+- `fred_runtime.runtime_support.model_metadata.runtime_metadata_from_message`
+  now reads `response_metadata["finish_reason"]` **or**
+  `["stop_reason"]` (fixing the Anthropic gap above) and normalizes via
+  `coerce_finish_reason` at the source, once — both the SSE event and the
+  persisted history descend from this same call, so they can never diverge.
+
+**Frontend.** `runtimeOpenApi.ts` now generates a named `FinishReason` union;
+`useChatSse.ts` reads it directly, no cast. `agenticOpenApi.ts`,
+`agenticApi.ts`, and their config are deleted — this was their last consumer,
+closing out `FRONTEND-BACKLOG.md §7` entirely.
+
+**Deliberately out of scope:** no retroactive backfill of `error`/`other`
+misclassification in history rows written before this shipped (the
+`mode="before"` coercion is what keeps them loadable, it does not rewrite
+them); no per-provider GreenOps/cost impact (unrelated to `TokenUsageImpact` /
+issue #2312).
+
+---
+
+### 8.47 ✅ `CorpusTreeService` truncation fix; paginated `list_documents_by_label` in its own capability (issue #2326, 2026-08-12)
+
+**Problem.** `CorpusTreeService`'s size-budgeted folder-tree renderer had a
+silent-truncation bug: `tree_builder.py::_render_budgeted_root`'s final
+fallback rebuilt its candidate lines from bare folder headers only, discarding
+whatever content depth-based pruning had already collapsed into them. A wide,
+shallow match (e.g. 150 folders, one document each) let those 150 bare headers
+fit comfortably under the char budget, so the response shipped
+`truncated=True` with **zero** documents and **zero** omission message —
+indistinguishable from a complete, empty corpus (regression test:
+`test_wide_shallow_tree_never_reports_truncated_with_zero_omission_signal`).
+Separately, `CorpusTreeService._resolve_leaves` resolved tree leaves via
+`MetadataService.get_documents_metadata` → `store.get_all_metadata()` — an
+unbounded `SELECT *` over the whole `metadata` table filtered in Python, run
+on **every** `list_document_tree` call (`document_access` is `DEFAULT_ON`).
+
+There was no agent-facing way to resolve a business label to *every* document
+carrying it, exhaustively — only browsing (`list_document_tree`, a
+size-budgeted folder tree) and single-document lookup.
+
+**Fix.**
+1. `_render_budgeted_root` now measures each candidate as the FULL block
+   (folder header + whatever was already collapsed into it by depth-pruning),
+   never a bare header — `truncated=True` can no longer ship without an
+   explicit, accurate omission signal.
+2. `CorpusTreeService._resolve_leaves` now calls new
+   `MetadataService.get_documents_by_uids` (indexed `get_metadata_by_uids`,
+   ReBAC-filtered after fetch) instead of the full-table scan.
+   `get_metadata_by_uids` and its label-hydration query
+   (`_hydrate_labels`, `postgres_document_store.py`) both chunk their
+   `document_uid IN (...)` statements at `_BULK_UPDATE_CHUNK_SIZE` — the
+   same constant `bulk_mark_vector_done` already chunks its updates with —
+   so a tree spanning the full `_MAX_FOLDERS` (10,000 folders) stays well
+   clear of a driver bind-parameter ceiling instead of sending one unbounded
+   query.
+3. **New port method** `DocumentTreePort.list_by_label(*, label, offset=0,
+   limit=50) -> DocumentLabelPageResult` (`fred-sdk/contracts/runtime.py`) —
+   flat, exhaustive, paginated label resolution, on the SAME port/adapter/
+   client as `tree()` (`KfDocumentClient`/`DocumentTreeAdapter` each gain one
+   more method) rather than a new port class: two distinct, unambiguous agent
+   tools at the LLM-facing layer, one port at the plumbing layer. Backed by
+   new `MetadataService.get_document_uids_with_any_label` (one ReBAC
+   resolution + one indexed `label IN (...)` store query, OR-semantics across
+   labels, UID-only, unpaginated — used by the non-paginated
+   `get_documents_with_label`) and a separate paginated sibling,
+   `get_document_uids_with_any_label_page`/`get_documents_with_label_page`
+   (real `ORDER BY ... OFFSET ... LIMIT ...` plus a matching `COUNT(*)` pushed
+   into the store query, not a fetch-everything-then-slice-in-Python — so
+   enumerating many pages of a large match set does not repeat a full,
+   unbounded label scan on each call; the ReBAC `lookup_user_resources` call
+   itself still runs once per page, same cost every other paginated,
+   authorized listing in this service already pays per call). KNOWN GAP,
+   documented on the port method itself: does NOT accept `library_tag_ids` —
+   Knowledge Flow's label resolution narrows only by document-level READ
+   permission, never by folder/library scope, so an agent configured with
+   `bind_libraries=True` still sees every readable document carrying a label,
+   corpus-wide, through this method. Not silently implemented as a no-op
+   parameter — flagged as follow-up work.
+4. **New capability `document_label_search`**
+   (`fred-runtime/capabilities/document_label_search/`), registered via its
+   own `fred.capabilities` entry point, manifest `team_scope` left at the
+   class default (`ADMIN_GATED` — same reasoning as `document_summarize`,
+   §10.1: no config-shaped trigger a user can reason about, a team admin must
+   opt an agent in explicitly). Owns exactly one tool,
+   `list_documents_by_label`: one page per call (documents as `name [uid]`,
+   `total`, `has_more`); the tool's docstring tells the model to call again
+   with `offset=next_offset` and never report a count without checking
+   `has_more`. Deliberately NOT added to `document_access` (`DEFAULT_ON`):
+   bundling it there would mean every existing `document_access` agent —
+   already in production — picks up a second, semantically-adjacent tool the
+   moment it ships. Both tools answer "documents with label X"; the
+   discriminating axis (where they sit vs. give me all of them) is a harder
+   tool-selection call for the model than the pre-existing
+   `search_documents_using_vectorization` vs. `list_document_tree` split
+   (content question vs. structure question — a much clearer boundary in
+   natural language), with a fail-quiet failure mode (a plausible-looking,
+   silently-incomplete answer once a large match set hits the tree's size
+   budget) instead of a fail-loud one. `list_document_tree` itself does no
+   label filtering at all, by design — a folder tree is the wrong response
+   shape for "give me every document labeled X".
+
+**Backing HTTP route.** `GET /documents/by-label` (query-param transport) is
+paginated: `offset`/`limit` query params, response `LabelDocumentsPage
+{label, documents: [{document_uid, document_name}], total, offset, limit,
+next_offset, has_more}` — a leaner response model than `BrowseDocumentsResponse`
+(full `DocumentMetadata`), which the path-segment `GET /documents/by-label/{label}`
+route keeps unpaginated for existing consumers. Both resolve through the same
+`MetadataService.get_document_uids_with_any_label`; `document_label_search`'s
+tool reaches the same route through `DocumentTreePort.list_by_label` — no new
+route, no plumbing duplication.
+
+**Bounded context.** `CorpusTreeService` is a read-only projection over the
+already-ingested corpus — it stores no bytes, accepts no writes, and is
+intentionally distinct from the future `WorkspaceService` (mutable,
+persistent user/agent files, currently implemented under `/fs`). See
+`FILESYSTEM.md` "Business labels vs. scope tags".
+
+Tests: `test_corpus_tree_builder.py` (renderer invariant),
+`test_corpus_tree_service.py`, `test_metadata_service_labels.py` +
+`test_postgres_document_store_labels.py` (resolver), `test_metadata_labels_controller.py`
+(pagination), `test_capability_document_access_1906.py` (tree tool unchanged,
+2 params, no label awareness), `test_capability_document_label_search.py`
+(new — registration, `ADMIN_GATED` default, tool behavior, real-adapter param
+forwarding), `test_capability_endpoints_1974.py` (catalog advertisement list
+gains `document_label_search`, sorted by id). Tracking:
+[#2326](https://github.com/ThalesGroup/fred/issues/2326).
 
 ---
 

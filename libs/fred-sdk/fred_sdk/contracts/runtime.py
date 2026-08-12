@@ -33,10 +33,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Any, Generic, List, Literal, Protocol, TypeAlias, TypeVar
 
+from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .context import (
     AgentInvocationRequest,
@@ -310,7 +311,16 @@ class FinalRuntimeEvent(RuntimeEventBase):
     ui_parts: tuple[UiPart, ...] = ()
     model_name: str | None = None
     token_usage: dict[str, int] | None = None
-    finish_reason: str | None = None
+    finish_reason: FinishReason | None = None
+
+    # Same tolerant coercion as `ChatMetadata.finish_reason` (fred-core): a raw
+    # provider value that isn't already normalized (or one this build has never
+    # seen) must never fail this frozen model's construction — it degrades to
+    # `other` instead.
+    @field_validator("finish_reason", mode="before")
+    @classmethod
+    def _normalize_finish_reason(cls, v: object) -> FinishReason | None:
+        return coerce_finish_reason(v)
 
 
 class TurnPersistedEvent(RuntimeEventBase):
@@ -785,6 +795,30 @@ class DocumentTreeResult(FrozenModel):
     truncated: bool = False
 
 
+class DocumentLabelReference(FrozenModel):
+    """Lean document reference for a label-page result — just enough for a
+    capability to identify and chain into another tool (e.g. summarize by
+    uid), not a full document payload."""
+
+    document_uid: str
+    document_name: str
+
+
+class DocumentLabelPageResult(FrozenModel):
+    """Typed result of one paginated, exhaustive label resolution — the
+    flat sibling of `DocumentTreeResult`, for a caller that needs EVERY
+    document carrying a label rather than a folder-oriented, size-budgeted
+    view (see `DocumentTreePort.list_by_label`)."""
+
+    label: str = ""
+    documents: tuple[DocumentLabelReference, ...] = ()
+    total: int = 0
+    offset: int = 0
+    limit: int = 50
+    next_offset: int | None = None
+    has_more: bool = False
+
+
 class DocumentSummaryResult(FrozenModel):
     """Typed result of one on-demand document summarization."""
 
@@ -824,6 +858,10 @@ class DocumentTreePort(ABC):
     only — never a caller-supplied context, identity, or access token. Auth
     and identity come solely from the adapter's privately-captured per-turn
     binding, which never enters `CapabilityContext`.
+
+    Read-only projection over already-ingested documents — never a workspace,
+    never free-form files, never byte storage. Distinct from `workspace_fs`
+    (`RuntimeServices`), which is the mutable, persistent file domain.
     """
 
     @abstractmethod
@@ -841,6 +879,37 @@ class DocumentTreePort(ABC):
         (None = "no capability-side narrowing"); the adapter further bounds it
         by the session binding before calling Knowledge Flow, completing
         `turn_option ⊆ capability_config ⊆ session_binding`. Raises
+        `DocumentPortCallError` on transport failure.
+
+        No business-label filtering here, deliberately: a folder tree renders
+        every folder in scope, size-budgeted to fit one response — the wrong
+        shape for "give me every document labeled X", which needs an
+        exhaustive, paginated answer instead. See `list_by_label` for that
+        need.
+        """
+
+    @abstractmethod
+    async def list_by_label(
+        self,
+        *,
+        label: str,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> DocumentLabelPageResult:
+        """
+        Return one deterministic page of the documents carrying `label` —
+        exhaustive, paginated business-label resolution. This is the ONLY
+        label-search surface on this port: `tree()` does no label filtering
+        at all (see its docstring) — a folder tree answers "where", this
+        method answers "give me every document with this label", and mixing
+        the two into one size-budgeted response was the exact design mistake
+        this split undoes.
+
+        KNOWN GAP: does NOT accept `library_tag_ids` — Knowledge Flow's label
+        resolution (`MetadataService.get_document_uids_with_any_label`)
+        narrows only by the caller's document-level READ permission, never by
+        folder/library scope. Flagged, not silently implemented as a no-op
+        parameter; narrowing this is follow-up work, not yet built. Raises
         `DocumentPortCallError` on transport failure.
         """
 

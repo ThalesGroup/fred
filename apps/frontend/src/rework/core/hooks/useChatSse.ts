@@ -19,12 +19,12 @@ import { v4 as uuidv4 } from "uuid";
 
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import type { ChatMessage, FinishReason } from "../../../slices/agentic/agenticOpenApi";
 import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
   AwaitingHumanRuntimeEvent,
+  ChatMessage,
   FinalRuntimeEvent,
   HumanInputRequest,
   NodeErrorRuntimeEvent,
@@ -189,12 +189,10 @@ type AnyRuntimeEvent =
 
 // ── HITL event/payload (#2216) ──────────────────────────────────────────────
 //
-// Explicit types based on the generated runtime `HumanInputRequest`
-// contract — NOT the legacy agentic-backend `AwaitingHumanEvent`/`HitlPayload`
-// (`slices/agentic/agenticOpenApi.ts`), whose open `[key: string]: any` index
-// signature let `checkpoint_id`/`interrupt_id` round-trip untyped. Both ids
-// stay independently typed here too, exactly one populated per runtime
-// (legacy Graph V2 vs ReAct V2) — never aliased for each other.
+// Explicit types based on the generated runtime `HumanInputRequest` contract.
+// `checkpoint_id`/`interrupt_id` stay independently typed here, exactly one
+// populated per runtime (legacy Graph V2 vs ReAct V2) — never aliased for
+// each other.
 
 export type RuntimeHitlPayload = HumanInputRequest;
 
@@ -422,7 +420,7 @@ export function useChatSse(
           const parts: ChatMessage["parts"] = [{ type: "text", text: event.content ?? "" }];
           if (event.ui_parts?.length) {
             for (const p of event.ui_parts) {
-              parts.push(p as ChatMessage["parts"][number]);
+              parts.push(p as unknown as ChatMessage["parts"][number]);
             }
           }
           emit({
@@ -434,13 +432,15 @@ export function useChatSse(
             channel: "final",
             parts,
             metadata: {
-              finish_reason: (event.finish_reason as FinishReason | null) ?? null,
+              model: event.model_name ?? null,
+              finish_reason: event.finish_reason ?? null,
               sources: event.sources ?? [],
               token_usage: event.token_usage
                 ? {
                     input_tokens: event.token_usage["input_tokens"] ?? 0,
                     output_tokens: event.token_usage["output_tokens"] ?? 0,
                     total_tokens: event.token_usage["total_tokens"] ?? 0,
+                    cache_read_tokens: event.token_usage["cache_read_tokens"],
                   }
                 : null,
               extras: {},
@@ -472,6 +472,7 @@ export function useChatSse(
                     input_tokens: event.token_usage["input_tokens"] ?? 0,
                     output_tokens: event.token_usage["output_tokens"] ?? 0,
                     total_tokens: event.token_usage["total_tokens"] ?? 0,
+                    cache_read_tokens: event.token_usage["cache_read_tokens"],
                   },
                 }
               : undefined,
@@ -492,7 +493,7 @@ export function useChatSse(
           ];
           if (event.ui_parts?.length) {
             for (const p of event.ui_parts) {
-              toolResultParts.push(p as ChatMessage["parts"][number]);
+              toolResultParts.push(p as unknown as ChatMessage["parts"][number]);
             }
           }
           emit({

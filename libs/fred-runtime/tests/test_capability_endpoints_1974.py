@@ -215,8 +215,8 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         # only the ones declared in THIS package's own pyproject.toml
         # ([project.entry-points."fred.capabilities"]) are guaranteed present
         # in fred-runtime's own test venv: demo_echo (tracer), the #1906
-        # document_access pilot, document_summarize (split out of it per
-        # RFC §10.1), and the DOCREAD-01 document-reading pair
+        # document_access pilot, document_summarize and document_label_search
+        # (both split out of it), and the DOCREAD-01 document-reading pair
         # (document_verbatim + document_extract) — advertised sorted by id.
         # `ppt_filler`/`writable_document` live in SEPARATE packages
         # (fred-capability-ppt-filler, fred-capability-writable-document) that
@@ -233,6 +233,7 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
             "demo_echo",
             "document_access",
             "document_extract",
+            "document_label_search",
             "document_summarize",
             "document_verbatim",
         ]

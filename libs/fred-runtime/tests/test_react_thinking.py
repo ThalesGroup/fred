@@ -555,7 +555,7 @@ def test_closed_turn_reasoning_is_still_stripped() -> None:
     Reasoning from a turn the user already closed must NOT be replayed.
 
     Why this test exists:
-    - it is the half of ISSUE-005 §6.3 that is easy to drop by accident, and
+    - it is the half of the GH #1780 fix that is easy to drop by accident, and
       dropping it costs context tokens on every later request for reasoning
       whose question has already been answered
     """

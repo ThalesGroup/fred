@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import type { VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 import { hitToSource, chatMessagesToMessage, buildConversation, activeThread } from "./conversationUtils";
 

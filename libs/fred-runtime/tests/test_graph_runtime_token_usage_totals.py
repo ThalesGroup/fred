@@ -95,6 +95,8 @@ def test_last_model_metadata_sums_every_call_the_node_made() -> None:
         "input_tokens": 105,
         "output_tokens": 21,
         "total_tokens": 126,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
     }
     assert model_name == "gpt-4o"
     assert finish_reason == "stop"

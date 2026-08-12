@@ -28,6 +28,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from opensearchpy import NotFoundError, OpenSearch, OpenSearchException, RequestError, RequestsHttpConnection
 
+from knowledge_flow_backend.common.cancellation import WorkCancelled, raise_if_cancelled
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     AnnHit,
@@ -794,6 +795,11 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             failure, the helper retries the same batch with exponential backoff
             before giving up.
         """
+        # Checkpoint before every provider attempt, not only between bulk
+        # slices: one slice hides many sub-batch attempts and retries, so a
+        # cancel landing mid-slice kept paying for embeddings ~12s longer
+        # (six more sub-batches observed) before the slice-level check fired.
+        raise_if_cancelled(f"vector indexing for index={self._index}")
         limit = self._current_embedding_attempt_limit()
         if limit is not None and len(documents) > limit:
             split_index = max(1, len(documents) // 2)
@@ -957,6 +963,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         Example:
             `store.add_documents([Document(page_content="...", metadata={"chunk_uid": "c1"})])`
         """
+        assigned_ids: List[str] = []
         try:
             if not documents:
                 logger.info("[VECTOR][OPENSEARCH] add_documents called with empty payload for index=%s", self._index)
@@ -985,9 +992,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 ids is not None,
             )
 
-            assigned_ids: List[str] = []
             start = 0
             while start < len(documents):
+                # Between slices is the one place stopping is free: nothing is
+                # half-written, and each remaining slice costs a paid embedding
+                # call plus a bulk index. A cancelled ingestion used to pay for
+                # all of them — 4038 chunks, ~3 minutes past the user's stop, for
+                # a document already deleted (#2315).
+                raise_if_cancelled(f"vector indexing for index={self._index}")
                 # Re-read each iteration: an earlier slice may have lowered the cap.
                 end = min(start + self._effective_embedding_batch_size(), len(documents))
                 batch_documents = documents[start:end]
@@ -1015,6 +1027,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
             return assigned_ids
 
+        except WorkCancelled:
+            # The expected end of a cancelled ingestion, not a failure: one
+            # line, no stacktrace, and no RuntimeError wrapping so callers can
+            # tell it apart and clean up what this run already wrote.
+            logger.info(
+                "[VECTOR][OPENSEARCH] indexing cancelled index=%s after %s of %s chunks (completed slices only; the caller deletes any partial writes); abandoning the rest",
+                self._index,
+                len(assigned_ids),
+                len(documents),
+            )
+            raise
         except Exception as e:
             logger.exception("[VECTOR][OPENSEARCH] failed to add documents to OpenSearch.")
             raise RuntimeError("Unexpected error during vector indexing.") from e
@@ -1022,7 +1045,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         try:
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
-            resp = self._client.delete_by_query(index=self._index, body=body)
+            # conflicts="proceed": this purge is idempotent and runs from more
+            # than one place on a cancelled ingestion (the indexing thread
+            # self-cleans, then the workflow compensation sweeps the same uid).
+            # A version conflict just means the other pass already removed the
+            # chunk — the default "abort" turned that benign race into a 409
+            # with a full stacktrace (#2315).
+            resp = self._client.delete_by_query(index=self._index, body=body, params={"conflicts": "proceed"})
             deleted = int(resp.get("deleted", 0))
             logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:

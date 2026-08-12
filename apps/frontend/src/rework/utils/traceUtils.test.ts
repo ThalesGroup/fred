@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import {
   asRagSearchResult,
   asSqlQueryResult,
