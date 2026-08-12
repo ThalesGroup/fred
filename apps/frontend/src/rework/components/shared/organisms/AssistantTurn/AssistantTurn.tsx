@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
+import { toEmailHtml, toPlainText, writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
 import { UiParts } from "@shared/molecules/UiParts/UiParts";
@@ -54,6 +55,8 @@ export const AssistantTurn = memo(function AssistantTurn({
 }: AssistantTurnProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const turnRef = useRef<HTMLDivElement>(null);
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
@@ -67,19 +70,36 @@ export const AssistantTurn = memo(function AssistantTurn({
   }, [activeSourceIndex, sources]);
 
   const copyAction = useCallback(() => {
-    navigator.clipboard.writeText(text).catch(() => {});
+    // Copy from the rendered markdown, not the raw `text` prop, so the
+    // clipboard gets real bold/lists/tables/links instead of literal
+    // markdown syntax — same email-safe serialisation as manual selection.
+    const node = turnRef.current?.querySelector<HTMLElement>("[data-copyable-content]");
+    const write = node ? writeRichClipboard(toEmailHtml(node), toPlainText(node)) : writeRichClipboard("", text);
+    write.then((success) => {
+      if (success) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    });
   }, [text]);
 
   const actions: Action[] = useMemo(
-    () => [{ id: "copy", icon: "content_copy", label: "Copy response", onClick: copyAction }],
-    [copyAction],
+    () => [
+      {
+        id: "copy",
+        icon: copied ? "check" : "content_copy",
+        label: copied ? "Copied" : "Copy response",
+        onClick: copyAction,
+      },
+    ],
+    [copied, copyAction],
   );
 
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;
   if (!hasContent) return null;
 
   return (
-    <div className={styles.turn}>
+    <div className={styles.turn} ref={turnRef}>
       {/* ThoughtTrace owns its own expand/collapse — no wrapper needed */}
       {/* pendingToolCallIds is forwarded regardless of isStreaming: the SSE
           stream itself ends the instant the backend pauses for HITL approval

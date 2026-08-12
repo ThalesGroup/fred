@@ -262,7 +262,7 @@ export function MarkdownRenderer({
   }
 
   return (
-    <div className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}`}>
+    <div className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}`} data-copyable-content>
       {stableMarkdown ? (
         <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
           {stableMarkdown}
