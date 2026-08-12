@@ -176,7 +176,10 @@ class KfBaseClient:
                 # Shape decided from the RESULT, not statically — see
                 # `resolve_refresh_result`. A legacy sync hook has already
                 # refreshed (and blocked the loop); its work is not thrown away.
-                await resolve_refresh_result(agent_hook(), self._agent)
+                refreshed = await resolve_refresh_result(agent_hook(), self._agent)
+                if not refreshed:
+                    logger.error("Agent-led token refresh returned an empty token.")
+                    return False
                 logger.info("Agent-led user token refresh succeeded.")
                 return True
             except Exception as e:
