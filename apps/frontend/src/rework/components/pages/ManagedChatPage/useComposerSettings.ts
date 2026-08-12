@@ -17,14 +17,20 @@ import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledg
 import type { ChatControlDescriptor } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
+type ReasoningEffort = "off" | "low" | "medium" | "high";
+
+/** Seed for a `reasoning_toggle` whose `params.default` asked for reasoning on:
+ *  "high" matches the only ops-authored `reasoning_effort` in the catalog, so a
+ *  default-on agent behaves exactly as before the picker existed. */
+const DEFAULT_ON_EFFORT: ReasoningEffort = "high";
 
 interface ComposerState {
   searchPolicy: SearchPolicyName;
   ragScope: RagScope;
   selectedLibraryIds: string[];
   selectedDocumentUids: string[];
-  /** Per-question reasoning activation (REASON-01 level 4, RFC §7.4). */
-  reasoning: boolean;
+  /** Per-question reasoning effort (REASON-01 level 4 + 4b, RFC §7.4). */
+  reasoningEffort: ReasoningEffort;
 }
 
 /** Reads a stock widget's `params.default` (RFC §3.3), e.g. `search_policy` /
@@ -62,14 +68,20 @@ function buildInitial(sessionId: string | null, chatControls: readonly ChatContr
     ragScope: findDefault<RagScope>(chatControls, "rag_scope") ?? "hybrid",
     selectedLibraryIds: [],
     selectedDocumentUids: [],
-    // Seeded from the `reasoning_toggle` widget's `params.default` like any
-    // other stock row. The backend ships `false` and that default is a safety
-    // decision, not a style one (RFC §9): reasoning on a tool loop was
-    // measured re-issuing duplicate tool calls. `?? false` also means a
+    // Seeded from the `reasoning_toggle` widget's boolean `params.default`
+    // like any other stock row. The backend ships `false` and that default is
+    // a safety decision, not a style one (RFC §9): reasoning on a tool loop
+    // was measured re-issuing duplicate tool calls. `?? false` also means a
     // frontend newer than the pod (no such widget) simply never reasons.
-    reasoning: findDefault<boolean>(chatControls, "reasoning_toggle") ?? false,
+    reasoningEffort: (findDefault<boolean>(chatControls, "reasoning_toggle") ?? false) ? DEFAULT_ON_EFFORT : "off",
   };
-  const stored = readStorage(sessionId);
+  const stored = readStorage(sessionId) as Partial<ComposerState> & { reasoning?: boolean };
+  // Sessions stored before the effort picker carry the old boolean `reasoning`
+  // key — map it once here rather than versioning the storage schema.
+  if (stored.reasoningEffort === undefined && stored.reasoning !== undefined) {
+    stored.reasoningEffort = stored.reasoning ? DEFAULT_ON_EFFORT : "off";
+  }
+  delete stored.reasoning;
   return { ...defaults, ...stored };
 }
 
@@ -124,15 +136,15 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
 
   const setSelectedDocumentUids = useCallback((uids: string[]) => update({ selectedDocumentUids: uids }), [update]);
 
-  const setReasoning = useCallback((value: boolean) => update({ reasoning: value }), [update]);
+  const setReasoningEffort = useCallback((value: ReasoningEffort) => update({ reasoningEffort: value }), [update]);
 
   return {
     searchPolicy: state.searchPolicy,
     ragScope: state.ragScope,
     selectedLibraryIds: state.selectedLibraryIds,
     selectedDocumentUids: state.selectedDocumentUids,
-    reasoning: state.reasoning,
-    setReasoning,
+    reasoningEffort: state.reasoningEffort,
+    setReasoningEffort,
     setSearchPolicy,
     setRagScope,
     setSelectedLibraryIds,

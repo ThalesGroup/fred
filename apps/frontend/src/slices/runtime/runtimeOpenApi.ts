@@ -425,6 +425,10 @@ export type RuntimeContext = {
     - `False` — the agent offers it and the user left it off: the turn must NOT reason, even on a model whose reasoning is enabled platform-wide.
     - `True` — the user asked for it. Permission to reason, never a guarantee: level 2 remains a ceiling this cannot raise (§5.3). */
   reasoning?: boolean | null;
+  /** The user's per-question reasoning EFFORT choice, set by the composer's effort picker — only meaningful alongside `reasoning=True`. Closed set on purpose: low/medium/high is the intersection every reasoning provider accepts; provider-specific extremes (OpenAI xhigh, Anthropic max/budget_tokens) stay ops-authored in `models_catalog.yaml`.
+    
+    `None` means 'no per-question preference': the resolved profile's own `settings.reasoning_effort` (the ops default) applies unchanged. When set, RoutedChatModelFactory REPLACES the effort on profiles that already carry one — it never injects the key into a non-reasoning profile, so aptitude and activation stay ops-authored (levels 1-2 remain ceilings this cannot raise, and the strip path for a declined/unauthorized turn stays dominant). */
+  reasoning_effort?: ("low" | "medium" | "high") | null;
   /** kind="model" capability ids whose reasoning a platform admin has switched ON (`MODEL-REASONING-ENABLEMENT-RFC.md` §5, REASON-01), resolved by control-plane at prepare-execution and forwarded unchanged for the rest of the session — same channel and same 'not re-fetched per turn' contract as chat_default_profile_id above. GLOBAL, not per team: this is an activation ('does this model run with reasoning'), not a permission — per-team model authorization is the separate, untouched `usable_model_ids` (§5.1/§5.4).
     
     OFF BY DEFAULT, and this is a real semantic difference from `usable_model_ids`: there, `None` means 'unrestricted'; here `None` and `[]` mean the same thing as any absent id — reasoning does NOT run. A model reasons only by being named in this list (§5.6). RoutedChatModelFactory enforces it by STRIPPING the reasoning settings at client construction (§5.6.2).

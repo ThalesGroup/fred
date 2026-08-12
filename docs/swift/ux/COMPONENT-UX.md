@@ -208,19 +208,25 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
-As of REASON-01 (#2166) the same row grammar carries a **boolean** row for the first
-time: the `Reasoning` toggle (`stockKit/ReasoningControl.tsx`) shows On/Off inline in
-muted text like the value rows, but its trailing affordance is a checkbox glyph rather
-than a chevron, and clicking it flips the value in place instead of opening a
-sub-menu. The popover deliberately stays open so a user can flip it and keep
-composing. It is also the first row contributed by the **platform** rather than by a
-capability. It appears only when the agent's author turned Reasoning on in the form's
-Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
-gate removes the row entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
-§33). The offer itself lived in the General section until Amendment C (2026-08-02) moved
-it into the Capabilities tab, rendered through the same `CapabilityCard` component every
-real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
-even though the reasoning offer still isn't a capability underneath.
+As of REASON-01 (#2166) the platform contributed its first non-capability control: a
+`Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
+**gone from the tune menu**: reasoning is now an **effort picker chip**
+(`features/capabilities/ReasoningChip.tsx`, a `ContextualPicker`) pinned at the
+composer's **right edge** next to mic/send (Claude's composer is the visual
+reference). The chip text leads with the session's model identity plus the mode
+("Mistral Small · Élevé"); its menu header states the trade-off ("higher effort =
+more thorough, slower") above the four options Désactivé / Faible / Moyen / Élevé.
+The chip renders in primary/selected colors whenever an effort level is active.
+Multi-model is deliberately NOT displayed yet — the model identity arrives as a
+plain profile-id prop so the menu can grow a model section when that feature ships.
+The gating is unchanged: the chip appears only when the agent's author turned
+Reasoning on in the form's Capabilities tab AND a platform admin enabled the model's
+reasoning — a closed upstream gate removes it entirely rather than disabling it
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
+section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
+through the same `CapabilityCard` component every real capability uses (generalized
+to a plain `name`/`description`/`subForm` API for this) even though the reasoning
+offer still isn't a capability underneath.
 
 As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
 constant: the reasoning card grows a second switch nested under `Reasoning` in its own
@@ -233,9 +239,9 @@ agents) so the decision is informed at the point it is made.
 
 #### Open UX issues
 
-- **Boolean-row affordance (REASON-01)** — the checkbox glyph reads correctly but is the
-  only non-chevron trailing icon in the menu. Decide whether boolean rows should instead
-  use a small switch, and whether the On/Off value text is redundant next to it.
+- ~~**Boolean-row affordance (REASON-01)**~~ — resolved 2026-08-12 by removal: the
+  reasoning row left the tune menu for the right-edge effort picker chip, so the menu
+  carries no boolean row anymore.
 - **Desktop anchor space** — sub-menus open to the right of the row. Validate the behaviour
   close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
 - **Prompts row (PROMPT-05)** — the harmonized menu is shaped to accept a `Prompts` sub-row

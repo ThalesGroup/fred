@@ -39,6 +39,7 @@ from .contracts import (
     ModelSelectionRequest,
     ModelSelectionSource,
     TeamRoutingProfileDriftError,
+    with_reasoning_effort,
     without_reasoning_settings,
 )
 from .resolver import ModelRoutingResolver, resolve_team_override
@@ -262,6 +263,20 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         turn_declined = binding.runtime_context.reasoning is False
         if not platform_allows or turn_declined:
             model_config = without_reasoning_settings(model_config)
+        elif (
+            binding.runtime_context.reasoning is True
+            and binding.runtime_context.reasoning_effort
+        ):
+            # Level 4b, the user's per-question effort pick: honored only on an
+            # explicit `reasoning=True` turn (an effort without the ask is a
+            # malformed client and stays inert), and replace-if-present only
+            # (with_reasoning_effort never injects the key) so it tunes
+            # profiles ops activated and is inert everywhere else. Ordered
+            # after the strip branch on purpose — a declined/unauthorized turn
+            # never sees the user's pick.
+            model_config = with_reasoning_effort(
+                model_config, binding.runtime_context.reasoning_effort
+            )
         model = self._provider.build_model(
             model_config, capability=selection.capability
         )

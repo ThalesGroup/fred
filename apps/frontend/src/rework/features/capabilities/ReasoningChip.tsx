@@ -12,43 +12,71 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The per-question reasoning toggle (REASON-01 level 4), rendered as an
-// always-visible pill chip anchored at the right edge of the composer's
-// bottomRow (RichInputField's `rightExtraSlot`, just before the mic/send
-// group) — Claude's composer, whose model/effort control anchors the right
-// edge, is the visual reference. `COMPOSER_CHIP_WIDGETS` is the single source
-// of truth for which widget ids are promoted out of the "tune" popover:
-// `ComposerControlSlot` excludes them from its "tools" render and
-// `ManagedChatPage`'s `hasToolControls` guard excludes them too, so the tune
-// button never opens onto an empty popover when an agent only exposes
-// promoted controls.
+// The per-question reasoning EFFORT picker (REASON-01 level 4 + 4b), rendered
+// as an always-visible ContextualPicker chip anchored at the right edge of the
+// composer's bottomRow (RichInputField's `rightExtraSlot`, just before the
+// mic/send group). Claude's composer is the visual reference: the chip shows
+// the MODEL IDENTITY plus the selected mode ("Mistral Small · Élevé"), and the
+// menu's header says what the trade-off is (higher effort = slower). "off"
+// maps to `reasoning: false` on the wire; a level maps to `reasoning: true` +
+// `reasoning_effort` (the runtime replaces the ops-authored effort on
+// profiles that carry one, and stays inert everywhere else).
 //
-// This placement is expected to keep moving as positioning is iterated on —
-// to move a widget back into the tune menu, remove it from
-// COMPOSER_CHIP_WIDGETS and delete its chip; its row component (`stockKit/`)
-// is never deleted, so it reappears in the tune popover with no other change
-// needed. History: search_policy was a chip 2026-08-05–2026-08-06; rag_scope
-// was a chip (ComposerOptionChips/ContextualPicker) 2026-08-07–2026-08-12;
-// both are back in the tune menu, replaced by this reasoning chip.
+// Multi-model readiness (deliberately NOT displayed yet): the model identity
+// arrives as a plain `modelProfileId` prop, so when model selection ships as
+// a Fred feature the chip's menu grows a model section fed by real catalog
+// display names and this file's `modelLabelFromProfileId` heuristic dies —
+// nothing else in the composer needs to move.
+//
+// `COMPOSER_CHIP_WIDGETS` is the single source of truth for which widget ids
+// are promoted out of the "tune" popover: `ComposerControlSlot` excludes them
+// from its "tools" render and `ManagedChatPage`'s `hasToolControls` guard
+// excludes them too, so the tune button never opens onto an empty popover
+// when an agent only exposes promoted controls. History: search_policy was a
+// chip 2026-08-05–2026-08-06; rag_scope was a chip 2026-08-07–2026-08-12;
+// both are back in the tune menu, replaced by this effort picker (its
+// tune-menu row predecessor, stockKit/ReasoningControl, was deleted with it).
 
 import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { ContextualPicker } from "@shared/molecules/ContextualPicker/ContextualPicker";
 import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import type { ChatTurnControlComposerState } from "./types";
-import styles from "./ReasoningChip.module.css";
+import type { ChatTurnControlComposerState, ReasoningEffortName } from "./types";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
+
+/**
+ * Human-ish label for a routing profile id — "chat.mistral.small" → "Mistral
+ * Small". TEMPORARY heuristic: profile ids are ops-authored routing keys, not
+ * display names; the multi-model feature will serve real catalog names and
+ * replace this. Null in → null out (no team default profile: routing falls to
+ * the pod's YAML rules, whose identity the frontend cannot know).
+ */
+export function modelLabelFromProfileId(profileId: string | null | undefined): string | null {
+  if (!profileId) return null;
+  const segments = profileId.split(".").filter(Boolean);
+  // Leading capability/tier qualifiers ("chat", "default") are routing
+  // vocabulary, not identity — drop them, keep provider/model words.
+  while (segments.length > 1 && ["chat", "default", "language", "vision", "embedding"].includes(segments[0])) {
+    segments.shift();
+  }
+  if (segments.length === 0) return null;
+  return segments.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
 
 interface ReasoningChipProps {
   /** `ExecutionPreparation.chat_controls` — same list ComposerControlSlot reads. */
   chatControls: readonly ChatControlDescriptor[];
   /** Shared composer state (same object passed to ComposerControlSlot). */
   composer: ChatTurnControlComposerState;
-  /** Mirrors the add/tune menu buttons: no toggling while a response streams. */
+  /** Team default chat profile id (`ExecutionPreparation.chat_default_profile_id`)
+   *  — the session's model identity, shown on the chip. Null hides the model
+   *  segment (identity unknown frontend-side). */
+  modelProfileId?: string | null;
+  /** Mirrors the add/tune menu buttons: no picking while a response streams. */
   disabled?: boolean;
 }
 
-export function ReasoningChip({ chatControls, composer, disabled = false }: ReasoningChipProps) {
+export function ReasoningChip({ chatControls, composer, modelProfileId = null, disabled = false }: ReasoningChipProps) {
   const { t } = useTranslation();
   // Only agents whose author enabled reasoning (and with a platform-enabled
   // reasoning model) emit the platform reasoning_toggle control — no control,
@@ -56,20 +84,31 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
   const offersReasoning = chatControls.some((control) => control.widget === "reasoning_toggle");
   if (!offersReasoning) return null;
 
-  const on = composer.reasoning;
+  const effortLabels: Record<ReasoningEffortName, string> = {
+    off: t("chatbot.composerSettings.reasoningOff"),
+    low: t("chatbot.composerSettings.reasoningLow"),
+    medium: t("chatbot.composerSettings.reasoningMedium"),
+    high: t("chatbot.composerSettings.reasoningHigh"),
+  };
+  const modelLabel = modelLabelFromProfileId(modelProfileId);
+  const effortLabel = effortLabels[composer.reasoningEffort];
+
   return (
-    <button
-      type="button"
-      className={styles.chip}
-      data-on={on}
-      aria-pressed={on}
+    <ContextualPicker<ReasoningEffortName>
+      icon={{ category: "outlined", type: "auto_awesome" }}
+      title={t("chatbot.composerSettings.reasoningRowLabel")}
+      value={composer.reasoningEffort}
+      valueLabel={modelLabel ? `${modelLabel} · ${effortLabel}` : effortLabel}
+      description={t("chatbot.composerSettings.reasoningEffortHint")}
+      onChange={composer.onReasoningEffortChange}
       disabled={disabled}
-      onClick={() => composer.onReasoningChange(!on)}
-    >
-      <span className={styles.icon}>
-        <Icon category="outlined" type="auto_awesome" />
-      </span>
-      <span className={styles.label}>{t("chatbot.composerSettings.reasoningRowLabel")}</span>
-    </button>
+      accent={composer.reasoningEffort !== "off"}
+      options={[
+        { value: "off", label: effortLabels.off },
+        { value: "low", label: effortLabels.low },
+        { value: "medium", label: effortLabels.medium },
+        { value: "high", label: effortLabels.high },
+      ]}
+    />
   );
 }

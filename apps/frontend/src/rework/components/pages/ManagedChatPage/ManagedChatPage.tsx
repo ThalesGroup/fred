@@ -271,8 +271,8 @@ export default function ManagedChatPage() {
     onSearchPolicyChange: chat.setSearchPolicy,
     ragScope: chat.ragScope,
     onRagScopeChange: chat.setRagScope,
-    reasoning: chat.reasoning,
-    onReasoningChange: chat.setReasoning,
+    reasoningEffort: chat.reasoningEffort,
+    onReasoningEffortChange: chat.setReasoningEffort,
   };
   // The "tune" button only appears when the agent exposes tool controls the
   // tune popover actually renders — i.e. any chat control that isn't the
@@ -305,7 +305,12 @@ export default function ManagedChatPage() {
         ) : undefined
       }
       rightExtraSlot={
-        <ReasoningChip chatControls={chat.chatControls} composer={composerState} disabled={composerControlsDisabled} />
+        <ReasoningChip
+          chatControls={chat.chatControls}
+          composer={composerState}
+          modelProfileId={chat.chatDefaultProfileId}
+          disabled={composerControlsDisabled}
+        />
       }
       leftSlot={
         <>

@@ -3182,6 +3182,11 @@ async def _iterate_runtime_event_payloads(
         # tri-state on purpose — `ctx.get` yielding None means "the agent never
         # offered the choice", which is NOT the same as the user answering no.
         reasoning=ctx.get("reasoning"),
+        # The user's per-question effort pick — only tunes the value on
+        # profiles ops already activated (replace-if-present in
+        # with_reasoning_effort); None falls back to the profile's own
+        # ops-authored effort.
+        reasoning_effort=ctx.get("reasoning_effort"),
     )
 
     binding = BoundRuntimeContext(
