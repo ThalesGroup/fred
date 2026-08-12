@@ -17,7 +17,7 @@
 // lossy and is the exact regression this suite pins against.
 
 import { describe, expect, it } from "vitest";
-import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { hitlResponseKey, reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {

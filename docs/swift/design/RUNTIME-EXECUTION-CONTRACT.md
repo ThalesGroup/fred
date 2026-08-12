@@ -2646,6 +2646,63 @@ there needs migrations written first.
 
 ---
 
+### 8.46 ✅ `FinishReason` — normalized, Fred-owned enum replaces the raw provider string (issue #1840, 2026-08-11)
+
+**Closes FRONT-05 (`FRONTEND-BACKLOG.md §7`).** The frontend's last remaining
+import from the retired `agentic-backend` client was `FinishReason` — a named
+6-value enum that client happened to expose, with nothing equivalent on the
+runtime side (`ChatMetadata.finish_reason` was a plain `Optional[str]`,
+whatever the LLM provider reported verbatim).
+
+**Why a raw passthrough was the wrong shape.** Providers report this under
+different keys and vocabularies — OpenAI: `response_metadata["finish_reason"]
+= "stop"/"length"/"tool_calls"`; Anthropic:
+`response_metadata["stop_reason"] = "end_turn"/"max_tokens"/"tool_use"`
+(**a different key entirely** — Fred only ever read `"finish_reason"`, so
+every Claude-backed turn silently had `finish_reason = None` before this fix);
+Gemini/Vertex: `"STOP"`/`"MAX_TOKENS"`, or `"UNKNOWN_<n>"` when the installed
+SDK doesn't recognize an enum value the API returned. That last case means the
+raw value space is open-ended by construction — no closed type can enumerate
+it, on the frontend or the backend.
+
+**What changed.**
+
+- `fred_core.history.history_schema` (`libs/fred-core`) gains `FinishReason(str,
+  Enum)` — `stop | length | content_filter | tool_calls | error | other` — and
+  `coerce_finish_reason(raw)`, a case-insensitive alias table mapping every
+  known provider value onto it. Anything not in the table (a new provider, a
+  new SDK enum value, a typo) maps to `other` rather than raising — this is a
+  deliberate, designed fallback, not an accidental gap.
+- `ChatMetadata.finish_reason` is now `Optional[FinishReason]`, with a
+  `field_validator(mode="before")` calling `coerce_finish_reason` — applied on
+  **both** construction and `.model_validate()` (read), so a history row
+  persisted before this change, still holding a raw provider string, loads
+  without error instead of failing validation.
+- `fred_sdk.contracts.runtime.FinalRuntimeEvent.finish_reason` (the live SSE
+  contract) is now `FinishReason | None`, with the same tolerant
+  `field_validator` — this is a separate Pydantic model from `ChatMetadata`
+  (one is the live event, one is persisted history), so both needed the fix;
+  fixing only one would have made the live view and a reloaded conversation
+  disagree on the same turn's value.
+- `fred_runtime.runtime_support.model_metadata.runtime_metadata_from_message`
+  now reads `response_metadata["finish_reason"]` **or**
+  `["stop_reason"]` (fixing the Anthropic gap above) and normalizes via
+  `coerce_finish_reason` at the source, once — both the SSE event and the
+  persisted history descend from this same call, so they can never diverge.
+
+**Frontend.** `runtimeOpenApi.ts` now generates a named `FinishReason` union;
+`useChatSse.ts` reads it directly, no cast. `agenticOpenApi.ts`,
+`agenticApi.ts`, and their config are deleted — this was their last consumer,
+closing out `FRONTEND-BACKLOG.md §7` entirely.
+
+**Deliberately out of scope:** no retroactive backfill of `error`/`other`
+misclassification in history rows written before this shipped (the
+`mode="before"` coercion is what keeps them loadable, it does not rewrite
+them); no per-provider GreenOps/cost impact (unrelated to `TokenUsageImpact` /
+issue #2312).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

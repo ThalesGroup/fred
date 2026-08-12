@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import type { ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";

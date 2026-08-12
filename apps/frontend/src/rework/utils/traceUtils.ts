@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { Channel, ChatMessage, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
-import type { VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
+import type {
+  Channel,
+  ChatMessage,
+  ToolCallPart,
+  ToolResultPart,
+  VectorSearchHit,
+} from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import type { TokenUsage } from "@rework/types/conversation";
 

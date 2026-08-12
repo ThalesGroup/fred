@@ -33,7 +33,7 @@ import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
-import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 

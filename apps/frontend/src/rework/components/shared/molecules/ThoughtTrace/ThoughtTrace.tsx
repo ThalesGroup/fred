@@ -14,7 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
-import type { ChatMessage } from "../../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { TraceSummary } from "../../../../utils/traceUtils";
 import {
   formatLatencyMs,
