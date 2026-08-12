@@ -68,7 +68,12 @@ vi.mock("react-redux", () => ({
 // Fixed UI locale so language-forwarding tests are deterministic — no other
 // test in this file inspects request bodies, so a fixed value here is safe.
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ i18n: { language: "fr-FR" } }),
+  useTranslation: () => ({
+    i18n: {
+      language: "fr-FR",
+      t: (key: string, values?: Record<string, unknown>) => `${key}:${values?.limit ?? ""}`,
+    },
+  }),
 }));
 
 vi.mock("../../../security/KeycloakService", () => ({
@@ -119,14 +124,18 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     flushPendingWrites,
     onError: (msg) => onErrorMock(msg),
     onTurnStarted: () => onTurnStartedMock(),
+    onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
+    isTurnCurrent,
   });
   onRender(hook);
   return null;
 }
 
 let flushPendingWrites: ((sessionId: string) => Promise<boolean>) | undefined;
+let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
+const onTurnRejectedMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -144,8 +153,10 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
   beforeEach(() => {
     flushPendingWrites = undefined;
+    isTurnCurrent = undefined;
     onErrorMock.mockClear();
     onTurnStartedMock.mockClear();
+    onTurnRejectedMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -217,6 +228,138 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // a reason to have skipped clearing the composer.
     expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
+  });
+
+  it("parses a structured length rejection, removes the optimistic message, and restores the full draft", async () => {
+    flushPendingWrites = async () => true;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 5,
+    });
+    const rejectedDraft = "🙂🙂🙂🙂🙂🙂";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 6,
+            input: rejectedDraft,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(latest.maxChatInputChars).toBe(5);
+    expect(onErrorMock).toHaveBeenCalledWith("chatbot.errors.chatInputTooLong:5");
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain(rejectedDraft);
+    expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(rejectedDraft);
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("suppresses a late length rejection after the request's session is reset", async () => {
+    flushPendingWrites = async () => true;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 10,
+    });
+    const response = deferred<Response>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
+    mount();
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = latest.send("old session draft", "session-a");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    act(() => latest.reset());
+    response.resolve(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 17,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await act(async () => sendPromise);
+
+    expect(onTurnRejectedMock).not.toHaveBeenCalled();
+    expect(onErrorMock).not.toHaveBeenCalled();
+    expect(latest.maxChatInputChars).toBeUndefined();
+    expect(latest.messages).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  it("suppresses a late length rejection after navigation changes session before reset runs", async () => {
+    flushPendingWrites = async () => true;
+    let activeSessionId = "session-a";
+    isTurnCurrent = (turnSessionId) => turnSessionId === activeSessionId;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 10,
+    });
+    const response = deferred<Response>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
+    mount();
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = latest.send("old session draft", "session-a");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    activeSessionId = "session-b";
+    response.resolve(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 17,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await act(async () => sendPromise);
+
+    expect(onTurnRejectedMock).not.toHaveBeenCalled();
+    expect(onErrorMock).not.toHaveBeenCalled();
+    expect(latest.maxChatInputChars).toBe(10);
+    fetchSpy.mockRestore();
+  });
+
+  it("omits the frontend limit when an older preparation does not publish it", async () => {
+    mount();
+
+    await act(async () => {
+      await latest.prepareChatControls();
+    });
+
+    expect(latest.maxChatInputChars).toBeUndefined();
   });
 
   it("surfaces onError, never throws, and never fires onTurnStarted when prepare-execution itself rejects", async () => {
@@ -819,6 +962,76 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     expect(reached).toBe(false);
     expect(onErrorMock).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
+
+  it("handles a structured HITL length rejection without echoing its content", async () => {
+    const rejectedText = "🙂🙂🙂🙂🙂🙂";
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 10,
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 6,
+            input: rejectedText,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      reached = await latest.sendHitlResume(hitlEvent, undefined, rejectedText);
+    });
+
+    expect(reached).toBe(false);
+    expect(latest.maxChatInputChars).toBe(5);
+    expect(onErrorMock).toHaveBeenCalledWith("chatbot.errors.chatInputTooLong:5");
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain(rejectedText);
+    expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(rejectedText);
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves exact HITL free text and canonical choice fields on the wire", async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ detail: "runtime unavailable" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    mount();
+
+    await act(async () => {
+      await latest.sendHitlResume(hitlEvent, undefined, "  a  ");
+    });
+    const choiceEvent = {
+      ...hitlEvent,
+      payload: { ...hitlEvent.payload, choices: [{ id: "proceed", label: "Proceed" }] },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(choiceEvent, "proceed", " note ");
+    });
+
+    expect(requestBodies[0].resume_payload).toEqual({ answer: "  a  " });
+    expect(requestBodies[1].resume_payload).toEqual({
+      answer: "proceed",
+      choice_id: "proceed",
+      text: " note ",
+    });
     fetchSpy.mockRestore();
   });
 

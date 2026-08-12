@@ -1015,6 +1015,7 @@ export type AgentTemplateSummary = {
     [key: string]: string;
   } | null;
   kind: ExecutionCategory;
+  max_chat_input_chars: number;
   template_agent_id: string;
   title: string;
 };

@@ -64,8 +64,15 @@ Fred policy behavior must come from files, not hardcoded values.
 Current policy sources:
 
 - Model/routing policy catalogs (agentic + knowledge-flow usage paths)
+- Runtime-pod request policy in `apps/fred-agents` configuration, including
+  `app.max_chat_input_chars` for the deployment-scoped chat-message limit
 - Conversation lifecycle policy catalog in control-plane:
   - `apps/control-plane-backend/config/conversation_policy_catalog.yaml`
+
+`app.max_chat_input_chars` is loaded once into `PodAppConfig`, enforced by the
+runtime, and published read-only to managed chat through runtime-template and
+execution-preparation metadata. It is not a database setting or a live
+platform-admin preference.
 
 When implementing behavior (for example purge delays), read from policy config and apply.
 Do not embed retention windows or team-specific rules in code.

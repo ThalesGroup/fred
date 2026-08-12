@@ -409,6 +409,7 @@
       "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
       "selectLibraryFirst": "Select a library first."
     },
+    "characterCounter": "{{count}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {
@@ -424,14 +425,18 @@
       "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again.",
       "attachmentDeleteFailedSummary": "File not deleted",
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
-      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file."
+      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
+      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit."
     },
+    "hitlFreeTextLabel": "Your answer",
+    "hitlWaitingAria": "Agent is waiting for your input",
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "sendHitlAnswer": "Send",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",

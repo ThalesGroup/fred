@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useId, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
+import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import type { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import styles from "./HitlPrompt.module.css";
@@ -23,6 +25,9 @@ interface HitlPromptProps {
   event: RuntimeAwaitingHumanEvent;
   onAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
   readonly?: boolean;
+  maxChatInputChars?: number;
+  freeTextValue?: string;
+  onFreeTextChange?: (value: string) => void;
 }
 
 /**
@@ -46,16 +51,31 @@ function choiceButtonStyle(choice: { id: string; default?: boolean }): {
   };
 }
 
-export function HitlPrompt({ event, onAnswer, readonly = false }: HitlPromptProps) {
+export function HitlPrompt({
+  event,
+  onAnswer,
+  readonly = false,
+  maxChatInputChars,
+  freeTextValue,
+  onFreeTextChange,
+}: HitlPromptProps) {
+  const { t, i18n } = useTranslation();
   const payload = event.payload;
-
-  const [freeText, setFreeText] = useState("");
+  const [localFreeText, setLocalFreeText] = useState("");
+  const freeText = freeTextValue ?? localFreeText;
+  const characterInfoId = useId();
+  const characterCount = countUnicodeCodePoints(freeText);
+  const isOverLimit = maxChatInputChars !== undefined && characterCount > maxChatInputChars;
+  const setFreeText = (value: string) => {
+    if (onFreeTextChange) onFreeTextChange(value);
+    else setLocalFreeText(value);
+  };
 
   return (
     <div
       className={`${styles.card} ${!readonly ? styles.active : ""}`}
       role="group"
-      aria-label="Agent is waiting for your input"
+      aria-label={t("chatbot.hitlWaitingAria")}
     >
       {payload.title && <p className={styles.title}>{payload.title}</p>}
       {payload.question && <p className={styles.question}>{payload.question}</p>}
@@ -84,15 +104,43 @@ export function HitlPrompt({ event, onAnswer, readonly = false }: HitlPromptProp
 
       {payload.free_text && !readonly && (
         <div className={styles.freeText}>
-          <TextArea label="Your answer" value={freeText} onChange={(e) => setFreeText(e.target.value)} rows={2} />
+          <TextArea
+            label={t("chatbot.hitlFreeTextLabel")}
+            value={freeText}
+            onChange={(e) => setFreeText(e.target.value)}
+            rows={2}
+            aria-invalid={isOverLimit || undefined}
+            aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
+          />
+          {maxChatInputChars !== undefined && (
+            <div
+              id={characterInfoId}
+              className={`${styles.characterInfo} ${isOverLimit ? styles.characterInfoError : ""}`}
+              aria-live="polite"
+            >
+              <span>
+                {isOverLimit
+                  ? t("chatbot.errors.chatInputTooLong", {
+                      limit: maxChatInputChars.toLocaleString(i18n.language),
+                    })
+                  : null}
+              </span>
+              <span className={styles.characterCount}>
+                {t("chatbot.characterCounter", {
+                  count: characterCount,
+                  limit: maxChatInputChars.toLocaleString(i18n.language),
+                })}
+              </span>
+            </div>
+          )}
           <Button
             color="primary"
             variant="filled"
             size="small"
-            disabled={!freeText.trim()}
+            disabled={!freeText.trim() || isOverLimit}
             onClick={() => onAnswer(undefined, freeText)}
           >
-            Send
+            {t("chatbot.sendHitlAnswer")}
           </Button>
         </div>
       )}

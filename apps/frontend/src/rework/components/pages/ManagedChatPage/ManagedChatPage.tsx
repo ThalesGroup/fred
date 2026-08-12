@@ -292,7 +292,9 @@ export default function ManagedChatPage() {
       onSend={chat.handleSend}
       onInterrupt={chat.handleAbort}
       disabled={chat.waitResponse || chat.isLoadingHistory}
-      sendDisabled={chat.attachmentsUploading}
+      sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
+      characterCount={chat.inputCharacterCount}
+      characterLimit={chat.maxChatInputChars}
       enableVoiceInput
       onTranscribeAudio={handleTranscribeAudio}
       voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
@@ -454,6 +456,9 @@ export default function ManagedChatPage() {
                   isStreaming={chat.waitResponse}
                   scrollContainerRef={scrollContainerRef}
                   onHitlAnswer={chat.handleHitlAnswer}
+                  maxChatInputChars={chat.maxChatInputChars}
+                  hitlFreeText={chat.hitlFreeText}
+                  onHitlFreeTextChange={chat.setHitlFreeText}
                 />
               )}
             </div>

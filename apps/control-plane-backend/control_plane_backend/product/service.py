@@ -177,6 +177,7 @@ class _RuntimeTemplatePayload:
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
         default_capability_ids: list[str] | None = None,
+        max_chat_input_chars: int | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
@@ -195,6 +196,7 @@ class _RuntimeTemplatePayload:
         # so `_apply_capability_selection` can ReBAC-check the None case instead of
         # skipping it.
         self.default_capability_ids = default_capability_ids or []
+        self.max_chat_input_chars = max_chat_input_chars
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
@@ -223,6 +225,14 @@ class _RuntimeTemplatePayload:
                 "description": data["description"],
             }
         )
+        raw_max_chat_input_chars = data.get("max_chat_input_chars")
+        max_chat_input_chars = (
+            raw_max_chat_input_chars
+            if isinstance(raw_max_chat_input_chars, int)
+            and not isinstance(raw_max_chat_input_chars, bool)
+            and raw_max_chat_input_chars > 0
+            else None
+        )
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -247,6 +257,9 @@ class _RuntimeTemplatePayload:
                 for cid in data.get("default_capability_ids", [])
                 if isinstance(cid, str) and cid
             ],
+            # Optional during rolling upgrades: older runtime pods do not
+            # advertise this deployment policy yet.
+            max_chat_input_chars=max_chat_input_chars,
         )
 
 
@@ -570,18 +583,39 @@ async def _available_capabilities_for_source(
     unreachable pod yields an empty list (no chat controls this prep).
     """
 
+    available_capabilities, _ = await _runtime_execution_metadata_for_source(base_url)
+    return available_capabilities
+
+
+async def _runtime_execution_metadata_for_source(
+    base_url: str,
+) -> tuple[list[CapabilityCatalogEntry], int | None]:
+    """Fetch pod-scoped metadata needed by one execution preparation.
+
+    Capability descriptors and the chat-input policy live on the same runtime
+    template response. Reading them together preserves the existing single
+    request per preparation and keeps older runtimes compatible.
+    """
+
     try:
         templates = await _fetch_runtime_templates(base_url, include_non_public=True)
     except Exception as exc:
-        # Best-effort (see docstring): an unreachable pod is expected/handled, not
-        # a fault worth WARNING-level attention on every poll cycle it recurs.
-        logger.debug("Failed to fetch capability catalog from %s: %s", base_url, exc)
-        return []
+        # Best-effort: an unreachable or older pod must not make preparation fail.
+        logger.debug("Failed to fetch runtime metadata from %s: %s", base_url, exc)
+        return [], None
     merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
         for entry in template.available_capabilities:
             merged.setdefault(entry.id, entry)
-    return list(merged.values())
+    max_chat_input_chars = next(
+        (
+            template.max_chat_input_chars
+            for template in templates
+            if template.max_chat_input_chars is not None
+        ),
+        None,
+    )
+    return list(merged.values()), max_chat_input_chars
 
 
 AGENT_CAPABILITY_NAMESPACE_PREFIX = "agent__"
@@ -3169,7 +3203,10 @@ async def prepare_execution(
     # Descriptors ship on ExecutionPreparation — the slot the retired
     # `effective_chat_options` occupied. Best-effort: an unreachable pod yields
     # no controls this prep (logged), never a failed prep.
-    available_capabilities = await _available_capabilities_for_source(source.base_url)
+    (
+        available_capabilities,
+        max_chat_input_chars,
+    ) = await _runtime_execution_metadata_for_source(source.base_url)
     chat_controls = await _resolve_chat_controls(
         instance.tuning,
         available_capabilities,
@@ -3226,6 +3263,7 @@ async def prepare_execution(
         chat_default_profile_id=chat_default_profile_id,
         operation_route_rules=operation_route_rules,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
+        max_chat_input_chars=max_chat_input_chars,
     )
 
 

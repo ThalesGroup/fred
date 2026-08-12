@@ -83,6 +83,24 @@
   color: var(--state-on-surface-disabled);
 }
 
+.characterInfo {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-s);
+  padding: 0 var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.characterInfoError {
+  color: var(--error);
+}
+
+.characterCount {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 /* Bottom row: options (left, flex-1) + send button (right) */
 .bottomRow {
   display: flex;
