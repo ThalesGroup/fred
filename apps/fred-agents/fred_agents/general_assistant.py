@@ -43,7 +43,6 @@ Example:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-    MCP_SERVER_KNOWLEDGE_FLOW_FS,
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
@@ -144,10 +143,13 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     # legacy capability on purpose as the comparison baseline. Do not select
     # both on one instance (duplicate vector-search tool, see
     # `document_access/capability.py`'s module docstring).
+    #
+    # Filesystem (`mcp-knowledge-flow-fs`) is deliberately excluded: the /fs
+    # boundary is not agent/team-scoped yet (AGENT-FILESYSTEM-HARDENING-RFC F1,
+    # #2334) — same stance as `deep_assistant`. Do not re-add until that lands.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id="document_access"),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
