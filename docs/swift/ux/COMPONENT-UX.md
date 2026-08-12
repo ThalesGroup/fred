@@ -2578,23 +2578,41 @@ server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
 
-### `DocumentWorkspace` — drag-and-drop onto folder rows
+### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
-Dropping OS files anywhere on a corpus folder's subtree — its row or, when
-expanded, its document rows/hints — opens the ingestion drawer
-(`DocumentUploadDrawer`) pre-seeded with the dropped files and targeting that
-folder (innermost tagged folder wins when subtrees nest), so the user only
-picks mode/profile (fast/medium/rich) and saves. A dropped directory is
-expanded into all its files, recursively and flat — same `file-selector`
-traversal as the drawer's own dropzone, which already accepted folders.
-Folder-originated files upload under their leaf name: browsers put the
-relative path in the multipart filename (this surfaced as one opaque
-"Upload failed: 404" per file, found live 2026-07-23), now pinned frontend-side
-and sanitized backend-side (`upload_basename`). The
-targeted row shows the drawer dropzone's affordance (dashed `--primary`
-outline + 6% tint) while hovered with files. Same `canUpdateResources` gate as
-the row's explicit upload action; rows without a tag (pure path prefixes) are
-not drop targets.
+Three drop surfaces, all behind the same `canUpdateResources` gate as the
+explicit upload action, all opening the ingestion drawer
+(`DocumentUploadDrawer`) pre-seeded with the dropped files so the user only
+picks mode/profile (fast/medium/rich) and saves:
+
+- **Folder row** (since 2026-07-23): targets that folder; the row shows the
+  drawer dropzone's affordance (dashed `--primary` outline + 6% tint) while
+  hovered with files, and its drop wins over the page surface below
+  (`stopPropagation`).
+- **Full page of an open folder**: the drill-down model shows one folder at a
+  time, so dropping anywhere on the page reads as "add to this folder" — an
+  overlay names the destination while a file drag hovers.
+- **Corpus root**: only dropped FOLDERS are accepted — each becomes a library
+  mirroring its structure (see below). Loose files are rejected with an error
+  toast (they have no tag to land in and would upload invisible); a mixed
+  drop keeps the folders' content and warns about the skipped loose files.
+
+A dropped directory keeps its on-disk structure: each subdirectory becomes a
+nested document tag (created exactly like `CreateFolderModal` would, existing
+levels reused), and every file uploads under its own subdirectory's tag
+instead of being flattened into the drop target. The drawer lists files under
+their relative path and announces how many subfolders the save will create; a
+failed/forbidden tag creation aborts the save before any upload starts.
+Folder-originated files still upload under their leaf name: browsers put the
+relative path in the multipart filename (one opaque "Upload failed: 404" per
+file, found live 2026-07-23), pinned frontend-side and sanitized backend-side
+(`upload_basename`).
+
+Status refresh: a folder's document page reloads on every entry (not just the
+first), and while any ingestion is live the 3s status poll also covers the
+folder being viewed — a subfolder opened before its files' uploads (or fresh
+ReBAC tuples) landed used to freeze forever on its first empty snapshot,
+hiding the live "processing" rows (found live 2026-08-12).
 
 ### `DocumentWorkspace` — embedded-title hint on the Name column
 

@@ -15,10 +15,34 @@
 
 .workspace {
   display: flex;
+  position: relative; /* anchors .pageDropOverlay */
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-s);
   min-height: 0;
+}
+
+/* Full-page "drop here" affordance while an OS-file drag hovers the opened
+ * folder — same visual language as the folder row's data-drag-over below.
+ * pointer-events: none so the overlay never steals the dragleave/drop events
+ * from the workspace element that owns them. */
+.workspace[data-page-drag-over] {
+  outline: 1.5px dashed var(--primary);
+  outline-offset: -1.5px;
+}
+
+.pageDropOverlay {
+  display: flex;
+  position: absolute;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-xs);
+  z-index: 3;
+  inset: 0;
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  pointer-events: none;
+  color: var(--primary);
+  font: var(--font-title-small);
 }
 
 .nameButton {
