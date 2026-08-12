@@ -2730,7 +2730,11 @@ size-budgeted folder tree) and single-document lookup.
    explicit, accurate omission signal.
 2. `CorpusTreeService._resolve_leaves` now calls new
    `MetadataService.get_documents_by_uids` (indexed `get_metadata_by_uids`,
-   ReBAC-filtered after fetch) instead of the full-table scan.
+   ReBAC-filtered after fetch) instead of the full-table scan. KNOWN GAP: this
+   sends the whole uid collection as one `IN (...)` query, unchunked — bounded
+   in practice by `_MAX_FOLDERS` (10,000 folders) but not hardened against an
+   exceptionally large distinct-document count hitting a driver bind-parameter
+   ceiling. Not hit by any known corpus size; flagged on the method itself.
 3. **New port method** `DocumentTreePort.list_by_label(*, label, offset=0,
    limit=50) -> DocumentLabelPageResult` (`fred-sdk/contracts/runtime.py`) —
    flat, exhaustive, paginated label resolution, on the SAME port/adapter/
@@ -2739,7 +2743,15 @@ size-budgeted folder tree) and single-document lookup.
    tools at the LLM-facing layer, one port at the plumbing layer. Backed by
    new `MetadataService.get_document_uids_with_any_label` (one ReBAC
    resolution + one indexed `label IN (...)` store query, OR-semantics across
-   labels, UID-only) and `get_documents_with_label_page`. KNOWN GAP,
+   labels, UID-only, unpaginated — used by the non-paginated
+   `get_documents_with_label`) and a separate paginated sibling,
+   `get_document_uids_with_any_label_page`/`get_documents_with_label_page`
+   (real `ORDER BY ... OFFSET ... LIMIT ...` plus a matching `COUNT(*)` pushed
+   into the store query, not a fetch-everything-then-slice-in-Python — so
+   enumerating many pages of a large match set does not repeat a full,
+   unbounded label scan on each call; the ReBAC `lookup_user_resources` call
+   itself still runs once per page, same cost every other paginated,
+   authorized listing in this service already pays per call). KNOWN GAP,
    documented on the port method itself: does NOT accept `library_tag_ids` —
    Knowledge Flow's label resolution narrows only by document-level READ
    permission, never by folder/library scope, so an agent configured with

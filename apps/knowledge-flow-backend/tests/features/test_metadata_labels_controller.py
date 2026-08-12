@@ -65,10 +65,10 @@ async def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     await store.save_metadata(_doc("doc-1"))
 
     fake_context = SimpleNamespace(
-        get_config=lambda: SimpleNamespace(),
+        get_config=SimpleNamespace,
         get_metadata_store=lambda: store,
         get_content_store=lambda: None,
-        get_rebac_engine=lambda: _FakeRebac(),
+        get_rebac_engine=_FakeRebac,
         get_pg_async_engine=lambda: engine,
     )
     monkeypatch.setattr(ApplicationContext, "get_instance", staticmethod(lambda: fake_context))

@@ -675,6 +675,38 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             rows = (await s.execute(stmt)).scalars().all()
         return list(rows)
 
+    async def get_document_uids_with_any_label_page(
+        self,
+        labels: set[str],
+        document_uids: set[str] | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        session: AsyncSession | None = None,
+    ) -> tuple[List[str], int]:
+        """Ordered, bounded sibling of `get_document_uids_with_any_label`: a
+        real `ORDER BY ... OFFSET ... LIMIT ...` query plus a matching
+        `COUNT(*)`, instead of fetching every matching uid and slicing in
+        Python — enumerating many pages does not re-fetch the whole match set
+        on each call."""
+        if not labels:
+            return [], 0
+        base = (
+            select(DocumentLabelRow.document_uid)
+            .distinct()
+            .where(DocumentLabelRow.label.in_(labels))
+        )
+        if document_uids is not None:
+            if not document_uids:
+                return [], 0
+            base = base.where(DocumentLabelRow.document_uid.in_(document_uids))
+        count_stmt = select(func.count()).select_from(base.subquery())
+        page_stmt = base.order_by(DocumentLabelRow.document_uid.asc()).offset(offset).limit(limit)
+        async with use_session(self._sessions, session) as s:
+            total = (await s.execute(count_stmt)).scalar_one()
+            rows = (await s.execute(page_stmt)).scalars().all()
+        return list(rows), total
+
     async def get_distinct_labels(
         self,
         document_uids: set[str] | None = None,

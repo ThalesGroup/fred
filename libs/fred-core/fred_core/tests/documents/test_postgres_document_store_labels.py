@@ -355,6 +355,67 @@ async def test_get_document_uids_with_any_label_returns_empty_for_no_labels(
 
 
 @pytest.mark.asyncio
+async def test_get_document_uids_with_any_label_page_orders_and_bounds_a_page(
+    tmp_path: Path,
+) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "any_label_page.sqlite3")
+    store = PostgresDocumentMetadataStore(engine)
+    for uid in ("doc-3", "doc-1", "doc-2"):
+        await store.save_metadata(_doc(uid))
+        await store.add_label(uid, "DAT")
+
+    page, total = await store.get_document_uids_with_any_label_page({"DAT"}, offset=0, limit=2)
+
+    assert page == ["doc-1", "doc-2"]
+    assert total == 3
+
+
+@pytest.mark.asyncio
+async def test_get_document_uids_with_any_label_page_second_page(tmp_path: Path) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "any_label_page2.sqlite3")
+    store = PostgresDocumentMetadataStore(engine)
+    for uid in ("doc-1", "doc-2", "doc-3"):
+        await store.save_metadata(_doc(uid))
+        await store.add_label(uid, "DAT")
+
+    page, total = await store.get_document_uids_with_any_label_page({"DAT"}, offset=2, limit=2)
+
+    assert page == ["doc-3"]
+    assert total == 3
+
+
+@pytest.mark.asyncio
+async def test_get_document_uids_with_any_label_page_narrows_to_the_given_set(
+    tmp_path: Path,
+) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "any_label_page_narrowed.sqlite3")
+    store = PostgresDocumentMetadataStore(engine)
+    await store.save_metadata(_doc("doc-1"))
+    await store.save_metadata(_doc("doc-2"))
+    await store.add_label("doc-1", "DAT")
+    await store.add_label("doc-2", "DAT")
+
+    page, total = await store.get_document_uids_with_any_label_page(
+        {"DAT"}, document_uids={"doc-2"}, offset=0, limit=50
+    )
+
+    assert page == ["doc-2"]
+    assert total == 1
+
+
+@pytest.mark.asyncio
+async def test_get_document_uids_with_any_label_page_returns_empty_for_no_labels(
+    tmp_path: Path,
+) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "any_label_page_empty.sqlite3")
+    store = PostgresDocumentMetadataStore(engine)
+    await store.save_metadata(_doc("doc-1"))
+    await store.add_label("doc-1", "DAT")
+
+    assert await store.get_document_uids_with_any_label_page(set()) == ([], 0)
+
+
+@pytest.mark.asyncio
 async def test_get_distinct_labels_across_documents(tmp_path: Path) -> None:
     engine = await _make_sqlite_engine(tmp_path, "distinct.sqlite3")
     store = PostgresDocumentMetadataStore(engine)

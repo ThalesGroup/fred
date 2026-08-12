@@ -43,6 +43,7 @@ from types import ModuleType
 
 import pytest
 import sqlalchemy as sa
+
 from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
 

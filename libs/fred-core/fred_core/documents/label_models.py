@@ -44,6 +44,7 @@ class DocumentLabelRow(Base):
 
 # Search index for exact-match label lookups ("documents carrying label X")
 # and distinct-label listing, both scanning by label first.
+# codeql[py/unused-global-variable]
 _document_labels_search_index = Index(
     "idx_document_labels_label_document_uid",
     DocumentLabelRow.label,

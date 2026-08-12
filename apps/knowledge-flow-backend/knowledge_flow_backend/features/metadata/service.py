@@ -922,13 +922,28 @@ class MetadataService:
         caller that needs an exhaustive, page-by-page result rather than
         everything in one response (e.g. an agent tool answering "give me
         every document with label X"). Ordered by document_uid for a stable
-        page boundary; hydrates ONLY the requested page's documents, never
-        the full match set — `get_document_uids_with_any_label` already
-        resolves the whole set as bare uids, which is cheap.
+        page boundary; hydrates ONLY the requested page's documents.
+
+        Pushes `offset`/`limit` into the store query
+        (`get_document_uids_with_any_label_page`) rather than fetching every
+        matching uid and slicing in Python — enumerating many pages does not
+        repeat a full, unbounded label scan on each call. The one thing that
+        IS still per-call is the ReBAC `lookup_user_resources` resolution
+        (same cost every other authorized/paginated listing in this service
+        pays per call; there is no cross-call authorization cache here).
         """
-        uids = sorted(await self.get_document_uids_with_any_label(user, [label]))
-        total = len(uids)
-        page_uids = uids[offset : offset + limit]
+        targets = set(normalize_labels([label]))
+        if not targets:
+            return [], 0
+
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, offset=offset, limit=limit)
+        else:
+            authorized_ids = {d.id for d in authorized_doc_ref}
+            if not authorized_ids:
+                return [], 0
+            page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, document_uids=authorized_ids, offset=offset, limit=limit)
         docs = await self.metadata_store.get_metadata_by_uids(page_uids) if page_uids else []
         return docs, total
 

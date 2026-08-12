@@ -253,6 +253,23 @@ class BaseDocumentMetadataStore:
         applies no authorization of its own."""
 
     @abstractmethod
+    async def get_document_uids_with_any_label_page(
+        self,
+        labels: set[str],
+        document_uids: set[str] | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        session: AsyncSession | None = None,
+    ) -> tuple[List[str], int]:
+        """Ordered, bounded sibling of `get_document_uids_with_any_label`: a
+        real `ORDER BY ... OFFSET ... LIMIT ...` query plus a matching
+        `COUNT(*)`, instead of fetching every matching uid and slicing in
+        Python — enumerating many pages does not re-fetch the whole match set
+        on each call. Same narrowing/authorization contract: narrow via
+        `document_uids`, this method applies no authorization of its own."""
+
+    @abstractmethod
     async def get_distinct_labels(
         self,
         document_uids: set[str] | None = None,

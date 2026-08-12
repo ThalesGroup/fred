@@ -97,6 +97,14 @@ class CorpusTreeService:
         return DocumentTreeResponse(tree=text, truncated=truncated)
 
     async def _resolve_leaves(self, user: KeycloakUser, document_uids: List[str]) -> Dict[str, Tuple[str, Optional[datetime]]]:
+        """KNOWN GAP: `get_documents_by_uids` sends the whole `document_uids`
+        collection as one `document_uid IN (...)` query — bounded in practice
+        by `_MAX_FOLDERS` (10,000 folders), but not chunked. A single call
+        with an exceptionally large distinct-document count could approach
+        the driver's bind-parameter ceiling and fail the whole tree request
+        instead of returning a pruned result. Not hit by any known corpus
+        size today; chunk this (and the label-hydration query it triggers)
+        if that changes."""
         if not document_uids:
             return {}
         docs = await self.metadata_service.get_documents_by_uids(user, document_uids)
