@@ -40,6 +40,13 @@ interface RichInputFieldProps {
   leftSlot?: ReactNode;
   /** Rendered to the right of the textarea — replaces the default send/stop buttons. */
   rightSlot?: ReactNode;
+  /**
+   * Rendered inside the right-side slot, just before the send/stop/mic action
+   * group — a compact always-visible control such as the reasoning chip.
+   * Unlike `rightSlot`, it composes with the default actions instead of
+   * replacing them.
+   */
+  rightExtraSlot?: ReactNode;
   /** When true, shows send/stop buttons based on state (ignored if rightSlot is provided). */
   showSendButton?: boolean;
   enableVoiceInput?: boolean;
@@ -78,6 +85,7 @@ export function RichInputField({
   topSlot,
   leftSlot,
   rightSlot,
+  rightExtraSlot,
   showSendButton = false,
   enableVoiceInput = false,
   onTranscribeAudio,
@@ -349,7 +357,12 @@ export function RichInputField({
             {leftSlot && <div className={styles.commandSlot}>{leftSlot}</div>}
             {topSlot && <div className={styles.bottomLeft}>{topSlot}</div>}
 
-            {actionSlot && <div className={styles.rightSlot}>{actionSlot}</div>}
+            {(actionSlot || rightExtraSlot) && (
+              <div className={styles.rightSlot}>
+                {rightExtraSlot}
+                {actionSlot}
+              </div>
+            )}
           </div>
         )}
       </div>

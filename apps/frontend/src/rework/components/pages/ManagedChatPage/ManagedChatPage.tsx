@@ -32,7 +32,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
-import { COMPOSER_CHIP_WIDGETS, ComposerOptionChips } from "../../../features/capabilities/ComposerOptionChips";
+import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
@@ -277,9 +277,9 @@ export default function ManagedChatPage() {
   // The "tune" button only appears when the agent exposes tool controls the
   // tune popover actually renders — i.e. any chat control that isn't the
   // attach action (lives in the "add" menu) and isn't one of
-  // COMPOSER_CHIP_WIDGETS (promoted to always-visible ComposerOptionChips
-  // chips instead, see below) — otherwise an agent exposing only those two
-  // would show a "tune" button that opens onto an empty popover.
+  // COMPOSER_CHIP_WIDGETS (promoted to the always-visible right-edge
+  // ReasoningChip instead, see below) — otherwise an agent exposing only
+  // those two would show a "tune" button that opens onto an empty popover.
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
@@ -304,7 +304,9 @@ export default function ManagedChatPage() {
           <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
         ) : undefined
       }
-      topSlot={<ComposerOptionChips chatControls={chat.chatControls} composer={composerState} />}
+      rightExtraSlot={
+        <ReasoningChip chatControls={chat.chatControls} composer={composerState} disabled={composerControlsDisabled} />
+      }
       leftSlot={
         <>
           <ComposerActionsMenu disabled={composerControlsDisabled}>
