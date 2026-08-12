@@ -193,6 +193,10 @@
         }
       }
     },
+    "document_label_search": {
+      "name": "Search documents by label",
+      "description": "Ability to list every document carrying a given business label, exhaustively and page by page."
+    },
     "document_summarize": {
       "name": "Summarize a document",
       "description": "Ability to summarize a document and make use of the result.",

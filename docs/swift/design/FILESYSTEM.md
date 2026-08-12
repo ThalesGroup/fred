@@ -232,7 +232,7 @@ carries no access semantics, and never becomes a ReBAC object.
 (`fred-runtime/capabilities/document_label_search/`, `ADMIN_GATED`, paginated,
 backed by `MetadataService.get_documents_with_label`). It is deliberately not
 wired into `CorpusTreeService`/`list_document_tree` (`DEFAULT_ON`, no label
-filtering — see `RUNTIME-EXECUTION-CONTRACT.md §8.46`) or into `/fs`: a team
+filtering — see `RUNTIME-EXECUTION-CONTRACT.md §8.47`) or into `/fs`: a team
 opts an agent into label search explicitly, the same way as any other
 `ADMIN_GATED` capability, instead of every `document_access` agent gaining a
 new behavior for free.

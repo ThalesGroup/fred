@@ -261,9 +261,9 @@ async def test_labels_are_an_unordered_set_represented_alphabetically(tmp_path, 
     labels form a set, and every read path (this mutation response,
     hydration, vocabulary, resolution) renders that set in a deterministic
     alphabetical order, never first-added-first-out. No known consumer
-    (frontend chip list, CorpusTreeService/document_access label filters,
-    fred-sdk contract) depends on insertion order — see FILESYSTEM.md
-    'Business labels vs. scope tags'."""
+    (frontend chip list, the document_label_search capability's
+    list_documents_by_label tool) depends on insertion order — see
+    FILESYSTEM.md 'Business labels vs. scope tags'."""
     engine = await _make_sqlite_engine(tmp_path, "ordering_contract.sqlite3")
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
@@ -331,6 +331,76 @@ async def test_get_documents_with_label_returns_everything_when_rebac_disabled(t
     results = await service.get_documents_with_label(_user(), "DAT")
 
     assert [d.identity.document_uid for d in results] == ["doc-1"]
+
+
+@pytest.mark.asyncio
+async def test_get_document_uids_with_any_label_unions_multiple_labels(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "any_label_union.sqlite3")
+    service = _build_service(engine, _FakeRebac(readable_uids={"doc-1", "doc-2", "doc-3"}), monkeypatch)
+    await service.metadata_store.save_metadata(_doc("doc-1"))
+    await service.metadata_store.save_metadata(_doc("doc-2"))
+    await service.metadata_store.save_metadata(_doc("doc-3"))
+    await service.metadata_store.add_label("doc-1", "DAT")
+    await service.metadata_store.add_label("doc-2", "MEX")
+    await service.metadata_store.add_label("doc-3", "OTHER")
+
+    uids = await service.get_document_uids_with_any_label(_user(), ["DAT", "MEX"])
+
+    assert uids == {"doc-1", "doc-2"}
+
+
+@pytest.mark.asyncio
+async def test_get_document_uids_with_any_label_only_returns_readable_documents(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "any_label_scoped.sqlite3")
+    service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
+    await service.metadata_store.save_metadata(_doc("doc-1"))
+    await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
+    await service.metadata_store.add_label("doc-1", "DAT")
+    await service.metadata_store.add_label("doc-2", "DAT")
+
+    assert await service.get_document_uids_with_any_label(_user(), ["DAT"]) == {"doc-1"}
+
+
+@pytest.mark.asyncio
+async def test_get_document_uids_with_any_label_returns_empty_set_for_no_labels(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "any_label_empty.sqlite3")
+    service = _build_service(engine, _FakeRebac(), monkeypatch)
+    await service.metadata_store.save_metadata(_doc("doc-1"))
+    await service.metadata_store.add_label("doc-1", "DAT")
+
+    assert await service.get_document_uids_with_any_label(_user(), []) == set()
+    assert await service.get_document_uids_with_any_label(_user(), ["", "  "]) == set()
+
+
+@pytest.mark.asyncio
+async def test_get_documents_by_uids_only_returns_readable_documents(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "by_uids_scoped.sqlite3")
+    service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
+    await service.metadata_store.save_metadata(_doc("doc-1"))
+    await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
+
+    results = await service.get_documents_by_uids(_user(), ["doc-1", "doc-2"])
+
+    assert [d.identity.document_uid for d in results] == ["doc-1"]
+
+
+@pytest.mark.asyncio
+async def test_get_documents_by_uids_returns_everything_when_rebac_disabled(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "by_uids_disabled.sqlite3")
+    service = _build_service(engine, _FakeRebac(disabled=True), monkeypatch)
+    await service.metadata_store.save_metadata(_doc("doc-1"))
+
+    results = await service.get_documents_by_uids(_user(), ["doc-1"])
+
+    assert [d.identity.document_uid for d in results] == ["doc-1"]
+
+
+@pytest.mark.asyncio
+async def test_get_documents_by_uids_returns_empty_for_empty_input(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "by_uids_empty.sqlite3")
+    service = _build_service(engine, _FakeRebac(), monkeypatch)
+
+    assert await service.get_documents_by_uids(_user(), []) == []
 
 
 @pytest.mark.asyncio

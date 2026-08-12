@@ -58,6 +58,11 @@ document_summarize = "fred_runtime.capabilities.document_summarize:DocumentSumma
 # auto-discovered — do NOT register manually.
 document_verbatim = "fred_runtime.capabilities.document_verbatim:DocumentVerbatimCapability"
 document_extract = "fred_runtime.capabilities.document_extract:DocumentExtractCapability"
+# Exhaustive, paginated business-label resolution on the shared
+# DocumentTreePort.list_by_label — deliberately kept out of document_access
+# (DEFAULT_ON) so no existing agent's tool set changes; a team admin opts in
+# explicitly. Admin-gated, auto-discovered — do NOT register manually.
+document_label_search = "fred_runtime.capabilities.document_label_search:DocumentLabelSearchCapability"
 
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.

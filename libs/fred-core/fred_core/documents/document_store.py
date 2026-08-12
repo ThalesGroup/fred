@@ -239,6 +239,20 @@ class BaseDocumentMetadataStore:
         of its own)."""
 
     @abstractmethod
+    async def get_document_uids_with_any_label(
+        self,
+        labels: set[str],
+        document_uids: set[str] | None = None,
+        session: AsyncSession | None = None,
+    ) -> List[str]:
+        """Return the uids of documents carrying ANY of `labels` (OR
+        semantics) as a single indexed `label IN (...)` query — the
+        multi-label sibling of `get_document_uids_with_label`, for callers
+        that would otherwise loop it once per label. Same narrowing/
+        authorization contract: narrow via `document_uids`, this method
+        applies no authorization of its own."""
+
+    @abstractmethod
     async def get_distinct_labels(
         self,
         document_uids: set[str] | None = None,

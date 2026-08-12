@@ -143,6 +143,8 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/documents/by-label`,
         params: {
           label: queryArg.label,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
         },
       }),
     }),
@@ -1052,9 +1054,11 @@ export type ListDocumentsByLabelApiResponse = /** status 200 Successful Response
 export type ListDocumentsByLabelApiArg = {
   label: string;
 };
-export type ResolveDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
+export type ResolveDocumentsByLabelApiResponse = /** status 200 Successful Response */ LabelDocumentsPage;
 export type ResolveDocumentsByLabelApiArg = {
   label: string;
+  offset?: number;
+  limit?: number;
 };
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
   /** status 200 Successful Response */ VectorChunk[];
@@ -1909,6 +1913,21 @@ export type LabelMutationRequest = {
   /** Labels to remove. Wins over `add` when the same value appears in both. */
   remove?: string[];
 };
+export type LabelDocumentReference = {
+  document_uid: string;
+  document_name: string;
+};
+export type LabelDocumentsPage = {
+  label: string;
+  documents: LabelDocumentReference[];
+  /** Total number of matching documents across all pages. */
+  total: number;
+  offset: number;
+  limit: number;
+  /** Offset to request the next page, or null when there is no more. */
+  next_offset?: number | null;
+  has_more: boolean;
+};
 export type VectorChunk = {
   /** Unique identifier of the chunk */
   chunk_uid: string;
@@ -2150,8 +2169,6 @@ export type DocumentTreeRequest = {
   working_directory?: string | null;
   /** Restrict the listing to these folder tag ids (and their descendants), when set. */
   tag_ids?: string[] | null;
-  /** Restrict the leaves to documents carrying any of these descriptive business labels (orthogonal to folder tags — see FILESYSTEM.md 'Business labels vs. scope tags'; several labels are OR'd together). Unlike an empty tag_ids narrowing, a label filter also prunes branches left with no matching document, keeping only the ancestors needed to reach a branch that still has one — the response is meant to help locate matches, not enumerate every folder. */
-  labels?: string[] | null;
   /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
   max_chars?: number;
   /** Filter by ownership: 'personal' for user-owned folders, 'team' for team-owned folders. */

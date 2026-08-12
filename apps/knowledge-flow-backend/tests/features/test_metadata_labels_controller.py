@@ -80,6 +80,7 @@ async def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="u-1", username="u-1", email="u-1@localhost", roles=["admin"])
 
     with TestClient(app) as test_client:
+        test_client.store = store  # type: ignore[attr-defined]
         yield test_client
 
 
@@ -195,8 +196,8 @@ def test_patch_route_updates_the_audit_trail(client: TestClient) -> None:
 def test_query_param_route_round_trips_a_label_the_path_segment_route_could_not(client: TestClient, label: str) -> None:
     """Full assign-then-resolve round trip: PATCH-assign the label (body
     transport, no character restriction), then resolve it back via the new
-    query-parameter GET — proving the two are symmetric, not just that each
-    transports the character individually."""
+    paginated query-parameter GET — proving the two are symmetric, not just
+    that each transports the character individually."""
     patch_response = client.patch("/knowledge-flow/v1/documents/doc-1/labels", json={"add": [label]})
     assert patch_response.status_code == 200
     assert patch_response.json() == [label]
@@ -205,18 +206,60 @@ def test_query_param_route_round_trips_a_label_the_path_segment_route_could_not(
 
     assert resolve_response.status_code == 200
     body = resolve_response.json()
+    assert body["label"] == label
     assert body["total"] == 1
-    assert body["documents"][0]["identity"]["document_uid"] == "doc-1"
+    assert body["documents"] == [{"document_uid": "doc-1", "document_name": "doc-1.pdf"}]
+    assert body["has_more"] is False
+    assert body["next_offset"] is None
 
 
 def test_query_param_route_and_path_segment_route_resolve_through_the_same_lookup(client: TestClient) -> None:
+    """Same underlying resolution, different transport/shape: the
+    path-segment route stays the legacy unpaginated `BrowseDocumentsResponse`
+    (full `DocumentMetadata`), the query-param route is the paginated, lean
+    `LabelDocumentsPage` — but both must agree on which document matched."""
     client.post("/knowledge-flow/v1/documents/doc-1/labels/DAT")
 
     by_path = client.get("/knowledge-flow/v1/documents/by-label/DAT")
     by_query = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT"})
 
     assert by_path.status_code == by_query.status_code == 200
-    assert by_path.json() == by_query.json()
+    assert by_path.json()["total"] == by_query.json()["total"] == 1
+    assert by_path.json()["documents"][0]["identity"]["document_uid"] == by_query.json()["documents"][0]["document_uid"] == "doc-1"
+
+
+@pytest.mark.asyncio
+async def test_query_param_route_paginates_deterministically(client: TestClient) -> None:
+    await client.store.save_metadata(_doc("doc-2"))  # type: ignore[attr-defined]
+    await client.store.save_metadata(_doc("doc-3"))  # type: ignore[attr-defined]
+    for uid in ("doc-1", "doc-2", "doc-3"):
+        client.post(f"/knowledge-flow/v1/documents/{uid}/labels/DAT")
+
+    page1 = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "offset": 0, "limit": 2}).json()
+    page2 = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "offset": page1["next_offset"], "limit": 2}).json()
+
+    assert page1["total"] == page2["total"] == 3
+    assert len(page1["documents"]) == 2
+    assert page1["has_more"] is True
+    assert page1["next_offset"] == 2
+    assert len(page2["documents"]) == 1
+    assert page2["has_more"] is False
+    assert page2["next_offset"] is None
+    seen = {d["document_uid"] for d in page1["documents"]} | {d["document_uid"] for d in page2["documents"]}
+    assert seen == {"doc-1", "doc-2", "doc-3"}
+
+
+def test_query_param_route_defaults_and_bounds_offset_and_limit(client: TestClient) -> None:
+    client.post("/knowledge-flow/v1/documents/doc-1/labels/DAT")
+
+    default_params = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT"}).json()
+    assert default_params["offset"] == 0
+    assert default_params["limit"] == 50
+
+    rejected = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "limit": 0})
+    assert rejected.status_code == 422
+    rejected = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "offset": -1})
+    assert rejected.status_code == 422
 
 
 def test_query_param_route_has_its_own_operation_id(client: TestClient) -> None:

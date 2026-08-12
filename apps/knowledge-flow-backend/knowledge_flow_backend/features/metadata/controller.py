@@ -14,9 +14,9 @@
 
 import logging
 from threading import Lock
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
 from fred_core.documents.document_structures import DocumentMetadata
 from pydantic import BaseModel, Field
@@ -67,6 +67,29 @@ class LabelMutationRequest(BaseModel):
 
     add: List[str] = Field(default_factory=list, description="Labels to add.")
     remove: List[str] = Field(default_factory=list, description="Labels to remove. Wins over `add` when the same value appears in both.")
+
+
+class LabelDocumentReference(BaseModel):
+    """Lean document reference for the paginated label listing — just enough
+    for an agent to identify and chain into another tool (e.g. summarize by
+    uid), not the full `DocumentMetadata` payload `BrowseDocumentsResponse`
+    carries."""
+
+    document_uid: str
+    document_name: str
+
+
+class LabelDocumentsPage(BaseModel):
+    """One deterministic page of the documents carrying `label`, ordered by
+    `document_uid` for a stable page boundary across calls."""
+
+    label: str
+    documents: List[LabelDocumentReference]
+    total: int = Field(..., description="Total number of matching documents across all pages.")
+    offset: int
+    limit: int
+    next_offset: Optional[int] = Field(default=None, description="Offset to request the next page, or null when there is no more.")
+    has_more: bool
 
 
 def handle_exception(e: Exception) -> HTTPException | Exception:
@@ -367,20 +390,38 @@ class MetadataController:
             "/documents/by-label",
             tags=["Documents"],
             operation_id="resolve_documents_by_label",
-            response_model=BrowseDocumentsResponse,
-            summary="List documents carrying a business label (query parameter transport)",
+            response_model=LabelDocumentsPage,
+            summary="List documents carrying a business label (paginated, query parameter transport)",
             description=(
                 "Canonical label resolution: the label rides as a query parameter, so it carries any Unicode "
                 "text with no character restriction — symmetric with the PATCH /documents/{document_uid}/labels "
-                "mutation transport. Resolves through the same MetadataService.get_documents_with_label as the "
-                "path-segment GET /documents/by-label/{label} route above (kept for existing consumers), not a "
-                "second lookup implementation."
+                "mutation transport. Paginated and deterministic (ordered by document_uid): a label can match "
+                "many documents spread across the whole corpus, and this route is the exhaustive, page-by-page "
+                "way to enumerate them all. Resolves through the same MetadataService.get_document_uids_with_any_label "
+                "as the document_label_search capability's list_documents_by_label tool, not a second lookup "
+                "implementation. The path-segment GET /documents/by-label/{label} route above returns everything "
+                "unpaginated for existing consumers; this route is the one to use for a label that may match many "
+                "documents."
             ),
         )
-        async def resolve_documents_by_label(label: str, user: KeycloakUser = Depends(get_current_user)):
+        async def resolve_documents_by_label(
+            label: str,
+            offset: int = Query(0, ge=0),
+            limit: int = Query(50, gt=0, le=500),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             try:
-                docs = await self.service.get_documents_with_label(user, label)
-                return BrowseDocumentsResponse(documents=docs, total=len(docs))
+                docs, total = await self.service.get_documents_with_label_page(user, label, offset=offset, limit=limit)
+                next_offset = offset + len(docs)
+                return LabelDocumentsPage(
+                    label=label,
+                    documents=[LabelDocumentReference(document_uid=d.identity.document_uid, document_name=d.identity.document_name) for d in docs],
+                    total=total,
+                    offset=offset,
+                    limit=limit,
+                    next_offset=next_offset if next_offset < total else None,
+                    has_more=next_offset < total,
+                )
             except Exception as e:
                 raise handle_exception(e)
 

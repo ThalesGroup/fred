@@ -18,11 +18,11 @@ from typing import Dict, List, Optional, Tuple
 
 from fred_core import KeycloakUser
 
+from knowledge_flow_backend.features.corpus_tree.structure import DocumentTreeRequest, DocumentTreeResponse
+from knowledge_flow_backend.features.corpus_tree.tree_builder import build_tree, render_tree
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.structure import TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
-from knowledge_flow_backend.features.tree.structure import DocumentTreeRequest, DocumentTreeResponse
-from knowledge_flow_backend.features.tree.tree_builder import build_tree, render_tree
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +31,18 @@ logger = logging.getLogger(__name__)
 _MAX_FOLDERS = 10_000
 
 
-class TreeService:
+class CorpusTreeService:
     """
-    Builds a readable, recursive folder/document listing for agent tools.
+    Read-only navigation/projection over the already-ingested corpus, rendered
+    as a readable folder/document listing for agent tools.
+
+    Bounded context: this is corpus navigation, not a filesystem. It never
+    stores bytes and never mutates anything — every document it lists was
+    already ingested. It is intentionally distinct from the future
+    `WorkspaceService` (mutable, persistent user/agent files, currently
+    implemented under the `/fs` routes — see FILESYSTEM.md "Bounded
+    contexts"). Do not add write, quota, or provenance behavior here; that
+    domain belongs to Workspace.
 
     Fred rationale:
     - Documents are organized via hierarchical tags (Tag.path/name/full_path).
@@ -44,9 +53,19 @@ class TreeService:
     - Authorization goes through the same ReBAC chokepoints as vector search:
       `TagService.list_all_tags_for_user` (owner_filter/team_id scoped, incl. the
       service_agent branch) decides which folders are visible, and
-      `MetadataService.get_documents_metadata` ReBAC-filters the leaves. The tree
-      is derived from the authorized tag set — never store-enumerated and
+      `MetadataService.get_documents_by_uids` ReBAC-filters the leaves (indexed
+      `document_uid IN (...)`, not a full-table scan — see its docstring). The
+      tree is derived from the authorized tag set — never store-enumerated and
       filtered after — so a caller cannot see folders across team boundaries.
+
+    No business-label filtering here, deliberately: a folder tree renders
+    every folder in scope, and mixing in a "find documents by label"
+    narrowing pulls two different questions ("where is X in the corpus" vs
+    "give me every document labeled X") into one tool with a size-budgeted,
+    non-exhaustive response shape — the wrong shape for the second question.
+    Label resolution lives entirely in `MetadataService.get_document_uids_with_any_label`/
+    `get_documents_with_label_page`, consumed by the separate, admin-gated
+    `document_label_search` capability (`fred-runtime`), not this one.
     """
 
     def __init__(self):
@@ -68,10 +87,11 @@ class TreeService:
             allowed_paths = {t.full_path for t in tags if t.id in allowed_ids}
             tags = [t for t in tags if t.id in allowed_ids or any(t.full_path == p or t.full_path.startswith(p + "/") for p in allowed_paths)]
 
-        all_uids = sorted({uid for t in tags for uid in t.item_ids})
+        folders: List[Tuple[str, List[str], str]] = [(t.full_path, t.item_ids, t.id) for t in tags]
+
+        all_uids = sorted({uid for _, item_ids, _ in folders for uid in item_ids})
         leaves_by_uid = await self._resolve_leaves(user, all_uids)
 
-        folders: List[Tuple[str, List[str], str]] = [(t.full_path, t.item_ids, t.id) for t in tags]
         root = build_tree(folders=folders, leaves_by_uid=leaves_by_uid)
         text, truncated = render_tree(root, max_chars=request.max_chars)
         return DocumentTreeResponse(tree=text, truncated=truncated)
@@ -79,5 +99,5 @@ class TreeService:
     async def _resolve_leaves(self, user: KeycloakUser, document_uids: List[str]) -> Dict[str, Tuple[str, Optional[datetime]]]:
         if not document_uids:
             return {}
-        docs = await self.metadata_service.get_documents_metadata(user, {"document_uid": document_uids})
+        docs = await self.metadata_service.get_documents_by_uids(user, document_uids)
         return {d.identity.document_uid: (d.identity.document_name, d.identity.created) for d in docs}

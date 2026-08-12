@@ -193,6 +193,10 @@
         }
       }
     },
+    "document_label_search": {
+      "name": "Rechercher des documents par label",
+      "description": "Capacité de lister tous les documents portant un label métier donné, de manière exhaustive et page par page."
+    },
     "document_summarize": {
       "name": "Résumer un document",
       "description": "Capacité de résumer un document et d'en exploiter le résultat.",

@@ -145,6 +145,22 @@ class MetadataService:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
 
+    async def get_documents_by_uids(self, user: KeycloakUser, document_uids: list[str]) -> list[DocumentMetadata]:
+        """Targeted, ReBAC-filtered metadata fetch for an already-known uid
+        set — the indexed sibling of `get_documents_metadata`: a single
+        `document_uid IN (...)` store query (`get_metadata_by_uids`) instead
+        of `get_all_metadata`'s full-table scan filtered in Python. Use this
+        whenever the caller already has the uids (e.g. an authorized folder's
+        item_ids, or a label resolution) and only needs their metadata."""
+        if not document_uids:
+            return []
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        docs = await self.metadata_store.get_metadata_by_uids(document_uids)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return docs
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
     async def get_document_metadata_in_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
         """
         Return all metadata entries associated with a specific tag.
@@ -895,22 +911,46 @@ class MetadataService:
         """Resolve a label to the readable documents carrying it — an indexed
         lookup narrowed to the caller's authorized documents, not a full-corpus
         scan filtered in Python."""
-        target = (label or "").strip()
-        if not target:
+        uids = await self.get_document_uids_with_any_label(user, [label])
+        if not uids:
             return []
+        return await self.metadata_store.get_metadata_by_uids(list(uids))
+
+    async def get_documents_with_label_page(self, user: KeycloakUser, label: str, *, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        """Paginated resolution of one label to its readable documents — the
+        flat, deterministic sibling of `get_documents_with_label`, for a
+        caller that needs an exhaustive, page-by-page result rather than
+        everything in one response (e.g. an agent tool answering "give me
+        every document with label X"). Ordered by document_uid for a stable
+        page boundary; hydrates ONLY the requested page's documents, never
+        the full match set — `get_document_uids_with_any_label` already
+        resolves the whole set as bare uids, which is cheap.
+        """
+        uids = sorted(await self.get_document_uids_with_any_label(user, [label]))
+        total = len(uids)
+        page_uids = uids[offset : offset + limit]
+        docs = await self.metadata_store.get_metadata_by_uids(page_uids) if page_uids else []
+        return docs, total
+
+    async def get_document_uids_with_any_label(self, user: KeycloakUser, labels: list[str]) -> set[str]:
+        """Resolve the union of readable document uids carrying ANY of
+        `labels` (OR semantics) — ONE ReBAC resolution, ONE indexed
+        `label IN (...)` query. UID-only: callers that need document
+        metadata should hydrate afterward (e.g. via `get_documents_by_uids`),
+        never call this label-by-label."""
+        targets = set(normalize_labels(labels))
+        if not targets:
+            return set()
 
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
         if isinstance(authorized_doc_ref, RebacDisabledResult):
-            uids = await self.metadata_store.get_document_uids_with_label(target)
+            uids = await self.metadata_store.get_document_uids_with_any_label(targets)
         else:
             authorized_ids = {d.id for d in authorized_doc_ref}
             if not authorized_ids:
-                return []
-            uids = await self.metadata_store.get_document_uids_with_label(target, document_uids=authorized_ids)
-
-        if not uids:
-            return []
-        return await self.metadata_store.get_metadata_by_uids(uids)
+                return set()
+            uids = await self.metadata_store.get_document_uids_with_any_label(targets, document_uids=authorized_ids)
+        return set(uids)
 
     async def list_document_labels(self, user: KeycloakUser) -> list[str]:
         """Return the distinct labels used across the user's readable documents

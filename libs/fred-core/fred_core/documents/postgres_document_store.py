@@ -654,6 +654,27 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             rows = (await s.execute(stmt)).scalars().all()
         return list(rows)
 
+    async def get_document_uids_with_any_label(
+        self,
+        labels: set[str],
+        document_uids: set[str] | None = None,
+        session: AsyncSession | None = None,
+    ) -> List[str]:
+        if not labels:
+            return []
+        stmt = (
+            select(DocumentLabelRow.document_uid)
+            .distinct()
+            .where(DocumentLabelRow.label.in_(labels))
+        )
+        if document_uids is not None:
+            if not document_uids:
+                return []
+            stmt = stmt.where(DocumentLabelRow.document_uid.in_(document_uids))
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(stmt)).scalars().all()
+        return list(rows)
+
     async def get_distinct_labels(
         self,
         document_uids: set[str] | None = None,
