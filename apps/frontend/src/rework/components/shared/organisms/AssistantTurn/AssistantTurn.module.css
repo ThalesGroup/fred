@@ -20,11 +20,32 @@
   /* HorizontalScrollRow defaults handle the scroll + gradient fade */
 }
 
-/* Same reveal contract as UserTurn's actions: reserved space (no layout
-   shift), faded in on hover or keyboard focus only. */
+.messageBlock {
+  position: relative;
+}
+
+/* Same placement AND reveal contract as UserTurn's actions: beside the
+   message at its left, faded in on hover or keyboard focus. Floated into the
+   centred column's outer gutter (absolute, negative left) so the prose never
+   shifts; on viewports narrower than the column it overlaps the column
+   padding instead. */
+.messageActions {
+  position: absolute;
+  top: 0;
+  left: calc(-28px - var(--spacing-2xs));
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.turn:hover .messageActions,
+.turn:focus-within .messageActions {
+  opacity: 1;
+}
+
+/* Token badge only — same hover reveal as the copy action. */
 .footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-s);
   opacity: 0;
@@ -34,4 +55,19 @@
 .turn:hover .footer,
 .turn:focus-within .footer {
   opacity: 1;
+}
+
+.copyPop {
+  display: flex;
+  animation: copy-pop 200ms ease;
+}
+
+@keyframes copy-pop {
+  from {
+    transform: scale(0.6);
+  }
+
+  to {
+    transform: scale(1);
+  }
 }

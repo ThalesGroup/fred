@@ -412,8 +412,7 @@
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
-      "tooltip": "Copier le message",
-      "success": "Message copié"
+      "tooltip": "Copier le message"
     },
     "editMessage": "Modifier le message",
     "dropFilesHere": "Déposez les fichiers ici",

@@ -24,3 +24,18 @@
 .turn:focus-within .actions {
   opacity: 1;
 }
+
+.copyPop {
+  display: flex;
+  animation: copy-pop 200ms ease;
+}
+
+@keyframes copy-pop {
+  from {
+    transform: scale(0.6);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
