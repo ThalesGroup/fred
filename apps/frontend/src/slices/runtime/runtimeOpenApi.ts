@@ -520,6 +520,7 @@ export type RuntimeErrorEvent = {
   message: string;
   sequence?: number;
 };
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
   /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
@@ -592,7 +593,7 @@ export type LinkPart = {
 };
 export type FinalRuntimeEvent = {
   content?: string;
-  finish_reason?: string | null;
+  finish_reason?: FinishReason | null;
   kind?: "final";
   model_name?: string | null;
   sequence?: number;
@@ -743,7 +744,7 @@ export type ChatTokenUsage = {
 };
 export type ChatMetadata = {
   agent_id?: string | null;
-  finish_reason?: string | null;
+  finish_reason?: FinishReason | null;
   latency_ms?: number | null;
   model?: string | null;
   sources?: VectorSearchHit[];

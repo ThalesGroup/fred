@@ -16,7 +16,7 @@
 // Kept in a separate file so they can be unit-tested without pulling in
 // React, RTK Query, or Keycloak dependencies.
 
-import type { ChatMessage } from "../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 
 export const keyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
 
