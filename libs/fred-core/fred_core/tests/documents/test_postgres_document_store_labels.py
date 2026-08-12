@@ -364,21 +364,27 @@ async def test_get_document_uids_with_any_label_page_orders_and_bounds_a_page(
         await store.save_metadata(_doc(uid))
         await store.add_label(uid, "DAT")
 
-    page, total = await store.get_document_uids_with_any_label_page({"DAT"}, offset=0, limit=2)
+    page, total = await store.get_document_uids_with_any_label_page(
+        {"DAT"}, offset=0, limit=2
+    )
 
     assert page == ["doc-1", "doc-2"]
     assert total == 3
 
 
 @pytest.mark.asyncio
-async def test_get_document_uids_with_any_label_page_second_page(tmp_path: Path) -> None:
+async def test_get_document_uids_with_any_label_page_second_page(
+    tmp_path: Path,
+) -> None:
     engine = await _make_sqlite_engine(tmp_path, "any_label_page2.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
     for uid in ("doc-1", "doc-2", "doc-3"):
         await store.save_metadata(_doc(uid))
         await store.add_label(uid, "DAT")
 
-    page, total = await store.get_document_uids_with_any_label_page({"DAT"}, offset=2, limit=2)
+    page, total = await store.get_document_uids_with_any_label_page(
+        {"DAT"}, offset=2, limit=2
+    )
 
     assert page == ["doc-3"]
     assert total == 3

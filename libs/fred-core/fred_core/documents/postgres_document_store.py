@@ -95,22 +95,27 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     async def _hydrate_labels(
         docs: List[DocumentMetadata], session: AsyncSession
     ) -> List[DocumentMetadata]:
-        """Populate `.labels` on every doc from `document_labels`, in one
-        batched query regardless of how many docs are passed — the N+1 guard
-        every multi-document read path below relies on."""
+        """Populate `.labels` on every doc from `document_labels` — the N+1
+        guard every multi-document read path below relies on. Chunked into
+        bounded `WHERE ... IN (...)` statements (`_BULK_UPDATE_CHUNK_SIZE`,
+        same constant `bulk_mark_vector_done` uses) so a call with an
+        exceptionally large doc set stays well clear of practical
+        statement-parameter limits, instead of one unbounded query."""
         if not docs:
             return docs
         uids = [d.identity.document_uid for d in docs]
-        rows = (
-            await session.execute(
-                select(DocumentLabelRow.document_uid, DocumentLabelRow.label).where(
-                    DocumentLabelRow.document_uid.in_(uids)
-                )
-            )
-        ).all()
         labels_by_uid: dict[str, list[str]] = {}
-        for uid, label in rows:
-            labels_by_uid.setdefault(uid, []).append(label)
+        for i in range(0, len(uids), _BULK_UPDATE_CHUNK_SIZE):
+            chunk = uids[i : i + _BULK_UPDATE_CHUNK_SIZE]
+            rows = (
+                await session.execute(
+                    select(DocumentLabelRow.document_uid, DocumentLabelRow.label).where(
+                        DocumentLabelRow.document_uid.in_(chunk)
+                    )
+                )
+            ).all()
+            for uid, label in rows:
+                labels_by_uid.setdefault(uid, []).append(label)
         for d in docs:
             d.labels = sorted(labels_by_uid.get(d.identity.document_uid, []))
         return docs
@@ -185,25 +190,31 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     async def get_metadata_by_uids(
         self, document_uids: list[str], session: AsyncSession | None = None
     ) -> list[DocumentMetadata]:
-        """Return metadata for a targeted uid list with one SQL query."""
+        """Return metadata for a targeted uid list, chunked into bounded
+        `WHERE ... IN (...)` statements (`_BULK_UPDATE_CHUNK_SIZE`) so an
+        exceptionally large uid collection (e.g. a wide corpus tree, or a
+        label match spanning many documents) stays well clear of practical
+        statement-parameter limits instead of one unbounded query."""
         unique_uids = list(dict.fromkeys(document_uids))
         if not unique_uids:
             return []
 
         async with use_session(self._sessions, session) as s:
-            rows = (
-                (
-                    await s.execute(
-                        select(DocumentMetadataRow).where(
-                            DocumentMetadataRow.document_uid.in_(unique_uids)
+            row_by_uid: dict[str, DocumentMetadataRow] = {}
+            for i in range(0, len(unique_uids), _BULK_UPDATE_CHUNK_SIZE):
+                chunk = unique_uids[i : i + _BULK_UPDATE_CHUNK_SIZE]
+                rows = (
+                    (
+                        await s.execute(
+                            select(DocumentMetadataRow).where(
+                                DocumentMetadataRow.document_uid.in_(chunk)
+                            )
                         )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-
-            row_by_uid = {row.document_uid: row for row in rows}
+                row_by_uid.update({row.document_uid: row for row in rows})
             docs = [
                 self._from_row(row_by_uid[document_uid])
                 for document_uid in unique_uids
@@ -701,7 +712,11 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 return [], 0
             base = base.where(DocumentLabelRow.document_uid.in_(document_uids))
         count_stmt = select(func.count()).select_from(base.subquery())
-        page_stmt = base.order_by(DocumentLabelRow.document_uid.asc()).offset(offset).limit(limit)
+        page_stmt = (
+            base.order_by(DocumentLabelRow.document_uid.asc())
+            .offset(offset)
+            .limit(limit)
+        )
         async with use_session(self._sessions, session) as s:
             total = (await s.execute(count_stmt)).scalar_one()
             rows = (await s.execute(page_stmt)).scalars().all()
