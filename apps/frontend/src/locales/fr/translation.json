@@ -402,11 +402,9 @@
       "searchPolicyTitle": "Politique de recherche",
       "reasoningRowLabel": "Raisonnement",
       "reasoningOff": "Désactivé",
-      "reasoningLow": "Faible",
-      "reasoningMedium": "Moyen",
-      "reasoningHigh": "Élevé",
-      "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
-      "reasoningEffortHint": "Plus l'effort est élevé, plus la réponse est approfondie — et plus elle est longue à produire."
+      "reasoningOn": "Activé",
+      "reasoningHint": "Le raisonnement donne des réponses plus approfondies, mais plus longues à produire.",
+      "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",

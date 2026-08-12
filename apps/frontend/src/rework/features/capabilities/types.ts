@@ -58,15 +58,6 @@ export type CapabilitySidePanel = ComponentType<CapabilitySidePanelProps>;
 export type RagScopeName = "corpus_only" | "hybrid" | "general_only";
 
 /**
- * The reasoning-effort closed set of the composer's effort picker. "off" is a
- * UI-only value: on the wire it becomes `reasoning: false` (the tri-state
- * decline), never a `reasoning_effort` value — the runtime strips the setting
- * entirely for a declined turn. The three levels ride
- * `RuntimeContext.reasoning_effort` alongside `reasoning: true`.
- */
-export type ReasoningEffortName = "off" | "low" | "medium" | "high";
-
-/**
  * Shared composer state threaded to every mounted chat-turn control (RFC §9
  * item 2). This is the same per-session state `SearchConfig` drove before its
  * rows were extracted into the stock kit (CAPAB-01 #1976) — the values keep
@@ -94,14 +85,15 @@ export interface ChatTurnControlComposerState {
   ragScope: RagScopeName;
   onRagScopeChange: (value: RagScopeName) => void;
   /**
-   * Per-question reasoning effort (REASON-01 level 4 + the 4b effort pick).
-   * Travels on `RuntimeContext` exactly like `searchPolicy`/`ragScope` above —
-   * reasoning is not a capability, so it has no typed `turn_options` slice to
-   * belong to. "off" maps to `reasoning: false` on the wire; a level maps to
-   * `reasoning: true` + `reasoning_effort`.
+   * Per-question reasoning activation (REASON-01 level 4,
+   * MODEL-REASONING-ENABLEMENT-RFC.md §7 + §15). Travels on `RuntimeContext`
+   * exactly like `searchPolicy`/`ragScope` above — reasoning is not a
+   * capability, so it has no typed `turn_options` slice to belong to. On/off
+   * only: the effort a reasoning turn runs with is the ops-authored
+   * `reasoning_effort` of the routed model profile, never a user pick.
    */
-  reasoningEffort: ReasoningEffortName;
-  onReasoningEffortChange: (value: ReasoningEffortName) => void;
+  reasoning: boolean;
+  onReasoningChange: (value: boolean) => void;
 }
 
 export interface CapabilityChatTurnControlProps<TParams = Record<string, unknown>> {

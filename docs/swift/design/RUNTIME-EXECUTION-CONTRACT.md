@@ -3321,45 +3321,20 @@ gains `document_label_search`, sorted by id). Tracking:
 
 ---
 
-### 8.48 ✅ Per-question reasoning EFFORT — `RuntimeContext.reasoning_effort` (REASON-01 level 4b, 2026-08-12)
+### 8.48 ✅ Reasoning stays ON/OFF per question — effort picker built and withdrawn same-day (2026-08-12)
 
-The composer's reasoning control became an **effort picker** (off / low /
-medium / high — the intersection every reasoning provider accepts; the
-provider extremes like OpenAI `xhigh` or Anthropic `max`/`budget_tokens` stay
-ops-authored in `models_catalog.yaml`). Wire and enforcement:
-
-- **New Group C field** `RuntimeContext.reasoning_effort:
-  Literal["low","medium","high"] | None` (`fred_sdk/contracts/context.py`),
-  only meaningful alongside `reasoning=True`. The tri-state `reasoning`
-  boolean (§8.30) is unchanged — "off" in the picker maps to
-  `reasoning: false`, never to an effort value, so the strip path stays
-  dominant and an older pod (which drops the unknown ctx key at the
-  `agent_app` explicit-read line) degrades to §8.30 behaviour exactly.
-- **Enforcement at the same single point** (`RoutedChatModelFactory
-  .build_for_chat`): after the §8.30 strip decision, an allowed
-  `reasoning=True` turn with an effort pick goes through
-  `with_reasoning_effort` (`model_routing/contracts.py`) — **replace-if-
-  present only, never an injection**: a profile without an ops-authored
-  `settings.reasoning_effort` is one ops never activated (or that cannot
-  think, §4.3 validator), and a per-turn UI pick must not flip it into
-  emitting thinking blocks (GH #1780). Levels 1-2 remain ceilings the pick
-  cannot raise; an effort without `reasoning=True` is malformed and inert.
-- **`models_catalog.yaml`'s `reasoning_effort` stays authoritative** for (a)
-  the activation signal itself, (b) every turn with no per-question pick
-  (`reasoning_effort=None`, including all pre-picker clients), and (c) the
-  majority path where the agent never offers the choice.
-- Frontend: the pick rides `useComposerSettings` sessionStorage like every
-  composer option (legacy stored boolean migrates: `true` → `"high"`, the
-  only ops-authored value, so default-on agents behave exactly as before);
-  `buildComposerRuntimeContext` omits both keys when the agent offers no
-  picker. `ExecutionPreparation`'s `reasoning_toggle` control and its boolean
-  `params.default` are unchanged (no control-plane change).
-
-Tests: `test_model_reasoning_enablement.py` — `with_reasoning_effort`
-primitives (replace/no-inject/no-alloc) and the level-4b wire cases (override,
-decline-dominates, no-pick-keeps-ops-default, effort-without-ask inert,
-level-2 ceiling); frontend `runtimeContextBuilder.test.ts` +
-`ReasoningChip.test.tsx`.
+A per-question `RuntimeContext.reasoning_effort` override (composer effort
+picker, low/medium/high) was implemented and **withdrawn the same day**:
+providers disagree on accepted values (measured: Mistral small rejects
+low/medium with a 400 `Must be one of (none, high)` that fails the whole
+turn), and the per-model declaration/snapshot machinery required to offer
+only valid values wasn't worth the surface. Decision: the effort a reasoning
+turn runs with is the ops-authored `settings.reasoning_effort` of the routed
+profile, full stop — the user's per-question choice remains the §8.30
+tri-state boolean, now presented as a right-edge composer chip
+(model identity + Activé/Désactivé, `docs/swift/ux/COMPONENT-UX.md`). No
+wire, contract, or enforcement change survives; this entry exists so the
+next "let users pick the effort" idea starts from the measured constraint.
 
 ---
 

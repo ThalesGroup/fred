@@ -36,14 +36,12 @@ export function buildComposerRuntimeContext(params: {
   boundLibraryIds?: string[] | null;
   attachmentsMarkdown?: string | null;
   /**
-   * The user's per-question reasoning-effort choice (REASON-01 level 4 + 4b).
-   * `undefined` when this agent does not offer the picker — both keys are then
-   * omitted, which the runtime reads as "no choice was made" and leaves levels
-   * 1-2 in charge. That is NOT the same as "off", which actively suppresses
-   * reasoning (`reasoning: false` on the wire, never a `reasoning_effort`
-   * value — the strip path must stay dominant).
+   * The user's per-question reasoning choice (REASON-01 level 4). `undefined`
+   * when this agent does not offer the toggle — the key is then omitted, which
+   * the runtime reads as "no choice was made" and leaves levels 1-2 in charge.
+   * That is NOT the same as `false`, which actively suppresses reasoning.
    */
-  reasoningEffort?: "off" | "low" | "medium" | "high";
+  reasoning?: boolean;
 }): Pick<
   RuntimeContext,
   | "selected_document_libraries_ids"
@@ -52,7 +50,6 @@ export function buildComposerRuntimeContext(params: {
   | "search_rag_scope"
   | "attachments_markdown"
   | "reasoning"
-  | "reasoning_effort"
 > {
   const selectedDocumentLibrariesIds =
     params.boundLibraryIds && params.boundLibraryIds.length > 0
@@ -66,10 +63,6 @@ export function buildComposerRuntimeContext(params: {
     search_policy: params.searchPolicy,
     search_rag_scope: params.ragScope,
     ...(params.attachmentsMarkdown != null ? { attachments_markdown: params.attachmentsMarkdown } : {}),
-    ...(params.reasoningEffort !== undefined
-      ? params.reasoningEffort === "off"
-        ? { reasoning: false }
-        : { reasoning: true, reasoning_effort: params.reasoningEffort }
-      : {}),
+    ...(params.reasoning !== undefined ? { reasoning: params.reasoning } : {}),
   };
 }

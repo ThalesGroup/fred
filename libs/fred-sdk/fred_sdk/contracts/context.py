@@ -253,24 +253,12 @@ class RuntimeContext(BaseModel):
             "guarantee: level 2 remains a ceiling this cannot raise (§5.3)."
         ),
     )
-    reasoning_effort: Literal["low", "medium", "high"] | None = Field(
-        default=None,
-        description=(
-            "The user's per-question reasoning EFFORT choice, set by the "
-            "composer's effort picker — only meaningful alongside "
-            "`reasoning=True`. Closed set on purpose: low/medium/high is the "
-            "intersection every reasoning provider accepts; provider-specific "
-            "extremes (OpenAI xhigh, Anthropic max/budget_tokens) stay "
-            "ops-authored in `models_catalog.yaml`.\n\n"
-            "`None` means 'no per-question preference': the resolved profile's "
-            "own `settings.reasoning_effort` (the ops default) applies "
-            "unchanged. When set, RoutedChatModelFactory REPLACES the effort "
-            "on profiles that already carry one — it never injects the key "
-            "into a non-reasoning profile, so aptitude and activation stay "
-            "ops-authored (levels 1-2 remain ceilings this cannot raise, and "
-            "the strip path for a declined/unauthorized turn stays dominant)."
-        ),
-    )
+    # NOTE (2026-08-12): a per-question `reasoning_effort` override was built
+    # and withdrawn the same day — providers disagree on accepted values
+    # (Mistral small 400s on low/medium), and the declaration machinery it
+    # required wasn't worth the surface. The effort a reasoning turn runs
+    # with is the ops-authored `settings.reasoning_effort` of the resolved
+    # profile, full stop; the user's choice is the boolean above.
 
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None

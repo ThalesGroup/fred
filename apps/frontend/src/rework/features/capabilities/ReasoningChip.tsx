@@ -12,35 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The per-question reasoning EFFORT picker (REASON-01 level 4 + 4b), rendered
-// as an always-visible ContextualPicker chip anchored at the right edge of the
-// composer's bottomRow (RichInputField's `rightExtraSlot`, just before the
-// mic/send group). Claude's composer is the visual reference: the chip shows
-// the MODEL IDENTITY plus the selected mode ("Mistral Small · Élevé"), and the
-// menu's header says what the trade-off is (higher effort = slower). "off"
-// maps to `reasoning: false` on the wire; a level maps to `reasoning: true` +
-// `reasoning_effort` (the runtime replaces the ops-authored effort on
-// profiles that carry one, and stays inert everywhere else).
+// The per-question reasoning control (REASON-01 level 4): an always-visible
+// chip anchored at the right edge of the composer's bottomRow (RichInputField's
+// `rightExtraSlot`, just before the mic/send group). Claude's composer is the
+// UI reference, faithfully: the chip shows the MODEL IDENTITY plus the
+// reasoning state ("Mistral Small · Activé"), and its menu holds ONE switch
+// row — label + trailing toggle, flipped in place, popover stays open so the
+// user can keep composing — under a muted header stating the trade-off
+// (more thorough, slower). The switch row reuses the exact affordance of the
+// retired tune-menu row (`MenuPopoverItem trailingToggle`, role
+// menuitemcheckbox): one on/off setting, the same switch here, on the agent
+// form, and on the admin models page — never a checkbox, never an options
+// list.
+//
+// Deliberately ON/OFF only — a per-question EFFORT picker was built and
+// withdrawn the same day (2026-08-12): providers disagree on the accepted
+// values (Mistral small 400s on low/medium; RUNTIME-EXECUTION-CONTRACT §8.48).
+// The effort a reasoning turn runs with is the ops-authored `reasoning_effort`
+// in the routed profile's settings, full stop.
 //
 // Multi-model readiness (deliberately NOT displayed yet): the model identity
 // arrives as a plain `modelProfileId` prop, so when model selection ships as
-// a Fred feature the chip's menu grows a model section fed by real catalog
-// display names and this file's `modelLabelFromProfileId` heuristic dies —
-// nothing else in the composer needs to move.
+// a Fred feature this menu grows a model section fed by real catalog display
+// names and `modelLabelFromProfileId` dies — nothing else moves.
 //
 // `COMPOSER_CHIP_WIDGETS` is the single source of truth for which widget ids
 // are promoted out of the "tune" popover: `ComposerControlSlot` excludes them
 // from its "tools" render and `ManagedChatPage`'s `hasToolControls` guard
 // excludes them too, so the tune button never opens onto an empty popover
-// when an agent only exposes promoted controls. History: search_policy was a
-// chip 2026-08-05–2026-08-06; rag_scope was a chip 2026-08-07–2026-08-12;
-// both are back in the tune menu, replaced by this effort picker (its
-// tune-menu row predecessor, stockKit/ReasoningControl, was deleted with it).
+// when an agent only exposes promoted controls.
 
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ContextualPicker } from "@shared/molecules/ContextualPicker/ContextualPicker";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
+import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import type { ChatTurnControlComposerState, ReasoningEffortName } from "./types";
+import type { ChatTurnControlComposerState } from "./types";
+import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
 
@@ -72,43 +82,94 @@ interface ReasoningChipProps {
    *  — the session's model identity, shown on the chip. Null hides the model
    *  segment (identity unknown frontend-side). */
   modelProfileId?: string | null;
-  /** Mirrors the add/tune menu buttons: no picking while a response streams. */
+  /** Mirrors the add/tune menu buttons: no toggling while a response streams. */
   disabled?: boolean;
 }
 
 export function ReasoningChip({ chatControls, composer, modelProfileId = null, disabled = false }: ReasoningChipProps) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Same compact close contract as ContextualPicker: click outside closes,
+  // Escape closes and restores focus to the trigger.
+  useEffect(() => {
+    if (!open) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   // Only agents whose author enabled reasoning (and with a platform-enabled
   // reasoning model) emit the platform reasoning_toggle control — no control,
   // no chip, same gate the tune-menu row used.
   const offersReasoning = chatControls.some((control) => control.widget === "reasoning_toggle");
   if (!offersReasoning) return null;
 
-  const effortLabels: Record<ReasoningEffortName, string> = {
-    off: t("chatbot.composerSettings.reasoningOff"),
-    low: t("chatbot.composerSettings.reasoningLow"),
-    medium: t("chatbot.composerSettings.reasoningMedium"),
-    high: t("chatbot.composerSettings.reasoningHigh"),
-  };
+  const on = composer.reasoning;
+  const title = t("chatbot.composerSettings.reasoningRowLabel");
+  const stateLabel = t(on ? "chatbot.composerSettings.reasoningOn" : "chatbot.composerSettings.reasoningOff");
   const modelLabel = modelLabelFromProfileId(modelProfileId);
-  const effortLabel = effortLabels[composer.reasoningEffort];
 
   return (
-    <ContextualPicker<ReasoningEffortName>
-      icon={{ category: "outlined", type: "auto_awesome" }}
-      title={t("chatbot.composerSettings.reasoningRowLabel")}
-      value={composer.reasoningEffort}
-      valueLabel={modelLabel ? `${modelLabel} · ${effortLabel}` : effortLabel}
-      description={t("chatbot.composerSettings.reasoningEffortHint")}
-      onChange={composer.onReasoningEffortChange}
-      disabled={disabled}
-      accent={composer.reasoningEffort !== "off"}
-      options={[
-        { value: "off", label: effortLabels.off },
-        { value: "low", label: effortLabels.low },
-        { value: "medium", label: effortLabels.medium },
-        { value: "high", label: effortLabels.high },
-      ]}
-    />
+    <div ref={containerRef} className={styles.wrap}>
+      <Tooltip text={title}>
+        <button
+          ref={triggerRef}
+          type="button"
+          className={styles.chip}
+          data-open={open}
+          data-accent={on || undefined}
+          disabled={disabled}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={`${title}: ${stateLabel}`}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span className={styles.icon}>
+            <Icon category="outlined" type="auto_awesome" />
+          </span>
+          <span className={styles.value}>{modelLabel ? `${modelLabel} · ${stateLabel}` : stateLabel}</span>
+        </button>
+      </Tooltip>
+
+      {open && (
+        <div className={styles.menu}>
+          <MenuPopover
+            aria-label={title}
+            header={<div className={styles.description}>{t("chatbot.composerSettings.reasoningHint")}</div>}
+            groups={[
+              [
+                <MenuPopoverItem
+                  key="reasoning"
+                  icon={{ category: "outlined", type: "auto_awesome" }}
+                  label={title}
+                  // A switch, like the agent-form and admin-side reasoning
+                  // controls it continues — the row IS the control, it opens
+                  // no submenu, and the popover stays open: flip it and keep
+                  // composing (Claude's "Thinking" toggle behaves the same).
+                  trailingToggle
+                  selected={on}
+                  onClick={() => composer.onReasoningChange(!on)}
+                />,
+              ],
+            ]}
+          />
+        </div>
+      )}
+    </div>
   );
 }

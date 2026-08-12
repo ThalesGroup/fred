@@ -135,38 +135,6 @@ def without_reasoning_settings(model: ModelConfiguration) -> ModelConfiguration:
     )
 
 
-def with_reasoning_effort(model: ModelConfiguration, effort: str) -> ModelConfiguration:
-    """Return `model` with `settings.reasoning_effort` REPLACED by the user's
-    per-question pick (`RuntimeContext.reasoning_effort`) — replace-if-present
-    only, never an injection.
-
-    Why replace-only: a profile without `reasoning_effort` in `settings` is one
-    ops never activated (or that cannot think — the §4.3 boot validator ties the
-    key to `supports_thinking`). Injecting the key there would make a per-turn
-    UI choice flip a non-reasoning profile into emitting thinking blocks, the
-    exact structured-output/tool-loop breakage `models_catalog.yaml` documents
-    for GH #1780 — so the ops-authored key stays the activation signal and the
-    user's pick only tunes its value.
-
-    Runs AFTER the strip decision in `RoutedChatModelFactory.build_for_chat`:
-    a declined/unauthorized turn never reaches this, keeping the strip path
-    dominant (an absent key, never `reasoning_effort: null` — §12 q2).
-
-    Returns the SAME object when there is nothing to replace or the value
-    already matches (same hot-path no-allocation contract as
-    `without_reasoning_settings` above).
-    """
-
-    settings = model.settings
-    if not settings or "reasoning_effort" not in settings:
-        return model
-    if settings["reasoning_effort"] == effort:
-        return model
-    return model.model_copy(
-        update={"settings": {**settings, "reasoning_effort": effort}}
-    )
-
-
 def _validate_match_value(*, field_name: str, value: MatchValue | None) -> None:
     if value is None:
         return

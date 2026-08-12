@@ -48,7 +48,7 @@ describe("buildComposerRuntimeContext", () => {
     });
   });
 
-  it("omits both reasoning keys when the agent offers no picker", () => {
+  it("omits the reasoning key when the agent offers no toggle", () => {
     // Omitted ≠ false: an absent key reaches the runtime as "no choice was
     // made" and leaves levels 1-2 in charge.
     const context = buildComposerRuntimeContext({
@@ -58,32 +58,25 @@ describe("buildComposerRuntimeContext", () => {
       ragScope: "hybrid",
     });
     expect("reasoning" in context).toBe(false);
-    expect("reasoning_effort" in context).toBe(false);
   });
 
-  it('maps "off" to an explicit decline with no effort value', () => {
-    // The strip path stays dominant runtime-side: a declined turn must never
-    // carry a reasoning_effort, not even "off".
-    const context = buildComposerRuntimeContext({
+  it("forwards the explicit per-question choice when offered", () => {
+    const declined = buildComposerRuntimeContext({
       selectedLibraryIds: [],
       selectedDocumentUids: [],
       searchPolicy: "hybrid",
       ragScope: "hybrid",
-      reasoningEffort: "off",
+      reasoning: false,
     });
-    expect(context.reasoning).toBe(false);
-    expect("reasoning_effort" in context).toBe(false);
-  });
+    expect(declined.reasoning).toBe(false);
 
-  it("maps an effort level to reasoning=true plus the level", () => {
-    const context = buildComposerRuntimeContext({
+    const asked = buildComposerRuntimeContext({
       selectedLibraryIds: [],
       selectedDocumentUids: [],
       searchPolicy: "hybrid",
       ragScope: "hybrid",
-      reasoningEffort: "low",
+      reasoning: true,
     });
-    expect(context.reasoning).toBe(true);
-    expect(context.reasoning_effort).toBe("low");
+    expect(asked.reasoning).toBe(true);
   });
 });

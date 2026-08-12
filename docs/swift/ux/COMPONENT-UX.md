@@ -210,12 +210,15 @@ shared molecule.
 
 As of REASON-01 (#2166) the platform contributed its first non-capability control: a
 `Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
-**gone from the tune menu**: reasoning is now an **effort picker chip**
+**gone from the tune menu**: reasoning is now an **on/off picker chip**
 (`features/capabilities/ReasoningChip.tsx`, a `ContextualPicker`) pinned at the
 composer's **right edge** next to mic/send (Claude's composer is the visual
-reference). The chip text leads with the session's model identity plus the mode
-("Mistral Small · Élevé"); its menu header states the trade-off ("higher effort =
-more thorough, slower") above the four options Désactivé / Faible / Moyen / Élevé.
+reference). The chip text leads with the session's model identity plus the state
+("Mistral Small · Activé"); its menu header states the trade-off ("more thorough,
+slower") above the two options Désactivé / Activé. Deliberately no effort levels:
+a same-day effort picker was withdrawn (providers reject values they don't
+support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48); the effort used is always the
+ops-authored one on the routed model profile.
 The chip renders in primary/selected colors whenever an effort level is active.
 Multi-model is deliberately NOT displayed yet — the model identity arrives as a
 plain profile-id prop so the menu can grow a model section when that feature ships.
@@ -240,7 +243,7 @@ agents) so the decision is informed at the point it is made.
 #### Open UX issues
 
 - ~~**Boolean-row affordance (REASON-01)**~~ — resolved 2026-08-12 by removal: the
-  reasoning row left the tune menu for the right-edge effort picker chip, so the menu
+  reasoning row left the tune menu for the right-edge on/off picker chip, so the menu
   carries no boolean row anymore.
 - **Desktop anchor space** — sub-menus open to the right of the row. Validate the behaviour
   close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.

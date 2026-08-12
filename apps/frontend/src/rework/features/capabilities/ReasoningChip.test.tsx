@@ -12,30 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The right-edge reasoning chip is an EFFORT PICKER (REASON-01 level 4 + 4b):
-// a ContextualPicker over the closed set off/low/medium/high, whose chip text
-// leads with the session's model identity (Claude-style). "off" is the
-// tri-state decline; the three levels ride RuntimeContext.reasoning_effort.
+// The right-edge reasoning chip (REASON-01 level 4): model identity + on/off
+// state on the trigger, one SWITCH row in its menu (Claude's "Thinking"
+// toggle is the reference). No effort levels on purpose — the effort a
+// reasoning turn runs with is the ops-authored `reasoning_effort` of the
+// routed profile (RUNTIME-EXECUTION-CONTRACT §8.48).
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ContextualPickerProps } from "@shared/molecules/ContextualPicker/ContextualPicker";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip, modelLabelFromProfileId } from "./ReasoningChip";
 import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import type { ChatTurnControlComposerState, ReasoningEffortName } from "./types";
+import type { ChatTurnControlComposerState } from "./types";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-// Capture the picker's props instead of rendering its DOM: what this component
-// owns is the wiring (gating, value, options, accent), not the chip visuals.
-let pickerProps: ContextualPickerProps<ReasoningEffortName> | null = null;
-vi.mock("@shared/molecules/ContextualPicker/ContextualPicker", () => ({
-  ContextualPicker: (props: ContextualPickerProps<ReasoningEffortName>) => {
-    pickerProps = props;
-    return <div data-picker />;
-  },
+vi.mock("@shared/atoms/Icon/Icon", () => ({
+  default: ({ type }: { type: string }) => <i data-icon={type} />,
+}));
+
+vi.mock("@shared/atoms/Tooltip/Tooltip", () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 const REASONING_CONTROL: ChatControlDescriptor = {
@@ -56,70 +54,60 @@ function composerState(over: Partial<ChatTurnControlComposerState> = {}): ChatTu
     onSearchPolicyChange: () => undefined,
     ragScope: "hybrid",
     onRagScopeChange: () => undefined,
-    reasoningEffort: "off",
-    onReasoningEffortChange: () => undefined,
+    reasoning: false,
+    onReasoningChange: () => undefined,
     ...over,
   } as ChatTurnControlComposerState;
 }
 
 function render(
   controls: ChatControlDescriptor[],
-  reasoningEffort: ReasoningEffortName,
+  reasoning: boolean,
   disabled = false,
   modelProfileId: string | null = null,
 ): string {
-  pickerProps = null;
   return renderToStaticMarkup(
     <ReasoningChip
       chatControls={controls}
-      composer={composerState({ reasoningEffort })}
+      composer={composerState({ reasoning })}
       modelProfileId={modelProfileId}
       disabled={disabled}
     />,
   );
 }
 
-describe("ReasoningChip (REASON-01 level 4 + 4b, right-edge effort picker)", () => {
+describe("ReasoningChip (REASON-01 level 4, right-edge chip)", () => {
   it("renders nothing when the agent does not offer the reasoning control", () => {
-    expect(render([], "off")).toBe("");
-    expect(pickerProps).toBeNull();
+    expect(render([], false)).toBe("");
   });
 
-  it("offers the full closed set, off first", () => {
-    render([REASONING_CONTROL], "off");
-    expect(pickerProps?.options.map((option) => option.value)).toEqual(["off", "low", "medium", "high"]);
+  it("shows the off state without the accent styling", () => {
+    const html = render([REASONING_CONTROL], false);
+    expect(html).toContain("chatbot.composerSettings.reasoningOff");
+    expect(html).not.toContain('data-accent="true"');
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('aria-expanded="false"');
   });
 
-  it("reflects the current effort and stays neutral when off", () => {
-    render([REASONING_CONTROL], "off");
-    expect(pickerProps?.value).toBe("off");
-    expect(pickerProps?.accent).toBe(false);
-  });
-
-  it("accents the chip whenever an effort level is active", () => {
-    render([REASONING_CONTROL], "medium");
-    expect(pickerProps?.value).toBe("medium");
-    expect(pickerProps?.accent).toBe(true);
+  it("accents the chip and shows the on state when reasoning is on", () => {
+    const html = render([REASONING_CONTROL], true);
+    expect(html).toContain("chatbot.composerSettings.reasoningOn");
+    expect(html).toContain('data-accent="true"');
   });
 
   it("is disabled while a response streams", () => {
-    render([REASONING_CONTROL], "off", true);
-    expect(pickerProps?.disabled).toBe(true);
+    expect(render([REASONING_CONTROL], false, true)).toContain("disabled");
   });
 
   it("leads the chip text with the model identity when a profile is known", () => {
-    render([REASONING_CONTROL], "high", false, "chat.mistral.small");
-    expect(pickerProps?.valueLabel).toBe("Mistral Small · chatbot.composerSettings.reasoningHigh");
+    const html = render([REASONING_CONTROL], true, false, "chat.mistral.small");
+    expect(html).toContain("Mistral Small · chatbot.composerSettings.reasoningOn");
   });
 
-  it("falls back to the effort alone when no team default profile exists", () => {
-    render([REASONING_CONTROL], "high", false, null);
-    expect(pickerProps?.valueLabel).toBe("chatbot.composerSettings.reasoningHigh");
-  });
-
-  it("explains the effort/latency trade-off in the menu header", () => {
-    render([REASONING_CONTROL], "off");
-    expect(pickerProps?.description).toBe("chatbot.composerSettings.reasoningEffortHint");
+  it("falls back to the state alone when no team default profile exists", () => {
+    const html = render([REASONING_CONTROL], true, false, null);
+    expect(html).not.toContain("·");
+    expect(html).toContain("chatbot.composerSettings.reasoningOn");
   });
 
   it("owns the reasoning_toggle promotion out of the tune popover", () => {

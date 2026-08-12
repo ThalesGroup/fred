@@ -42,7 +42,6 @@ from fred_runtime.model_routing.contracts import (
     ModelCapability,
     ModelProfile,
     ModelRoutingPolicy,
-    with_reasoning_effort,
     without_reasoning_settings,
 )
 from fred_runtime.model_routing.provider import RoutedChatModelFactory
@@ -166,53 +165,8 @@ def test_strip_returns_the_same_object_when_there_is_nothing_to_remove() -> None
     assert without_reasoning_settings(model) is model
 
 
-def test_effort_override_replaces_the_ops_authored_value() -> None:
-    model = ModelConfiguration(
-        provider="openai",
-        name="mistral-small-latest",
-        settings={"base_url": "https://api.mistral.ai/v1", "reasoning_effort": "high"},
-    )
-
-    overridden = with_reasoning_effort(model, "low")
-
-    assert overridden.settings is not None
-    assert overridden.settings["reasoning_effort"] == "low"
-    # Targeted replacement — nothing else moves, and the catalog object is
-    # untouched (profiles are reused across turns).
-    assert overridden.settings["base_url"] == "https://api.mistral.ai/v1"
-    assert model.settings is not None and model.settings["reasoning_effort"] == "high"
-
-
-def test_effort_override_never_injects_into_a_profile_without_the_key() -> None:
-    # Replace-if-present is the whole safety story: a profile without
-    # `reasoning_effort` is one ops never activated (or that cannot think), and
-    # a per-turn UI pick must not flip it into emitting thinking blocks
-    # (GH #1780's structured-output breakage).
-    model = ModelConfiguration(
-        provider="openai", name="gpt-4o", settings={"temperature": 0.2}
-    )
-
-    assert with_reasoning_effort(model, "high") is model
-
-
-def test_effort_override_is_allocation_free_when_the_value_already_matches() -> None:
-    model = ModelConfiguration(
-        provider="openai",
-        name="mistral-small-latest",
-        settings={"reasoning_effort": "high"},
-    )
-
-    assert with_reasoning_effort(model, "high") is model
-
-
-def test_effort_override_handles_a_profile_with_no_settings_at_all() -> None:
-    model = ModelConfiguration(provider="openai", name="gpt-4o", settings=None)
-
-    assert with_reasoning_effort(model, "medium") is model
-
-
 def test_strip_handles_a_profile_with_no_settings_at_all() -> None:
-    model = ModelConfiguration(provider="anthropic", name="claude-sonnet-4-6")
+    model = ModelConfiguration(provider="openai", name="gpt-5.1", settings=None)
 
     assert without_reasoning_settings(model) is model
 
@@ -245,7 +199,6 @@ def _binding(
     reasoning_enabled_model_ids: list[str] | None,
     *,
     reasoning: bool | None = None,
-    reasoning_effort: str | None = None,
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
@@ -253,7 +206,6 @@ def _binding(
             user_id="u1",
             reasoning_enabled_model_ids=reasoning_enabled_model_ids,
             reasoning=reasoning,
-            reasoning_effort=reasoning_effort,
         ),
         portable_context=PortableContext(
             request_id="r1",
@@ -278,14 +230,12 @@ def _build(
     reasoning_enabled_model_ids: list[str] | None,
     *,
     reasoning: bool | None = None,
-    reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     model, selection = _factory().build_for_chat(
         definition=SimpleNamespace(agent_id="agent-1"),
         binding=_binding(
             reasoning_enabled_model_ids,
             reasoning=reasoning,
-            reasoning_effort=reasoning_effort,
         ),
         purpose="chat",
         operation=None,
@@ -377,47 +327,5 @@ def test_level_2_stays_a_ceiling_the_user_cannot_raise() -> None:
     # The user asked for reasoning on a model whose reasoning the platform admin
     # has NOT enabled — it must still not reason.
     params = _build([], reasoning=True)
-
-    assert "reasoning_effort" not in params
-
-
-# ---------------------------------------------------------------------------
-# Level 4b — the user's per-question effort pick, same enforcement point
-# ---------------------------------------------------------------------------
-
-
-def test_a_turn_that_picks_an_effort_overrides_the_ops_default() -> None:
-    # The profile ships `reasoning_effort: high`; the user asked for reasoning
-    # and picked "low" — the wire carries the user's value, not the YAML's.
-    params = _build([THINKING_MODEL_ID], reasoning=True, reasoning_effort="low")
-
-    assert params["reasoning_effort"] == "low"
-
-
-def test_no_effort_pick_leaves_the_ops_default_in_charge() -> None:
-    params = _build([THINKING_MODEL_ID], reasoning=True, reasoning_effort=None)
-
-    assert params["reasoning_effort"] == "high"
-
-
-def test_a_declined_turn_ignores_a_stray_effort_pick() -> None:
-    # The strip stays dominant: whatever the client put in reasoning_effort, a
-    # reasoning=False turn carries no reasoning setting at all.
-    params = _build([THINKING_MODEL_ID], reasoning=False, reasoning_effort="high")
-
-    assert "reasoning_effort" not in params
-
-
-def test_an_effort_pick_without_the_ask_stays_inert() -> None:
-    # `reasoning_effort` is only meaningful alongside reasoning=True; a client
-    # sending it with reasoning=None is malformed and must not change behaviour
-    # (the ops default still applies through levels 1-2).
-    params = _build([THINKING_MODEL_ID], reasoning=None, reasoning_effort="low")
-
-    assert params["reasoning_effort"] == "high"
-
-
-def test_level_2_stays_a_ceiling_over_the_effort_pick_too() -> None:
-    params = _build([], reasoning=True, reasoning_effort="high")
 
     assert "reasoning_effort" not in params
