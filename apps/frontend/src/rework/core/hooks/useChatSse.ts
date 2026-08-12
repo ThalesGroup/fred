@@ -39,7 +39,7 @@ import type {
   ToolResultRuntimeEvent,
   TurnPersistedEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
-import { upsertOne } from "./chatSseUtils";
+import { toolResultCallId, upsertOne } from "./chatSseUtils";
 import {
   mergeContextPromptText,
   mergeReasoningActivation,
@@ -55,6 +55,120 @@ import { personalTeamId } from "../../components/shared/utils/teamId";
 // before it reaches the runtime, mirroring usePipelineRun.ts.
 function canonicalizeRuntimeTeamId(teamId: string): string {
   return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
+}
+
+// ── Turn-start token preflight ────────────────────────────────────────────────
+// The runtime pod forwards this turn's bearer to Knowledge Flow for the WHOLE
+// turn and has no mid-turn refresh (#2073 Item 3, RUNTIME-EXECUTION-CONTRACT
+// §8.48): a turn that starts with seconds of token life dies mid-stream. So a
+// turn asks for more headroom than the 30 s used for ordinary fetches, and a
+// FAILED refresh over a nearly-dead token blocks the send here — a clear error
+// now beats an opaque tool failure 30 s into the stream.
+const TURN_TOKEN_MIN_VALIDITY_S = 120;
+// Below this remaining validity, refusing to start is strictly better than
+// starting a turn that admission (exp, leeway=0) or the first tool call will
+// kill anyway.
+const TURN_TOKEN_HARD_FLOOR_S = 30;
+
+/**
+ * Refresh the bearer for a turn about to start; report whether it is usable.
+ *
+ * Why: `ensureFreshToken` resolves false instead of rejecting, so the old
+ * `try/catch` around it was dead code and a silently failed refresh started
+ * doomed turns. Returns null when the turn may proceed, or a user-facing
+ * message when it must not.
+ *
+ * `degradedWarned` is the caller's warn-once latch. It is a parameter, not a
+ * module global: a module-level latch is shared by every mounted chat (a
+ * degraded warning in one pane silences the other) and survives between tests,
+ * making assertion order load-bearing.
+ */
+async function preflightTurnToken(degradedWarned: { current: boolean }): Promise<string | null> {
+  let fresh: boolean;
+  try {
+    fresh = await KeyCloakService.ensureFreshToken(TURN_TOKEN_MIN_VALIDITY_S);
+  } catch (err) {
+    // `ensureFreshToken` resolves false rather than rejecting on the paths it
+    // handles itself, but a rejection must still never escape: send()'s
+    // callers do not await/catch its promise (see failPreflight), so an
+    // escaping rejection strands the preflight lock and silently drops every
+    // later send. Report it as a refusal instead.
+    //
+    // Never an EMPTY string: `??` does not substitute for `""`, and both call
+    // sites test truthiness — so `new Error("")` (or a bare `throw ""`, which
+    // keycloak-js does) would read as "no problem" and start the very turn this
+    // path exists to refuse.
+    const detail = (err as Error)?.message || String(err) || "";
+    return detail.trim() || "the session token could not be refreshed";
+  }
+  if (fresh) {
+    degradedWarned.current = false;
+    return null;
+  }
+  const secondsLeft = KeyCloakService.GetTokenSecondsLeft();
+  if (secondsLeft !== null && secondsLeft < TURN_TOKEN_HARD_FLOOR_S) {
+    return `your session token expires in ${Math.max(0, Math.floor(secondsLeft))}s and could not be refreshed — check your connection or sign in again`;
+  }
+  // Once per TRANSITION into the degraded state, not once per send: during a
+  // Keycloak outage every retried send lands here, and keycloak-js emits its
+  // own warning per attempt — repeating this one would bury the hard refusal
+  // that eventually matters under interleaved duplicates.
+  if (!degradedWarned.current) {
+    degradedWarned.current = true;
+    console.warn(
+      `[useChatSse] token refresh failed; proceeding with ~${secondsLeft === null ? "unbounded" : Math.floor(secondsLeft)}s of token validity`,
+    );
+  }
+  return null;
+}
+
+/**
+ * Re-check the hard floor after the unbounded pre-stream awaits, taking one
+ * more refresh before refusing.
+ *
+ * Why the re-check: `preflightTurnToken` certifies headroom BEFORE
+ * `flushPendingWrites` and prepare-execution, neither of which is time-bounded.
+ * A slow control-plane can put minutes between the certificate and the bearer
+ * actually going on the wire, so the go/no-go decision has to be taken again at
+ * the wire. Re-reading the token string alone could not detect this — only the
+ * remaining lifetime can.
+ *
+ * Why it refreshes instead of refusing outright: being under the floor here is
+ * the ORDINARY state on a realm whose access tokens live less than
+ * TURN_TOKEN_MIN_VALIDITY_S. The preflight can never reach its target there, so
+ * it deliberately proceeds degraded (see `degradedWarned` above) — and a
+ * refuse-only gate at the wire would turn that designed-for band into a hard
+ * failure on precisely the realms it exists for. The cost is one round trip, in
+ * a case that is rare on a normal realm and is already the slow path.
+ *
+ * The verdict is always the MEASURED lifetime afterwards, never the refresh's
+ * own boolean: `ensureFreshToken` answers "is THIS caller's headroom
+ * satisfied?", and its rejection is not a verdict either — a refresh that
+ * raised after storing a new token still cleared the floor. Returns a
+ * user-facing message when the turn must not start.
+ */
+async function verifyTokenStillUsable(): Promise<string | null> {
+  const before = KeyCloakService.GetTokenSecondsLeft();
+  // `null` = no floor to enforce (dev token, or no token parsed yet). The
+  // preflight already made that call and let the turn through; this gate must
+  // not second-guess it.
+  if (before === null || before >= TURN_TOKEN_HARD_FLOOR_S) return null;
+
+  try {
+    // The FLOOR, not TURN_TOKEN_MIN_VALIDITY_S. At the wire the only question
+    // left is whether the bearer survives admission and the first tool call;
+    // asking for the full turn-start headroom on a short-lifespan realm would
+    // report "not fresh" for a refresh that had in fact just cleared the floor.
+    await KeyCloakService.ensureFreshToken(TURN_TOKEN_HARD_FLOOR_S);
+  } catch {
+    // Never a verdict on its own — the re-read below decides. Swallowed for the
+    // same reason `preflightTurnToken` catches: send()'s callers do not await
+    // its promise, so an escaping rejection would strand the preflight lock.
+  }
+
+  const after = KeyCloakService.GetTokenSecondsLeft();
+  if (after === null || after >= TURN_TOKEN_HARD_FLOOR_S) return null;
+  return `your session token expired while this turn was being prepared (${Math.max(0, Math.floor(after))}s left) — please try again`;
 }
 
 // ── SSE event union ───────────────────────────────────────────────────────────
@@ -174,6 +288,9 @@ export function useChatSse(
   // `ac` — this attempt's own controller — makes a late cleanup a no-op
   // once someone else owns the slot.
   const preflightOwnerRef = useRef<AbortController | null>(null);
+  // Per-hook warn-once latch for the degraded token preflight (see
+  // `preflightTurnToken`), so two mounted chats do not silence each other.
+  const degradedTokenWarnedRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
     Map<
@@ -542,6 +659,11 @@ export function useChatSse(
       exchangeId: string,
       sessionId: string,
       signal: AbortSignal,
+      // Fired once the runtime has ACCEPTED the request (2xx, stream opening).
+      // `sendHitlResume` needs to distinguish "the runtime never took this
+      // resume" (fetch rejected, or a 401/502/503 response) from "it ran and
+      // then failed mid-stream" — only the first may put the HITL prompt back.
+      onAccepted?: () => void,
     ): Promise<void> => {
       const url = new URL(executeStreamUrl, window.location.origin);
       console.debug(
@@ -560,10 +682,16 @@ export function useChatSse(
       console.debug(`[useChatSse] fetch response — status=${response.status} ok=${response.ok}`);
       if (!response.ok) {
         const text = await response.text().catch(() => String(response.status));
-        throw new Error(`Runtime ${response.status}: ${text}`);
+        const httpError = new Error(`Runtime ${response.status}: ${text}`) as Error & { status?: number };
+        // The status is what tells a HITL resume whether the checkpoint is still
+        // answerable: 409 means the runtime already consumed or dropped it.
+        httpError.status = response.status;
+        throw httpError;
       }
 
       if (!response.body) throw new Error("Empty response body from runtime");
+
+      onAccepted?.();
 
       const rankRef = { current: messagesRef.current.length + 1 };
       const deltaRankRef: { current: number | null } = { current: null };
@@ -648,19 +776,16 @@ export function useChatSse(
         onError?.(`Could not prepare this turn: ${msg}`);
       };
 
-      try {
-        await KeyCloakService.ensureFreshToken(30);
-      } catch (err) {
-        failPreflight("token refresh", err);
-        return;
-      }
+      const tokenProblem = await preflightTurnToken(degradedTokenWarnedRef);
       if (ac.signal.aborted) {
         console.debug(`[useChatSse][${sendId}] aborted during token refresh — never reaching onTurnStarted`);
         releasePreflightLock();
         return;
       }
-      const token = KeyCloakService.GetToken() ?? "";
-
+      if (tokenProblem) {
+        failPreflight("token refresh", new Error(tokenProblem));
+        return;
+      }
       // Ordering barrier: any in-flight session row creation and context-prompt
       // PATCH must commit before prepare-execution reads them, otherwise the
       // first turn is prepared from a stale/empty prompt set while the composer
@@ -745,6 +870,28 @@ export function useChatSse(
         return;
       }
 
+      // Last gate BEFORE the turn commits. Deliberately above `onTurnStarted`
+      // and the optimistic user message: those clear the composer and paint the
+      // message into the thread, so refusing after them would lose the user's
+      // text AND leave an orphan message with an error and no reply. Everything
+      // above this point is still undoable.
+      const staleToken = await verifyTokenStillUsable();
+      // The gate now awaits a refresh, so it is one more window in which the
+      // user can cancel — re-check before committing, exactly as every other
+      // await above does. `failPreflight` would stay silent on an aborted
+      // signal, but it would not stop the turn from starting below.
+      if (ac.signal.aborted) {
+        console.debug(
+          `[useChatSse][${sendId}] aborted during the wire-time token check — never reaching onTurnStarted`,
+        );
+        releasePreflightLock();
+        return;
+      }
+      if (staleToken) {
+        failPreflight("token refresh", new Error(staleToken));
+        return;
+      }
+
       // The turn is now genuinely starting. Preflight is over — release the
       // reentrancy lock so the existing "a new send() replaces the current
       // stream" behavior (via abortRef, below) governs from here on,
@@ -770,6 +917,13 @@ export function useChatSse(
       messagesRef.current = upsertOne(messagesRef.current, userMsg);
       setMessages([...messagesRef.current]);
       console.debug(`[useChatSse][${sendId}] starting streamToMessages`);
+
+      // Read as LATE as possible — right before the bearer goes on the wire.
+      // Captured before `flushPendingWrites`/`prepare-execution` (neither
+      // time-bounded), the preflight's freshness certificate could be a hundred
+      // seconds stale by the time the stream opened, and any refresh those
+      // awaits triggered would have been discarded.
+      const token = KeyCloakService.GetToken() ?? "";
 
       try {
         await streamToMessages(
@@ -818,8 +972,26 @@ export function useChatSse(
     ],
   );
 
+  /**
+   * Resume a paused HITL turn.
+   *
+   * Resolves `false` whenever the resume never reached the runtime — a token
+   * refusal, a prepare-execution failure, OR an abort/supersession before the
+   * stream was started. `handleHitlAnswer` clears `pendingHitl` before calling
+   * this, and the checkpoint stays paused until somebody answers it, so every
+   * not-reached outcome must offer the prompt back; an aborted attempt that
+   * reported "reached" stranded the interaction exactly like a silent refusal.
+   * Guarding the restore against a newer owner (a different session, a newer
+   * prompt) is the CALLER's job — it has the state to decide; this function
+   * only reports the fact.
+   * Resolves `true` once the resume stream has been started.
+   */
   const sendHitlResume = useCallback(
-    async (pending: RuntimeAwaitingHumanEvent, answer: string | boolean | undefined, freeText?: string) => {
+    async (
+      pending: RuntimeAwaitingHumanEvent,
+      answer: string | boolean | undefined,
+      freeText?: string,
+    ): Promise<boolean> => {
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
@@ -833,16 +1005,97 @@ export function useChatSse(
       // the meantime.
       preflightOwnerRef.current = null;
 
+      // This call has taken `abortRef` (and cleared `preflightOwnerRef`) from a
+      // send() that may still be preflighting. That send's own cleanup is
+      // ownership-checked, so it will NOT clear `waitResponse` once we own the
+      // slot — every early return below therefore has to release the spinner
+      // itself, or the composer stays disabled until reset()/abort().
+      const bailOut = (reached: boolean): boolean => {
+        if (!ac.signal.aborted) setWaitResponse(false);
+        return reached;
+      };
+
+      // Preflight BEFORE any optimistic UI mutation: a refusal here never
+      // reaches the backend, so nothing may already be shown as applied.
+      const tokenProblem = await preflightTurnToken(degradedTokenWarnedRef);
+      if (ac.signal.aborted) {
+        // Superseded before the backend heard anything: not reached. No toast
+        // — the newer owner's flow speaks for the UI now.
+        return bailOut(false);
+      }
+      if (tokenProblem) {
+        onError?.(`Could not resume this turn: ${tokenProblem}`);
+        return bailOut(false);
+      }
+
+      let prep: ExecutionPreparation;
+      try {
+        prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      } catch (err) {
+        if (!ac.signal.aborted) {
+          onError?.(`Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
+        }
+        // prepare-execution failed, so the resume never started either — the
+        // prompt must come back for the same reason as the token refusal.
+        return bailOut(false);
+      }
+      // This attempt may have been superseded (by a new send() or another
+      // sendHitlResume) while prepare-execution was in flight — don't apply
+      // a stale response's chat controls/capability URLs over the current
+      // owner's state, and the resume itself was never sent: not reached.
+      if (ac.signal.aborted) {
+        return bailOut(false);
+      }
+      const staleResumeToken = await verifyTokenStillUsable();
+      // The gate now awaits a refresh, so it is one more window in which this
+      // attempt can be superseded — re-check before committing, exactly as
+      // every other await above does.
+      if (ac.signal.aborted) {
+        return bailOut(false);
+      }
+      if (staleResumeToken) {
+        onError?.(`Could not resume this turn: ${staleResumeToken}`);
+        return bailOut(false);
+      }
+
+      // Read as LATE as possible — right before the bearer goes on the wire.
+      // Captured before `flushPendingWrites`/`prepare-execution` (neither
+      // time-bounded), the preflight's freshness certificate could be a hundred
+      // seconds stale by the time the stream opened, and any refresh those
+      // awaits triggered would have been discarded.
+      const token = KeyCloakService.GetToken() ?? "";
+      applyPreparation(prep);
+
       // Optimistic cancel: flip every tool call this HITL prompt gated from
       // "running" straight to a cancelled state, without waiting for the resume
       // round-trip (which may even crash before resolving them). Each error
       // tool_result flagged `cancelled_by_user` pairs with the dangling
-      // tool_call by call_id; a real result later would simply supersede it.
+      // tool_call by call_id; a real result later supersedes it (upsertOne
+      // matches optimistic cancellations by call_id, since their Date.now()
+      // rank can never collide with a backend rank).
+      //
+      // Deliberately AFTER prepare-execution, alongside the token preflight
+      // above: everything before this point can still fail without the backend
+      // ever hearing about the resume, and `handleHitlAnswer` puts the prompt
+      // back when it does. Showing the calls as cancelled first left the retry
+      // facing tool calls already marked cancelled by an attempt that never ran.
       if (answer === "cancel") {
         const cancelTs = new Date().toISOString();
         const rankBase = Date.now();
         (pending.payload.pending_calls ?? []).forEach((call, i) => {
           if (!call.tool_call_id) return;
+          // A result already on screen for this call — real (it arrived while
+          // the prompt sat unanswered) or optimistic (a prior cancel attempt
+          // whose stream failed after this point) — must win: inserting
+          // another Date.now()-ranked row would either shadow the real result
+          // or duplicate the cancelled one.
+          const alreadyResolved = messagesRef.current.some(
+            (x) =>
+              x.session_id === pending.session_id &&
+              x.exchange_id === pending.exchange_id &&
+              toolResultCallId(x) === call.tool_call_id,
+          );
+          if (alreadyResolved) return;
           messagesRef.current = upsertOne(messagesRef.current, {
             session_id: pending.session_id,
             exchange_id: pending.exchange_id,
@@ -856,37 +1109,6 @@ export function useChatSse(
         });
         setMessages([...messagesRef.current]);
       }
-
-      try {
-        await KeyCloakService.ensureFreshToken(30);
-      } catch (err) {
-        if (!ac.signal.aborted) {
-          onError?.(`Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
-        }
-        return;
-      }
-      if (ac.signal.aborted) {
-        return;
-      }
-      const token = KeyCloakService.GetToken() ?? "";
-
-      let prep: ExecutionPreparation;
-      try {
-        prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
-      } catch (err) {
-        if (!ac.signal.aborted) {
-          onError?.(`Could not resume this turn: ${(err as Error)?.message ?? String(err)}`);
-        }
-        return;
-      }
-      // This attempt may have been superseded (by a new send() or another
-      // sendHitlResume) while prepare-execution was in flight — don't apply
-      // a stale response's chat controls/capability URLs over the current
-      // owner's state.
-      if (ac.signal.aborted) {
-        return;
-      }
-      applyPreparation(prep);
 
       const sessionId = pending.session_id;
       // Reuse the interrupted turn's exchange_id straight from the event that
@@ -908,6 +1130,12 @@ export function useChatSse(
       const answerValue = !hasChoices && normalizedFreeText ? normalizedFreeText : answer;
 
       setWaitResponse(true);
+
+      // Only flipped once the runtime answers 2xx. A fetch rejection or a
+      // 401/502/503 means the resume never ran, so the caller must be told
+      // "not reached" and put the prompt back — the paused checkpoint is
+      // otherwise unanswerable.
+      let acceptedByRuntime = false;
 
       try {
         await streamToMessages(
@@ -939,16 +1167,34 @@ export function useChatSse(
           exchangeId,
           sessionId,
           ac.signal,
+          () => {
+            acceptedByRuntime = true;
+          },
         );
       } catch (err) {
-        if ((err as Error)?.name !== "AbortError") {
-          onError?.(`HITL resume failed: ${(err as Error).message ?? String(err)}`);
+        const status = (err as { status?: number })?.status;
+        const aborted = (err as Error)?.name === "AbortError";
+        // 409 = the runtime says this checkpoint is not waiting for a resume
+        // (already answered, or a stale interrupt_id after a reload). Restoring
+        // the prompt there produces an unanswerable card that re-409s on every
+        // attempt. An abort is the user's own choice and may land AFTER the
+        // resume was delivered, so it must not resurrect a consumed checkpoint
+        // either. Both count as reached.
+        if (status === 409 || aborted) {
+          acceptedByRuntime = true;
+        }
+        if (!aborted) {
+          onError?.(`HITL resume failed: ${(err as Error)?.message ?? String(err)}`);
         }
       } finally {
         if (!ac.signal.aborted) {
           setWaitResponse(false);
         }
       }
+      // Reached only if the runtime accepted the resume. A mid-stream failure
+      // after that point has surfaced its own error and must NOT resurrect the
+      // prompt — the checkpoint was consumed. A failure before it never ran.
+      return acceptedByRuntime;
     },
     [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, applyPreparation, i18n],
   );

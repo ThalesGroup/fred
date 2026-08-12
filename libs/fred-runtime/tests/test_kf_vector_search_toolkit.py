@@ -54,7 +54,7 @@ class _FakeAgent:
         self.runtime_context = runtime_context
         self.agent_settings: AgentSettingsLike = _FakeSettings()
 
-    def refresh_user_access_token(self) -> str:
+    async def refresh_user_access_token(self) -> str:
         return "token"
 
 

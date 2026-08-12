@@ -17,12 +17,16 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import BinaryIO, Callable
+from typing import BinaryIO
 from urllib.parse import quote
 
 import httpx
 
-from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
+from fred_runtime.common.kf_base_client import (
+    KfBaseClient,
+    KnowledgeFlowAgentContext,
+    TokenRefreshCallback,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +112,7 @@ class KfWorkspaceClient(KfBaseClient):
         agent: KnowledgeFlowAgentContext | None = None,
         *,
         access_token: str | None = None,
-        refresh_user_access_token: Callable[[], str] | None = None,
+        refresh_user_access_token: TokenRefreshCallback | None = None,
     ):
         """
         Why: keep workspace access bound to the caller's runtime identity.

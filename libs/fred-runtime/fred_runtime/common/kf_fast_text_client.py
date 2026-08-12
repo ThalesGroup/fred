@@ -18,11 +18,11 @@ import io
 import json
 import mimetypes
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 
-from fred_runtime.common.kf_base_client import KfBaseClient
+from fred_runtime.common.kf_base_client import KfBaseClient, TokenRefreshCallback
 
 
 class KfFastTextClient(KfBaseClient):
@@ -32,8 +32,8 @@ class KfFastTextClient(KfBaseClient):
         # Agent mode (unchanged):
         client = KfFastTextClient(agent=my_agent)
 
-        # Session mode (conversation/controller):
-        client = KfFastTextClient(access_token=session_access_token, refresh_user_access_token=my_refresh_fn)
+        # Session mode (conversation/controller); the refresh hook is awaited:
+        client = KfFastTextClient(access_token=session_access_token, refresh_user_access_token=my_async_refresh_fn)
     """
 
     def __init__(
@@ -41,7 +41,7 @@ class KfFastTextClient(KfBaseClient):
         agent=None,
         *,
         access_token: Optional[str] = None,
-        refresh_user_access_token: Optional[Callable[[], str]] = None,
+        refresh_user_access_token: Optional[TokenRefreshCallback] = None,
     ):
         super().__init__(
             allowed_methods=frozenset({"POST"}),

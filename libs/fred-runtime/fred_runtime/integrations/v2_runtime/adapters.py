@@ -37,6 +37,7 @@ import inspect
 import json
 import logging
 import os
+import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Protocol, TypedDict, cast
@@ -828,18 +829,26 @@ class DocumentSearchAdapter(DocumentSearchPort):
             # documents (attached files) only, never the corpus.
             include_session_scope, include_corpus_scope = True, False
 
-        hits = await self._search_client.search(
-            question=query,
-            top_k=top_k,
-            document_library_tags_ids=effective_libs,
-            document_uids=effective_uids,
-            search_policy=policy,
-            owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
-            team_id=team_id if scoped_team else None,
-            session_id=runtime_context.session_id,
-            include_session_scope=include_session_scope,
-            include_corpus_scope=include_corpus_scope,
-        )
+        try:
+            hits = await self._search_client.search(
+                question=query,
+                top_k=top_k,
+                document_library_tags_ids=effective_libs,
+                document_uids=effective_uids,
+                search_policy=policy,
+                owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
+                team_id=team_id if scoped_team else None,
+                session_id=runtime_context.session_id,
+                include_session_scope=include_session_scope,
+                include_corpus_scope=include_corpus_scope,
+            )
+        except Exception as exc:
+            # Same SDK-typed mapping the tree/summarize adapters already apply:
+            # without it a raw httpx error reaches the capability, which reads
+            # `status_code`/`timed_out` off the exception to build its message —
+            # so a 401 degraded to "the service call failed" instead of naming
+            # the status. The capability never imports the HTTP stack itself.
+            raise _wrap_document_port_error(exc) from exc
         return DocumentSearchResult(hits=tuple(hits))
 
 
@@ -971,6 +980,28 @@ class DocumentFolderAdapter(DocumentFolderPort):
         )
 
 
+_URL_IN_TEXT = re.compile(r"https?://\S+")
+_REDACTED_URL = "[redacted url]"
+
+
+def _redact_urls(text: str) -> str:
+    """Strip absolute URLs from text destined for the model or chat history.
+
+    Why it exists:
+    - downstream error strings name internal service hosts, ports and routes.
+      They travel further than a log line: `_document_tool_failure` renders them
+      into the tool result the LLM reads and the trace block that is persisted.
+
+    The placeholder is not angle-bracketed: the chat renderer treats
+    `<redacted-url>` as an unknown HTML tag and drops it, leaving what looks
+    like a truncated error.
+
+    How to use it:
+    - `detail = _redact_urls(str(exc))`
+    """
+    return _URL_IN_TEXT.sub(_REDACTED_URL, text).strip()
+
+
 def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     """
     Map an httpx transport failure onto the SDK-typed `DocumentPortCallError`
@@ -982,7 +1013,14 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     status_code = (
         exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
     )
-    detail = str(exc).strip() or type(exc).__name__
+    # `str(exc)` on an httpx error embeds the full request URL — for
+    # HTTPStatusError, "Client error '401 Unauthorized' for url
+    # 'http://knowledge-flow:8111/knowledge-flow/v1/vector/search'". This detail
+    # is rendered into the model-facing tool message AND persisted in chat
+    # history, so the internal service host, port and route would reach the LLM
+    # context and the trace of every user who triggers a downstream failure.
+    # Status and exception type carry the diagnosis without the topology.
+    detail = _redact_urls(str(exc).strip()) or type(exc).__name__
     return DocumentPortCallError(detail, timed_out=timed_out, status_code=status_code)
 
 
@@ -1339,8 +1377,8 @@ class FredWorkspaceFs(WorkspaceFsPort):
             )
         return str(aid)
 
-    def _token(self) -> str:
-        return _workspace_access_token(self._binding.runtime_context)
+    async def _token(self) -> str:
+        return await _workspace_access_token(self._binding.runtime_context)
 
     # ---- path relativization (§7.1 security rule) ----
     def _resolve(self, path: str, *, allow_root: bool = False) -> str:
@@ -1420,7 +1458,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
     async def _download(self, resolved: str, original: str) -> bytes:
         try:
             blob = await self._workspace_client.fs_download_blob(
-                resolved, self._token()
+                resolved, await self._token()
             )
         except WorkspaceRetrievalError as e:
             if e.status_code == 404:
@@ -1465,7 +1503,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
 
     async def ls(self, path: str = "") -> list[FsEntry]:
         entries = await self._workspace_client.fs_list(
-            self._resolve(path, allow_root=True), self._token()
+            self._resolve(path, allow_root=True), await self._token()
         )
         return [
             FsEntry(path=entry.path, size=entry.size, is_dir=entry.is_directory())
@@ -1473,11 +1511,13 @@ class FredWorkspaceFs(WorkspaceFsPort):
         ]
 
     async def delete(self, path: str) -> None:
-        await self._workspace_client.fs_delete(self._resolve_owned(path), self._token())
+        await self._workspace_client.fs_delete(
+            self._resolve_owned(path), await self._token()
+        )
 
     async def link_for(self, path: str) -> PublishedArtifact:
         resolved = self._resolve(path)
-        link = await self._workspace_client.fs_share(resolved, self._token())
+        link = await self._workspace_client.fs_share(resolved, await self._token())
         file_name = link.file_name or resolved.rsplit("/", 1)[-1]
         return PublishedArtifact(
             key=resolved,
@@ -1505,8 +1545,8 @@ class _VectorSearchAgentShim:
         self.runtime_context = binding.runtime_context
         self.agent_settings = settings
 
-    def refresh_user_access_token(self) -> str:
-        return _refresh_runtime_context_access_token(self.runtime_context)
+    async def refresh_user_access_token(self) -> str:
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
 class _McpRuntimeAgentShim:
@@ -1526,8 +1566,8 @@ class _McpRuntimeAgentShim:
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self.runtime_context = binding.runtime_context
 
-    def refresh_user_access_token(self) -> str:
-        return _refresh_runtime_context_access_token(self.runtime_context)
+    async def refresh_user_access_token(self) -> str:
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
 class _WorkspaceAgentShim:
@@ -1548,18 +1588,18 @@ class _WorkspaceAgentShim:
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self.runtime_context = binding.runtime_context
 
-    def refresh_user_access_token(self) -> str:
-        return _refresh_runtime_context_access_token(self.runtime_context)
+    async def refresh_user_access_token(self) -> str:
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
-def _workspace_access_token(runtime_context: RuntimeContext) -> str:
+async def _workspace_access_token(runtime_context: RuntimeContext) -> str:
     current = runtime_context.access_token
     if isinstance(current, str) and current:
         return current
-    return _refresh_runtime_context_access_token(runtime_context)
+    return await _refresh_runtime_context_access_token(runtime_context)
 
 
-def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> str:
+async def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> str:
     refresh_token = runtime_context.refresh_token
     if not refresh_token:
         raise RuntimeError(
@@ -1573,7 +1613,7 @@ def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> st
     if not client_id:
         raise RuntimeError("User security client_id is not configured for Keycloak.")
 
-    payload = refresh_user_access_token_from_keycloak(
+    payload = await refresh_user_access_token_from_keycloak(
         keycloak_url=keycloak_url,
         client_id=client_id,
         refresh_token=refresh_token,
@@ -1584,6 +1624,9 @@ def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> st
     new_refresh_token: str = (
         raw_refresh if isinstance(raw_refresh, str) and raw_refresh else refresh_token
     )
+    # Defence in depth only — `_validated_token_payload` inside the refresher
+    # already guarantees a non-empty string `access_token`, so this cannot fire
+    # today; it exists for a future caller that bypasses that validation.
     if not isinstance(new_access_token, str) or not new_access_token:
         raise RuntimeError(
             "Keycloak refresh response did not include a valid access_token."

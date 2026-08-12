@@ -81,6 +81,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // (a single, not-per-session piece of UI state) or show a toast for it.
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId;
+  // Live mirror of the rendered thread. `handleHitlAnswer`'s continuation
+  // settles after arbitrary delay and must read the CURRENT thread, not the one
+  // captured when the user answered.
+  const latestMessagesRef = useRef<ChatMessage[]>([]);
   // Whether a local context-prompt mutation has happened for the CURRENTLY
   // active session. Once true, the rehydrate effect below stops applying
   // incoming `sessionData` snapshots — a GET that resolves late (e.g. after
@@ -266,6 +270,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onError: handleChatError,
     onTurnStarted: handleTurnStarted,
   });
+  latestMessagesRef.current = messages;
 
   // Chat controls are resolved per agent instance/config, not per session — a
   // session change should keep showing the last-known controls (no composer
@@ -567,8 +572,47 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const handleHitlAnswer = useCallback(
     (answer: string | boolean | undefined, freeText?: string) => {
       if (!pendingHitl) return;
+      const prompt = pendingHitl;
       setPendingHitl(null);
-      sendHitlResume(pendingHitl, answer, freeText);
+      // Restore the prompt when the resume never reached the backend: the
+      // checkpoint is still paused, so dropping it would strand the turn with
+      // no way to answer.
+      //
+      // Whether the restore is still WANTED is derived from the thread itself,
+      // not accumulated in a counter. `sendHitlResume` also reports
+      // "not reached" when a newer interaction aborted it, and its continuation
+      // can settle arbitrarily late — but if the user has genuinely moved on,
+      // the new turn has already appended its optimistic user message under a
+      // DIFFERENT exchange_id, so the thread says so. A turn that failed before
+      // committing (write barrier, prepare-execution, the token floor) appends
+      // nothing, which is exactly when the prompt should come back.
+      //
+      // This replaced a turn-generation counter with rollbacks and ownership:
+      // three rounds of review found three holes in it (bumping on rejected
+      // sends, a bail that skipped the rollback, one rollback slot with several
+      // owners). Nothing here accumulates, so there is nothing to unwind.
+      const restoreIfStillWanted = () => {
+        if (activeSessionIdRef.current !== prompt.session_id) return;
+        const thread = latestMessagesRef.current;
+        const last = thread.length > 0 ? thread[thread.length - 1] : undefined;
+        if (last && last.exchange_id !== prompt.exchange_id) return;
+        // Functional update: a newer awaiting_human that arrived meanwhile owns
+        // the slot and must not be stomped.
+        setPendingHitl((current) => current ?? prompt);
+      };
+      void sendHitlResume(prompt, answer, freeText)
+        .then((reached) => {
+          if (reached) return;
+          restoreIfStillWanted();
+        })
+        // `pendingHitl` is already cleared, so these are the ONLY paths that can
+        // put it back — a rejection would strand the checkpoint exactly like the
+        // silent refusal this restore exists to prevent, and surface as an
+        // unhandled rejection on top.
+        .catch((err) => {
+          console.error("[useManagedChat] HITL resume rejected; restoring the prompt", err);
+          restoreIfStillWanted();
+        });
     },
     [pendingHitl, sendHitlResume],
   );

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -343,6 +344,69 @@ def test_create_agent_app_lifespan_fails_when_sql_storage_is_unreachable(
             pytest.fail(
                 "TestClient must not finish startup when SQL storage is unreachable"
             )
+
+
+def test_lifespan_shutdown_releases_every_resource_even_when_a_step_raises(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    """A raising shutdown step must not strand the resources released after it.
+
+    Shutdown used to be a bare sequence after `yield`. Two ways that lost the
+    Keycloak refresh pool — a 32-connection httpx client — with nothing logged:
+    an exception propagating out of the app skipped the whole sequence, and a
+    `container.shutdown()` failure (a hung KPI task, a broken SQL dispose)
+    skipped everything behind it. The pod is terminating either way; leaking a
+    pool because an unrelated subsystem failed is the strictly worse outcome.
+    """
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    async def _raising_shutdown(self) -> None:
+        raise RuntimeError("kpi task refused to cancel")
+
+    monkeypatch.setattr(PodApplicationContext, "shutdown", _raising_shutdown)
+
+    closed: list[str] = []
+
+    async def _record_close() -> None:
+        closed.append("keycloak")
+
+    monkeypatch.setattr(agent_app_module, "aclose_token_refresh_client", _record_close)
+
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(tmp_path),
+    )
+
+    # Not `caplog`: the lifespan's own `log_setup()` re-wires logging during
+    # startup and detaches pytest's capture handler, so records emitted at
+    # SHUTDOWN never reach `caplog.records`. Attaching to the module logger
+    # after startup is what actually observes them.
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    handler = _Capture()
+    module_logger = logging.getLogger(agent_app_module.__name__)
+    with TestClient(app):
+        module_logger.addHandler(handler)
+    module_logger.removeHandler(handler)
+
+    # The step AFTER the failing one still ran...
+    assert closed == ["keycloak"]
+    # ...and the failure was reported rather than silently absorbed, naming
+    # which step it was so a shutdown hang is diagnosable from pod logs alone.
+    assert [
+        r.levelname for r in records if "shutdown step failed" in r.getMessage()
+    ] == ["ERROR"]
+    assert "pod container" in records[0].getMessage()
+    assert records[0].exc_info is not None
 
 
 def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
