@@ -2585,6 +2585,37 @@ its own flex-row cell wraps the Tooltip's wrapper span in a `flex-shrink: 0`
 guard so a narrow column with a long filename can't crush the icon down to
 nothing. (Found live 2026-08-09.)
 
+### `DocumentWorkspace` / `ManageLabelsModal` — descriptive label management (2026-08-11)
+
+**Status:** `Functional` — pending manual visual review
+
+A document row's "more" menu offers "Manage labels": a compact dialog
+listing the document's current `DocumentMetadata.labels` as removable
+chips, plus an add field (explicit accessible name, focused on open) with
+suggestions from `listDocumentLabels`. Every add/remove applies immediately
+(no Save/Cancel) through a single canonical mutation
+(`useMutateDocumentLabelsMutation`, `PATCH /documents/{uid}/labels` with a
+JSON body) — `CorpusTreeService` and `CorpusVirtualFilesystem` stay
+read-only consumers, untouched.
+
+No character restriction on a new label: the JSON body transport carries
+any Unicode text, including `/`, `#`, `?`, `%`, and spaces, which the
+original URL-path-segment routes could not (see FILESYSTEM.md "Business
+labels"). **Open product question, still not settled:** whether labels are
+meant to be bounded technical tokens (e.g. `DAT`) or free descriptive text;
+this UI takes no position on it — see FILESYSTEM.md.
+
+**Open UX issue — shared `Dialog` duplication.** `ManageLabelsModal`
+hand-rolls the same Portal/overlay/dialog shell as the pre-existing
+`RenameModal` (same directory) instead of the shared `Dialog` molecule:
+`Dialog` is built around a confirm/cancel action pair, but every action
+here already applies immediately — there is no "confirm" step, only a
+single "Close". Reusing `Dialog` as-is would mean either a redundant second
+button or modifying `Dialog` to support a single-action mode, both out of
+scope for this increment. Revisit if a third "auto-applies, single close
+action" dialog appears — three is when a shared "no-confirm" `Dialog`
+variant pays for itself.
+
 ### `CategoryPicker` / prompt category surfaces (PROMPT-09)
 
 **Location:** `src/rework/components/shared/molecules/CategoryPicker/CategoryPicker.tsx`

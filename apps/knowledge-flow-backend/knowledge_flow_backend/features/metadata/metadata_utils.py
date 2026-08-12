@@ -67,11 +67,13 @@ def file_entry_to_metadata(entry: PullFileEntry, source_tag: str) -> DocumentMet
     )
 
 
-# === Business labels (descriptive, no access-control meaning — DOCUMENT-TAGS-RFC) ===
+# === Business labels (descriptive, no access-control meaning) ===
 #
-# Pure helpers for the label list carried on DocumentMetadata.labels. Kept pure so
-# the assignment contract (dedupe, order, trimming) is unit-testable without the
-# metadata store or ApplicationContext.
+# Pure normalization for label values. Kept pure so the contract (dedupe,
+# trimming) is unit-testable without the metadata store or ApplicationContext.
+# Assignment itself (add/remove) is no longer a Python list transform — it's
+# a row insert/delete against `document_labels`, idempotent via the table's
+# own primary key (see MetadataService.mutate_document_labels).
 
 
 def normalize_labels(labels: list[str]) -> list[str]:
@@ -84,14 +86,3 @@ def normalize_labels(labels: list[str]) -> list[str]:
             seen.add(label)
             out.append(label)
     return out
-
-
-def with_label_added(labels: list[str], label: str) -> list[str]:
-    """Return the labels with ``label`` appended (idempotent, normalized)."""
-    return normalize_labels([*labels, label])
-
-
-def with_label_removed(labels: list[str], label: str) -> list[str]:
-    """Return the labels without ``label`` (normalized; case- and space-sensitive)."""
-    target = (label or "").strip()
-    return [item for item in normalize_labels(labels) if item != target]

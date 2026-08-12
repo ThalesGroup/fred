@@ -113,6 +113,13 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.tagSizesRequest,
       }),
     }),
+    mutateDocumentLabels: build.mutation<MutateDocumentLabelsApiResponse, MutateDocumentLabelsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels`,
+        method: "PATCH",
+        body: queryArg.labelMutationRequest,
+      }),
+    }),
     addDocumentLabel: build.mutation<AddDocumentLabelApiResponse, AddDocumentLabelApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
@@ -130,6 +137,14 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     listDocumentsByLabel: build.query<ListDocumentsByLabelApiResponse, ListDocumentsByLabelApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/by-label/${queryArg.label}` }),
+    }),
+    resolveDocumentsByLabel: build.query<ResolveDocumentsByLabelApiResponse, ResolveDocumentsByLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/by-label`,
+        params: {
+          label: queryArg.label,
+        },
+      }),
     }),
     documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
@@ -1016,6 +1031,11 @@ export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiResponse =
 export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiArg = {
   tagSizesRequest: TagSizesRequest;
 };
+export type MutateDocumentLabelsApiResponse = /** status 200 Successful Response */ string[];
+export type MutateDocumentLabelsApiArg = {
+  documentUid: string;
+  labelMutationRequest: LabelMutationRequest;
+};
 export type AddDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
 export type AddDocumentLabelApiArg = {
   documentUid: string;
@@ -1030,6 +1050,10 @@ export type ListDocumentLabelsApiResponse = /** status 200 Successful Response *
 export type ListDocumentLabelsApiArg = void;
 export type ListDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type ListDocumentsByLabelApiArg = {
+  label: string;
+};
+export type ResolveDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
+export type ResolveDocumentsByLabelApiArg = {
   label: string;
 };
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
@@ -1879,6 +1903,12 @@ export type TagSizesRequest = {
   /** Library tag identifiers to total */
   tag_ids: string[];
 };
+export type LabelMutationRequest = {
+  /** Labels to add. */
+  add?: string[];
+  /** Labels to remove. Wins over `add` when the same value appears in both. */
+  remove?: string[];
+};
 export type VectorChunk = {
   /** Unique identifier of the chunk */
   chunk_uid: string;
@@ -2120,6 +2150,8 @@ export type DocumentTreeRequest = {
   working_directory?: string | null;
   /** Restrict the listing to these folder tag ids (and their descendants), when set. */
   tag_ids?: string[] | null;
+  /** Restrict the leaves to documents carrying any of these descriptive business labels (orthogonal to folder tags — see FILESYSTEM.md 'Business labels vs. scope tags'; several labels are OR'd together). Unlike an empty tag_ids narrowing, a label filter also prunes branches left with no matching document, keeping only the ancestors needed to reach a branch that still has one — the response is meant to help locate matches, not enumerate every folder. */
+  labels?: string[] | null;
   /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
   max_chars?: number;
   /** Filter by ownership: 'personal' for user-owned folders, 'team' for team-owned folders. */
@@ -2511,12 +2543,15 @@ export const {
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
+  useMutateDocumentLabelsMutation,
   useAddDocumentLabelMutation,
   useRemoveDocumentLabelMutation,
   useListDocumentLabelsQuery,
   useLazyListDocumentLabelsQuery,
   useListDocumentsByLabelQuery,
   useLazyListDocumentsByLabelQuery,
+  useResolveDocumentsByLabelQuery,
+  useLazyResolveDocumentsByLabelQuery,
   useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,

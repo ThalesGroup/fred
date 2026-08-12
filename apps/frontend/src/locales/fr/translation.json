@@ -1532,6 +1532,7 @@
         "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
+        "manageLabels": "Gérer les labels",
         "more": "Plus d'actions",
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
@@ -1585,6 +1586,16 @@
         "nameLabel": "Nom",
         "save": "Enregistrer",
         "error": "Impossible de renommer"
+      },
+      "labelsModal": {
+        "title": "Gérer les labels",
+        "currentEmpty": "Aucun label pour l'instant",
+        "addPlaceholder": "Ajouter un label…",
+        "add": "Ajouter",
+        "createNew": "Créer le label",
+        "addFieldLabel": "Ajouter un label",
+        "removeAriaLabel": "Retirer le label « {{label}} »",
+        "close": "Fermer"
       },
       "loading": "Chargement des ressources...",
       "preview": {

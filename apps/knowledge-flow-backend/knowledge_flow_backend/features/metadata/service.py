@@ -15,7 +15,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID
 
 from fred_core import (
@@ -45,7 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
-from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels, with_label_added, with_label_removed
+from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     TABULAR_MULTI_EXTENSION_KEY,
@@ -818,48 +818,113 @@ class MetadataService:
             logger.error(f"Error updating title for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update title: {e}")
 
-    # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ====================
+    # === Business labels (descriptive) =========================================
     # Labels carry NO scope/permission meaning, so there is no ReBAC check on the
     # label itself; only the DOCUMENT's update/read access is enforced (you may
-    # label documents you can already edit, and resolve over documents you can read).
+    # label documents you can already edit, and resolve over documents you can
+    # read). `document_labels` is the sole persisted source of truth (see
+    # PostgresDocumentMetadataStore) — this is the ONLY method that mutates it;
+    # every route (old path-segment and new PATCH body) calls through here.
 
-    async def _mutate_document_labels(self, user: KeycloakUser, document_uid: str, transform: Callable[[list[str]], list[str]], modified_by: str) -> list[str]:
-        """Fetch a document, apply ``transform`` to its labels, persist, and return them."""
+    async def mutate_document_labels(
+        self,
+        user: KeycloakUser,
+        document_uid: str,
+        *,
+        add: list[str] | None = None,
+        remove: list[str] | None = None,
+        modified_by: str,
+    ) -> list[str]:
+        """Add and/or remove descriptive labels on one document in a single
+        transaction. Returns the canonical stored set (never client-computed).
+
+        A value present in both `add` and `remove` ends up absent: `remove`
+        wins on conflict. Normalization (trim, drop empty, dedupe) is the same
+        `normalize_labels` contract used everywhere else. An empty request
+        (nothing to add or remove, after normalization) is a no-op that still
+        returns the current stored set — idempotent, not an error.
+        """
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
 
-        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
-        if not metadata:
-            raise MetadataNotFound(f"Document '{document_uid}' not found.")
+        to_remove = set(normalize_labels(remove or []))
+        to_add = set(normalize_labels(add or [])) - to_remove
 
-        metadata.labels = transform(metadata.labels)
-        metadata.identity.modified = datetime.now(timezone.utc)
-        metadata.identity.last_modified_by = modified_by
-        await self.metadata_store.save_metadata(metadata)
-        logger.info(f"[METADATA] Labels {metadata.labels} on document '{document_uid}' by '{modified_by}'")
-        return metadata.labels
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        sessions = make_session_factory(engine)
+        async with sessions() as s:
+            async with s.begin():
+                exists = await self.metadata_store.get_metadata_by_uid(document_uid, session=s)
+                if exists is None:
+                    raise MetadataNotFound(f"Document '{document_uid}' not found.")
+                for label in to_add:
+                    await self.metadata_store.add_label(document_uid, label, session=s)
+                for label in to_remove:
+                    await self.metadata_store.remove_label(document_uid, label, session=s)
+                # A genuinely empty request (nothing to add/remove after
+                # normalization) is a no-op that must not touch the audit
+                # trail; a requested add/remove does, even when it turns out
+                # to be idempotent (label already present/absent) — matching
+                # the pre-relational-table behavior on `identity.modified`/
+                # `last_modified_by`.
+                if to_add or to_remove:
+                    await self.metadata_store.touch_label_mutation_audit_fields(
+                        document_uid,
+                        modified=datetime.now(timezone.utc),
+                        modified_by=modified_by,
+                        session=s,
+                    )
+                labels = await self.metadata_store.get_labels_for_document(document_uid, session=s)
+
+        if to_add or to_remove:
+            logger.info(f"[METADATA] Labels add={sorted(to_add)} remove={sorted(to_remove)} on document '{document_uid}' by '{modified_by}'")
+        return labels
 
     async def add_label_to_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
-        """Add a descriptive label to a document (idempotent). Returns the stored set."""
-        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_added(labels, label), modified_by)
+        """Legacy single-label adapter (`POST /documents/{uid}/labels/{label}`).
+        Returns the stored set."""
+        return await self.mutate_document_labels(user, document_uid, add=[label], modified_by=modified_by)
 
     async def remove_label_from_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
-        """Remove a descriptive label from a document. Returns the stored set."""
-        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_removed(labels, label), modified_by)
+        """Legacy single-label adapter (`DELETE /documents/{uid}/labels/{label}`).
+        Returns the stored set."""
+        return await self.mutate_document_labels(user, document_uid, remove=[label], modified_by=modified_by)
 
     async def get_documents_with_label(self, user: KeycloakUser, label: str) -> list[DocumentMetadata]:
-        """Resolve a label to the readable documents carrying it (search resolve-then-target)."""
+        """Resolve a label to the readable documents carrying it — an indexed
+        lookup narrowed to the caller's authorized documents, not a full-corpus
+        scan filtered in Python."""
         target = (label or "").strip()
         if not target:
             return []
-        docs = await self.get_documents_metadata(user, {})
-        return [doc for doc in docs if target in (doc.labels or [])]
+
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            uids = await self.metadata_store.get_document_uids_with_label(target)
+        else:
+            authorized_ids = {d.id for d in authorized_doc_ref}
+            if not authorized_ids:
+                return []
+            uids = await self.metadata_store.get_document_uids_with_label(target, document_uids=authorized_ids)
+
+        if not uids:
+            return []
+        return await self.metadata_store.get_metadata_by_uids(uids)
 
     async def list_document_labels(self, user: KeycloakUser) -> list[str]:
-        """Return the distinct labels used across the user's readable documents (UI vocabulary)."""
-        docs = await self.get_documents_metadata(user, {})
-        return normalize_labels([label for doc in docs for label in (doc.labels or [])])
+        """Return the distinct labels used across the user's readable documents
+        (UI vocabulary) — an indexed distinct query narrowed to the caller's
+        authorized documents, never revealing a label used only on documents
+        the caller cannot read."""
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return await self.metadata_store.get_distinct_labels()
+
+        authorized_ids = {d.id for d in authorized_doc_ref}
+        if not authorized_ids:
+            return []
+        return await self.metadata_store.get_distinct_labels(document_uids=authorized_ids)
 
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
@@ -951,7 +1016,16 @@ class MetadataService:
                     exc,
                 )
 
-            # Save the metadata first
+            # `metadata.labels` is never written into `doc` (see
+            # PostgresDocumentMetadataStore._to_dict) and this generic save
+            # never touches `document_labels` either — `mutate_document_labels`
+            # is the ONLY label mutation path (see its docstring). A caller
+            # holding a stale in-memory snapshot whose `.labels` no longer
+            # matches the table (e.g. a long-running revectorize activity that
+            # loaded a document before a label was removed from it) must not
+            # be able to reintroduce, drop, or otherwise affect a label by
+            # calling this method — that was the exact lost-update path this
+            # single-mutator invariant closes.
             if update_only:
                 if not await self.metadata_store.update_metadata(metadata):
                     logger.info(
