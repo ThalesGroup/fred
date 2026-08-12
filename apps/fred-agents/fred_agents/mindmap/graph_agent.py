@@ -61,6 +61,11 @@ class MindmapGraphAgent(GraphAgent):
         "knowledge-flow",
     )
 
+    # Filesystem is a functional dependency here (unlike general/deep assistant,
+    # which dropped it — #2334): the graph steps read picker-selected documents
+    # via bounded `read_file_page` calls, code-driven rather than LLM-steered.
+    # Still subject to the /fs team-scoping gap (AGENT-FILESYSTEM-HARDENING-RFC
+    # F1) until the runtime principal lands; admission remains admin-gated.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
