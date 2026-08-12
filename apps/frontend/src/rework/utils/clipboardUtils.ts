@@ -30,6 +30,8 @@
  */
 
 const IGNORE_ATTR = "data-clipboard-ignore";
+const DIAGRAM_LABEL_ATTR = "data-clipboard-diagram-label";
+const KATEX_CLASS = "katex";
 const NEUTRAL_BORDER = "#cccccc";
 const HEADING_SIZE_PT: Record<string, number> = { h1: 13, h2: 13, h3: 12, h4: 11, h5: 11, h6: 11 };
 
@@ -48,9 +50,40 @@ function isDiagramNode(el: Element): boolean {
   return tag === "SVG" || tag === "CANVAS";
 }
 
-function diagramPlaceholder(el: Element): string {
-  const label = el.getAttribute("aria-label") || el.querySelector("title")?.textContent;
+/**
+ * A diagram's label, or null if this node isn't a diagram root.
+ *
+ * Prefers the explicit `data-clipboard-diagram-label` a component sets on its
+ * own rendered-output wrapper — this is how Mermaid/MindMap mark their chart
+ * container without the serialiser caring whether that container happens to
+ * be an <svg> or a <canvas> internally (that detail is a rendering-library
+ * choice, not a stable contract). Bare <svg>/<canvas> without the attribute
+ * still degrade to a placeholder as a generic fallback.
+ */
+function diagramLabel(el: Element): string | null {
+  const explicit = el.getAttribute(DIAGRAM_LABEL_ATTR);
+  if (explicit !== null) return explicit;
+  if (isDiagramNode(el)) return el.getAttribute("aria-label") || el.querySelector("title")?.textContent || "";
+  return null;
+}
+
+function diagramPlaceholder(label: string): string {
   return label ? `[diagram: ${label}]` : "[diagram]";
+}
+
+/**
+ * KaTeX (MarkdownRenderer runs it with `output: "html"`) renders only the
+ * visually-positioned glyph tree, never the MathML annotation that would
+ * carry the original TeX source — and rehype-sanitize's schema has no MathML
+ * tags whitelisted even where it does. Flattening that visual tree's
+ * textContent silently drops structure ("E = mc^2" -> "E=mc2"), so instead of
+ * guessing, a formula degrades to an honest placeholder. Recovering the real
+ * TeX source would mean switching to `output: "htmlAndMathml"` and extending
+ * MarkdownRenderer's sanitizeSchema for MathML — a separate, riskier change
+ * to a shared rendering component, not a clipboard-only fix.
+ */
+function isKatexFormula(el: Element): boolean {
+  return el.classList.contains(KATEX_CLASS);
 }
 
 /** SyntaxHighlighter nests one <span> per token; textContent flattens them back to source. */
@@ -121,7 +154,9 @@ function renderNodeHtml(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.textContent ?? "");
   if (!isElement(node)) return "";
   if (isIgnored(node)) return "";
-  if (isDiagramNode(node)) return escapeHtml(diagramPlaceholder(node));
+  if (isKatexFormula(node)) return escapeHtml("[formula]");
+  const label = diagramLabel(node);
+  if (label !== null) return escapeHtml(diagramPlaceholder(label));
 
   const tag = node.tagName.toLowerCase();
   switch (tag) {
@@ -218,7 +253,16 @@ function tableToTsv(table: Element): string {
     .map((row) =>
       Array.from(row.children)
         .filter((c) => c.tagName === "TH" || c.tagName === "TD")
-        .map((cell) => (cell.textContent ?? "").trim().replace(/\t/g, " "))
+        .map((cell) =>
+          // Route through the same node walker as everything else — a raw
+          // cell.textContent would bypass the KaTeX/diagram/ignore handling
+          // and leak garbled formula glyphs into the TSV, e.g. inside a table
+          // of "Function | Derivative | Integral". A cell's content is also
+          // collapsed to one line: a TSV field can't carry embedded newlines
+          // (e.g. from a <p> or <br> inside the cell) without breaking Excel's
+          // row boundaries.
+          renderChildrenPlain(cell, 0).replace(/\s+/g, " ").trim().replace(/\t/g, " "),
+        )
         .join("\t"),
     )
     .join("\n");
@@ -236,7 +280,9 @@ function renderNodePlain(node: Node, indent: number): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (!isElement(node)) return "";
   if (isIgnored(node)) return "";
-  if (isDiagramNode(node)) return diagramPlaceholder(node);
+  if (isKatexFormula(node)) return "[formula]";
+  const label = diagramLabel(node);
+  if (label !== null) return diagramPlaceholder(label);
 
   const tag = node.tagName.toLowerCase();
   switch (tag) {

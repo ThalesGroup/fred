@@ -100,11 +100,35 @@ describe("toEmailHtml", () => {
     expect(html).toContain("keep");
   });
 
-  it("replaces an SVG diagram with a bracketed alt-text placeholder", () => {
+  it("replaces a bare SVG/canvas diagram with a bracketed alt-text placeholder", () => {
     const withLabel = toEmailHtml(fragment('<svg aria-label="authentication flow"></svg>'));
     expect(withLabel).toBe("[diagram: authentication flow]");
     const withoutLabel = toEmailHtml(fragment("<svg></svg>"));
     expect(withoutLabel).toBe("[diagram]");
+  });
+
+  it("replaces a data-clipboard-diagram-label subtree regardless of its internal markup", () => {
+    // Mirrors Mermaid/MindMap: neither an <svg> nor a <canvas> at the root,
+    // arbitrary chrome inside — the explicit label attribute must still win
+    // over whatever the rendering library put in the DOM.
+    const html = toEmailHtml(
+      fragment('<div data-clipboard-diagram-label="Mermaid diagram"><svg><g><text>internal</text></g></svg></div>'),
+    );
+    expect(html).toBe("[diagram: Mermaid diagram]");
+    expect(html).not.toContain("internal");
+  });
+
+  it("degrades a KaTeX formula to a placeholder instead of concatenating its glyph spans", () => {
+    // output:"html" KaTeX renders only positioned glyph spans, no TeX source
+    // annotation — flattening textContent would silently mangle the formula
+    // (e.g. "E = mc^2" -> "E=mc2"), so it must never leak raw text at all.
+    const html = toEmailHtml(
+      fragment(
+        '<span class="katex"><span class="katex-html"><span class="mord">E</span><span class="mrel">=</span><span class="mord">mc</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist"><span><span class="pstrut"></span><span class="mord">2</span></span></span></span></span></span></span></span>',
+      ),
+    );
+    expect(html).toBe("[formula]");
+    expect(html).not.toMatch(/mc2|E=mc/);
   });
 
   it("returns empty string for an empty or whitespace-only fragment", () => {
@@ -133,6 +157,17 @@ describe("toPlainText", () => {
     expect(text.split("\n")).toEqual(["Name\tAge", "Alice\t30"]);
   });
 
+  it("degrades a KaTeX formula inside a table cell instead of leaking its glyph spans into the TSV", () => {
+    const text = toPlainText(
+      fragment(
+        "<table><tr><th>Function</th><th>Derivative</th></tr>" +
+          '<tr><td><span class="katex"><span class="katex-html"><span class="mord">x</span></span></span></td>' +
+          "<td>plain</td></tr></table>",
+      ),
+    );
+    expect(text.split("\n")).toEqual(["Function\tDerivative", "[formula]\tplain"]);
+  });
+
   it("collapses a link to its URL when the label duplicates it, else 'label (url)'", () => {
     const text = toPlainText(
       fragment('<a href="https://example.com">https://example.com</a> and <a href="https://x.com">click here</a>'),
@@ -150,6 +185,16 @@ describe("toPlainText", () => {
   it("collapses runs of 3+ blank lines to one", () => {
     const text = toPlainText(fragment("<p>a</p><p></p><p></p><p>b</p>"));
     expect(text).not.toMatch(/\n{3,}/);
+  });
+
+  it("replaces a labelled diagram subtree and a KaTeX formula the same way as toEmailHtml", () => {
+    const diagram = toPlainText(fragment('<div data-clipboard-diagram-label="Roadmap"><canvas></canvas></div>'));
+    expect(diagram).toBe("[diagram: Roadmap]");
+
+    const formula = toPlainText(
+      fragment('<span class="katex"><span class="katex-html"><span class="mord">mc2</span></span></span>'),
+    );
+    expect(formula).toBe("[formula]");
   });
 });
 
