@@ -61,7 +61,7 @@ call in an unbounded thread pool.
     `agent.tool_latency_ms` produces series carrying only
     `actor_type`/`status`/`tool_name` — the dim is absent. The counter emitted
     in the same run *does* carry it, because its first sample did. This is the
-    evidence for §8.48 item 1.
+    evidence for §8.51 item 1.
   - **The event loop stays free.** A ticker advanced **172 times** during a live
     Keycloak round trip.
   - **Every legal hook shape resolves** through `resolve_refresh_result`:
@@ -81,7 +81,7 @@ call in an unbounded thread pool.
   streams) remains structurally unrunnable, and the shutdown `finally`'s
   *raising-step* branch is unit-test-only — a clean shutdown exercises the path
   but cannot distinguish it from the pre-change sequence.
-- **2026-08-10:** final state after the review cycle (§8.48). Two mechanisms
+- **2026-08-10:** final state after the review cycle (§8.51). Two mechanisms
   that repeatedly regressed were replaced rather than patched: the refresh-hook
   contract is now enforced on the awaited *result* (`resolve_refresh_result` —
   no static shape check can classify every legal `Callable[[], Awaitable[str]]`),
@@ -95,7 +95,7 @@ call in an unbounded thread pool.
   cleared-session fail-open on the frontend (`isTokenExpired` throws a bare
   string after keycloak-js `clearToken()`; `GetTokenSecondsLeft` reported the
   dead session as unconstrained; `GetToken` resurrected the persisted bearer —
-  see §8.47's dated addendum), three malformed-response gaps in the refresher
+  see §8.50's dated addendum), three malformed-response gaps in the refresher
   (explicit `expires_in: null` conflated with absent, negative lifetimes
   accepted, a non-string `error` value raising `TypeError` past the
   `RuntimeError` normalization), and two doc paragraphs still describing the
@@ -114,7 +114,7 @@ call in an unbounded thread pool.
 ## Resolution evidence
 
 Resolved 2026-08-07. Contract record:
-[`RUNTIME-EXECUTION-CONTRACT.md` §8.45](../../../design/RUNTIME-EXECUTION-CONTRACT.md).
+[`RUNTIME-EXECUTION-CONTRACT.md` §8.48](../../../design/RUNTIME-EXECUTION-CONTRACT.md).
 
 `refresh_user_access_token_from_keycloak` is now `async def`, backed by a
 per-event-loop `httpx.AsyncClient` with bounded connection limits, coalescing
@@ -215,7 +215,7 @@ Exposure window, from the deployment's own config: `accessTokenLifespan` is
 **300 s** in the docker and k3d realm templates (`fred-deployment-factory`).
 At the time of the incident the frontend refreshed a turn only below **30 s**
 remaining, so a turn could begin with as little as 30 seconds of token life;
-§8.47 raised that to **120 s** and now refuses to start a turn whose refresh
+§8.50 raised that to **120 s** and now refuses to start a turn whose refresh
 failed with under 30 s left, so the routine floor is 120 s and the 30 s case
 survives only on the degraded path (refresh failed, ≥ 30 s still remaining).
 
@@ -241,7 +241,7 @@ sign-off, so this change does not attempt it.
 What *is* fixed here is the blast radius and the entry window, via the two
 no-RFC mitigations
 ([`RUNTIME-EXECUTION-CONTRACT.md`](../../../design/RUNTIME-EXECUTION-CONTRACT.md)
-§8.46 and §8.47): `search_documents_using_vectorization` no longer kills the
+§8.49 and §8.50): `search_documents_using_vectorization` no longer kills the
 turn on a downstream failure, and the chat send path preflights 120 s of token
 headroom and refuses to start a turn whose refresh failed over a nearly-dead
 token, instead of silently launching it.

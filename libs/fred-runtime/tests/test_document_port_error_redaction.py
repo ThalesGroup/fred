@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""`_wrap_document_port_error` must not leak service topology (§8.46).
+"""`_wrap_document_port_error` must not leak service topology (§8.49).
 
 Why this file exists: the redaction shipped with no coverage at all. Disabling
 it (`return text.strip()`) left the whole 869-case suite green, so nothing

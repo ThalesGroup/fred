@@ -641,7 +641,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   });
 
   it("a token below the floor at the wire is refreshed once, and the turn proceeds when that clears it", async () => {
-    // This is the case the degraded band (§8.47) exists for: on a realm whose
+    // This is the case the degraded band (§8.50) exists for: on a realm whose
     // access tokens live under TURN_TOKEN_MIN_VALIDITY_S the preflight can
     // NEVER reach its target, so it proceeds degraded by design — and a
     // refuse-only gate at the wire would hard-fail exactly those realms.
@@ -670,7 +670,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  // ── Turn-start token preflight (§8.47) ───────────────────────────────────
+  // ── Turn-start token preflight (§8.50) ───────────────────────────────────
   //
   // `ensureFreshToken` RESOLVES false on a failed refresh rather than
   // rejecting, so these are the branches that actually run in production; the

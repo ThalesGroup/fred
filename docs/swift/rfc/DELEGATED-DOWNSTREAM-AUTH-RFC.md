@@ -5,7 +5,7 @@
 **ID:** AUTH-TX
 **Area:** `fred-runtime` (`agent_app.py` admission, `runtime_support/`), `fred-core` (`security/oidc.py` — read-only dependency), `fred-deployment-factory` (Keycloak realm templates, gcp-c1 provisioning) — **multi-repo**
 **Related:**
-- `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.45 (async singleflight refresh — the prerequisite this RFC builds on), §8.46 (tool-failure degradation), §8.47 (frontend turn-start token preflight), §0.2 invariants #2/#3/#8
+- `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8.48 (async singleflight refresh — the prerequisite this RFC builds on), §8.49 (tool-failure degradation), §8.50 (frontend turn-start token preflight), §0.2 invariants #2/#3/#8
 - `docs/swift/reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md` — incident evidence and commit archaeology
 - Incidents: [#1948](https://github.com/ThalesGroup/fred/issues/1948) (KEA prod, closed not-planned), [#1951](https://github.com/ThalesGroup/fred/issues/1951), [#2073](https://github.com/ThalesGroup/fred/issues/2073) Item 3 (reproduced live 2026-07-23) — all closed without a fix; no open issue tracks the defect
 - Issue #2125 (TURN-07) — made the refresh path async/coalesced/bounded; explicitly did **not** restore delegated refresh (this RFC is that follow-up)
@@ -32,7 +32,7 @@ calls"). The pod has no way to renew it mid-turn:
 
 Exposure window: `accessTokenLifespan` is **300 s** in the docker/k3d realm
 templates; the frontend refreshes only below a threshold at turn start
-(**120 s** since #2125's §8.47 hardening; 30 s before it), and there is **no
+(**120 s** since #2125's §8.50 hardening; 30 s before it), and there is **no
 whole-turn timeout** — one `summarize_read` call alone is allowed 300 s. A turn
 can therefore outlive its bearer. Reproduced live (#2073 Item 3, session
 `5fef7a4a-…`, 2026-07-23): repeated 401s over ~40 s, surfaced to the user.
@@ -77,7 +77,7 @@ Mechanics (all shapes proven by #2125's shipped machinery):
   total budget via `asyncio.wait_for`, coalescing keyed on a SHA-256 digest of
   the subject token (never the raw token as a key), dedicated
   `auth.token_exchange_latency_ms` KPI with `status=ok|error|timeout` (the
-  `phase`-dim pitfall and the raise-outside-the-timer pattern from §8.45 apply
+  `phase`-dim pitfall and the raise-outside-the-timer pattern from §8.48 apply
   verbatim).
 - **Cache** exchanged tokens per subject-token digest, TTL =
   `min(exchanged_exp, subject_exp)` minus a floor (don't serve a cached token
@@ -196,7 +196,7 @@ Checked in `fred` and `fred-deployment-factory` on 2026-08-07:
    matter.** Keycloak invalidates the presented refresh token when it issues
    the replacement, so any exchange that times out or loses its response can
    leave the rotation applied server-side while the pod holds only the now-dead
-   original. §8.45 no longer *adds* to this race — the total deadline moved
+   original. §8.48 no longer *adds* to this race — the total deadline moved
    inside the exchange task, so there is no longer a shielded refresh whose
    late payload gets discarded — but the underlying lost-response window is
    inherent to the protocol and cannot be closed client-side. Today it is
@@ -219,7 +219,7 @@ Checked in `fred` and `fred-deployment-factory` on 2026-08-07:
   lifespan on `agentic` (docker + k3d templates); kcadm equivalents in the
   gcp-c1 provision job; configmap block for environments that enable it.
   Factory has no CI — the cross-repo contract review (R6) is the only gate.
-- Frontend: none (the §8.47 preflight remains as defense in depth).
+- Frontend: none (the §8.50 preflight remains as defense in depth).
 - Rollout: land fred half disabled-by-default first or factory half first —
   either order is safe by construction.
 

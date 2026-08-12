@@ -90,7 +90,7 @@ class _LoopState:
     Replica scope (§0.2 invariant #7): **pod-local**, so coalescing holds
     within one pod only — two replicas refreshing one identity still issue two
     Keycloak round trips. Rationale for accepting that:
-    RUNTIME-EXECUTION-CONTRACT.md §8.45.
+    RUNTIME-EXECUTION-CONTRACT.md §8.48.
     """
 
     client: httpx.AsyncClient

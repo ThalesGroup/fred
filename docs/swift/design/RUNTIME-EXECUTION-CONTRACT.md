@@ -346,7 +346,7 @@ Every implementation and review must preserve these invariants:
 | Turn resource budgets | **Gap (P1)** — 500-message model window, no default tool-call cap, unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md) |
 | SSE/history lifecycle | **Needs load evidence (P2)** — full payload buffering and unbounded fire-and-forget persistence tasks | [TURN-05](../reviews/performance/2026-07-26-agent-turn-core/TURN-05-sse-buffering-and-history-backpressure.md) |
 | Pod/SQL admission | **Needs load evidence (P1)** — Uvicorn limit unset; shared async SQL pool defaults to 15 maximum connections | [TURN-06](../reviews/performance/2026-07-26-agent-turn-core/TURN-06-admission-and-sql-capacity.md) |
-| Token refresh | **Fixed offline 2026-08-07** — the refresh is async, coalesced and bounded; the synchronous helper was removed (§8.45). The pod-level forced-expiry proof is still owed and cannot run until delegated refresh is reachable again | [TURN-07](../reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md) |
+| Token refresh | **Fixed offline 2026-08-07** — the refresh is async, coalesced and bounded; the synchronous helper was removed (§8.48). The pod-level forced-expiry proof is still owed and cannot run until delegated refresh is reachable again | [TURN-07](../reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md) |
 | Runtime construction | **Needs load evidence (P2)** — runtime/executor/ReAct compilation repeats per turn | [TURN-08](../reviews/performance/2026-07-26-agent-turn-core/TURN-08-per-turn-runtime-rebuild.md) |
 
 The call-budget estimate and P1/P2 labels above are review findings, not measured
@@ -2499,7 +2499,7 @@ the `folder:` form. Regression tests:
 `test_tree_builder.py`, `test_capability_document_summarize.py`,
 `traceUtils.test.ts`.
 
-### 8.45 ✅ Keycloak user-token refresh is async and coalesced (TURN-07, issue #2125, 2026-08-07)
+### 8.48 ✅ Keycloak user-token refresh is async and coalesced (TURN-07, issue #2125, 2026-08-07)
 
 > **Scope of the ✅:** every acceptance criterion is met offline except the
 > delayed-Keycloak, two-SSE-stream pod test. That one is not merely unrun — it
@@ -2586,7 +2586,7 @@ neutralizes body-supplied refresh tokens deliberately, and giving a pod a user's
 long-lived refresh token is a security decision, not a bug fix. The design for
 closing the root cause is `docs/swift/rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md`
 (token exchange at admission) — written, not implemented, awaiting its own
-issue. §8.46 and §8.47 record the two no-RFC mitigations landed alongside this
+issue. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
 change.
 
 **Contract-visible signature changes** (all internal to `fred-runtime`; the
@@ -2713,9 +2713,9 @@ but it exercises the refresher directly, not a pod serving concurrent SSE
 turns. The pod-level forced-expiry scenario (`WORKING-PROTOCOL.md` §6) needs a
 live stack and is not reachable from `make test`; it remains owed.
 
-### 8.46 ✅ `search_documents_using_vectorization` degrades instead of killing the turn (2026-08-07)
+### 8.49 ✅ `search_documents_using_vectorization` degrades instead of killing the turn (2026-08-07)
 
-**Companion to §8.45, and the only part of the expired-token exposure fixable
+**Companion to §8.48, and the only part of the expired-token exposure fixable
 without an RFC.** Three tools in `document_access` handled an identical
 downstream failure three different ways. `list_document_tree` and
 `summarize_document` caught it and returned an `is_error=True` artifact via the
@@ -2734,7 +2734,7 @@ that MCP tools survived (degraded) took the turn down through this tool.
 **Now**: the `port.search(...)` call is wrapped like its siblings, returning
 `_document_tool_failure(...)` so the model sees an actionable error and can
 recover or explain, and the trace carries a populated `is_error` row. This does
-not fix the token expiry itself — §8.45 explains why that needs an RFC — it
+not fix the token expiry itself — §8.48 explains why that needs an RFC — it
 bounds the blast radius from "turn dies" to "one tool call failed", for this and
 every other Knowledge Flow failure mode.
 
@@ -2775,16 +2775,16 @@ Regression tests: `test_search_tool_failure_returns_is_error_result` and
 (`test_tool_observability_middleware.py`). Each fails against its pre-change
 implementation.
 
-### 8.47 ✅ Chat turn-start token preflight: more headroom, no doomed sends (2026-08-07)
+### 8.50 ✅ Chat turn-start token preflight: more headroom, no doomed sends (2026-08-07)
 
-**Frontend companion to §8.45/§8.46 — the last no-RFC-needed piece of the
+**Frontend companion to §8.48/§8.49 — the last no-RFC-needed piece of the
 expired-token exposure.** Two defects in the send path compounded the mid-turn
 expiry window:
 
 1. Turns preflighted with `ensureFreshToken(30)` — the same 30 s threshold as
    ordinary fetches — so a turn could *begin* with 30 seconds of bearer life
    while the pod forwards that bearer for the whole turn with no mid-turn
-   renewal (§8.45).
+   renewal (§8.48).
 2. `ensureFreshToken` resolves `false` on refresh failure/timeout instead of
    rejecting, so the `try/catch` around it in `useChatSse.ts` was dead code and
    the boolean was discarded: a silently failed refresh removed even the 30 s
@@ -2887,9 +2887,9 @@ same exchange). Each fails against its pre-change implementation.
 
 ---
 
-### 8.48 ✅ Tool-KPI label discipline, complete pod shutdown, wire-time token rescue (§8.45–§8.47 follow-up, 2026-08-10)
+### 8.51 ✅ Tool-KPI label discipline, complete pod shutdown, wire-time token rescue (§8.48–§8.50 follow-up, 2026-08-10)
 
-**Three corrections landed with the §8.45–§8.47 change. The first two share
+**Three corrections landed with the §8.48–§8.50 change. The first two share
 one shape: a mechanism that looked correct in the source and did nothing at
 runtime.**
 
@@ -2903,7 +2903,7 @@ runtime.**
    dashboard to say so. They are removed from the timer rather than back-filled
    on the success path: the failure taxonomy already lives on
    `agent.tool_failed_total` (a counter, labelled identically on the raised and
-   the handled-failure branch, per §8.46), and `agent.tool_latency_ms` is a
+   the handled-failure branch, per §8.49), and `agent.tool_latency_ms` is a
    histogram whose bucket series would be multiplied by error-code cardinality
    for a question — "latency by error code" — nobody asks. `status` alone
    answers the one that is asked, and `_TimerImpl.__exit__` sets it on every
@@ -2927,7 +2927,7 @@ runtime.**
 3. **The wire-time token gate refreshes once before refusing.**
    `verifyTokenStillUsable` (`useChatSse.ts`) re-checks the hard floor after
    the unbounded pre-stream awaits, and used to refuse outright below it. That
-   made the degraded band of §8.47 unreachable on the realms it was built for:
+   made the degraded band of §8.50 unreachable on the realms it was built for:
    where access tokens live under `TURN_TOKEN_MIN_VALIDITY_S` (120 s) the
    turn-start preflight can *never* reach its target, so it proceeds degraded
    by design — and a refuse-only gate then hard-failed every turn whose
@@ -2957,7 +2957,7 @@ Regression tests: `test_awrap_tool_call_is_error_artifact_marks_failed`
 (`test_agent_app.py`), plus
 `test_client_closed_under_an_inflight_exchange_is_reported_as_shutdown` and
 `test_unexpected_runtime_error_is_not_reported_as_an_orderly_shutdown`
-(`test_user_token_refresher.py`), which pin §8.45's closed-client branch
+(`test_user_token_refresher.py`), which pin §8.48's closed-client branch
 against httpx's own wording by closing a real client rather than hand-building
 the exception; and, for the gate, `useChatSse.test.tsx`'s pair — a token under
 the floor that the rescue refresh clears (turn proceeds, second refresh asks

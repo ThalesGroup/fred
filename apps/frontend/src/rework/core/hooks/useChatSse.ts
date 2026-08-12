@@ -60,7 +60,7 @@ function canonicalizeRuntimeTeamId(teamId: string): string {
 // ── Turn-start token preflight ────────────────────────────────────────────────
 // The runtime pod forwards this turn's bearer to Knowledge Flow for the WHOLE
 // turn and has no mid-turn refresh (#2073 Item 3, RUNTIME-EXECUTION-CONTRACT
-// §8.45): a turn that starts with seconds of token life dies mid-stream. So a
+// §8.48): a turn that starts with seconds of token life dies mid-stream. So a
 // turn asks for more headroom than the 30 s used for ordinary fetches, and a
 // FAILED refresh over a nearly-dead token blocks the send here — a clear error
 // now beats an opaque tool failure 30 s into the stream.

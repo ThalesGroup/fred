@@ -88,7 +88,7 @@ async def resolve_refresh_result(result: object, hook_owner: object) -> str:
     else:
         logger.error(
             "%s supplied a SYNCHRONOUS token-refresh hook; it must be `async def` "
-            "(RUNTIME-EXECUTION-CONTRACT.md §8.45). It has just run blocking "
+            "(RUNTIME-EXECUTION-CONTRACT.md §8.48). It has just run blocking "
             "network I/O on the event loop, stalling every other turn on this "
             "pod. Using its result this once — fix the hook.",
             type(hook_owner).__name__,
