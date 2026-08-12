@@ -277,22 +277,6 @@ class ModelProfile(FrozenModel):
             "`RuntimeContext.reasoning_enabled_model_ids`."
         ),
     )
-    supported_reasoning_efforts: tuple[str, ...] | None = Field(
-        default=None,
-        description=(
-            "Ops-declared list of `reasoning_effort` values this profile's "
-            "provider actually accepts (e.g. Mistral small: only ['high'] — it "
-            "rejects 'low'/'medium' with a 400). POSITIVE efforts only: 'off' "
-            "is expressed by stripping the key, never as a value. `None` means "
-            "'not declared' — the per-question effort pick (level 4b) is then "
-            "applied unclamped, exactly the pre-declaration behaviour. When "
-            "declared, `with_reasoning_effort`'s call site clamps: a pick "
-            "outside the list stays inert (the ops-authored default applies) "
-            "instead of reaching the provider and failing the turn. Also "
-            "snapshotted control-plane-side when an admin enables the model's "
-            "reasoning, to narrow the composer picker's option list."
-        ),
-    )
 
     @model_validator(mode="after")
     def validate_model(self) -> "ModelProfile":
@@ -318,31 +302,6 @@ class ModelProfile(FrozenModel):
                 "'supports_thinking: true' on the profile (it declares the model's "
                 "aptitude), or remove the setting."
             )
-        # Same §4.3 fail-loud policy for the effort list: it only means anything
-        # on a thinking profile, and the ops default must be one of the values
-        # the provider accepts — otherwise every default turn would 400.
-        if self.supported_reasoning_efforts is not None:
-            if not self.supports_thinking:
-                raise ValueError(
-                    f"ModelProfile {self.profile_id!r} declares "
-                    "supported_reasoning_efforts but supports_thinking is false."
-                )
-            if not self.supported_reasoning_efforts:
-                raise ValueError(
-                    f"ModelProfile {self.profile_id!r} declares an EMPTY "
-                    "supported_reasoning_efforts. Declare the accepted values, "
-                    "or drop the key entirely ('not declared')."
-                )
-            default_effort = (self.model.settings or {}).get("reasoning_effort")
-            if (
-                default_effort is not None
-                and default_effort not in self.supported_reasoning_efforts
-            ):
-                raise ValueError(
-                    f"ModelProfile {self.profile_id!r} ships reasoning_effort="
-                    f"{default_effort!r} but supported_reasoning_efforts is "
-                    f"{list(self.supported_reasoning_efforts)!r}."
-                )
         return self
 
 
@@ -546,6 +505,3 @@ class ModelSelection(FrozenModel):
     model: ModelConfiguration
     rule_id: str | None = None
     matched_criteria: int = Field(default=0, ge=0)
-    # Carried from the winning ModelProfile so the level-4b effort clamp runs
-    # at the enforcement point without a profile lookup. None = not declared.
-    supported_reasoning_efforts: tuple[str, ...] | None = None

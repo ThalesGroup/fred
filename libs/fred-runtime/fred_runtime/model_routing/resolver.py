@@ -182,7 +182,6 @@ class ModelRoutingResolver:
             model=profile.model.model_copy(deep=True),
             rule_id=winner.rule.rule_id,
             matched_criteria=winner.specificity,
-            supported_reasoning_efforts=profile.supported_reasoning_efforts,
         )
 
     def _default_selection(self, *, capability: ModelCapability) -> ModelSelection:
@@ -201,7 +200,6 @@ class ModelRoutingResolver:
             model=profile.model.model_copy(deep=True),
             rule_id=None,
             matched_criteria=0,
-            supported_reasoning_efforts=profile.supported_reasoning_efforts,
         )
 
     def _profile(self, profile_id: str) -> ModelProfile:

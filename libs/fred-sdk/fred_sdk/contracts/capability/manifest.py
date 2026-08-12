@@ -391,15 +391,6 @@ class CapabilityCatalogEntry(BaseModel):
     # so the admin row shows no reasoning control at all (an administrator
     # cannot make a model reason). Always empty for kind="tool"/"agent".
     model_thinking_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
-    # Union of the thinking profiles' ops-declared `supported_reasoning_efforts`
-    # (level 4b): the `reasoning_effort` values this model's provider actually
-    # accepts — positive efforts only, "off" is a stripped key, never a value.
-    # None = not declared ("unknown, don't narrow"): the composer then offers
-    # the full platform set and the pod-side clamp is the only guard. Only
-    # `kind="model"` entries populate it; snapshotted control-plane-side when
-    # an admin enables the model's reasoning, so the composer control's
-    # `params.efforts` needs no catalog fetch on the send path.
-    model_supported_reasoning_efforts: tuple[str, ...] | None = None
 
     @classmethod
     def from_manifest(

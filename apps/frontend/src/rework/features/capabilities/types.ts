@@ -102,14 +102,6 @@ export interface ChatTurnControlComposerState {
    */
   reasoningEffort: ReasoningEffortName;
   onReasoningEffortChange: (value: ReasoningEffortName) => void;
-  /**
-   * Effort levels this session's picker may offer (never "off", always shown):
-   * the platform set narrowed by the reasoning control's `params.efforts` —
-   * the enable-time snapshot of what the enabled models' providers actually
-   * accept (Mistral small: only "high"). The pod-side clamp is the guard;
-   * this is the UX narrowing.
-   */
-  reasoningEffortOptions: Exclude<ReasoningEffortName, "off">[];
 }
 
 export interface CapabilityChatTurnControlProps<TParams = Record<string, unknown>> {

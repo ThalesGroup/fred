@@ -58,7 +58,6 @@ function composerState(over: Partial<ChatTurnControlComposerState> = {}): ChatTu
     onRagScopeChange: () => undefined,
     reasoningEffort: "off",
     onReasoningEffortChange: () => undefined,
-    reasoningEffortOptions: ["low", "medium", "high"],
     ...over,
   } as ChatTurnControlComposerState;
 }
@@ -89,19 +88,6 @@ describe("ReasoningChip (REASON-01 level 4 + 4b, right-edge effort picker)", () 
   it("offers the full closed set, off first", () => {
     render([REASONING_CONTROL], "off");
     expect(pickerProps?.options.map((option) => option.value)).toEqual(["off", "low", "medium", "high"]);
-  });
-
-  it("narrows the levels to the session's provider-accepted set (params.efforts)", () => {
-    // The measured Mistral-small case: only "high" is accepted, so the picker
-    // must offer off + high and nothing else.
-    pickerProps = null;
-    renderToStaticMarkup(
-      <ReasoningChip
-        chatControls={[REASONING_CONTROL]}
-        composer={composerState({ reasoningEffortOptions: ["high"] })}
-      />,
-    );
-    expect(pickerProps?.options.map((option) => option.value)).toEqual(["off", "high"]);
   });
 
   it("reflects the current effort and stays neutral when off", () => {

@@ -725,7 +725,6 @@ export type ModelCatalogEntry = {
   name: string;
   profile_ids?: string[];
   provider: string;
-  supported_reasoning_efforts?: string[] | null;
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
@@ -935,7 +934,6 @@ export type CapabilityCatalogEntry = {
   id: string;
   kind?: "tool" | "agent" | "model";
   model_profile_ids?: string[];
-  model_supported_reasoning_efforts?: string[] | null;
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;

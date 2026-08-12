@@ -724,7 +724,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     ragScope: composer.ragScope,
     setRagScope: composer.setRagScope,
     reasoningEffort: composer.reasoningEffort,
-    reasoningEffortOptions: composer.reasoningEffortOptions,
     setReasoningEffort: composer.setReasoningEffort,
     contextPrompts,
     contextPromptIds,

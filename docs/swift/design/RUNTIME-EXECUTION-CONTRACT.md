@@ -3355,39 +3355,11 @@ ops-authored in `models_catalog.yaml`). Wire and enforcement:
   picker. `ExecutionPreparation`'s `reasoning_toggle` control and its boolean
   `params.default` are unchanged (no control-plane change).
 
-**Same-day amendment — per-model accepted efforts (measured 400).** The
-closed set is NOT universal per model: Mistral small rejects `low`/`medium`
-with a 400 (`Must be one of (none, high)`) that fails the whole turn. Two
-additions, same principles:
-
-- **`ModelProfile.supported_reasoning_efforts`** (ops-authored,
-  `models_catalog.yaml`; positive efforts only — "off" stays a stripped key):
-  boot-validated (requires `supports_thinking`, must contain the ops default,
-  never empty), carried on `ModelSelection`, and **clamped at the same
-  `build_for_chat` point**: a pick outside the declared set stays inert and
-  the ops default applies. `None` = not declared, unclamped (pre-declaration
-  behaviour).
-- **Composer narrowing without a send-path catalog fetch**: the declaration
-  is projected per model (`CapabilityCatalogEntry.model_supported_reasoning_efforts`,
-  union over thinking profiles), **snapshotted into `model_reasoning`**
-  (`supported_efforts_json`, migration `b8d4e92a3c51`) by the one write path
-  that already holds the catalog entry (`set_model_reasoning`), and served on
-  the reasoning control's schema-free `params.efforts` (intersection of the
-  declared enable-time snapshots; undeclared models don't veto — the pod
-  clamp covers them; nothing declared = key omitted, full set offered). The
-  frontend narrows the picker to `off + params.efforts` and clamps a stored
-  level the session no longer offers to the highest offered one. Snapshot
-  staleness is accepted: a catalog change refreshes at the next admin
-  re-toggle, and the clamp is the actual enforcement.
-
 Tests: `test_model_reasoning_enablement.py` — `with_reasoning_effort`
-primitives (replace/no-inject/no-alloc), the level-4b wire cases (override,
+primitives (replace/no-inject/no-alloc) and the level-4b wire cases (override,
 decline-dominates, no-pick-keeps-ops-default, effort-without-ask inert,
-level-2 ceiling), the declaration validators, and the clamp (unsupported pick
-→ ops default); control-plane `test_model_reasoning_toggle.py` (snapshot
-round-trip incl. NULL, `params.efforts` narrowing/omission/intersection);
-frontend `runtimeContextBuilder.test.ts` + `ReasoningChip.test.tsx`
-(narrowed option list).
+level-2 ceiling); frontend `runtimeContextBuilder.test.ts` +
+`ReasoningChip.test.tsx`.
 
 ---
 

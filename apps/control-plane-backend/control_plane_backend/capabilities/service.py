@@ -614,11 +614,6 @@ async def set_model_reasoning(
         model_capability_id=capability_id,
         reasoning_enabled=reasoning_enabled,
         updated_by=user.uid,
-        # Level 4b snapshot: the provider-accepted effort values, taken HERE
-        # (the one write path that already holds the catalog entry) so the
-        # send path never fetches the catalog. Refreshed on every toggle;
-        # None = the catalog declares nothing ("unknown, don't narrow").
-        supported_efforts=entry.model_supported_reasoning_efforts,
     )
     logger.info(
         "[capability-reasoning] model=%s reasoning_enabled=%s by=%s",

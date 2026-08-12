@@ -103,12 +103,11 @@ export function ReasoningChip({ chatControls, composer, modelProfileId = null, d
       onChange={composer.onReasoningEffortChange}
       disabled={disabled}
       accent={composer.reasoningEffort !== "off"}
-      // "off" always; the levels are the session's narrowed set (params.efforts
-      // — what the enabled models' providers actually accept). The pod-side
-      // clamp guards whatever slips through anyway.
       options={[
         { value: "off", label: effortLabels.off },
-        ...composer.reasoningEffortOptions.map((level) => ({ value: level, label: effortLabels[level] })),
+        { value: "low", label: effortLabels.low },
+        { value: "medium", label: effortLabels.medium },
+        { value: "high", label: effortLabels.high },
       ]}
     />
   );

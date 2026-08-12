@@ -986,15 +986,6 @@ class _ModelCatalogEntry(BaseModel):
     shows no reasoning control at all — aptitude is not a choice, an
     administrator cannot make a model reason. Non-empty means the row carries
     the toggle. Same established join as `profile_ids` above."""
-    supported_reasoning_efforts: list[str] | None = None
-    """UNION of `supported_reasoning_efforts` across this model's thinking
-    profiles (level 4b — same per-profile→per-model projection as
-    `thinking_profile_ids` above). None when no thinking profile declares a
-    list: 'unknown, don't narrow'. Snapshotted control-plane-side when an
-    admin enables the model's reasoning, then served on the composer
-    control's `params.efforts` so the picker only offers what the provider
-    accepts; the pod-side clamp in `build_for_chat` is the enforcement, this
-    is the UX."""
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1043,14 +1034,6 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         # this one condition is the whole projection between them.
         if profile.supports_thinking:
             existing.thinking_profile_ids.append(profile.profile_id)
-            if profile.supported_reasoning_efforts is not None:
-                merged = list(existing.supported_reasoning_efforts or [])
-                merged.extend(
-                    effort
-                    for effort in profile.supported_reasoning_efforts
-                    if effort not in merged
-                )
-                existing.supported_reasoning_efforts = merged
     return list(seen.values())
 
 

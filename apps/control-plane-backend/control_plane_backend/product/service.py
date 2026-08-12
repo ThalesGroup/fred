@@ -779,13 +779,6 @@ async def _model_capabilities_for_source_uncached(
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
-            # Level 4b — verbatim passthrough too; None (absent on an older
-            # pod, or simply not declared) means "unknown, don't narrow".
-            model_supported_reasoning_efforts=(
-                tuple(entry["supported_reasoning_efforts"])
-                if entry.get("supported_reasoning_efforts") is not None
-                else None
-            ),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
@@ -936,7 +929,6 @@ def _platform_reasoning_control(
     reasoning_enabled: bool,
     reasoning_default_on: bool,
     reasoning_enabled_model_ids: Sequence[str],
-    supported_efforts_by_model: Mapping[str, list[str] | None] | None = None,
 ) -> ChatControlDescriptor | None:
     """The composer's reasoning toggle, or `None` when a gate upstream is closed
     (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
@@ -983,22 +975,6 @@ def _platform_reasoning_control(
             _REASONING_TOGGLE_WIDGET,
         )
         return None
-    # Level 4b — narrow the effort picker to what the providers actually
-    # accept (measured: Mistral small 400s on low/medium). Intersection of the
-    # DECLARED enable-time snapshots, restricted to the platform's closed set;
-    # models with no declaration don't veto (the pod-side clamp covers them),
-    # and no declaration at all omits the key — the composer then offers the
-    # full set and the clamp alone guards. `params` is schema-free on the
-    # wire, so this needs no contract regeneration.
-    efforts: list[str] | None = None
-    declared = [
-        set(value)
-        for value in (supported_efforts_by_model or {}).values()
-        if value is not None
-    ]
-    if declared:
-        allowed = set.intersection(*declared)
-        efforts = [level for level in ("low", "medium", "high") if level in allowed]
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -1008,10 +984,7 @@ def _platform_reasoning_control(
         # False remains the default because `AGENT-THINKING-API-RFC.md`
         # Amendment C measured reasoning re-issuing duplicate tool calls in
         # 10/10 turns on this stack. Starting ON is an author's opt-in.
-        params={
-            "default": reasoning_default_on,
-            **({"efforts": efforts} if efforts else {}),
-        },
+        params={"default": reasoning_default_on},
     )
 
 
@@ -3186,15 +3159,12 @@ async def prepare_execution(
     # gathered rather than chained — this is a user-facing send path.
     (
         (chat_default_profile_id, operation_route_rules),
-        reasoning_efforts_by_model,
+        reasoning_enabled_model_ids,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
-        # Same single indexed read as the previous list_enabled_model_ids, one
-        # extra column: the enable-time snapshot of each model's
-        # provider-accepted efforts (level 4b) — still no catalog fetch here.
-        deps.get_model_reasoning_store().list_enabled_supported_efforts(),
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
-    sorted_reasoning_model_ids = sorted(reasoning_efforts_by_model)
+    sorted_reasoning_model_ids = sorted(reasoning_enabled_model_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
@@ -3202,7 +3172,6 @@ async def prepare_execution(
         reasoning_enabled=instance.tuning.reasoning_enabled,
         reasoning_default_on=instance.tuning.reasoning_default_on,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
-        supported_efforts_by_model=reasoning_efforts_by_model,
     )
     if reasoning_control is not None:
         chat_controls = [*chat_controls, reasoning_control]

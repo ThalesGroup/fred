@@ -47,11 +47,6 @@ profiles:
     # Note `language.mistral.small` below shares this (provider, name) and is
     # deliberately NOT thinking-capable: aptitude is per profile.
     supports_thinking: true
-    # Efforts this provider ACCEPTS (measured 2026-08-12: Mistral rejects
-    # low/medium with a 400 'Must be one of (none, high)'; 'off' is expressed
-    # by stripping the key, never a value). Clamps the per-question pick and
-    # narrows the composer's effort menu.
-    supported_reasoning_efforts: ["high"]
     model:
       provider: openai
       name: mistral-small-latest
