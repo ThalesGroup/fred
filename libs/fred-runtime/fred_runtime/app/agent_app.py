@@ -65,7 +65,6 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.security.models import AuthorizationError
-from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
@@ -162,6 +161,7 @@ from ..integrations.v2_runtime.adapters import (
     FredMcpToolProvider,
     FredWorkspaceFs,
     KPIWriterMetricsAdapter,
+    _refresh_runtime_context_access_token,
     build_default_tracer,
 )
 from ..runtime_context import (
@@ -170,7 +170,7 @@ from ..runtime_context import (
     set_runtime_context,
 )
 from ..runtime_context import RuntimeContext as FredRuntimeContext
-from ..runtime_support import refresh_user_access_token_from_keycloak
+from ..runtime_support import aclose_token_refresh_client
 from .config import AgentPodConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
@@ -458,58 +458,26 @@ class _MediaClientAgentAdapter:
         self.runtime_context = binding.runtime_context
         self.agent_settings: AgentSettingsLike = settings
 
-    def refresh_user_access_token(self) -> str:
+    async def refresh_user_access_token(self) -> str:
         """
         Refresh the user access token for media downloads.
 
         Why this exists:
         - media fetch retries need the same Keycloak refresh path as other
-          runtime adapters
+          runtime adapters. It delegates rather than reimplementing: this used
+          to be a ~40-line copy of `_refresh_runtime_context_access_token`
+          which had already drifted — the copy never wrote
+          `access_token_expires_at`, so any consumer gating on expiry saw stale
+          data after a media-path refresh.
 
         How to use it:
-        - called by `KfMarkdownMediaClient` when the current token is expired
+        - awaited by `KfMarkdownMediaClient` when the current token is expired
 
         Example:
-        - `token = adapter.refresh_user_access_token()`
+        - `token = await adapter.refresh_user_access_token()`
         """
 
-        refresh_token = self.runtime_context.refresh_token
-        if not refresh_token:
-            raise RuntimeError(
-                "Cannot refresh user access token: refresh_token missing from runtime context."
-            )
-
-        keycloak_url = get_keycloak_url()
-        client_id = get_keycloak_client_id()
-        if not keycloak_url:
-            raise RuntimeError(
-                "User security realm_url is not configured for Keycloak."
-            )
-        if not client_id:
-            raise RuntimeError(
-                "User security client_id is not configured for Keycloak."
-            )
-
-        payload = refresh_user_access_token_from_keycloak(
-            keycloak_url=keycloak_url,
-            client_id=client_id,
-            refresh_token=refresh_token,
-        )
-        new_access_token = payload.get("access_token")
-        raw_refresh = payload.get("refresh_token")
-        new_refresh_token: str = (
-            raw_refresh
-            if isinstance(raw_refresh, str) and raw_refresh
-            else refresh_token
-        )
-        if not isinstance(new_access_token, str) or not new_access_token:
-            raise RuntimeError(
-                "Keycloak refresh response did not include a valid access_token."
-            )
-
-        self.runtime_context.access_token = new_access_token
-        self.runtime_context.refresh_token = new_refresh_token
-        return new_access_token
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
 def _definition_to_agent_tuning(
@@ -2253,6 +2221,8 @@ async def _write_turn_history(
                     input_tokens=tu.get("input_tokens", 0),
                     output_tokens=tu.get("output_tokens", 0),
                     total_tokens=tu.get("total_tokens", 0),
+                    cache_read_tokens=tu.get("cache_read_tokens", 0),
+                    cache_creation_tokens=tu.get("cache_creation_tokens", 0),
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
@@ -2309,6 +2279,7 @@ class _TurnOutcome:
     token_usage: dict[str, Any] | None
     input_tokens: int | None
     output_tokens: int | None
+    cache_read_tokens: int | None
     tool_count: int
     is_error: bool
     total_ms: int
@@ -2332,6 +2303,7 @@ def _parse_turn_outcome(
         token_usage=token_usage,
         input_tokens=token_usage.get("input_tokens") if token_usage else None,
         output_tokens=token_usage.get("output_tokens") if token_usage else None,
+        cache_read_tokens=token_usage.get("cache_read_tokens") if token_usage else None,
         tool_count=tool_count,
         is_error=is_error,
         total_ms=total_ms,
@@ -2477,6 +2449,7 @@ def _emit_turn_completed(
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
+                "cache_read_tokens": outcome.cache_read_tokens,
             },
             actor=KPIActor(type="human", user_id=user_id),
         )
@@ -4715,9 +4688,32 @@ def create_agent_app(
             "prometheus" if config.observability.kpi.prometheus.enabled else "logging",
             list(registry.keys()),
         )
-        yield
-        await gc_diagnostics.stop()
-        await container.shutdown()
+        try:
+            yield
+        finally:
+            # Shutdown must RUN and must COMPLETE.
+            # - `finally`: a plain sequence after `yield` is skipped entirely
+            #   when an exception propagates out of the app through the
+            #   generator, which is exactly the case where releasing sockets
+            #   and stopping tasks matters most.
+            # - per-step guard: these three release INDEPENDENT resources, so a
+            #   raising `container.shutdown()` must not strand the Keycloak
+            #   refresh pool behind it. The pod is going away either way;
+            #   losing a connection pool because an unrelated subsystem failed
+            #   is strictly worse than logging both failures.
+            # `except Exception` deliberately lets `CancelledError` through —
+            # a shutdown being cancelled is not a step failing.
+            for label, close in (
+                ("gc diagnostics", gc_diagnostics.stop),
+                ("pod container", container.shutdown),
+                # Release the Keycloak refresh pool deterministically rather
+                # than leaving it to GC, as the control-plane client above is.
+                ("keycloak refresh pool", aclose_token_refresh_client),
+            ):
+                try:
+                    await close()
+                except Exception:
+                    logger.exception("[fred-runtime] shutdown step failed: %s", label)
 
     app = FastAPI(
         title=config.app.name,

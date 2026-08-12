@@ -16,7 +16,7 @@
 // Kept in a separate file so they can be unit-tested without pulling in
 // React, RTK Query, or Keycloak dependencies.
 
-import type { ChatMessage } from "../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 
 export const keyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
 
@@ -28,6 +28,25 @@ export const isOptimisticUserMessage = (m: ChatMessage) =>
   m.role === "user" &&
   m.channel === "final" &&
   (m.metadata?.extras as { optimistic_user?: unknown } | undefined)?.optimistic_user === true;
+
+// The optimistic tool_result useChatSse injects when a HITL prompt is cancelled,
+// before the backend has resolved the gated calls.
+export const isOptimisticCancelledToolResult = (m: ChatMessage) =>
+  m.channel === "tool_result" &&
+  (m.metadata?.extras as { cancelled_by_user?: unknown } | undefined)?.cancelled_by_user === true;
+
+// Mirrors traceUtils.toolResultPart's semantics (channel AND part type) so the
+// two accessors cannot disagree about the same message. Mirrored rather than
+// imported to keep this module's import graph type-only: traceUtils itself is
+// type-only today, but it is the trace-rendering module and is the natural
+// place for runtime helpers to accrete, which is exactly what these pure
+// list helpers are kept out of. Any change to the tool_result part shape must
+// touch both — the shared assertion lives in chatSseUtils.test.ts.
+export const toolResultCallId = (m: ChatMessage): string => {
+  if (m.channel !== "tool_result") return "";
+  const p = m.parts?.[0] as { type?: string; call_id?: string } | undefined;
+  return p?.type === "tool_result" ? (p.call_id ?? "") : "";
+};
 
 export const hasStreamingDeltaFlag = (m: ChatMessage) =>
   m.role === "assistant" &&
@@ -57,10 +76,19 @@ export const upsertOne = (all: ChatMessage[], m: ChatMessage): ChatMessage[] => 
     : all;
   const k = keyOf(m);
   const stableConversationKey = stableConversationKeyOf(m);
+  const incomingCallId = toolResultCallId(m);
   const idx = base.findIndex((x) => {
     if (keyOf(x) === k) return true;
     if (isOptimisticUserMessage(x) && m.role === "user" && m.channel === "final") {
       return stableConversationKeyOf(x) === stableConversationKey;
+    }
+    // A real tool_result must REPLACE the optimistic cancellation for the same
+    // call, not sit alongside it. The optimistic message is ranked by Date.now(),
+    // so it can never collide with a backend rank via keyOf — the two coexisted,
+    // and since groupTraceEntries keeps the last result per call_id in rank
+    // order, the fake one (always the higher rank) won permanently.
+    if (isOptimisticCancelledToolResult(x) && !isOptimisticCancelledToolResult(m) && incomingCallId) {
+      return exchangeKeyOf(x) === exchangeKey && toolResultCallId(x) === incomingCallId;
     }
     return false;
   });

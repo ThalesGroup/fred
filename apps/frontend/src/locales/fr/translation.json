@@ -193,6 +193,10 @@
         }
       }
     },
+    "document_label_search": {
+      "name": "Rechercher des documents par label",
+      "description": "Capacité de lister tous les documents portant un label métier donné, de manière exhaustive et page par page."
+    },
     "document_summarize": {
       "name": "Résumer un document",
       "description": "Capacité de résumer un document et d'en exploiter le résultat.",
@@ -324,7 +328,9 @@
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
       "total_one": "Total : {{count}} token",
-      "total_other": "Total : {{count}} tokens"
+      "total_other": "Total : {{count}} tokens",
+      "cached_one": "{{count}} token servi depuis le cache du fournisseur",
+      "cached_other": "{{count}} tokens servis depuis le cache du fournisseur"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
@@ -1532,6 +1538,7 @@
         "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
+        "manageLabels": "Gérer les labels",
         "more": "Plus d'actions",
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
@@ -1547,6 +1554,7 @@
         "deleteBulkMessage": "Retirer {{count}} documents de ce dossier ?",
         "deleteTitle": "Retirer le document",
         "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
+        "deleteFolderMessageUnknownCount": "Supprimer « {{name}} » et tout son contenu ? Cette action est irréversible.",
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
@@ -1584,6 +1592,16 @@
         "nameLabel": "Nom",
         "save": "Enregistrer",
         "error": "Impossible de renommer"
+      },
+      "labelsModal": {
+        "title": "Gérer les labels",
+        "currentEmpty": "Aucun label pour l'instant",
+        "addPlaceholder": "Ajouter un label…",
+        "add": "Ajouter",
+        "createNew": "Créer le label",
+        "addFieldLabel": "Ajouter un label",
+        "removeAriaLabel": "Retirer le label « {{label}} »",
+        "close": "Fermer"
       },
       "loading": "Chargement des ressources...",
       "preview": {

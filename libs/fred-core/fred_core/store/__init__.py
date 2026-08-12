@@ -18,6 +18,7 @@ from fred_core.store.local_content_store import LocalContentStore
 from fred_core.store.minio_content_store import MinioContentStore
 from fred_core.store.opensearch_mapping_validator import (
     MappingValidationError,
+    ensure_index_mapping,
     validate_index_mapping,
 )
 from fred_core.store.vector_search import VectorSearchHit
@@ -29,5 +30,6 @@ __all__ = [
     "MappingValidationError",
     "MinioContentStore",
     "VectorSearchHit",
+    "ensure_index_mapping",
     "validate_index_mapping",
 ]

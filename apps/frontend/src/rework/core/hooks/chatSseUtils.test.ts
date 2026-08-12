@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ChatMessage } from "../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 import {
   keyOf,
   exchangeKeyOf,
@@ -245,6 +245,77 @@ describe("upsertOne — optimistic user message replacement", () => {
     });
     let state = upsertOne([], opt1);
     state = upsertOne(state, opt2);
+    expect(state).toHaveLength(2);
+  });
+});
+
+// ── Optimistic HITL cancellation ──────────────────────────────────────────────
+//
+// useChatSse injects a cancelled tool_result the moment the user cancels a HITL
+// prompt, ranked by Date.now() so it sorts after everything on screen. That rank
+// can never collide with a backend rank, so keyOf alone left the optimistic and
+// real results coexisting — and since groupTraceEntries keeps the LAST result
+// per call_id in rank order, the optimistic one (always higher) won forever.
+
+function cancelledToolResult(callId: string, rank: number): ChatMessage {
+  return msg({
+    rank,
+    role: "tool",
+    channel: "tool_result",
+    parts: [{ type: "tool_result", call_id: callId, ok: false, content: "", latency_ms: null }],
+    metadata: { extras: { cancelled_by_user: true } },
+  });
+}
+
+function realToolResult(callId: string, rank: number, content = "done"): ChatMessage {
+  return msg({
+    rank,
+    role: "tool",
+    channel: "tool_result",
+    parts: [{ type: "tool_result", call_id: callId, ok: true, content, latency_ms: 12 }],
+  });
+}
+
+describe("upsertOne — optimistic cancellation supersession", () => {
+  it("a real tool_result replaces the optimistic cancellation for the same call_id", () => {
+    const state = upsertOne([cancelledToolResult("call-1", 1_700_000_000_000)], realToolResult("call-1", 7));
+    expect(state).toHaveLength(1);
+    expect((state[0].parts?.[0] as { ok?: boolean }).ok).toBe(true);
+  });
+
+  it("does not touch an optimistic cancellation for a different call_id", () => {
+    const state = upsertOne([cancelledToolResult("call-1", 1_700_000_000_000)], realToolResult("call-2", 7));
+    expect(state).toHaveLength(2);
+  });
+
+  it("does not touch an optimistic cancellation from a different exchange", () => {
+    const other = { ...cancelledToolResult("call-1", 1_700_000_000_000), exchange_id: "e2" };
+    const state = upsertOne([other], realToolResult("call-1", 7));
+    expect(state).toHaveLength(2);
+  });
+
+  it("two optimistic cancellations for different calls both survive", () => {
+    let state = upsertOne([], cancelledToolResult("call-1", 1_700_000_000_000));
+    state = upsertOne(state, cancelledToolResult("call-2", 1_700_000_000_001));
+    expect(state).toHaveLength(2);
+  });
+});
+
+describe("toolResultCallId — part-type guard", () => {
+  it("requires the first part to actually BE a tool_result part", () => {
+    // Mirrors traceUtils.toolResultPart: a tool_result-channel message whose
+    // first part is some other type must not yield a call_id, or upsertOne
+    // and groupTraceEntries would disagree about whether it is a result.
+    // The stray part CARRIES a call_id — a guard-less accessor would read it
+    // and wrongly supersede the optimistic cancellation below.
+    const weird = msg({
+      rank: 5,
+      role: "tool",
+      channel: "tool_result",
+      parts: [{ type: "text", text: "preamble", call_id: "call-1" } as never],
+    });
+    const state = upsertOne([cancelledToolResult("call-1", 1_700_000_000_000)], weird);
+    // No supersession happened — the optimistic cancellation survives.
     expect(state).toHaveLength(2);
   });
 });

@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { Channel, ChatMessage, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
-import type { VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
+import type {
+  Channel,
+  ChatMessage,
+  ToolCallPart,
+  ToolResultPart,
+  VectorSearchHit,
+} from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import type { TokenUsage } from "@rework/types/conversation";
 
@@ -218,6 +223,7 @@ export function toolCallTokenUsage(call: ChatMessage): TokenUsage | null {
     input_tokens: tu.input_tokens ?? 0,
     output_tokens: tu.output_tokens ?? 0,
     total_tokens: tu.total_tokens ?? 0,
+    cache_read_tokens: tu.cache_read_tokens,
   };
 }
 

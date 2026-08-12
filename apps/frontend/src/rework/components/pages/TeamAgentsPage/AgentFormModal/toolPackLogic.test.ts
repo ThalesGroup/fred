@@ -22,7 +22,6 @@ import {
 import {
   CAP_DOCUMENT_ACCESS,
   CAP_DOCUMENT_SUMMARIZE,
-  CAP_FILESYSTEM,
   CAP_PPT_FILLER,
   CAP_TABULAR,
   CAP_WRITABLE_DOCUMENT,
@@ -49,7 +48,6 @@ const REASONING = packById("reasoning");
 const ALL_IDS: ReadonlySet<string> = new Set([
   CAP_DOCUMENT_ACCESS,
   CAP_DOCUMENT_SUMMARIZE,
-  CAP_FILESYSTEM,
   CAP_TABULAR,
   CAP_WRITABLE_DOCUMENT,
   CAP_PPT_FILLER,
@@ -69,9 +67,7 @@ describe("resource packs — document_access truth table", () => {
   it("team resources only → corpus, no attach, corpus scope", () => {
     const s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).toEqual(
-      expect.arrayContaining([CAP_FILESYSTEM, CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE]),
-    );
+    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining([CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE]));
     expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
     expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(false);
     expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(true);
@@ -82,7 +78,6 @@ describe("resource packs — document_access truth table", () => {
     const s = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_FILESYSTEM);
     expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR);
     expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(true);
     expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(true);
@@ -102,7 +97,7 @@ describe("resource packs — document_access truth table", () => {
   it("both off → document_access removed entirely", () => {
     const s = applyPackToggle(TEAM_RESOURCES, false, applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS), ALL_IDS);
     expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_FILESYSTEM);
+    expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR);
     expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SUMMARIZE);
     expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(false);
     expect(derivePackChecked(ATTACHMENTS, s)).toBe(false);
@@ -116,8 +111,7 @@ describe("resource packs — shared summarize + mode transitions", () => {
     s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS); // team off, attachments still on
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE); // shared, must stay
-    expect(s.selectedCapabilityIds).not.toContain(CAP_FILESYSTEM); // team-only, removed
-    expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+    expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR); // team-only, removed
     expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(true);
     expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(true);
   });
@@ -139,7 +133,7 @@ describe("admin availability — activate available, ignore the rest", () => {
   it("skips an unavailable included capability but still activates the pack", () => {
     const s = applyPackToggle(TEAM_RESOURCES, true, empty(), NO_TABULAR);
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).toContain(CAP_FILESYSTEM);
+    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE);
     expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR); // admin-disabled, skipped
     expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(true);
   });

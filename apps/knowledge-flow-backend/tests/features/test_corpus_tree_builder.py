@@ -14,7 +14,7 @@
 
 from datetime import datetime, timezone
 
-from knowledge_flow_backend.features.tree.tree_builder import build_tree, render_tree
+from knowledge_flow_backend.features.corpus_tree.tree_builder import build_tree, render_tree
 
 
 def test_nested_folders_render_with_indentation():
@@ -163,3 +163,29 @@ def test_oversized_root_level_omits_items_with_count():
     assert truncated
     assert "more item(s) at this level" in text
     assert len(text) <= 300
+
+
+def test_wide_shallow_tree_never_reports_truncated_with_zero_omission_signal():
+    """Regression: a label match spread across many folders (one document
+    each) is wide, not deep -- depth-based pruning collapses every folder's
+    single document into an "N more item(s) below" note, but the FINAL
+    root-level budget fallback used to rebuild its candidate lines from
+    scratch (bare folder headers only), discarding those notes entirely.
+    150 folder headers alone fit comfortably under 6000 chars, so the old
+    code returned truncated=True with 150 folders, 0 documents, and 0
+    words telling the caller anything was omitted -- indistinguishable from
+    a complete, empty-of-content corpus. `truncated=True` must never ship
+    without an explicit, non-empty signal of what was left out."""
+    folders = [(f"Folder{i:03d}", [f"doc-{i:03d}"], f"tag-{i:03d}") for i in range(150)]
+    leaves = {f"doc-{i:03d}": (f"document-{i:03d}.pdf", None) for i in range(150)}
+
+    root = build_tree(folders=folders, leaves_by_uid=leaves)
+    text, truncated = render_tree(root, max_chars=6000)
+
+    assert truncated
+    assert len(text) <= 6000
+    documents_rendered = sum(1 for line in text.splitlines() if "(uploaded" in line)
+    omission_signals = sum(1 for line in text.splitlines() if "more item(s)" in line)
+    assert documents_rendered > 0 or omission_signals > 0, (
+        f"truncated=True but the response shows {documents_rendered} documents and {omission_signals} omission notes -- indistinguishable from a complete, empty corpus"
+    )

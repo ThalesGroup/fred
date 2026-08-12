@@ -16,7 +16,7 @@
 // Carries raw API types (ChatMessage, VectorSearchHit) because the rendering
 // layer (AssistantTurn, HitlPrompt) consumes them directly.
 
-import type { ChatMessage, VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 import type { TokenUsage } from "./conversation";
 import type { RawUiPart } from "./parts";
 

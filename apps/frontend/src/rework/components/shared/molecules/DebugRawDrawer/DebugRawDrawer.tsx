@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import type { ChatMessage } from "../../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
 import styles from "./DebugRawDrawer.module.css";
 
 interface DebugRawDrawerProps {

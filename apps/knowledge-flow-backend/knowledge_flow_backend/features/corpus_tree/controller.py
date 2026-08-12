@@ -17,19 +17,21 @@ import logging
 from fastapi import APIRouter, Depends
 from fred_core import KeycloakUser, get_current_user
 
-from knowledge_flow_backend.features.tree.service import TreeService
-from knowledge_flow_backend.features.tree.structure import DocumentTreeRequest, DocumentTreeResponse
+from knowledge_flow_backend.features.corpus_tree.service import CorpusTreeService
+from knowledge_flow_backend.features.corpus_tree.structure import DocumentTreeRequest, DocumentTreeResponse
 
 logger = logging.getLogger(__name__)
 
 
-class TreeController:
+class CorpusTreeController:
     """
-    Controller exposing a recursive, readable folder/document listing.
+    Controller exposing a read-only, recursive folder/document listing over
+    the already-ingested corpus. See `CorpusTreeService` for the domain
+    boundary (corpus navigation, not a mutable workspace).
     """
 
     def __init__(self, router: APIRouter):
-        self.service = TreeService()
+        self.service = CorpusTreeService()
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):

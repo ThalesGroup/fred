@@ -21,6 +21,7 @@ import {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
+  useMutateDocumentLabelsMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
@@ -46,6 +47,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();
+  const [mutateLabelsMutation] = useMutateDocumentLabelsMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
   const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
@@ -256,12 +258,37 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [renameDocumentMutation, refresh, showError, t],
   );
 
+  // Descriptive business labels: no tag-tree/count impact, so — like
+  // toggleRetrievable — this only calls the backend and returns the updated
+  // list for the caller to patch its own row state, no list-wide refetch.
+  // Single canonical mutation (add and/or remove in one PATCH body,
+  // mirroring MetadataService.mutate_document_labels) — never two separate
+  // add/remove implementations.
+  const mutateLabels = useCallback(
+    async (doc: DocumentMetadata, patch: { add?: string[]; remove?: string[] }): Promise<string[] | undefined> => {
+      try {
+        return await mutateLabelsMutation({
+          documentUid: doc.identity.document_uid,
+          labelMutationRequest: { add: patch.add ?? [], remove: patch.remove ?? [] },
+        }).unwrap();
+      } catch (e: any) {
+        showError?.({
+          summary: t("validation.error"),
+          detail: e?.data?.detail || e?.message || "Failed to update labels.",
+        });
+        return undefined;
+      }
+    },
+    [mutateLabelsMutation, showError, t],
+  );
+
   return {
     toggleRetrievable,
     removeFromLibrary,
     bulkRemoveFromLibraryForTag,
     renameTag,
     renameDocument,
+    mutateLabels,
     preview,
     previewTarget,
     closePreview,

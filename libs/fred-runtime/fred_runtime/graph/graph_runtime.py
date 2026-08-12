@@ -38,6 +38,7 @@ from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
+from fred_core.history.history_schema import coerce_finish_reason
 from fred_core.portable import MetricsProvider
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
@@ -2297,6 +2298,7 @@ def _final_event_from_output(
     - `event = _final_event_from_output(output_model, model_name=name, token_usage=usage)`
     """
 
+    normalized_finish_reason = coerce_finish_reason(finish_reason)
     if isinstance(output_model, GraphExecutionOutput):
         return FinalRuntimeEvent(
             sequence=0,
@@ -2305,7 +2307,7 @@ def _final_event_from_output(
             ui_parts=output_model.ui_parts,
             model_name=model_name,
             token_usage=token_usage or output_model.token_usage,
-            finish_reason=finish_reason,
+            finish_reason=normalized_finish_reason,
         )
 
     payload = output_model.model_dump(mode="json")
@@ -2317,7 +2319,7 @@ def _final_event_from_output(
         content=content,
         model_name=model_name,
         token_usage=token_usage,
-        finish_reason=finish_reason,
+        finish_reason=normalized_finish_reason,
     )
 
 

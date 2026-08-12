@@ -198,24 +198,41 @@ def _count_items(node: TreeNode) -> int:
 
 
 def _render_budgeted_root(node: TreeNode, *, max_chars: int) -> str:
-    """Even the top level alone overflows: keep as many root-level lines as fit."""
-    candidate_lines = [_format_folder(node.children[name]) for name in sorted(node.children)]
-    candidate_lines += [_format_leaf(d) for d in sorted(node.docs, key=lambda d: d.document_name)]
+    """Even the top level alone overflows: keep as many whole folder/doc BLOCKS
+    as fit, where a folder's block is its header line plus everything already
+    nested under it (recursively rendered -- by the time this runs, every
+    depth has already been pruned, so that nested content is at most an
+    "N more item(s) below" note, never a large subtree).
+
+    Building each candidate from `_format_folder` alone (the bare header,
+    discarding the child's own notes/docs) used to be the bug: a wide,
+    shallow match set (e.g. 150 folders, one document each) fits its 150
+    folder headers comfortably under a 6000-char budget on their own, so
+    `omitted` came out 0 and no line ever told the caller their document
+    content had already been dropped by the earlier depth-pruning pass --
+    `truncated=True` shipped indistinguishable from a complete, empty-of-
+    content corpus. Measuring the FULL block (header + nested notes/docs)
+    means that content is either shown or correctly counted as omitted --
+    never silently dropped in between.
+    """
+    candidate_blocks = [f"{_format_folder(node.children[name])}\n{_render(node.children[name], depth=1)}".rstrip() for name in sorted(node.children)]
+    candidate_blocks += [_format_leaf(d) for d in sorted(node.docs, key=lambda d: d.document_name)]
 
     # Reserve room for the longest possible omitted-count line (its count can have
-    # up to len(candidate_lines)'s digit count), so the line we append always fits.
-    max_omitted_line = len(f"... {len(candidate_lines)} more item(s) at this level, {_FALLBACK_HINT}")
+    # up to len(candidate_blocks)'s digit count), so the line we append always fits.
+    max_omitted_line = len(f"... {len(candidate_blocks)} more item(s) at this level, {_FALLBACK_HINT}")
     budget = max_chars - max_omitted_line - 1  # -1 for its leading newline
 
     lines: List[str] = []
     total = 0
-    for line in candidate_lines:
-        if total + len(line) + 1 > budget:
+    omitted = 0
+    for i, block in enumerate(candidate_blocks):
+        if total + len(block) + 1 > budget:
+            omitted = len(candidate_blocks) - i
             break
-        lines.append(line)
-        total += len(line) + 1
+        lines.append(block)
+        total += len(block) + 1
 
-    omitted = len(candidate_lines) - len(lines)
     if omitted:
         lines.append(f"... {omitted} more item(s) at this level, {_FALLBACK_HINT}")
     return "\n".join(lines)

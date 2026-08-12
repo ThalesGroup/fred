@@ -36,6 +36,7 @@ from importlib.metadata import EntryPoint
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from fred_core.store.vector_search import DATASET_POINTER_CHUNK_KIND, VectorSearchHit
 from fred_runtime.capabilities import (
@@ -101,9 +102,14 @@ def _identity() -> CapabilityIdentity:
 class _FakePort(DocumentSearchPort):
     """Fake `DocumentSearchPort` recording the scope params it received."""
 
-    def __init__(self, hits: Sequence[VectorSearchHit] = ()) -> None:
+    def __init__(
+        self,
+        hits: Sequence[VectorSearchHit] = (),
+        error: Exception | None = None,
+    ) -> None:
         self.calls: list[dict[str, Any]] = []
         self._hits = tuple(hits)
+        self._error = error
 
     async def search(
         self,
@@ -125,6 +131,8 @@ class _FakePort(DocumentSearchPort):
                 "attachments_only": attachments_only,
             }
         )
+        if self._error is not None:
+            raise self._error
         return DocumentSearchResult(hits=self._hits)
 
 
@@ -191,6 +199,9 @@ class _FakeTreePort(DocumentTreePort):
         if self._error is not None:
             raise self._error
         return self._result
+
+    async def list_by_label(self, **kwargs: Any):
+        raise NotImplementedError("list_by_label is not used by document_access")
 
 
 def _capability_tools(
@@ -507,6 +518,52 @@ async def test_min_source_score_ratio_is_configurable_per_instance() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_adapter_wraps_httpx_error_with_status_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The search adapter must stamp `status_code`, like tree/summarize do.
+
+    The capability builds its user-facing message from `status_code`/`timed_out`
+    on the exception and never imports httpx. Unwrapped, the expired-token 401
+    of #2073 Item 3 degraded to "the service call failed" with no status named.
+    """
+
+    def _factory(*, agent: Any) -> Any:
+        class _Failing:
+            async def search(self, **kwargs: Any) -> list[VectorSearchHit]:
+                request = httpx.Request("POST", "http://kf/vector/search")
+                raise httpx.HTTPStatusError(
+                    "401 Unauthorized",
+                    request=request,
+                    response=httpx.Response(401, request=request),
+                )
+
+        return _Failing()
+
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", _factory)
+    adapter = DocumentSearchAdapter(binding=_binding(), settings=_settings())
+
+    with pytest.raises(DocumentPortCallError) as exc_info:
+        await adapter.search("q")
+
+    assert exc_info.value.status_code == 401
+
+    # …and the capability turns that into a message naming the status.
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_full_services(search=adapter),
+        config={},
+    )
+    message = await _invoke_named_tool(
+        cap, ctx, "search_documents_using_vectorization", {"question": "q"}
+    )
+    assert message.artifact.is_error is True
+    assert "HTTP 401" in message.content
+
+
+@pytest.mark.asyncio
 async def test_scoping_precedence_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, _FakeVectorSearchClient] = {}
 
@@ -665,9 +722,12 @@ def test_adapter_keeps_binding_and_token_private(
 # ---------------------------------------------------------------------------
 
 
-def _full_services(tree: _FakeTreePort | None = None) -> RuntimeServices:
+def _full_services(
+    tree: _FakeTreePort | None = None,
+    search: DocumentSearchPort | None = None,
+) -> RuntimeServices:
     return RuntimeServices(
-        document_search=_FakePort(hits=(_hit("d1"),)),
+        document_search=search or _FakePort(hits=(_hit("d1"),)),
         document_tree=tree or _FakeTreePort(),
     )
 
@@ -765,6 +825,34 @@ async def test_tree_tool_failure_returns_is_error_result() -> None:
     # no message tells a Graph node THAT it failed but not WHY.
     assert message.artifact.blocks[0].text == message.content
     assert "list the document tree" in message.content
+
+
+@pytest.mark.asyncio
+async def test_search_tool_failure_returns_is_error_result() -> None:
+    """The same contract as `list_document_tree`, for the most-used RAG tool.
+
+    Observed live as an expired-token 401 (#2073 Item 3): this tool had no
+    try/except, so the exception escaped the default ToolNode handler and took
+    the whole turn down with a raw `401 Unauthorized` and an empty error detail,
+    while its siblings degraded gracefully on the identical failure.
+    """
+
+    port = _FakePort(error=DocumentPortCallError("expired token", status_code=401))
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_full_services(search=port), config={}
+    )
+
+    message = await _invoke_named_tool(
+        cap, ctx, "search_documents_using_vectorization", {"question": "q"}
+    )
+
+    assert message.artifact.is_error is True
+    assert "HTTP 401" in message.content
+    assert "search documents" in message.content
+    # CAPAB-02: the diagnostic must reach a Graph node too, which keeps only
+    # the artifact half of a `content_and_artifact` return.
+    assert message.artifact.blocks[0].text == message.content
 
 
 @pytest.mark.asyncio
