@@ -561,6 +561,7 @@
     "downloadStarting": "Getting ready to start downloading...",
     "dropFiles": "Drop your files here",
     "excessSize": "Excess: ",
+    "folderRequired": "Only files inside a folder can be added here — loose files were skipped.",
     "folders": "Folders",
     "ingestionMode": "Ingestion mode",
     "keywords": "Keywords",
@@ -572,6 +573,8 @@
     "makeSearchable": "Make searchable",
     "maxSize": "or click to select (max 200Mb per file)",
     "modifySearch": "Try to modify your search criteria",
+    "nestedFoldersHint_one": "{{count}} subfolder will be created to mirror the dropped folder",
+    "nestedFoldersHint_other": "{{count}} subfolders will be created to mirror the dropped folder",
     "newFilesSize": "Upload Size: ",
     "noDocument": "No document found",
     "noSummary": "No summary available.",
@@ -1529,6 +1532,14 @@
         "author": "Added by"
       },
       "embeddedTitleHint": "Embedded title: {{title}}",
+      "dropInFolder": "Drop your files to add them to \"{{folder}}\"",
+      "dropAtRoot": "Drop a folder to create it here with its structure",
+      "rootDrop": {
+        "rejectedTitle": "Drop a folder",
+        "rejectedDetail": "Loose files can't land at the top level — drop a folder (it becomes a library), or drop the files into an existing folder.",
+        "skippedDetail_one": "{{count}} loose file was skipped — only the dropped folders' content was kept.",
+        "skippedDetail_other": "{{count}} loose files were skipped — only the dropped folders' content was kept."
+      },
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
