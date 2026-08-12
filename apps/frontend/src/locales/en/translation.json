@@ -572,6 +572,8 @@
     "makeSearchable": "Make searchable",
     "maxSize": "or click to select (max 200Mb per file)",
     "modifySearch": "Try to modify your search criteria",
+    "nestedFoldersHint_one": "{{count}} subfolder will be created to mirror the dropped folder",
+    "nestedFoldersHint_other": "{{count}} subfolders will be created to mirror the dropped folder",
     "newFilesSize": "Upload Size: ",
     "noDocument": "No document found",
     "noSummary": "No summary available.",
@@ -1529,6 +1531,7 @@
         "author": "Added by"
       },
       "embeddedTitleHint": "Embedded title: {{title}}",
+      "dropInFolder": "Drop your files to add them to \"{{folder}}\"",
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",

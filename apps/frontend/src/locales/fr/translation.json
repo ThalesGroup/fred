@@ -572,6 +572,8 @@
     "makeSearchable": "Rendre recherchable",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
     "modifySearch": "Essayez de modifier vos critères de recherche",
+    "nestedFoldersHint_one": "{{count}} sous-dossier sera créé pour refléter le dossier déposé",
+    "nestedFoldersHint_other": "{{count}} sous-dossiers seront créés pour refléter le dossier déposé",
     "newFilesSize": "Taille de l'upload : ",
     "noDocument": "Aucun document trouvé",
     "noSummary": "Aucun résumé disponible.",
@@ -1529,6 +1531,7 @@
         "author": "Ajouté par"
       },
       "embeddedTitleHint": "Titre intégré au fichier : {{title}}",
+      "dropInFolder": "Déposez vos fichiers pour les ajouter à « {{folder}} »",
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
