@@ -21,23 +21,6 @@
   min-height: 0;
 }
 
-.header {
-  display: flex;
-  flex-direction: column;
-  padding: 0 var(--spacing-s) var(--spacing-xs);
-}
-
-.titleContainer {
-  display: flex;
-  align-items: center;
-  height: 48px;
-}
-
-.title {
-  color: var(--on-surface-retreat);
-  font: var(--font-title-medium);
-}
-
 /* Dividers above and below frame the personal space apart from the team list. */
 .personalSpace {
   border-top: 1px solid var(--outline-muted);
@@ -62,6 +45,10 @@
 .teamListHeaderLabel {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+}
+
+.teamSearch {
+  padding: 0 var(--spacing-s) var(--spacing-xs);
 }
 
 /* The team list fills the remaining height and scrolls on overflow.

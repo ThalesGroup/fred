@@ -20,8 +20,15 @@
   }
 
   &[data-disabled="true"] {
-    --item-color: var(--on-surface-disabled);
-    --item-bg: var(--state-surface-main-disabled);
+    /* --state-text-disabled, not the (nonexistent) --on-surface-disabled the
+     * rule shipped with: an unresolved var() left the label at full color, so
+     * a disabled item was indistinguishable from an enabled one. Same text
+     * token as `.btn:disabled` (Button.module.scss) so every disabled control
+     * greys identically; items are transparent at rest, so the greyed label +
+     * cursor are the signal, not a background. */
+    --item-color: var(--state-text-disabled);
+    --item-bg: transparent;
+    cursor: not-allowed;
   }
 
   &[data-destructive="true"]:not([data-disabled="true"]) {

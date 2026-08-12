@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
+from knowledge_flow_backend.features.scheduler.activity_utils import raise_if_document_deleted, to_thread_with_heartbeat
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
 )
@@ -49,7 +50,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
         metadata,
         accept_memory_storage,
         ingestion_service=ingestion_service,
-        save_metadata=ingestion_service.save_metadata,
+        persist_progress=ingestion_service.persist_progress,
     )
 
 
@@ -76,7 +77,7 @@ async def output_process_trusted(file: FileToProcess, metadata: DocumentMetadata
         metadata,
         accept_memory_storage,
         ingestion_service=ingestion_service,
-        save_metadata=ingestion_service.save_metadata_trusted,
+        persist_progress=ingestion_service.persist_progress_trusted,
     )
 
 
@@ -86,7 +87,7 @@ async def _output_process_impl(
     accept_memory_storage: bool,
     *,
     ingestion_service: Any,
-    save_metadata: Callable[..., Awaitable[None]],
+    persist_progress: Callable[..., Awaitable[bool]],
 ) -> DocumentMetadata:
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
@@ -101,8 +102,22 @@ async def _output_process_impl(
             output_dir = working_dir / "output"
             document_name = metadata.document_name
 
-            # For both push and pull, restore what was saved (input/output)
-            await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
+            # For both push and pull, restore what was saved (input/output).
+            # to_thread_with_heartbeat, not bare to_thread, here and for
+            # process_output below — and not only for progress reporting: the
+            # heartbeat responses are ALSO the channel Temporal uses to tell a
+            # running activity it was cancelled. A bare to_thread never
+            # heartbeats, so this activity sailed through a user's cancel and
+            # vectorized 4038 chunks for a document already deleted (#2315).
+            # The wrapper additionally scopes a cancellation signal the worker
+            # thread checks between batches (`common/cancellation.py`).
+            await to_thread_with_heartbeat(
+                ingestion_service.get_local_copy,
+                file.processed_by,
+                metadata,
+                working_dir,
+                heartbeat_details={"stage": "output_restore", "document_uid": metadata.document_uid},
+            )
             output_dir.mkdir(parents=True, exist_ok=True)
 
             app_context = ApplicationContext.get_instance()
@@ -125,7 +140,7 @@ async def _output_process_impl(
                 file_name_for_processing = preview_file.name
 
             metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
-            await save_metadata(file.processed_by, metadata=metadata)
+            raise_if_document_deleted(await persist_progress(file.processed_by, metadata=metadata), metadata.document_uid)
 
             if output_stage == ProcessingStage.VECTORIZED:
                 from knowledge_flow_backend.common.structures import InMemoryVectorStorage
@@ -137,18 +152,25 @@ async def _output_process_impl(
                         non_retryable=True,
                     )
 
-            # Proceed with the output processing
-            metadata = await asyncio.to_thread(
+            # Proceed with the output processing (vectorization / SQL indexing —
+            # the longest-running, most expensive stage; see the comment above).
+            metadata = await to_thread_with_heartbeat(
                 ingestion_service.process_output,
                 file.processed_by,
                 file_name_for_processing,
                 output_dir,
                 metadata,
                 file.profile,
+                heartbeat_details={"stage": "output_process", "document_uid": metadata.document_uid},
+                # The vectorization loop checks cancellation checkpoints, so on
+                # cancel the activity waits (bounded) for the thread's last
+                # write before letting the workflow purge — without this the
+                # purge raced the still-writing thread (#2315).
+                drain_on_cancel=True,
             )
 
             # Save the updated metadata
-            await save_metadata(file.processed_by, metadata=metadata)
+            await persist_progress(file.processed_by, metadata=metadata)
 
         logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
         emit_temporal_activity_result_kpis(
@@ -164,7 +186,7 @@ async def _output_process_impl(
         stage = output_stage or ProcessingStage.PREVIEW_READY
         metadata.mark_stage_error(stage, error_message)
         try:
-            await save_metadata(file.processed_by, metadata=metadata)
+            await persist_progress(file.processed_by, metadata=metadata)
         except Exception:
             logger.exception(
                 "[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed to persist error state uid=%s",
@@ -225,6 +247,25 @@ async def emit_ingestion_task_event(
     )
     task_service = ApplicationContext.get_instance().get_task_service()
     await task_service.record(event)
+
+    # The task row is not what the library renders -- the document's processing
+    # stages are, and a terminal task leaves them stale: `in_progress` forever
+    # after an executor-side failure (#2279), or pointing at a document the user
+    # asked to stop building (#2315). Repair the document through the one policy
+    # both this compensation and API-side reconciliation share. Running it here
+    # too is what makes the list update within seconds; reconciliation is the
+    # backstop for when no worker is around to run this at all. Best-effort by
+    # contract -- it must never mask the state being reported.
+    if TaskState(state).is_terminal and document_uid:
+        from knowledge_flow_backend.features.scheduler.document_failure import repair_document_after_terminal
+
+        run = await task_service.get_run(task_id)
+        await repair_document_after_terminal(
+            document_uid,
+            TaskState(state),
+            error or "Processing failed",
+            created_by=run.created_by if run is not None else None,
+        )
 
 
 @activity.defn

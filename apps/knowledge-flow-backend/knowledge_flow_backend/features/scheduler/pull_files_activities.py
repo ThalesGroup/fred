@@ -24,6 +24,7 @@ from temporalio import activity
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.activity_utils import (
     await_with_heartbeat,
+    raise_if_document_deleted,
     to_thread_with_heartbeat,
 )
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
@@ -134,7 +135,7 @@ async def pull_input_process(
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
-        await ingestion_service.save_metadata(user, metadata=metadata)
+        raise_if_document_deleted(await ingestion_service.persist_progress(user, metadata=metadata), metadata.document_uid)
 
         with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
             working_dir = pathlib.Path(tmpdir)
@@ -182,7 +183,7 @@ async def pull_input_process(
 
         if not ingestion_service.context.is_tabular_file(metadata.document_name):
             metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-        await ingestion_service.save_metadata(user, metadata=metadata)
+        await ingestion_service.persist_progress(user, metadata=metadata)
         logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
         emit_temporal_activity_result_kpis(
             phase="input",
@@ -195,7 +196,7 @@ async def pull_input_process(
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
         try:
-            await ingestion_service.save_metadata(user, metadata=metadata)
+            await ingestion_service.persist_progress(user, metadata=metadata)
         except Exception:
             logger.exception(
                 "[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] failed to persist error state uid=%s",

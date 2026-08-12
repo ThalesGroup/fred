@@ -145,6 +145,40 @@ class IngestionService:
         logger.debug(f"Saving metadata (trusted) {metadata}")
         return await self.metadata_service.save_document_metadata_trusted(user, metadata)
 
+    async def persist_progress(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
+        """Persist an ingestion in flight, or clean up after a lost race (#2315).
+
+        The single seam every ingestion-progress write goes through. It never
+        creates a document: `update_document_metadata` is a conditional UPDATE,
+        so a document deleted meanwhile stays deleted and this returns False.
+
+        When that happens the caller has already written artifacts (content,
+        vectors, Parquet) for a document that no longer exists — its work runs
+        in a thread Python cannot kill, so it routinely finishes after a
+        cancellation erased the document. Those bytes are orphans nothing points
+        at, so the writer that lost the race discards its own output here rather
+        than leaving it for the corpus audit to report.
+
+        Returns whether the document is still there, for callers that want to
+        stop early.
+        """
+        return await self._persist_progress(self.metadata_service.update_document_metadata, user, metadata)
+
+    async def persist_progress_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
+        """`persist_progress` without the per-tag permission check — same trust
+        rationale as `save_metadata_trusted`."""
+        return await self._persist_progress(self.metadata_service.update_document_metadata_trusted, user, metadata)
+
+    async def _persist_progress(self, update, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
+        if await update(user, metadata):
+            return True
+        logger.info(
+            "[INGESTION] document_uid=%s was deleted mid-flight; discarding the artifacts this attempt wrote",
+            metadata.document_uid,
+        )
+        await self.metadata_service.purge_document_artifacts(metadata.document_uid)
+        return False
+
     async def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.

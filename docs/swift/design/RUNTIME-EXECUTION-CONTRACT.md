@@ -2628,6 +2628,125 @@ more accurate once rates are populated, no new UI element shipped.
 
 ---
 
+### 8.45 ✅ Alembic owns `session_history` DDL; an unmigrated pod fails at startup (issue #2290, 2026-08-07)
+
+**Extends §8.33.** `PostgresHistoryStore` used to call `_ensure_tables()` —
+`metadata.create_all` under a Postgres advisory lock — from every read and
+write path (`save`, `get`, `list_sessions`, `delete_session`,
+`session_belongs_to_user`, `session_exists`, `next_rank`,
+`latest_exchange_id`), in parallel with the Alembic tree that already owns the
+same schema (`libs/fred-runtime/alembic/versions/a1e2f3c4d5b6_*`,
+`b2f3a4e5c6d7_*`, `c3d4b5a6f7e8_*`). Hit in production: an install that skipped
+its migration job worked — the store silently made the table — but
+`alembic_version_runtime` was never stamped, so the first `alembic upgrade head`
+needed for anything else replayed from the first revision and died on "table
+already exists". The operator was left with a working database and a migration
+tree that could never be applied, recoverable only by hand-stamping.
+
+**What changed.** `_ensure_tables()` and all eight call sites are gone; the
+store creates nothing, on any path. `PodApplicationContext.initialize_sql()`
+now calls `fred_core.sql.require_tables` once, right after the §8.33
+connectivity ping and before the checkpointer/history store are published: a
+missing `session_history` raises `SchemaNotMigratedError` naming the table and
+the exact fix (`python -m fred_runtime migrate`), so the lifespan aborts and
+the replica never becomes Ready. This is startup-only work — nothing was added
+to the per-turn path; the eight per-call `await self._ensure_tables()` guards
+were in fact removed from it. A database whose tables exist but whose version
+table is unstamped (the pre-#2290 state) still boots, with a warning naming the
+recovery path.
+
+**Tests run the real migrations, not hand-rolled DDL.** Every pod-booting test
+applies fred-runtime's Alembic tree to its SQLite file through
+`fred_runtime.migrations.upgrade_sqlite_database` (`DATABASE_URL` override, run
+off-loop because Alembic's online runner calls `asyncio.run`) — used by
+`libs/fred-runtime/tests/conftest.py`'s `migrate_test_config` and by
+`apps/fred-agents/tests/test_smoke.py`. Cost is ~30ms per database once imports
+are warm, and the payoff is that the suite proves the migration tree produces a
+schema the pod can boot against, leaving `alembic_version_runtime` stamped at
+head exactly like a real install. Re-introducing `metadata.create_all` in test
+setup would recreate, in test code, the second schema definition this entry
+removed from production.
+
+The one exception is `fred_core.history.create_history_schema`, for fred-core's
+own unit tests: fred-core sits below the package that owns the Alembic tree and
+cannot import upwards to run it. Anything that *can* import fred-runtime must
+use `upgrade_sqlite_database`.
+
+Note for test authors: a suite that boots a pod against a **persistent** SQLite
+file (`apps/fred-agents/config/configuration.yaml` points at
+`~/.fred/fred-agents/runtime.sqlite3`) must migrate it itself. Such a file left
+over from before this change already contains `session_history`, so the guard
+stays quiet locally and fires only on a clean runner — which is exactly how this
+was missed locally and caught by CI.
+
+Operator recovery path (which revision to stamp, by columns present):
+[`ops/DATABASE_MIGRATIONS.md`](../ops/DATABASE_MIGRATIONS.md).
+
+**Deliberately out of scope:** `SqlCheckpointer._ensure_tables()`
+(`fred_runtime/runtime_support/sql_checkpointer.py`, ~12 call sites plus three
+direct calls from `agent_app.py`) has the identical pattern and is tracked
+separately — its tables are in no Alembic tree yet, so removing lazy creation
+there needs migrations written first.
+
+---
+
+### 8.46 ✅ `FinishReason` — normalized, Fred-owned enum replaces the raw provider string (issue #1840, 2026-08-11)
+
+**Closes FRONT-05 (`FRONTEND-BACKLOG.md §7`).** The frontend's last remaining
+import from the retired `agentic-backend` client was `FinishReason` — a named
+6-value enum that client happened to expose, with nothing equivalent on the
+runtime side (`ChatMetadata.finish_reason` was a plain `Optional[str]`,
+whatever the LLM provider reported verbatim).
+
+**Why a raw passthrough was the wrong shape.** Providers report this under
+different keys and vocabularies — OpenAI: `response_metadata["finish_reason"]
+= "stop"/"length"/"tool_calls"`; Anthropic:
+`response_metadata["stop_reason"] = "end_turn"/"max_tokens"/"tool_use"`
+(**a different key entirely** — Fred only ever read `"finish_reason"`, so
+every Claude-backed turn silently had `finish_reason = None` before this fix);
+Gemini/Vertex: `"STOP"`/`"MAX_TOKENS"`, or `"UNKNOWN_<n>"` when the installed
+SDK doesn't recognize an enum value the API returned. That last case means the
+raw value space is open-ended by construction — no closed type can enumerate
+it, on the frontend or the backend.
+
+**What changed.**
+
+- `fred_core.history.history_schema` (`libs/fred-core`) gains `FinishReason(str,
+  Enum)` — `stop | length | content_filter | tool_calls | error | other` — and
+  `coerce_finish_reason(raw)`, a case-insensitive alias table mapping every
+  known provider value onto it. Anything not in the table (a new provider, a
+  new SDK enum value, a typo) maps to `other` rather than raising — this is a
+  deliberate, designed fallback, not an accidental gap.
+- `ChatMetadata.finish_reason` is now `Optional[FinishReason]`, with a
+  `field_validator(mode="before")` calling `coerce_finish_reason` — applied on
+  **both** construction and `.model_validate()` (read), so a history row
+  persisted before this change, still holding a raw provider string, loads
+  without error instead of failing validation.
+- `fred_sdk.contracts.runtime.FinalRuntimeEvent.finish_reason` (the live SSE
+  contract) is now `FinishReason | None`, with the same tolerant
+  `field_validator` — this is a separate Pydantic model from `ChatMetadata`
+  (one is the live event, one is persisted history), so both needed the fix;
+  fixing only one would have made the live view and a reloaded conversation
+  disagree on the same turn's value.
+- `fred_runtime.runtime_support.model_metadata.runtime_metadata_from_message`
+  now reads `response_metadata["finish_reason"]` **or**
+  `["stop_reason"]` (fixing the Anthropic gap above) and normalizes via
+  `coerce_finish_reason` at the source, once — both the SSE event and the
+  persisted history descend from this same call, so they can never diverge.
+
+**Frontend.** `runtimeOpenApi.ts` now generates a named `FinishReason` union;
+`useChatSse.ts` reads it directly, no cast. `agenticOpenApi.ts`,
+`agenticApi.ts`, and their config are deleted — this was their last consumer,
+closing out `FRONTEND-BACKLOG.md §7` entirely.
+
+**Deliberately out of scope:** no retroactive backfill of `error`/`other`
+misclassification in history rows written before this shipped (the
+`mode="before"` coercion is what keeps them loadable, it does not rewrite
+them); no per-provider GreenOps/cost impact (unrelated to `TokenUsageImpact` /
+issue #2312).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

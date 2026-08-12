@@ -20,6 +20,7 @@
   gap: var(--spacing-xs);
   background-color: var(--surface-container-high);
   padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-m);
+  min-height: 48px;
   color: var(--on-surface);
 }
 
@@ -72,5 +73,6 @@
 /* "Back" out of team settings, above the settings section menu. */
 .settings-back-container {
   display: flex;
-  padding: var(--spacing-xs) 0 var(--spacing-xs) var(--spacing-xs);
+  background-color: var(--surface-container);
+  padding: var(--spacing-2xs) 0 var(--spacing-2xs) var(--spacing-2xs);
 }

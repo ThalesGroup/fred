@@ -33,10 +33,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Any, Generic, List, Literal, Protocol, TypeAlias, TypeVar
 
+from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .context import (
     AgentInvocationRequest,
@@ -310,7 +311,16 @@ class FinalRuntimeEvent(RuntimeEventBase):
     ui_parts: tuple[UiPart, ...] = ()
     model_name: str | None = None
     token_usage: dict[str, int] | None = None
-    finish_reason: str | None = None
+    finish_reason: FinishReason | None = None
+
+    # Same tolerant coercion as `ChatMetadata.finish_reason` (fred-core): a raw
+    # provider value that isn't already normalized (or one this build has never
+    # seen) must never fail this frozen model's construction — it degrades to
+    # `other` instead.
+    @field_validator("finish_reason", mode="before")
+    @classmethod
+    def _normalize_finish_reason(cls, v: object) -> FinishReason | None:
+        return coerce_finish_reason(v)
 
 
 class TurnPersistedEvent(RuntimeEventBase):
