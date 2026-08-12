@@ -56,7 +56,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
   const [copied, setCopied] = useState(false);
-  const turnRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
@@ -73,7 +73,7 @@ export const AssistantTurn = memo(function AssistantTurn({
     // Copy from the rendered markdown, not the raw `text` prop, so the
     // clipboard gets real bold/lists/tables/links instead of literal
     // markdown syntax — same email-safe serialisation as manual selection.
-    const node = turnRef.current?.querySelector<HTMLElement>("[data-copyable-content]");
+    const node = contentRef.current;
     const write = node ? writeRichClipboard(toEmailHtml(node), toPlainText(node)) : writeRichClipboard("", text);
     write.then((success) => {
       if (success) {
@@ -99,7 +99,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   if (!hasContent) return null;
 
   return (
-    <div className={styles.turn} ref={turnRef}>
+    <div className={styles.turn}>
       {/* ThoughtTrace owns its own expand/collapse — no wrapper needed */}
       {/* pendingToolCallIds is forwarded regardless of isStreaming: the SSE
           stream itself ends the instant the backend pauses for HITL approval
@@ -114,6 +114,7 @@ export const AssistantTurn = memo(function AssistantTurn({
       )}
 
       <AssistantMessage
+        ref={contentRef}
         text={text}
         isStreaming={isStreaming}
         onSourceClick={uiSources.length > 0 ? setActiveSourceIndex : undefined}

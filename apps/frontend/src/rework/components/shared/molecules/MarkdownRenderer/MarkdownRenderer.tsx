@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo } from "react";
+import { forwardRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -166,13 +166,10 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
   [rehypeSanitize, sanitizeSchema],
 ];
 
-export function MarkdownRenderer({
-  text,
-  onSourceClick,
-  streaming = false,
-  fullWidth = false,
-  headingAnchors = false,
-}: MarkdownRendererProps) {
+export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps>(function MarkdownRenderer(
+  { text, onSourceClick, streaming = false, fullWidth = false, headingAnchors = false },
+  ref,
+) {
   const { stableMarkdown, pendingFence } = useMemo(
     () => (streaming ? getStreamingMarkdownState(text) : { stableMarkdown: text, pendingFence: null }),
     [streaming, text],
@@ -262,7 +259,7 @@ export function MarkdownRenderer({
   }
 
   return (
-    <div className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}`} data-copyable-content>
+    <div ref={ref} className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}`} data-copyable-content>
       {stableMarkdown ? (
         <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
           {stableMarkdown}
@@ -271,4 +268,4 @@ export function MarkdownRenderer({
       {renderPendingFence(pendingFence)}
     </div>
   );
-}
+});
