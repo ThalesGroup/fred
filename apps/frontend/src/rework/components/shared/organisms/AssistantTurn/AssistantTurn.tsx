@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { memo, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
@@ -24,9 +23,6 @@ import { SourceCard } from "@shared/molecules/SourceCard/SourceCard";
 import { SourceDetailModal } from "@shared/molecules/SourcesPanel/SourceDetailModal/SourceDetailModal";
 import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { hitToSource } from "../../../../utils/conversationUtils";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
-import { useCopyToClipboard } from "@hooks/useCopyToClipboard";
 import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./AssistantTurn.module.css";
 
@@ -54,7 +50,6 @@ export const AssistantTurn = memo(function AssistantTurn({
   isStreaming,
   pendingToolCallIds,
 }: AssistantTurnProps) {
-  const { t } = useTranslation();
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
 
@@ -68,9 +63,6 @@ export const AssistantTurn = memo(function AssistantTurn({
     if (!source) return;
     setSelected({ source, index: activeSourceIndex });
   }, [activeSourceIndex, sources]);
-
-  // The button itself confirms the copy (content_copy → green check) — no toast.
-  const { copied, copy } = useCopyToClipboard(text);
 
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;
   if (!hasContent) return null;
@@ -90,32 +82,14 @@ export const AssistantTurn = memo(function AssistantTurn({
         <ThoughtTrace messages={traceMessages} done={!isStreaming} pendingToolCallIds={pendingToolCallIds} />
       )}
 
-      <div className={styles.messageBlock}>
-        {/* Same placement as UserTurn's actions: beside the message, at its
-            left — floated into the centred column's outer gutter so the prose
-            never shifts — and revealed on hover/focus like the user side. */}
-        {!isStreaming && text && (
-          <div className={styles.messageActions}>
-            <Tooltip text={t("chatbot.copyMessage.tooltip")}>
-              <span className={copied ? styles.copyPop : undefined}>
-                <IconButton
-                  variant="icon"
-                  size="small"
-                  color={copied ? "success" : undefined}
-                  icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
-                  aria-label={t("chatbot.copyMessage.tooltip")}
-                  onClick={copy}
-                />
-              </span>
-            </Tooltip>
-          </div>
-        )}
-        <AssistantMessage
-          text={text}
-          isStreaming={isStreaming}
-          onSourceClick={uiSources.length > 0 ? setActiveSourceIndex : undefined}
-        />
-      </div>
+      {/* No copy button here (removed on review): assistant prose is freely
+          selectable, and selection IS the copy path for a long answer — the
+          user turn keeps its button for the short, grab-it-all case. */}
+      <AssistantMessage
+        text={text}
+        isStreaming={isStreaming}
+        onSourceClick={uiSources.length > 0 ? setActiveSourceIndex : undefined}
+      />
 
       {!isStreaming && uiSources.length > 0 && (
         <HorizontalScrollRow className={styles.sources}>
