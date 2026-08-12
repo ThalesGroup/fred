@@ -30,6 +30,7 @@ import { IngestionProcessingProfile } from "../../../../../slices/knowledgeFlow/
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
+import { displayPath, relativeDirSegments } from "./droppedPaths";
 import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
@@ -43,6 +44,17 @@ interface DocumentUploadDrawerProps {
   /** Files picked before the drawer opened (dropped on a folder row) — seeded into the
    * list on open so the user only has to choose mode/profile and save. */
   initialFiles?: File[];
+  /** Resolves (creating tags as needed) the nested folder chain `segments` under the
+   * upload destination and returns the tag id files in that folder attach to — how a
+   * dropped directory keeps its on-disk structure as nested corpus tags. Owned by the
+   * caller (it knows the tag tree); absent => structure is ignored and every file
+   * lands flat in the destination folder, the historical behavior. */
+  ensureFolderPath?: (segments: string[]) => Promise<string | null>;
+  /** Destination with no tag of its own (the corpus root): every file must sit
+   * inside a dropped folder — its chain becomes the file's library — because a
+   * loose file would upload tagless and be invisible in the corpus. Loose
+   * files are filtered out of the list (with a toast when it happens). */
+  requireFolderPerFile?: boolean;
 }
 
 /**
@@ -95,6 +107,8 @@ export function DocumentUploadDrawer({
   teamId,
   destinationPath,
   initialFiles,
+  ensureFolderPath,
+  requireFolderPerFile,
 }: DocumentUploadDrawerProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
@@ -137,16 +151,28 @@ export function DocumentUploadDrawer({
   const [isLoading, setIsLoading] = useState(false);
 
   // Seed on open only: `files` stays local state afterwards (user can still add
-  // or remove entries), and closing resets it via handleClose as usual.
+  // or remove entries), and closing resets it via handleClose as usual. The
+  // caller already filters loose files out of a root-drop seed — the filter
+  // here is for any other opener of a tagless destination.
   useEffect(() => {
-    if (isOpen && initialFiles?.length) setFiles(initialFiles);
-  }, [isOpen, initialFiles]);
+    if (isOpen && initialFiles?.length) {
+      setFiles(requireFolderPerFile ? initialFiles.filter((f) => relativeDirSegments(f).length > 0) : initialFiles);
+    }
+  }, [isOpen, initialFiles, requireFolderPerFile]);
 
   const resolvedTeamId = teamId ?? "personal";
   const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId });
   const { canUpdateResources: canSelectProfile } = useTeamCapabilities(team);
 
   const newFilesSize = useMemo(() => files.reduce((acc, f) => acc + f.size, 0), [files]);
+
+  // Distinct subdirectories carried by the listed files (a dropped folder) that
+  // saving will mirror as nested corpus tags — 0 when the list is flat or when
+  // the caller provided no ensureFolderPath (structure is then ignored).
+  const nestedDirCount = useMemo(() => {
+    if (!ensureFolderPath) return 0;
+    return new Set(files.map((f) => relativeDirSegments(f).join("/")).filter(Boolean)).size;
+  }, [files, ensureFolderPath]);
 
   const isQuotaExceeded = useMemo(() => {
     if (!team) return false;
@@ -161,9 +187,16 @@ export function DocumentUploadDrawer({
     // Enter/Space opens the file dialog (react-dropzone), so adding files no
     // longer depends on a mouse/drag. Focus-visible styling lives in the CSS.
     onDrop: (accepted) => {
+      const usable = requireFolderPerFile ? accepted.filter((f) => relativeDirSegments(f).length > 0) : accepted;
+      if (usable.length < accepted.length) {
+        showError?.({
+          summary: t("documentLibrary.uploadDrawerTitle"),
+          detail: t("documentLibrary.folderRequired"),
+        });
+      }
       setFiles((prev) => {
         const existing = new Set(prev.map((f) => `${f.name}-${f.size}-${f.lastModified}`));
-        return [...prev, ...accepted.filter((f) => !existing.has(`${f.name}-${f.size}-${f.lastModified}`))];
+        return [...prev, ...usable.filter((f) => !existing.has(`${f.name}-${f.size}-${f.lastModified}`))];
       });
     },
   });
@@ -179,6 +212,29 @@ export function DocumentUploadDrawer({
   const handleSave = async () => {
     if (!files.length || isLoading || isQuotaExceeded) return;
     setIsLoading(true);
+    // Mirror a dropped folder's structure first: one tag chain per distinct
+    // subdirectory, resolved before any upload starts so a failed/forbidden tag
+    // creation aborts the save with nothing half-uploaded (the drawer stays open
+    // for a retry). Sequential on purpose — sibling chains share parent
+    // prefixes, which the caller's resolver caches between calls.
+    const tagIdByDir = new Map<string, string | null>();
+    if (ensureFolderPath) {
+      const chains = new Map<string, string[]>();
+      for (const file of files) {
+        const segments = relativeDirSegments(file);
+        if (segments.length) chains.set(segments.join("/"), segments);
+      }
+      try {
+        for (const [key, segments] of chains) tagIdByDir.set(key, await ensureFolderPath(segments));
+      } catch (err) {
+        setIsLoading(false);
+        showError?.({
+          summary: t("documentLibrary.uploadDrawerTitle"),
+          detail: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+    }
     try {
       // Schedule every file concurrently rather than one-at-a-time: each
       // `scheduleFile` already only waits for its own task_id to be discovered
@@ -187,7 +243,11 @@ export function DocumentUploadDrawer({
       // not after the sum of every file's upload time.
       await Promise.all(
         files.map((file) => {
-          const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
+          const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
+          // A file inside a dropped subdirectory attaches to that subdirectory's
+          // tag instead of the destination folder's (`base` keeps the latter).
+          const dirTagId = tagIdByDir.get(relativeDirSegments(file).join("/"));
+          const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
           // Register each task the instant the server first reports its id (the first
           // line of the stream), not after the whole upload finishes — so the tray
           // lights up and starts its SSE subscription while the upload streams.
@@ -304,8 +364,8 @@ export function DocumentUploadDrawer({
                 <ul className={styles.fileList}>
                   {files.map((f, i) => (
                     <li key={`${f.name}-${i}`} className={styles.fileRow}>
-                      <span className={styles.fileName} title={f.name}>
-                        {f.name}
+                      <span className={styles.fileName} title={displayPath(f)}>
+                        {displayPath(f)}
                       </span>
                       <span className={styles.fileSize}>{formatBytes(f.size)}</span>
                       <IconButton
@@ -323,6 +383,12 @@ export function DocumentUploadDrawer({
                 </ul>
               )}
             </div>
+
+            {nestedDirCount > 0 && (
+              <p className={styles.formatsCaption}>
+                {t("documentLibrary.nestedFoldersHint", { count: nestedDirCount })}
+              </p>
+            )}
 
             <p className={styles.formatsCaption}>{t("documentLibrary.supportedFormats")}</p>
 

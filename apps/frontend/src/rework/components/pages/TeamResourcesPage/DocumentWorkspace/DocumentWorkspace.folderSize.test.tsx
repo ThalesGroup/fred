@@ -65,6 +65,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [vi.fn()],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [tagSizes],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
+  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
 }));

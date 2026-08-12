@@ -97,7 +97,6 @@ export interface ToolPackSection {
 //     rather than in scattered string literals; also consumed by toolPackLogic. ---
 export const CAP_DOCUMENT_ACCESS = "document_access";
 export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
-export const CAP_FILESYSTEM = "mcp-knowledge-flow-fs";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
@@ -125,15 +124,18 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         icon: "database",
         titleKey: "rework.teams.formAgent.capabilities.packs.teamResources.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.teamResources.description",
+        // The filesystem capability (mcp-knowledge-flow-fs) is deliberately NOT
+        // part of this pack: the /fs runtime boundary is not agent/team-scoped
+        // yet (#2334, AGENT-FILESYSTEM-HARDENING-RFC F1). Do not re-add it here
+        // until that lands.
         includes: [
           { capabilityId: CAP_DOCUMENT_ACCESS, labelKey: "capability.document_access.name" },
-          { capabilityId: CAP_FILESYSTEM, labelKey: "mcp.servers.filesystem.name" },
           { capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" },
           { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
         ],
         // document_access is handled via documentAccessIntent (computed config);
         // the rest are plain on/off.
-        enablesCapabilityIds: [CAP_FILESYSTEM, CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE],
+        enablesCapabilityIds: [CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE],
         documentAccessIntent: "corpus",
       },
       {

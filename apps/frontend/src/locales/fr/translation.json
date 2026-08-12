@@ -566,6 +566,7 @@
     "downloadStarting": "Préparation du téléchargement...",
     "dropFiles": "Déposez vos fichiers ici",
     "excessSize": "Dépassement : ",
+    "folderRequired": "Seuls les fichiers contenus dans un dossier peuvent être ajoutés ici — les fichiers seuls ont été ignorés.",
     "folders": "Dossiers",
     "ingestionMode": "Mode d'ingestion",
     "keywords": "Mots-clés",
@@ -577,6 +578,8 @@
     "makeSearchable": "Rendre recherchable",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
     "modifySearch": "Essayez de modifier vos critères de recherche",
+    "nestedFoldersHint_one": "{{count}} sous-dossier sera créé pour refléter le dossier déposé",
+    "nestedFoldersHint_other": "{{count}} sous-dossiers seront créés pour refléter le dossier déposé",
     "newFilesSize": "Taille de l'upload : ",
     "noDocument": "Aucun document trouvé",
     "noSummary": "Aucun résumé disponible.",
@@ -1534,6 +1537,14 @@
         "author": "Ajouté par"
       },
       "embeddedTitleHint": "Titre intégré au fichier : {{title}}",
+      "dropInFolder": "Déposez vos fichiers pour les ajouter à « {{folder}} »",
+      "dropAtRoot": "Déposez un dossier pour le créer ici avec son arborescence",
+      "rootDrop": {
+        "rejectedTitle": "Déposez un dossier",
+        "rejectedDetail": "Les fichiers seuls ne peuvent pas être déposés à la racine — déposez un dossier (il deviendra une bibliothèque), ou déposez les fichiers dans un dossier existant.",
+        "skippedDetail_one": "{{count}} fichier seul a été ignoré — seul le contenu des dossiers déposés a été conservé.",
+        "skippedDetail_other": "{{count}} fichiers seuls ont été ignorés — seul le contenu des dossiers déposés a été conservé."
+      },
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
