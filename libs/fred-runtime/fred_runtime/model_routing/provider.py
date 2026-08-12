@@ -274,9 +274,26 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             # profiles ops activated and is inert everywhere else. Ordered
             # after the strip branch on purpose — a declined/unauthorized turn
             # never sees the user's pick.
-            model_config = with_reasoning_effort(
-                model_config, binding.runtime_context.reasoning_effort
-            )
+            #
+            # Clamped against the profile's ops-declared accepted values when
+            # they exist: providers reject efforts they don't support with a
+            # 400 that fails the whole turn (measured: Mistral small accepts
+            # only 'high'), so an out-of-range pick stays inert and the
+            # ops-authored default applies. The composer narrows its option
+            # list from the same declaration, so this clamp is the backstop
+            # for stale/malformed clients, not the primary UX.
+            effort = binding.runtime_context.reasoning_effort
+            allowed = selection.supported_reasoning_efforts
+            if allowed is None or effort in allowed:
+                model_config = with_reasoning_effort(model_config, effort)
+            else:
+                logger.debug(
+                    "[V2][MODEL_ROUTING] reasoning effort %r not in profile %s's "
+                    "supported set %s — keeping the ops-authored default",
+                    effort,
+                    selection.profile_id,
+                    list(allowed),
+                )
         model = self._provider.build_model(
             model_config, capability=selection.capability
         )
@@ -388,6 +405,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             model=profile.model.model_copy(deep=True),
             rule_id=None,
             matched_criteria=0,
+            supported_reasoning_efforts=profile.supported_reasoning_efforts,
         )
 
 

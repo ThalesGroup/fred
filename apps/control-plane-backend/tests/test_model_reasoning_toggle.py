@@ -26,7 +26,7 @@ Covers the two properties the rest of the feature rests on:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 from control_plane_backend.capabilities import service as capability_service
@@ -113,6 +113,32 @@ async def test_a_stored_false_is_indistinguishable_from_no_row(tmp_path) -> None
     assert await store.list_enabled_model_ids() == {THINKING_MODEL}
 
 
+@pytest.mark.asyncio
+async def test_supported_efforts_snapshot_round_trips(tmp_path) -> None:
+    # Level 4b: the enable-time snapshot of the provider-accepted efforts is
+    # what the composer's params.efforts is built from — no catalog fetch on
+    # the send path, so it must survive the store round trip (and NULL must
+    # read back as "not declared", never as an empty narrowing).
+    store = await _make_store(tmp_path)
+
+    await store.set_enabled(
+        model_capability_id=THINKING_MODEL,
+        reasoning_enabled=True,
+        updated_by="admin-1",
+        supported_efforts=["high"],
+    )
+    assert await store.list_enabled_supported_efforts() == {THINKING_MODEL: ["high"]}
+
+    # Re-toggling with no declaration is the refresh path back to "unknown".
+    await store.set_enabled(
+        model_capability_id=THINKING_MODEL,
+        reasoning_enabled=True,
+        updated_by="admin-1",
+        supported_efforts=None,
+    )
+    assert await store.list_enabled_supported_efforts() == {THINKING_MODEL: None}
+
+
 # ---------------------------------------------------------------------------
 # Service — aptitude is declared, never granted (§5.3)
 # ---------------------------------------------------------------------------
@@ -136,6 +162,8 @@ def _model_entry(
 class _RecordingStore:
     def __init__(self, enabled: set[str] | None = None) -> None:
         self.writes: list[tuple[str, bool]] = []
+        # (model_id, efforts) captured by set_enabled — the level-4b snapshot.
+        self.effort_snapshots: list[tuple[str, list[str] | None]] = []
         self._enabled = enabled or set()
 
     async def set_enabled(
@@ -144,12 +172,22 @@ class _RecordingStore:
         model_capability_id: str,
         reasoning_enabled: bool,
         updated_by: str | None,
+        supported_efforts: Sequence[str] | None = None,
     ) -> bool:
         self.writes.append((model_capability_id, reasoning_enabled))
+        self.effort_snapshots.append(
+            (
+                model_capability_id,
+                list(supported_efforts) if supported_efforts is not None else None,
+            )
+        )
         return reasoning_enabled
 
     async def list_enabled_model_ids(self) -> set[str]:
         return set(self._enabled)
+
+    async def list_enabled_supported_efforts(self) -> dict[str, list[str] | None]:
+        return {model_id: None for model_id in self._enabled}
 
 
 class _FakeDeps:
@@ -430,6 +468,60 @@ def test_control_is_emitted_when_every_gate_is_open() -> None:
     # Author-settable since Amendment B, but this stays the value an author
     # who does nothing gets.
     assert control.params == {"default": False}
+
+
+def test_params_efforts_narrow_to_the_declared_provider_set() -> None:
+    # Level 4b: the enable-time snapshot said this provider only accepts
+    # 'high' (the measured Mistral-small 400 on low/medium) — the composer's
+    # picker must only offer that.
+    from control_plane_backend.product.service import _platform_reasoning_control
+
+    control = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL],
+        supported_efforts_by_model={THINKING_MODEL: ["high"]},
+    )
+
+    assert control is not None
+    assert control.params == {"default": False, "efforts": ["high"]}
+
+
+def test_params_efforts_omitted_when_nothing_is_declared() -> None:
+    # None = "unknown, don't narrow": the composer offers the full set and the
+    # pod-side clamp alone guards — never an empty narrowing that would kill
+    # the picker.
+    from control_plane_backend.product.service import _platform_reasoning_control
+
+    control = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL],
+        supported_efforts_by_model={THINKING_MODEL: None},
+    )
+
+    assert control is not None
+    assert control.params == {"default": False}
+
+
+def test_params_efforts_intersect_across_declared_models() -> None:
+    # Two enabled reasoning models: a pick must be valid on both, so the
+    # offered set is the intersection of the DECLARED lists; an undeclared
+    # model doesn't veto (it is clamped pod-side).
+    from control_plane_backend.product.service import _platform_reasoning_control
+
+    control = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
+        supported_efforts_by_model={
+            THINKING_MODEL: ["medium", "high"],
+            PLAIN_MODEL: ["low", "medium"],
+        },
+    )
+
+    assert control is not None
+    assert control.params == {"default": False, "efforts": ["medium"]}
 
 
 # ---------------------------------------------------------------------------

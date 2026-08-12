@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from typing import Sequence
 
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import select
@@ -49,8 +51,19 @@ class ModelReasoningStore:
         model_capability_id: str,
         reasoning_enabled: bool,
         updated_by: str | None,
+        supported_efforts: Sequence[str] | None = None,
         session: AsyncSession | None = None,
     ) -> bool:
+        # `supported_efforts` is a SNAPSHOT of the catalog entry's
+        # provider-accepted effort values, taken by the service at
+        # enable-time so the send path never needs a catalog fetch (level
+        # 4b). None = the catalog declared nothing — stored as NULL, read
+        # back as "unknown, don't narrow".
+        efforts_json = (
+            json.dumps(list(supported_efforts))
+            if supported_efforts is not None
+            else None
+        )
         async with use_session(self._sessions, session) as s:
             existing = (
                 await s.execute(
@@ -64,11 +77,13 @@ class ModelReasoningStore:
                     ModelReasoningRow(
                         model_capability_id=model_capability_id,
                         reasoning_enabled=reasoning_enabled,
+                        supported_efforts_json=efforts_json,
                         updated_by=updated_by,
                     )
                 )
             else:
                 existing.reasoning_enabled = reasoning_enabled
+                existing.supported_efforts_json = efforts_json
                 existing.updated_by = updated_by
         return reasoning_enabled
 
@@ -94,3 +109,39 @@ class ModelReasoningStore:
                 )
             ).scalars()
             return set(rows)
+
+    async def list_enabled_supported_efforts(
+        self, *, session: AsyncSession | None = None
+    ) -> dict[str, list[str] | None]:
+        """Enabled model ids → their snapshotted provider-accepted efforts.
+
+        Same single indexed read as `list_enabled_model_ids`, one extra
+        column. `None` per model means the catalog declared nothing when
+        reasoning was enabled ("unknown, don't narrow"); a malformed stored
+        JSON degrades to the same rather than failing session prep.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(
+                        ModelReasoningRow.model_capability_id,
+                        ModelReasoningRow.supported_efforts_json,
+                    ).where(ModelReasoningRow.reasoning_enabled.is_(True))
+                )
+            ).all()
+        result: dict[str, list[str] | None] = {}
+        for model_id, efforts_json in rows:
+            efforts: list[str] | None = None
+            if efforts_json:
+                try:
+                    parsed = json.loads(efforts_json)
+                    if isinstance(parsed, list):
+                        efforts = [str(item) for item in parsed]
+                except (ValueError, TypeError):
+                    logger.warning(
+                        "[model-reasoning] unreadable supported_efforts_json for %s — treating as undeclared",
+                        model_id,
+                    )
+            result[model_id] = efforts
+        return result

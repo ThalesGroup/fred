@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -45,6 +45,19 @@ class ModelReasoningRow(Base):
     __tablename__ = "model_reasoning"
 
     model_capability_id: Mapped[str] = mapped_column(String, primary_key=True)
+    supported_efforts_json: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment=(
+            "JSON array of the reasoning_effort values this model's provider "
+            "accepts (level 4b), SNAPSHOTTED from the catalog entry at the "
+            "moment reasoning was enabled — so the composer control's "
+            "params.efforts needs no catalog fetch on the send path. NULL = "
+            "not declared ('unknown, don't narrow'). Staleness is accepted: "
+            "a catalog change is picked up the next time an admin re-toggles "
+            "reasoning, and the pod-side clamp is the actual enforcement."
+        ),
+    )
     reasoning_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

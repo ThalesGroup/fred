@@ -18,11 +18,32 @@ import type { ChatControlDescriptor } from "../../../../slices/controlPlane/cont
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
 type ReasoningEffort = "off" | "low" | "medium" | "high";
+type ReasoningEffortLevel = Exclude<ReasoningEffort, "off">;
 
-/** Seed for a `reasoning_toggle` whose `params.default` asked for reasoning on:
- *  "high" matches the only ops-authored `reasoning_effort` in the catalog, so a
- *  default-on agent behaves exactly as before the picker existed. */
-const DEFAULT_ON_EFFORT: ReasoningEffort = "high";
+/** The platform's full closed set, low→high — narrowed per session by the
+ *  reasoning control's `params.efforts` (the enable-time snapshot of what the
+ *  enabled models' providers actually accept; absent = don't narrow). */
+const ALL_EFFORT_LEVELS: readonly ReasoningEffortLevel[] = ["low", "medium", "high"];
+
+/** Effort levels this session's picker may offer (level 4b narrowing). */
+function offeredEffortLevels(chatControls: readonly ChatControlDescriptor[]): ReasoningEffortLevel[] {
+  const control = chatControls.find((c) => c.widget === "reasoning_toggle");
+  const efforts = (control?.params as { efforts?: unknown } | undefined)?.efforts;
+  if (!Array.isArray(efforts)) return [...ALL_EFFORT_LEVELS];
+  const narrowed = ALL_EFFORT_LEVELS.filter((level) => efforts.includes(level));
+  // A malformed/empty narrowing must not kill the picker — the pod-side clamp
+  // is the real guard, offering too much only makes a pick inert.
+  return narrowed.length > 0 ? narrowed : [...ALL_EFFORT_LEVELS];
+}
+
+/** Seed for a `reasoning_toggle` whose `params.default` asked for reasoning
+ *  on: the HIGHEST offered level — matches the ops-authored default of the
+ *  only reasoning model in the catalog, so a default-on agent behaves exactly
+ *  as before the picker existed. Also the clamp target for a stored level the
+ *  session no longer offers ("on" intent preserved, valid value guaranteed). */
+function defaultOnEffort(offered: readonly ReasoningEffortLevel[]): ReasoningEffort {
+  return offered[offered.length - 1] ?? "high";
+}
 
 interface ComposerState {
   searchPolicy: SearchPolicyName;
@@ -63,6 +84,7 @@ function writeStorage(sessionId: string, state: ComposerState): void {
 }
 
 function buildInitial(sessionId: string | null, chatControls: readonly ChatControlDescriptor[]): ComposerState {
+  const offered = offeredEffortLevels(chatControls);
   const defaults: ComposerState = {
     searchPolicy: findDefault<SearchPolicyName>(chatControls, "search_policy") ?? "hybrid",
     ragScope: findDefault<RagScope>(chatControls, "rag_scope") ?? "hybrid",
@@ -73,15 +95,26 @@ function buildInitial(sessionId: string | null, chatControls: readonly ChatContr
     // a safety decision, not a style one (RFC §9): reasoning on a tool loop
     // was measured re-issuing duplicate tool calls. `?? false` also means a
     // frontend newer than the pod (no such widget) simply never reasons.
-    reasoningEffort: (findDefault<boolean>(chatControls, "reasoning_toggle") ?? false) ? DEFAULT_ON_EFFORT : "off",
+    reasoningEffort:
+      (findDefault<boolean>(chatControls, "reasoning_toggle") ?? false) ? defaultOnEffort(offered) : "off",
   };
   const stored = readStorage(sessionId) as Partial<ComposerState> & { reasoning?: boolean };
   // Sessions stored before the effort picker carry the old boolean `reasoning`
   // key — map it once here rather than versioning the storage schema.
   if (stored.reasoningEffort === undefined && stored.reasoning !== undefined) {
-    stored.reasoningEffort = stored.reasoning ? DEFAULT_ON_EFFORT : "off";
+    stored.reasoningEffort = stored.reasoning ? defaultOnEffort(offered) : "off";
   }
   delete stored.reasoning;
+  // A stored level this session no longer offers (the enabled model changed,
+  // or its efforts narrowed) clamps to the highest offered one — "on" intent
+  // preserved, and the wire never carries a value the picker wouldn't show.
+  if (
+    stored.reasoningEffort !== undefined &&
+    stored.reasoningEffort !== "off" &&
+    !offered.includes(stored.reasoningEffort as ReasoningEffortLevel)
+  ) {
+    stored.reasoningEffort = defaultOnEffort(offered);
+  }
   return { ...defaults, ...stored };
 }
 
@@ -144,6 +177,7 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
     selectedLibraryIds: state.selectedLibraryIds,
     selectedDocumentUids: state.selectedDocumentUids,
     reasoningEffort: state.reasoningEffort,
+    reasoningEffortOptions: offeredEffortLevels(chatControls),
     setReasoningEffort,
     setSearchPolicy,
     setRagScope,
