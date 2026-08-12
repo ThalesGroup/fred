@@ -13,6 +13,8 @@
 // limitations under the License.
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
@@ -52,6 +54,8 @@ export const AssistantTurn = memo(function AssistantTurn({
   isStreaming,
   pendingToolCallIds,
 }: AssistantTurnProps) {
+  const { t } = useTranslation();
+  const { showSuccess } = useToast();
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
 
@@ -67,12 +71,17 @@ export const AssistantTurn = memo(function AssistantTurn({
   }, [activeSourceIndex, sources]);
 
   const copyAction = useCallback(() => {
-    navigator.clipboard.writeText(text).catch(() => {});
-  }, [text]);
+    navigator.clipboard
+      .writeText(text)
+      // Same short-lived confirmation as UserTurn's copy — a copy is a
+      // trivial, self-evident action, the toast just blinks and clears.
+      .then(() => showSuccess({ summary: t("chatbot.copyMessage.success"), duration: 2000 }))
+      .catch(() => {});
+  }, [text, showSuccess, t]);
 
   const actions: Action[] = useMemo(
-    () => [{ id: "copy", icon: "content_copy", label: "Copy response", onClick: copyAction }],
-    [copyAction],
+    () => [{ id: "copy", icon: "content_copy", label: t("chatbot.copyMessage.tooltip"), onClick: copyAction }],
+    [copyAction, t],
   );
 
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;

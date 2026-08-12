@@ -4,6 +4,10 @@
   justify-content: flex-end;
   align-items: flex-start;
   gap: var(--spacing-2xs);
+  /* Chat bubbles are a reading zone: opt back into selection against the
+     page-wide `user-select: none` chrome default — users must be able to
+     select exactly the fragment they want to copy. */
+  user-select: text;
 }
 
 /* Sits to the left of the right-aligned bubble; reserves its space so the
