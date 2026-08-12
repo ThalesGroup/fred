@@ -56,10 +56,11 @@ searches across the four handlers.
 - A synchronous HTTP client is called inline from four async request handlers.
 - `team_activity_summary` performs two independent searches sequentially.
 - The reference deployment has a single control-plane replica.
-- The earlier KPI-write event-loop issue is not a duplicate:
-  `docs/swift/issues/ISSUE-001-kpi-opensearch-event-loop-blocking.md` is
-  resolved by `ResilientSinkStore`; these are direct read queries and bypass
-  that write queue.
+- The earlier KPI-write event-loop issue is not a duplicate: that concern
+  (tracked pre-GitHub as `docs/swift/issues/ISSUE-001`, since retired — see
+  [#2331](https://github.com/ThalesGroup/fred/issues/2331)) is resolved by
+  `ResilientSinkStore`; these are direct read queries and bypass that write
+  queue.
 
 ## What is not proven
 

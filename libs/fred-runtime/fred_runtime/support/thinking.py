@@ -243,7 +243,7 @@ def thread_reasoning_within_open_turn(
     """
     Replay the model's reasoning inside the turn it belongs to; strip it elsewhere.
 
-    Why this exists (ISSUE-005 §6.3, AGENT-THINKING-API-RFC Amendment C/E):
+    Why this exists (GH #1780 — root-cause fix + guardrail):
     - a reasoning model that calls a tool gets its own message back with the
       content emptied, so it re-derives the same plan and re-issues the same
       call — measured at 10/10 turns, 2.8 duplicate calls per question
