@@ -31,6 +31,15 @@ let updateTokenCalls: number[];
 // HTTP 400 the library drops token/tokenParsed/refreshToken itself, and
 // isTokenExpired starts THROWING (a bare string) instead of answering.
 let sessionCleared: boolean;
+// Real keycloak-js's setToken() (called synchronously from updateToken()'s
+// XHR success handler, BEFORE the promise our code awaits resolves)
+// unconditionally overwrites kc.token/kc.tokenParsed with the new response —
+// regardless of any teardown the app already ran meanwhile (e.g. an explicit
+// logout that cleared the persisted copy). `sessionCleared` alone cannot model
+// that: it only ever moves state towards "cleared". This is the "live"
+// override a test's `updateTokenImpl` can mutate independently, to simulate a
+// refresh resurrecting fresh-looking values after the session was invalidated.
+let liveOverride: { token: string; tokenParsed: { exp: number } } | null = null;
 
 vi.mock("keycloak-js", () => ({
   default: class MockKeycloak {
@@ -40,9 +49,11 @@ vi.mock("keycloak-js", () => ({
     onTokenExpired: (() => void) | null = null;
     onAuthLogout: (() => void) | null = null;
     get token() {
+      if (liveOverride) return liveOverride.token;
       return sessionCleared ? undefined : "initial-token";
     }
     get tokenParsed() {
+      if (liveOverride) return liveOverride.tokenParsed;
       if (sessionCleared) return undefined;
       return { exp: Math.floor(Date.now() / 1000) + secondsLeft };
     }
@@ -87,6 +98,7 @@ describe("ensureFreshToken", () => {
   beforeEach(() => {
     secondsLeft = 0; // default: token needs refreshing at any threshold
     sessionCleared = false;
+    liveOverride = null;
     updateTokenCalls = [];
     vi.useFakeTimers();
     // Node 18+'s own experimental global `localStorage` shadows happy-dom's,
@@ -306,6 +318,7 @@ describe("ensureFreshToken — concurrency", () => {
   beforeEach(() => {
     secondsLeft = 0;
     sessionCleared = false;
+    liveOverride = null;
     updateTokenCalls = [];
     vi.useFakeTimers();
     vi.stubGlobal("localStorage", { setItem: vi.fn(), getItem: vi.fn(), removeItem: vi.fn() });
@@ -390,5 +403,40 @@ describe("ensureFreshToken — concurrency", () => {
     await expect(inFlight).resolves.toBe(false);
 
     expect(setItem).not.toHaveBeenCalledWith("keycloak_token", expect.anything());
+  });
+
+  it("a refresh that resurrects the live token after logout cannot un-invalidate the session", async () => {
+    // The previous test proves the epoch guard stops US from re-persisting the
+    // bearer. It does NOT prove the getters are safe, because real keycloak-js
+    // resurrects kc.token/kc.tokenParsed in memory regardless of our epoch
+    // check — setToken() runs synchronously inside updateToken()'s XHR success
+    // handler, BEFORE the promise we await even settles (keycloak.js ~1265 vs
+    // ~1268). GetToken() used to read `keycloakInstance?.token` first and only
+    // fall back to localStorage, so that resurrected in-memory value won a
+    // race the epoch bump was supposed to have already lost.
+    let release: (v: boolean) => void = () => {};
+    updateTokenImpl = () =>
+      new Promise<boolean>((r) => {
+        release = r;
+      });
+    const mod = await import("./KeycloakService.ts");
+    mod.createKeycloakInstance("http://kc/realms/app", "app");
+
+    const inFlight = mod.ensureFreshToken(30); // starts the refresh, still pending
+    mod.KeyCloakService.CallLogout(); // app-initiated teardown: sessionInvalidated=true, epoch bumped
+
+    // The response arrives AFTER logout and, like real keycloak-js, mutates the
+    // library's live fields to a fresh-looking token BEFORE resolving true.
+    liveOverride = { token: "resurrected-token", tokenParsed: { exp: Math.floor(Date.now() / 1000) + 300 } };
+    release(true);
+    await expect(inFlight).resolves.toBe(false);
+
+    // Despite the live keycloak-js state now looking valid again, every getter
+    // must still report the session dead — they gate on `sessionInvalidated`,
+    // never on the (resurrectable) live library fields.
+    expect(mod.KeyCloakService.GetToken()).toBeNull();
+    expect(mod.KeyCloakService.GetRefreshToken()).toBeNull();
+    expect(mod.KeyCloakService.GetTokenParsed()).toBeNull();
+    expect(mod.KeyCloakService.GetTokenSecondsLeft()).toBe(0);
   });
 });

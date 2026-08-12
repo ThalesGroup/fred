@@ -33,13 +33,15 @@ const KEYCLOAK_FORCE_WORK = Number.POSITIVE_INFINITY;
 
 // single-flight so concurrent calls don’t trigger multiple refreshes
 let refreshInFlight: Promise<boolean> | null = null;
-// True once keycloak-js has ended the session itself (clearToken → onAuthLogout,
-// e.g. after a refresh answered HTTP 400). Distinguishes "session died" from
-// "not logged in yet": keycloak-js sets `authenticated = false` in BOTH states,
-// so the fields alone cannot tell them apart, and GetTokenSecondsLeft must
-// report the first as dead (0) without reporting app bootstrap the same way.
+// True once the session has genuinely ended — either keycloak-js ended it
+// itself (clearToken → onAuthLogout, e.g. after a refresh answered HTTP 400)
+// or the app deliberately ended it (explicit Logout/CallLogout). Distinguishes
+// "session died" from "not logged in yet": keycloak-js sets
+// `authenticated = false` in BOTH states, so the fields alone cannot tell them
+// apart, and GetTokenSecondsLeft must report the first as dead (0) without
+// reporting app bootstrap the same way.
 // Reset when a refreshed token is stored; a full login resets it with the page.
-let sessionDied = false;
+let sessionInvalidated = false;
 
 // The ONE owner of "the persisted token dies with the session". Every path
 // that ends a session (keycloak-js's own clearToken via onAuthLogout, Logout,
@@ -47,6 +49,7 @@ let sessionDied = false;
 // orphaned bearer that GetToken()'s localStorage fallback will re-present and
 // the backend will accept via offline JWT validation.
 const clearPersistedToken = () => {
+  sessionInvalidated = true;
   authEpoch += 1;
   localStorage.removeItem("keycloak_token");
 };
@@ -183,7 +186,6 @@ export function createKeycloakInstance(keycloak_url: string, keycloak_client_id:
     // requests (the backend validates JWTs offline) after Keycloak has
     // already ended the session.
     keycloakInstance.onAuthLogout = () => {
-      sessionDied = true;
       clearPersistedToken();
     };
 
@@ -344,10 +346,10 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
     keycloakInstance.updateToken(effectiveMinValidity).then(() => {
       if (authEpoch !== epochAtStart) {
         // Superseded by a logout while this was in flight. Do not resurrect the
-        // persisted token and do not clear `sessionDied`.
+        // persisted token and do not clear `sessionInvalidated`.
         return false;
       }
-      sessionDied = false;
+      sessionInvalidated = false;
       localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
       return true;
     }),
@@ -431,6 +433,12 @@ const GetToken = (): string | null => {
     localStorage.setItem("keycloak_token", tok);
     return tok;
   }
+  // A refresh that settles after the session ended can resurrect
+  // keycloakInstance.token in memory (keycloak-js's setToken() runs
+  // synchronously, before our epoch check even sees the response) — once the
+  // session is invalidated, never hand that back, and never fall through to
+  // the localStorage copy either, since clearPersistedToken already removed it.
+  if (sessionInvalidated) return null;
   return keycloakInstance?.token || localStorage.getItem("keycloak_token");
 };
 const GetRefreshToken = (): string | null => {
@@ -438,6 +446,7 @@ const GetRefreshToken = (): string | null => {
     // In dev mode, there is no real refresh token
     return "dev-refresh-token-dummy";
   }
+  if (sessionInvalidated) return null;
   // 🔑 Access the refreshToken property on the KeycloakInstance
   return keycloakInstance?.refreshToken || null;
 };
@@ -446,6 +455,7 @@ const GetTokenParsed = (): any => {
     const tok = GetToken(); // returns our dev token in insecure mode
     return parseJwtPayload(tok); // <- decode and return payload JSON
   }
+  if (sessionInvalidated) return null;
   return keycloakInstance?.tokenParsed ?? null;
 };
 
@@ -464,15 +474,22 @@ const GetTokenParsed = (): any => {
  */
 const GetTokenSecondsLeft = (): number | null => {
   if (!isSecurityEnabled) return null; // dev token: intentionally long-lived
-  // Session ENDED (keycloak-js clearToken(), e.g. after a refresh HTTP 400):
-  // there is no live token to measure. Report it DEAD (0), not unconstrained
-  // (null) — callers use null as "no floor to enforce", and the turn preflight
-  // would otherwise proceed on the stale persisted copy of the token.
-  // `sessionDied` and not merely `!tokenParsed`: the token is also absent
-  // BEFORE init() has ever completed (app bootstrap, reload with check-sso in
-  // flight), and reporting that state as 0 would hard-refuse turns with
-  // "expires in 0s" for a session that is merely not established yet.
-  if (sessionDied && !keycloakInstance?.tokenParsed) return 0;
+  // Session ENDED (keycloak-js clearToken(), e.g. after a refresh HTTP 400, or
+  // the app itself deliberately logging out via clearPersistedToken): there is
+  // no live token to trust. Report it DEAD (0), not unconstrained (null) —
+  // callers use null as "no floor to enforce", and the turn preflight would
+  // otherwise proceed on a resurrected or stale token.
+  // `sessionInvalidated` ALONE — no `!tokenParsed` conjunct — distinguishes
+  // "session died" from "not logged in yet" (app bootstrap, reload with
+  // check-sso in flight): the flag defaults to false and is never set true
+  // until a real session actually ends, so bootstrap never trips it. A
+  // `!tokenParsed` conjunct used to sit here to guard that same distinction,
+  // but it was never needed for it and instead opened a hole: a refresh that
+  // settles after logout resurrects keycloakInstance.tokenParsed in memory
+  // (keycloak-js's setToken() runs synchronously before our epoch check even
+  // sees the response), which made `!tokenParsed` false and suppressed the
+  // dead-session report for an already-invalidated session.
+  if (sessionInvalidated) return 0;
   const exp = GetTokenParsed()?.exp;
   if (typeof exp !== "number") return null;
   // `timeSkew` cancels client-clock drift exactly as keycloak-js's own
