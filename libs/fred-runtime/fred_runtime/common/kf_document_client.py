@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from fred_core.common import OwnerFilter
 from pydantic import BaseModel
@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from fred_runtime.common.kf_base_client import (
     KfBaseClient,
     KnowledgeFlowAgentContext,
+    TokenRefreshCallback,
 )
 from fred_runtime.runtime_context import get_runtime_context
 
@@ -120,7 +121,7 @@ class KfDocumentClient(KfBaseClient):
         *,
         agent: Optional[KnowledgeFlowAgentContext] = None,
         access_token: Optional[str] = None,
-        refresh_user_access_token: Optional[Callable[[], str]] = None,
+        refresh_user_access_token: Optional[TokenRefreshCallback] = None,
     ):
         super().__init__(
             allowed_methods=frozenset({"GET", "POST"}),

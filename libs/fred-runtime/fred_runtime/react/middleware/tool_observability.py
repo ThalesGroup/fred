@@ -227,6 +227,21 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         base_dims = self._base_dims(tool_name=tool_name, source=source)
 
         kpi = self._kpi
+        # The timer carries `status` and nothing else about the outcome, by
+        # design. Two reasons, and both bite if a future change adds
+        # `error_code`/`exception_type` back onto `kpi_dims`:
+        # - `PrometheusKPIStore._resolve_labeling` freezes a metric's label-name
+        #   tuple on the FIRST sample it sees. The first tool call in any pod is
+        #   overwhelmingly a success, so a dim only written on the failure
+        #   branches is silently dropped for the rest of the process — present
+        #   in the code, absent from Grafana, with nothing anywhere to say so.
+        # - `agent.tool_latency_ms` is a histogram; every extra label multiplies
+        #   its bucket series. Latency split by success/failure is a real
+        #   question and `status` (always set by `_TimerImpl.__exit__`) answers
+        #   it. Latency split by error code is not.
+        # The failure taxonomy lives on `agent.tool_failed_total` — a counter,
+        # labelled identically on BOTH failure branches below — and on the
+        # audit event.
         timer_ctx = (
             kpi.timer(
                 "agent.tool_latency_ms", dims=base_dims, actor=KPIActor(type="system")
@@ -258,9 +273,8 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                 raise
             except Exception as e:
                 if kpi_dims is not None:
+                    # `status` only — see the timer comment above.
                     kpi_dims["status"] = "error"
-                    kpi_dims["error_code"] = type(e).__name__
-                    kpi_dims["exception_type"] = type(e).__name__
                 if kpi is not None:
                     kpi.count(
                         "agent.tool_failed_total",
@@ -288,20 +302,71 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                 # A `Command` has no `.status` — LangGraph already ran the
                 # tool and chose to redirect graph state, which is not a
                 # failure signal, so it always counts as "succeeded".
-                failed = isinstance(result, ToolMessage) and result.status == "error"
+                #
+                # `status == "error"` only covers tools that RAISED and had the
+                # exception converted by LangChain. A tool that handles its own
+                # failure and returns an `is_error=True` artifact (the contract
+                # `_document_tool_failure` implements, and what `react_runtime`
+                # already reads to mark the trace step failed) returns a
+                # perfectly normal ToolMessage — so without the artifact check
+                # a handled failure was audited as "succeeded" and never
+                # counted in `agent.tool_failed_total`.
+                # Both artifact shapes must be read: `normalize_tool_artifact`
+                # (react_stream_adapter) accepts a dict as well as a typed
+                # `ToolInvocationResult`, so a dict-returning tool would show as
+                # failed in the user's trace while a getattr-only check here
+                # recorded it as a success — the exact divergence this closes.
+                artifact = getattr(result, "artifact", None)
+                artifact_is_error = (
+                    bool(artifact.get("is_error"))
+                    if isinstance(artifact, dict)
+                    else bool(getattr(artifact, "is_error", False))
+                )
+                status_is_error = (
+                    isinstance(result, ToolMessage) and result.status == "error"
+                )
+                failed = status_is_error or artifact_is_error
                 if failed:
+                    # Labelled like the `except` branch above. A tool that
+                    # HANDLES its own failure (the `_document_tool_failure`
+                    # contract) is now the dominant failure population, so
+                    # emitting it without `error_code` would make
+                    # `sum by (error_code) (agent.tool_failed_total)` — and any
+                    # audit query filtering on it — silently drop exactly the
+                    # failures #2073 Item 3 was raised about. There is no
+                    # exception type here, so the code names the SHAPE that
+                    # reported the failure.
+                    error_code = (
+                        "tool_error_status"
+                        if status_is_error
+                        else "tool_error_artifact"
+                    )
                     if kpi_dims is not None:
+                        # `status` only — see the timer comment above.
                         kpi_dims["status"] = "error"
                     if kpi is not None:
                         kpi.count(
                             "agent.tool_failed_total",
                             1,
-                            dims={**base_dims, "status": "error"},
+                            # `exception_type` is emitted even though there is
+                            # no exception: PrometheusKPIStore freezes a
+                            # metric's label-name tuple on its FIRST sample, and
+                            # handled failures are the dominant population — so
+                            # omitting it here would drop `exception_type` from
+                            # every RAISED failure for the rest of the process.
+                            dims={
+                                **base_dims,
+                                "status": "error",
+                                "error_code": error_code,
+                                "exception_type": "none",
+                            },
                             actor=KPIActor(type="system"),
                         )
                     emit_audit_log(
                         "agent.tool.invocation.completed",
                         outcome="failed",
+                        error_code=error_code,
+                        exception_type="none",
                         **base_dims,
                     )
                 else:
