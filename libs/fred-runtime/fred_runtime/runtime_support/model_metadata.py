@@ -190,6 +190,13 @@ def normalize_token_usage(raw: object) -> dict[str, int] | None:
     if total_raw is None:
         total_raw = usage.get("token_count")
 
+    input_token_details = usage.get("input_token_details")
+    cache_read_raw = None
+    cache_creation_raw = None
+    if isinstance(input_token_details, dict):
+        cache_read_raw = input_token_details.get("cache_read")
+        cache_creation_raw = input_token_details.get("cache_creation")
+
     has_any = any(
         usage.get(key) is not None
         for key in (
@@ -220,6 +227,8 @@ def normalize_token_usage(raw: object) -> dict[str, int] | None:
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
+        "cache_read_tokens": _to_int(cache_read_raw),
+        "cache_creation_tokens": _to_int(cache_creation_raw),
     }
 
 
@@ -254,4 +263,8 @@ def sum_token_usage(
         "input_tokens": left.get("input_tokens", 0) + right.get("input_tokens", 0),
         "output_tokens": left.get("output_tokens", 0) + right.get("output_tokens", 0),
         "total_tokens": left.get("total_tokens", 0) + right.get("total_tokens", 0),
+        "cache_read_tokens": left.get("cache_read_tokens", 0)
+        + right.get("cache_read_tokens", 0),
+        "cache_creation_tokens": left.get("cache_creation_tokens", 0)
+        + right.get("cache_creation_tokens", 0),
     }

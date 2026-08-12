@@ -738,6 +738,8 @@ export type Channel =
   | "hitl_request"
   | "hitl_response";
 export type ChatTokenUsage = {
+  cache_creation_tokens?: number;
+  cache_read_tokens?: number;
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;

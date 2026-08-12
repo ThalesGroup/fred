@@ -124,6 +124,7 @@ class Quantities(BaseModel):
     tool_count: Optional[int] = None
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
+    cache_read_tokens: Optional[int] = None
 
 
 class Trace(BaseModel):

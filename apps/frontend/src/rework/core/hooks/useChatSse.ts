@@ -315,6 +315,7 @@ export function useChatSse(
             channel: "final",
             parts,
             metadata: {
+              model: event.model_name ?? null,
               finish_reason: event.finish_reason ?? null,
               sources: event.sources ?? [],
               token_usage: event.token_usage
@@ -322,6 +323,7 @@ export function useChatSse(
                     input_tokens: event.token_usage["input_tokens"] ?? 0,
                     output_tokens: event.token_usage["output_tokens"] ?? 0,
                     total_tokens: event.token_usage["total_tokens"] ?? 0,
+                    cache_read_tokens: event.token_usage["cache_read_tokens"],
                   }
                 : null,
               extras: {},
@@ -353,6 +355,7 @@ export function useChatSse(
                     input_tokens: event.token_usage["input_tokens"] ?? 0,
                     output_tokens: event.token_usage["output_tokens"] ?? 0,
                     total_tokens: event.token_usage["total_tokens"] ?? 0,
+                    cache_read_tokens: event.token_usage["cache_read_tokens"],
                   },
                 }
               : undefined,

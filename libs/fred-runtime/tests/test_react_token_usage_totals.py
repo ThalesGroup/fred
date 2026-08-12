@@ -123,6 +123,57 @@ async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> No
         "input_tokens": 130,
         "output_tokens": 30,
         "total_tokens": 160,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_final_token_usage_carries_cache_detail_through_the_pipeline() -> None:
+    """
+    CACHE-01: `input_token_details.cache_read`/`cache_creation` (LangChain's
+    standardized cache breakdown, since `langchain-core` 0.3.9) must survive
+    normalize_token_usage -> sum_token_usage -> FinalRuntimeEvent, the same
+    path the base input/output/total fields already take.
+    """
+
+    tool_call = AIMessage(
+        content="",
+        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
+        usage_metadata={
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+            "input_token_details": {"cache_read": 80, "cache_creation": 0},
+        },
+    )
+    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    final_message = AIMessage(
+        content="done",
+        usage_metadata={
+            "input_tokens": 30,
+            "output_tokens": 10,
+            "total_tokens": 40,
+            "input_token_details": {"cache_read": 0, "cache_creation": 25},
+        },
+    )
+
+    events = [
+        ("updates", {"agent": {"messages": [tool_call]}}),
+        ("updates", {"tools": {"messages": [tool_result]}}),
+        ("updates", {"agent": {"messages": [final_message]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    finals = [e for e in collected if isinstance(e, FinalRuntimeEvent)]
+    assert len(finals) == 1
+    assert finals[0].token_usage == {
+        "input_tokens": 130,
+        "output_tokens": 30,
+        "total_tokens": 160,
+        "cache_read_tokens": 80,
+        "cache_creation_tokens": 25,
     }
 
 
@@ -165,9 +216,13 @@ async def test_tool_call_event_keeps_only_its_own_triggering_call_usage() -> Non
         "input_tokens": 100,
         "output_tokens": 20,
         "total_tokens": 120,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
     }
     assert tool_calls[1].token_usage == {
         "input_tokens": 5,
         "output_tokens": 1,
         "total_tokens": 6,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
     }

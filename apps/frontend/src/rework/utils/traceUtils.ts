@@ -223,6 +223,7 @@ export function toolCallTokenUsage(call: ChatMessage): TokenUsage | null {
     input_tokens: tu.input_tokens ?? 0,
     output_tokens: tu.output_tokens ?? 0,
     total_tokens: tu.total_tokens ?? 0,
+    cache_read_tokens: tu.cache_read_tokens,
   };
 }
 
