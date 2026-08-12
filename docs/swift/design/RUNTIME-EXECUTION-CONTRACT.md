@@ -2747,6 +2747,115 @@ issue #2312).
 
 ---
 
+### 8.47 ✅ `CorpusTreeService` truncation fix; paginated `list_documents_by_label` in its own capability (issue #2326, 2026-08-12)
+
+**Problem.** `CorpusTreeService`'s size-budgeted folder-tree renderer had a
+silent-truncation bug: `tree_builder.py::_render_budgeted_root`'s final
+fallback rebuilt its candidate lines from bare folder headers only, discarding
+whatever content depth-based pruning had already collapsed into them. A wide,
+shallow match (e.g. 150 folders, one document each) let those 150 bare headers
+fit comfortably under the char budget, so the response shipped
+`truncated=True` with **zero** documents and **zero** omission message —
+indistinguishable from a complete, empty corpus (regression test:
+`test_wide_shallow_tree_never_reports_truncated_with_zero_omission_signal`).
+Separately, `CorpusTreeService._resolve_leaves` resolved tree leaves via
+`MetadataService.get_documents_metadata` → `store.get_all_metadata()` — an
+unbounded `SELECT *` over the whole `metadata` table filtered in Python, run
+on **every** `list_document_tree` call (`document_access` is `DEFAULT_ON`).
+
+There was no agent-facing way to resolve a business label to *every* document
+carrying it, exhaustively — only browsing (`list_document_tree`, a
+size-budgeted folder tree) and single-document lookup.
+
+**Fix.**
+1. `_render_budgeted_root` now measures each candidate as the FULL block
+   (folder header + whatever was already collapsed into it by depth-pruning),
+   never a bare header — `truncated=True` can no longer ship without an
+   explicit, accurate omission signal.
+2. `CorpusTreeService._resolve_leaves` now calls new
+   `MetadataService.get_documents_by_uids` (indexed `get_metadata_by_uids`,
+   ReBAC-filtered after fetch) instead of the full-table scan.
+   `get_metadata_by_uids` and its label-hydration query
+   (`_hydrate_labels`, `postgres_document_store.py`) both chunk their
+   `document_uid IN (...)` statements at `_BULK_UPDATE_CHUNK_SIZE` — the
+   same constant `bulk_mark_vector_done` already chunks its updates with —
+   so a tree spanning the full `_MAX_FOLDERS` (10,000 folders) stays well
+   clear of a driver bind-parameter ceiling instead of sending one unbounded
+   query.
+3. **New port method** `DocumentTreePort.list_by_label(*, label, offset=0,
+   limit=50) -> DocumentLabelPageResult` (`fred-sdk/contracts/runtime.py`) —
+   flat, exhaustive, paginated label resolution, on the SAME port/adapter/
+   client as `tree()` (`KfDocumentClient`/`DocumentTreeAdapter` each gain one
+   more method) rather than a new port class: two distinct, unambiguous agent
+   tools at the LLM-facing layer, one port at the plumbing layer. Backed by
+   new `MetadataService.get_document_uids_with_any_label` (one ReBAC
+   resolution + one indexed `label IN (...)` store query, OR-semantics across
+   labels, UID-only, unpaginated — used by the non-paginated
+   `get_documents_with_label`) and a separate paginated sibling,
+   `get_document_uids_with_any_label_page`/`get_documents_with_label_page`
+   (real `ORDER BY ... OFFSET ... LIMIT ...` plus a matching `COUNT(*)` pushed
+   into the store query, not a fetch-everything-then-slice-in-Python — so
+   enumerating many pages of a large match set does not repeat a full,
+   unbounded label scan on each call; the ReBAC `lookup_user_resources` call
+   itself still runs once per page, same cost every other paginated,
+   authorized listing in this service already pays per call). KNOWN GAP,
+   documented on the port method itself: does NOT accept `library_tag_ids` —
+   Knowledge Flow's label resolution narrows only by document-level READ
+   permission, never by folder/library scope, so an agent configured with
+   `bind_libraries=True` still sees every readable document carrying a label,
+   corpus-wide, through this method. Not silently implemented as a no-op
+   parameter — flagged as follow-up work.
+4. **New capability `document_label_search`**
+   (`fred-runtime/capabilities/document_label_search/`), registered via its
+   own `fred.capabilities` entry point, manifest `team_scope` left at the
+   class default (`ADMIN_GATED` — same reasoning as `document_summarize`,
+   §10.1: no config-shaped trigger a user can reason about, a team admin must
+   opt an agent in explicitly). Owns exactly one tool,
+   `list_documents_by_label`: one page per call (documents as `name [uid]`,
+   `total`, `has_more`); the tool's docstring tells the model to call again
+   with `offset=next_offset` and never report a count without checking
+   `has_more`. Deliberately NOT added to `document_access` (`DEFAULT_ON`):
+   bundling it there would mean every existing `document_access` agent —
+   already in production — picks up a second, semantically-adjacent tool the
+   moment it ships. Both tools answer "documents with label X"; the
+   discriminating axis (where they sit vs. give me all of them) is a harder
+   tool-selection call for the model than the pre-existing
+   `search_documents_using_vectorization` vs. `list_document_tree` split
+   (content question vs. structure question — a much clearer boundary in
+   natural language), with a fail-quiet failure mode (a plausible-looking,
+   silently-incomplete answer once a large match set hits the tree's size
+   budget) instead of a fail-loud one. `list_document_tree` itself does no
+   label filtering at all, by design — a folder tree is the wrong response
+   shape for "give me every document labeled X".
+
+**Backing HTTP route.** `GET /documents/by-label` (query-param transport) is
+paginated: `offset`/`limit` query params, response `LabelDocumentsPage
+{label, documents: [{document_uid, document_name}], total, offset, limit,
+next_offset, has_more}` — a leaner response model than `BrowseDocumentsResponse`
+(full `DocumentMetadata`), which the path-segment `GET /documents/by-label/{label}`
+route keeps unpaginated for existing consumers. Both resolve through the same
+`MetadataService.get_document_uids_with_any_label`; `document_label_search`'s
+tool reaches the same route through `DocumentTreePort.list_by_label` — no new
+route, no plumbing duplication.
+
+**Bounded context.** `CorpusTreeService` is a read-only projection over the
+already-ingested corpus — it stores no bytes, accepts no writes, and is
+intentionally distinct from the future `WorkspaceService` (mutable,
+persistent user/agent files, currently implemented under `/fs`). See
+`FILESYSTEM.md` "Business labels vs. scope tags".
+
+Tests: `test_corpus_tree_builder.py` (renderer invariant),
+`test_corpus_tree_service.py`, `test_metadata_service_labels.py` +
+`test_postgres_document_store_labels.py` (resolver), `test_metadata_labels_controller.py`
+(pagination), `test_capability_document_access_1906.py` (tree tool unchanged,
+2 params, no label awareness), `test_capability_document_label_search.py`
+(new — registration, `ADMIN_GATED` default, tool behavior, real-adapter param
+forwarding), `test_capability_endpoints_1974.py` (catalog advertisement list
+gains `document_label_search`, sorted by id). Tracking:
+[#2326](https://github.com/ThalesGroup/fred/issues/2326).
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

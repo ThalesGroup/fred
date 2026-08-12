@@ -193,6 +193,10 @@
         }
       }
     },
+    "document_label_search": {
+      "name": "Rechercher des documents par label",
+      "description": "Capacité de lister tous les documents portant un label métier donné, de manière exhaustive et page par page."
+    },
     "document_summarize": {
       "name": "Résumer un document",
       "description": "Capacité de résumer un document et d'en exploiter le résultat.",
@@ -1534,6 +1538,7 @@
         "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
+        "manageLabels": "Gérer les labels",
         "more": "Plus d'actions",
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
@@ -1587,6 +1592,16 @@
         "nameLabel": "Nom",
         "save": "Enregistrer",
         "error": "Impossible de renommer"
+      },
+      "labelsModal": {
+        "title": "Gérer les labels",
+        "currentEmpty": "Aucun label pour l'instant",
+        "addPlaceholder": "Ajouter un label…",
+        "add": "Ajouter",
+        "createNew": "Créer le label",
+        "addFieldLabel": "Ajouter un label",
+        "removeAriaLabel": "Retirer le label « {{label}} »",
+        "close": "Fermer"
       },
       "loading": "Chargement des ressources...",
       "preview": {

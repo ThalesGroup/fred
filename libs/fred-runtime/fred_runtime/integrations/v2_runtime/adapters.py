@@ -70,6 +70,8 @@ from fred_sdk.contracts.runtime import (
     DocumentExtractionPort,
     DocumentExtractionResult,
     DocumentFolderPort,
+    DocumentLabelPageResult,
+    DocumentLabelReference,
     DocumentMarkdownPort,
     DocumentMarkdownResult,
     DocumentPortCallError,
@@ -1034,6 +1036,34 @@ class DocumentTreeAdapter(DocumentTreePort):
         except httpx.HTTPError as exc:
             raise _wrap_document_port_error(exc) from exc
         return DocumentTreeResult(tree=result.tree, truncated=result.truncated)
+
+    async def list_by_label(
+        self,
+        *,
+        label: str,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> DocumentLabelPageResult:
+        try:
+            result = await self._client.list_by_label(
+                label=label, offset=offset, limit=limit
+            )
+        except httpx.HTTPError as exc:
+            raise _wrap_document_port_error(exc) from exc
+        return DocumentLabelPageResult(
+            label=result.label,
+            documents=tuple(
+                DocumentLabelReference(
+                    document_uid=d.document_uid, document_name=d.document_name
+                )
+                for d in result.documents
+            ),
+            total=result.total,
+            offset=result.offset,
+            limit=result.limit,
+            next_offset=result.next_offset,
+            has_more=result.has_more,
+        )
 
 
 class DocumentSummarizeAdapter(DocumentSummarizePort):

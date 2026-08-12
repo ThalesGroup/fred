@@ -193,6 +193,10 @@
         }
       }
     },
+    "document_label_search": {
+      "name": "Search documents by label",
+      "description": "Ability to list every document carrying a given business label, exhaustively and page by page."
+    },
     "document_summarize": {
       "name": "Summarize a document",
       "description": "Ability to summarize a document and make use of the result.",
@@ -1534,6 +1538,7 @@
         "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
         "download": "Download",
         "includeInSearch": "Include in search",
+        "manageLabels": "Manage labels",
         "more": "More actions",
         "newFolder": "New folder",
         "newSubfolder": "New subfolder in \"{{name}}\"",
@@ -1587,6 +1592,16 @@
         "nameLabel": "Name",
         "save": "Save",
         "error": "Could not rename"
+      },
+      "labelsModal": {
+        "title": "Manage labels",
+        "currentEmpty": "No labels yet",
+        "addPlaceholder": "Add a label…",
+        "add": "Add",
+        "createNew": "Create label",
+        "addFieldLabel": "Add a label",
+        "removeAriaLabel": "Remove label \"{{label}}\"",
+        "close": "Close"
       },
       "loading": "Loading resources...",
       "preview": {

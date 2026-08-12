@@ -58,6 +58,7 @@ import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
 import { isPdfFile } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
+import ManageLabelsModal from "../ManageLabelsModal/ManageLabelsModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
@@ -104,7 +105,7 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
 
-type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion";
+type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion" | "labels";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
@@ -208,6 +209,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
   >(null);
   // Document whose per-stage ingestion errors are being shown (#2315).
+  // The vocabulary query itself lives inside ManageLabelsModal — it only
+  // needs to be fetched while that dialog is open, which is exactly this
+  // component's own mount lifetime (see the conditional render below).
+  const [labelsTarget, setLabelsTarget] = useState<DocumentMetadata | null>(null);
   // "Just reprocessed" rows pinned to "processing" (#1903-era gap): the
   // reprocess route (`POST /process-documents`) returns only the Temporal
   // workflow id — unlike uploads it creates no TaskService task the SSE task
@@ -753,6 +758,22 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     if (next !== undefined) patchDocRetrievable(doc.identity.document_uid, next);
   };
 
+  // Same rationale as patchDocRetrievable above: a label add/remove never
+  // changes tag membership or counts, so patch every loaded page holding this
+  // doc instead of a list-wide refetch.
+  const patchDocLabels = (documentUid: string, labels: string[]) => {
+    setPerTag((prev) => {
+      const next: typeof prev = {};
+      for (const [tagId, page] of Object.entries(prev)) {
+        next[tagId] = {
+          ...page,
+          docs: page.docs.map((d) => (d.identity.document_uid === documentUid ? { ...d, labels } : d)),
+        };
+      }
+      return next;
+    });
+  };
+
   const bulkToggleSearchable = async () => {
     // searchToggleMode being defined guarantees the toggle-relevant subset of
     // the selection is uniform (all searchable or all excluded), so toggling
@@ -832,6 +853,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       icon: { category: "outlined", type: "download" },
     });
     if (canCreateFolder) {
+      // Labels are descriptive metadata, not resource management — only
+      // checks the document's own UPDATE access server-side, same gate as
+      // rename, so it's offered under this same condition.
+      options.push({
+        value: "labels",
+        key: "labels",
+        label: t("rework.resources.action.manageLabels"),
+        icon: { category: "outlined", type: "category" },
+      });
       const excludedFromSearch = doc.source.retrievable === false;
       // A tabular-only dataset's `retrievable` is always false without being a
       // real exclusion (see isTabularOnlyDoc) — it stays queryable via the
@@ -1074,6 +1104,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                 } else {
                   if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                   if (value === "download") void commands.download(row.doc);
+                  if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
                   if (value === "stopIngestion") confirmStopIngestion(row.doc);
@@ -1260,6 +1291,18 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             } else {
               await commands.renameDocument(renameTarget.doc, newName);
             }
+          }}
+        />
+      )}
+      {labelsTarget && (
+        <ManageLabelsModal
+          open={!!labelsTarget}
+          onClose={() => setLabelsTarget(null)}
+          doc={labelsTarget}
+          onMutate={async (patch) => {
+            const next = await commands.mutateLabels(labelsTarget, patch);
+            if (next) patchDocLabels(labelsTarget.identity.document_uid, next);
+            return next;
           }}
         />
       )}

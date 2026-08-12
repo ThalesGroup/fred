@@ -113,6 +113,13 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.tagSizesRequest,
       }),
     }),
+    mutateDocumentLabels: build.mutation<MutateDocumentLabelsApiResponse, MutateDocumentLabelsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels`,
+        method: "PATCH",
+        body: queryArg.labelMutationRequest,
+      }),
+    }),
     addDocumentLabel: build.mutation<AddDocumentLabelApiResponse, AddDocumentLabelApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
@@ -130,6 +137,16 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     listDocumentsByLabel: build.query<ListDocumentsByLabelApiResponse, ListDocumentsByLabelApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/by-label/${queryArg.label}` }),
+    }),
+    resolveDocumentsByLabel: build.query<ResolveDocumentsByLabelApiResponse, ResolveDocumentsByLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/by-label`,
+        params: {
+          label: queryArg.label,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
     }),
     documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
@@ -1016,6 +1033,11 @@ export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiResponse =
 export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiArg = {
   tagSizesRequest: TagSizesRequest;
 };
+export type MutateDocumentLabelsApiResponse = /** status 200 Successful Response */ string[];
+export type MutateDocumentLabelsApiArg = {
+  documentUid: string;
+  labelMutationRequest: LabelMutationRequest;
+};
 export type AddDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
 export type AddDocumentLabelApiArg = {
   documentUid: string;
@@ -1031,6 +1053,12 @@ export type ListDocumentLabelsApiArg = void;
 export type ListDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type ListDocumentsByLabelApiArg = {
   label: string;
+};
+export type ResolveDocumentsByLabelApiResponse = /** status 200 Successful Response */ LabelDocumentsPage;
+export type ResolveDocumentsByLabelApiArg = {
+  label: string;
+  offset?: number;
+  limit?: number;
 };
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
   /** status 200 Successful Response */ VectorChunk[];
@@ -1879,6 +1907,27 @@ export type TagSizesRequest = {
   /** Library tag identifiers to total */
   tag_ids: string[];
 };
+export type LabelMutationRequest = {
+  /** Labels to add. */
+  add?: string[];
+  /** Labels to remove. Wins over `add` when the same value appears in both. */
+  remove?: string[];
+};
+export type LabelDocumentReference = {
+  document_uid: string;
+  document_name: string;
+};
+export type LabelDocumentsPage = {
+  label: string;
+  documents: LabelDocumentReference[];
+  /** Total number of matching documents across all pages. */
+  total: number;
+  offset: number;
+  limit: number;
+  /** Offset to request the next page, or null when there is no more. */
+  next_offset?: number | null;
+  has_more: boolean;
+};
 export type VectorChunk = {
   /** Unique identifier of the chunk */
   chunk_uid: string;
@@ -2511,12 +2560,15 @@ export const {
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
+  useMutateDocumentLabelsMutation,
   useAddDocumentLabelMutation,
   useRemoveDocumentLabelMutation,
   useListDocumentLabelsQuery,
   useLazyListDocumentLabelsQuery,
   useListDocumentsByLabelQuery,
   useLazyListDocumentsByLabelQuery,
+  useResolveDocumentsByLabelQuery,
+  useLazyResolveDocumentsByLabelQuery,
   useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
