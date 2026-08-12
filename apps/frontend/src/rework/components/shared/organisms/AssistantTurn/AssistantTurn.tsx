@@ -128,7 +128,12 @@ export const AssistantTurn = memo(function AssistantTurn({
 
       {!isStreaming && text && (
         <div className={styles.footer}>
-          <ActionBar actions={actions} />
+          {/* alwaysVisible: the bar ships its own opacity-0 that a consumer
+              hover rule is supposed to lift — the footer above already owns
+              the hover/focus reveal for the whole row, so the bar must not
+              stack a second hidden layer (it was never revealed here, and the
+              copy button was invisible since #2221). */}
+          <ActionBar actions={actions} alwaysVisible />
           {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
         </div>
       )}
