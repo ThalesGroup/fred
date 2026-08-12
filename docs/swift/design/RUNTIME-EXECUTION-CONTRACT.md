@@ -3321,6 +3321,23 @@ gains `document_label_search`, sorted by id). Tracking:
 
 ---
 
+### 8.48 ✅ Reasoning stays ON/OFF per question — effort picker built and withdrawn same-day (2026-08-12)
+
+A per-question `RuntimeContext.reasoning_effort` override (composer effort
+picker, low/medium/high) was implemented and **withdrawn the same day**:
+providers disagree on accepted values (measured: Mistral small rejects
+low/medium with a 400 `Must be one of (none, high)` that fails the whole
+turn), and the per-model declaration/snapshot machinery required to offer
+only valid values wasn't worth the surface. Decision: the effort a reasoning
+turn runs with is the ops-authored `settings.reasoning_effort` of the routed
+profile, full stop — the user's per-question choice remains the §8.30
+tri-state boolean, now presented as a right-edge composer chip
+(model identity + Activé/Désactivé, `docs/swift/ux/COMPONENT-UX.md`). No
+wire, contract, or enforcement change survives; this entry exists so the
+next "let users pick the effort" idea starts from the measured constraint.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

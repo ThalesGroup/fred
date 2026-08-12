@@ -49,8 +49,13 @@ class ModelReasoningStore:
         model_capability_id: str,
         reasoning_enabled: bool,
         updated_by: str | None,
+        default_effort: str | None = None,
         session: AsyncSession | None = None,
     ) -> bool:
+        # `default_effort` is a display SNAPSHOT of the model's ops-authored
+        # `settings.reasoning_effort`, taken by the service at toggle time so
+        # the send path never fetches the catalog; the pod always applies the
+        # live settings value. NULL = no effort key on the thinking profile.
         async with use_session(self._sessions, session) as s:
             existing = (
                 await s.execute(
@@ -64,11 +69,13 @@ class ModelReasoningStore:
                     ModelReasoningRow(
                         model_capability_id=model_capability_id,
                         reasoning_enabled=reasoning_enabled,
+                        default_effort=default_effort,
                         updated_by=updated_by,
                     )
                 )
             else:
                 existing.reasoning_enabled = reasoning_enabled
+                existing.default_effort = default_effort
                 existing.updated_by = updated_by
         return reasoning_enabled
 
@@ -94,3 +101,24 @@ class ModelReasoningStore:
                 )
             ).scalars()
             return set(rows)
+
+    async def list_enabled_default_efforts(
+        self, *, session: AsyncSession | None = None
+    ) -> dict[str, str | None]:
+        """Enabled model ids → their snapshotted ops-authored effort.
+
+        Same single indexed read as `list_enabled_model_ids`, one extra
+        column — feeds the composer control's `params.effort` at session
+        prep. `None` per model = the thinking profile ships no effort key
+        (the menu falls back to a generic On label)."""
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(
+                        ModelReasoningRow.model_capability_id,
+                        ModelReasoningRow.default_effort,
+                    ).where(ModelReasoningRow.reasoning_enabled.is_(True))
+                )
+            ).all()
+        return {model_id: effort for model_id, effort in rows}

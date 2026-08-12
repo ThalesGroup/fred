@@ -37,11 +37,12 @@ def _profile(
     name: str | None = "gpt-5.1",
     description: str | None = None,
     supports_thinking: bool = False,
+    settings: dict | None = None,
 ) -> ModelProfile:
     return ModelProfile(
         profile_id=profile_id,
         capability=capability,
-        model=ModelConfiguration(provider=provider, name=name),
+        model=ModelConfiguration(provider=provider, name=name, settings=settings),
         description=description,
         supports_thinking=supports_thinking,
     )
@@ -197,3 +198,38 @@ def test_thinking_profile_ids_never_leaks_across_models() -> None:
         "gpt-5.1": ["thinker"],
         "gpt-4o": [],
     }
+
+
+def test_reasoning_effort_is_derived_from_the_thinking_profile_settings() -> None:
+    # The settings key is the single source of truth (review 2026-08-12): the
+    # composer menu shows the level a reasoning turn actually runs with, so
+    # the projection carries it — from the thinking profile only, never from a
+    # non-thinking sibling.
+    catalog = _catalog(
+        (
+            _profile(
+                "chat.mistral.small",
+                provider="openai",
+                name="mistral-small-latest",
+                supports_thinking=True,
+                settings={"reasoning_effort": "high"},
+            ),
+            _profile(
+                "language.mistral.small",
+                capability=ModelCapability.LANGUAGE,
+                provider="openai",
+                name="mistral-small-latest",
+            ),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert len(entries) == 1
+    assert entries[0].reasoning_effort == "high"
+
+
+def test_reasoning_effort_is_none_without_a_thinking_profile_effort() -> None:
+    catalog = _catalog((_profile("p1", supports_thinking=True),))
+
+    assert _project_model_catalog_entries(catalog)[0].reasoning_effort is None

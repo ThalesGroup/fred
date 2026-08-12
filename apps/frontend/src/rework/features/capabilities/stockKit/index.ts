@@ -25,7 +25,6 @@ import type { CapabilityChatTurnControl } from "../types";
 import { AttachFilesControl } from "./AttachFilesControl";
 import { DocumentScopeControl } from "./DocumentScopeControl";
 import { RagScopeControl } from "./RagScopeControl";
-import { ReasoningControl } from "./ReasoningControl";
 import { SearchPolicyControl } from "./SearchPolicyControl";
 
 export const stockChatTurnControlKit: Record<string, CapabilityChatTurnControl> = {
@@ -33,9 +32,8 @@ export const stockChatTurnControlKit: Record<string, CapabilityChatTurnControl> 
   document_scope: DocumentScopeControl,
   search_policy: SearchPolicyControl,
   rag_scope: RagScopeControl,
-  // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): contributed by
-  // the `reasoning` capability, which has a static id and so COULD ship a
-  // plugin folder — it lives here because the row needs nothing
-  // capability-specific, just shared composer state like its neighbours.
-  reasoning_toggle: ReasoningControl,
+  // REASON-01 level 4: `reasoning_toggle` deliberately has NO stock row —
+  // it is promoted to the composer's right-edge effort picker (ReasoningChip,
+  // COMPOSER_CHIP_WIDGETS) and the resolver's silent-skip keeps the popover
+  // clean if a descriptor still names it.
 };

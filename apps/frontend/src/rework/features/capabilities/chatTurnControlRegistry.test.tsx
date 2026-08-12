@@ -91,14 +91,17 @@ describe("chatTurnControlRegistry (#1976)", () => {
 });
 
 describe("platform-owned controls (REASON-01 level 4)", () => {
-  it("ships a reasoning_toggle control in the stock kit", async () => {
-    // Without a stock-kit entry the registry silently skips unknown widget ids
-    // — forward-compatible by design, which is exactly why a missing entry
-    // would be invisible: the composer would simply never show the toggle and
-    // nothing would complain.
+  it("promotes reasoning_toggle to the right-edge chip, never a stock row", async () => {
+    // The effort picker (ReasoningChip) reads chat_controls directly and
+    // COMPOSER_CHIP_WIDGETS excludes the widget from the tune popover. A
+    // stock-kit entry reappearing would render the same setting twice; the
+    // chip set losing the id would make the control vanish silently (the
+    // resolver skips unknown widget ids by design).
     const { stockChatTurnControlKit } = await import("./stockKit");
+    const { COMPOSER_CHIP_WIDGETS } = await import("./ReasoningChip");
 
-    expect(stockChatTurnControlKit.reasoning_toggle).toBeDefined();
+    expect(stockChatTurnControlKit.reasoning_toggle).toBeUndefined();
+    expect(COMPOSER_CHIP_WIDGETS.has("reasoning_toggle")).toBe(true);
   });
 
   it("resolves a descriptor owned by the PLATFORM rather than a capability", () => {
