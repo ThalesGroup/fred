@@ -343,7 +343,7 @@ Every implementation and review must preserve these invariants:
 | MCP activation | **Needs load evidence (P1)** — sequential cold discovery, token-scoped pod cache, no singleflight | [TURN-02](../reviews/performance/2026-07-26-agent-turn-core/TURN-02-mcp-cold-path-and-cache-scope.md) |
 | ReAct/Deep model/tool boundary | **Mostly meets design** — canonical KPI/audit middleware and per-tool ReBAC; the authorization cost needs an explicit stage metric and load budget | [core review](../reviews/performance/2026-07-26-agent-turn-core/README.md) |
 | Graph model/tool boundary | **Gap (P1)** — bypasses canonical LLM/tool KPI, tool audit, and per-call ReBAC | [TURN-03](../reviews/performance/2026-07-26-agent-turn-core/TURN-03-graph-runtime-observability-and-authz.md) |
-| Turn resource budgets | **Gap (P1)** — 500-message model window, no default tool-call cap, unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md) |
+| Turn resource budgets | **Partially fixed** — ReAct now has a size-based model-input budget alongside the message-count window (§8.52, 2026-08-13) and a shipped tool-call cap (`apps/fred-agents/tool_pacing.py`, 2026-08-01); **Gap (P1) remains** for Deep, Graph, persisted-checkpoint compaction, and the unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md), [#2343](https://github.com/ThalesGroup/fred/issues/2343) |
 | SSE/history lifecycle | **Needs load evidence (P2)** — full payload buffering and unbounded fire-and-forget persistence tasks | [TURN-05](../reviews/performance/2026-07-26-agent-turn-core/TURN-05-sse-buffering-and-history-backpressure.md) |
 | Pod/SQL admission | **Needs load evidence (P1)** — Uvicorn limit unset; shared async SQL pool defaults to 15 maximum connections | [TURN-06](../reviews/performance/2026-07-26-agent-turn-core/TURN-06-admission-and-sql-capacity.md) |
 | Token refresh | **Fixed offline 2026-08-07** — the refresh is async, coalesced and bounded; the synchronous helper was removed (§8.48). The pod-level forced-expiry proof is still owed and cannot run until delegated refresh is reachable again | [TURN-07](../reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md) |
@@ -2966,6 +2966,160 @@ Each was verified to fail against its pre-change implementation.
 
 ---
 
+### 8.52 ✅ Deployment-scoped chat-input length limit — issue #2253 (2026-08-12)
+
+One submitted chat message is bounded by the runtime-pod startup policy
+`app.max_chat_input_chars` (default `5000`, positive integer). The unit is a
+Unicode code point: Python uses `len(text)`, while managed chat iterates the
+string by code point without materializing a second array. This is deliberately
+a character policy, not a model-token, conversation-history, request-byte, or
+context-window budget.
+
+The runtime is authoritative and validates before exchange lookup, target
+resolution, history persistence, stream construction, or agent execution on
+`POST /agents/execute`, `/agents/execute/stream`, and `/agents/evaluate`.
+Ordinary turns count `RuntimeExecuteRequest.input`. HITL resumes count a bare
+string, or the combined string values of canonical `choice_id`, `answer`, and
+`text` fields; arbitrary JSON keys are not traversed. The OpenAI-compatible
+route applies the same code-point limit to the last user message Fred forwards.
+
+Fred-native rejection is HTTP 422 with `detail.code =
+"chat_input_too_long"`, `message`, `limit_chars`, and `actual_chars`.
+OpenAI compatibility returns HTTP 400 with the corresponding
+`invalid_request_error`, `param = "messages"`, and the same stable code/counts.
+Neither response, logs, metrics, nor traces may include the rejected content.
+A static Pydantic `max_length` is not used because the value is deployment
+policy, HITL is field-aware, and FastAPI's default validation response can echo
+the offending input.
+
+The effective pod-scoped value is mirrored on every `/agents/templates` item,
+following the existing pod-metadata publication pattern. Managed chat receives
+that optional projection through execution preparation, displays a counter,
+blocks an oversized draft without truncation or native `maxLength`, and relies
+on backend enforcement when an older runtime does not yet publish the field.
+During a rolling deployment, replicas configured with different limits may
+temporarily advertise and enforce different values: execution preparation can
+project one replica's value while the browser's execution request reaches
+another. The displayed limit is therefore advisory; the receiving runtime
+remains authoritative, returns its own `limit_chars` on rejection, and managed
+chat adopts that returned limit for subsequent validation.
+This semantic handler check occurs after HTTP body parsing; whole-request byte
+limits and HTTP 413 remain outside issue #2253.
+
+---
+
+### 8.53 ✅ ReAct model-input size budget, in addition to the message-count trim — TURN-04 partial (#2350, 2026-08-13)
+
+**ReAct-only slice of TURN-04's "turn resource bounds" finding** (full finding
+still open for Deep and Graph, and for persisted-checkpoint compaction — see
+[#2343](https://github.com/ThalesGroup/fred/issues/2343)). Field incident
+(2026-08-12, `mistral-small-2603`): a session stayed at ~25 turns, far under
+`_V2_MAX_HISTORY_MESSAGES = 500`, while a 115k-character tool result followed
+a few turns later by a 22k-character generated document pushed one call's
+input to 178,670 tokens — still accepted — and the very next turn then failed
+outright (`finish_reason="error"`, 0 output tokens). The message-count trim
+never engages on payload size; whether the failure itself was specifically a
+provider context-length rejection could not be confirmed from the persisted
+turn history — Fred's own error-path token reporting attaches the last
+successful sub-call's usage to the turn, not the failing request's real size,
+which is exactly the separate `execution_error` persistence gap #2343 flags
+for its own fix.
+
+`CheckpointHygieneMiddleware.awrap_model_call`
+(`fred_runtime/react/middleware/checkpoint_hygiene.py`) now applies a second,
+size-based trim after the existing message-count trim:
+`trim_to_char_budget` (`fred_runtime/support/tool_loop.py`) keeps as many
+trailing messages as fit under `_V2_MAX_HISTORY_CHARS` (200,000 characters,
+`fred_runtime/react/react_tool_loop.py`), then advances to the same safe
+HumanMessage/orphan-ToolMessage boundary as the message-count trim so it
+never hands a provider a payload that starts mid tool-call/result pair.
+
+Character count, not tokens: no exact tokenizer covers every provider this
+deployment can point at (Mistral, Azure, OpenAI, ...), so this is a
+deliberately provider-agnostic proxy, the same reasoning `max_chat_input_chars`
+(#2253) uses for a single message. The 200,000-character default is
+calibrated off the same field incident, not a generic "~4 chars/token" rule
+of thumb: replaying that incident's persisted turn history against its own
+reported token usage gives roughly 1.35 characters per token for this
+deployment's French/HTML-heavy content (240,395 visible characters of prior
+turns fed the call that reported 178,670 input tokens) — a naive 4x
+assumption would correspond to ~800k characters and would never have trimmed
+before this exact failure. 200,000 characters (~148k tokens at the measured
+ratio) sits comfortably below the 178,670 tokens that already nearly failed
+while still covering the incident's own single-document/single-tool-result
+payloads (each well under 150k characters) without trimming them on their
+own. This is one deployment's measured ratio, not a portable constant — see
+`react_tool_loop.py`'s comment for the full derivation and re-check it if the
+configured models or typical content mix change materially. When even the
+trimmed window still exceeds the budget — the CURRENT turn's own content is
+the culprit, and no amount of dropping older history helps — the middleware
+raises `ChatTurnTooLargeError` (numbers only, never the oversized content)
+instead of forwarding a payload the provider will reject anyway. It
+propagates through the existing generic `except Exception` →
+`RuntimeErrorEvent` path (`agent_app.py`) unchanged, so no new frontend
+handling was needed.
+
+**Observability.** A production robustness audit of this exact failure mode
+(same day) found the rejection was only a DEBUG log — invisible without
+digging through OpenSearch, and not how the 200,000-character default (a
+first-pass estimate) would get validated or re-tuned from real traffic. Two
+additions, both numbers/identifiers only, never content: the log is now
+WARNING; and `CheckpointHygieneMiddleware` gained `binding`/`kpi` (following
+`TracingKpiMiddleware`/`ToolObservabilityMiddleware`'s own required-not-
+optional convention for those two params) to emit `agent.turn_rejected_total`
+— a counter, same shape as the sibling `agent.tool_failed_total`
+(`status`/`error_code`/`exception_type` dims, `KPIActor(type="system")`),
+reaching Grafana through the existing `PROMETHEUS_ALLOWED_LABELS` allow-list
+with no new label needed. The identity/correlation dims (`session_id`,
+`user_id`, `team_id`, `agent_instance_id`, `template_agent_id`,
+`correlation_id`, `trace_id`) are built by a new shared
+`identity_kpi_dims(binding)` helper (`react/middleware/shared.py`), factored
+out of `ToolObservabilityMiddleware._base_dims`'s identical logic rather than
+hand-rolling a second copy — that method itself was left untouched to avoid
+touching already-shipped, tested code same-day.
+
+Deliberately out of scope here: Deep and Graph runtimes, persisted-checkpoint
+compaction (`CheckpointHygieneMiddleware` trims only the outgoing model
+request by design, never graph state), and #2330 (making
+`_V2_MAX_HISTORY_MESSAGES` itself configurable) — all tracked separately
+under #2343.
+
+Regression tests: `test_char_budget_*` (`test_tool_loop_trim.py`, pure
+function), `test_history_is_trimmed_by_char_budget`,
+`test_current_turn_alone_over_char_budget_fails_cleanly`, and
+`test_current_turn_too_large_emits_a_kpi_counter`
+(`test_react_loop_regressions_1972.py`, full loop through
+`agent.astream`).
+
+**Three PR-review fixes to the counting itself (same day), each verified by
+reverting and confirming its regression test fails without the fix:**
+
+1. `_message_char_len` only read `AIMessage.content`, which LangChain leaves
+   empty on a pure tool-calling turn — the real payload sits in
+   `tool_calls[*]["args"]` instead (exactly `write_document`'s shape in the
+   motivating field incident). Now sums tool-call arguments
+   (JSON-serialized) too.
+2. The budget ran BEFORE `thread_reasoning_within_open_turn`, so a large
+   open-turn reasoning trace — invisible to `_message_char_len` as
+   structured `thinking`-block content — could pass unmeasured and only
+   balloon past the limit once rehomed into ordinary text. Reordered so the
+   budget measures what the handler actually receives.
+3. `trim_to_char_budget` can legitimately collapse to `[]` when the only
+   message it could keep under budget is a lone trailing ToolMessage with
+   no preceding AIMessage in the window (one oversized tool result, e.g. a
+   big RAG hit) — an unsafe orphan boundary. Measuring that now-empty
+   result silently passed the check and sent the model NO messages at
+   all — worse than a raw crash. The collapse itself is now detected and
+   measured against the pre-trim total instead.
+
+Additional regression tests: `test_char_budget_counts_tool_call_arguments_not_just_content`
+(`test_tool_loop_trim.py`), `test_history_is_trimmed_by_char_budget_from_tool_call_arguments`,
+`test_oversized_reasoning_trace_is_budgeted_after_rehoming`, and
+`test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty`
+(`test_react_loop_regressions_1972.py`).
+
+---
+
 ### 8.43 ✅ `DocumentMarkdownPort` — paginated full-content read for capabilities (DOCREAD-01, 2026-08-07)
 
 **New optional port on `RuntimeServices` (`fred-sdk`
@@ -3318,6 +3472,52 @@ Tests: `test_corpus_tree_builder.py` (renderer invariant),
 forwarding), `test_capability_endpoints_1974.py` (catalog advertisement list
 gains `document_label_search`, sorted by id). Tracking:
 [#2326](https://github.com/ThalesGroup/fred/issues/2326).
+
+---
+
+### 8.48 ✅ Reasoning stays ON/OFF per question — effort picker built and withdrawn same-day (2026-08-12)
+
+A per-question `RuntimeContext.reasoning_effort` override (composer effort
+picker, low/medium/high) was implemented and **withdrawn the same day**:
+providers disagree on accepted values (measured: Mistral small rejects
+low/medium with a 400 `Must be one of (none, high)` that fails the whole
+turn), and the per-model declaration/snapshot machinery required to offer
+only valid values wasn't worth the surface. Decision: the effort a reasoning
+turn runs with is the ops-authored `settings.reasoning_effort` of the routed
+profile, full stop — the user's per-question choice remains the §8.30
+tri-state boolean, now presented as a right-edge composer chip
+(model identity + Activé/Désactivé, `docs/swift/ux/COMPONENT-UX.md`). No
+wire, contract, or enforcement change survives; this entry exists so the
+next "let users pick the effort" idea starts from the measured constraint.
+
+---
+
+### 8.54 ✅ Ops name the model — `model_display_name` in `models_catalog.yaml` (2026-08-13)
+
+The composer chip (§8.48) derived its model label by splitting the capability
+id on hyphens. That heuristic cannot tell a version separator from a variant
+one — `claude-sonnet-4-6` rendered "Claude Sonnet 4 6" — and only whoever
+pinned the model knows which it is.
+
+**What changed.**
+
+- `ModelProfile.model_display_name` (optional, per profile) in
+  `models_catalog.yaml`. Display only: routing, enablement and the capability
+  id still key on `(provider, name)`.
+- `GET /agents/models-catalog` gains `ModelCatalogEntry.display_name`, taken
+  from the first profile in the `(provider, name)` group that declares one —
+  same first-seen rule as `description`. `CapabilityCatalogEntry` gains
+  `model_display_name`, carried verbatim; the multi-pod catalog union keeps a
+  name authored on one pod when another serves the model unnamed.
+- control-plane snapshots it into `model_reasoning.display_name` at toggle
+  time (migration `a7d2e9c41f38`), exactly like `default_effort` — the send
+  path still performs no catalog fetch — and serves it on the reasoning
+  control's `params.display_name`, only alongside an unambiguous `model_id`.
+- The frontend prefers that string verbatim and keeps the old heuristic as
+  the fallback, so a catalog that never adopts the key renders as before.
+
+Staleness is deliberate and bounded: editing the catalog reaches the composer
+at the next admin re-toggle, not on open sessions.
 
 ---
 

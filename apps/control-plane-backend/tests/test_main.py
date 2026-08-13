@@ -1599,6 +1599,104 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     assert payload["capability_base_urls"] == {}
 
 
+def test_runtime_template_payload_accepts_new_and_legacy_chat_input_metadata() -> None:
+    """Rolling upgrades accept template responses with or without the policy."""
+
+    base = {
+        "template_agent_id": "rags.sample.echo",
+        "title": "Echo",
+        "description": "Echo agent",
+        "kind": "assistant",
+    }
+
+    assert _RuntimeTemplatePayload.model_validate(base).max_chat_input_chars is None
+    assert (
+        _RuntimeTemplatePayload.model_validate(
+            {**base, "max_chat_input_chars": 321}
+        ).max_chat_input_chars
+        == 321
+    )
+    for malformed in (True, False, "321", 0, -1):
+        assert (
+            _RuntimeTemplatePayload.model_validate(
+                {**base, "max_chat_input_chars": malformed}
+            ).max_chat_input_chars
+            is None
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("published_limit", [321, None])
+async def test_prepare_execution_propagates_optional_runtime_chat_input_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    published_limit: int | None,
+) -> None:
+    """Preparation reuses one template fetch and tolerates an older runtime."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-limit",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+            )
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+    fetch_calls = 0
+
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ) -> list[_RuntimeTemplatePayload]:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        assert include_non_public is True
+        return [
+            _RuntimeTemplatePayload(
+                template_agent_id="rags.sample.echo",
+                title="Echo",
+                description="Echo agent",
+                kind="assistant",
+                max_chat_input_chars=published_limit,
+            )
+        ]
+
+    monkeypatch.setattr(
+        product_service,
+        "_fetch_runtime_templates",
+        _fake_fetch_runtime_templates,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-limit/prepare-execution"
+        )
+
+    assert response.status_code == 200
+    assert fetch_calls == 1
+    if published_limit is None:
+        assert "max_chat_input_chars" not in response.json()
+    else:
+        assert response.json()["max_chat_input_chars"] == published_limit
+
+
 @pytest.mark.asyncio
 async def test_prepare_execution_advertises_capability_base_urls(
     monkeypatch: pytest.MonkeyPatch,

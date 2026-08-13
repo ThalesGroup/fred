@@ -69,6 +69,7 @@ applications:
       profiles:
         - profile_id: default.chat.mock
           capability: chat
+          model_display_name: "Mock OpenAI Chat"
           model:
             provider: openai
             name: mock-openai-chat
@@ -76,6 +77,7 @@ applications:
               base_url: http://mock-openai-server:8383/v1
         - profile_id: default.language.mock
           capability: language
+          model_display_name: "Mock OpenAI Chat"
           model:
             provider: openai
             name: mock-openai-chat

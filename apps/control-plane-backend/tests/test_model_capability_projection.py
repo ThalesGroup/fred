@@ -121,6 +121,50 @@ async def test_carries_thinking_profile_ids_through_the_projection(
 
 
 @pytest.mark.asyncio
+async def test_carries_the_ops_authored_display_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The label ops authored reaches control-plane verbatim.
+
+    Verbatim matters more here than for the derived fields: the string is
+    shown to users as-is, so normalizing it would be a second opinion about a
+    name ops already settled. A pod that sends none reads as None, leaving
+    the frontend on its id-splitting heuristic — the previous behaviour.
+    """
+
+    payload = {
+        "models": [
+            {
+                "id": "model__anthropic__claude-sonnet-4-6",
+                "provider": "anthropic",
+                "name": "claude-sonnet-4-6",
+                "display_name": "Claude Sonnet 4.6",
+            },
+            {
+                "id": "model__openai__gpt-4o",
+                "provider": "openai",
+                "name": "gpt-4o",
+            },
+        ]
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    entries = await _model_capabilities_for_source("http://pod")
+
+    assert entries is not None
+    assert entries[0].model_display_name == "Claude Sonnet 4.6"
+    assert entries[1].model_display_name is None
+    # The technical name is untouched — routing, the capability id and the
+    # admin table all still key on it.
+    assert entries[0].name == "claude-sonnet-4-6"
+
+
+@pytest.mark.asyncio
 async def test_ignores_malformed_entries_without_crashing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

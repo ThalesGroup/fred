@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
+import { toEmailHtml, toPlainText, writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
 import { UiParts } from "@shared/molecules/UiParts/UiParts";
@@ -52,8 +55,11 @@ export const AssistantTurn = memo(function AssistantTurn({
   isStreaming,
   pendingToolCallIds,
 }: AssistantTurnProps) {
+  const { t } = useTranslation();
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
+  const { copied, confirmCopied } = useCopyConfirmation();
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
@@ -67,12 +73,26 @@ export const AssistantTurn = memo(function AssistantTurn({
   }, [activeSourceIndex, sources]);
 
   const copyAction = useCallback(() => {
-    navigator.clipboard.writeText(text).catch(() => {});
-  }, [text]);
+    // Copy from the rendered markdown, not the raw `text` prop, so the
+    // clipboard gets real bold/lists/tables/links instead of literal
+    // markdown syntax — same email-safe serialisation as manual selection.
+    const node = contentRef.current;
+    const write = node ? writeRichClipboard(toEmailHtml(node), toPlainText(node)) : writeRichClipboard("", text);
+    write.then((success) => {
+      if (success) confirmCopied();
+    });
+  }, [text, confirmCopied]);
 
   const actions: Action[] = useMemo(
-    () => [{ id: "copy", icon: "content_copy", label: "Copy response", onClick: copyAction }],
-    [copyAction],
+    () => [
+      {
+        id: "copy",
+        icon: copied ? "check" : "content_copy",
+        label: copied ? t("chatbot.copyMessage.copied") : t("chatbot.copyMessage.response"),
+        onClick: copyAction,
+      },
+    ],
+    [copied, copyAction, t],
   );
 
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;
@@ -94,6 +114,7 @@ export const AssistantTurn = memo(function AssistantTurn({
       )}
 
       <AssistantMessage
+        ref={contentRef}
         text={text}
         isStreaming={isStreaming}
         onSourceClick={uiSources.length > 0 ? setActiveSourceIndex : undefined}
@@ -119,7 +140,7 @@ export const AssistantTurn = memo(function AssistantTurn({
 
       {!isStreaming && text && (
         <div className={styles.footer}>
-          <ActionBar actions={actions} />
+          <ActionBar actions={actions} alwaysVisible />
           {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
         </div>
       )}

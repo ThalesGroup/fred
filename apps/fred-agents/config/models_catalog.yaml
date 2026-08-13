@@ -19,6 +19,7 @@ default_profile_by_capability:
 profiles:
   - profile_id: chat.mistral.medium
     capability: chat
+    model_display_name: "Mistral Medium 3.5"
     # Non-reasoning model: structured output (JSON) and tool loops are reliable.
     # A reasoning model (mistral-small-2603 + reasoning_effort) emits its content
     # as `thinking` blocks → structured/JSON parsing fails ("expected value at
@@ -31,6 +32,7 @@ profiles:
         max_retries: 2
   - profile_id: language.mistral.medium
     capability: language
+    model_display_name: "Mistral Medium 3.5"
     model:
       provider: openai
       name: mistral-medium-latest
@@ -39,6 +41,7 @@ profiles:
         max_retries: 2
   - profile_id: chat.mistral.small
     capability: chat
+    model_display_name: "Mistral Small 4"
     description: "Faster and lower-cost Mistral Small profile for everyday chat tasks."
     # Declared aptitude, NOT activation (REASON-01 §4): this profile ships
     # `reasoning_effort`, so it must say so — a reasoning setting without this
@@ -78,6 +81,7 @@ profiles:
 
   - profile_id: language.mistral.small
     capability: language
+    model_display_name: "Mistral Small 4"
     description: "Faster and lower-cost Mistral Small profile for lightweight language tasks."
     model:
       provider: openai
@@ -88,6 +92,7 @@ profiles:
 
   - profile_id: default.chat.openai.prod
     capability: chat
+    model_display_name: "GPT-5.1"
     description: "Default balanced chat model for production conversations."
     model:
       provider: openai
@@ -96,6 +101,7 @@ profiles:
 
   - profile_id: default.language.openai.prod
     capability: language
+    model_display_name: "GPT-5.1"
     description: "Default balanced language model for structured text tasks."
     model:
       provider: openai
@@ -104,6 +110,7 @@ profiles:
 
   - profile_id: default.chat.local
     capability: chat
+    model_display_name: "GPT-5.1"
     description: "Local default chat profile with retries and shorter timeout."
     model:
       provider: openai
@@ -115,6 +122,7 @@ profiles:
 
   - profile_id: default.language.local
     capability: language
+    model_display_name: "GPT-5.1"
     description: "Local default language profile with retries and shorter timeout."
     model:
       provider: openai
@@ -126,6 +134,7 @@ profiles:
 
   - profile_id: chat.openai.gpt52
     capability: chat
+    model_display_name: "GPT-5.2"
     description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
     model:
       provider: openai
@@ -134,6 +143,7 @@ profiles:
 
   - profile_id: language.openai.gpt52
     capability: language
+    model_display_name: "GPT-5.2"
     description: "Highest-quality GPT-5.2 profile for demanding language workloads."
     model:
       provider: openai
@@ -142,6 +152,7 @@ profiles:
 
   - profile_id: chat.openai.gpt5
     capability: chat
+    model_display_name: "GPT-5"
     description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
     model:
       provider: openai
@@ -150,6 +161,7 @@ profiles:
 
   - profile_id: language.openai.gpt5
     capability: language
+    model_display_name: "GPT-5"
     description: "General-purpose GPT-5 language profile with strong overall quality."
     model:
       provider: openai
@@ -158,6 +170,7 @@ profiles:
 
   - profile_id: chat.openai.gpt5mini
     capability: chat
+    model_display_name: "GPT-5 mini"
     description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
     model:
       provider: openai
@@ -166,6 +179,7 @@ profiles:
 
   - profile_id: language.openai.gpt5mini
     capability: language
+    model_display_name: "GPT-5 mini"
     description: "Faster and lower-cost GPT-5 Mini profile for lightweight language tasks."
     model:
       provider: openai
@@ -174,6 +188,7 @@ profiles:
 
   - profile_id: chat.openai.gpt5nano
     capability: chat
+    model_display_name: "GPT-5 nano"
     description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
     model:
       provider: openai
@@ -182,6 +197,7 @@ profiles:
 
   - profile_id: language.openai.gpt5nano
     capability: language
+    model_display_name: "GPT-5 nano"
     description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple language tasks."
     model:
       provider: openai
@@ -190,6 +206,7 @@ profiles:
 
   - profile_id: chat.openai.gpt41
     capability: chat
+    model_display_name: "GPT-4.1"
     description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
     model:
       provider: openai
@@ -198,6 +215,7 @@ profiles:
 
   - profile_id: language.openai.gpt41
     capability: language
+    model_display_name: "GPT-4.1"
     description: "Reliable GPT-4.1 language profile for stable text generation."
     model:
       provider: openai
@@ -206,6 +224,7 @@ profiles:
 
   - profile_id: chat.openai.gpt41mini
     capability: chat
+    model_display_name: "GPT-4.1 mini"
     description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
     model:
       provider: openai
@@ -214,6 +233,7 @@ profiles:
 
   - profile_id: language.openai.gpt41mini
     capability: language
+    model_display_name: "GPT-4.1 mini"
     description: "Cost-efficient GPT-4.1 Mini profile for lightweight language work."
     model:
       provider: openai
@@ -222,6 +242,7 @@ profiles:
 
   - profile_id: chat.azure_apim.gpt4o
     capability: chat
+    model_display_name: "GPT-4o (Azure)"
     description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
     model:
       provider: azure-apim
@@ -236,6 +257,7 @@ profiles:
 
   - profile_id: chat.ollama.mistral
     capability: chat
+    model_display_name: "Mistral (Ollama)"
     description: "Local Ollama Mistral profile for private/offline chat experimentation."
     model:
       provider: ollama
@@ -245,6 +267,7 @@ profiles:
 
   - profile_id: language.ollama.mistral
     capability: language
+    model_display_name: "Mistral (Ollama)"
     description: "Local Ollama Mistral profile for private/offline language tasks."
     model:
       provider: ollama
@@ -253,6 +276,7 @@ profiles:
         base_url: "http://host.docker.internal:11434"
   - profile_id: default.chat.mock
     capability: chat
+    model_display_name: "Mock OpenAI Chat"
     model:
       provider: openai
       name: mock-openai-chat
@@ -262,6 +286,7 @@ profiles:
 
   - profile_id: default.language.mock
     capability: language
+    model_display_name: "Mock OpenAI Chat"
     model:
       provider: openai
       name: mock-openai-chat
@@ -271,6 +296,7 @@ profiles:
 
   - profile_id: mock.chat.gpt4o
     capability: chat
+    model_display_name: "GPT-4o (mock)"
     model:
       provider: openai
       name: gpt-4o
@@ -280,6 +306,7 @@ profiles:
 
   - profile_id: mock.chat.latest
     capability: chat
+    model_display_name: "ChatGPT-4o (mock)"
     model:
       provider: openai
       name: chatgpt-4o-latest
@@ -289,6 +316,7 @@ profiles:
 
   - profile_id: chat.anthropic.claude-sonnet
     capability: chat
+    model_display_name: "Claude Sonnet 4.6"
     description: "Claude Sonnet 4.6 via Synapse Gateway (Anthropic-native). Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY in .env."
     model:
       provider: anthropic
@@ -296,6 +324,7 @@ profiles:
 
   - profile_id: chat.anthropic.claude-haiku
     capability: chat
+    model_display_name: "Claude Haiku 3.5"
     description: "Claude Haiku via Synapse Gateway, fast and cost-efficient. Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY in .env."
     model:
       provider: anthropic
@@ -303,6 +332,7 @@ profiles:
 
   - profile_id: language.anthropic.claude-sonnet
     capability: language
+    model_display_name: "Claude Sonnet 4.6"
     description: "Claude Sonnet 4.6 via Synapse Gateway for structured language tasks. Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY in .env."
     model:
       provider: anthropic

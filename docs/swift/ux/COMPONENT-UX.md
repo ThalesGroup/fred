@@ -208,19 +208,36 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
-As of REASON-01 (#2166) the same row grammar carries a **boolean** row for the first
-time: the `Reasoning` toggle (`stockKit/ReasoningControl.tsx`) shows On/Off inline in
-muted text like the value rows, but its trailing affordance is a checkbox glyph rather
-than a chevron, and clicking it flips the value in place instead of opening a
-sub-menu. The popover deliberately stays open so a user can flip it and keep
-composing. It is also the first row contributed by the **platform** rather than by a
-capability. It appears only when the agent's author turned Reasoning on in the form's
-Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
-gate removes the row entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
-§33). The offer itself lived in the General section until Amendment C (2026-08-02) moved
-it into the Capabilities tab, rendered through the same `CapabilityCard` component every
-real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
-even though the reasoning offer still isn't a capability underneath.
+As of REASON-01 (#2166) the platform contributed its first non-capability control: a
+`Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
+**gone from the tune menu**: reasoning is now a **plain text button + chevron**
+(`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
+edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
+reference. The button leads with the MODEL IDENTITY (`params.model_id`, the
+single enabled reasoning model — read-only today, the model picker slot once
+multi-model ships, each model carrying its own reasoning mode): "Mistral
+Small · Élevé" when on, "Mistral Small · Désactivé" when off (bare
+"Raisonnement"/level labels when no unambiguous model is served); its menu
+opens above, right-aligned, with the effort/latency explainer as a muted
+header and two check-circle rows: Désactivé, and the ON row labeled with the
+level. The level is the model's own
+ops-authored `settings.reasoning_effort` (single source of truth, served on
+`params.effort`; generic "Activé" when absent) — deliberately NOT a
+low/medium/high picker: a same-day effort picker was withdrawn (providers 400
+on values they don't support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48), so the
+wire stays the on/off tri-state and the pod always applies the live settings
+value.
+The chip renders in primary/selected colors whenever an effort level is active.
+Multi-model is deliberately NOT displayed yet — the model identity arrives as a
+plain profile-id prop so the menu can grow a model section when that feature ships.
+The gating is unchanged: the chip appears only when the agent's author turned
+Reasoning on in the form's Capabilities tab AND a platform admin enabled the model's
+reasoning — a closed upstream gate removes it entirely rather than disabling it
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
+section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
+through the same `CapabilityCard` component every real capability uses (generalized
+to a plain `name`/`description`/`subForm` API for this) even though the reasoning
+offer still isn't a capability underneath.
 
 As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
 constant: the reasoning card grows a second switch nested under `Reasoning` in its own
@@ -233,9 +250,9 @@ agents) so the decision is informed at the point it is made.
 
 #### Open UX issues
 
-- **Boolean-row affordance (REASON-01)** — the checkbox glyph reads correctly but is the
-  only non-chevron trailing icon in the menu. Decide whether boolean rows should instead
-  use a small switch, and whether the On/Off value text is redundant next to it.
+- ~~**Boolean-row affordance (REASON-01)**~~ — resolved 2026-08-12 by removal: the
+  reasoning row left the tune menu for the right-edge on/off picker chip, so the menu
+  carries no boolean row anymore.
 - **Desktop anchor space** — sub-menus open to the right of the row. Validate the behaviour
   close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
 - **Prompts row (PROMPT-05)** — the harmonized menu is shaped to accept a `Prompts` sub-row
@@ -570,6 +587,12 @@ _(none — streaming indicator resolved 2026-05-18)_
 - **Blockquote style** — left-border only, no background. Confirm whether a subtle background tint
   (`--surface-container`) would better distinguish blockquotes from regular text.
 
+- **`sanitizeSchema` drops `<ol start>` and GFM task-list `checked` (#2347)** — `rehype-sanitize`'s
+  `defaultSchema` (extended here) whitelists neither `start` on `<ol>` nor `checked` on
+  `<input type="checkbox">`, so both are stripped before the DOM exists — a renumbered ordered list
+  always renders from 1, and a GFM checklist (`- [x] done`) loses its checked/unchecked state on
+  screen. Not a rendering bug introduced elsewhere; the fix is whitelisting both in this schema.
+
 #### Resolved
 
 - **Streaming previews for open fences (2026-05-28)** — `CodeBlock` now has a streaming mode used
@@ -672,6 +695,44 @@ library:
 - **Page surface** — the chat page background (`ManagedChatPage` `.page`/`.mainColumn`/`.topBar`
   and the composer's fade-to-page gradient) moved from `--surface-container-lowest` to
   `--surface-main`.
+
+---
+
+### Chat input length states (`RichInputField`, `HitlPrompt`, 2026-08-12, updated 2026-08-13)
+
+**Location:** `src/rework/components/shared/atoms/CharacterLimitNotice/`,
+`src/rework/components/shared/molecules/RichInputField/`,
+`src/rework/components/shared/molecules/HitlPrompt/`,
+`src/rework/components/pages/ManagedChatPage/`
+
+**Status:** `Functional`
+
+The managed-chat composer and active HITL free-text prompt enforce the optional
+runtime-published character policy from execution preparation. Both count Unicode code points;
+ordinary chat counts the trimmed value that will be submitted, while HITL counts the exact free
+text. Both render the shared `CharacterLimitNotice`, which owns the states below — the field
+itself owns only `aria-invalid` and its send gating.
+
+- At or below the limit, nothing is visible — no counter, no error colour — and send stays
+  available. An ordinary message sits far below a limit measured in thousands of code points
+  (5,000 in the default template, but it is per-template and admin-configurable), so a
+  permanently visible counter would report a non-problem for the whole life of the draft
+  (2026-08-13, issue #2358).
+- Above the limit, the error copy and the counter appear together as one error-coloured region,
+  the input is marked `aria-invalid`, and only the corresponding free-text send action is
+  disabled. Fixed HITL choices remain available because selecting one submits the identifier
+  without the oversized free-text draft; the runtime still validates any submitted `choice_id`,
+  `answer`, and `text` fields.
+- The notice stays mounted whenever a limit is published, empty and out of flow while the draft is
+  within it: an `aria-live` region inserted into the DOM at the same time as its text is not
+  announced, and a permanently mounted node also keeps the field's `aria-describedby` from
+  pointing at a removed id as the draft crosses back and forth. The count sits outside the live
+  region — inside, it would re-announce on every keystroke.
+- Text remains fully editable: neither component sets native `maxLength`, truncates pasted or
+  dictated content, nor clears an oversized draft. A backend length rejection restores the
+  ordinary draft or pending HITL prompt safely.
+- During a rolling upgrade, an older runtime may omit the policy. In that state no counter is
+  shown and the runtime remains the authoritative enforcement boundary.
 
 ---
 
@@ -883,6 +944,11 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 - **`max-width: 75%`** on `AssistantTurn` — validates alignment with the `MessageBubble` assistant
   variant. Confirm both are visually consistent across viewport widths.
 
+- **Multi-turn selection copy (#2346)** — a manual selection contained inside one reply gets the
+  clean clipboard serialisation described below; one that spans multiple assistant replies (or
+  includes chrome between them — `ActionBar`, source cards, `ThoughtTrace`) falls back to the
+  browser's native copy, which reintroduces the theme-background leak this feature exists to fix.
+
 #### Resolved
 
 - **Props changed (2026-04-27)** — `finalMessages: ChatMessage[]` replaced by `text: string`.
@@ -890,6 +956,30 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 
 - **Artifact download links (2026-06-22, FILES-04)** — `AssistantTurn` now renders `ArtifactLinks`
   below the reply when the agent emits `LinkPart` ui_parts.
+
+- **Copy response — always visible, email-safe clipboard (2026-08-12, #2336)** — the per-message
+  copy action (`ActionBar`, `alwaysVisible`) was hover-only and easy to miss; it's now shown
+  permanently and gives a transient "Copied" confirmation. Both the button and a manual text
+  selection inside a reply write clipboard content built by `rework/utils/clipboardUtils.ts`
+  instead of relying on the browser's default copy, which inlined the message surface's computed
+  `background-color` into the pasted `text/html` — a pink or near-black highlight depending on
+  theme. The serialiser emits email-safe HTML (inline `pt`-sized styles, no color/background/font
+  overrides, so pasted text inherits the destination document's own typography — targets Outlook's
+  Word rendering engine) alongside plain text. Mermaid/MindMap diagrams and KaTeX formulas degrade
+  to a `[diagram: <label>]` / `[formula]` placeholder rather than leaking rendering chrome (button
+  labels, breadcrumbs) or garbled glyph text — KaTeX runs with `output: "html"` here, so no
+  TeX-source annotation exists in the DOM to recover the original formula from. Fixing that would
+  mean switching to `output: "htmlAndMathml"` and whitelisting MathML in `sanitizeSchema` below —
+  not yet tracked as its own issue. Known limitation: see multi-turn selection above (#2346).
+
+- **Copy confirmation is now the shared one (2026-08-13, #2359)** — `UserTurn` had shipped a
+  parallel copy affordance the same week; both turns now use the same `ActionBar` action,
+  the same `content_copy` → `check` flip and the same 2s revert, and the labels are
+  translated on both sides (they were hardcoded English here). The 2s revert timer is also
+  now cancelled before re-arming and on unmount: clicking copy twice inside the window used
+  to have the first click's timer cut the second confirmation short after ~0.1s. The
+  clipboard *payload* stays asymmetric on purpose: assistant replies go through
+  `clipboardUtils`, user messages are plain text and use `writeText`. See `UserTurn` below.
 
 ---
 
@@ -980,13 +1070,35 @@ opened document. When the extraction is missing (endpoint 404s, or empty body), 
 renders a `preview.markdownUnavailable` notice instead of the former literal
 "Error loading document." string, which read as document content.
 
+**Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
+previously mounted one live `<canvas>` per page of the document the moment it
+loaded; at ~3.5 MB of bitmap per page that allocated gigabytes on a large PDF and
+crashed the browser tab. The viewer now renders one cheap, correctly-sized
+placeholder slot per page — so the scrollbar still reflects the document's real
+length — and mounts a real `<Page>` only for slots inside a 600 px band around
+the viewport, tracked by a single `IntersectionObserver`. Placeholders are sized
+from page 1's own geometry (A4 portrait as fallback), so the scroll extent is
+right for landscape and slide-shaped documents too. pdf.js is additionally given
+`disableAutoFetch: true` so it fetches byte ranges on demand against the
+`Accept-Ranges: bytes` support `/raw_content/stream/{uid}` already provides,
+instead of buffering the whole file up front.
+
+**Large-document guard (2026-08-07, #2273).** Past 500 pages the viewer shows an
+opt-in panel (`preview.pdf.largeTitle` / `largeBody` / `largeConfirm`) reporting
+the page count, with an "afficher quand même" action, instead of rendering
+immediately. Virtualization bounds the canvases, but one placeholder plus one
+observer entry per page is not free and pdf.js still walks the whole page tree —
+so the pathological shape stays behind an explicit choice. The state resets on
+every newly opened document.
+
 #### Open UX issues
 
 - **Assistant side panel** — FRONT-13's other half (collapsible "ask the assistant"
   panel next to the viewer) is not built yet, blocked on an agent-selection product
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
-  continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
+  continuous scroll at the container's full width (`PDF_SCALE = 1.0`). Revisit if
+  users report needing them.
 - **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
   unaffected by this component.
 
@@ -2205,14 +2317,52 @@ admin diagnostics.
 
 `UserMessage` + `ActionBar` (copy, optional edit). `.turn` has `position: relative`; hover shows actions. Edit action passes `onEdit` prop through to the action bar.
 
+Copy is the same affordance as `AssistantTurn`'s (#2336): `content_copy` flips to `check` for
+2s, no toast, no colour change. A second click inside that window restarts it rather than being
+cut short by the first click's timer, and the pending revert is dropped on unmount. The payload
+is `writeText` of the raw message: user messages are plain text, so none of the assistant side's
+email-safe HTML serialisation applies.
+
+A failed clipboard write is deliberately silent — the icon not flipping *is* the feedback, and
+the API only fails in degraded contexts a toast would not fix (a denied permission rejects; a
+non-secure origin has no `navigator.clipboard` at all, so the property access throws
+synchronously and never reaches a `.catch`). Both turns get this from
+`clipboardUtils.writeRichClipboard`, which wraps every path in `try` — `UserTurn` calls it with
+no HTML, which is the same call `AssistantTurn` makes when it has no rendered node to serialise,
+and writes `text/plain` only.
+
+The `copied` flag and its 2s revert live in `core/hooks/useCopyConfirmation.ts`, shared by both
+turns. It knows nothing about the clipboard on purpose: its predecessor bundled the write with
+the flag, which hardcoded `writeText` and made it unusable by the assistant side — see Resolved
+below.
+
+Unlike `AssistantTurn`, the bar is **not** `alwaysVisible`. The assistant's is a footer toolbar
+under the reply, where hover-only made it easy to miss (#2336); these sit beside a right-aligned
+bubble and include Edit, so pinning them visible on every user message in a thread is a louder
+change — deliberately left as its own call (see Hover zone below).
+
 #### Open UX issues
 
 - **Edit action** — `onEdit` prop exists but is not wired in `ConversationThread` yet. When wired, confirm that editing a message and re-sending correctly creates a new branch in the message tree.
-- **Hover zone** — the hover area is the full `.turn` div. On mobile, confirm touch events correctly show/hide the action bar.
+- **Hover zone** — the hover area is the full `.turn` div. On mobile, confirm touch events correctly show/hide the action bar. Decide at the same time whether this bar should follow `AssistantTurn` and become `alwaysVisible`.
 
 #### Resolved
 
-_(none yet)_
+- **Converged onto the shared copy affordance (2026-08-13, #2359)** — the copy button shipped
+  here (#2339) and on `AssistantTurn` (#2336) in the same week, as two separate implementations:
+  a hand-rolled `IconButton`/`Tooltip` row driven by a bespoke `useCopyToClipboard` hook, with a
+  `success`-coloured check, a `copy-pop` scale keyframe and a 1.5s revert — against the
+  assistant's `ActionBar`, plain check, 2s revert. Same interaction, two visual languages,
+  depending on who wrote the message. This section already described `ActionBar`, so the code
+  was also diverging from its own doc. `UserTurn` now renders `ActionBar`, and the keyframe is
+  deleted.
+
+  `useCopyToClipboard` is deleted too, replaced by `useCopyConfirmation`. The distinction is
+  the point: the old hook bundled the clipboard *write* with the confirmation flag, which
+  forced it to hardcode `writeText` — unusable by the assistant side, which writes email-safe
+  HTML. Unshareable by construction, so it was reimplemented per turn and the copies drifted.
+  The new hook holds only the flag and its timer, so both turns really do share it, and the
+  write goes through `writeRichClipboard` on both sides.
 
 ---
 

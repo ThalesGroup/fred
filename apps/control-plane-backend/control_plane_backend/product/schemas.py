@@ -344,6 +344,15 @@ class ExecutionPreparation(BaseModel):
     supports_streaming: bool = True
     supports_hitl: bool = True
     supports_ui_parts: bool = True
+    max_chat_input_chars: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Maximum Unicode code points accepted in one submitted chat message, "
+            "as advertised by the selected runtime pod. Null when an older runtime "
+            "does not publish the policy."
+        ),
+    )
     chat_controls: list[ChatControlDescriptor] = Field(
         default_factory=list,
         description=(

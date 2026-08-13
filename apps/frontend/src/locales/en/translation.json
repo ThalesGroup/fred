@@ -393,21 +393,29 @@
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
-      "scopeCorpus": "Resources",
-      "scopeCorpusAndWeb": "Model + Resources",
-      "scopeGeneral": "Model",
+      "scopeGeneral": "General knowledge",
+      "scopeCorpus": "Your documents",
+      "scopeCorpusAndWeb": "General knowledge + your documents",
       "scopeRowLabel": "Scope",
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
+      "reasoningOff": "Off",
+      "reasoningOn": "On",
+      "reasoningLow": "Low",
+      "reasoningMedium": "Medium",
+      "reasoningHigh": "High",
+      "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
       "selectLibraryFirst": "Select a library first."
     },
+    "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {
       "tooltip": "Copy message",
-      "success": "Message copied"
+      "response": "Copy response",
+      "copied": "Copied"
     },
     "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",
@@ -419,14 +427,19 @@
       "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again.",
       "attachmentDeleteFailedSummary": "File not deleted",
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
-      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file."
+      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
+      "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
+      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit."
     },
+    "hitlFreeTextLabel": "Your answer",
+    "hitlWaitingAria": "Agent is waiting for your input",
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "sendHitlAnswer": "Send",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -1627,7 +1640,15 @@
           "raw": "Raw"
         },
         "loading": "Loading…",
-        "markdownUnavailable": "No Markdown version was generated for this document."
+        "markdownUnavailable": "No Markdown version was generated for this document.",
+        "pdf": {
+          "loadFailed": "Failed to load PDF document.",
+          "unavailable": "Document content is unavailable.",
+          "largeTitle": "Large document",
+          "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
+          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
+          "largeConfirm": "Display anyway"
+        }
       },
       "storage": {
         "aria": "Storage space used",

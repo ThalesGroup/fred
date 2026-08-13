@@ -83,6 +83,12 @@
   color: var(--state-on-surface-disabled);
 }
 
+/* Aligns the over-limit notice with the textarea's own inline padding; the
+   notice itself is styled by CharacterLimitNotice. */
+.characterInfo {
+  padding: 0 var(--spacing-xs);
+}
+
 /* Bottom row: options (left, flex-1) + send button (right) */
 .bottomRow {
   display: flex;
@@ -109,6 +115,7 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
+  gap: var(--spacing-2xs); /* rightExtraSlot chip ↔ action group */
   margin-left: auto; /* pushes to right edge whether or not bottomLeft is present */
 }
 

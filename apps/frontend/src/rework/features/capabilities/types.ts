@@ -88,7 +88,9 @@ export interface ChatTurnControlComposerState {
    * Per-question reasoning activation (REASON-01 level 4,
    * MODEL-REASONING-ENABLEMENT-RFC.md §7 + §15). Travels on `RuntimeContext`
    * exactly like `searchPolicy`/`ragScope` above — reasoning is not a
-   * capability, so it has no typed `turn_options` slice to belong to.
+   * capability, so it has no typed `turn_options` slice to belong to. On/off
+   * only: the effort a reasoning turn runs with is the ops-authored
+   * `reasoning_effort` of the routed model profile, never a user pick.
    */
   reasoning: boolean;
   onReasoningChange: (value: boolean) => void;

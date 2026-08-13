@@ -393,21 +393,29 @@
       "noDocumentsAvailable": "Aucun document disponible.",
       "noDocumentsSelected": "Aucun document sélectionné",
       "noLibrariesAvailable": "Aucune bibliothèque disponible.",
-      "scopeCorpus": "Ressources",
-      "scopeCorpusAndWeb": "Modèle + Ressources",
-      "scopeGeneral": "Modèle",
+      "scopeGeneral": "Connaissances générales",
+      "scopeCorpus": "Vos documents",
+      "scopeCorpusAndWeb": "Connaissances générales + vos documents",
       "scopeRowLabel": "Portée",
       "scopeTitle": "Portée de recherche",
       "searchPolicyRowLabel": "Recherche",
       "searchPolicyTitle": "Politique de recherche",
       "reasoningRowLabel": "Raisonnement",
+      "reasoningOff": "Désactivé",
+      "reasoningOn": "Activé",
+      "reasoningLow": "Faible",
+      "reasoningMedium": "Moyen",
+      "reasoningHigh": "Élevé",
+      "reasoningHint": "Plus l'effort est élevé, plus la réponse est approfondie — et plus elle est longue à produire.",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
+    "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
       "tooltip": "Copier le message",
-      "success": "Message copié"
+      "response": "Copier la réponse",
+      "copied": "Copié"
     },
     "editMessage": "Modifier le message",
     "dropFilesHere": "Déposez les fichiers ici",
@@ -419,14 +427,19 @@
       "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer.",
       "attachmentDeleteFailedSummary": "Fichier non supprimé",
       "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
-      "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier."
+      "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
+      "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
+      "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères."
     },
+    "hitlFreeTextLabel": "Votre réponse",
+    "hitlWaitingAria": "L'agent attend votre réponse",
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
       "closeAria": "Fermer l'aperçu markdown",
       "empty": "Aucun aperçu markdown disponible."
     },
     "recordAudio": "Enregistrer de l'audio",
+    "sendHitlAnswer": "Envoyer",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
@@ -1627,7 +1640,15 @@
           "raw": "Raw"
         },
         "loading": "Chargement…",
-        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document."
+        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document.",
+        "pdf": {
+          "loadFailed": "Impossible de charger le document PDF.",
+          "unavailable": "Le contenu du document est indisponible.",
+          "largeTitle": "Document volumineux",
+          "largeBody": "Ce PDF compte {{pages}} pages. L'afficher peut ralentir votre navigateur.",
+          "largeBodyBytes": "Ce PDF pèse {{megabytes}} Mo. Son ouverture peut prendre un long moment et ralentir votre navigateur.",
+          "largeConfirm": "Afficher quand même"
+        }
       },
       "storage": {
         "aria": "Espace de stockage utilisé",

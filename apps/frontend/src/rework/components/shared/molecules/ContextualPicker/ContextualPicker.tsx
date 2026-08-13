@@ -40,6 +40,20 @@ export interface ContextualPickerProps<T extends string> {
   value: T;
   options: ContextualPickerOption<T>[];
   onChange: (value: T) => void;
+  /** Blocks opening (e.g. while a response streams) — mirrors the composer menus. */
+  disabled?: boolean;
+  /** Renders the chip in its active (primary/selected) colors — for pickers
+   *  whose current value is a "something is on" state, e.g. reasoning effort. */
+  accent?: boolean;
+  /**
+   * Chip text override — when the visible chip label is richer than the bare
+   * option label (e.g. "Mistral Small · Élevé" while the option is "Élevé").
+   * The accessible name keeps using `title` + the option label.
+   */
+  valueLabel?: string;
+  /** Muted explainer rendered as the options menu's header (e.g. "higher
+   *  effort takes longer"). */
+  description?: string;
 }
 
 export function ContextualPicker<T extends string>({
@@ -48,6 +62,10 @@ export function ContextualPicker<T extends string>({
   value,
   options,
   onChange,
+  disabled = false,
+  accent = false,
+  valueLabel,
+  description,
 }: ContextualPickerProps<T>) {
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -137,6 +155,8 @@ export function ContextualPicker<T extends string>({
           type="button"
           className={styles.chip}
           data-open={open}
+          data-accent={accent || undefined}
+          disabled={disabled}
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={`${title}: ${selected.label}`}
@@ -145,7 +165,7 @@ export function ContextualPicker<T extends string>({
           <span className={styles.icon}>
             <Icon {...icon} />
           </span>
-          <span className={styles.value}>{selected.label}</span>
+          <span className={styles.value}>{valueLabel ?? selected.label}</span>
         </button>
       </Tooltip>
 
@@ -154,6 +174,7 @@ export function ContextualPicker<T extends string>({
           <MenuPopover
             role="listbox"
             aria-label={title}
+            header={description ? <div className={styles.description}>{description}</div> : undefined}
             groups={[
               options.map((option, index) => (
                 <MenuPopoverItem

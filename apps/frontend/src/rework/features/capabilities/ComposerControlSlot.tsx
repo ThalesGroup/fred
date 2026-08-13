@@ -31,7 +31,7 @@ import { ContextPromptPicker } from "@shared/molecules/ContextPromptPicker/Conte
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import { usePickerMenuMaxHeight } from "@shared/molecules/MenuPopover/usePickerMenuMaxHeight";
-import { COMPOSER_CHIP_WIDGETS } from "./ComposerOptionChips";
+import { COMPOSER_CHIP_WIDGETS } from "./ReasoningChip";
 import { resolveChatTurnControls, type ResolvedChatTurnControl } from "./chatTurnControlRegistry";
 import type { ChatTurnControlComposerState } from "./types";
 import styles from "./ComposerControlSlot.module.css";
@@ -77,10 +77,10 @@ export function ComposerControlSlot({
   const resolved = useMemo(() => resolveChatTurnControls(chatControls), [chatControls]);
   // Split by widget id (data-driven presence, not capability branching): attach
   // goes in the "primary" menu alongside the prompts row, everything else in
-  // the "tools" menu — see `part` below. COMPOSER_CHIP_WIDGETS (search_policy,
-  // rag_scope) are promoted to always-visible ComposerOptionChips chips
-  // instead, so they're excluded here to avoid the same setting appearing
-  // twice.
+  // the "tools" menu — see `part` below. COMPOSER_CHIP_WIDGETS
+  // (reasoning_toggle) are promoted to always-visible composer chips instead
+  // (ReasoningChip, right edge), so they're excluded here to avoid the same
+  // setting appearing twice.
   const attachControls = resolved.filter((entry) => entry.widget === "attach_files");
   const otherControls = resolved.filter(
     (entry) => entry.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(entry.widget),

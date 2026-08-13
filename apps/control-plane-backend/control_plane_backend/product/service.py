@@ -52,6 +52,7 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
+from control_plane_backend.capabilities.reasoning_store import ModelReasoningDisplay
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -177,6 +178,7 @@ class _RuntimeTemplatePayload:
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
         default_capability_ids: list[str] | None = None,
+        max_chat_input_chars: int | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
@@ -195,6 +197,7 @@ class _RuntimeTemplatePayload:
         # so `_apply_capability_selection` can ReBAC-check the None case instead of
         # skipping it.
         self.default_capability_ids = default_capability_ids or []
+        self.max_chat_input_chars = max_chat_input_chars
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
@@ -223,6 +226,14 @@ class _RuntimeTemplatePayload:
                 "description": data["description"],
             }
         )
+        raw_max_chat_input_chars = data.get("max_chat_input_chars")
+        max_chat_input_chars = (
+            raw_max_chat_input_chars
+            if isinstance(raw_max_chat_input_chars, int)
+            and not isinstance(raw_max_chat_input_chars, bool)
+            and raw_max_chat_input_chars > 0
+            else None
+        )
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -247,6 +258,9 @@ class _RuntimeTemplatePayload:
                 for cid in data.get("default_capability_ids", [])
                 if isinstance(cid, str) and cid
             ],
+            # Optional during rolling upgrades: older runtime pods do not
+            # advertise this deployment policy yet.
+            max_chat_input_chars=max_chat_input_chars,
         )
 
 
@@ -570,18 +584,39 @@ async def _available_capabilities_for_source(
     unreachable pod yields an empty list (no chat controls this prep).
     """
 
+    available_capabilities, _ = await _runtime_execution_metadata_for_source(base_url)
+    return available_capabilities
+
+
+async def _runtime_execution_metadata_for_source(
+    base_url: str,
+) -> tuple[list[CapabilityCatalogEntry], int | None]:
+    """Fetch pod-scoped metadata needed by one execution preparation.
+
+    Capability descriptors and the chat-input policy live on the same runtime
+    template response. Reading them together preserves the existing single
+    request per preparation and keeps older runtimes compatible.
+    """
+
     try:
         templates = await _fetch_runtime_templates(base_url, include_non_public=True)
     except Exception as exc:
-        # Best-effort (see docstring): an unreachable pod is expected/handled, not
-        # a fault worth WARNING-level attention on every poll cycle it recurs.
-        logger.debug("Failed to fetch capability catalog from %s: %s", base_url, exc)
-        return []
+        # Best-effort: an unreachable or older pod must not make preparation fail.
+        logger.debug("Failed to fetch runtime metadata from %s: %s", base_url, exc)
+        return [], None
     merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
         for entry in template.available_capabilities:
             merged.setdefault(entry.id, entry)
-    return list(merged.values())
+    max_chat_input_chars = next(
+        (
+            template.max_chat_input_chars
+            for template in templates
+            if template.max_chat_input_chars is not None
+        ),
+        None,
+    )
+    return list(merged.values()), max_chat_input_chars
 
 
 AGENT_CAPABILITY_NAMESPACE_PREFIX = "agent__"
@@ -779,6 +814,14 @@ async def _model_capabilities_for_source_uncached(
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
+            # Derived pod-side from the thinking profile's own
+            # `settings.reasoning_effort` — the single source of truth for the
+            # level a reasoning turn runs with (review 2026-08-12).
+            model_reasoning_effort=entry.get("reasoning_effort"),
+            # Ops-authored display label, carried verbatim. Absent on an older
+            # pod, which reads as unnamed and leaves the frontend on its
+            # id-splitting heuristic — the previous behaviour exactly.
+            model_display_name=entry.get("display_name"),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
@@ -929,6 +972,7 @@ def _platform_reasoning_control(
     reasoning_enabled: bool,
     reasoning_default_on: bool,
     reasoning_enabled_model_ids: Sequence[str],
+    display_by_model: Mapping[str, ModelReasoningDisplay] | None = None,
 ) -> ChatControlDescriptor | None:
     """The composer's reasoning toggle, or `None` when a gate upstream is closed
     (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
@@ -975,6 +1019,35 @@ def _platform_reasoning_control(
             _REASONING_TOGGLE_WIDGET,
         )
         return None
+    # The level a reasoning turn actually runs with — the model's own
+    # ops-authored settings.reasoning_effort, snapshotted at toggle time
+    # (display only; the pod applies the live settings value). Emitted when
+    # the enabled models agree on one distinct value; omitted otherwise, and
+    # the composer menu falls back to a generic On label. `params` is
+    # schema-free on the wire, so this needs no contract regeneration.
+    snapshots = display_by_model or {}
+    distinct_efforts = {
+        snapshot.effort
+        for snapshot in snapshots.values()
+        if snapshot.effort is not None
+    }
+    effort = distinct_efforts.pop() if len(distinct_efforts) == 1 else None
+    # The model identity the composer button displays next to the reasoning
+    # state ("Mistral Small · Élevé") — the enabled reasoning model's own
+    # capability id, emitted when it is unambiguous (exactly one enabled).
+    # Multi-model is coming (the button becomes a model picker, with a
+    # per-model reasoning mode); until then the frontend shows it read-only.
+    model_id = (
+        reasoning_enabled_model_ids[0]
+        if len(reasoning_enabled_model_ids) == 1
+        else None
+    )
+    # That model's ops-authored label. Emitted only alongside an unambiguous
+    # `model_id` — a name without the id it belongs to would let the button
+    # claim an identity the rest of the payload doesn't back. Omitted when
+    # unnamed, and the frontend falls back to splitting the id apart.
+    snapshot = snapshots.get(model_id) if model_id else None
+    display_name = snapshot.display_name if snapshot else None
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -984,7 +1057,12 @@ def _platform_reasoning_control(
         # False remains the default because `AGENT-THINKING-API-RFC.md`
         # Amendment C measured reasoning re-issuing duplicate tool calls in
         # 10/10 turns on this stack. Starting ON is an author's opt-in.
-        params={"default": reasoning_default_on},
+        params={
+            "default": reasoning_default_on,
+            **({"effort": effort} if effort else {}),
+            **({"model_id": model_id} if model_id else {}),
+            **({"display_name": display_name} if display_name else {}),
+        },
     )
 
 
@@ -3137,7 +3215,10 @@ async def prepare_execution(
     # Descriptors ship on ExecutionPreparation — the slot the retired
     # `effective_chat_options` occupied. Best-effort: an unreachable pod yields
     # no controls this prep (logged), never a failed prep.
-    available_capabilities = await _available_capabilities_for_source(source.base_url)
+    (
+        available_capabilities,
+        max_chat_input_chars,
+    ) = await _runtime_execution_metadata_for_source(source.base_url)
     chat_controls = await _resolve_chat_controls(
         instance.tuning,
         available_capabilities,
@@ -3159,12 +3240,15 @@ async def prepare_execution(
     # gathered rather than chained — this is a user-facing send path.
     (
         (chat_default_profile_id, operation_route_rules),
-        reasoning_enabled_model_ids,
+        reasoning_display_by_model,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
-        deps.get_model_reasoning_store().list_enabled_model_ids(),
+        # Same single indexed read as the former list_enabled_model_ids, two
+        # extra columns: the toggle-time snapshot of each model's ops-authored
+        # effort and display name — still no catalog fetch on this send path.
+        deps.get_model_reasoning_store().list_enabled_display_snapshots(),
     )
-    sorted_reasoning_model_ids = sorted(reasoning_enabled_model_ids)
+    sorted_reasoning_model_ids = sorted(reasoning_display_by_model)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
@@ -3172,6 +3256,7 @@ async def prepare_execution(
         reasoning_enabled=instance.tuning.reasoning_enabled,
         reasoning_default_on=instance.tuning.reasoning_default_on,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
+        display_by_model=reasoning_display_by_model,
     )
     if reasoning_control is not None:
         chat_controls = [*chat_controls, reasoning_control]
@@ -3190,6 +3275,7 @@ async def prepare_execution(
         chat_default_profile_id=chat_default_profile_id,
         operation_route_rules=operation_route_rules,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
+        max_chat_input_chars=max_chat_input_chars,
     )
 
 
