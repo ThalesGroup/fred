@@ -43,6 +43,24 @@ def _ai_with_calls(*call_ids: str) -> AIMessage:
     )
 
 
+def _ai_proposing_write_document(call_id: str, content_markdown: str) -> AIMessage:
+    """
+    Shapes the motivating field incident exactly: `content` empty (LangChain
+    leaves it that way on a pure tool-calling turn), the real payload in the
+    tool call's own `args` (found missing from the char budget in PR review).
+    """
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "write_document",
+                "args": {"title": "doc", "content_markdown": content_markdown},
+                "id": call_id,
+            }
+        ],
+    )
+
+
 def _tool_result(call_id: str) -> ToolMessage:
     return ToolMessage(content="err", tool_call_id=call_id, name="read_query")
 
@@ -163,6 +181,28 @@ def test_char_budget_advances_to_human_boundary_like_message_trim() -> None:
     # AIMessage(tool_calls) — collapsing to empty is the safe outcome.
     trimmed = trim_to_char_budget(messages, 15)
     assert trimmed == []
+
+
+def test_char_budget_counts_tool_call_arguments_not_just_content() -> None:
+    """
+    Regression for the exact field incident (found in PR review): a
+    tool-calling AIMessage's own `content` is empty, and the large payload
+    lives entirely in `tool_calls[*]["args"]`. If the budget only looked at
+    `content`, a `write_document` call carrying a huge document would be
+    almost invisible to it — precisely defeating the point of this fix.
+    """
+    huge = "x" * 50_000
+    messages = [
+        HumanMessage(content="please write it"),
+        _ai_proposing_write_document("c1", huge),
+    ]
+    assert total_char_len(messages) >= len(huge)
+
+    # And the trim actually engages on it: a budget well under the
+    # argument's own size must still trim, not silently let it through
+    # because `content` alone was short.
+    trimmed = trim_to_char_budget(messages, 100)
+    assert total_char_len(trimmed) < total_char_len(messages)
 
 
 def test_char_budget_never_raises_even_when_unfixable() -> None:

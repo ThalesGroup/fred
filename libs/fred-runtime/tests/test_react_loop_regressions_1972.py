@@ -756,6 +756,61 @@ async def test_history_is_trimmed_by_char_budget() -> None:
 
 
 @pytest.mark.asyncio
+async def test_history_is_trimmed_by_char_budget_from_tool_call_arguments() -> None:
+    """
+    Regression for the exact field incident, found missing in PR review: a
+    tool-calling AIMessage's own `content` is typically empty — the real
+    payload (e.g. `write_document`'s `content_markdown`) lives in
+    `tool_calls[*]["args"]`. A budget that only looked at `content` would
+    barely register a session shaped exactly like the one that motivated
+    this fix. This drives the full compiled agent, not just the pure trim
+    function, so it also proves the huge argument doesn't survive as
+    "current turn" content forever — a later, small turn still gets through.
+    """
+    # Bigger than the whole budget on its own: if the argument were correctly
+    # counted, the trim MUST engage on the next turn (this is the regression
+    # check — under the pre-fix code, an all-empty-`content` history like
+    # this one measured as ~0 chars and the trim never engaged at all).
+    huge_doc = "x" * (_V2_MAX_HISTORY_CHARS + 20_000)
+    model = RecordingModel(script=[AIMessage(content="ok")])
+    agent = _compile_agent(model, approval_enabled=False)
+
+    history: list[BaseMessage] = [
+        HumanMessage("write the RTM document"),
+        AIMessage(
+            content="",
+            tool_calls=[
+                _tool_call(
+                    "write_document",
+                    {"title": "RTM", "content_markdown": huge_doc},
+                    "c-doc",
+                )
+            ],
+        ),
+        ToolMessage(
+            content="Document 'RTM' saved (id=abc123).",
+            tool_call_id="c-doc",
+            name="write_document",
+        ),
+        HumanMessage("now add the real requirements"),
+    ]
+
+    await _drive(agent, {"messages": history}, "t-tool-call-args")
+
+    assert len(model.calls) == 1
+    model_input = model.calls[0]
+    non_system = [m for m in model_input if not isinstance(m, SystemMessage)]
+    # The huge write_document call is old history by the time this new turn
+    # runs — it must have been trimmed away, not silently carried forward
+    # forever because it never registered as large in the first place.
+    for m in non_system:
+        assert huge_doc not in str(m.content)
+        for tc in getattr(m, "tool_calls", None) or []:
+            assert huge_doc not in str(tc.get("args", {}))
+    assert non_system[-1].content == "now add the real requirements"
+
+
+@pytest.mark.asyncio
 async def test_current_turn_alone_over_char_budget_fails_cleanly() -> None:
     """
     When the CURRENT turn's own content already exceeds the char budget, no

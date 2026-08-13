@@ -206,10 +206,46 @@ def trim_to_human_boundary(messages: list, max_messages: int) -> list:
     return _advance_to_safe_boundary(messages[-max_messages:])
 
 
+def _tool_calls_char_len(message: Any) -> int:
+    """
+    Character length of a message's proposed tool-call arguments.
+
+    Why this matters (found in PR review, #2350): a tool-calling AIMessage's
+    own `content` is typically empty or a short preamble — LangChain/the
+    provider put the actual payload in `tool_calls[*]["args"]` instead. The
+    motivating field incident's `write_document` call is exactly this shape:
+    an empty-content AIMessage carrying a 22k-character `content_markdown`
+    argument. Without this, that argument was invisible to
+    `_message_char_len` and the whole point of this budget — catching a
+    large-tool-output turn before it blows the provider's context window —
+    would silently not engage on the one case it was built for.
+
+    JSON-serialized (not just summing string leaf values): args can nest
+    dicts/lists/non-string values, and this approximates what actually goes
+    over the wire to the provider closely enough for a proxy budget — the
+    small serialization overhead (quotes, braces, commas) only makes the
+    estimate more conservative, never less.
+    """
+    tool_calls = getattr(message, "tool_calls", None)
+    if not tool_calls:
+        return 0
+    total = 0
+    for call in tool_calls:
+        args = call.get("args") if isinstance(call, dict) else None
+        if not args:
+            continue
+        try:
+            total += len(json.dumps(args, ensure_ascii=False, default=str))
+        except (TypeError, ValueError):
+            total += len(str(args))
+    return total
+
+
 def _message_char_len(message: Any) -> int:
     """
-    Character length of one message's content, robust to multimodal content
-    (a list of content blocks) as well as plain string content.
+    Character length of one message: its content (robust to multimodal
+    content blocks as well as plain string content) plus any proposed
+    tool-call arguments (see `_tool_calls_char_len`).
 
     Why character count, not tokens (#2350):
     - no exact tokenizer covers every provider this deployment can point at
@@ -218,10 +254,10 @@ def _message_char_len(message: Any) -> int:
       `max_chat_input_chars` (#2253) already counts on a single message.
     """
     content = getattr(message, "content", None)
+    total = 0
     if isinstance(content, str):
-        return len(content)
-    if isinstance(content, list):
-        total = 0
+        total = len(content)
+    elif isinstance(content, list):
         for block in content:
             if isinstance(block, str):
                 total += len(block)
@@ -229,8 +265,7 @@ def _message_char_len(message: Any) -> int:
                 text = block.get("text")
                 if isinstance(text, str):
                     total += len(text)
-        return total
-    return 0
+    return total + _tool_calls_char_len(message)
 
 
 def total_char_len(messages: list) -> int:
