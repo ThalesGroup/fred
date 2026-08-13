@@ -413,7 +413,9 @@
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {
-      "tooltip": "Copy message"
+      "tooltip": "Copy message",
+      "response": "Copy response",
+      "copied": "Copied"
     },
     "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",

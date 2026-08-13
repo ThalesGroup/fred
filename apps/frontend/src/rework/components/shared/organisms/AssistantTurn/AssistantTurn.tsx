@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { toEmailHtml, toPlainText, writeRichClipboard } from "@rework/utils/clipboardUtils";
@@ -53,6 +54,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   isStreaming,
   pendingToolCallIds,
 }: AssistantTurnProps) {
+  const { t } = useTranslation();
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -88,11 +90,11 @@ export const AssistantTurn = memo(function AssistantTurn({
       {
         id: "copy",
         icon: copied ? "check" : "content_copy",
-        label: copied ? "Copied" : "Copy response",
+        label: copied ? t("chatbot.copyMessage.copied") : t("chatbot.copyMessage.response"),
         onClick: copyAction,
       },
     ],
-    [copied, copyAction],
+    [copied, copyAction, t],
   );
 
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;
