@@ -59,6 +59,19 @@ class ModelReasoningRow(Base):
             "(re-)toggled. NULL = no effort key on the thinking profile."
         ),
     )
+    # Second display snapshot on the same lifecycle as `default_effort`: the
+    # model's ops-authored `model_display_name`, so the composer can label the
+    # chip without the send path fetching the catalog. Same
+    # byte-identical-comment rule as above — migration a7d2e9c41f38.
+    display_name: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment=(
+            "The model's ops-authored model_display_name, snapshotted from "
+            "the catalog entry when reasoning was (re-)toggled. NULL = no "
+            "display name authored in models_catalog.yaml."
+        ),
+    )
     reasoning_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

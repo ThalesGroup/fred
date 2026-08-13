@@ -169,6 +169,14 @@ async def aggregate_capability_catalog(
                             existing.model_thinking_profile_ids,
                             entry.model_thinking_profile_ids,
                         ),
+                        # The union rule above applied to a scalar: a label
+                        # authored on one pod survives another that serves the
+                        # same model unnamed, so a partly rolled-out catalog
+                        # edit does not flicker the composer label back to the
+                        # heuristic. Both naming it: last wins, as elsewhere.
+                        "model_display_name": (
+                            entry.model_display_name or existing.model_display_name
+                        ),
                     }
                 )
             catalog[entry.id] = entry

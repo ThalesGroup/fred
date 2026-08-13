@@ -1925,6 +1925,7 @@ export type CapabilityCatalogEntry = {
   model_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
   model_reasoning_effort?: string | null;
+  model_display_name?: string | null;
 };
 export type AgentTemplateSummary = {
   template_id: string;

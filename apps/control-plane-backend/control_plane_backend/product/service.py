@@ -52,6 +52,7 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
+from control_plane_backend.capabilities.reasoning_store import ModelReasoningDisplay
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -817,6 +818,10 @@ async def _model_capabilities_for_source_uncached(
             # `settings.reasoning_effort` — the single source of truth for the
             # level a reasoning turn runs with (review 2026-08-12).
             model_reasoning_effort=entry.get("reasoning_effort"),
+            # Ops-authored display label, carried verbatim. Absent on an older
+            # pod, which reads as unnamed and leaves the frontend on its
+            # id-splitting heuristic — the previous behaviour exactly.
+            model_display_name=entry.get("display_name"),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
@@ -967,7 +972,7 @@ def _platform_reasoning_control(
     reasoning_enabled: bool,
     reasoning_default_on: bool,
     reasoning_enabled_model_ids: Sequence[str],
-    default_efforts_by_model: Mapping[str, str | None] | None = None,
+    display_by_model: Mapping[str, ModelReasoningDisplay] | None = None,
 ) -> ChatControlDescriptor | None:
     """The composer's reasoning toggle, or `None` when a gate upstream is closed
     (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
@@ -1020,23 +1025,29 @@ def _platform_reasoning_control(
     # the enabled models agree on one distinct value; omitted otherwise, and
     # the composer menu falls back to a generic On label. `params` is
     # schema-free on the wire, so this needs no contract regeneration.
+    snapshots = display_by_model or {}
     distinct_efforts = {
-        value
-        for value in (default_efforts_by_model or {}).values()
-        if value is not None
+        snapshot.effort
+        for snapshot in snapshots.values()
+        if snapshot.effort is not None
     }
     effort = distinct_efforts.pop() if len(distinct_efforts) == 1 else None
     # The model identity the composer button displays next to the reasoning
     # state ("Mistral Small · Élevé") — the enabled reasoning model's own
     # capability id, emitted when it is unambiguous (exactly one enabled).
     # Multi-model is coming (the button becomes a model picker, with a
-    # per-model reasoning mode); until then the frontend derives a display
-    # label from this id and shows it read-only.
+    # per-model reasoning mode); until then the frontend shows it read-only.
     model_id = (
         reasoning_enabled_model_ids[0]
         if len(reasoning_enabled_model_ids) == 1
         else None
     )
+    # That model's ops-authored label. Emitted only alongside an unambiguous
+    # `model_id` — a name without the id it belongs to would let the button
+    # claim an identity the rest of the payload doesn't back. Omitted when
+    # unnamed, and the frontend falls back to splitting the id apart.
+    snapshot = snapshots.get(model_id) if model_id else None
+    display_name = snapshot.display_name if snapshot else None
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -1050,6 +1061,7 @@ def _platform_reasoning_control(
             "default": reasoning_default_on,
             **({"effort": effort} if effort else {}),
             **({"model_id": model_id} if model_id else {}),
+            **({"display_name": display_name} if display_name else {}),
         },
     )
 
@@ -3228,15 +3240,15 @@ async def prepare_execution(
     # gathered rather than chained — this is a user-facing send path.
     (
         (chat_default_profile_id, operation_route_rules),
-        reasoning_efforts_by_model,
+        reasoning_display_by_model,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
-        # Same single indexed read as the former list_enabled_model_ids, one
-        # extra column: the toggle-time snapshot of each model's ops-authored
-        # effort — still no catalog fetch on this send path.
-        deps.get_model_reasoning_store().list_enabled_default_efforts(),
+        # Same single indexed read as the former list_enabled_model_ids, two
+        # extra columns: the toggle-time snapshot of each model's ops-authored
+        # effort and display name — still no catalog fetch on this send path.
+        deps.get_model_reasoning_store().list_enabled_display_snapshots(),
     )
-    sorted_reasoning_model_ids = sorted(reasoning_efforts_by_model)
+    sorted_reasoning_model_ids = sorted(reasoning_display_by_model)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
@@ -3244,7 +3256,7 @@ async def prepare_execution(
         reasoning_enabled=instance.tuning.reasoning_enabled,
         reasoning_default_on=instance.tuning.reasoning_default_on,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
-        default_efforts_by_model=reasoning_efforts_by_model,
+        display_by_model=reasoning_display_by_model,
     )
     if reasoning_control is not None:
         chat_controls = [*chat_controls, reasoning_control]
