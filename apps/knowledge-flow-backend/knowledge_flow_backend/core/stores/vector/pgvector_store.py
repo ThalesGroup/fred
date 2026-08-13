@@ -280,7 +280,11 @@ class PgVectorStoreAdapter(BaseVectorStore):
                     text(
                         """
                         UPDATE langchain_pg_embedding e
-                        SET cmetadata = jsonb_set(e.cmetadata, '{document_name}', to_jsonb(:new_name::text))
+                        -- CAST(... AS text), not `:new_name::text`: SQLAlchemy's
+                        -- text() bind parser stops a parameter name before a
+                        -- trailing `:`, so the `::` form binds a truncated
+                        -- `:new_nam` and the statement can never execute.
+                        SET cmetadata = jsonb_set(e.cmetadata, '{document_name}', to_jsonb(CAST(:new_name AS text)))
                         FROM langchain_pg_collection c
                         WHERE e.collection_id = c.uuid
                           AND c.name = :collection
