@@ -44,6 +44,10 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+from fred_core.kpi.base_kpi_store import BaseKPIStore
+from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
+from fred_core.kpi.kpi_writer import KPIWriter
+from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_runtime.react.react_model_adapter import (
     REACT_MODEL_OPERATION_PLANNING,
     REACT_MODEL_OPERATION_ROUTING,
@@ -51,9 +55,11 @@ from fred_runtime.react.react_model_adapter import (
 )
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import (
+    _V2_MAX_HISTORY_CHARS,
     _V2_MAX_HISTORY_MESSAGES,
     build_tool_loop_compiled_react_agent,
 )
+from fred_runtime.support.tool_loop import ChatTurnTooLargeError
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -145,6 +151,7 @@ def _compile_agent(
     approval_enabled: bool = True,
     always_require_tools: tuple[str, ...] = (),
     chat_model_factory: object | None = None,
+    kpi: object | None = None,
 ) -> Any:
     return build_tool_loop_compiled_react_agent(
         model=model,
@@ -161,6 +168,7 @@ def _compile_agent(
         infer_operation_from_messages=infer_react_model_operation_from_messages,
         default_operation=REACT_MODEL_OPERATION_ROUTING,
         available_tool_names={"update_ticket", "get_info"},
+        kpi=cast(Any, kpi),
     )
 
 
@@ -707,6 +715,130 @@ async def test_history_is_trimmed_to_human_boundary() -> None:
         m.content for m in history[len(history) - len(non_system) :]
     ]
     assert non_system[-1].content == f"question {pairs + 1}"
+
+
+# ---------------------------------------------------------------------------
+# History trim by size budget (#2350) — a companion to the message-count trim
+# above: a handful of large messages can blow the char budget while staying
+# far under `_V2_MAX_HISTORY_MESSAGES`, which never engages on message count
+# alone.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_history_is_trimmed_by_char_budget() -> None:
+    model = RecordingModel(script=[AIMessage(content="trimmed answer")])
+    agent = _compile_agent(model, approval_enabled=False)
+
+    # Few messages (far under `_V2_MAX_HISTORY_MESSAGES`), but each one large
+    # enough that the total blows past `_V2_MAX_HISTORY_CHARS` — the exact
+    # shape of the field incident this guards against (a `write_document`
+    # tool output ballooning input tokens while message count stayed ~60).
+    big = "x" * (_V2_MAX_HISTORY_CHARS // 3 + 1000)
+    history: list[BaseMessage] = [
+        HumanMessage(f"q1 {big}"),
+        AIMessage(content=f"a1 {big}"),
+        HumanMessage(f"q2 {big}"),
+        AIMessage(content=f"a2 {big}"),
+        HumanMessage("current question"),
+    ]
+
+    await _drive(agent, {"messages": history}, "t-char-trim")
+
+    assert len(model.calls) == 1
+    model_input = model.calls[0]
+    non_system = [m for m in model_input if not isinstance(m, SystemMessage)]
+    total_chars = sum(len(str(m.content)) for m in non_system)
+    assert total_chars <= _V2_MAX_HISTORY_CHARS
+    assert isinstance(non_system[0], HumanMessage)
+    # The latest turn is always preserved.
+    assert non_system[-1].content == "current question"
+
+
+@pytest.mark.asyncio
+async def test_current_turn_alone_over_char_budget_fails_cleanly() -> None:
+    """
+    When the CURRENT turn's own content already exceeds the char budget, no
+    amount of trimming older history can help — the turn must fail with a
+    clean, structured error instead of a raw provider context-length crash.
+    """
+    model = RecordingModel(script=[AIMessage(content="unreachable")])
+    agent = _compile_agent(model, approval_enabled=False)
+
+    oversized = "x" * (_V2_MAX_HISTORY_CHARS + 1)
+    history: list[BaseMessage] = [HumanMessage(oversized)]
+
+    with pytest.raises(ChatTurnTooLargeError) as exc_info:
+        await _drive(agent, {"messages": history}, "t-char-too-big")
+
+    assert exc_info.value.limit_chars == _V2_MAX_HISTORY_CHARS
+    assert exc_info.value.actual_chars > _V2_MAX_HISTORY_CHARS
+    # Never echo the oversized content back.
+    assert oversized not in str(exc_info.value)
+    assert model.calls == []
+
+
+class _RecordingKPIStore(BaseKPIStore):
+    """
+    Minimal BaseKPIStore that just remembers every emitted event (#2350).
+
+    Mirrors `test_tool_observability_middleware.py`'s own established
+    pattern for stubbing the KPI writer — duplicated locally rather than
+    imported, matching that file's own stated convention.
+    """
+
+    def __init__(self) -> None:
+        self.events: list[KPIEvent] = []
+
+    def ensure_ready(self) -> None:
+        return
+
+    def index_event(self, event: KPIEvent) -> None:
+        self.events.append(event)
+
+    def bulk_index(self, events: list[KPIEvent]) -> None:
+        self.events.extend(events)
+
+    def query(self, q: KPIQuery) -> KPIQueryResult:
+        return KPIQueryResult(rows=[])
+
+
+def _install_recording_kpi_writer() -> tuple[_RecordingKPIStore, KPIWriter]:
+    store = _RecordingKPIStore()
+    return store, KPIWriter(store=store)
+
+
+@pytest.mark.asyncio
+async def test_current_turn_too_large_emits_a_kpi_counter() -> None:
+    """
+    `agent.turn_rejected_total` is the production signal for whether
+    `_V2_MAX_HISTORY_CHARS` is well-tuned (#2350) — same shape as the
+    sibling `agent.tool_failed_total` counter in `ToolObservabilityMiddleware`
+    (status/error_code/exception_type dims, `KPIActor(type="system")`), so it
+    reaches Grafana through the same allow-listed labels without needing a
+    new one.
+    """
+    store, kpi = _install_recording_kpi_writer()
+    model = RecordingModel(script=[AIMessage(content="unreachable")])
+    agent = _compile_agent(model, approval_enabled=False, kpi=kpi)
+
+    oversized = "x" * (_V2_MAX_HISTORY_CHARS + 1)
+    with pytest.raises(ChatTurnTooLargeError):
+        await _drive(agent, {"messages": [HumanMessage(oversized)]}, "t-kpi")
+
+    matches = [
+        e
+        for e in store.events
+        if e.metric and e.metric.name == "agent.turn_rejected_total"
+    ]
+    assert len(matches) == 1
+    dims = matches[0].dims or {}
+    assert dims.get("status") == "error"
+    assert dims.get("error_code") == "ChatTurnTooLargeError"
+    assert dims.get("exception_type") == "ChatTurnTooLargeError"
+    # Never the oversized content, on a KPI event any more than in the error
+    # message itself.
+    assert oversized not in str(matches[0].model_dump())
 
 
 # ---------------------------------------------------------------------------

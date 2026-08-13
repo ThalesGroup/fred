@@ -28,7 +28,11 @@ All tests are offline — no model or network required.
 
 from __future__ import annotations
 
-from fred_runtime.support.tool_loop import trim_to_human_boundary
+from fred_runtime.support.tool_loop import (
+    total_char_len,
+    trim_to_char_budget,
+    trim_to_human_boundary,
+)
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 
@@ -103,3 +107,70 @@ def test_window_advances_to_first_non_tool_message() -> None:
     assert isinstance(trimmed[0], AIMessage)
     assert trimmed[0].tool_calls[0]["id"] == "y"
     assert not isinstance(trimmed[0], ToolMessage)
+
+
+# ---------------------------------------------------------------------------
+# trim_to_char_budget (#2350) — size-based companion to the message-count trim
+# above: a handful of large messages (a generated document, a big RAG hit)
+# can blow a provider's context window while the message count stays low.
+# ---------------------------------------------------------------------------
+
+
+def test_char_budget_returns_unchanged_when_under_budget() -> None:
+    messages = [HumanMessage(content="hi"), AIMessage(content="hello")]
+    assert trim_to_char_budget(messages, 1000) == messages
+
+
+def test_char_budget_drops_oldest_messages_first() -> None:
+    """Trailing messages are kept as long as they fit; older ones are dropped."""
+    messages = [
+        HumanMessage(content="q1 " + "a" * 20),
+        AIMessage(content="a1 " + "b" * 20),
+        HumanMessage(content="q2 " + "c" * 20),
+        AIMessage(content="a2 " + "d" * 20),
+    ]
+    # Budget fits only the last two messages (~23 chars each).
+    trimmed = trim_to_char_budget(messages, 46)
+    assert trimmed == messages[-2:]
+    assert total_char_len(trimmed) <= 46
+
+
+def test_char_budget_always_keeps_at_least_the_last_message() -> None:
+    """
+    Even when the single last message alone exceeds the budget, it is kept
+    rather than collapsed to an empty list — the caller (middleware) is
+    responsible for detecting the still-over-budget result and failing the
+    turn cleanly, not this pure trim function.
+    """
+    messages = [HumanMessage(content="short"), HumanMessage(content="x" * 100)]
+    trimmed = trim_to_char_budget(messages, 10)
+    assert trimmed == [messages[-1]]
+    assert total_char_len(trimmed) > 10
+
+
+def test_char_budget_advances_to_human_boundary_like_message_trim() -> None:
+    """The same tool-call/tool-result pairing safety applies to the char trim."""
+    messages = [
+        HumanMessage(content="q" * 5),
+        _ai_with_calls("a", "b", "c", "d"),
+        ToolMessage(content="r" * 10, tool_call_id="a", name="read_query"),
+        ToolMessage(content="r" * 10, tool_call_id="b", name="read_query"),
+        ToolMessage(content="r" * 10, tool_call_id="c", name="read_query"),
+        ToolMessage(content="r" * 10, tool_call_id="d", name="read_query"),
+    ]
+    # Budget only fits the trailing orphan ToolMessages (mid tool-round): a
+    # naive tail slice would start on a bare tool result with no preceding
+    # AIMessage(tool_calls) — collapsing to empty is the safe outcome.
+    trimmed = trim_to_char_budget(messages, 15)
+    assert trimmed == []
+
+
+def test_char_budget_never_raises_even_when_unfixable() -> None:
+    """
+    `trim_to_char_budget` never raises: `ChatTurnTooLargeError` is the
+    middleware's responsibility once it sees the trimmed result is still
+    over budget (unit-tested in the middleware layer, not here).
+    """
+    messages = [HumanMessage(content="x" * 1000)]
+    trimmed = trim_to_char_budget(messages, 1)
+    assert trimmed == messages

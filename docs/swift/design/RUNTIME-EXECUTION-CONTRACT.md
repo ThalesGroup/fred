@@ -343,7 +343,7 @@ Every implementation and review must preserve these invariants:
 | MCP activation | **Needs load evidence (P1)** — sequential cold discovery, token-scoped pod cache, no singleflight | [TURN-02](../reviews/performance/2026-07-26-agent-turn-core/TURN-02-mcp-cold-path-and-cache-scope.md) |
 | ReAct/Deep model/tool boundary | **Mostly meets design** — canonical KPI/audit middleware and per-tool ReBAC; the authorization cost needs an explicit stage metric and load budget | [core review](../reviews/performance/2026-07-26-agent-turn-core/README.md) |
 | Graph model/tool boundary | **Gap (P1)** — bypasses canonical LLM/tool KPI, tool audit, and per-call ReBAC | [TURN-03](../reviews/performance/2026-07-26-agent-turn-core/TURN-03-graph-runtime-observability-and-authz.md) |
-| Turn resource budgets | **Gap (P1)** — 500-message model window, no default tool-call cap, unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md) |
+| Turn resource budgets | **Partially fixed** — ReAct now has a size-based model-input budget alongside the message-count window (§8.52, 2026-08-13) and a shipped tool-call cap (`apps/fred-agents/tool_pacing.py`, 2026-08-01); **Gap (P1) remains** for Deep, Graph, persisted-checkpoint compaction, and the unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md), [#2343](https://github.com/ThalesGroup/fred/issues/2343) |
 | SSE/history lifecycle | **Needs load evidence (P2)** — full payload buffering and unbounded fire-and-forget persistence tasks | [TURN-05](../reviews/performance/2026-07-26-agent-turn-core/TURN-05-sse-buffering-and-history-backpressure.md) |
 | Pod/SQL admission | **Needs load evidence (P1)** — Uvicorn limit unset; shared async SQL pool defaults to 15 maximum connections | [TURN-06](../reviews/performance/2026-07-26-agent-turn-core/TURN-06-admission-and-sql-capacity.md) |
 | Token refresh | **Fixed offline 2026-08-07** — the refresh is async, coalesced and bounded; the synchronous helper was removed (§8.48). The pod-level forced-expiry proof is still owed and cannot run until delegated refresh is reachable again | [TURN-07](../reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md) |
@@ -2963,6 +2963,91 @@ the exception; and, for the gate, `useChatSse.test.tsx`'s pair — a token under
 the floor that the rescue refresh clears (turn proceeds, second refresh asks
 for 30 s not 120 s) and one it cannot (refusal, but only after the attempt).
 Each was verified to fail against its pre-change implementation.
+
+---
+
+### 8.52 ✅ ReAct model-input size budget, in addition to the message-count trim — TURN-04 partial (#2350, 2026-08-13)
+
+**ReAct-only slice of TURN-04's "turn resource bounds" finding** (full finding
+still open for Deep and Graph, and for persisted-checkpoint compaction — see
+[#2343](https://github.com/ThalesGroup/fred/issues/2343)). Field incident
+(2026-08-12, `mistral-small-2603`): a session stayed at ~25 turns, far under
+`_V2_MAX_HISTORY_MESSAGES = 500`, while a 115k-character tool result followed
+a few turns later by a 22k-character generated document pushed one call's
+input to 178,670 tokens — still accepted — and the very next turn then failed
+outright (`finish_reason="error"`, 0 output tokens). The message-count trim
+never engages on payload size; whether the failure itself was specifically a
+provider context-length rejection could not be confirmed from the persisted
+turn history — Fred's own error-path token reporting attaches the last
+successful sub-call's usage to the turn, not the failing request's real size,
+which is exactly the separate `execution_error` persistence gap #2343 flags
+for its own fix.
+
+`CheckpointHygieneMiddleware.awrap_model_call`
+(`fred_runtime/react/middleware/checkpoint_hygiene.py`) now applies a second,
+size-based trim after the existing message-count trim:
+`trim_to_char_budget` (`fred_runtime/support/tool_loop.py`) keeps as many
+trailing messages as fit under `_V2_MAX_HISTORY_CHARS` (200,000 characters,
+`fred_runtime/react/react_tool_loop.py`), then advances to the same safe
+HumanMessage/orphan-ToolMessage boundary as the message-count trim so it
+never hands a provider a payload that starts mid tool-call/result pair.
+
+Character count, not tokens: no exact tokenizer covers every provider this
+deployment can point at (Mistral, Azure, OpenAI, ...), so this is a
+deliberately provider-agnostic proxy, the same reasoning `max_chat_input_chars`
+(#2253) uses for a single message. The 200,000-character default is
+calibrated off the same field incident, not a generic "~4 chars/token" rule
+of thumb: replaying that incident's persisted turn history against its own
+reported token usage gives roughly 1.35 characters per token for this
+deployment's French/HTML-heavy content (240,395 visible characters of prior
+turns fed the call that reported 178,670 input tokens) — a naive 4x
+assumption would correspond to ~800k characters and would never have trimmed
+before this exact failure. 200,000 characters (~148k tokens at the measured
+ratio) sits comfortably below the 178,670 tokens that already nearly failed
+while still covering the incident's own single-document/single-tool-result
+payloads (each well under 150k characters) without trimming them on their
+own. This is one deployment's measured ratio, not a portable constant — see
+`react_tool_loop.py`'s comment for the full derivation and re-check it if the
+configured models or typical content mix change materially. When even the
+trimmed window still exceeds the budget — the CURRENT turn's own content is
+the culprit, and no amount of dropping older history helps — the middleware
+raises `ChatTurnTooLargeError` (numbers only, never the oversized content)
+instead of forwarding a payload the provider will reject anyway. It
+propagates through the existing generic `except Exception` →
+`RuntimeErrorEvent` path (`agent_app.py`) unchanged, so no new frontend
+handling was needed.
+
+**Observability.** A production robustness audit of this exact failure mode
+(same day) found the rejection was only a DEBUG log — invisible without
+digging through OpenSearch, and not how the 200,000-character default (a
+first-pass estimate) would get validated or re-tuned from real traffic. Two
+additions, both numbers/identifiers only, never content: the log is now
+WARNING; and `CheckpointHygieneMiddleware` gained `binding`/`kpi` (following
+`TracingKpiMiddleware`/`ToolObservabilityMiddleware`'s own required-not-
+optional convention for those two params) to emit `agent.turn_rejected_total`
+— a counter, same shape as the sibling `agent.tool_failed_total`
+(`status`/`error_code`/`exception_type` dims, `KPIActor(type="system")`),
+reaching Grafana through the existing `PROMETHEUS_ALLOWED_LABELS` allow-list
+with no new label needed. The identity/correlation dims (`session_id`,
+`user_id`, `team_id`, `agent_instance_id`, `template_agent_id`,
+`correlation_id`, `trace_id`) are built by a new shared
+`identity_kpi_dims(binding)` helper (`react/middleware/shared.py`), factored
+out of `ToolObservabilityMiddleware._base_dims`'s identical logic rather than
+hand-rolling a second copy — that method itself was left untouched to avoid
+touching already-shipped, tested code same-day.
+
+Deliberately out of scope here: Deep and Graph runtimes, persisted-checkpoint
+compaction (`CheckpointHygieneMiddleware` trims only the outgoing model
+request by design, never graph state), and #2330 (making
+`_V2_MAX_HISTORY_MESSAGES` itself configurable) — all tracked separately
+under #2343.
+
+Regression tests: `test_char_budget_*` (`test_tool_loop_trim.py`, pure
+function), `test_history_is_trimmed_by_char_budget`,
+`test_current_turn_alone_over_char_budget_fails_cleanly`, and
+`test_current_turn_too_large_emits_a_kpi_counter`
+(`test_react_loop_regressions_1972.py`, full loop through
+`agent.astream`).
 
 ---
 

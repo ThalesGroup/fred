@@ -44,6 +44,27 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 logger = logging.getLogger(__name__)
 
 
+class ChatTurnTooLargeError(RuntimeError):
+    """
+    Raised when even the trimmed model-input window still exceeds the
+    deployment's character budget (#2350) — i.e. the CURRENT turn's own
+    content (the latest human message plus whatever tool rounds it produced)
+    is too large on its own, so no amount of trimming older history helps.
+
+    Deliberately carries only numbers, never message content: this message
+    reaches the user as-is via the generic `execution_error` path
+    (`agent_app.py`), and submitted/generated text must never be echoed back.
+    """
+
+    def __init__(self, *, limit_chars: int, actual_chars: int) -> None:
+        self.limit_chars = limit_chars
+        self.actual_chars = actual_chars
+        super().__init__(
+            f"This turn's content ({actual_chars:,} characters) exceeds the "
+            f"{limit_chars:,}-character model-input budget for this deployment."
+        )
+
+
 def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
     """
     Remove any AIMessage(tool_calls=...) whose call_ids are not all answered
@@ -128,38 +149,24 @@ def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
     return result
 
 
-def trim_to_human_boundary(messages: list, max_messages: int) -> list:
+def _advance_to_safe_boundary(trimmed: list) -> list:
     """
-    Keep the last `max_messages` entries, then advance to a safe boundary so the
-    trimmed context never starts mid tool-call/result pair.
-
-    Why this matters:
-    - A tool round replays as one AIMessage(tool_calls) immediately followed by
-      its ToolMessages. A naive tail slice can land inside that group, so the
-      window starts on orphan ToolMessages whose AIMessage was cut off the front.
-      OpenAI-compatible providers (Mistral, OpenAI) then reject the whole request
-      with "messages with role 'tool' must be a response to a preceding message
-      with 'tool_calls'", which crashes the turn instead of answering the user.
-    - This is easy to hit when a single reasoning step fans out many tool calls
-      (e.g. a batch of failed `read_query` calls) that alone exceed
-      `max_messages`: every message in the window is then a bare tool result.
+    Shared post-trim boundary rule for both the message-count and the
+    char-budget trims (#2350): a tail slice can land inside an
+    AIMessage(tool_calls)/ToolMessage group, so the window must be advanced to
+    a point where it is valid to send to a provider on its own.
 
     Boundary rule:
-    - prefer to start on the first HumanMessage inside the window (keeps the most
-      context while remaining a valid start);
-    - otherwise drop any leading orphan ToolMessages so the window starts on an
-      AIMessage or later — never on a bare tool result. A ToolMessage's matching
-      AIMessage always precedes it, so a leading ToolMessage here is provably an
-      orphan and safe to drop.
+    - prefer to start on the first HumanMessage inside the window (keeps the
+      most context while remaining a valid start);
+    - otherwise drop any leading orphan ToolMessages so the window starts on
+      an AIMessage or later — never on a bare tool result. A ToolMessage's
+      matching AIMessage always precedes it, so a leading ToolMessage here is
+      provably an orphan and safe to drop.
     """
-    if len(messages) <= max_messages:
-        return messages
-    trimmed = messages[-max_messages:]
     for i, msg in enumerate(trimmed):
         if isinstance(msg, HumanMessage):
             return trimmed[i:]
-    # No HumanMessage in the window: strip leading orphan ToolMessages so the
-    # payload does not begin with a tool result that has no matching tool_calls.
     for i, msg in enumerate(trimmed):
         if not isinstance(msg, ToolMessage):
             if i:
@@ -176,6 +183,89 @@ def trim_to_human_boundary(messages: list, max_messages: int) -> list:
         "an invalid provider payload"
     )
     return []
+
+
+def trim_to_human_boundary(messages: list, max_messages: int) -> list:
+    """
+    Keep the last `max_messages` entries, then advance to a safe boundary so the
+    trimmed context never starts mid tool-call/result pair.
+
+    Why this matters:
+    - A tool round replays as one AIMessage(tool_calls) immediately followed by
+      its ToolMessages. A naive tail slice can land inside that group, so the
+      window starts on orphan ToolMessages whose AIMessage was cut off the front.
+      OpenAI-compatible providers (Mistral, OpenAI) then reject the whole request
+      with "messages with role 'tool' must be a response to a preceding message
+      with 'tool_calls'", which crashes the turn instead of answering the user.
+    - This is easy to hit when a single reasoning step fans out many tool calls
+      (e.g. a batch of failed `read_query` calls) that alone exceed
+      `max_messages`: every message in the window is then a bare tool result.
+    """
+    if len(messages) <= max_messages:
+        return messages
+    return _advance_to_safe_boundary(messages[-max_messages:])
+
+
+def _message_char_len(message: Any) -> int:
+    """
+    Character length of one message's content, robust to multimodal content
+    (a list of content blocks) as well as plain string content.
+
+    Why character count, not tokens (#2350):
+    - no exact tokenizer covers every provider this deployment can point at
+      (Mistral, Azure, OpenAI, ...); a character count is a cheap, provider-
+      agnostic, deterministic proxy for the same over-large-payload problem
+      `max_chat_input_chars` (#2253) already counts on a single message.
+    """
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return len(content)
+    if isinstance(content, list):
+        total = 0
+        for block in content:
+            if isinstance(block, str):
+                total += len(block)
+            elif isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str):
+                    total += len(text)
+        return total
+    return 0
+
+
+def total_char_len(messages: list) -> int:
+    """Total character length across a message list (see `_message_char_len`)."""
+    return sum(_message_char_len(m) for m in messages)
+
+
+def trim_to_char_budget(messages: list, max_chars: int) -> list:
+    """
+    Keep as many trailing messages as fit under `max_chars`, then advance to
+    the same safe boundary as `trim_to_human_boundary` (#2350).
+
+    Why this exists in addition to the message-count trim:
+    - a handful of large tool outputs (a generated document, a big RAG hit)
+      can blow past a provider's real context window while the session stays
+      far under any message-COUNT cap — the message count trim alone never
+      engages, and the next turn fails with a raw provider context-length
+      error instead of a clean, structured one.
+
+    Always keeps at least the last message, even if it alone exceeds
+    `max_chars` — the caller (`CheckpointHygieneMiddleware`) is responsible
+    for detecting that the trimmed result is still over budget and failing
+    the turn cleanly instead of sending a payload no trim can shrink further.
+    """
+    if total_char_len(messages) <= max_chars:
+        return messages
+    running = 0
+    cut = len(messages) - 1
+    for i in range(len(messages) - 1, -1, -1):
+        msg_len = _message_char_len(messages[i])
+        if running > 0 and running + msg_len > max_chars:
+            break
+        running += msg_len
+        cut = i
+    return _advance_to_safe_boundary(messages[cut:])
 
 
 def collect_tool_outputs(messages: List[Any]) -> Dict[str, Any]:
