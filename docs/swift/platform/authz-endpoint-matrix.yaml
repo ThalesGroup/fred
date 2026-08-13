@@ -986,6 +986,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/quota/precheck
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/raw_content/stream/{document_uid}
     review_status: pending_review
