@@ -986,6 +986,13 @@ class _ModelCatalogEntry(BaseModel):
     shows no reasoning control at all — aptitude is not a choice, an
     administrator cannot make a model reason. Non-empty means the row carries
     the toggle. Same established join as `profile_ids` above."""
+    reasoning_effort: str | None = None
+    """The ops-authored `settings.reasoning_effort` of this model's first
+    thinking profile — DERIVED from the settings (never declared twice; the
+    settings key is the single source of truth per review 2026-08-12). The
+    composer's reasoning menu displays it as the level a reasoning turn will
+    actually run with ("Élevé" for Mistral small); None when no thinking
+    profile ships the key (the menu then falls back to a generic On label)."""
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1034,6 +1041,10 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         # this one condition is the whole projection between them.
         if profile.supports_thinking:
             existing.thinking_profile_ids.append(profile.profile_id)
+            if existing.reasoning_effort is None:
+                existing.reasoning_effort = (profile.model.settings or {}).get(
+                    "reasoning_effort"
+                )
     return list(seen.values())
 
 

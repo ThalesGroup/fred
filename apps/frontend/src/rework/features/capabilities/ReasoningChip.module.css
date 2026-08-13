@@ -1,0 +1,79 @@
+/* Composer.html mockup (2026-08-12): a plain text button + chevron, no pill —
+   hover surfaces like the composer's icon buttons, menu opens above-right. */
+.wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  padding: 0 var(--spacing-s);
+  height: 38px;
+  color: var(--on-surface);
+  /* Same font as the chat message being typed (RichInputField's textarea):
+     plain regular text, never the weight-500 label tokens that read as bold. */
+  font: var(--font-body-medium);
+  white-space: nowrap;
+}
+
+.trigger:hover,
+.trigger[data-open="true"] {
+  background: var(--state-on-surface-hover);
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.value {
+  line-height: 1;
+}
+
+.model {
+  line-height: 1;
+}
+
+.state {
+  /* One step fainter than retreat in both themes — the colour contrast alone
+     separates the model name from the reasoning state. */
+  color: var(--on-surface-muted);
+  line-height: 1;
+}
+
+.chevron {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--on-surface-retreat);
+  font-size: 16px;
+}
+
+.description {
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-width: 260px;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--spacing-xs));
+  z-index: 1600;
+  min-width: 260px;
+}

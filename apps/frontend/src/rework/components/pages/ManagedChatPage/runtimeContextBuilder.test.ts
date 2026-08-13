@@ -47,4 +47,36 @@ describe("buildComposerRuntimeContext", () => {
       search_rag_scope: "corpus_only",
     });
   });
+
+  it("omits the reasoning key when the agent offers no toggle", () => {
+    // Omitted ≠ false: an absent key reaches the runtime as "no choice was
+    // made" and leaves levels 1-2 in charge.
+    const context = buildComposerRuntimeContext({
+      selectedLibraryIds: [],
+      selectedDocumentUids: [],
+      searchPolicy: "hybrid",
+      ragScope: "hybrid",
+    });
+    expect("reasoning" in context).toBe(false);
+  });
+
+  it("forwards the explicit per-question choice when offered", () => {
+    const declined = buildComposerRuntimeContext({
+      selectedLibraryIds: [],
+      selectedDocumentUids: [],
+      searchPolicy: "hybrid",
+      ragScope: "hybrid",
+      reasoning: false,
+    });
+    expect(declined.reasoning).toBe(false);
+
+    const asked = buildComposerRuntimeContext({
+      selectedLibraryIds: [],
+      selectedDocumentUids: [],
+      searchPolicy: "hybrid",
+      ragScope: "hybrid",
+      reasoning: true,
+    });
+    expect(asked.reasoning).toBe(true);
+  });
 });
