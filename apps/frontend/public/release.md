@@ -1,3 +1,52 @@
+**v2.1.35** — 2026-08-13
+
+- **Summary**
+
+  Drop a folder of any shape into Resources, and an upload that would exceed
+  your storage quota is now refused before a single file crosses the network.
+  Excel CSV exports ingest on the first try, very large tool results no longer
+  take a turn down, and models with reasoning in the Chat UI can carry a proper display name from the
+  catalog.
+
+- **Features**
+
+  - Models can carry a display name from the catalog, so the chat shows
+    "Claude Sonnet 4.6" with the reasoning effort right next to it instead of a name guessed from its id (#2354)
+
+- **Improvements**
+
+  - Uploads are checked against your storage quota before anything is sent: an
+    over-quota batch is refused with the real figures, and the meter refreshes
+    itself after every upload, delete or cancelled ingestion (#2360, #2363)
+  - Dropping a folder into Resources caps nesting at 15 levels, whether the
+    structure is dropped or built by hand (#2355, #2357)
+  - The chat character counter now appears only when you go over the limit,
+    instead of sitting under every draft (#2358, #2362)
+  - Copying your own message now looks and behaves exactly like copying an
+    assistant reply (#2359)
+
+- **Bug Fixes**
+
+  - Reasoning turned on in a new conversation no longer switches itself
+    back off when you send the first question (#2369)
+  - A CSV exported from Excel with quoted multi-line fields could fail to
+    ingest; it now imports on the first try (#2366, #2368)
+  - A large PDF no longer freezes or crashes the tab: pages load as you
+    scroll, and very large files open behind a confirmation (#2273, #2278)
+  - Adding a label to a document failed on PostgreSQL deployments, and
+    renaming a document left the old name on its indexed content
+  - A task's error message could run off the bottom of the screen with no
+    way to scroll or copy it, and "Ignorer" did nothing on a chat
+    attachment error (#2366, #2368)
+
+- **Deployment note**
+
+  Personal and per-team storage limits are now present in the shipped
+  production configuration — deployments relying on it had no quota enforced
+  at all and will start enforcing them, so review the values before
+  upgrading. The new `model_display_name` catalog key is optional; a catalog
+  without it renders as before.
+
 **v2.1.34** — 2026-08-13
 
 - **Summary**
