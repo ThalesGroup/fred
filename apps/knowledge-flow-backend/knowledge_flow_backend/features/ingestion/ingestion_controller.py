@@ -22,16 +22,28 @@ import shutil
 import tempfile
 import time
 import uuid
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Literal, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import ORGANIZATION_ID, AuthorizationError, DocumentPermission, KeycloakUser, OrganizationPermission, RebacEngine, Resource, TagPermission, TeamMetadataStore, get_current_user
+from fred_core import (
+    ORGANIZATION_ID,
+    AuthorizationError,
+    DocumentPermission,
+    KeycloakUser,
+    OrganizationPermission,
+    RebacEngine,
+    Resource,
+    TagPermission,
+    TeamMetadataStore,
+    TeamPermission,
+    get_current_user,
+)
 from fred_core.common.team_id import TeamId
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.scheduler import SchedulerBackend
 from langchain_core.documents import Document
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer, get_rebac_engine
 from knowledge_flow_backend.common.structures import (
@@ -125,6 +137,33 @@ class IngestionInput(BaseModel):
     tags: List[str] = []
     source_tag: str = "fred"
     profile: IngestionProcessingProfile | None = None
+
+
+class QuotaPrecheckRequest(BaseModel):
+    """A declared upload batch to check against storage quota BEFORE any byte
+    is uploaded (#2360). Sizes come from the client (`File.size`) and can lie —
+    the post-receive check in the upload endpoints stays the enforcement point;
+    this is a UX/bandwidth optimization that lets the caller reject a whole
+    batch up front instead of file by file after transfer.
+
+    `team_id` covers destinations whose tags don't exist yet at precheck time
+    (a folder dropped at a team corpus root); "personal" means no team.
+    """
+
+    tags: List[str] = []
+    team_id: Optional[str] = None
+    total_size: int = Field(..., ge=0)
+
+
+class QuotaPrecheckResponse(BaseModel):
+    """Verdict for a quota precheck; scope/owner/current/limit are only set on
+    denial (the numbers of the first owner whose quota the batch would blow)."""
+
+    allowed: bool
+    scope: Optional[Literal["team", "personal"]] = None
+    owner_id: Optional[str] = None
+    current: Optional[int] = None
+    limit: Optional[int] = None
 
 
 class ProcessingProgress(BaseModel):
@@ -426,38 +465,37 @@ class IngestionController:
 
         return team_ids, user_ids
 
-    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
-        """Reject an upload that would exceed the owning team's or user's quota.
+    async def _evaluate_quota(
+        self,
+        total_upload_size: int,
+        tags: List[str],
+        user: KeycloakUser,
+        extra_team_ids: Optional[set[str]] = None,
+    ) -> QuotaPrecheckResponse:
+        """Would `total_upload_size` bytes exceed the owning team's or user's quota?
 
-        A tagless upload is checked against the uploader's personal quota, not
+        Single implementation behind both the pre-receive precheck endpoint
+        (declared sizes) and the post-receive upload enforcement
+        (`_check_quota_before_upload`), so the two can never drift (#2360).
+
+        A tagless batch is checked against the caller's personal quota, not
         exempt: `tags` defaults to `[]`, so returning early here let any caller
-        bypass quota entirely by omitting tags (#2150).
+        bypass quota entirely by omitting tags (#2150). `extra_team_ids` covers
+        owners whose tags don't exist yet (a folder dropped at a team corpus
+        root prechecks before its library tags are created).
 
-        This is defence in depth rather than a live hole. The workspace disables
-        its upload control unless the current node has a library
-        (`DocumentWorkspace.tsx`, `disabled={!currentTag}`), so the UI cannot
-        produce a tagless upload; the guard covers the API default and any future
-        caller. Untagged documents are also not charged anywhere — they have no
-        ReBAC parent, so nothing can reach or delete one, and quota charged to it
-        could never be released.
+        Fail CLOSED on unreadable counters: treating a store error as 0 turned
+        any transient blip into a full quota bypass (#2150 review) — those
+        paths still raise (400 malformed owner / 503 unverifiable) rather than
+        answering allowed.
         """
-        total_upload_size = 0
-        for f in files:
-            file_size = getattr(f, "size", None)
-            if file_size is not None:
-                total_upload_size += file_size
-            else:
-                f.file.seek(0, 2)
-                total_upload_size += f.file.tell()
-                f.file.seek(0)
-
         if total_upload_size <= 0:
-            return
+            return QuotaPrecheckResponse(allowed=True)
 
         team_ids, user_ids = await self._resolve_tag_owners(tags, user)
+        if extra_team_ids:
+            team_ids |= extra_team_ids
         if not team_ids and not user_ids:
-            # Tagless (or entirely unresolvable) upload: it occupies the
-            # uploader's personal space, so check it against that quota.
             user_ids = {user.uid}
 
         cfg = ApplicationContext.get_instance().get_config()
@@ -469,11 +507,7 @@ class IngestionController:
             for team_id in team_ids:
                 allowed, current, max_size = await store.check_quota(TeamId(team_id), total_upload_size, default_limit=default_limit)
                 if not allowed:
-                    limit_str = f"{max_size} bytes" if max_size else "unlimited"
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Storage quota exceeded for team '{team_id}': limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes.",
-                    )
+                    return QuotaPrecheckResponse(allowed=False, scope="team", owner_id=team_id, current=current, limit=max_size)
 
         personal_limit = cfg.app.personal_max_resources_storage_size
         if user_ids and personal_limit is not None and personal_limit > 0:
@@ -483,9 +517,6 @@ class IngestionController:
 
             user_store = get_user_store()
             for user_id_str in user_ids:
-                # Fail CLOSED: treating an unreadable counter as 0 turned any
-                # transient store error into a full quota bypass — a user at
-                # 90/100 could upload anything during a blip (#2150 review).
                 try:
                     user_uuid = UUID(user_id_str)
                 except ValueError:
@@ -499,11 +530,34 @@ class IngestionController:
                 current = user_row.current_resources_storage_size or 0 if user_row else 0
 
                 if current + total_upload_size > personal_limit:
-                    limit_str = f"{personal_limit} bytes"
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Storage quota exceeded for personal space: limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes.",
-                    )
+                    return QuotaPrecheckResponse(allowed=False, scope="personal", owner_id=user_id_str, current=current, limit=personal_limit)
+
+        return QuotaPrecheckResponse(allowed=True)
+
+    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
+        """Reject (400) an upload that would exceed the owning team's or user's
+        quota. Post-receive enforcement point — the sizes are read from the
+        actually-received files, unlike the client-declared precheck. Kept even
+        with the precheck in place: declared sizes can lie.
+        """
+        total_upload_size = 0
+        for f in files:
+            file_size = getattr(f, "size", None)
+            if file_size is not None:
+                total_upload_size += file_size
+            else:
+                f.file.seek(0, 2)
+                total_upload_size += f.file.tell()
+                f.file.seek(0)
+
+        verdict = await self._evaluate_quota(total_upload_size, tags, user)
+        if not verdict.allowed:
+            owner_str = f"team '{verdict.owner_id}'" if verdict.scope == "team" else "personal space"
+            limit_str = f"{verdict.limit} bytes" if verdict.limit else "unlimited"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Storage quota exceeded for {owner_str}: limit is {limit_str}, current usage is {verdict.current} bytes, attempting to upload {total_upload_size} bytes.",
+            )
 
     async def _stream_upload_process(
         self,
@@ -876,6 +930,39 @@ class IngestionController:
                 )
 
                 return StreamingResponse(event_stream, media_type="application/x-ndjson")
+
+        @router.post(
+            "/quota/precheck",
+            tags=["Processing"],
+            summary="Check a declared upload batch against storage quota before any byte is sent",
+            description=(
+                "Answers whether `total_size` bytes would exceed the storage quota of the "
+                "destination (tags' owning team, explicit `team_id`, or the caller's personal "
+                "space) so a whole batch can be rejected before any upload starts. Advisory "
+                "only: the upload endpoints re-check against the actually-received sizes."
+            ),
+        )
+        async def quota_precheck(
+            precheck: QuotaPrecheckRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> QuotaPrecheckResponse:
+            # Mirror the upload endpoints' authorization so the precheck leaks
+            # no team's usage numbers to callers who couldn't upload there.
+            for tag_id in precheck.tags:
+                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            team_id = None if precheck.team_id in (None, "personal") else precheck.team_id
+            if team_id:
+                await get_rebac_engine().check_user_team_permission_or_raise(
+                    user=user,
+                    permission=TeamPermission.CAN_UPDATE_RESOURCES,
+                    team_id=team_id,
+                )
+            return await self._evaluate_quota(
+                precheck.total_size,
+                precheck.tags,
+                user,
+                extra_team_ids={team_id} if team_id else None,
+            )
 
         @router.post(
             "/fast/text",

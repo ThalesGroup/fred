@@ -14,11 +14,12 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useSelector } from "react-redux";
-import { makeSelectSucceededTargetsOfType, type SucceededTarget } from "./taskSlice";
+import { makeSelectSettledTargetsOfType, type SettledTarget } from "./taskSlice";
 
 /**
- * Run `onSuccess(targetId)` exactly once when a task acting on an entity of
- * `targetType` reaches `succeeded`.
+ * Run `onSettled(targetId)` exactly once when a task acting on an entity of
+ * `targetType` settles on an outcome that changed that entity — `succeeded` or
+ * `cancelled`.
  *
  * Why this exists — a list/row derives its status from a cached copy of the
  * entity (e.g. a document's browse snapshot, an erasure schedule query result).
@@ -29,34 +30,43 @@ import { makeSelectSucceededTargetsOfType, type SucceededTarget } from "./taskSl
  * refetches just the affected entity when its task completes, so ingestion today
  * and conversation erasure tomorrow both stay live with identical logic.
  *
- * Fires only on `succeeded` (failed/cancelled still render from the retained
- * task). Each task fires its callback once for the lifetime of the mount, so a
- * task already succeeded before mount triggers a single catch-up refetch.
+ * Cancellation is included, not just success: cancelling an ingestion erases the
+ * half-built document outright — content, vectors, metadata row and the storage
+ * quota it had been charged (`delete_cancelled_document`, #2315). A consumer that
+ * only watched `succeeded` left the deleted document's row and the team's storage
+ * meter frozen until a manual reload. Cancellation is cooperative, so the erase
+ * lands seconds after the cancel request returns; this hook fires on the terminal
+ * state, which is when it has actually happened, not when it was asked for.
+ *
+ * `failed` deliberately does not fire: the document survives a failure and its
+ * row keeps rendering from the retained task, so there is nothing to refetch.
+ * Each task fires its callback once for the lifetime of the mount, so a task
+ * already settled before mount triggers a single catch-up refetch.
  */
-export function useRefetchOnTaskSuccess(targetType: string, onSuccess: (targetId: string) => void): void {
-  const selectSucceeded = useMemo(() => makeSelectSucceededTargetsOfType(targetType), [targetType]);
-  // Content-equality on task ids: only re-render when the succeeded set changes,
+export function useRefetchOnTaskSettled(targetType: string, onSettled: (targetId: string) => void): void {
+  const selectSettled = useMemo(() => makeSelectSettledTargetsOfType(targetType), [targetType]);
+  // Content-equality on task ids: only re-render when the settled set changes,
   // not on every progress event that mutates the task store.
-  const succeeded = useSelector(selectSucceeded, sameTaskIds);
+  const settled = useSelector(selectSettled, sameTaskIds);
 
   // Keep the latest callback without making it an effect dependency, so the
   // consumer can pass a fresh closure each render (capturing current state).
-  const onSuccessRef = useRef(onSuccess);
-  onSuccessRef.current = onSuccess;
+  const onSettledRef = useRef(onSettled);
+  onSettledRef.current = onSettled;
 
   const handledRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    for (const { taskId, targetId } of succeeded) {
+    for (const { taskId, targetId } of settled) {
       if (handledRef.current.has(taskId)) continue;
       handledRef.current.add(taskId);
-      onSuccessRef.current(targetId);
+      onSettledRef.current(targetId);
     }
-  }, [succeeded]);
+  }, [settled]);
 }
 
 /** True when both lists carry the same task ids (order-sensitive is fine — the
  *  selector orders by store iteration, which is stable between recomputes). */
-function sameTaskIds(a: SucceededTarget[], b: SucceededTarget[]): boolean {
+function sameTaskIds(a: SettledTarget[], b: SettledTarget[]): boolean {
   return a.length === b.length && a.every((item, i) => item.taskId === b[i].taskId);
 }
