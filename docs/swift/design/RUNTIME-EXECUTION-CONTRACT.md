@@ -3091,6 +3091,33 @@ function), `test_history_is_trimmed_by_char_budget`,
 (`test_react_loop_regressions_1972.py`, full loop through
 `agent.astream`).
 
+**Three PR-review fixes to the counting itself (same day), each verified by
+reverting and confirming its regression test fails without the fix:**
+
+1. `_message_char_len` only read `AIMessage.content`, which LangChain leaves
+   empty on a pure tool-calling turn — the real payload sits in
+   `tool_calls[*]["args"]` instead (exactly `write_document`'s shape in the
+   motivating field incident). Now sums tool-call arguments
+   (JSON-serialized) too.
+2. The budget ran BEFORE `thread_reasoning_within_open_turn`, so a large
+   open-turn reasoning trace — invisible to `_message_char_len` as
+   structured `thinking`-block content — could pass unmeasured and only
+   balloon past the limit once rehomed into ordinary text. Reordered so the
+   budget measures what the handler actually receives.
+3. `trim_to_char_budget` can legitimately collapse to `[]` when the only
+   message it could keep under budget is a lone trailing ToolMessage with
+   no preceding AIMessage in the window (one oversized tool result, e.g. a
+   big RAG hit) — an unsafe orphan boundary. Measuring that now-empty
+   result silently passed the check and sent the model NO messages at
+   all — worse than a raw crash. The collapse itself is now detected and
+   measured against the pre-trim total instead.
+
+Additional regression tests: `test_char_budget_counts_tool_call_arguments_not_just_content`
+(`test_tool_loop_trim.py`), `test_history_is_trimmed_by_char_budget_from_tool_call_arguments`,
+`test_oversized_reasoning_trace_is_budgeted_after_rehoming`, and
+`test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty`
+(`test_react_loop_regressions_1972.py`).
+
 ---
 
 ### 8.43 ✅ `DocumentMarkdownPort` — paginated full-content read for capabilities (DOCREAD-01, 2026-08-07)
