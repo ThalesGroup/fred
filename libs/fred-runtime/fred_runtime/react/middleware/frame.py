@@ -51,6 +51,7 @@ def build_react_platform_middleware_frame(
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     max_history_messages: int | None,
+    max_history_chars: int | None = None,
     max_tool_calls_per_turn: int | None = None,
     capability_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
@@ -76,7 +77,12 @@ def build_react_platform_middleware_frame(
     """
 
     frame: list[AgentMiddleware] = [
-        CheckpointHygieneMiddleware(max_history_messages=max_history_messages),
+        CheckpointHygieneMiddleware(
+            max_history_messages=max_history_messages,
+            max_history_chars=max_history_chars,
+            binding=binding,
+            kpi=kpi,
+        ),
         ModelRoutingMiddleware(
             chat_model_factory=chat_model_factory,
             definition=definition,
