@@ -409,11 +409,13 @@
       "reasoningHint": "Plus l'effort est élevé, plus la réponse est approfondie — et plus elle est longue à produire.",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
-    "characterCounter": "{{count}} / {{limit}} caractères",
+    "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
-      "tooltip": "Copier le message"
+      "tooltip": "Copier le message",
+      "response": "Copier la réponse",
+      "copied": "Copié"
     },
     "editMessage": "Modifier le message",
     "dropFilesHere": "Déposez les fichiers ici",
@@ -615,6 +617,10 @@
     "storageQuotaExceededTitle": "Quota de stockage dépassé",
     "summary": "Résumé",
     "supportedFormats": "Formats pris en charge : PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "tooDeepRejected": "Rien n'a été ajouté : le dossier déposé imbriquerait des fichiers au-delà de {{max}} niveaux de dossiers.",
+    "tooDeepSkipped_one": "{{count}} fichier a été ignoré : il serait imbriqué au-delà de {{max}} niveaux de dossiers.",
+    "tooDeepSkipped_other": "{{count}} fichiers ont été ignorés : ils seraient imbriqués au-delà de {{max}} niveaux de dossiers.",
+    "tooDeepTitle": "Dossier trop profond",
     "uploadAndProcess": "Importer et traiter",
     "uploadDestination": "Les fichiers seront ajoutés à",
     "uploadDrawerTitle": "Ajouter un document",
@@ -1607,7 +1613,9 @@
         "inFolder": "Dans",
         "nameLabel": "Nom",
         "namePlaceholder": "ex. Rapports 2026",
-        "title": "Nouveau dossier"
+        "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
+        "title": "Nouveau dossier",
+        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
       },
       "renameModal": {
         "title": "Renommer",
@@ -1634,7 +1642,15 @@
           "raw": "Raw"
         },
         "loading": "Chargement…",
-        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document."
+        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document.",
+        "pdf": {
+          "loadFailed": "Impossible de charger le document PDF.",
+          "unavailable": "Le contenu du document est indisponible.",
+          "largeTitle": "Document volumineux",
+          "largeBody": "Ce PDF compte {{pages}} pages. L'afficher peut ralentir votre navigateur.",
+          "largeBodyBytes": "Ce PDF pèse {{megabytes}} Mo. Son ouverture peut prendre un long moment et ralentir votre navigateur.",
+          "largeConfirm": "Afficher quand même"
+        }
       },
       "storage": {
         "aria": "Espace de stockage utilisé",

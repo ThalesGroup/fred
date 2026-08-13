@@ -698,25 +698,36 @@ library:
 
 ---
 
-### Chat input length states (`RichInputField`, `HitlPrompt`, 2026-08-12)
+### Chat input length states (`RichInputField`, `HitlPrompt`, 2026-08-12, updated 2026-08-13)
 
-**Location:** `src/rework/components/shared/molecules/RichInputField/`,
+**Location:** `src/rework/components/shared/atoms/CharacterLimitNotice/`,
+`src/rework/components/shared/molecules/RichInputField/`,
 `src/rework/components/shared/molecules/HitlPrompt/`,
 `src/rework/components/pages/ManagedChatPage/`
 
 **Status:** `Functional`
 
-The managed-chat composer and active HITL free-text prompt display the optional
+The managed-chat composer and active HITL free-text prompt enforce the optional
 runtime-published character policy from execution preparation. Both count Unicode code points;
 ordinary chat counts the trimmed value that will be submitted, while HITL counts the exact free
-text.
+text. Both render the shared `CharacterLimitNotice`, which owns the states below — the field
+itself owns only `aria-invalid` and its send gating.
 
-- At or below the limit, the counter remains informational and send stays available.
-- Above the limit, the input uses `aria-invalid`, the counter/error region announces changes with
-  `aria-live="polite"`, and only the corresponding free-text send action is disabled. Fixed HITL
-  choices remain available because selecting one submits the identifier without the oversized
-  free-text draft; the runtime still validates any submitted `choice_id`, `answer`, and `text`
-  fields.
+- At or below the limit, nothing is visible — no counter, no error colour — and send stays
+  available. An ordinary message sits far below a limit measured in thousands of code points
+  (5,000 in the default template, but it is per-template and admin-configurable), so a
+  permanently visible counter would report a non-problem for the whole life of the draft
+  (2026-08-13, issue #2358).
+- Above the limit, the error copy and the counter appear together as one error-coloured region,
+  the input is marked `aria-invalid`, and only the corresponding free-text send action is
+  disabled. Fixed HITL choices remain available because selecting one submits the identifier
+  without the oversized free-text draft; the runtime still validates any submitted `choice_id`,
+  `answer`, and `text` fields.
+- The notice stays mounted whenever a limit is published, empty and out of flow while the draft is
+  within it: an `aria-live` region inserted into the DOM at the same time as its text is not
+  announced, and a permanently mounted node also keeps the field's `aria-describedby` from
+  pointing at a removed id as the draft crosses back and forth. The count sits outside the live
+  region — inside, it would re-announce on every keystroke.
 - Text remains fully editable: neither component sets native `maxLength`, truncates pasted or
   dictated content, nor clears an oversized draft. A backend length rejection restores the
   ordinary draft or pending HITL prompt safely.
@@ -961,6 +972,15 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
   mean switching to `output: "htmlAndMathml"` and whitelisting MathML in `sanitizeSchema` below —
   not yet tracked as its own issue. Known limitation: see multi-turn selection above (#2346).
 
+- **Copy confirmation is now the shared one (2026-08-13, #2359)** — `UserTurn` had shipped a
+  parallel copy affordance the same week; both turns now use the same `ActionBar` action,
+  the same `content_copy` → `check` flip and the same 2s revert, and the labels are
+  translated on both sides (they were hardcoded English here). The 2s revert timer is also
+  now cancelled before re-arming and on unmount: clicking copy twice inside the window used
+  to have the first click's timer cut the second confirmation short after ~0.1s. The
+  clipboard *payload* stays asymmetric on purpose: assistant replies go through
+  `clipboardUtils`, user messages are plain text and use `writeText`. See `UserTurn` below.
+
 ---
 
 ### `ArtifactLinks`
@@ -1050,13 +1070,35 @@ opened document. When the extraction is missing (endpoint 404s, or empty body), 
 renders a `preview.markdownUnavailable` notice instead of the former literal
 "Error loading document." string, which read as document content.
 
+**Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
+previously mounted one live `<canvas>` per page of the document the moment it
+loaded; at ~3.5 MB of bitmap per page that allocated gigabytes on a large PDF and
+crashed the browser tab. The viewer now renders one cheap, correctly-sized
+placeholder slot per page — so the scrollbar still reflects the document's real
+length — and mounts a real `<Page>` only for slots inside a 600 px band around
+the viewport, tracked by a single `IntersectionObserver`. Placeholders are sized
+from page 1's own geometry (A4 portrait as fallback), so the scroll extent is
+right for landscape and slide-shaped documents too. pdf.js is additionally given
+`disableAutoFetch: true` so it fetches byte ranges on demand against the
+`Accept-Ranges: bytes` support `/raw_content/stream/{uid}` already provides,
+instead of buffering the whole file up front.
+
+**Large-document guard (2026-08-07, #2273).** Past 500 pages the viewer shows an
+opt-in panel (`preview.pdf.largeTitle` / `largeBody` / `largeConfirm`) reporting
+the page count, with an "afficher quand même" action, instead of rendering
+immediately. Virtualization bounds the canvases, but one placeholder plus one
+observer entry per page is not free and pdf.js still walks the whole page tree —
+so the pathological shape stays behind an explicit choice. The state resets on
+every newly opened document.
+
 #### Open UX issues
 
 - **Assistant side panel** — FRONT-13's other half (collapsible "ask the assistant"
   panel next to the viewer) is not built yet, blocked on an agent-selection product
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
-  continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
+  continuous scroll at the container's full width (`PDF_SCALE = 1.0`). Revisit if
+  users report needing them.
 - **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
   unaffected by this component.
 
@@ -2275,14 +2317,52 @@ admin diagnostics.
 
 `UserMessage` + `ActionBar` (copy, optional edit). `.turn` has `position: relative`; hover shows actions. Edit action passes `onEdit` prop through to the action bar.
 
+Copy is the same affordance as `AssistantTurn`'s (#2336): `content_copy` flips to `check` for
+2s, no toast, no colour change. A second click inside that window restarts it rather than being
+cut short by the first click's timer, and the pending revert is dropped on unmount. The payload
+is `writeText` of the raw message: user messages are plain text, so none of the assistant side's
+email-safe HTML serialisation applies.
+
+A failed clipboard write is deliberately silent — the icon not flipping *is* the feedback, and
+the API only fails in degraded contexts a toast would not fix (a denied permission rejects; a
+non-secure origin has no `navigator.clipboard` at all, so the property access throws
+synchronously and never reaches a `.catch`). Both turns get this from
+`clipboardUtils.writeRichClipboard`, which wraps every path in `try` — `UserTurn` calls it with
+no HTML, which is the same call `AssistantTurn` makes when it has no rendered node to serialise,
+and writes `text/plain` only.
+
+The `copied` flag and its 2s revert live in `core/hooks/useCopyConfirmation.ts`, shared by both
+turns. It knows nothing about the clipboard on purpose: its predecessor bundled the write with
+the flag, which hardcoded `writeText` and made it unusable by the assistant side — see Resolved
+below.
+
+Unlike `AssistantTurn`, the bar is **not** `alwaysVisible`. The assistant's is a footer toolbar
+under the reply, where hover-only made it easy to miss (#2336); these sit beside a right-aligned
+bubble and include Edit, so pinning them visible on every user message in a thread is a louder
+change — deliberately left as its own call (see Hover zone below).
+
 #### Open UX issues
 
 - **Edit action** — `onEdit` prop exists but is not wired in `ConversationThread` yet. When wired, confirm that editing a message and re-sending correctly creates a new branch in the message tree.
-- **Hover zone** — the hover area is the full `.turn` div. On mobile, confirm touch events correctly show/hide the action bar.
+- **Hover zone** — the hover area is the full `.turn` div. On mobile, confirm touch events correctly show/hide the action bar. Decide at the same time whether this bar should follow `AssistantTurn` and become `alwaysVisible`.
 
 #### Resolved
 
-_(none yet)_
+- **Converged onto the shared copy affordance (2026-08-13, #2359)** — the copy button shipped
+  here (#2339) and on `AssistantTurn` (#2336) in the same week, as two separate implementations:
+  a hand-rolled `IconButton`/`Tooltip` row driven by a bespoke `useCopyToClipboard` hook, with a
+  `success`-coloured check, a `copy-pop` scale keyframe and a 1.5s revert — against the
+  assistant's `ActionBar`, plain check, 2s revert. Same interaction, two visual languages,
+  depending on who wrote the message. This section already described `ActionBar`, so the code
+  was also diverging from its own doc. `UserTurn` now renders `ActionBar`, and the keyframe is
+  deleted.
+
+  `useCopyToClipboard` is deleted too, replaced by `useCopyConfirmation`. The distinction is
+  the point: the old hook bundled the clipboard *write* with the confirmation flag, which
+  forced it to hardcode `writeText` — unusable by the assistant side, which writes email-safe
+  HTML. Unshareable by construction, so it was reimplemented per turn and the copies drifted.
+  The new hook holds only the flag and its timer, so both turns really do share it, and the
+  write goes through `writeRichClipboard` on both sides.
 
 ---
 
@@ -2647,6 +2727,18 @@ levels reused), and every file uploads under its own subdirectory's tag
 instead of being flattened into the drop target. The drawer lists files under
 their relative path and announces how many subfolders the save will create; a
 failed/forbidden tag creation aborts the save before any upload starts.
+Depth guardrail (#2355, 2026-08-13): the resulting folder path — destination
+folder included, so a deep destination doesn't sidestep it — is capped at 15
+levels (`MAX_FOLDER_DEPTH`, mirrored server-side by `MAX_TAG_PATH_DEPTH` on
+tag creation; the value is bounded by OpenFGA's parent-chain permission
+resolution, see structure.py). Files that would land deeper are skipped with
+a warn toast naming the count; a drop with nothing shallow enough is
+rejected with an error toast. Manual creation (`CreateFolderModal`) enforces
+the same cap inline — Create disabled with an explanation instead of a 422
+toast — and rejects "/" in a folder name on both sides (a slashed name would
+smuggle several levels past the cap in one call; found live 2026-08-13).
+The fs `mkdir` variant of the modal keeps the slash rule but not the depth
+cap (not tag-backed, so the ReBAC-chain constraint doesn't apply).
 Folder-originated files still upload under their leaf name: browsers put the
 relative path in the multipart filename (one opaque "Upload failed: 404" per
 file, found live 2026-07-23), pinned frontend-side and sanitized backend-side

@@ -20,6 +20,7 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useCreateTagKnowledgeFlowV1TagsPostMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
 import styles from "./CreateFolderModal.module.css";
 
 interface CreateFolderModalProps {
@@ -75,8 +76,23 @@ export default function CreateFolderModal({
   const trimmed = name.trim();
   const parentLeaf = parentPath?.split("/").filter(Boolean).pop();
 
+  // Mirror the backend's TagCreate guards (#2355) so the user learns BEFORE
+  // clicking Create, not from a 422 toast: a folder name is a single level
+  // (no slashes — a slashed name would smuggle several levels past the depth
+  // cap), and corpus folders stop nesting at MAX_FOLDER_DEPTH. The fs `mkdir`
+  // variant (custom onSubmit) is not tag-backed, so the depth cap — a
+  // ReBAC-chain constraint — doesn't apply there; the slash rule does.
+  const nameHasSlash = trimmed.includes("/") || trimmed.includes("\\");
+  const tooDeep = !onSubmit && folderPathDepth(parentPath) + 1 > MAX_FOLDER_DEPTH;
+  const blocked = !trimmed || nameHasSlash || tooDeep;
+  const inlineError = tooDeep
+    ? t("rework.resources.folderModal.tooDeep", { max: MAX_FOLDER_DEPTH })
+    : nameHasSlash
+      ? t("rework.resources.folderModal.nameNoSlash")
+      : undefined;
+
   const submit = async () => {
-    if (!trimmed || isLoading) return;
+    if (blocked || isLoading) return;
     try {
       if (onSubmit) {
         await onSubmit(trimmed);
@@ -145,6 +161,11 @@ export default function CreateFolderModal({
                 if (e.key === "Enter") void submit();
               }}
             />
+            {inlineError && (
+              <p className={styles.inlineError} role="alert">
+                {inlineError}
+              </p>
+            )}
           </div>
 
           <div className={styles.actions}>
@@ -155,7 +176,7 @@ export default function CreateFolderModal({
               color="primary"
               variant="filled"
               size="medium"
-              disabled={!trimmed || isLoading}
+              disabled={blocked || isLoading}
               onClick={() => void submit()}
             >
               {t("rework.resources.folderModal.create")}

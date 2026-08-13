@@ -149,13 +149,9 @@ Un panneau de chat s'ouvre. C'est ici que l'on pose les questions.
 
 ### Comment ça fonctionne
 
-Claude Code lit l'ensemble du dépôt — code, documentation, backlogs, RFCs — et
-répond aux questions en langage naturel. Il n'invente pas : il cite les fichiers
-sources dont il tire ses réponses. Si une information n'est pas dans le dépôt,
-il le dit.
-
-Le fichier de départ est [`docs/STATUS.md`](STATUS.md) — c'est le tableau de bord
-du projet, mis à jour à chaque session de travail.
+Claude Code lit le dépôt et peut interroger GitHub. Le code et les contrats du
+dépôt décrivent le produit ; GitHub Issues/Milestones décrit le travail courant.
+Il ne faut pas maintenir de tableau de statut parallèle dans les fichiers.
 
 ### Questions types à poser
 
@@ -260,14 +256,6 @@ Résume le plan de sprint actuel en 5 points.
 | Demander _"où est-ce documenté ?"_ pour naviguer       | Supposer que Claude connaît le contexte extérieur au dépôt |
 | Reformuler si la réponse semble incomplète             |                                                            |
 
-### Astuce : naviguer vers un fichier depuis une réponse
-
-Quand Claude mentionne un fichier (ex. `docs/STATUS.md`), il crée souvent un lien
-cliquable. Un clic ouvre le fichier directement dans l'éditeur. Plus besoin de
-chercher manuellement dans l'arborescence.
-
----
-
 ## Partie 4 — La boucle de feedback (pour tous)
 
 **La qualité des réponses dépend de la qualité de la documentation.**
@@ -283,8 +271,8 @@ structurée. C'est utile comme feedback.
 3. La documentation sera mise à jour dans la foulée
 4. La même question donnera une meilleure réponse la prochaine fois
 
-C'est volontaire : au lieu de maintenir un Jira en parallèle du code, toute
-l'information vit dans le dépôt et Claude sert d'interface de consultation.
+C'est volontaire : les décisions et contrats durables vivent dans le dépôt,
+tandis que le suivi du travail vit uniquement dans GitHub.
 
 ---
 
@@ -292,9 +280,6 @@ l'information vit dans le dépôt et Claude sert d'interface de consultation.
 
 | Fichier                                                  | Contenu                                                                | Usage quotidien                       |
 | -------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------- |
-| [`docs/STATUS.md`](STATUS.md)                            | Tableau de bord : en cours, livré cette semaine, bloqué, feature→tests | Première entrée pour Claire et Arnaud |
-| [`docs/WORKPLAN.md`](WORKPLAN.md)                        | Sprint détaillé : qui fait quoi, dans quel ordre                       | Vue complète du sprint                |
-| [`docs/backlog/BACKLOG.md`](backlog/BACKLOG.md)          | Toutes les phases de migration, items `[x]`/`[ ]`                      | Suivi de l'avancement global          |
 | [`docs/platform/OPERATING_MODES.md`](OPERATING_MODES.md) | Standalone vs full-stack : quand utiliser quoi                         | Référence déploiement                 |
 | [`docs/README.md`](../README.md)                         | Index de toute la documentation                                        | Navigation générale                   |
 

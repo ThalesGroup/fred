@@ -260,12 +260,11 @@ own `**Status:**` line (if any) tracks the design.
 
 ## Operational queries — status and team
 
-For team activity, current focus, and where the real work lives: read
-`docs/swift/STATUS.md` first — it is intentionally thin and points to GitHub.
-For the actual list of active/open work, query GitHub directly:
+For team activity, current focus, and the actual list of active/open work,
+query GitHub directly:
 `gh api "repos/:owner/:repo/milestones?state=open"` for the current milestones, then
-`gh issue list --milestone "<name>"`. Do not expect `STATUS.md` to mirror
-issue content — it won't, by design.
+`gh issue list --milestone "<name>"`. Do not create or maintain a status/PMO
+mirror in the repository.
 
 `docs/swift/backlog/BACKLOG.md` and `docs/swift/WORKPLAN.md` are frozen
 (2026-07-16) — historical record of the runtime migration only, not live
@@ -357,7 +356,6 @@ Do not silently expand scope. Do not silently delete content.
 | AI operational rules (Claude Code)       | `CLAUDE.md` (this file)                               |
 | OpenAI/Codex agent instructions          | `AGENT.md`, `AGENTS.md`                               |
 | Gemini agent instructions                | `GEMINI.md`                                           |
-| Team activity, current focus (thin — points to GitHub) | `docs/swift/STATUS.md`                  |
 | Active work, milestones (check `gh api "repos/:owner/:repo/milestones?state=open"`) | GitHub Issues/Milestones (`gh issue list`) |
 | Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
@@ -368,5 +366,5 @@ Do not silently expand scope. Do not silently delete content.
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |
 | Track manifests                          | `docs/swift/tracks/`                                  |
-| Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, `docs/PMO.md` |
-| Sprints, issues, milestones (only source of truth) | GitHub Issues/Milestones (`gh issue list`) — `PMO-BOARD.md`/`sprint.yaml` removed 2026-07-21, `id-legend.yaml` removed 2026-07-27, never recreate them |
+| Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md` |
+| Sprints, issues, milestones (only source of truth) | GitHub Issues/Milestones (`gh issue list`) — `STATUS.md`, `docs/PMO.md`, `PMO-BOARD.md`, `sprint.yaml`, and `id-legend.yaml` were removed; never recreate them |

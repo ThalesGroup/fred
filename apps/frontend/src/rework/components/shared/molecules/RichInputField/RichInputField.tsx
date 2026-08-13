@@ -15,6 +15,7 @@
 import { KeyboardEvent, ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
 import styles from "./RichInputField.module.css";
 
@@ -100,7 +101,7 @@ export function RichInputField({
   maxHeight = 200,
   focusEndRequestId,
 }: RichInputFieldProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const characterInfoId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
@@ -198,9 +199,8 @@ export function RichInputField({
   const hasDefaultAction = canUseVoiceInput || showStop || showSend;
   const showBottomRow = !!(topSlot || leftSlot || rightSlot || hasDefaultAction);
   const voiceControlDisabled = disabled || voiceInputDisabled || voiceInputState === "transcribing";
-  const showCharacterInfo = characterLimit !== undefined && characterCount !== undefined;
-  const isOverCharacterLimit = showCharacterInfo && characterCount > characterLimit;
-  const formattedCharacterLimit = characterLimit?.toLocaleString(i18n.language);
+  const hasCharacterLimit = characterLimit !== undefined && characterCount !== undefined;
+  const isOverCharacterLimit = hasCharacterLimit && characterCount > characterLimit;
 
   const reportVoiceError = useCallback(
     (message: string) => {
@@ -356,7 +356,7 @@ export function RichInputField({
           disabled={disabled}
           placeholder={placeholder}
           aria-invalid={isOverCharacterLimit || undefined}
-          aria-describedby={showCharacterInfo ? characterInfoId : undefined}
+          aria-describedby={hasCharacterLimit ? characterInfoId : undefined}
           onChange={(e) => {
             onChange(e.target.value);
             resize();
@@ -364,23 +364,12 @@ export function RichInputField({
           onKeyDown={handleKeyDown}
         />
 
-        {showCharacterInfo && (
-          <div
-            id={characterInfoId}
-            className={`${styles.characterInfo} ${isOverCharacterLimit ? styles.characterInfoError : ""}`}
-            aria-live="polite"
-          >
-            <span>
-              {isOverCharacterLimit ? t("chatbot.errors.chatInputTooLong", { limit: formattedCharacterLimit }) : null}
-            </span>
-            <span className={styles.characterCount}>
-              {t("chatbot.characterCounter", {
-                count: characterCount,
-                limit: formattedCharacterLimit,
-              })}
-            </span>
-          </div>
-        )}
+        <CharacterLimitNotice
+          id={characterInfoId}
+          count={characterCount}
+          limit={characterLimit}
+          className={styles.characterInfo}
+        />
 
         {showBottomRow && (
           <div className={styles.bottomRow}>

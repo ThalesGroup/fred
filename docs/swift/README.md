@@ -14,7 +14,7 @@ Start here, then follow the links to the relevant section.
 | **A developer** touching an API boundary or execution path | [`design/`](#design--architecture-contracts)                                                                       |
 | **A developer** working on the chat UI                     | [`backlog/CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) then [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)         |
 | **A UX designer** reviewing component rendering            | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) then [`design/CHAT-COMPONENT-SPECS.md`](design/CHAT-COMPONENT-SPECS.md) |
-| **A product manager** tracking progress                    | [`STATUS.md`](STATUS.md) → GitHub Issues/Milestones (`swift-golive`, `swift ga`)                                   |
+| **A product manager** tracking progress                    | GitHub Issues/Milestones                                                                                            |
 | **Anyone** validating a checkout or a release candidate    | [`TESTING.md`](TESTING.md) — four steps, each ending in a clear pass/fail answer                                   |
 | **An architect** reviewing or proposing a change           | [`rfc/`](#rfc--technical-proposals) → [`design/`](#design--architecture-contracts)                                 |
 | **Writing an agent** with the SDK                          | [`authoring/`](#authoring--agent-sdk)                                                                              |
@@ -50,7 +50,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md)         |
 | Deploy Fred                                           | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md)     |
 | Write an agent with the SDK                           | [`authoring/`](#authoring--agent-sdk)                              |
-| See what the team is working on now                   | [`STATUS.md`](STATUS.md) → GitHub Milestones (`swift-golive`, `swift ga`) |
+| See what the team is working on now                   | GitHub Issues/Milestones                                            |
 | Understand the migration backlog                      | [`backlog/`](#backlog--project-state-and-sequencing)               |
 | Check UX status of a chat component                   | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)                         |
 | Read a technical proposal                             | [`rfc/`](#rfc--technical-proposals)                                |
@@ -143,20 +143,18 @@ was removed (2026-07-27). The `DOMAIN-NN` shorthand can still appear
 informally in commit messages and issue titles; convention: see
 [`../../CLAUDE.md §Task ID convention`](../../CLAUDE.md).
 
-Sprint state, issues, and milestones are **not** tracked in this repo's docs —
-`PMO-BOARD.md` and `data/sprint.yaml` were removed (2026-07-21) because they
-duplicated GitHub without ever being kept current. GitHub Issues/Milestones
-(`gh issue list --milestone "swift-golive"` / `"swift ga"`) are the single
-source of truth; ask a developer or query GitHub directly for current sprint
-status, not a file in this tree.
+Sprint state, issues, and milestones are **not** tracked in this repo's docs.
+`STATUS.md`, `PMO-BOARD.md`, `data/sprint.yaml`, and `docs/PMO.md` were removed
+because they duplicated GitHub without remaining current. GitHub
+Issues/Milestones are the single source of truth; query them directly for
+current status.
 
 ---
 
 ### `backlog/` — Project state and sequencing
 
 Feature backlogs and audit reports. `BACKLOG.md` itself (the runtime migration
-backlog) is frozen — active work is tracked via GitHub Issues/Milestones, see
-[`STATUS.md`](STATUS.md).
+backlog) is frozen — active work is tracked via GitHub Issues/Milestones.
 
 | File                                                                     | Purpose                                                                                  |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
@@ -218,7 +216,6 @@ Runbooks and operational guides for the platform.
 
 | File                                       | Purpose                                                                                                     |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [`STATUS.md`](STATUS.md)                   | **Thin status pointer** — who's around, current focus, links to GitHub Milestones. Start here for quick status. |
 | [`WORKPLAN.md`](WORKPLAN.md)               | Frozen 2026-07-16 — superseded by GitHub Milestones (`swift-golive`, `swift ga`)                            |
 | [`TESTING.md`](TESTING.md)                 | **Release-candidate check** — four steps (offline tests → backing services → apps → auth validation suite), each with a pass/fail signal; linked from the repo root `README.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)       | Contribution guidelines                                                                                     |
