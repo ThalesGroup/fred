@@ -409,7 +409,7 @@
       "reasoningHint": "Plus l'effort est élevé, plus la réponse est approfondie — et plus elle est longue à produire.",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
-    "characterCounter": "{{count}} / {{limit}} caractères",
+    "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
