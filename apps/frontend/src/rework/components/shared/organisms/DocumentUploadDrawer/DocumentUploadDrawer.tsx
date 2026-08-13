@@ -26,7 +26,11 @@ import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWar
 import { formatBytes } from "@shared/utils/formatBytes";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { streamUploadOrProcessDocument, type ScheduledTask } from "../../../../../slices/streamDocumentUpload";
-import { IngestionProcessingProfile } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  IngestionProcessingProfile,
+  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
+  type QuotaPrecheckResponse,
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
@@ -174,13 +178,14 @@ export function DocumentUploadDrawer({
     return new Set(files.map((f) => relativeDirSegments(f).join("/")).filter(Boolean)).size;
   }, [files, ensureFolderPath]);
 
-  const isQuotaExceeded = useMemo(() => {
-    if (!team) return false;
-    const current = team.current_resources_storage_size ?? 0;
-    const max = team.max_resources_storage_size ?? 0;
-    if (max <= 0) return false;
-    return current + newFilesSize > max;
-  }, [team, newFilesSize]);
+  // Server-side quota verdict for the CURRENT batch (#2360), asked at Save
+  // time with the declared sizes — one authoritative answer for team AND
+  // personal quotas, replacing the old client-side team-only computation. A
+  // denial keeps the drawer open with the server's numbers; editing the list
+  // clears it (the next Save re-asks).
+  const [quotaDenial, setQuotaDenial] = useState<QuotaPrecheckResponse | null>(null);
+  const [quotaPrecheck] = useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation();
+  useEffect(() => setQuotaDenial(null), [files]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     // Keyboard-accessible: the dropzone root becomes focusable (tabIndex) and
@@ -210,8 +215,30 @@ export function DocumentUploadDrawer({
   };
 
   const handleSave = async () => {
-    if (!files.length || isLoading || isQuotaExceeded) return;
+    if (!files.length || isLoading) return;
     setIsLoading(true);
+    // Quota precheck FIRST (#2360): one request with the batch's declared
+    // total rejects the whole batch before any tag is created or any byte
+    // uploaded — including against the personal quota, which the client
+    // cannot see. Advisory only: the upload endpoints re-check against the
+    // actually-received sizes, so a precheck transport error falls through
+    // to the save rather than blocking it.
+    try {
+      const verdict = await quotaPrecheck({
+        quotaPrecheckRequest: {
+          tags: (metadata?.tags as string[] | undefined) ?? [],
+          team_id: resolvedTeamId,
+          total_size: newFilesSize,
+        },
+      }).unwrap();
+      if (!verdict.allowed) {
+        setQuotaDenial(verdict);
+        setIsLoading(false);
+        return;
+      }
+    } catch {
+      // Precheck unavailable — let the enforcement path answer.
+    }
     // Mirror a dropped folder's structure first: one tag chain per distinct
     // subdirectory, resolved before any upload starts so a failed/forbidden tag
     // creation aborts the save with nothing half-uploaded (the drawer stays open
@@ -392,17 +419,16 @@ export function DocumentUploadDrawer({
 
             <p className={styles.formatsCaption}>{t("documentLibrary.supportedFormats")}</p>
 
-            {isQuotaExceeded && team && (
+            {quotaDenial && (
               <div className={styles.quotaWarning} role="alert">
                 <strong className={styles.quotaTitle}>{t("documentLibrary.storageQuotaExceededTitle")}</strong>
                 <p className={styles.quotaMessage}>{t("documentLibrary.storageQuotaExceededMessage")}</p>
                 <div className={styles.quotaRow}>
                   <span>
-                    {t("documentLibrary.currentUsage")}{" "}
-                    <strong>{formatBytes(team.current_resources_storage_size ?? 0)}</strong>
+                    {t("documentLibrary.currentUsage")} <strong>{formatBytes(quotaDenial.current ?? 0)}</strong>
                   </span>
                   <span>
-                    {t("documentLibrary.limit")} <strong>{formatBytes(team.max_resources_storage_size ?? 0)}</strong>
+                    {t("documentLibrary.limit")} <strong>{formatBytes(quotaDenial.limit ?? 0)}</strong>
                   </span>
                 </div>
                 <div className={styles.quotaRow}>
@@ -411,11 +437,7 @@ export function DocumentUploadDrawer({
                   </span>
                   <span className={styles.quotaExcess}>
                     {t("documentLibrary.excessSize")}{" "}
-                    {formatBytes(
-                      (team.current_resources_storage_size ?? 0) +
-                        newFilesSize -
-                        (team.max_resources_storage_size ?? 0),
-                    )}
+                    {formatBytes((quotaDenial.current ?? 0) + newFilesSize - (quotaDenial.limit ?? 0))}
                   </span>
                 </div>
               </div>
@@ -430,7 +452,7 @@ export function DocumentUploadDrawer({
               variant="filled"
               size="small"
               onClick={handleSave}
-              disabled={!files.length || isLoading || isQuotaExceeded}
+              disabled={!files.length || isLoading || !!quotaDenial}
             >
               {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
             </Button>

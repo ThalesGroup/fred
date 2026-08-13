@@ -254,6 +254,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
       }),
     }),
+    quotaPrecheckKnowledgeFlowV1QuotaPrecheckPost: build.mutation<
+      QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiResponse,
+      QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/quota/precheck`,
+        method: "POST",
+        body: queryArg.quotaPrecheckRequest,
+      }),
+    }),
     fastMarkdownKnowledgeFlowV1FastTextPost: build.mutation<
       FastMarkdownKnowledgeFlowV1FastTextPostApiResponse,
       FastMarkdownKnowledgeFlowV1FastTextPostApiArg
@@ -1134,6 +1144,11 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResp
 export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
   bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
 };
+export type QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiResponse =
+  /** status 200 Successful Response */ QuotaPrecheckResponse;
+export type QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiArg = {
+  quotaPrecheckRequest: QuotaPrecheckRequest;
+};
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiResponse = /** status 200 Successful Response */ any;
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiArg = {
   /** Response format: 'json' or 'text' */
@@ -1980,6 +1995,18 @@ export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = 
   files: string[];
   metadata_json: string;
 };
+export type QuotaPrecheckResponse = {
+  allowed: boolean;
+  scope?: ("team" | "personal") | null;
+  owner_id?: string | null;
+  current?: number | null;
+  limit?: number | null;
+};
+export type QuotaPrecheckRequest = {
+  tags?: string[];
+  team_id?: string | null;
+  total_size: number;
+};
 export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
   file: string;
   /** JSON string of FastTextOptions */
@@ -2592,6 +2619,7 @@ export const {
   useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
+  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
   useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,

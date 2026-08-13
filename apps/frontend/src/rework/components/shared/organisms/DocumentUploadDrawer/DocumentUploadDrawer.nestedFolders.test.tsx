@@ -54,7 +54,13 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
     return Promise.resolve([]);
   },
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({}));
+vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  // Precheck answers "allowed" so saves proceed; the denial path has its own
+  // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.
+  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [
+    () => ({ unwrap: () => Promise.resolve({ allowed: true }) }),
+  ],
+}));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));

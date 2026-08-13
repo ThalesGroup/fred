@@ -2658,6 +2658,16 @@ folder being viewed — a subfolder opened before its files' uploads (or fresh
 ReBAC tuples) landed used to freeze forever on its first empty snapshot,
 hiding the live "processing" rows (found live 2026-08-12).
 
+Quota (#2360, 2026-08-13): Save first asks the server's `/quota/precheck`
+with the batch's declared total, so a whole over-quota batch is rejected in
+one round-trip — before any tag creation or upload, and covering the
+personal quota the client can't see. A denial keeps the drawer open with the
+server's numbers in the existing warning panel (usage / limit / batch /
+excess) and disables Save until the file list changes. This replaced the
+client-side team-only quota math; the check is advisory (upload endpoints
+still re-check received sizes), so a precheck transport error falls through
+to the save rather than blocking it.
+
 ### `DocumentWorkspace` — embedded-title hint on the Name column
 
 The Name column always shows `identity.document_name` (the real filename) now,
