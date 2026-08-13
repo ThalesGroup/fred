@@ -1613,7 +1613,9 @@
         "inFolder": "Dans",
         "nameLabel": "Nom",
         "namePlaceholder": "ex. Rapports 2026",
-        "title": "Nouveau dossier"
+        "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
+        "title": "Nouveau dossier",
+        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur — le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
       },
       "renameModal": {
         "title": "Renommer",

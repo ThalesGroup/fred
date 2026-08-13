@@ -58,6 +58,22 @@ def _normalize_path(p: Optional[str]) -> Optional[str]:
     return "/".join(parts) or None
 
 
+def _validate_name(v: str) -> str:
+    """A tag NAME is a single path segment — never a path.
+
+    The depth cap counts `path` segments + 1 for the name, and
+    `TagService._compose_full_path` joins them with "/": a name carrying "/"
+    would create several levels in one call, silently bypassing
+    MAX_TAG_PATH_DEPTH (and the uniqueness scoping) — found live on #2355.
+    """
+    v = v.strip()
+    if not v:
+        raise ValueError("Name cannot be empty")
+    if "/" in v or "\\" in v:
+        raise ValueError("Name cannot contain '/' or '\\' — a tag name is a single folder level")
+    return v
+
+
 class TagCreate(BaseModel):
     """
     name: leaf segment (e.g. 'HR')
@@ -71,6 +87,11 @@ class TagCreate(BaseModel):
     type: TagType
     team_id: Optional[str] = None
 
+    @field_validator("name")
+    @classmethod
+    def _validate_single_segment_name(cls, v: str) -> str:
+        return _validate_name(v)
+
     @field_validator("path")
     @classmethod
     def _validate_and_normalize_path(cls, v: Optional[str]) -> Optional[str]:
@@ -78,7 +99,8 @@ class TagCreate(BaseModel):
         if v is None:
             return None
         segments = v.split("/")
-        # `path` is the PARENT chain; the tag's own name adds one more level.
+        # `path` is the PARENT chain; the tag's own name adds exactly one more
+        # level (names are validated single segments).
         if len(segments) + 1 > MAX_TAG_PATH_DEPTH:
             raise ValueError(f"Path too deep: at most {MAX_TAG_PATH_DEPTH} folder levels are allowed")
         # simple character policy; relax/tighten as needed
@@ -101,6 +123,11 @@ class TagUpdate(BaseModel):
     @classmethod
     def _no_none_ids(cls, v):
         return [i for i in v if i]
+
+    @field_validator("name")
+    @classmethod
+    def _validate_single_segment_name(cls, v: str) -> str:
+        return _validate_name(v)
 
     @field_validator("path")
     @classmethod

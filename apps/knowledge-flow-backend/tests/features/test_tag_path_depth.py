@@ -57,3 +57,18 @@ def test_update_shares_the_same_depth_cap():
 def test_rootless_tag_is_unaffected():
     tag = TagCreate(name="leaf", path=None, type="document")
     assert tag.path is None
+
+
+def test_slashed_name_cannot_smuggle_extra_levels():
+    # A name carrying "/" would create several levels in one call — the depth
+    # check only counts path segments + 1, so it must be rejected outright
+    # (found live: "a/b/c" typed in the folder-name field bypassed the cap).
+    with pytest.raises(ValidationError, match="single folder level"):
+        TagCreate(name="a/b/c", path=None, type="document")
+    with pytest.raises(ValidationError, match="single folder level"):
+        TagUpdate(name="a\\b", type="document")
+
+
+def test_blank_name_is_rejected():
+    with pytest.raises(ValidationError, match="empty"):
+        TagCreate(name="   ", type="document")

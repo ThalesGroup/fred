@@ -2733,7 +2733,12 @@ levels (`MAX_FOLDER_DEPTH`, mirrored server-side by `MAX_TAG_PATH_DEPTH` on
 tag creation; the value is bounded by OpenFGA's parent-chain permission
 resolution, see structure.py). Files that would land deeper are skipped with
 a warn toast naming the count; a drop with nothing shallow enough is
-rejected with an error toast.
+rejected with an error toast. Manual creation (`CreateFolderModal`) enforces
+the same cap inline — Create disabled with an explanation instead of a 422
+toast — and rejects "/" in a folder name on both sides (a slashed name would
+smuggle several levels past the cap in one call; found live 2026-08-13).
+The fs `mkdir` variant of the modal keeps the slash rule but not the depth
+cap (not tag-backed, so the ReBAC-chain constraint doesn't apply).
 Folder-originated files still upload under their leaf name: browsers put the
 relative path in the multipart filename (one opaque "Upload failed: 404" per
 file, found live 2026-07-23), pinned frontend-side and sanitized backend-side
