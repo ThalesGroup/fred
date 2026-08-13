@@ -19,6 +19,7 @@ import { TERMINAL_STATES } from "../../../../features/tasks/taskTypes";
 import { relativeTime } from "../../../../features/tasks/taskLabels";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
 import styles from "./TaskCard.module.css";
@@ -47,9 +48,11 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
 
   const handleCopyWarnings = async () => {
     if (!task.warnings || task.warnings.length === 0) return;
-    await navigator.clipboard.writeText(task.warnings.join("\n"));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    const ok = await writeRichClipboard("", task.warnings.join("\n"));
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
   };
 
   return (

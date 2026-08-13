@@ -21,6 +21,7 @@ import { Breadcrumb, type BreadcrumbSegment } from "@shared/molecules/Breadcrumb
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { helpPagePath, type HelpPage, type HelpSectionTree } from "@rework/features/helpCenter/content";
 import type { HelpLang } from "@rework/features/helpCenter/manifest";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import styles from "./HelpArticle.module.scss";
 
 interface HelpArticleProps {
@@ -55,9 +56,11 @@ export default function HelpArticle({ lang, section, page }: HelpArticleProps) {
   ];
 
   const copyPageLink = () => {
-    void navigator.clipboard.writeText(`${window.location.origin}${pageHref}`).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", `${window.location.origin}${pageHref}`).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      }
     });
   };
 

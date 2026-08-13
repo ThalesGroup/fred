@@ -43,6 +43,9 @@ from typing import AsyncIterator
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.document_structures import (
     DocumentMetadata,
@@ -55,10 +58,8 @@ from fred_core.documents.document_structures import (
 from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.models.base import Base
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
 
 _PG_DSN_ENV = "FRED_PG_DSN"
 _DEFAULT_DSN = "postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret
