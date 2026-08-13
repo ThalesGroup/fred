@@ -455,13 +455,17 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     if (!sid) {
       sid = uuidv4();
       skipResetOnSessionBindRef.current = true;
+      // Before bindSessionId: the composer settings the user picked while this
+      // conversation had no id are only in memory until they are written under
+      // one (#2369).
+      composer.bindSession(sid);
       bindSessionId(sid);
     }
     if (needsCreate) {
       createSessionRow(sid, "New conversation");
     }
     return sid;
-  }, [bindSessionId, createSessionRow, sessionId]);
+  }, [bindSessionId, composer.bindSession, createSessionRow, sessionId]);
 
   const handleAddAttachments = useCallback(
     (files: File[], source: "picker" | "drop") => {
@@ -498,6 +502,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         sid = uuidv4();
         console.debug(`[useManagedChat] handleSend() — no session, creating new sid=${sid}, calling bindSessionId`);
         skipResetOnSessionBindRef.current = true;
+        // See ensureSessionForAttachments: makes this turn's composer settings
+        // durable under the id they were picked for (#2369).
+        composer.bindSession(sid);
         bindSessionId(sid);
       }
       if (needsCreate) {
@@ -587,6 +594,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     waitResponse,
     sessionId,
     chatControls,
+    composer.bindSession,
     composer.selectedLibraryIds,
     composer.selectedDocumentUids,
     composer.searchPolicy,

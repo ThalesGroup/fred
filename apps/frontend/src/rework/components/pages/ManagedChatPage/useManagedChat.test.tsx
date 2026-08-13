@@ -138,6 +138,7 @@ vi.mock("@hooks/useChatSse", () => ({
 }));
 
 const composerResetMock = vi.fn();
+const composerBindSessionMock = vi.fn();
 const composerValue = {
   searchPolicy: "corpus" as const,
   ragScope: "general" as const,
@@ -148,6 +149,7 @@ const composerValue = {
   setSelectedLibraryIds: vi.fn(),
   setSelectedDocumentUids: vi.fn(),
   reset: composerResetMock,
+  bindSession: composerBindSessionMock,
 };
 vi.mock("./useComposerSettings", () => ({
   useComposerSettings: () => composerValue,
@@ -311,6 +313,7 @@ describe("useManagedChat — session write reliability", () => {
       abortMock,
       replaceAllMessagesMock,
       composerResetMock,
+      composerBindSessionMock,
       showErrorMock,
       notifyApiErrorMock,
       chatAttachmentsValue.clearReadyAttachments,
@@ -401,6 +404,34 @@ describe("useManagedChat — session write reliability", () => {
 
     expect(latest.inputTooLong).toBe(false);
     expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  // #2369: a brand-new conversation's composer settings live only in memory —
+  // there is no session id to key sessionStorage on until handleSend mints
+  // one. So the mint must both hand that id to the composer (making the pick
+  // durable) and NOT trigger the sessionId-change reset(), which would rebuild
+  // the composer from that session's still-empty storage and revert the pick.
+  // Both halves are this hook's job and invisible from useComposerSettings'
+  // own tests, which can only simulate the bind.
+  it("hands a handleSend-minted session id to the composer instead of resetting it", async () => {
+    mount();
+    act(() => {
+      latest.setInput("first question");
+    });
+    rerender();
+    // The mount itself legitimately resets (entering a session, here the empty
+    // one) — only what the send adds on top is under test.
+    const resetsBeforeSend = composerResetMock.mock.calls.length;
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+    rerender();
+
+    const sid = (registerSessionCalls[0] as { createSessionRequest: { session_id: string } }).createSessionRequest
+      .session_id;
+    expect(composerBindSessionMock).toHaveBeenCalledWith(sid);
+    expect(composerResetMock.mock.calls.length).toBe(resetsBeforeSend);
   });
 
   it("restores the complete ordinary draft after a backend length rejection", async () => {

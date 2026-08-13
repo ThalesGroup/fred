@@ -1270,6 +1270,7 @@ defaults after navigation, and half-streaming state on session switch.
 - [x] Reads initial state from `sessionStorage` key `chat.composer.{sessionId}` if present; otherwise from `agentDefaults` (2026-05-24)
 - [x] Writes through to `sessionStorage` on every setter call (2026-05-24)
 - [x] `useManagedChat` delegates `searchPolicy`, `ragScope`, `selectedLibraryIds` to this hook (2026-05-24)
+- [x] A pick the user made themselves outranks both tiers above: it survives the `chat_controls` refresh every send triggers, and `bindSession()` persists it under the session id the first message mints — until that id exists there is no key to write to (#2369, 2026-08-13)
 
 ---
 

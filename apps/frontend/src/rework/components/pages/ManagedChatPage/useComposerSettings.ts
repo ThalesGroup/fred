@@ -93,13 +93,21 @@ function buildInitial(sessionId: string | null, chatControls: readonly ChatContr
  * Writes through to sessionStorage on every change so state survives
  * navigation within the same browser tab.
  *
- * Call reset() when the session changes to reinitialise from storage/defaults.
+ * Call reset() when the session changes to reinitialise from storage/defaults,
+ * and bindSession() when a session id is minted for a conversation that had
+ * none — that is the moment a pick made before the first message becomes
+ * durable (#2369).
  */
 export function useComposerSettings(sessionId: string | null, chatControls: readonly ChatControlDescriptor[]) {
   const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, chatControls));
 
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+
+  // Read by bindSession() below, which fires from a callback and so cannot
+  // close over the render-time state.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // True as soon as the user picks anything; cleared by reset() (a genuine
   // entry into a new or different session). #2369: sessionStorage alone cannot
@@ -139,6 +147,20 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
     setState(buildInitial(nextSessionId, nextChatControls));
   }, []);
 
+  // Called by the caller that MINTS a session id for a conversation that had
+  // none (#2369) — the flag above keeps the pick alive for the rest of the
+  // mount, this is what makes it durable. Until the id exists update() has
+  // nowhere to write, so without this a reasoning pick made before the first
+  // message was gone the next time the user entered that very session (reload,
+  // or leaving and coming back), reverting to the widget default one
+  // navigation later. Only a real pick is written: seeding storage with
+  // untouched defaults would freeze them against a later chat_controls
+  // refresh, which is exactly what the storage guard above is there to allow.
+  const bindSession = useCallback((nextSessionId: string) => {
+    if (!userEditedRef.current) return;
+    writeStorage(nextSessionId, stateRef.current);
+  }, []);
+
   const setSearchPolicy = useCallback((p: SearchPolicyName) => update({ searchPolicy: p }), [update]);
 
   const setRagScope = useCallback((s: RagScope) => update({ ragScope: s }), [update]);
@@ -161,5 +183,6 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
     setSelectedLibraryIds,
     setSelectedDocumentUids,
     reset,
+    bindSession,
   };
 }

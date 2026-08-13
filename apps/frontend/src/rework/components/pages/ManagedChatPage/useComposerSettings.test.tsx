@@ -64,6 +64,14 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
     });
   };
 
+  /** A reload (or leaving the conversation and coming back): nothing survives
+   *  but sessionStorage. */
+  const remount = (sessionId: string | null, chatControls: readonly ChatControlDescriptor[]) => {
+    act(() => root.unmount());
+    root = createRoot(container);
+    render(sessionId, chatControls);
+  };
+
   beforeEach(() => {
     sessionStorage.clear();
     container = document.createElement("div");
@@ -104,6 +112,28 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
 
     expect(latest.searchPolicy).toBe("semantic");
     expect(latest.selectedLibraryIds).toEqual(["lib-a"]);
+  });
+
+  it("makes that pick durable: bindSession() persists it under the freshly minted session id", () => {
+    render(null, controls(false));
+    act(() => latest.setReasoning(true));
+
+    // What useManagedChat does the moment it mints a session id for a
+    // conversation that had none.
+    act(() => latest.bindSession("sid-1"));
+    remount("sid-1", controls(false));
+
+    expect(latest.reasoning).toBe(true);
+  });
+
+  it("does not seed storage on bind when the user picked nothing — defaults keep applying", () => {
+    render(null, []);
+
+    act(() => latest.bindSession("sid-1"));
+
+    expect(sessionStorage.getItem("chat.composer.sid-1")).toBeNull();
+    render("sid-1", controls(true));
+    expect(latest.reasoning).toBe(true);
   });
 
   it("still applies the author's defaults when chat_controls lands after mount and nothing was picked", () => {
