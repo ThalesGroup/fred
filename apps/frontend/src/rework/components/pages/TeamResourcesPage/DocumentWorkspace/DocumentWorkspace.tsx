@@ -456,7 +456,13 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // When an ingestion task finishes, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
   // just the loaded folder page(s) showing that document so its status goes live.
+  // Also the moment the storage quota is finally charged: ingestion saves the
+  // metadata (and its file size) at the end of the workflow, so the earlier
+  // refetchTags() at task registration ran while the document still weighed
+  // nothing. Without this second notification the parent's quota meter stays
+  // behind by exactly the document that just landed.
   useRefetchOnTaskSuccess("document", (documentUid) => {
+    onDocumentsChanged?.();
     for (const [tagId, page] of Object.entries(perTag)) {
       if (page.docs.some((doc) => doc.identity.document_uid === documentUid)) {
         void loadTagPage(tagId, page.offset);
