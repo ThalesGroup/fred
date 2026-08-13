@@ -409,7 +409,7 @@
       "reasoningHint": "Plus l'effort est élevé, plus la réponse est approfondie — et plus elle est longue à produire.",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
-    "characterCounter": "{{count}} / {{limit}} caractères",
+    "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
@@ -1636,7 +1636,15 @@
           "raw": "Raw"
         },
         "loading": "Chargement…",
-        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document."
+        "markdownUnavailable": "Aucune version Markdown n'a été générée pour ce document.",
+        "pdf": {
+          "loadFailed": "Impossible de charger le document PDF.",
+          "unavailable": "Le contenu du document est indisponible.",
+          "largeTitle": "Document volumineux",
+          "largeBody": "Ce PDF compte {{pages}} pages. L'afficher peut ralentir votre navigateur.",
+          "largeBodyBytes": "Ce PDF pèse {{megabytes}} Mo. Son ouverture peut prendre un long moment et ralentir votre navigateur.",
+          "largeConfirm": "Afficher quand même"
+        }
       },
       "storage": {
         "aria": "Espace de stockage utilisé",

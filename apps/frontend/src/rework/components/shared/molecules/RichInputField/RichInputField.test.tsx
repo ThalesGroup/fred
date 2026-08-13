@@ -19,13 +19,17 @@ import { RichInputField } from "./RichInputField";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) =>
-      values ? `${key}:${values.count ?? ""}:${values.limit ?? ""}` : key,
+      values ? `${key}:${values.used ?? ""}:${values.limit ?? ""}` : key,
     i18n: { language: "en" },
   }),
 }));
 
 function sendButtonOpeningTag(html: string): string {
   return html.match(/<button[^>]*aria-label="chatbot\.sendMessage"[^>]*>/)?.[0] ?? "";
+}
+
+function textareaOpeningTag(html: string): string {
+  return html.match(/<textarea[^>]*>/)?.[0] ?? "";
 }
 
 function render(props: { sendDisabled?: boolean; characterCount?: number; characterLimit?: number }): string {
@@ -47,21 +51,37 @@ describe("RichInputField send gating", () => {
     expect(tag).toContain("disabled");
   });
 
-  it("renders an accessible counter without a native maxLength at the exact limit", () => {
+  it("shows no counter at the exact limit and sets no native maxLength", () => {
     const html = render({ characterCount: 5, characterLimit: 5 });
+    const textarea = textareaOpeningTag(html);
 
-    expect(html).toContain("chatbot.characterCounter:5:5");
+    expect(html).not.toContain("chatbot.characterCounter");
     expect(html).not.toContain("chatbot.errors.chatInputTooLong");
     expect(html).not.toContain("maxLength=");
-    expect(html).not.toContain('aria-invalid="true"');
+    expect(textarea).not.toBe("");
+    expect(textarea).not.toContain("aria-invalid");
   });
 
-  it("marks an over-limit draft invalid and keeps the full textarea value", () => {
+  it("marks an over-limit draft invalid, reveals the counter, and keeps the full textarea value", () => {
     const html = render({ characterCount: 6, characterLimit: 5, sendDisabled: true });
+    const textarea = textareaOpeningTag(html);
 
-    expect(html).toContain('aria-invalid="true"');
+    expect(textarea).toContain('aria-invalid="true"');
     expect(html).toContain("chatbot.errors.chatInputTooLong::5");
+    expect(html).toContain("chatbot.characterCounter:6:5");
     expect(html).toContain(">hello</textarea>");
     expect(sendButtonOpeningTag(html)).toContain("disabled");
+  });
+
+  it("describes the textarea with the notice whenever the runtime publishes a limit", () => {
+    // The notice stays mounted below the limit, so the description never
+    // points at a removed node when the draft crosses back and forth.
+    const describedBy = (html: string) => /aria-describedby="([^"]*)"/.exec(textareaOpeningTag(html))?.[1];
+
+    expect(describedBy(render({ characterCount: 5, characterLimit: 5 }))).toBeDefined();
+    expect(describedBy(render({ characterCount: 6, characterLimit: 5 }))).toBe(
+      describedBy(render({ characterCount: 5, characterLimit: 5 })),
+    );
+    expect(describedBy(render({ characterCount: 6 }))).toBeUndefined();
   });
 });

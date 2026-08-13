@@ -698,25 +698,36 @@ library:
 
 ---
 
-### Chat input length states (`RichInputField`, `HitlPrompt`, 2026-08-12)
+### Chat input length states (`RichInputField`, `HitlPrompt`, 2026-08-12, updated 2026-08-13)
 
-**Location:** `src/rework/components/shared/molecules/RichInputField/`,
+**Location:** `src/rework/components/shared/atoms/CharacterLimitNotice/`,
+`src/rework/components/shared/molecules/RichInputField/`,
 `src/rework/components/shared/molecules/HitlPrompt/`,
 `src/rework/components/pages/ManagedChatPage/`
 
 **Status:** `Functional`
 
-The managed-chat composer and active HITL free-text prompt display the optional
+The managed-chat composer and active HITL free-text prompt enforce the optional
 runtime-published character policy from execution preparation. Both count Unicode code points;
 ordinary chat counts the trimmed value that will be submitted, while HITL counts the exact free
-text.
+text. Both render the shared `CharacterLimitNotice`, which owns the states below — the field
+itself owns only `aria-invalid` and its send gating.
 
-- At or below the limit, the counter remains informational and send stays available.
-- Above the limit, the input uses `aria-invalid`, the counter/error region announces changes with
-  `aria-live="polite"`, and only the corresponding free-text send action is disabled. Fixed HITL
-  choices remain available because selecting one submits the identifier without the oversized
-  free-text draft; the runtime still validates any submitted `choice_id`, `answer`, and `text`
-  fields.
+- At or below the limit, nothing is visible — no counter, no error colour — and send stays
+  available. An ordinary message sits far below a limit measured in thousands of code points
+  (5,000 in the default template, but it is per-template and admin-configurable), so a
+  permanently visible counter would report a non-problem for the whole life of the draft
+  (2026-08-13, issue #2358).
+- Above the limit, the error copy and the counter appear together as one error-coloured region,
+  the input is marked `aria-invalid`, and only the corresponding free-text send action is
+  disabled. Fixed HITL choices remain available because selecting one submits the identifier
+  without the oversized free-text draft; the runtime still validates any submitted `choice_id`,
+  `answer`, and `text` fields.
+- The notice stays mounted whenever a limit is published, empty and out of flow while the draft is
+  within it: an `aria-live` region inserted into the DOM at the same time as its text is not
+  announced, and a permanently mounted node also keeps the field's `aria-describedby` from
+  pointing at a removed id as the draft crosses back and forth. The count sits outside the live
+  region — inside, it would re-announce on every keystroke.
 - Text remains fully editable: neither component sets native `maxLength`, truncates pasted or
   dictated content, nor clears an oversized draft. A backend length rejection restores the
   ordinary draft or pending HITL prompt safely.
@@ -1059,13 +1070,35 @@ opened document. When the extraction is missing (endpoint 404s, or empty body), 
 renders a `preview.markdownUnavailable` notice instead of the former literal
 "Error loading document." string, which read as document content.
 
+**Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
+previously mounted one live `<canvas>` per page of the document the moment it
+loaded; at ~3.5 MB of bitmap per page that allocated gigabytes on a large PDF and
+crashed the browser tab. The viewer now renders one cheap, correctly-sized
+placeholder slot per page — so the scrollbar still reflects the document's real
+length — and mounts a real `<Page>` only for slots inside a 600 px band around
+the viewport, tracked by a single `IntersectionObserver`. Placeholders are sized
+from page 1's own geometry (A4 portrait as fallback), so the scroll extent is
+right for landscape and slide-shaped documents too. pdf.js is additionally given
+`disableAutoFetch: true` so it fetches byte ranges on demand against the
+`Accept-Ranges: bytes` support `/raw_content/stream/{uid}` already provides,
+instead of buffering the whole file up front.
+
+**Large-document guard (2026-08-07, #2273).** Past 500 pages the viewer shows an
+opt-in panel (`preview.pdf.largeTitle` / `largeBody` / `largeConfirm`) reporting
+the page count, with an "afficher quand même" action, instead of rendering
+immediately. Virtualization bounds the canvases, but one placeholder plus one
+observer entry per page is not free and pdf.js still walks the whole page tree —
+so the pathological shape stays behind an explicit choice. The state resets on
+every newly opened document.
+
 #### Open UX issues
 
 - **Assistant side panel** — FRONT-13's other half (collapsible "ask the assistant"
   panel next to the viewer) is not built yet, blocked on an agent-selection product
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
-  continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
+  continuous scroll at the container's full width (`PDF_SCALE = 1.0`). Revisit if
+  users report needing them.
 - **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
   unaffected by this component.
 
