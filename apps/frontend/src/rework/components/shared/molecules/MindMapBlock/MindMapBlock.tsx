@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import styles from "./MindMapBlock.module.css";
 import {
   escapeHtml,
@@ -288,9 +289,11 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
   }, [chartReady, parsed, selectedNodeId]);
 
   function handleCopy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", code).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     });
   }
 

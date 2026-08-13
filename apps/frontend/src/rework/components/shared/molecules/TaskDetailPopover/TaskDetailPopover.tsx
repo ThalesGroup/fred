@@ -25,6 +25,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useCopyConfirmation } from "../../../../core/hooks/useCopyConfirmation";
+import { writeRichClipboard } from "../../../../utils/clipboardUtils";
 import { viewportHeight, viewportWidth } from "@shared/utils/viewport.ts";
 import styles from "./TaskDetailPopover.module.css";
 
@@ -52,11 +53,15 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     }
     const rect = anchorEl.getBoundingClientRect();
     const POPOVER_WIDTH = 280;
-    // Matches .popover's max-height (TaskDetailPopover.module.css) — used here
-    // to keep the popover's bottom edge on-screen without measuring the real
-    // DOM height (the CSS cap is the worst case; content scrolls internally).
-    const POPOVER_MAX_HEIGHT = 400;
     const MARGIN = 8;
+    // Matches .popover's max-height (`min(400px, 100vh - 16px)` in
+    // TaskDetailPopover.module.css) — used here to keep the popover's bottom
+    // edge on-screen without measuring the real DOM height (the CSS cap is
+    // the worst case; content scrolls internally). Capped to the viewport
+    // itself too: on a short viewport (mobile landscape, a squeezed split
+    // window) the fixed 400px alone would still get clipped past the bottom
+    // even with internal scroll.
+    const POPOVER_MAX_HEIGHT = Math.min(400, viewportHeight() - 2 * MARGIN);
     // Prefer opening below the anchor; clamp upward when a long error would
     // otherwise push the popover's bottom edge past the viewport.
     const top = Math.max(MARGIN, Math.min(rect.bottom + 6, viewportHeight() - MARGIN - POPOVER_MAX_HEIGHT));
@@ -92,10 +97,9 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
 
   const handleCopyError = () => {
     if (!task.error) return;
-    navigator.clipboard
-      .writeText(task.error)
-      .then(confirmErrorCopied)
-      .catch(() => {});
+    writeRichClipboard("", task.error).then((ok) => {
+      if (ok) confirmErrorCopied();
+    });
   };
 
   const progressPct = task.progress !== null ? `${Math.round(task.progress * 100)}%` : null;
