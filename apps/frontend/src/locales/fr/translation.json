@@ -424,7 +424,8 @@
       "contextPromptSaveFailedDetail": "Impossible d'enregistrer les prompts sélectionnés — la dernière sélection enregistrée a été restaurée. Veuillez réessayer.",
       "attachmentDeleteFailedSummary": "Fichier non supprimé",
       "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
-      "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier."
+      "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
+      "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer."
     },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {

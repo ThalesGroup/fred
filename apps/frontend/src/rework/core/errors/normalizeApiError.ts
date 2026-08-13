@@ -69,8 +69,22 @@ const kindFromStatus = (status: number): ApiErrorKind => {
 };
 
 export function normalizeApiError(error: unknown): NormalizedApiError {
-  if (!isRecord(error) || !("status" in error)) {
+  if (!isRecord(error)) {
     return { kind: "unknown" };
+  }
+
+  if (!("status" in error)) {
+    // RTK Query's `.unwrap()` rejects with a plain SerializedError
+    // ({name, message, stack}) -- not a real Error instance -- whenever the
+    // query/mutation throws before producing a FetchBaseQueryError. Surface
+    // its message instead of silently dropping it. A real Error is left
+    // alone: callers that reach here with one are treating it as an
+    // unexpected failure and often prefer their own contextual fallback
+    // over leaking a raw exception message.
+    if (error instanceof Error) {
+      return { kind: "unknown" };
+    }
+    return { kind: "unknown", detail: asString(error.message) };
   }
 
   const statusValue = error.status;
