@@ -587,6 +587,12 @@ _(none — streaming indicator resolved 2026-05-18)_
 - **Blockquote style** — left-border only, no background. Confirm whether a subtle background tint
   (`--surface-container`) would better distinguish blockquotes from regular text.
 
+- **`sanitizeSchema` drops `<ol start>` and GFM task-list `checked` (#2347)** — `rehype-sanitize`'s
+  `defaultSchema` (extended here) whitelists neither `start` on `<ol>` nor `checked` on
+  `<input type="checkbox">`, so both are stripped before the DOM exists — a renumbered ordered list
+  always renders from 1, and a GFM checklist (`- [x] done`) loses its checked/unchecked state on
+  screen. Not a rendering bug introduced elsewhere; the fix is whitelisting both in this schema.
+
 #### Resolved
 
 - **Streaming previews for open fences (2026-05-28)** — `CodeBlock` now has a streaming mode used
@@ -900,6 +906,11 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 - **`max-width: 75%`** on `AssistantTurn` — validates alignment with the `MessageBubble` assistant
   variant. Confirm both are visually consistent across viewport widths.
 
+- **Multi-turn selection copy (#2346)** — a manual selection contained inside one reply gets the
+  clean clipboard serialisation described below; one that spans multiple assistant replies (or
+  includes chrome between them — `ActionBar`, source cards, `ThoughtTrace`) falls back to the
+  browser's native copy, which reintroduces the theme-background leak this feature exists to fix.
+
 #### Resolved
 
 - **Props changed (2026-04-27)** — `finalMessages: ChatMessage[]` replaced by `text: string`.
@@ -907,6 +918,21 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 
 - **Artifact download links (2026-06-22, FILES-04)** — `AssistantTurn` now renders `ArtifactLinks`
   below the reply when the agent emits `LinkPart` ui_parts.
+
+- **Copy response — always visible, email-safe clipboard (2026-08-12, #2336)** — the per-message
+  copy action (`ActionBar`, `alwaysVisible`) was hover-only and easy to miss; it's now shown
+  permanently and gives a transient "Copied" confirmation. Both the button and a manual text
+  selection inside a reply write clipboard content built by `rework/utils/clipboardUtils.ts`
+  instead of relying on the browser's default copy, which inlined the message surface's computed
+  `background-color` into the pasted `text/html` — a pink or near-black highlight depending on
+  theme. The serialiser emits email-safe HTML (inline `pt`-sized styles, no color/background/font
+  overrides, so pasted text inherits the destination document's own typography — targets Outlook's
+  Word rendering engine) alongside plain text. Mermaid/MindMap diagrams and KaTeX formulas degrade
+  to a `[diagram: <label>]` / `[formula]` placeholder rather than leaking rendering chrome (button
+  labels, breadcrumbs) or garbled glyph text — KaTeX runs with `output: "html"` here, so no
+  TeX-source annotation exists in the DOM to recover the original formula from. Fixing that would
+  mean switching to `output: "htmlAndMathml"` and whitelisting MathML in `sanitizeSchema` below —
+  not yet tracked as its own issue. Known limitation: see multi-turn selection above (#2346).
 
 ---
 
