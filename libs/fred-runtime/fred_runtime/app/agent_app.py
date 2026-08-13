@@ -171,6 +171,7 @@ from ..runtime_context import (
 )
 from ..runtime_context import RuntimeContext as FredRuntimeContext
 from ..runtime_support import aclose_token_refresh_client
+from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
@@ -945,6 +946,9 @@ class _AgentTemplateSummary(BaseModel):
     # for); this field is the one control-plane reads to resolve what a
     # `selected_capability_ids = None` instance activates (#1980).
     default_capability_ids: list[str] = Field(default_factory=list)
+    # Pod-scoped deployment policy mirrored per template so control-plane can
+    # publish it to the managed-chat composer without another runtime endpoint.
+    max_chat_input_chars: int
 
 
 class _McpCatalogEntry(BaseModel):
@@ -3426,6 +3430,7 @@ def _capability_route_base_url(base_url: str, capability_id: str) -> str:
 def _build_agent_router(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     security_enabled: bool,
+    max_chat_input_chars: int,
     base_url: str = "",
 ) -> APIRouter:
     """
@@ -3449,6 +3454,14 @@ def _build_agent_router(
     # handlers can perform the bearer-token / grant user_id correlation check.
     # Returns None in local-dev mode so dev pods start without Keycloak.
     _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
+
+    def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
+        violation = validate_runtime_request(request, max_chat_input_chars)
+        if violation is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=violation.native_detail(),
+            )
 
     @router.get("")
     async def list_agents() -> list[str]:
@@ -3584,6 +3597,7 @@ def _build_agent_router(
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
+                max_chat_input_chars=max_chat_input_chars,
             )
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
@@ -4279,6 +4293,7 @@ def _build_agent_router(
         - This endpoint does not implement pod discovery or routing.
           Those concerns belong to Kubernetes Service, Ingress, and Argo CD.
         """
+        _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
@@ -4364,6 +4379,7 @@ def _build_agent_router(
         Intended for evaluation harnesses (DeepEval, Promptfoo) that need
         input, output, retrieval_context, tools_called, and steps in one response.
         """
+        _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
@@ -4475,6 +4491,7 @@ def _build_agent_router(
         - This endpoint does not implement pod discovery or routing.
           Those concerns belong to Kubernetes Service, Ingress, and Argo CD.
         """
+        _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
@@ -4757,7 +4774,10 @@ def create_agent_app(
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(
         _build_agent_router(
-            registry, security_enabled=security_enabled, base_url=base_url
+            registry,
+            security_enabled=security_enabled,
+            max_chat_input_chars=config.app.max_chat_input_chars,
+            base_url=base_url,
         )
     )
 
@@ -4787,6 +4807,7 @@ def create_agent_app(
         openai_router = create_openai_compat_router(
             registry,
             security_enabled=security_enabled,
+            max_chat_input_chars=config.app.max_chat_input_chars,
         )
         app.include_router(openai_router, prefix="/v1")
         logger.info("[fred-runtime] OpenAI-compat endpoints enabled at /v1")

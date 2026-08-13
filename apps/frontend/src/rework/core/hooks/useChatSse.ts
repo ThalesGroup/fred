@@ -46,6 +46,7 @@ import {
   mergeRoutingPolicy,
   parseSseFrames,
 } from "../utils/runtimeStream";
+import { countUnicodeCodePoints } from "../utils/chatInput";
 import { personalTeamId } from "../../components/shared/utils/teamId";
 
 // The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
@@ -187,6 +188,42 @@ type AnyRuntimeEvent =
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
   | ({ kind: "execution_error" } & RuntimeErrorEvent);
 
+class RuntimeHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code?: string,
+    readonly limitChars?: number,
+    readonly actualChars?: number,
+    message = `Runtime request failed (${status})`,
+  ) {
+    super(message);
+    this.name = "RuntimeHttpError";
+  }
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return new RuntimeHttpError(response.status);
+  }
+  const detail = recordValue(recordValue(body)?.detail);
+  return new RuntimeHttpError(
+    response.status,
+    typeof detail?.code === "string" ? detail.code : undefined,
+    typeof detail?.limit_chars === "number" ? detail.limit_chars : undefined,
+    typeof detail?.actual_chars === "number" ? detail.actual_chars : undefined,
+    typeof detail?.message === "string" ? detail.message : undefined,
+  );
+}
+
 // ── HITL event/payload (#2216) ──────────────────────────────────────────────
 //
 // Explicit types based on the generated runtime `HumanInputRequest` contract.
@@ -223,6 +260,10 @@ export type ChatSseCallbacks = {
    * already covers showing the failure itself.
    */
   onTurnStarted?: () => void;
+  /** Restores an ordinary composer draft after a runtime length rejection. */
+  onTurnRejected?: (draft: string, sessionId: string) => void;
+  /** Reads current navigation ownership before applying late turn side effects. */
+  isTurnCurrent?: (sessionId: string) => boolean;
   /**
    * Ordering barrier awaited immediately before prepare-execution, keyed on
    * the session id this turn is about to use. Lets the caller flush any
@@ -260,6 +301,8 @@ export function useChatSse(
     onAwaitingHuman,
     onError,
     onTurnStarted,
+    onTurnRejected,
+    isTurnCurrent,
     flushPendingWrites,
   } = params;
 
@@ -311,6 +354,7 @@ export function useChatSse(
   // resolves each descriptor's `widget` id against the chat-turn-control
   // registry (plugin first, then the capability-agnostic stock kit).
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
+  const [maxChatInputChars, setMaxChatInputChars] = useState<number | undefined>();
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
@@ -322,6 +366,11 @@ export function useChatSse(
   const applyPreparation = useCallback(
     (prep: ExecutionPreparation) => {
       setChatControls(prep.chat_controls ?? []);
+      setMaxChatInputChars(
+        typeof prep.max_chat_input_chars === "number" && prep.max_chat_input_chars > 0
+          ? prep.max_chat_input_chars
+          : undefined,
+      );
       // #1979: publish the instance-bound capability route base URLs so each
       // capability's generated RTK slice can reach its pod routes directly.
       dispatch(setCapabilityBaseUrls(prep.capability_base_urls ?? {}));
@@ -342,6 +391,7 @@ export function useChatSse(
     thoughtBufsRef.current.clear();
     setAll([]);
     setChatControls([]);
+    setMaxChatInputChars(undefined);
   }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
 
@@ -681,12 +731,7 @@ export function useChatSse(
 
       console.debug(`[useChatSse] fetch response — status=${response.status} ok=${response.ok}`);
       if (!response.ok) {
-        const text = await response.text().catch(() => String(response.status));
-        const httpError = new Error(`Runtime ${response.status}: ${text}`) as Error & { status?: number };
-        // The status is what tells a HITL resume whether the checkpoint is still
-        // answerable: 409 means the runtime already consumed or dropped it.
-        httpError.status = response.status;
-        throw httpError;
+        throw await runtimeHttpError(response);
       }
 
       if (!response.body) throw new Error("Empty response body from runtime");
@@ -715,7 +760,7 @@ export function useChatSse(
     ) => {
       const sendId = Math.random().toString(36).slice(2, 8);
       console.debug(
-        `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} input="${input.slice(0, 40)}"`,
+        `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} inputChars=${countUnicodeCodePoints(input)}`,
       );
 
       // Synchronous reentrancy lock — checked and acquired before the first
@@ -944,8 +989,24 @@ export function useChatSse(
       } catch (err) {
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
-        if (name === "AbortError") {
+        if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {
+          console.debug(`[useChatSse][${sendId}] stream error settled after cancellation — side effects suppressed`);
+        } else if (name === "AbortError") {
           console.debug(`[useChatSse][${sendId}] streamToMessages aborted (AbortError) — swallowed`);
+        } else if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
+          messagesRef.current = messagesRef.current.filter(
+            (message) => !(message.exchange_id === exchangeId && message.metadata?.extras?.optimistic_user === true),
+          );
+          setMessages([...messagesRef.current]);
+          onTurnRejected?.(input, effectiveSessionId);
+          if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
+          onError?.(
+            err.limitChars === undefined
+              ? err.message
+              : i18n.t("chatbot.errors.chatInputTooLong", {
+                  limit: err.limitChars.toLocaleString(i18n.language),
+                }),
+          );
         } else {
           console.error(`[useChatSse][${sendId}] streamToMessages error — ${name}: ${msg}`);
           onError?.(`Streaming failed: ${msg}`);
@@ -966,6 +1027,8 @@ export function useChatSse(
       streamToMessages,
       onError,
       onTurnStarted,
+      onTurnRejected,
+      isTurnCurrent,
       flushPendingWrites,
       applyPreparation,
       i18n,
@@ -1126,8 +1189,8 @@ export function useChatSse(
       const exchangeId = pending.exchange_id;
       const hitlPayload = pending.payload;
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
-      const normalizedFreeText = typeof freeText === "string" ? freeText.trim() || undefined : undefined;
-      const answerValue = !hasChoices && normalizedFreeText ? normalizedFreeText : answer;
+      const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
+      const answerValue = !hasChoices && exactFreeText ? exactFreeText : answer;
 
       setWaitResponse(true);
 
@@ -1159,7 +1222,7 @@ export function useChatSse(
             resume_payload: {
               answer: answerValue,
               choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
-              text: hasChoices ? normalizedFreeText : undefined,
+              text: hasChoices ? exactFreeText : undefined,
             },
           },
           prep.execute_stream_url,
@@ -1184,7 +1247,18 @@ export function useChatSse(
           acceptedByRuntime = true;
         }
         if (!aborted) {
-          onError?.(`HITL resume failed: ${(err as Error)?.message ?? String(err)}`);
+          if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
+            if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
+            onError?.(
+              err.limitChars === undefined
+                ? err.message
+                : i18n.t("chatbot.errors.chatInputTooLong", {
+                    limit: err.limitChars.toLocaleString(i18n.language),
+                  }),
+            );
+          } else {
+            onError?.(`HITL resume failed: ${(err as Error)?.message ?? String(err)}`);
+          }
         }
       } finally {
         if (!ac.signal.aborted) {
@@ -1221,6 +1295,7 @@ export function useChatSse(
     messages,
     waitResponse,
     chatControls,
+    maxChatInputChars,
     prepareChatControls,
     send,
     sendHitlResume,

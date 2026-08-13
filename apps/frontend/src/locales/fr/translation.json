@@ -409,6 +409,7 @@
       "reasoningHint": "Plus l'effort est élevé, plus la réponse est approfondie — et plus elle est longue à produire.",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
+    "characterCounter": "{{count}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
@@ -425,14 +426,18 @@
       "attachmentDeleteFailedSummary": "Fichier non supprimé",
       "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
-      "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer."
+      "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
+      "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères."
     },
+    "hitlFreeTextLabel": "Votre réponse",
+    "hitlWaitingAria": "L'agent attend votre réponse",
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
       "closeAria": "Fermer l'aperçu markdown",
       "empty": "Aucun aperçu markdown disponible."
     },
     "recordAudio": "Enregistrer de l'audio",
+    "sendHitlAnswer": "Envoyer",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
