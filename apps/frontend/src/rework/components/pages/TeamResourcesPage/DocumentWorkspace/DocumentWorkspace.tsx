@@ -25,7 +25,12 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
-import { relativeDirSegments } from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
+import {
+  MAX_FOLDER_DEPTH,
+  exceedsMaxFolderDepth,
+  folderPathDepth,
+  relativeDirSegments,
+} from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
 import {
   DocumentViewer,
   DocumentViewerModeToggle,
@@ -647,6 +652,28 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             detail: t("rework.resources.rootDrop.skippedDetail", { count: dropped.length - foldered.length }),
           });
         dropped = foldered;
+      }
+      // Depth guardrail (#2355): a file may not end up nested deeper than
+      // MAX_FOLDER_DEPTH levels, destination included — the mirrored tag
+      // chain is bounded the same way server-side (422 past the cap).
+      const destinationDepth = folderPathDepth(node.full);
+      const shallow = dropped.filter((file) => !exceedsMaxFolderDepth(file, destinationDepth));
+      if (shallow.length < dropped.length) {
+        if (shallow.length === 0) {
+          showError?.({
+            summary: t("documentLibrary.tooDeepTitle"),
+            detail: t("documentLibrary.tooDeepRejected", { max: MAX_FOLDER_DEPTH }),
+          });
+          return;
+        }
+        showWarn?.({
+          summary: t("documentLibrary.tooDeepTitle"),
+          detail: t("documentLibrary.tooDeepSkipped", {
+            count: dropped.length - shallow.length,
+            max: MAX_FOLDER_DEPTH,
+          }),
+        });
+        dropped = shallow;
       }
       if (dropped.length === 0) return;
       setDropTargetNode(node);

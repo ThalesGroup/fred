@@ -35,12 +35,43 @@ class TagType(str, Enum):
         return ResourceKind(self.value)
 
 
+# Ceiling on the depth of a tag's FULL path (parent path + its own name).
+# Guards the folder drag-and-drop mirroring (#2355): a dropped directory tree
+# creates one tag per subdirectory, so an unbounded drop could nest tags
+# arbitrarily deep. The frontend pre-filters against the same limit.
+#
+# 15 is bounded by ReBAC, not taste: every nested tag carries a PARENT tuple
+# and the OpenFGA schema inherits permissions through that chain (`read from
+# parent`, schema.fga), so a check on a depth-N tag resolves up to N hops —
+# against OpenFGA's default 25-hop resolution limit, which the chain's other
+# branches (owner/team_member) also draw from. Raising this materially means
+# retuning OpenFGA (OPENFGA_RESOLVE_NODE_LIMIT) and re-checking the btree
+# index on tag.path (~2.7KB max indexed value).
+MAX_TAG_PATH_DEPTH = 15
+
+
 def _normalize_path(p: Optional[str]) -> Optional[str]:
     if p is None:
         return None
     # strip spaces around segments, remove duplicate slashes
     parts = [seg.strip() for seg in p.split("/") if seg.strip()]
     return "/".join(parts) or None
+
+
+def _validate_name(v: str) -> str:
+    """A tag NAME is a single path segment — never a path.
+
+    The depth cap counts `path` segments + 1 for the name, and
+    `TagService._compose_full_path` joins them with "/": a name carrying "/"
+    would create several levels in one call, silently bypassing
+    MAX_TAG_PATH_DEPTH (and the uniqueness scoping) — found live on #2355.
+    """
+    v = v.strip()
+    if not v:
+        raise ValueError("Name cannot be empty")
+    if "/" in v or "\\" in v:
+        raise ValueError("Name cannot contain '/' or '\\' — a tag name is a single folder level")
+    return v
 
 
 class TagCreate(BaseModel):
@@ -56,14 +87,24 @@ class TagCreate(BaseModel):
     type: TagType
     team_id: Optional[str] = None
 
+    @field_validator("name")
+    @classmethod
+    def _validate_single_segment_name(cls, v: str) -> str:
+        return _validate_name(v)
+
     @field_validator("path")
     @classmethod
     def _validate_and_normalize_path(cls, v: Optional[str]) -> Optional[str]:
         v = _normalize_path(v)
         if v is None:
             return None
+        segments = v.split("/")
+        # `path` is the PARENT chain; the tag's own name adds exactly one more
+        # level (names are validated single segments).
+        if len(segments) + 1 > MAX_TAG_PATH_DEPTH:
+            raise ValueError(f"Path too deep: at most {MAX_TAG_PATH_DEPTH} folder levels are allowed")
         # simple character policy; relax/tighten as needed
-        for seg in v.split("/"):
+        for seg in segments:
             if not seg:
                 raise ValueError("Path contains empty segment")
             if any(c in seg for c in "\\"):
@@ -82,6 +123,11 @@ class TagUpdate(BaseModel):
     @classmethod
     def _no_none_ids(cls, v):
         return [i for i in v if i]
+
+    @field_validator("name")
+    @classmethod
+    def _validate_single_segment_name(cls, v: str) -> str:
+        return _validate_name(v)
 
     @field_validator("path")
     @classmethod

@@ -1199,7 +1199,7 @@ The CLI keeps machine-readable JSON on stdout and human rendering on stderr. Its
 - generated Control Plane OpenAPI client
 - i18n message files
 - runtime and product contract docs
-- EVAL-01 backlog, id legend, track/PMO/status convergence files
+- EVAL-01 GitHub execution issue and durable contract documentation
 
 ### `fred-deepeval-cli` repository
 
@@ -1290,26 +1290,13 @@ All touched project roots must pass `make code-quality` and `make test`. OpenAPI
 
 ---
 
-## 23. Required repository convergence in the approval change
+## 23. Required tracking convergence in the approval change
 
-The repository currently contains tracking divergence for EVAL-01. The approval change should correct it without changing ownership unless the PMO owner confirms:
-
-1. `docs/swift/data/id-legend.yaml`
-   - add the missing backlog reference to `docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md`;
-   - change status from `not_started` to `in_progress`, because `/agents/evaluate`, `EvalTrace`, and the CLI prototype already exist.
-2. `docs/swift/tracks/README.md`
-   - change EVAL-01 from “Not started” to “In progress”.
-3. `docs/swift/WORKPLAN.md`
-   - correct the RFC path from `docs/rfc/...` to `docs/swift/rfc/...`;
-   - update the current state to reflect shipped trace and CLI foundations.
-4. `docs/swift/STATUS.md`
-   - verify status and owner consistency with the canonical ID registry.
-   - (superseded 2026-07-21: `PMO-BOARD.md` and `sprint.yaml`, formerly listed
-     here, were removed — GitHub Issues/Milestones are the only tracking
-     surface now; nothing to sync in their place.)
-5. `docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md`
-   - add implementation phases for Control Plane campaigns, task events, frontend, persistence, security, and OTLP export;
-   - close or rewrite questions already resolved by this RFC.
+GitHub Issues/Milestones are the only execution-tracking surface for EVAL-01.
+The approval change must update the existing GitHub issue rather than a status,
+PMO, sprint, ID-registry, or workplan mirror. Settled behavior belongs in the
+durable runtime/product contracts; the historical backlog is not an active
+status ledger.
 
 The RFC path remains `docs/swift/rfc/AGENT-EVALUATION-RFC.md`; this is an amendment/replacement, not a parallel RFC file.
 

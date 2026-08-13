@@ -34,7 +34,13 @@ import {
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
-import { displayPath, relativeDirSegments } from "./droppedPaths";
+import {
+  MAX_FOLDER_DEPTH,
+  displayPath,
+  exceedsMaxFolderDepth,
+  folderPathDepth,
+  relativeDirSegments,
+} from "./droppedPaths";
 import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
@@ -154,15 +160,26 @@ export function DocumentUploadDrawer({
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Depth guardrail (#2355): destination folder + a file's own subdirectory
+  // chain may not exceed MAX_FOLDER_DEPTH — the backend rejects the mirrored
+  // tag chain past that cap, so too-deep files are filtered out up front.
+  const destinationDepth = folderPathDepth(destinationPath);
+  const withinDepth = (f: File) => !exceedsMaxFolderDepth(f, destinationDepth);
+
   // Seed on open only: `files` stays local state afterwards (user can still add
   // or remove entries), and closing resets it via handleClose as usual. The
-  // caller already filters loose files out of a root-drop seed — the filter
-  // here is for any other opener of a tagless destination.
+  // caller already filters loose/too-deep files out of a drop seed — the
+  // filters here are for any other opener.
   useEffect(() => {
     if (isOpen && initialFiles?.length) {
-      setFiles(requireFolderPerFile ? initialFiles.filter((f) => relativeDirSegments(f).length > 0) : initialFiles);
+      const seeded = requireFolderPerFile
+        ? initialFiles.filter((f) => relativeDirSegments(f).length > 0)
+        : initialFiles;
+      setFiles(seeded.filter(withinDepth));
     }
-  }, [isOpen, initialFiles, requireFolderPerFile]);
+    // withinDepth derives from destinationPath, stable while the drawer is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialFiles, requireFolderPerFile, destinationPath]);
 
   const resolvedTeamId = teamId ?? "personal";
   const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId });
@@ -192,11 +209,21 @@ export function DocumentUploadDrawer({
     // Enter/Space opens the file dialog (react-dropzone), so adding files no
     // longer depends on a mouse/drag. Focus-visible styling lives in the CSS.
     onDrop: (accepted) => {
-      const usable = requireFolderPerFile ? accepted.filter((f) => relativeDirSegments(f).length > 0) : accepted;
-      if (usable.length < accepted.length) {
+      const foldered = requireFolderPerFile ? accepted.filter((f) => relativeDirSegments(f).length > 0) : accepted;
+      if (foldered.length < accepted.length) {
         showError?.({
           summary: t("documentLibrary.uploadDrawerTitle"),
           detail: t("documentLibrary.folderRequired"),
+        });
+      }
+      const usable = foldered.filter(withinDepth);
+      if (usable.length < foldered.length) {
+        showError?.({
+          summary: t("documentLibrary.tooDeepTitle"),
+          detail: t("documentLibrary.tooDeepSkipped", {
+            count: foldered.length - usable.length,
+            max: MAX_FOLDER_DEPTH,
+          }),
         });
       }
       setFiles((prev) => {

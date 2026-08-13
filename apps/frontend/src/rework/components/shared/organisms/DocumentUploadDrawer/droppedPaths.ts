@@ -26,6 +26,27 @@
 type FileWithOptionalPath = File & { path?: string; webkitRelativePath?: string };
 
 /**
+ * Ceiling on the depth of the folder path a dropped file would END UP at —
+ * destination folder + the file's own subdirectory chain — mirroring the
+ * backend's MAX_TAG_PATH_DEPTH on tag paths (structure.py, #2355; see there
+ * for why 15 — ReBAC resolves permissions through the parent-tag chain).
+ * Counting from the destination (not the drop root) is what makes the cap
+ * meaningful: dropping into an already-deep folder must not sidestep it.
+ */
+export const MAX_FOLDER_DEPTH = 15;
+
+/** Depth of a destination folder path — "CIR/Sub" → 2, root ("" / undefined) → 0. */
+export function folderPathDepth(path: string | null | undefined): number {
+  return path ? path.split("/").filter(Boolean).length : 0;
+}
+
+/** True when landing `file` under a destination `destinationDepth` levels deep
+ * would nest it beyond MAX_FOLDER_DEPTH. */
+export function exceedsMaxFolderDepth(file: File, destinationDepth: number): boolean {
+  return destinationDepth + relativeDirSegments(file).length > MAX_FOLDER_DEPTH;
+}
+
+/**
  * The directory chain a file sits in, relative to the drop/pick root —
  * `["batch", "sub"]` for "/batch/sub/a.pdf", `[]` for a file with no folder.
  */

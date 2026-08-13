@@ -37,7 +37,6 @@ Every release branch carries its **complete documentation tree** under
 
 ```
 docs/swift/       ← all docs for the swift release
-  STATUS.md
   WORKPLAN.md
   backlog/
   design/
@@ -46,7 +45,6 @@ docs/swift/       ← all docs for the swift release
   ...
 
 docs/eagle/       ← all docs for the eagle release (once created)
-  STATUS.md
   WORKPLAN.md
   ...
 ```
