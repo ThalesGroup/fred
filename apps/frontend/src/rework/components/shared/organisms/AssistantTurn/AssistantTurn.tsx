@@ -13,9 +13,11 @@
 // limitations under the License.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { toEmailHtml, toPlainText, writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
 import { UiParts } from "@shared/molecules/UiParts/UiParts";
@@ -53,9 +55,10 @@ export const AssistantTurn = memo(function AssistantTurn({
   isStreaming,
   pendingToolCallIds,
 }: AssistantTurnProps) {
+  const { t } = useTranslation();
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, confirmCopied } = useCopyConfirmation();
   const contentRef = useRef<HTMLDivElement>(null);
 
   // All hooks before any conditional returns.
@@ -76,23 +79,20 @@ export const AssistantTurn = memo(function AssistantTurn({
     const node = contentRef.current;
     const write = node ? writeRichClipboard(toEmailHtml(node), toPlainText(node)) : writeRichClipboard("", text);
     write.then((success) => {
-      if (success) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
+      if (success) confirmCopied();
     });
-  }, [text]);
+  }, [text, confirmCopied]);
 
   const actions: Action[] = useMemo(
     () => [
       {
         id: "copy",
         icon: copied ? "check" : "content_copy",
-        label: copied ? "Copied" : "Copy response",
+        label: copied ? t("chatbot.copyMessage.copied") : t("chatbot.copyMessage.response"),
         onClick: copyAction,
       },
     ],
-    [copied, copyAction],
+    [copied, copyAction, t],
   );
 
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;
