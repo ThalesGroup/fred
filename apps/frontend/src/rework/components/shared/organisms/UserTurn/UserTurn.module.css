@@ -10,32 +10,12 @@
   user-select: text;
 }
 
-/* Sits to the left of the right-aligned bubble; reserves its space so the
-   bubble never shifts, and only fades in on hover (or keyboard focus). */
-.actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  opacity: 0;
-  transition: opacity 150ms ease;
-}
-
+/* `ActionBar` owns the layout and the `opacity: 0` resting state — which
+   reserves the row's space, so revealing it never shifts the bubble. The turn
+   only decides *when* it fades in, per the hover contract documented in
+   ActionBar.module.css. Declare nothing else here: anything that also exists
+   on `.bar` would collide at equal specificity and resolve by bundle order. */
 .turn:hover .actions,
 .turn:focus-within .actions {
   opacity: 1;
-}
-
-.copyPop {
-  display: flex;
-  animation: copy-pop 200ms ease;
-}
-
-@keyframes copy-pop {
-  from {
-    transform: scale(0.6);
-  }
-
-  to {
-    transform: scale(1);
-  }
 }

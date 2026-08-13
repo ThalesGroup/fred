@@ -28,6 +28,66 @@
   overflow-y: auto;
 }
 
+/* The <Document> wrapper. It carries the page slots, so it has to own the
+ * column layout the pages used to inherit from .viewer directly. */
+.document {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+}
+
+/* One slot per page of the document, always present so the scrollbar reflects
+ * the real length. `min-height` (not `height`) reserves the estimated page box
+ * while it is an empty placeholder, and lets the slot grow to the real page
+ * height once its canvas mounts — see PAGE_MOUNT_MARGIN_PX in the component. */
+.pageSlot {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.guard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  margin: var(--spacing-l) 0;
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container);
+  padding: var(--spacing-s);
+  max-width: 48ch;
+  color: var(--on-surface);
+}
+
+.guardTitle {
+  margin: 0;
+  font: var(--font-body-medium);
+  font-weight: 600;
+}
+
+.guardBody {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.guardAction {
+  cursor: pointer;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-s);
+  background: transparent;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.guardAction:hover {
+  background: var(--surface-container-high);
+}
+
 .error {
   margin-top: var(--spacing-xl);
   color: var(--error);

@@ -19,10 +19,18 @@ import { HitlPrompt } from "./HitlPrompt";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) =>
-      values ? `${key}:${values.count ?? ""}:${values.limit ?? ""}` : key,
+      values ? `${key}:${values.used ?? ""}:${values.limit ?? ""}` : key,
     i18n: { language: "en" },
   }),
 }));
+
+function buttonTag(html: string, label: string): string {
+  const tag = html.match(new RegExp(`<button[^>]*>[^<]*<div[^>]*>${label}</div></button>`))?.[0] ?? "";
+  // A regex that stops matching (any Button markup change) would otherwise make
+  // every `not.toContain("disabled")` below pass while checking nothing.
+  expect(tag).not.toBe("");
+  return tag;
+}
 
 const event = {
   session_id: "session-1",
@@ -44,11 +52,26 @@ describe("HitlPrompt chat-input limit", () => {
 
     expect(html).toContain("chatbot.characterCounter:6:5");
     expect(html).toContain("chatbot.errors.chatInputTooLong::5");
+    expect(html).toContain('aria-live="polite"');
     expect(html).not.toContain("maxLength=");
-    const proceedButton = html.match(/<button[^>]*>[^<]*<div[^>]*>Proceed<\/div><\/button>/)?.[0] ?? "";
-    const sendButton = html.match(/<button[^>]*>[^<]*<div[^>]*>chatbot\.sendHitlAnswer<\/div><\/button>/)?.[0] ?? "";
-    expect(proceedButton).not.toContain("disabled");
-    expect(sendButton).toContain('disabled=""');
+    expect(buttonTag(html, "Proceed")).not.toContain("disabled");
+    expect(buttonTag(html, "chatbot\\.sendHitlAnswer")).toContain('disabled=""');
+  });
+
+  it("hides the counter while the free text is within the limit", () => {
+    const html = renderToStaticMarkup(
+      <HitlPrompt
+        event={event}
+        onAnswer={() => undefined}
+        maxChatInputChars={5}
+        freeTextValue="🙂🙂🙂🙂🙂"
+        onFreeTextChange={() => undefined}
+      />,
+    );
+
+    expect(html).not.toContain("chatbot.characterCounter");
+    expect(html).not.toContain("chatbot.errors.chatInputTooLong");
+    expect(buttonTag(html, "chatbot\\.sendHitlAnswer")).not.toContain("disabled");
   });
 
   it("omits limit UI for an older runtime while preserving free text", () => {

@@ -43,20 +43,3 @@
   flex-direction: column;
   gap: var(--spacing-xs);
 }
-
-.characterInfo {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--spacing-s);
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
-.characterInfoError {
-  color: var(--error);
-}
-
-.characterCount {
-  flex-shrink: 0;
-  margin-left: auto;
-}

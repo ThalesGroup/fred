@@ -409,11 +409,13 @@
       "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
       "selectLibraryFirst": "Select a library first."
     },
-    "characterCounter": "{{count}} / {{limit}} characters",
+    "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {
-      "tooltip": "Copy message"
+      "tooltip": "Copy message",
+      "response": "Copy response",
+      "copied": "Copied"
     },
     "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",
@@ -1634,7 +1636,15 @@
           "raw": "Raw"
         },
         "loading": "Loading…",
-        "markdownUnavailable": "No Markdown version was generated for this document."
+        "markdownUnavailable": "No Markdown version was generated for this document.",
+        "pdf": {
+          "loadFailed": "Failed to load PDF document.",
+          "unavailable": "Document content is unavailable.",
+          "largeTitle": "Large document",
+          "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
+          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
+          "largeConfirm": "Display anyway"
+        }
       },
       "storage": {
         "aria": "Storage space used",
