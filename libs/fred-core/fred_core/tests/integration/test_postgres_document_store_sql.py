@@ -59,7 +59,7 @@ from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.models.base import Base
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
 
 _PG_DSN_ENV = "FRED_PG_DSN"
 _DEFAULT_DSN = "postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret

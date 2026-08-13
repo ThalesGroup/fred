@@ -42,11 +42,15 @@ integration-down: ## Stop integration test dependencies
 	docker compose -f $(INTEGRATION_COMPOSE) down -v
 
 .PHONY: test-integration-only
-test-integration-only: dev ## Run integration tests that rely on external services
-	${UV} run pytest -m integration
+test-integration-only: dev ## Run integration tests that rely on external services already running
+	${UV} run pytest -m "integration and not integration_postgres"
 
 .PHONY: test-integration
 test-integration: dev ## Run integration tests that rely on external services and start/stop those services automatically
 	@set -e; trap 'docker compose -f $(INTEGRATION_COMPOSE) down -v' EXIT; \
 		docker compose -f $(INTEGRATION_COMPOSE) up -d; \
-		${UV} run pytest -m integration
+		${UV} run pytest -m "integration and not integration_postgres"
+
+.PHONY: test-integration-postgres
+test-integration-postgres: dev ## Run the integration tests that need a real PostgreSQL — not provisioned by docker-compose.integration.yml (OpenFGA only), so these are excluded from test-integration/test-integration-only until that's addressed. Point FRED_PG_DSN at a running Postgres first (see the test file's own docstring for the default dev-stack DSN).
+	${UV} run pytest -m integration_postgres
