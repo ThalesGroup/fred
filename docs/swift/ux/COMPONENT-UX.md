@@ -964,9 +964,11 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 - **Copy confirmation is now the shared one (2026-08-13, #2359)** — `UserTurn` had shipped a
   parallel copy affordance the same week; both turns now use the same `ActionBar` action,
   the same `content_copy` → `check` flip and the same 2s revert, and the labels are
-  translated on both sides (they were hardcoded English here). The clipboard *payload* stays
-  asymmetric on purpose: assistant replies go through `clipboardUtils`, user messages are
-  plain text and use `writeText`. See `UserTurn` below.
+  translated on both sides (they were hardcoded English here). The 2s revert timer is also
+  now cancelled before re-arming and on unmount: clicking copy twice inside the window used
+  to have the first click's timer cut the second confirmation short after ~0.1s. The
+  clipboard *payload* stays asymmetric on purpose: assistant replies go through
+  `clipboardUtils`, user messages are plain text and use `writeText`. See `UserTurn` below.
 
 ---
 
@@ -2283,11 +2285,17 @@ admin diagnostics.
 `UserMessage` + `ActionBar` (copy, optional edit). `.turn` has `position: relative`; hover shows actions. Edit action passes `onEdit` prop through to the action bar.
 
 Copy is the same affordance as `AssistantTurn`'s (#2336): `content_copy` flips to `check` for
-2s, no toast, no colour change. A failed clipboard write is deliberately silent — the icon not
-flipping *is* the feedback, and the API only fails in degraded contexts (missing permission,
-non-secure origin) that a toast would not fix. The payload is `writeText` of the raw message:
-user messages are plain text, so none of the assistant side's email-safe HTML serialisation
-applies.
+2s, no toast, no colour change. A second click inside that window restarts it rather than being
+cut short by the first click's timer, and the pending revert is dropped on unmount. The payload
+is `writeText` of the raw message: user messages are plain text, so none of the assistant side's
+email-safe HTML serialisation applies.
+
+A failed clipboard write is deliberately silent — the icon not flipping *is* the feedback, and
+the API only fails in degraded contexts a toast would not fix. Two distinct failures, and they
+need different handling: a *denied permission* rejects the promise (`.catch`), whereas a
+*non-secure origin* has no `navigator.clipboard` at all, so the property access throws
+synchronously and never reaches `.catch` — hence the `?.`. `AssistantTurn` gets the second case
+for free, since `clipboardUtils.writeRichClipboard` already wraps both paths in `try`.
 
 Unlike `AssistantTurn`, the bar is **not** `alwaysVisible`. The assistant's is a footer toolbar
 under the reply, where hover-only made it easy to miss (#2336); these sit beside a right-aligned

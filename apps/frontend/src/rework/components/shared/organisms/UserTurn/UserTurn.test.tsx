@@ -129,11 +129,65 @@ describe("UserTurn copy affordance (#2359)", () => {
     expect(iconOf(copyButton())).toBe("content_copy");
   });
 
+  it("restarts the full 2s window on a second click instead of letting the first timer cut it short", async () => {
+    render(<UserTurn text="hello" />);
+
+    await click(copyButton());
+    act(() => {
+      vi.advanceTimersByTime(1900);
+    });
+
+    // Second click 1.9s in: the first click's timer must not fire 100ms later.
+    await click(copyButton());
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(iconOf(copyButton())).toBe("check");
+
+    act(() => {
+      vi.advanceTimersByTime(1900);
+    });
+    expect(iconOf(copyButton())).toBe("content_copy");
+  });
+
+  it("drops the pending revert on unmount rather than setting state on a dead turn", async () => {
+    render(<UserTurn text="hello" />);
+    await click(copyButton());
+
+    act(() => {
+      root.unmount();
+    });
+    // Assert BEFORE advancing: letting the timer fire would zero the count
+    // either way and the test would pass without the cleanup effect.
+    expect(vi.getTimerCount()).toBe(0);
+    expect(() => vi.advanceTimersByTime(2000)).not.toThrow();
+
+    // afterEach unmounts again; re-mount so it has a live root to tear down.
+    render(<UserTurn text="hello" />);
+  });
+
   it("stays silent when the clipboard write fails — the icon not flipping IS the feedback", async () => {
     writeText.mockRejectedValue(new Error("not allowed"));
     render(<UserTurn text="hello" />);
 
     await click(copyButton());
     expect(iconOf(copyButton())).toBe("content_copy");
+  });
+
+  // On a non-secure origin navigator.clipboard is undefined outright, so what
+  // has to stay harmless is the property *access* — `.catch()` never sees a
+  // synchronous TypeError. React swallows a throwing handler and reports it,
+  // so neither the click nor a `.resolves.not.toThrow()` assertion observes
+  // it; the reported error is what this pins.
+  it("stays silent when navigator.clipboard is absent entirely", async () => {
+    Object.defineProperty(globalThis.navigator, "clipboard", { value: undefined, configurable: true });
+    const reported = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<UserTurn text="hello" />);
+
+    await click(copyButton());
+
+    expect(reported).not.toHaveBeenCalled();
+    expect(iconOf(copyButton())).toBe("content_copy");
+    reported.mockRestore();
   });
 });

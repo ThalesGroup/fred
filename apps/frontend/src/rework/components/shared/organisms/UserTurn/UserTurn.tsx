@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
@@ -29,21 +29,37 @@ interface UserTurnProps {
 export const UserTurn = memo(function UserTurn({ text, onEdit }: UserTurnProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const revertTimer = useRef<number | null>(null);
+
+  // A pending revert has to be cancelled before arming the next one: clicking
+  // copy twice inside the 2s window would otherwise have the FIRST click's
+  // timer cut the second confirmation short. Cancelled on unmount too —
+  // switching conversations tears the turn down mid-window.
+  const confirmCopied = useCallback(() => {
+    setCopied(true);
+    if (revertTimer.current !== null) window.clearTimeout(revertTimer.current);
+    revertTimer.current = window.setTimeout(() => setCopied(false), 2000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (revertTimer.current !== null) window.clearTimeout(revertTimer.current);
+    },
+    [],
+  );
 
   const copyAction = useCallback(() => {
     // User messages are plain text — none of the assistant turn's email-safe
     // HTML serialisation applies here, so writeText is the whole job.
     // A failed copy stays silent on purpose: the icon simply not flipping IS
     // the feedback, and the clipboard API only fails in degraded contexts
-    // (missing permission, non-secure origin) that a toast would not fix.
+    // (denied permission, or — via the `?.` — a non-secure origin, where
+    // navigator.clipboard is not defined at all) that a toast would not fix.
     navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
+      ?.writeText(text)
+      .then(confirmCopied)
       .catch(() => {});
-  }, [text]);
+  }, [text, confirmCopied]);
 
   // Same confirmation as AssistantTurn (#2336): the button itself is the
   // receipt — content_copy → check for 2s, no toast, no colour change.

@@ -59,6 +59,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const revertTimer = useRef<number | null>(null);
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
@@ -71,6 +72,22 @@ export const AssistantTurn = memo(function AssistantTurn({
     setSelected({ source, index: activeSourceIndex });
   }, [activeSourceIndex, sources]);
 
+  // Kept identical to UserTurn's (#2359): cancel a pending revert before
+  // arming the next, so a second click inside the 2s window is not cut short
+  // by the first click's timer, and drop it on unmount.
+  const confirmCopied = useCallback(() => {
+    setCopied(true);
+    if (revertTimer.current !== null) window.clearTimeout(revertTimer.current);
+    revertTimer.current = window.setTimeout(() => setCopied(false), 2000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (revertTimer.current !== null) window.clearTimeout(revertTimer.current);
+    },
+    [],
+  );
+
   const copyAction = useCallback(() => {
     // Copy from the rendered markdown, not the raw `text` prop, so the
     // clipboard gets real bold/lists/tables/links instead of literal
@@ -78,12 +95,9 @@ export const AssistantTurn = memo(function AssistantTurn({
     const node = contentRef.current;
     const write = node ? writeRichClipboard(toEmailHtml(node), toPlainText(node)) : writeRichClipboard("", text);
     write.then((success) => {
-      if (success) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
+      if (success) confirmCopied();
     });
-  }, [text]);
+  }, [text, confirmCopied]);
 
   const actions: Action[] = useMemo(
     () => [
