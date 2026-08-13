@@ -833,6 +833,69 @@ async def test_current_turn_alone_over_char_budget_fails_cleanly() -> None:
     assert model.calls == []
 
 
+@pytest.mark.asyncio
+async def test_oversized_reasoning_trace_is_budgeted_after_rehoming() -> None:
+    """
+    Regression (found in PR review): the char budget must run AFTER
+    `thread_reasoning_within_open_turn`, not before. A `thinking` block's
+    own text isn't visible to `_message_char_len` as structured reasoning
+    content — only once rehomed into ordinary `content` text does its size
+    become measurable. Budgeting before that rehoming would let an oversized
+    reasoning trace slip through unmeasured and then expand past the limit
+    on the way to the provider.
+    """
+    model = RecordingModel(script=[AIMessage(content="unreachable")])
+    agent = _compile_agent(model, approval_enabled=False)
+
+    huge_reasoning = "x" * (_V2_MAX_HISTORY_CHARS + 20_000)
+    history: list[BaseMessage] = [
+        HumanMessage("investigate the contract"),
+        # Open-turn reasoning (after the last HumanMessage) — invisible to a
+        # budget that only reads plain `content` strings or tool-call args.
+        AIMessage(content=[{"type": "thinking", "thinking": huge_reasoning}]),
+    ]
+
+    with pytest.raises(ChatTurnTooLargeError) as exc_info:
+        await _drive(agent, {"messages": history}, "t-reasoning-too-big")
+
+    assert exc_info.value.actual_chars > _V2_MAX_HISTORY_CHARS
+    assert model.calls == []
+
+
+@pytest.mark.asyncio
+async def test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty() -> (
+    None
+):
+    """
+    Regression (found in PR review): when the latest ToolMessage alone
+    exceeds the char budget (e.g. one huge RAG result), the reverse-scan
+    trim keeps only that lone ToolMessage — a window with no preceding
+    AIMessage(tool_calls) in it, which `_advance_to_safe_boundary` treats as
+    entirely orphaned and collapses to `[]`. Measuring the now-empty result
+    would silently pass the budget check and call the model with NO
+    messages at all — worse than a raw crash. It must fail with
+    `ChatTurnTooLargeError` instead.
+    """
+    model = RecordingModel(script=[AIMessage(content="unreachable")])
+    agent = _compile_agent(model, approval_enabled=False)
+
+    huge_result = "x" * (_V2_MAX_HISTORY_CHARS + 20_000)
+    history: list[BaseMessage] = [
+        HumanMessage("search the corpus"),
+        AIMessage(
+            content="",
+            tool_calls=[_tool_call("search_documents", {"query": "corpus"}, "c-rag")],
+        ),
+        ToolMessage(content=huge_result, tool_call_id="c-rag", name="search_documents"),
+    ]
+
+    with pytest.raises(ChatTurnTooLargeError) as exc_info:
+        await _drive(agent, {"messages": history}, "t-tool-result-too-big")
+
+    assert exc_info.value.actual_chars > _V2_MAX_HISTORY_CHARS
+    assert model.calls == []
+
+
 class _RecordingKPIStore(BaseKPIStore):
     """
     Minimal BaseKPIStore that just remembers every emitted event (#2350).

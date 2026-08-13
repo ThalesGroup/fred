@@ -95,6 +95,23 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
             # it already ran on the untrimmed list above. Re-run it: idempotent
             # on an already-clean list, closes the gap on a freshly-cut one.
             messages = sanitize_dangling_tool_calls(trimmed)
+        # Reasoning continuity (RUNTIME-05 Layer 2c, RFC Amendment E §E.3).
+        # Provider-native reasoning blocks cannot be replayed as such — the model
+        # client drops them — so the reasoning of the turn IN PROGRESS is carried
+        # back as ordinary text and reasoning from closed turns is dropped.
+        # Without this the model gets its own message back with the content
+        # emptied, re-derives the plan, and re-issues the identical tool call:
+        # measured 9/12 turns and 67 duplicate calls on a bare prompt, 0/12 with
+        # this (p = 1.7e-4). Raw reasoning blocks are still never replayed.
+        #
+        # Must run BEFORE the size budget below (found in PR review): a
+        # `thinking` block's own text isn't counted by `_message_char_len`
+        # (it's structured reasoning content, not the plain `content` string
+        # or a tool-call argument) until this call flattens it into ordinary
+        # text. Budgeting first would measure the pre-flatten shape and miss
+        # however large the rehomed reasoning trace turns out to be — the
+        # budget must see what the handler will actually receive.
+        messages = thread_reasoning_within_open_turn(messages)
         if self._max_history_chars is not None:
             # Message-count trim above says nothing about payload size: a
             # handful of large tool outputs (a generated document, a big RAG
@@ -102,7 +119,21 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
             # provider's real context window (#2350 field evidence: ~60
             # messages, 178k+ tokens). Trim again, this time by size.
             trimmed = trim_to_char_budget(messages, self._max_history_chars)
-            actual_chars = total_char_len(trimmed)
+            if not trimmed and messages:
+                # `trim_to_char_budget` can legitimately collapse to `[]`
+                # when the only message it could keep under budget is a lone
+                # trailing ToolMessage with no preceding AIMessage in the
+                # window — an unsafe orphan boundary (e.g. one oversized RAG
+                # result). `total_char_len([])` is then 0, which would
+                # silently pass the check below and send the model an EMPTY
+                # context — no user question, no tool result — instead of
+                # failing the turn (found in PR review). Treat the collapse
+                # itself as the over-budget signal: measure the pre-trim
+                # total instead, guaranteed > budget since
+                # `trim_to_char_budget` only trims when that already holds.
+                actual_chars = total_char_len(messages)
+            else:
+                actual_chars = total_char_len(trimmed)
             if actual_chars > self._max_history_chars:
                 # Even the trimmed window is too big: the CURRENT turn's own
                 # content is the culprit, and no amount of dropping older
@@ -155,15 +186,6 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
                     self._max_history_chars,
                 )
                 messages = sanitize_dangling_tool_calls(trimmed)
-        # Reasoning continuity (RUNTIME-05 Layer 2c, RFC Amendment E §E.3).
-        # Provider-native reasoning blocks cannot be replayed as such — the model
-        # client drops them — so the reasoning of the turn IN PROGRESS is carried
-        # back as ordinary text and reasoning from closed turns is dropped.
-        # Without this the model gets its own message back with the content
-        # emptied, re-derives the plan, and re-issues the identical tool call:
-        # measured 9/12 turns and 67 duplicate calls on a bare prompt, 0/12 with
-        # this (p = 1.7e-4). Raw reasoning blocks are still never replayed.
-        messages = thread_reasoning_within_open_turn(messages)
         response = await handler(
             request.override(messages=cast(list[AnyMessage], messages))
         )
