@@ -101,17 +101,30 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
+  // True as soon as the user picks anything; cleared by reset() (a genuine
+  // entry into a new or different session). #2369: sessionStorage alone cannot
+  // stand in for it. A pick made in a brand-new conversation happens while
+  // `sessionId` is still null, so update() below writes nothing — and
+  // prepare-execution hands back a FRESH chat_controls array on every send(),
+  // which re-runs the effect below. Without this flag the first send reverted
+  // the user's own reasoning pick (and search policy, RAG scope, library and
+  // document selection) to the widget defaults, mid-conversation.
+  const userEditedRef = useRef(false);
+
   // chatControls arrives async (an eager prepare-execution call, RFC §3.7). If
   // it was empty at mount and no sessionStorage data exists for this session,
-  // apply the resolved defaults now.
+  // apply the resolved defaults now. Defaults only ever fill a gap: a resolved
+  // value the user chose themselves outranks them.
   useEffect(() => {
     if (chatControls.length === 0) return;
+    if (userEditedRef.current) return;
     if (Object.keys(readStorage(sessionIdRef.current)).length > 0) return;
     setState(buildInitial(sessionIdRef.current, chatControls));
   }, [chatControls]);
 
   const update = useCallback(
     (patch: Partial<ComposerState>) => {
+      userEditedRef.current = true;
       setState((prev) => {
         const next = { ...prev, ...patch };
         if (sessionId) writeStorage(sessionId, next);
@@ -122,6 +135,7 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
   );
 
   const reset = useCallback((nextSessionId: string | null, nextChatControls: readonly ChatControlDescriptor[]) => {
+    userEditedRef.current = false;
     setState(buildInitial(nextSessionId, nextChatControls));
   }, []);
 
