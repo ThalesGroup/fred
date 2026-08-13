@@ -2324,11 +2324,17 @@ is `writeText` of the raw message: user messages are plain text, so none of the 
 email-safe HTML serialisation applies.
 
 A failed clipboard write is deliberately silent — the icon not flipping *is* the feedback, and
-the API only fails in degraded contexts a toast would not fix. Two distinct failures, and they
-need different handling: a *denied permission* rejects the promise (`.catch`), whereas a
-*non-secure origin* has no `navigator.clipboard` at all, so the property access throws
-synchronously and never reaches `.catch` — hence the `?.`. `AssistantTurn` gets the second case
-for free, since `clipboardUtils.writeRichClipboard` already wraps both paths in `try`.
+the API only fails in degraded contexts a toast would not fix (a denied permission rejects; a
+non-secure origin has no `navigator.clipboard` at all, so the property access throws
+synchronously and never reaches a `.catch`). Both turns get this from
+`clipboardUtils.writeRichClipboard`, which wraps every path in `try` — `UserTurn` calls it with
+no HTML, which is the same call `AssistantTurn` makes when it has no rendered node to serialise,
+and writes `text/plain` only.
+
+The `copied` flag and its 2s revert live in `core/hooks/useCopyConfirmation.ts`, shared by both
+turns. It knows nothing about the clipboard on purpose: its predecessor bundled the write with
+the flag, which hardcoded `writeText` and made it unusable by the assistant side — see Resolved
+below.
 
 Unlike `AssistantTurn`, the bar is **not** `alwaysVisible`. The assistant's is a footer toolbar
 under the reply, where hover-only made it easy to miss (#2336); these sit beside a right-aligned
@@ -2348,8 +2354,15 @@ change — deliberately left as its own call (see Hover zone below).
   `success`-coloured check, a `copy-pop` scale keyframe and a 1.5s revert — against the
   assistant's `ActionBar`, plain check, 2s revert. Same interaction, two visual languages,
   depending on who wrote the message. This section already described `ActionBar`, so the code
-  was also diverging from its own doc. `UserTurn` now renders `ActionBar`; the hook (its only
-  consumer was here) and the keyframe are deleted.
+  was also diverging from its own doc. `UserTurn` now renders `ActionBar`, and the keyframe is
+  deleted.
+
+  `useCopyToClipboard` is deleted too, replaced by `useCopyConfirmation`. The distinction is
+  the point: the old hook bundled the clipboard *write* with the confirmation flag, which
+  forced it to hardcode `writeText` — unusable by the assistant side, which writes email-safe
+  HTML. Unshareable by construction, so it was reimplemented per turn and the copies drifted.
+  The new hook holds only the flag and its timer, so both turns really do share it, and the
+  write goes through `writeRichClipboard` on both sides.
 
 ---
 
