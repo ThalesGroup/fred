@@ -35,6 +35,13 @@ class TagType(str, Enum):
         return ResourceKind(self.value)
 
 
+# Ceiling on the depth of a tag's FULL path (parent path + its own name).
+# Guards the folder drag-and-drop mirroring (#2355): a dropped directory tree
+# creates one tag per subdirectory, so an unbounded drop could nest tags
+# arbitrarily deep. The frontend pre-filters against the same limit.
+MAX_TAG_PATH_DEPTH = 10
+
+
 def _normalize_path(p: Optional[str]) -> Optional[str]:
     if p is None:
         return None
@@ -62,8 +69,12 @@ class TagCreate(BaseModel):
         v = _normalize_path(v)
         if v is None:
             return None
+        segments = v.split("/")
+        # `path` is the PARENT chain; the tag's own name adds one more level.
+        if len(segments) + 1 > MAX_TAG_PATH_DEPTH:
+            raise ValueError(f"Path too deep: at most {MAX_TAG_PATH_DEPTH} folder levels are allowed")
         # simple character policy; relax/tighten as needed
-        for seg in v.split("/"):
+        for seg in segments:
             if not seg:
                 raise ValueError("Path contains empty segment")
             if any(c in seg for c in "\\"):

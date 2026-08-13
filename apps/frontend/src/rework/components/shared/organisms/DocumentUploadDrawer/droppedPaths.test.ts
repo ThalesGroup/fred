@@ -19,7 +19,13 @@
 // dropped or picked on its own ("./a.pdf", bare name, or nothing).
 
 import { describe, expect, it } from "vitest";
-import { displayPath, relativeDirSegments } from "./droppedPaths";
+import {
+  MAX_FOLDER_DEPTH,
+  displayPath,
+  exceedsMaxFolderDepth,
+  folderPathDepth,
+  relativeDirSegments,
+} from "./droppedPaths";
 
 function fileWith(name: string, extra: { path?: string; webkitRelativePath?: string } = {}): File {
   const file = new File(["x"], name);
@@ -53,5 +59,39 @@ describe("displayPath", () => {
   it("prefixes the directory chain when there is one, plain name otherwise", () => {
     expect(displayPath(fileWith("a.pdf", { path: "/batch/sub/a.pdf" }))).toBe("batch/sub/a.pdf");
     expect(displayPath(fileWith("a.pdf"))).toBe("a.pdf");
+  });
+});
+
+describe("folderPathDepth", () => {
+  it("counts destination segments, with 0 for the corpus root", () => {
+    expect(folderPathDepth("CIR/Sub")).toBe(2);
+    expect(folderPathDepth("CIR")).toBe(1);
+    expect(folderPathDepth("")).toBe(0);
+    expect(folderPathDepth(undefined)).toBe(0);
+    expect(folderPathDepth(null)).toBe(0);
+  });
+});
+
+describe("exceedsMaxFolderDepth", () => {
+  const chain = (depth: number) => `/${Array.from({ length: depth }, (_, i) => `d${i}`).join("/")}/a.pdf`;
+
+  it("accepts a file landing exactly at MAX_FOLDER_DEPTH", () => {
+    expect(exceedsMaxFolderDepth(fileWith("a.pdf", { path: chain(MAX_FOLDER_DEPTH) }), 0)).toBe(false);
+    expect(exceedsMaxFolderDepth(fileWith("a.pdf", { path: chain(MAX_FOLDER_DEPTH - 3) }), 3)).toBe(false);
+  });
+
+  it("rejects a file one level past the cap", () => {
+    expect(exceedsMaxFolderDepth(fileWith("a.pdf", { path: chain(MAX_FOLDER_DEPTH + 1) }), 0)).toBe(true);
+  });
+
+  it("counts the destination folder's own depth toward the cap", () => {
+    // The same dropped chain passes at the root but not inside a deep folder.
+    const file = fileWith("a.pdf", { path: chain(MAX_FOLDER_DEPTH) });
+    expect(exceedsMaxFolderDepth(file, 0)).toBe(false);
+    expect(exceedsMaxFolderDepth(file, 1)).toBe(true);
+  });
+
+  it("never rejects a loose file dropped into a valid folder", () => {
+    expect(exceedsMaxFolderDepth(fileWith("a.pdf"), MAX_FOLDER_DEPTH)).toBe(false);
   });
 });

@@ -2577,6 +2577,12 @@ levels reused), and every file uploads under its own subdirectory's tag
 instead of being flattened into the drop target. The drawer lists files under
 their relative path and announces how many subfolders the save will create; a
 failed/forbidden tag creation aborts the save before any upload starts.
+Depth guardrail (#2355, 2026-08-13): the resulting folder path — destination
+folder included, so a deep destination doesn't sidestep it — is capped at 10
+levels (`MAX_FOLDER_DEPTH`, mirrored server-side by `MAX_TAG_PATH_DEPTH` on
+tag creation). Files that would land deeper are skipped with a warn toast
+naming the count; a drop with nothing shallow enough is rejected with an
+error toast.
 Folder-originated files still upload under their leaf name: browsers put the
 relative path in the multipart filename (one opaque "Upload failed: 404" per
 file, found live 2026-07-23), pinned frontend-side and sanitized backend-side
