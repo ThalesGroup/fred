@@ -93,7 +93,10 @@ function buildInitial(sessionId: string | null, chatControls: readonly ChatContr
  * Writes through to sessionStorage on every change so state survives
  * navigation within the same browser tab.
  *
- * Call reset() when the session changes to reinitialise from storage/defaults.
+ * Call reset() when the session changes to reinitialise from storage/defaults,
+ * and bindSession() when a session id is minted for a conversation that had
+ * none — that is the moment a pick made before the first message becomes
+ * durable (#2369).
  */
 export function useComposerSettings(sessionId: string | null, chatControls: readonly ChatControlDescriptor[]) {
   const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, chatControls));
@@ -101,17 +104,35 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
+  // Read by bindSession() below, which fires from a callback and so cannot
+  // close over the render-time state.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // True as soon as the user picks anything; cleared by reset() (a genuine
+  // entry into a new or different session). #2369: sessionStorage alone cannot
+  // stand in for it. A pick made in a brand-new conversation happens while
+  // `sessionId` is still null, so update() below writes nothing — and
+  // prepare-execution hands back a FRESH chat_controls array on every send(),
+  // which re-runs the effect below. Without this flag the first send reverted
+  // the user's own reasoning pick (and search policy, RAG scope, library and
+  // document selection) to the widget defaults, mid-conversation.
+  const userEditedRef = useRef(false);
+
   // chatControls arrives async (an eager prepare-execution call, RFC §3.7). If
   // it was empty at mount and no sessionStorage data exists for this session,
-  // apply the resolved defaults now.
+  // apply the resolved defaults now. Defaults only ever fill a gap: a resolved
+  // value the user chose themselves outranks them.
   useEffect(() => {
     if (chatControls.length === 0) return;
+    if (userEditedRef.current) return;
     if (Object.keys(readStorage(sessionIdRef.current)).length > 0) return;
     setState(buildInitial(sessionIdRef.current, chatControls));
   }, [chatControls]);
 
   const update = useCallback(
     (patch: Partial<ComposerState>) => {
+      userEditedRef.current = true;
       setState((prev) => {
         const next = { ...prev, ...patch };
         if (sessionId) writeStorage(sessionId, next);
@@ -122,7 +143,22 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
   );
 
   const reset = useCallback((nextSessionId: string | null, nextChatControls: readonly ChatControlDescriptor[]) => {
+    userEditedRef.current = false;
     setState(buildInitial(nextSessionId, nextChatControls));
+  }, []);
+
+  // Called by the caller that MINTS a session id for a conversation that had
+  // none (#2369) — the flag above keeps the pick alive for the rest of the
+  // mount, this is what makes it durable. Until the id exists update() has
+  // nowhere to write, so without this a reasoning pick made before the first
+  // message was gone the next time the user entered that very session (reload,
+  // or leaving and coming back), reverting to the widget default one
+  // navigation later. Only a real pick is written: seeding storage with
+  // untouched defaults would freeze them against a later chat_controls
+  // refresh, which is exactly what the storage guard above is there to allow.
+  const bindSession = useCallback((nextSessionId: string) => {
+    if (!userEditedRef.current) return;
+    writeStorage(nextSessionId, stateRef.current);
   }, []);
 
   const setSearchPolicy = useCallback((p: SearchPolicyName) => update({ searchPolicy: p }), [update]);
@@ -147,5 +183,6 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
     setSelectedLibraryIds,
     setSelectedDocumentUids,
     reset,
+    bindSession,
   };
 }
