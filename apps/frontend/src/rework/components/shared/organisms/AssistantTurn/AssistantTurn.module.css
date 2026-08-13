@@ -20,17 +20,9 @@
   /* HorizontalScrollRow defaults handle the scroll + gradient fade */
 }
 
-/* Token badge only — same hover reveal as the copy action. */
 .footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
-  opacity: 0;
-  transition: opacity 150ms ease;
-}
-
-.turn:hover .footer,
-.turn:focus-within .footer {
-  opacity: 1;
 }
