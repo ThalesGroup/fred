@@ -32,6 +32,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const probe = vi.hoisted(() => ({
   drawerProps: [] as Record<string, unknown>[],
   canUpdateResources: true,
+  createTagCalls: [] as Record<string, unknown>[],
+  browseCalls: [] as { tag_id: string }[],
 }));
 
 vi.mock("react-i18next", () => ({
@@ -40,13 +42,27 @@ vi.mock("react-i18next", () => ({
 vi.mock("react-redux", () => ({ useSelector: () => [] }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
-    data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
+    data: [
+      { id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] },
+      { id: "tag-sub", name: "Sub", path: "CIR", type: "document", item_ids: [] },
+    ],
     isLoading: false,
     refetch: () => {},
   }),
-  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [vi.fn()],
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
+    (arg: { browseDocumentsByTagRequest: { tag_id: string } }) => {
+      probe.browseCalls.push(arg.browseDocumentsByTagRequest);
+      return { unwrap: () => Promise.resolve({ documents: [], total: 0 }) };
+    },
+  ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
+  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [
+    (arg: { tagCreate: { name: string } }) => {
+      probe.createTagCalls.push(arg.tagCreate);
+      return { unwrap: () => Promise.resolve({ id: `tag-${arg.tagCreate.name.toLowerCase()}` }) };
+    },
+  ],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
 }));
@@ -92,6 +108,8 @@ let root: Root;
 beforeEach(() => {
   probe.drawerProps.length = 0;
   probe.canUpdateResources = true;
+  probe.createTagCalls.length = 0;
+  probe.browseCalls.length = 0;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -223,6 +241,106 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
     const props = lastDrawerProps();
     expect(props.isOpen).toBe(false);
     expect(props.initialFiles).toBeUndefined();
+  });
+});
+
+async function navigateInto(name: string) {
+  await act(async () => {
+    folderToggle(name).click();
+    // flush the entry effect's browse promise so perTag settles inside act
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+describe("DocumentWorkspace full-page drop (one folder per page)", () => {
+  it("rejects loose files dropped at the corpus root — only folders can land there", async () => {
+    await drop(container.firstElementChild as HTMLElement, filesTransfer([new File(["a"], "a.pdf")]));
+
+    expect(lastDrawerProps().isOpen).toBe(false);
+  });
+
+  it("accepts a folder dropped at the corpus root, keeping its structure", async () => {
+    const dir = fakeDirEntry("batch", [
+      fakeFileEntry("/batch/a.pdf", new File(["a"], "a.pdf")),
+      fakeDirEntry("sub", [fakeFileEntry("/batch/sub/b.docx", new File(["b"], "b.docx"))]),
+    ]);
+    await drop(container.firstElementChild as HTMLElement, directoryTransfer(dir));
+
+    const props = lastDrawerProps();
+    expect(props.isOpen).toBe(true);
+    expect(props.destinationPath).toBeUndefined();
+    expect((props.metadata as { tags: string[] }).tags).toEqual([]);
+    expect(typeof props.ensureFolderPath).toBe("function");
+    expect(props.requireFolderPerFile).toBe(true);
+    expect((props.initialFiles as File[]).map((f) => f.name).sort((a, b) => a.localeCompare(b))).toEqual([
+      "a.pdf",
+      "b.docx",
+    ]);
+  });
+
+  it("dropping anywhere inside an open folder opens the drawer targeting that folder", async () => {
+    await navigateInto("CIR");
+    await drop(container.firstElementChild as HTMLElement, filesTransfer([new File(["a"], "a.pdf")]));
+
+    const props = lastDrawerProps();
+    expect(props.isOpen).toBe(true);
+    expect(props.destinationPath).toBe("CIR");
+    expect((props.metadata as { tags: string[] }).tags).toEqual(["tag-cir"]);
+  });
+
+  it("a drop on a subfolder row targets that subfolder, not the page's open folder", async () => {
+    await navigateInto("CIR");
+    await drop(folderToggle("Sub"), filesTransfer([new File(["a"], "a.pdf")]));
+
+    expect(lastDrawerProps().destinationPath).toBe("CIR/Sub");
+  });
+});
+
+describe("DocumentWorkspace folder page reload on entry", () => {
+  it("reloads the folder's document page on every entry, not just the first", async () => {
+    await navigateInto("CIR");
+    const backButton = [...container.querySelectorAll("button")].find((b) =>
+      b.getAttribute("aria-label")?.includes("rework.resources.action.back"),
+    );
+    if (!backButton) throw new Error("back button not rendered");
+    await act(async () => {
+      backButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await navigateInto("CIR");
+
+    // One browse per entry: a folder first opened while its files were still
+    // uploading must not stay frozen on that first empty snapshot.
+    expect(probe.browseCalls.filter((call) => call.tag_id === "tag-cir")).toHaveLength(2);
+  });
+});
+
+describe("DocumentWorkspace nested tag creation (ensureFolderPath)", () => {
+  async function ensureAfterDropOnCir(segments: string[]): Promise<string | null> {
+    await drop(folderToggle("CIR"), filesTransfer([new File(["a"], "a.pdf")]));
+    const ensure = lastDrawerProps().ensureFolderPath as (segments: string[]) => Promise<string | null>;
+    let leaf: string | null = null;
+    await act(async () => {
+      leaf = await ensure(segments);
+    });
+    return leaf;
+  }
+
+  it("creates one document tag per missing level under the drop target and returns the leaf's id", async () => {
+    const leaf = await ensureAfterDropOnCir(["Alpha", "Beta"]);
+
+    expect(probe.createTagCalls).toEqual([
+      { name: "Alpha", path: "CIR", type: "document", team_id: "team-1" },
+      { name: "Beta", path: "CIR/Alpha", type: "document", team_id: "team-1" },
+    ]);
+    expect(leaf).toBe("tag-beta");
+  });
+
+  it("reuses an already-materialized folder instead of re-creating its tag", async () => {
+    const leaf = await ensureAfterDropOnCir(["Sub"]);
+
+    expect(probe.createTagCalls).toEqual([]);
+    expect(leaf).toBe("tag-sub");
   });
 });
 

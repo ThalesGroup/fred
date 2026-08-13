@@ -1924,6 +1924,8 @@ export type CapabilityCatalogEntry = {
   default_capability_ids?: string[];
   model_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
+  model_reasoning_effort?: string | null;
+  model_display_name?: string | null;
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -2291,6 +2293,8 @@ export type ExecutionPreparation = {
   supports_streaming?: boolean;
   supports_hitl?: boolean;
   supports_ui_parts?: boolean;
+  /** Maximum Unicode code points accepted in one submitted chat message, as advertised by the selected runtime pod. Null when an older runtime does not publish the policy. */
+  max_chat_input_chars?: number | null;
   /** Computed chat-time composer controls for this instance (CAPAB-01 #1976, RFC §3.3/§3.7), evaluated per capability on the pod at session prep and flattened in capability-registration then returned-list order. Supersedes the retired `effective_chat_options`: the composer resolves each `widget` id against the owning capability's plugin registry (§9) and silently skips unknown ids. Never persisted — a cache-aside projection of stored config. */
   chat_controls?: ChatControlDescriptor[];
   runtime_display_name?: string | null;

@@ -1,3 +1,69 @@
+**v2.1.34** — 2026-08-13
+
+- **Summary**
+
+  You can now pick a reasoning effort and model identity from a new chat
+  selector, and chat messages have a maximum length with a live counter so
+  you never lose a draft to a silent rejection. Resources gains full-page
+  folder drag-and-drop that mirrors your folder structure as nested tags,
+  and corpus images now get AI-written descriptions. Several ingestion,
+  upload, and session-handling bugs are fixed, including stuck "processing"
+  documents, incorrect delete-confirmation counts, and intermittent freezes
+  during session token refresh.
+
+- **Features**
+
+  - New reasoning selector: choose model identity and toggle reasoning
+    effort on/off, with improved chat selection and copy behavior (#2339)
+  - Chat input now enforces a maximum message length, with a live character
+    counter and your draft preserved if a submission is rejected (#2253)
+  - Resources: drop a folder anywhere on the page to upload into the folder
+    you're viewing, or at the root to create a new library — the folder
+    structure is mirrored as nested tags (#2341)
+  - Corpus documents: images are now described by AI when a vision model is
+    configured, matching the existing chat-attachment behavior (#2311)
+  - Admins can grant an agent a capability to search documents by label
+    across the whole corpus, opt-in and separate from standard document
+    access (#2329)
+
+- **Improvements**
+
+  - Prompt-cache token usage is now visible and billed at a reduced rate in
+    cost estimates (#2312)
+  - The assistant message copy button is now always visible, and copying a
+    message keeps clean formatting instead of leaking background colors
+    when pasted into email clients (#2336, #2342)
+  - Navigation panel styling made consistent between the Home and
+    Marketplace panels (#2316)
+
+- **Bug Fixes**
+
+  - Very large tool results (a generated document, a large search hit)
+    could silently overflow the model's context; the turn now fails with a
+    clear error instead of crashing (#2350, #2352)
+  - Fixed attachment upload progress showing "1000%" and upload errors
+    displaying as "[object Object]" (#2344, #2345)
+  - Stopping an in-progress ingestion now fully erases the half-uploaded
+    document instead of leaving it stuck; Delete is disabled with an
+    explanation while ingestion is running, and finished documents show a
+    brief "Terminé" success badge (#2315, #2322)
+  - The delete-folder confirmation now always shows the correct number of
+    documents about to be deleted, including from subfolders (#2315)
+  - A document stuck showing "processing" after a backend timeout now
+    correctly shows as failed (#2279, #2287)
+  - A corpus folder with many small subfolders could appear completely
+    empty even when it wasn't; fixed (#2329)
+  - Fixed intermittent freezes and stalled turns caused by session-token
+    refresh; signing out now immediately stops using cached credentials
+    (#2125, #2309)
+
+- **Deployment note**
+
+  Database migrations for chat session history are now enforced at
+  startup — a deployment that skipped its migration step will fail fast
+  with a clear message instead of silently drifting out of sync.
+  Already-migrated deployments need no action.
+
 **v2.1.33** — 2026-08-09
 
 - **Summary**

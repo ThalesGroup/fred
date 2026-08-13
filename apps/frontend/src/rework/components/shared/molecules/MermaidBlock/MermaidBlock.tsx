@@ -94,7 +94,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
 
   return (
     <div className={styles.block}>
-      <div className={styles.header}>
+      <div className={styles.header} data-clipboard-ignore>
         <span className={styles.lang}>mermaid</span>
         <div className={styles.actions}>
           {svg !== null && (
@@ -117,7 +117,15 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
         ) : (
           // Safe: SVG is produced by the mermaid library from our own agent
           // content — never from raw user input.
-          <div className={styles.diagram} dangerouslySetInnerHTML={{ __html: svg }} />
+          // data-clipboard-diagram-label: the clipboard serialiser degrades this
+          // whole subtree to a placeholder rather than depending on mermaid's
+          // internal SVG structure (which is a rendering-library detail, not a
+          // stable contract).
+          <div
+            className={styles.diagram}
+            data-clipboard-diagram-label="Mermaid diagram"
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
         )}
       </div>
 

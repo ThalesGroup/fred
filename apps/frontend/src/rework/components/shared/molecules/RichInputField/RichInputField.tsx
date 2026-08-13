@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
@@ -31,6 +31,10 @@ interface RichInputFieldProps {
   disabled?: boolean;
   /** Blocks sending (Enter + send button) while typing stays enabled — e.g. attachments still uploading. */
   sendDisabled?: boolean;
+  /** Code-point count for the exact value the caller will submit. */
+  characterCount?: number;
+  /** Runtime-published code-point limit; omitted for older runtime pods. */
+  characterLimit?: number;
   placeholder?: string;
   /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
   aboveTextSlot?: ReactNode;
@@ -40,6 +44,13 @@ interface RichInputFieldProps {
   leftSlot?: ReactNode;
   /** Rendered to the right of the textarea — replaces the default send/stop buttons. */
   rightSlot?: ReactNode;
+  /**
+   * Rendered inside the right-side slot, just before the send/stop/mic action
+   * group — a compact always-visible control such as the reasoning chip.
+   * Unlike `rightSlot`, it composes with the default actions instead of
+   * replacing them.
+   */
+  rightExtraSlot?: ReactNode;
   /** When true, shows send/stop buttons based on state (ignored if rightSlot is provided). */
   showSendButton?: boolean;
   enableVoiceInput?: boolean;
@@ -73,11 +84,14 @@ export function RichInputField({
   onInterrupt,
   disabled = false,
   sendDisabled = false,
+  characterCount,
+  characterLimit,
   placeholder,
   aboveTextSlot,
   topSlot,
   leftSlot,
   rightSlot,
+  rightExtraSlot,
   showSendButton = false,
   enableVoiceInput = false,
   onTranscribeAudio,
@@ -86,7 +100,8 @@ export function RichInputField({
   maxHeight = 200,
   focusEndRequestId,
 }: RichInputFieldProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const characterInfoId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -183,6 +198,9 @@ export function RichInputField({
   const hasDefaultAction = canUseVoiceInput || showStop || showSend;
   const showBottomRow = !!(topSlot || leftSlot || rightSlot || hasDefaultAction);
   const voiceControlDisabled = disabled || voiceInputDisabled || voiceInputState === "transcribing";
+  const showCharacterInfo = characterLimit !== undefined && characterCount !== undefined;
+  const isOverCharacterLimit = showCharacterInfo && characterCount > characterLimit;
+  const formattedCharacterLimit = characterLimit?.toLocaleString(i18n.language);
 
   const reportVoiceError = useCallback(
     (message: string) => {
@@ -337,6 +355,8 @@ export function RichInputField({
           rows={1}
           disabled={disabled}
           placeholder={placeholder}
+          aria-invalid={isOverCharacterLimit || undefined}
+          aria-describedby={showCharacterInfo ? characterInfoId : undefined}
           onChange={(e) => {
             onChange(e.target.value);
             resize();
@@ -344,12 +364,35 @@ export function RichInputField({
           onKeyDown={handleKeyDown}
         />
 
+        {showCharacterInfo && (
+          <div
+            id={characterInfoId}
+            className={`${styles.characterInfo} ${isOverCharacterLimit ? styles.characterInfoError : ""}`}
+            aria-live="polite"
+          >
+            <span>
+              {isOverCharacterLimit ? t("chatbot.errors.chatInputTooLong", { limit: formattedCharacterLimit }) : null}
+            </span>
+            <span className={styles.characterCount}>
+              {t("chatbot.characterCounter", {
+                count: characterCount,
+                limit: formattedCharacterLimit,
+              })}
+            </span>
+          </div>
+        )}
+
         {showBottomRow && (
           <div className={styles.bottomRow}>
             {leftSlot && <div className={styles.commandSlot}>{leftSlot}</div>}
             {topSlot && <div className={styles.bottomLeft}>{topSlot}</div>}
 
-            {actionSlot && <div className={styles.rightSlot}>{actionSlot}</div>}
+            {(actionSlot || rightExtraSlot) && (
+              <div className={styles.rightSlot}>
+                {rightExtraSlot}
+                {actionSlot}
+              </div>
+            )}
           </div>
         )}
       </div>

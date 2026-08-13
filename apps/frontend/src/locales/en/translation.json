@@ -393,21 +393,27 @@
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
-      "scopeCorpus": "Resources",
-      "scopeCorpusAndWeb": "Model + Resources",
-      "scopeGeneral": "Model",
+      "scopeGeneral": "General knowledge",
+      "scopeCorpus": "Your documents",
+      "scopeCorpusAndWeb": "General knowledge + your documents",
       "scopeRowLabel": "Scope",
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
+      "reasoningOff": "Off",
+      "reasoningOn": "On",
+      "reasoningLow": "Low",
+      "reasoningMedium": "Medium",
+      "reasoningHigh": "High",
+      "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
       "selectLibraryFirst": "Select a library first."
     },
+    "characterCounter": "{{count}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {
-      "tooltip": "Copy message",
-      "success": "Message copied"
+      "tooltip": "Copy message"
     },
     "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",
@@ -419,14 +425,19 @@
       "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again.",
       "attachmentDeleteFailedSummary": "File not deleted",
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
-      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file."
+      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
+      "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
+      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit."
     },
+    "hitlFreeTextLabel": "Your answer",
+    "hitlWaitingAria": "Agent is waiting for your input",
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "sendHitlAnswer": "Send",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -561,6 +572,7 @@
     "downloadStarting": "Getting ready to start downloading...",
     "dropFiles": "Drop your files here",
     "excessSize": "Excess: ",
+    "folderRequired": "Only files inside a folder can be added here — loose files were skipped.",
     "folders": "Folders",
     "ingestionMode": "Ingestion mode",
     "keywords": "Keywords",
@@ -572,6 +584,8 @@
     "makeSearchable": "Make searchable",
     "maxSize": "or click to select (max 200Mb per file)",
     "modifySearch": "Try to modify your search criteria",
+    "nestedFoldersHint_one": "{{count}} subfolder will be created to mirror the dropped folder",
+    "nestedFoldersHint_other": "{{count}} subfolders will be created to mirror the dropped folder",
     "newFilesSize": "Upload Size: ",
     "noDocument": "No document found",
     "noSummary": "No summary available.",
@@ -1529,6 +1543,14 @@
         "author": "Added by"
       },
       "embeddedTitleHint": "Embedded title: {{title}}",
+      "dropInFolder": "Drop your files to add them to \"{{folder}}\"",
+      "dropAtRoot": "Drop a folder to create it here with its structure",
+      "rootDrop": {
+        "rejectedTitle": "Drop a folder",
+        "rejectedDetail": "Loose files can't land at the top level — drop a folder (it becomes a library), or drop the files into an existing folder.",
+        "skippedDetail_one": "{{count}} loose file was skipped — only the dropped folders' content was kept.",
+        "skippedDetail_other": "{{count}} loose files were skipped — only the dropped folders' content was kept."
+      },
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",

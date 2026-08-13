@@ -22,9 +22,15 @@
   background: var(--state-on-surface-hover);
 }
 
-.chip[data-open="true"] {
+.chip[data-open="true"],
+.chip[data-accent="true"] {
   background: var(--state-primary-selected);
   color: var(--primary);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .chip:focus-visible {
@@ -44,6 +50,13 @@
 
 .value {
   line-height: 1;
+}
+
+.description {
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-width: 260px;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .menu {

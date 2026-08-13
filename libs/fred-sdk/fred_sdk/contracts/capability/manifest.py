@@ -391,6 +391,18 @@ class CapabilityCatalogEntry(BaseModel):
     # so the admin row shows no reasoning control at all (an administrator
     # cannot make a model reason). Always empty for kind="tool"/"agent".
     model_thinking_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # The ops-authored `settings.reasoning_effort` of the model's thinking
+    # profile — derived from the settings, the single source of truth (review
+    # 2026-08-12: no separate supported-efforts declaration). Displayed by the
+    # composer's reasoning menu as the level a reasoning turn actually runs
+    # with; None when no thinking profile ships the key. Only `kind="model"`
+    # entries populate it.
+    model_reasoning_effort: str | None = None
+    # The ops-authored `model_display_name` from `models_catalog.yaml` — the
+    # label the composer shows for this model. None = unnamed, and the
+    # frontend derives one from the capability id. Display only; nothing
+    # routes or authorizes on it. Only `kind="model"` entries populate it.
+    model_display_name: str | None = None
 
     @classmethod
     def from_manifest(

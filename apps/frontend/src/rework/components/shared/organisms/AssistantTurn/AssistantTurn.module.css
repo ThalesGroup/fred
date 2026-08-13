@@ -4,6 +4,11 @@
   flex-direction: column;
   gap: var(--spacing-s);
   width: 100%;
+  /* The whole assistant turn (prose, thought trace, source labels) is a
+     reading zone: opt back into selection against the page-wide
+     `user-select: none` chrome default — users must be able to select
+     exactly the fragment they want to copy. */
+  user-select: text;
 }
 
 .traceSummary {
@@ -20,8 +25,4 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
-}
-
-.turn:hover .footer {
-  opacity: 1;
 }

@@ -45,6 +45,33 @@ class ModelReasoningRow(Base):
     __tablename__ = "model_reasoning"
 
     model_capability_id: Mapped[str] = mapped_column(String, primary_key=True)
+    # Display snapshot for the composer menu (the level a reasoning turn runs
+    # with) so the send path never fetches the catalog. Refreshed at the next
+    # admin re-toggle; display-only — the pod always applies the live settings
+    # value. The DB comment below MUST stay byte-identical to migration
+    # c9e1f74b2a63's, or the CI migration-drift check flags a modify_comment.
+    default_effort: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment=(
+            "The model's ops-authored settings.reasoning_effort, "
+            "snapshotted from the catalog entry when reasoning was "
+            "(re-)toggled. NULL = no effort key on the thinking profile."
+        ),
+    )
+    # Second display snapshot on the same lifecycle as `default_effort`: the
+    # model's ops-authored `model_display_name`, so the composer can label the
+    # chip without the send path fetching the catalog. Same
+    # byte-identical-comment rule as above — migration a7d2e9c41f38.
+    display_name: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment=(
+            "The model's ops-authored model_display_name, snapshotted from "
+            "the catalog entry when reasoning was (re-)toggled. NULL = no "
+            "display name authored in models_catalog.yaml."
+        ),
+    )
     reasoning_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

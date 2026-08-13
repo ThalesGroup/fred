@@ -208,19 +208,36 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
-As of REASON-01 (#2166) the same row grammar carries a **boolean** row for the first
-time: the `Reasoning` toggle (`stockKit/ReasoningControl.tsx`) shows On/Off inline in
-muted text like the value rows, but its trailing affordance is a checkbox glyph rather
-than a chevron, and clicking it flips the value in place instead of opening a
-sub-menu. The popover deliberately stays open so a user can flip it and keep
-composing. It is also the first row contributed by the **platform** rather than by a
-capability. It appears only when the agent's author turned Reasoning on in the form's
-Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
-gate removes the row entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
-§33). The offer itself lived in the General section until Amendment C (2026-08-02) moved
-it into the Capabilities tab, rendered through the same `CapabilityCard` component every
-real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
-even though the reasoning offer still isn't a capability underneath.
+As of REASON-01 (#2166) the platform contributed its first non-capability control: a
+`Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
+**gone from the tune menu**: reasoning is now a **plain text button + chevron**
+(`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
+edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
+reference. The button leads with the MODEL IDENTITY (`params.model_id`, the
+single enabled reasoning model — read-only today, the model picker slot once
+multi-model ships, each model carrying its own reasoning mode): "Mistral
+Small · Élevé" when on, "Mistral Small · Désactivé" when off (bare
+"Raisonnement"/level labels when no unambiguous model is served); its menu
+opens above, right-aligned, with the effort/latency explainer as a muted
+header and two check-circle rows: Désactivé, and the ON row labeled with the
+level. The level is the model's own
+ops-authored `settings.reasoning_effort` (single source of truth, served on
+`params.effort`; generic "Activé" when absent) — deliberately NOT a
+low/medium/high picker: a same-day effort picker was withdrawn (providers 400
+on values they don't support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48), so the
+wire stays the on/off tri-state and the pod always applies the live settings
+value.
+The chip renders in primary/selected colors whenever an effort level is active.
+Multi-model is deliberately NOT displayed yet — the model identity arrives as a
+plain profile-id prop so the menu can grow a model section when that feature ships.
+The gating is unchanged: the chip appears only when the agent's author turned
+Reasoning on in the form's Capabilities tab AND a platform admin enabled the model's
+reasoning — a closed upstream gate removes it entirely rather than disabling it
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
+section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
+through the same `CapabilityCard` component every real capability uses (generalized
+to a plain `name`/`description`/`subForm` API for this) even though the reasoning
+offer still isn't a capability underneath.
 
 As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
 constant: the reasoning card grows a second switch nested under `Reasoning` in its own
@@ -233,9 +250,9 @@ agents) so the decision is informed at the point it is made.
 
 #### Open UX issues
 
-- **Boolean-row affordance (REASON-01)** — the checkbox glyph reads correctly but is the
-  only non-chevron trailing icon in the menu. Decide whether boolean rows should instead
-  use a small switch, and whether the On/Off value text is redundant next to it.
+- ~~**Boolean-row affordance (REASON-01)**~~ — resolved 2026-08-12 by removal: the
+  reasoning row left the tune menu for the right-edge on/off picker chip, so the menu
+  carries no boolean row anymore.
 - **Desktop anchor space** — sub-menus open to the right of the row. Validate the behaviour
   close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
 - **Prompts row (PROMPT-05)** — the harmonized menu is shaped to accept a `Prompts` sub-row
@@ -570,6 +587,12 @@ _(none — streaming indicator resolved 2026-05-18)_
 - **Blockquote style** — left-border only, no background. Confirm whether a subtle background tint
   (`--surface-container`) would better distinguish blockquotes from regular text.
 
+- **`sanitizeSchema` drops `<ol start>` and GFM task-list `checked` (#2347)** — `rehype-sanitize`'s
+  `defaultSchema` (extended here) whitelists neither `start` on `<ol>` nor `checked` on
+  `<input type="checkbox">`, so both are stripped before the DOM exists — a renumbered ordered list
+  always renders from 1, and a GFM checklist (`- [x] done`) loses its checked/unchecked state on
+  screen. Not a rendering bug introduced elsewhere; the fix is whitelisting both in this schema.
+
 #### Resolved
 
 - **Streaming previews for open fences (2026-05-28)** — `CodeBlock` now has a streaming mode used
@@ -672,6 +695,33 @@ library:
 - **Page surface** — the chat page background (`ManagedChatPage` `.page`/`.mainColumn`/`.topBar`
   and the composer's fade-to-page gradient) moved from `--surface-container-lowest` to
   `--surface-main`.
+
+---
+
+### Chat input length states (`RichInputField`, `HitlPrompt`, 2026-08-12)
+
+**Location:** `src/rework/components/shared/molecules/RichInputField/`,
+`src/rework/components/shared/molecules/HitlPrompt/`,
+`src/rework/components/pages/ManagedChatPage/`
+
+**Status:** `Functional`
+
+The managed-chat composer and active HITL free-text prompt display the optional
+runtime-published character policy from execution preparation. Both count Unicode code points;
+ordinary chat counts the trimmed value that will be submitted, while HITL counts the exact free
+text.
+
+- At or below the limit, the counter remains informational and send stays available.
+- Above the limit, the input uses `aria-invalid`, the counter/error region announces changes with
+  `aria-live="polite"`, and only the corresponding free-text send action is disabled. Fixed HITL
+  choices remain available because selecting one submits the identifier without the oversized
+  free-text draft; the runtime still validates any submitted `choice_id`, `answer`, and `text`
+  fields.
+- Text remains fully editable: neither component sets native `maxLength`, truncates pasted or
+  dictated content, nor clears an oversized draft. A backend length rejection restores the
+  ordinary draft or pending HITL prompt safely.
+- During a rolling upgrade, an older runtime may omit the policy. In that state no counter is
+  shown and the runtime remains the authoritative enforcement boundary.
 
 ---
 
@@ -883,6 +933,11 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 - **`max-width: 75%`** on `AssistantTurn` — validates alignment with the `MessageBubble` assistant
   variant. Confirm both are visually consistent across viewport widths.
 
+- **Multi-turn selection copy (#2346)** — a manual selection contained inside one reply gets the
+  clean clipboard serialisation described below; one that spans multiple assistant replies (or
+  includes chrome between them — `ActionBar`, source cards, `ThoughtTrace`) falls back to the
+  browser's native copy, which reintroduces the theme-background leak this feature exists to fix.
+
 #### Resolved
 
 - **Props changed (2026-04-27)** — `finalMessages: ChatMessage[]` replaced by `text: string`.
@@ -890,6 +945,21 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 
 - **Artifact download links (2026-06-22, FILES-04)** — `AssistantTurn` now renders `ArtifactLinks`
   below the reply when the agent emits `LinkPart` ui_parts.
+
+- **Copy response — always visible, email-safe clipboard (2026-08-12, #2336)** — the per-message
+  copy action (`ActionBar`, `alwaysVisible`) was hover-only and easy to miss; it's now shown
+  permanently and gives a transient "Copied" confirmation. Both the button and a manual text
+  selection inside a reply write clipboard content built by `rework/utils/clipboardUtils.ts`
+  instead of relying on the browser's default copy, which inlined the message surface's computed
+  `background-color` into the pasted `text/html` — a pink or near-black highlight depending on
+  theme. The serialiser emits email-safe HTML (inline `pt`-sized styles, no color/background/font
+  overrides, so pasted text inherits the destination document's own typography — targets Outlook's
+  Word rendering engine) alongside plain text. Mermaid/MindMap diagrams and KaTeX formulas degrade
+  to a `[diagram: <label>]` / `[formula]` placeholder rather than leaking rendering chrome (button
+  labels, breadcrumbs) or garbled glyph text — KaTeX runs with `output: "html"` here, so no
+  TeX-source annotation exists in the DOM to recover the original formula from. Fixing that would
+  mean switching to `output: "htmlAndMathml"` and whitelisting MathML in `sanitizeSchema` below —
+  not yet tracked as its own issue. Known limitation: see multi-turn selection above (#2346).
 
 ---
 
@@ -2574,23 +2644,41 @@ server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
 
-### `DocumentWorkspace` — drag-and-drop onto folder rows
+### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
-Dropping OS files anywhere on a corpus folder's subtree — its row or, when
-expanded, its document rows/hints — opens the ingestion drawer
-(`DocumentUploadDrawer`) pre-seeded with the dropped files and targeting that
-folder (innermost tagged folder wins when subtrees nest), so the user only
-picks mode/profile (fast/medium/rich) and saves. A dropped directory is
-expanded into all its files, recursively and flat — same `file-selector`
-traversal as the drawer's own dropzone, which already accepted folders.
-Folder-originated files upload under their leaf name: browsers put the
-relative path in the multipart filename (this surfaced as one opaque
-"Upload failed: 404" per file, found live 2026-07-23), now pinned frontend-side
-and sanitized backend-side (`upload_basename`). The
-targeted row shows the drawer dropzone's affordance (dashed `--primary`
-outline + 6% tint) while hovered with files. Same `canUpdateResources` gate as
-the row's explicit upload action; rows without a tag (pure path prefixes) are
-not drop targets.
+Three drop surfaces, all behind the same `canUpdateResources` gate as the
+explicit upload action, all opening the ingestion drawer
+(`DocumentUploadDrawer`) pre-seeded with the dropped files so the user only
+picks mode/profile (fast/medium/rich) and saves:
+
+- **Folder row** (since 2026-07-23): targets that folder; the row shows the
+  drawer dropzone's affordance (dashed `--primary` outline + 6% tint) while
+  hovered with files, and its drop wins over the page surface below
+  (`stopPropagation`).
+- **Full page of an open folder**: the drill-down model shows one folder at a
+  time, so dropping anywhere on the page reads as "add to this folder" — an
+  overlay names the destination while a file drag hovers.
+- **Corpus root**: only dropped FOLDERS are accepted — each becomes a library
+  mirroring its structure (see below). Loose files are rejected with an error
+  toast (they have no tag to land in and would upload invisible); a mixed
+  drop keeps the folders' content and warns about the skipped loose files.
+
+A dropped directory keeps its on-disk structure: each subdirectory becomes a
+nested document tag (created exactly like `CreateFolderModal` would, existing
+levels reused), and every file uploads under its own subdirectory's tag
+instead of being flattened into the drop target. The drawer lists files under
+their relative path and announces how many subfolders the save will create; a
+failed/forbidden tag creation aborts the save before any upload starts.
+Folder-originated files still upload under their leaf name: browsers put the
+relative path in the multipart filename (one opaque "Upload failed: 404" per
+file, found live 2026-07-23), pinned frontend-side and sanitized backend-side
+(`upload_basename`).
+
+Status refresh: a folder's document page reloads on every entry (not just the
+first), and while any ingestion is live the 3s status poll also covers the
+folder being viewed — a subfolder opened before its files' uploads (or fresh
+ReBAC tuples) landed used to freeze forever on its first empty snapshot,
+hiding the live "processing" rows (found live 2026-08-12).
 
 ### `DocumentWorkspace` — embedded-title hint on the Name column
 

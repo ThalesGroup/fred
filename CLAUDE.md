@@ -195,6 +195,20 @@ client/cache, or anything else that runs per-turn or per-request under
 concurrent load, also run the `fred-performance-reviewer` skill before
 reporting done.
 
+**Self-review is not enough for non-trivial logic changes.** Before reporting
+done, run `/code-review` on your own diff — default effort at minimum, higher
+for anything touching correctness-sensitive shared code. Tests you write from
+the same reasoning pass that wrote the code confirm your own assumptions
+instead of falsifying them; an agent checking its own work shares whatever
+blind spot produced the bug in the first place. (2026-08-13: a same-day
+ReAct size-budget fix — issue #2350, PR #2352 — passed its own tests,
+`make code-quality`, and a `fred-performance-reviewer` pass, then shipped
+with three P1 correctness bugs that an independent reviewer bot caught on
+first read of the cold diff — each one a case not covered by the tests
+written alongside the code they were breaking.) Do not skip this under time
+pressure — that is exactly when a design's blind spots survive to
+production instead of being caught same-session.
+
 **Step 6 — Doc update checklist.**
 
 | What changed                                                      | File to update                                                                           |
