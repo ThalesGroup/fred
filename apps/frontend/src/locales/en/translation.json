@@ -617,6 +617,10 @@
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
     "supportedFormats": "Supported files: PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "tooDeepRejected": "Nothing was added: the dropped folder would nest files deeper than {{max}} folder levels.",
+    "tooDeepSkipped_one": "{{count}} file was skipped: it would end up nested deeper than {{max}} folder levels.",
+    "tooDeepSkipped_other": "{{count}} files were skipped: they would end up nested deeper than {{max}} folder levels.",
+    "tooDeepTitle": "Folder too deep",
     "uploadAndProcess": "Upload & process",
     "uploadDestination": "Files will be added to",
     "uploadDrawerTitle": "Upload a document",
@@ -1609,7 +1613,9 @@
         "inFolder": "In",
         "nameLabel": "Name",
         "namePlaceholder": "e.g. Reports 2026",
-        "title": "New folder"
+        "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
+        "title": "New folder",
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
       },
       "renameModal": {
         "title": "Rename",

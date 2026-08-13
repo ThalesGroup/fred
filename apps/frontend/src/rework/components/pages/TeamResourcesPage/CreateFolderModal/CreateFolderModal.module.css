@@ -68,6 +68,12 @@
   font-family: monospace;
 }
 
+.inlineError {
+  margin: var(--spacing-3xs) 0 0;
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
