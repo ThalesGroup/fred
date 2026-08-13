@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { toEmailHtml, toPlainText, writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
 import { UiParts } from "@shared/molecules/UiParts/UiParts";
@@ -57,9 +58,8 @@ export const AssistantTurn = memo(function AssistantTurn({
   const { t } = useTranslation();
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, confirmCopied } = useCopyConfirmation();
   const contentRef = useRef<HTMLDivElement>(null);
-  const revertTimer = useRef<number | null>(null);
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
@@ -71,22 +71,6 @@ export const AssistantTurn = memo(function AssistantTurn({
     if (!source) return;
     setSelected({ source, index: activeSourceIndex });
   }, [activeSourceIndex, sources]);
-
-  // Kept identical to UserTurn's (#2359): cancel a pending revert before
-  // arming the next, so a second click inside the 2s window is not cut short
-  // by the first click's timer, and drop it on unmount.
-  const confirmCopied = useCallback(() => {
-    setCopied(true);
-    if (revertTimer.current !== null) window.clearTimeout(revertTimer.current);
-    revertTimer.current = window.setTimeout(() => setCopied(false), 2000);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (revertTimer.current !== null) window.clearTimeout(revertTimer.current);
-    },
-    [],
-  );
 
   const copyAction = useCallback(() => {
     // Copy from the rendered markdown, not the raw `text` prop, so the
