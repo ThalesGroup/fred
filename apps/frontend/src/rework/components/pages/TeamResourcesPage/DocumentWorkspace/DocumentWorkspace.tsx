@@ -59,7 +59,7 @@ import {
 } from "../../../../../shared/utils/tagTree.ts";
 import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
-import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
+import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { downloadManyAsZip } from "../../../../../utils/downloadUtils.tsx";
@@ -364,7 +364,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // tuples still propagating server-side) would otherwise stay frozen on that
   // first empty snapshot forever — none of the other refresh paths retries a
   // page that doesn't yet SHOW the document (the 3s poll needs a visible
-  // processing row, useRefetchOnTaskSuccess needs the doc already in the page,
+  // processing row, useRefetchOnTaskSettled needs the doc already in the page,
   // useNotifyOnNewTaskTarget fires before this page exists). loadTagPage keeps
   // the previous rows while reloading, so re-entering an already-loaded folder
   // refreshes without a flash of empty.
@@ -453,15 +453,20 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     setPreviewView("file");
   }, [commands.previewTarget?.documentUid]);
 
-  // When an ingestion task finishes, the browse snapshot that backs its row is
+  // When an ingestion task settles, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
   // just the loaded folder page(s) showing that document so its status goes live.
-  // Also the moment the storage quota is finally charged: ingestion saves the
-  // metadata (and its file size) at the end of the workflow, so the earlier
-  // refetchTags() at task registration ran while the document still weighed
-  // nothing. Without this second notification the parent's quota meter stays
-  // behind by exactly the document that just landed.
-  useRefetchOnTaskSuccess("document", (documentUid) => {
+  // Also the moment the storage quota moves, in both directions:
+  //   - success: ingestion saves the metadata (and its file size) at the end of
+  //     the workflow, so the earlier refetchTags() at task registration ran
+  //     while the document still weighed nothing;
+  //   - cancel: the backend erases the half-built document and gives its quota
+  //     back (`delete_cancelled_document`), seconds after the cancel request
+  //     returned — far too late for confirmStopIngestion to refetch anything
+  //     itself, which is why it deliberately does not try.
+  // Without this notification the quota meter stays behind by exactly the
+  // document that just landed, or the one that was just erased.
+  useRefetchOnTaskSettled("document", (documentUid) => {
     onDocumentsChanged?.();
     for (const [tagId, page] of Object.entries(perTag)) {
       if (page.docs.some((doc) => doc.identity.document_uid === documentUid)) {
@@ -471,7 +476,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   });
 
   // A brand-new document (just registered by the upload drawer) has no row
-  // anywhere yet, so `useRefetchOnTaskSuccess` above can never trigger its first
+  // anywhere yet, so `useRefetchOnTaskSettled` above can never trigger its first
   // refetch — its check requires the document to already be in a loaded page.
   // Fire on first sighting of the task instead (any state, not just succeeded).
   useNotifyOnNewTaskTarget("document", () => {

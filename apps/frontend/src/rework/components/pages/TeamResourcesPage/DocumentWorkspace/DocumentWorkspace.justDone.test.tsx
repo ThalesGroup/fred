@@ -80,7 +80,7 @@ vi.mock("../../../../features/tasks/taskSlice", () => ({
   // One ingestion finished during this session, targeting uid-done.
   selectAllTasks: () => [{ id: "task-1", state: "succeeded", target: { type: "document", id: "uid-done" } }],
 }));
-vi.mock("../../../../features/tasks/useRefetchOnTaskSuccess", () => ({ useRefetchOnTaskSuccess: () => {} }));
+vi.mock("../../../../features/tasks/useRefetchOnTaskSettled", () => ({ useRefetchOnTaskSettled: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
   useDocumentCommands: () => ({

@@ -212,27 +212,37 @@ export const selectActiveTaskForTarget =
       (vm) => vm.state !== "succeeded" && vm.target?.type === type && vm.target?.id === id,
     );
 
-/** A task that reached `succeeded`, paired with the id of the entity it acted on. */
-export interface SucceededTarget {
+/** A task that settled on an outcome which changed its entity, paired with that entity's id. */
+export interface SettledTarget {
   taskId: string;
   targetId: string;
 }
 
 /**
- * All succeeded tasks of a given target type, each with its target id.
+ * All tasks of a given target type that settled on an outcome which changed the
+ * entity they acted on — `succeeded` or `cancelled` — each with its target id.
  *
- * Backs `useRefetchOnTaskSuccess`: a row/list derives its status from a cached
+ * Backs `useRefetchOnTaskSettled`: a row/list derives its status from a cached
  * copy of the underlying entity, which goes stale the instant its task finishes
  * (`selectActiveTaskForTarget` drops succeeded tasks, so the row falls back to the
  * pre-completion snapshot). Consumers watch this selector to refetch the affected
  * entity on completion — the shared mechanism ingestion and erasure both use.
  *
+ * `cancelled` counts because a cancelled ingestion does not merely stop: the
+ * backend erases the half-built document — content, vectors, metadata row and
+ * its storage quota (`delete_cancelled_document`, #2315). The entity the caller
+ * cached is gone, so it needs the same refresh a success gets. `failed` is
+ * deliberately excluded: the document survives, and its row keeps rendering
+ * from the retained task rather than from a refetched snapshot.
+ *
  * Factory (one memoized selector per `type`); memoize the call with `useMemo`.
  */
-export const makeSelectSucceededTargetsOfType = (type: string) =>
-  createSelector(selectById, (byId): SucceededTarget[] =>
+export const makeSelectSettledTargetsOfType = (type: string) =>
+  createSelector(selectById, (byId): SettledTarget[] =>
     Object.values(byId)
-      .filter((vm) => vm.state === "succeeded" && vm.target?.type === type && !!vm.target?.id)
+      .filter(
+        (vm) => (vm.state === "succeeded" || vm.state === "cancelled") && vm.target?.type === type && !!vm.target?.id,
+      )
       .map((vm) => ({ taskId: vm.taskId, targetId: vm.target!.id })),
   );
 
@@ -243,7 +253,7 @@ export const makeSelectSucceededTargetsOfType = (type: string) =>
  * (document folders today, others later) uses this to notice a target it has
  * never seen before — typically a document that was just uploaded and has no
  * row yet — and refetch, instead of waiting for that task to reach `succeeded`
- * (which `makeSelectSucceededTargetsOfType` requires and a brand-new row never
+ * (which `makeSelectSettledTargetsOfType` requires and a brand-new row never
  * satisfies, since it never existed pre-task to refresh in place).
  *
  * Factory (one memoized selector per `type`); memoize the call with `useMemo`.

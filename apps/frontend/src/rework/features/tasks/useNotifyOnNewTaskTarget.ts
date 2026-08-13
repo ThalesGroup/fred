@@ -20,11 +20,11 @@ import { makeSelectTaskTargetsOfType } from "./taskSlice";
  * Run `onNewTarget(targetId)` exactly once, the first time a task of `targetType`
  * appears in the store for a target this hook instance has not seen before.
  *
- * Why this exists — sibling to `useRefetchOnTaskSuccess`, but for the opposite
+ * Why this exists — sibling to `useRefetchOnTaskSettled`, but for the opposite
  * edge of a task's lifecycle. That hook lets a row already on screen refresh
  * itself once its task *succeeds*. This hook is for the entity that does not
  * exist on screen *yet*: a document just registered by the upload drawer has no
- * row anywhere until its owning list refetches — and `useRefetchOnTaskSuccess`
+ * row anywhere until its owning list refetches — and `useRefetchOnTaskSettled`
  * can never trigger that first refetch, because its `succeeded`-only check
  * requires the target to already be in the loaded page. Firing on first
  * sighting (any state, including `pending`) instead of on success means the
