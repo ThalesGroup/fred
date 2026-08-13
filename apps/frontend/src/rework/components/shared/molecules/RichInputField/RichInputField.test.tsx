@@ -17,14 +17,18 @@ import { describe, expect, it, vi } from "vitest";
 import { RichInputField } from "./RichInputField";
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) =>
+      values ? `${key}:${values.count ?? ""}:${values.limit ?? ""}` : key,
+    i18n: { language: "en" },
+  }),
 }));
 
 function sendButtonOpeningTag(html: string): string {
   return html.match(/<button[^>]*aria-label="chatbot\.sendMessage"[^>]*>/)?.[0] ?? "";
 }
 
-function render(props: { sendDisabled?: boolean }): string {
+function render(props: { sendDisabled?: boolean; characterCount?: number; characterLimit?: number }): string {
   return renderToStaticMarkup(
     <RichInputField value="hello" onChange={() => undefined} onSend={() => undefined} showSendButton {...props} />,
   );
@@ -41,5 +45,23 @@ describe("RichInputField send gating", () => {
     const tag = sendButtonOpeningTag(render({ sendDisabled: true }));
     expect(tag).not.toBe("");
     expect(tag).toContain("disabled");
+  });
+
+  it("renders an accessible counter without a native maxLength at the exact limit", () => {
+    const html = render({ characterCount: 5, characterLimit: 5 });
+
+    expect(html).toContain("chatbot.characterCounter:5:5");
+    expect(html).not.toContain("chatbot.errors.chatInputTooLong");
+    expect(html).not.toContain("maxLength=");
+    expect(html).not.toContain('aria-invalid="true"');
+  });
+
+  it("marks an over-limit draft invalid and keeps the full textarea value", () => {
+    const html = render({ characterCount: 6, characterLimit: 5, sendDisabled: true });
+
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain("chatbot.errors.chatInputTooLong::5");
+    expect(html).toContain(">hello</textarea>");
+    expect(sendButtonOpeningTag(html)).toContain("disabled");
   });
 });

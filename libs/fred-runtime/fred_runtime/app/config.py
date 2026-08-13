@@ -120,6 +120,14 @@ class PodAppConfig(BaseModel):
             "limit."
         ),
     )
+    max_chat_input_chars: int = Field(
+        default=5_000,
+        ge=1,
+        description=(
+            "Maximum number of Unicode code points accepted in one submitted "
+            "chat message, including supported HITL resume text fields."
+        ),
+    )
     gcu_version: str | None = None
     openai_compat: bool = False
     """

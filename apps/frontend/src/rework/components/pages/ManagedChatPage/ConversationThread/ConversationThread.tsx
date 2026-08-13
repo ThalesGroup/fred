@@ -34,6 +34,9 @@ interface ConversationThreadProps {
   emptyState?: ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement>;
   onHitlAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
+  maxChatInputChars?: number;
+  hitlFreeText: string;
+  onHitlFreeTextChange: (value: string) => void;
 }
 
 // Memoized: ManagedChatPage re-renders on every composer keystroke (the input
@@ -48,6 +51,9 @@ export const ConversationThread = memo(function ConversationThread({
   emptyState,
   scrollContainerRef,
   onHitlAnswer,
+  maxChatInputChars,
+  hitlFreeText,
+  onHitlFreeTextChange,
 }: ConversationThreadProps) {
   const { t } = useTranslation();
   useAssistantCopyInterception(scrollContainerRef);
@@ -98,7 +104,15 @@ export const ConversationThread = memo(function ConversationThread({
           />
         );
       })}
-      {pendingHitl && <HitlPrompt event={pendingHitl} onAnswer={onHitlAnswer} />}
+      {pendingHitl && (
+        <HitlPrompt
+          event={pendingHitl}
+          onAnswer={onHitlAnswer}
+          maxChatInputChars={maxChatInputChars}
+          freeTextValue={hitlFreeText}
+          onFreeTextChange={onHitlFreeTextChange}
+        />
+      )}
     </ChatMessagesArea>
   );
 });

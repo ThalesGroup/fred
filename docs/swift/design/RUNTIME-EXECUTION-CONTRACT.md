@@ -2966,7 +2966,49 @@ Each was verified to fail against its pre-change implementation.
 
 ---
 
-### 8.52 ✅ ReAct model-input size budget, in addition to the message-count trim — TURN-04 partial (#2350, 2026-08-13)
+### 8.52 ✅ Deployment-scoped chat-input length limit — issue #2253 (2026-08-12)
+
+One submitted chat message is bounded by the runtime-pod startup policy
+`app.max_chat_input_chars` (default `5000`, positive integer). The unit is a
+Unicode code point: Python uses `len(text)`, while managed chat iterates the
+string by code point without materializing a second array. This is deliberately
+a character policy, not a model-token, conversation-history, request-byte, or
+context-window budget.
+
+The runtime is authoritative and validates before exchange lookup, target
+resolution, history persistence, stream construction, or agent execution on
+`POST /agents/execute`, `/agents/execute/stream`, and `/agents/evaluate`.
+Ordinary turns count `RuntimeExecuteRequest.input`. HITL resumes count a bare
+string, or the combined string values of canonical `choice_id`, `answer`, and
+`text` fields; arbitrary JSON keys are not traversed. The OpenAI-compatible
+route applies the same code-point limit to the last user message Fred forwards.
+
+Fred-native rejection is HTTP 422 with `detail.code =
+"chat_input_too_long"`, `message`, `limit_chars`, and `actual_chars`.
+OpenAI compatibility returns HTTP 400 with the corresponding
+`invalid_request_error`, `param = "messages"`, and the same stable code/counts.
+Neither response, logs, metrics, nor traces may include the rejected content.
+A static Pydantic `max_length` is not used because the value is deployment
+policy, HITL is field-aware, and FastAPI's default validation response can echo
+the offending input.
+
+The effective pod-scoped value is mirrored on every `/agents/templates` item,
+following the existing pod-metadata publication pattern. Managed chat receives
+that optional projection through execution preparation, displays a counter,
+blocks an oversized draft without truncation or native `maxLength`, and relies
+on backend enforcement when an older runtime does not yet publish the field.
+During a rolling deployment, replicas configured with different limits may
+temporarily advertise and enforce different values: execution preparation can
+project one replica's value while the browser's execution request reaches
+another. The displayed limit is therefore advisory; the receiving runtime
+remains authoritative, returns its own `limit_chars` on rejection, and managed
+chat adopts that returned limit for subsequent validation.
+This semantic handler check occurs after HTTP body parsing; whole-request byte
+limits and HTTP 413 remain outside issue #2253.
+
+---
+
+### 8.53 ✅ ReAct model-input size budget, in addition to the message-count trim — TURN-04 partial (#2350, 2026-08-13)
 
 **ReAct-only slice of TURN-04's "turn resource bounds" finding** (full finding
 still open for Deep and Graph, and for persisted-checkpoint compaction — see

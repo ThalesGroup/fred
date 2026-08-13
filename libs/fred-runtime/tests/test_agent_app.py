@@ -27,6 +27,7 @@ import json
 import logging
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -244,6 +245,7 @@ def _build_test_config(
     control_plane_url: str | None = None,
     metrics_backend: str = "logging",
     kpi_process_metrics_interval_sec: int = 0,
+    max_chat_input_chars: int = 5_000,
 ) -> AgentPodConfig:
     """
     Build an offline pod config for the authored-tool regression test.
@@ -270,6 +272,7 @@ def _build_test_config(
                 # OpenAI-compat is opt-in (off by default, RUNTIME-07 F-A); the
                 # broad app test below asserts the /v1 surface, so enable it here.
                 "openai_compat": True,
+                "max_chat_input_chars": max_chat_input_chars,
             },
             "security": {
                 "m2m": {
@@ -453,7 +456,7 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
     app = create_agent_app(
         registry=registry,
-        config=_build_test_config(tmp_path),
+        config=_build_test_config(tmp_path, max_chat_input_chars=37),
     )
 
     with TestClient(app) as client:
@@ -469,6 +472,14 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
         assert (
             templates_response.json()[0]["default_tuning"]["role"] == "Echo tool agent"
         )
+        assert templates_response.json()[0]["max_chat_input_chars"] == 37
+
+        configured_limit_response = client.post(
+            "/pod/v1/agents/execute",
+            json={"agent_id": "unknown", "input": "x" * 38},
+        )
+        assert configured_limit_response.status_code == 422
+        assert configured_limit_response.json()["detail"]["limit_chars"] == 37
 
         openapi_response = client.get("/pod/v1/openapi.json")
         assert openapi_response.status_code == 200
@@ -535,6 +546,97 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
     assert any(payload.get("kind") == "tool_result" for payload in payloads)
     assert payloads[-1]["kind"] == "final"
     assert payloads[-1]["content"] == "Echo complete."
+
+
+@pytest.mark.parametrize(
+    "text_factory",
+    [
+        pytest.param(lambda size: "a" * size, id="ascii"),
+        pytest.param(lambda size: "界" * size, id="cjk"),
+        pytest.param(lambda size: "🙂" * size, id="emoji"),
+    ],
+)
+def test_native_execution_routes_enforce_chat_input_limit_before_runtime_work(
+    monkeypatch, tmp_path, text_factory
+) -> None:
+    """All native entry points share the 4,999/5,000/5,001 boundary."""
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    limit = 5_000
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    routes = (
+        "/pod/v1/agents/execute",
+        "/pod/v1/agents/execute/stream",
+        "/pod/v1/agents/evaluate",
+    )
+
+    with TestClient(app) as client:
+        for route in routes:
+            for size in (limit - 1, limit):
+                response = client.post(
+                    route,
+                    json={"agent_id": "unknown", "input": text_factory(size)},
+                )
+                assert response.status_code == 404
+
+        exchange_lookup = AsyncMock()
+        target_resolution = AsyncMock()
+        history_write = AsyncMock()
+        stream_construction = MagicMock()
+        event_iteration = MagicMock()
+        monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_lookup)
+        monkeypatch.setattr(
+            agent_app_module, "_authorize_and_resolve", target_resolution
+        )
+        monkeypatch.setattr(agent_app_module, "_write_turn_history", history_write)
+        monkeypatch.setattr(agent_app_module, "_stream", stream_construction)
+        monkeypatch.setattr(
+            agent_app_module, "_iterate_runtime_event_payloads", event_iteration
+        )
+
+        rejected_text = text_factory(limit + 1)
+        for route in routes:
+            response = client.post(
+                route,
+                json={"agent_id": "unknown", "input": rejected_text},
+            )
+            assert response.status_code == 422
+            assert response.json() == {
+                "detail": {
+                    "code": "chat_input_too_long",
+                    "message": "Your message exceeds the 5,000-character limit.",
+                    "limit_chars": limit,
+                    "actual_chars": limit + 1,
+                }
+            }
+            assert rejected_text not in response.text
+
+        for route in routes:
+            response = client.post(
+                route,
+                json={
+                    "agent_id": "unknown",
+                    "resume_payload": {
+                        "choice_id": text_factory(2_000),
+                        "answer": text_factory(2_000),
+                        "text": text_factory(1_001),
+                        "ignored": text_factory(limit + 1),
+                    },
+                },
+            )
+            assert response.status_code == 422
+            assert response.json()["detail"]["actual_chars"] == limit + 1
+
+    exchange_lookup.assert_not_awaited()
+    target_resolution.assert_not_awaited()
+    history_write.assert_not_awaited()
+    stream_construction.assert_not_called()
+    event_iteration.assert_not_called()
 
 
 def test_delete_checkpoint_thread_returns_deleted_count(monkeypatch, tmp_path) -> None:
@@ -4674,7 +4776,9 @@ async def test_caller_can_manage_platform_false_when_no_caller(monkeypatch) -> N
 def _get_kpi_turns_endpoint():
     """Grab the `/kpi-turns` route's raw endpoint function, bypassing FastAPI's
     dependency-injection layer so it can be called directly with explicit args."""
-    router = agent_app_module._build_agent_router(registry={}, security_enabled=True)
+    router = agent_app_module._build_agent_router(
+        registry={}, security_enabled=True, max_chat_input_chars=5_000
+    )
     return next(
         route.endpoint
         for route in router.routes

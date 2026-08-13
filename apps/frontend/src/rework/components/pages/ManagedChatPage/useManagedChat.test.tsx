@@ -86,7 +86,7 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // a fresh `vi.fn()` per render would make those deps look "changed" every
 // render, re-firing the sessionId-change reset effect forever (observed as
 // an OOM from an actual infinite render loop while writing this test).
-const sendMock = vi.fn(async () => {});
+const sendMock = vi.fn(async (..._args: unknown[]) => {});
 const prepareChatControlsMock = vi.fn(async () => ({}));
 const chatSseResetMock = vi.fn();
 // Default: the resume reached the backend. `useManagedChat` calls `.then()` on
@@ -100,25 +100,33 @@ const replaceAllMessagesMock = vi.fn();
 // Mutable so the #2239 departure-snapshot test below can put a displayed
 // thread on screen; reset to [] in beforeEach.
 let chatSseMessages: unknown[] = [];
+let chatSseMaxChatInputChars: number | undefined;
 let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
 let capturedOnTurnStarted: (() => void) | undefined;
+let capturedOnTurnRejected: ((draft: string, sessionId: string) => void) | undefined;
+let capturedIsTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let capturedOnError: ((msg: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     flushPendingWrites?: (sid: string | null) => Promise<boolean>;
     onTurnStarted?: () => void;
+    onTurnRejected?: (draft: string, sessionId: string) => void;
+    isTurnCurrent?: (sessionId: string) => boolean;
     onError?: (msg: string) => void;
     onAwaitingHuman?: (event: unknown) => void;
   }) => {
     capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
+    capturedOnTurnRejected = params.onTurnRejected;
+    capturedIsTurnCurrent = params.isTurnCurrent;
     capturedOnError = params.onError;
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     return {
       messages: chatSseMessages,
       waitResponse: false,
       chatControls: [],
+      maxChatInputChars: chatSseMaxChatInputChars,
       prepareChatControls: prepareChatControlsMock,
       send: sendMock,
       sendHitlResume: sendHitlResumeMock,
@@ -275,6 +283,7 @@ describe("useManagedChat — session write reliability", () => {
   beforeEach(() => {
     clearSessionHistoryCache();
     chatSseMessages = [];
+    chatSseMaxChatInputChars = undefined;
     registerSessionImpl = async () => ({});
     patchSessionImpl = async () => ({});
     registerSessionCalls.length = 0;
@@ -312,6 +321,8 @@ describe("useManagedChat — session write reliability", () => {
     // lets an assertion pass against a component that is already unmounted.
     capturedFlushPendingWrites = undefined;
     capturedOnTurnStarted = undefined;
+    capturedOnTurnRejected = undefined;
+    capturedIsTurnCurrent = undefined;
     capturedOnError = undefined;
     capturedOnAwaitingHuman = undefined;
   });
@@ -354,6 +365,69 @@ describe("useManagedChat — session write reliability", () => {
     expect(capturedOnAwaitingHuman).toBe(firstOnAwaitingHuman);
     expect(capturedOnTurnStarted).toBe(firstOnTurnStarted);
     expect(latest.handleHitlAnswer).toBe(firstHandleHitlAnswer);
+  });
+
+  it("counts trimmed Unicode code points and blocks an over-limit draft without clearing it", async () => {
+    chatSseMaxChatInputChars = 5;
+    mount();
+
+    act(() => {
+      latest.setInput("  🙂🙂🙂🙂🙂🙂  ");
+    });
+    rerender();
+
+    expect(latest.inputCharacterCount).toBe(6);
+    expect(latest.inputTooLong).toBe(true);
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(registerSessionCalls).toHaveLength(0);
+    expect(latest.input).toBe("  🙂🙂🙂🙂🙂🙂  ");
+  });
+
+  it("accepts an exact-limit Unicode draft", async () => {
+    chatSseMaxChatInputChars = 5;
+    mount();
+
+    act(() => {
+      latest.setInput("🙂🙂🙂🙂🙂");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect(latest.inputTooLong).toBe(false);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores the complete ordinary draft after a backend length rejection", async () => {
+    mount();
+    const draft = "  full draft 🙂  ";
+
+    act(() => {
+      latest.setInput(draft);
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    act(() => capturedOnTurnStarted?.());
+    rerender();
+    expect(latest.input).toBe("");
+
+    const sentSessionId = sendMock.mock.calls[0][1] as string;
+    expect(capturedIsTurnCurrent?.(sentSessionId)).toBe(true);
+    expect(capturedIsTurnCurrent?.("another-session")).toBe(false);
+    act(() => capturedOnTurnRejected?.(draft.trim(), "another-session"));
+    rerender();
+    expect(latest.input).toBe("");
+
+    act(() => capturedOnTurnRejected?.(draft.trim(), sentSessionId));
+    rerender();
+    expect(latest.input).toBe(draft);
   });
 
   it("selecting a context prompt persists it and a send proceeds", async () => {
@@ -1172,6 +1246,59 @@ describe("useManagedChat — session write reliability", () => {
     rerender();
   };
 
+  it("blocks over-limit HITL free text locally while leaving fixed choices available", async () => {
+    chatSseMaxChatInputChars = 5;
+    mount();
+    bindSession("session-1");
+    const freeTextEvent = {
+      ...awaitingHumanEvent,
+      payload: {
+        ...awaitingHumanEvent.payload,
+        free_text: true,
+        choices: [{ id: "proceed", label: "Proceed" }],
+      },
+    };
+
+    act(() => {
+      capturedOnAwaitingHuman?.(freeTextEvent);
+      latest.setHitlFreeText("🙂🙂🙂🙂🙂🙂");
+    });
+    rerender();
+    act(() => latest.handleHitlAnswer(undefined, latest.hitlFreeText));
+
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    expect(latest.pendingHitl).toEqual(freeTextEvent);
+    expect(latest.hitlFreeText).toBe("🙂🙂🙂🙂🙂🙂");
+
+    await act(async () => {
+      latest.handleHitlAnswer("proceed");
+    });
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, "proceed", undefined);
+  });
+
+  it("accepts HITL free text at the exact configured code-point limit", async () => {
+    chatSseMaxChatInputChars = 5;
+    sendHitlResumeMock.mockResolvedValueOnce(true);
+    mount();
+    bindSession("session-1");
+    const freeTextEvent = {
+      ...awaitingHumanEvent,
+      payload: { ...awaitingHumanEvent.payload, free_text: true },
+    };
+
+    act(() => {
+      capturedOnAwaitingHuman?.(freeTextEvent);
+      latest.setHitlFreeText("🙂🙂🙂🙂🙂");
+    });
+    rerender();
+    await act(async () => {
+      latest.handleHitlAnswer(undefined, latest.hitlFreeText);
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, undefined, "🙂🙂🙂🙂🙂");
+  });
+
   it("restores the HITL prompt when the resume never reached the backend", async () => {
     sendHitlResumeMock.mockResolvedValueOnce(false);
     mount();
@@ -1179,17 +1306,20 @@ describe("useManagedChat — session write reliability", () => {
 
     act(() => {
       capturedOnAwaitingHuman?.(awaitingHumanEvent);
+      latest.setHitlFreeText("  complete answer 🙂  ");
     });
     rerender();
     expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
 
     await act(async () => {
-      latest.handleHitlAnswer("cancel");
+      latest.handleHitlAnswer(undefined, latest.hitlFreeText);
     });
     rerender();
 
     expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(awaitingHumanEvent, undefined, "  complete answer 🙂  ");
     expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+    expect(latest.hitlFreeText).toBe("  complete answer 🙂  ");
   });
 
   it("does not resurrect the prompt over a new turn started in the same session", async () => {
@@ -1384,5 +1514,39 @@ describe("useManagedChat — session write reliability", () => {
 
     expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
     expect(latest.pendingHitl).toBeNull();
+  });
+
+  it("does not clear a newer HITL prompt's draft when an older resume settles", async () => {
+    let resolveResume: (v: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((r) => (resolveResume = r)));
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+      latest.setHitlFreeText("answer for the first prompt");
+    });
+    rerender();
+    act(() => latest.handleHitlAnswer(undefined, latest.hitlFreeText));
+
+    const newerPrompt = {
+      ...awaitingHumanEvent,
+      exchange_id: "exch-2",
+      payload: { ...awaitingHumanEvent.payload, interrupt_id: "interrupt-b" },
+    };
+    act(() => {
+      capturedOnAwaitingHuman?.(newerPrompt);
+      latest.setHitlFreeText("answer for the newer prompt");
+    });
+    rerender();
+
+    await act(async () => {
+      resolveResume(true);
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(newerPrompt);
+    expect(latest.hitlFreeText).toBe("answer for the newer prompt");
   });
 });
