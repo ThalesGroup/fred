@@ -409,7 +409,7 @@
       "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
       "selectLibraryFirst": "Select a library first."
     },
-    "characterCounter": "{{count}} / {{limit}} characters",
+    "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {

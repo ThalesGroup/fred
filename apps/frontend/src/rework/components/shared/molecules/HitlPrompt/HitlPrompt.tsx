@@ -16,6 +16,7 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
+import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import type { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
@@ -59,7 +60,7 @@ export function HitlPrompt({
   freeTextValue,
   onFreeTextChange,
 }: HitlPromptProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const payload = event.payload;
   const [localFreeText, setLocalFreeText] = useState("");
   const freeText = freeTextValue ?? localFreeText;
@@ -112,27 +113,7 @@ export function HitlPrompt({
             aria-invalid={isOverLimit || undefined}
             aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
           />
-          {maxChatInputChars !== undefined && (
-            <div
-              id={characterInfoId}
-              className={`${styles.characterInfo} ${isOverLimit ? styles.characterInfoError : ""}`}
-              aria-live="polite"
-            >
-              <span>
-                {isOverLimit
-                  ? t("chatbot.errors.chatInputTooLong", {
-                      limit: maxChatInputChars.toLocaleString(i18n.language),
-                    })
-                  : null}
-              </span>
-              <span className={styles.characterCount}>
-                {t("chatbot.characterCounter", {
-                  count: characterCount,
-                  limit: maxChatInputChars.toLocaleString(i18n.language),
-                })}
-              </span>
-            </div>
-          )}
+          <CharacterLimitNotice id={characterInfoId} count={characterCount} limit={maxChatInputChars} />
           <Button
             color="primary"
             variant="filled"

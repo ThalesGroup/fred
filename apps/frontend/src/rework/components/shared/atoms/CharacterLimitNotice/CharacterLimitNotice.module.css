@@ -1,0 +1,22 @@
+/* Within the limit: empty and out of flow, so it adds neither a visible line
+   nor a flex gap to the field it sits under — while staying in the
+   accessibility tree, which is what makes the message announceable when it
+   later appears. */
+.notice {
+  position: absolute;
+}
+
+/* Over the limit: message on the left, count on the right, always the error
+   treatment — this notice never renders as an at-rest counter. */
+.notice.visible {
+  display: flex;
+  position: static;
+  justify-content: space-between;
+  gap: var(--spacing-s);
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.count {
+  flex-shrink: 0;
+}
