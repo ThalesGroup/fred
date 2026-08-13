@@ -1615,7 +1615,7 @@
         "namePlaceholder": "e.g. Reports 2026",
         "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
         "title": "New folder",
-        "tooDeep": "This folder is already {{max}} levels deep — the maximum. Create the new folder higher up."
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
       },
       "renameModal": {
         "title": "Rename",

@@ -1615,7 +1615,7 @@
         "namePlaceholder": "ex. Rapports 2026",
         "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
         "title": "Nouveau dossier",
-        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur — le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
+        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
       },
       "renameModal": {
         "title": "Renommer",
