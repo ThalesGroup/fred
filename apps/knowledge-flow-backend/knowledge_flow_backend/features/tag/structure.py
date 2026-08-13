@@ -39,7 +39,15 @@ class TagType(str, Enum):
 # Guards the folder drag-and-drop mirroring (#2355): a dropped directory tree
 # creates one tag per subdirectory, so an unbounded drop could nest tags
 # arbitrarily deep. The frontend pre-filters against the same limit.
-MAX_TAG_PATH_DEPTH = 10
+#
+# 15 is bounded by ReBAC, not taste: every nested tag carries a PARENT tuple
+# and the OpenFGA schema inherits permissions through that chain (`read from
+# parent`, schema.fga), so a check on a depth-N tag resolves up to N hops —
+# against OpenFGA's default 25-hop resolution limit, which the chain's other
+# branches (owner/team_member) also draw from. Raising this materially means
+# retuning OpenFGA (OPENFGA_RESOLVE_NODE_LIMIT) and re-checking the btree
+# index on tag.path (~2.7KB max indexed value).
+MAX_TAG_PATH_DEPTH = 15
 
 
 def _normalize_path(p: Optional[str]) -> Optional[str]:
