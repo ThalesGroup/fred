@@ -1864,6 +1864,8 @@
       "popover": {
         "acknowledge": "Ignorer",
         "close": "Fermer",
+        "copyError": "Copier l'erreur",
+        "errorCopied": "Erreur copiée",
         "startedAgo": "démarré {{time}}",
         "title": "Détails — {{label}}"
       },

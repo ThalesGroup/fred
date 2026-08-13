@@ -23,7 +23,9 @@ import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { viewportWidth } from "@shared/utils/viewport.ts";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { useCopyConfirmation } from "../../../../core/hooks/useCopyConfirmation";
+import { viewportHeight, viewportWidth } from "@shared/utils/viewport.ts";
 import styles from "./TaskDetailPopover.module.css";
 
 interface TaskDetailPopoverProps {
@@ -37,6 +39,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
   const { t } = useTranslation();
   const task = useSelector(selectTask(taskId));
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
+  const { copied: errorCopied, confirmCopied: confirmErrorCopied } = useCopyConfirmation();
   const popoverRef = React.useRef<HTMLDivElement>(null);
 
   // Position the popover below the anchor element
@@ -49,8 +52,14 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     }
     const rect = anchorEl.getBoundingClientRect();
     const POPOVER_WIDTH = 280;
+    // Matches .popover's max-height (TaskDetailPopover.module.css) — used here
+    // to keep the popover's bottom edge on-screen without measuring the real
+    // DOM height (the CSS cap is the worst case; content scrolls internally).
+    const POPOVER_MAX_HEIGHT = 400;
     const MARGIN = 8;
-    const top = rect.bottom + 6;
+    // Prefer opening below the anchor; clamp upward when a long error would
+    // otherwise push the popover's bottom edge past the viewport.
+    const top = Math.max(MARGIN, Math.min(rect.bottom + 6, viewportHeight() - MARGIN - POPOVER_MAX_HEIGHT));
     // Prefer left-aligned; flip to right-aligned when it would overflow the viewport.
     const left =
       rect.left + POPOVER_WIDTH + MARGIN > viewportWidth() ? Math.max(MARGIN, rect.right - POPOVER_WIDTH) : rect.left;
@@ -80,6 +89,14 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
   }, [open, onClose]);
 
   if (!open || !task || !pos) return null;
+
+  const handleCopyError = () => {
+    if (!task.error) return;
+    navigator.clipboard
+      .writeText(task.error)
+      .then(confirmErrorCopied)
+      .catch(() => {});
+  };
 
   const progressPct = task.progress !== null ? `${Math.round(task.progress * 100)}%` : null;
   const elapsedLabel = t("rework.tasks.popover.startedAgo", { time: relativeTime(task.registeredAt, t) });
@@ -133,6 +150,13 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
       {task.error && (
         <div className={styles.errorRow}>
           <span className={styles.errorText}>{task.error}</span>
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: errorCopied ? "check_circle" : "content_copy" }}
+            aria-label={errorCopied ? t("rework.tasks.popover.errorCopied") : t("rework.tasks.popover.copyError")}
+            onClick={handleCopyError}
+          />
         </div>
       )}
 
@@ -142,7 +166,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
             color="on-surface"
             variant="text"
             size="small"
-            onClick={() => acknowledge(task.taskId, task.kind)}
+            onClick={() => acknowledge(task.taskId, task.kind, task.localOnly)}
             disabled={isAcknowledging(task.taskId)}
           >
             {t("rework.tasks.popover.acknowledge")}
