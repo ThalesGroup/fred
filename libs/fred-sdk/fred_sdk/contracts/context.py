@@ -253,6 +253,12 @@ class RuntimeContext(BaseModel):
             "guarantee: level 2 remains a ceiling this cannot raise (§5.3)."
         ),
     )
+    # NOTE (2026-08-12): a per-question `reasoning_effort` override was built
+    # and withdrawn the same day — providers disagree on accepted values
+    # (Mistral small 400s on low/medium), and the declaration machinery it
+    # required wasn't worth the surface. The effort a reasoning turn runs
+    # with is the ops-authored `settings.reasoning_effort` of the resolved
+    # profile, full stop; the user's choice is the boolean above.
 
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None

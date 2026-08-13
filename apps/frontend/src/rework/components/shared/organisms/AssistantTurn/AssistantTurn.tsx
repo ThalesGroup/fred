@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
@@ -21,10 +21,8 @@ import { UiParts } from "@shared/molecules/UiParts/UiParts";
 import { HorizontalScrollRow } from "@shared/molecules/HorizontalScrollRow/HorizontalScrollRow";
 import { SourceCard } from "@shared/molecules/SourceCard/SourceCard";
 import { SourceDetailModal } from "@shared/molecules/SourcesPanel/SourceDetailModal/SourceDetailModal";
-import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { hitToSource } from "../../../../utils/conversationUtils";
-import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./AssistantTurn.module.css";
 
@@ -66,15 +64,6 @@ export const AssistantTurn = memo(function AssistantTurn({
     setSelected({ source, index: activeSourceIndex });
   }, [activeSourceIndex, sources]);
 
-  const copyAction = useCallback(() => {
-    navigator.clipboard.writeText(text).catch(() => {});
-  }, [text]);
-
-  const actions: Action[] = useMemo(
-    () => [{ id: "copy", icon: "content_copy", label: "Copy response", onClick: copyAction }],
-    [copyAction],
-  );
-
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;
   if (!hasContent) return null;
 
@@ -93,6 +82,9 @@ export const AssistantTurn = memo(function AssistantTurn({
         <ThoughtTrace messages={traceMessages} done={!isStreaming} pendingToolCallIds={pendingToolCallIds} />
       )}
 
+      {/* No copy button here (removed on review): assistant prose is freely
+          selectable, and selection IS the copy path for a long answer — the
+          user turn keeps its button for the short, grab-it-all case. */}
       <AssistantMessage
         text={text}
         isStreaming={isStreaming}
@@ -117,10 +109,9 @@ export const AssistantTurn = memo(function AssistantTurn({
 
       {!isStreaming && uiParts.length > 0 && <UiParts parts={uiParts} />}
 
-      {!isStreaming && text && (
+      {!isStreaming && text && tokenUsage && (
         <div className={styles.footer}>
-          <ActionBar actions={actions} />
-          {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
+          <TokenUsageBadge usage={tokenUsage} />
         </div>
       )}
 

@@ -614,6 +614,10 @@ async def set_model_reasoning(
         model_capability_id=capability_id,
         reasoning_enabled=reasoning_enabled,
         updated_by=user.uid,
+        # Display snapshot of the ops-authored settings.reasoning_effort,
+        # taken HERE (the one write path already holding the catalog entry)
+        # so session prep never fetches the catalog. Refreshed per toggle.
+        default_effort=entry.model_reasoning_effort,
     )
     logger.info(
         "[capability-reasoning] model=%s reasoning_enabled=%s by=%s",
