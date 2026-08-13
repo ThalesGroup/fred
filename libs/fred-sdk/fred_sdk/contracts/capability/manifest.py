@@ -398,6 +398,11 @@ class CapabilityCatalogEntry(BaseModel):
     # with; None when no thinking profile ships the key. Only `kind="model"`
     # entries populate it.
     model_reasoning_effort: str | None = None
+    # The ops-authored `model_display_name` from `models_catalog.yaml` — the
+    # label the composer shows for this model. None = unnamed, and the
+    # frontend derives one from the capability id. Display only; nothing
+    # routes or authorizes on it. Only `kind="model"` entries populate it.
+    model_display_name: str | None = None
 
     @classmethod
     def from_manifest(

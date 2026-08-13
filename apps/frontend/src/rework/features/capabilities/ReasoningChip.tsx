@@ -45,12 +45,20 @@ import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
 
-/** Display label derived from a `model__{provider}__{name}` capability id —
- *  "model__openai__mistral-small-latest" → "Mistral Small Latest",
- *  "model__openai__gpt-4.1-mini" → "GPT 4.1 Mini". TEMPORARY heuristic until
- *  the multi-model feature serves real catalog display names — the button is
- *  deliberately shaped as the future model picker (model identity first,
- *  reasoning state second). Exported for tests. */
+/** The model name the button shows: whatever ops authored as
+ *  `model_display_name` in `models_catalog.yaml`, else the derived guess
+ *  below. Ops win because only they know whether a hyphen is a version
+ *  separator ("claude-sonnet-4-6") or a variant one ("gpt-4.1-mini").
+ *  Exported for tests. */
+export function modelLabel(displayName: unknown, modelId: unknown): string | null {
+  if (typeof displayName === "string" && displayName.trim()) return displayName.trim();
+  return modelLabelFromCapabilityId(modelId);
+}
+
+/** Fallback label derived from a `model__{provider}__{name}` capability id —
+ *  "model__openai__gpt-4.1-mini" → "GPT 4.1 Mini". Used only when the catalog
+ *  names no `model_display_name`; it is a guess, and ops override it per
+ *  model rather than grow another special case here. Exported for tests. */
 export function modelLabelFromCapabilityId(modelId: unknown): string | null {
   if (typeof modelId !== "string") return null;
   const parts = modelId.split("__");
@@ -131,16 +139,16 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
 
   const on = composer.reasoning;
   const title = t("chatbot.composerSettings.reasoningRowLabel");
-  const params = control.params as { effort?: unknown; model_id?: unknown } | undefined;
+  const params = control.params as { effort?: unknown; model_id?: unknown; display_name?: unknown } | undefined;
   const levelKey = effortLabelKey(params?.effort);
   const onLabel = levelKey ? t(levelKey) : t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
-  // Model identity first, Claude-style ("Mistral Small Latest Élevé"): model
-  // in the regular button text, reasoning state one step fainter
+  // Model identity first, Claude-style ("Mistral Small Élevé"): model in the
+  // regular button text, reasoning state one step fainter
   // (--on-surface-muted) — the color contrast is the separator. Read-only
   // today, the model picker slot tomorrow. Without an unambiguous model the
   // button falls back to the mockup's bare labels.
-  const modelLabel = modelLabelFromCapabilityId(params?.model_id);
+  const displayLabel = modelLabel(params?.display_name, params?.model_id);
   const stateLabel = on ? onLabel : offLabel;
 
   const pick = (next: boolean) => {
@@ -162,9 +170,9 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
         aria-label={`${title}: ${on ? onLabel : offLabel}`}
         onClick={() => setOpen((current) => !current)}
       >
-        {modelLabel ? (
+        {displayLabel ? (
           <>
-            <span className={styles.model}>{modelLabel}</span>
+            <span className={styles.model}>{displayLabel}</span>
             <span className={styles.state}>{stateLabel}</span>
           </>
         ) : (

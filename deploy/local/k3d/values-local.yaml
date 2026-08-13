@@ -307,6 +307,7 @@ applications:
       profiles:
         - profile_id: default.chat.mistral
           capability: chat
+          model_display_name: "Mistral Medium 3.5"
           model:
             provider: openai
             name: mistral-medium-latest
@@ -314,6 +315,7 @@ applications:
               base_url: https://api.mistral.ai/v1
         - profile_id: default.language.mistral
           capability: language
+          model_display_name: "Mistral Medium 3.5"
           model:
             provider: openai
             name: mistral-medium-latest

@@ -3492,6 +3492,35 @@ next "let users pick the effort" idea starts from the measured constraint.
 
 ---
 
+### 8.54 ✅ Ops name the model — `model_display_name` in `models_catalog.yaml` (2026-08-13)
+
+The composer chip (§8.48) derived its model label by splitting the capability
+id on hyphens. That heuristic cannot tell a version separator from a variant
+one — `claude-sonnet-4-6` rendered "Claude Sonnet 4 6" — and only whoever
+pinned the model knows which it is.
+
+**What changed.**
+
+- `ModelProfile.model_display_name` (optional, per profile) in
+  `models_catalog.yaml`. Display only: routing, enablement and the capability
+  id still key on `(provider, name)`.
+- `GET /agents/models-catalog` gains `ModelCatalogEntry.display_name`, taken
+  from the first profile in the `(provider, name)` group that declares one —
+  same first-seen rule as `description`. `CapabilityCatalogEntry` gains
+  `model_display_name`, carried verbatim; the multi-pod catalog union keeps a
+  name authored on one pod when another serves the model unnamed.
+- control-plane snapshots it into `model_reasoning.display_name` at toggle
+  time (migration `a7d2e9c41f38`), exactly like `default_effort` — the send
+  path still performs no catalog fetch — and serves it on the reasoning
+  control's `params.display_name`, only alongside an unambiguous `model_id`.
+- The frontend prefers that string verbatim and keeps the old heuristic as
+  the fallback, so a catalog that never adopts the key renders as before.
+
+Staleness is deliberate and bounded: editing the catalog reaches the composer
+at the next admin re-toggle, not on open sessions.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

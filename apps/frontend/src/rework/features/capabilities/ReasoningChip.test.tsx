@@ -20,7 +20,13 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { COMPOSER_CHIP_WIDGETS, ReasoningChip, effortLabelKey, modelLabelFromCapabilityId } from "./ReasoningChip";
+import {
+  COMPOSER_CHIP_WIDGETS,
+  ReasoningChip,
+  effortLabelKey,
+  modelLabel,
+  modelLabelFromCapabilityId,
+} from "./ReasoningChip";
 import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 
@@ -103,6 +109,23 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
     expect(html).not.toContain("Mistral");
   });
 
+  it("shows the ops-authored display name instead of the derived guess", () => {
+    const html = render(
+      [
+        reasoningControl({
+          default: false,
+          effort: "high",
+          model_id: "model__anthropic__claude-sonnet-4-6",
+          display_name: "Claude Sonnet 4.6",
+        }),
+      ],
+      true,
+    );
+    expect(html).toContain("Claude Sonnet 4.6");
+    // What the heuristic gets wrong: it reads "4-6" as two words.
+    expect(html).not.toContain("Claude Sonnet 4 6");
+  });
+
   it("owns the reasoning_toggle promotion out of the tune popover", () => {
     // ComposerControlSlot and ManagedChatPage filter on this set; the button
     // and the filters must agree or the setting shows up twice (or nowhere).
@@ -123,7 +146,7 @@ describe("effortLabelKey", () => {
   });
 });
 
-describe("modelLabelFromCapabilityId (temporary heuristic until multi-model)", () => {
+describe("modelLabelFromCapabilityId (the fallback when ops named nothing)", () => {
   it("handles the major providers' real model names", () => {
     // OpenAI — version dots survive, GPT/ChatGPT cased, "latest" kept.
     expect(modelLabelFromCapabilityId("model__openai__gpt-4o")).toBe("GPT 4o");
@@ -147,5 +170,29 @@ describe("modelLabelFromCapabilityId (temporary heuristic until multi-model)", (
   it("rejects anything that is not a model capability id", () => {
     expect(modelLabelFromCapabilityId("document_access")).toBeNull();
     expect(modelLabelFromCapabilityId(undefined)).toBeNull();
+  });
+});
+
+describe("modelLabel (ops-authored name wins, heuristic is the fallback)", () => {
+  it("returns the authored name verbatim", () => {
+    // Verbatim: no re-casing, no token rewriting. Ops already decided.
+    expect(modelLabel("Mistral Small", "model__openai__mistral-small-latest")).toBe("Mistral Small");
+    expect(modelLabel("Mistral (Ollama)", "model__ollama__mistral:latest")).toBe("Mistral (Ollama)");
+  });
+
+  it("falls back to the derived label when the catalog names nothing", () => {
+    expect(modelLabel(undefined, "model__openai__gpt-4.1-mini")).toBe("GPT 4.1 Mini");
+    expect(modelLabel(null, "model__openai__gpt-4o")).toBe("GPT 4o");
+  });
+
+  it("treats a blank or non-string name as unauthored", () => {
+    // A YAML key left as `model_display_name: ""` must not blank the button.
+    expect(modelLabel("   ", "model__openai__gpt-4o")).toBe("GPT 4o");
+    expect(modelLabel(42, "model__openai__gpt-4o")).toBe("GPT 4o");
+  });
+
+  it("stays null when neither source can name the model", () => {
+    expect(modelLabel(undefined, "document_access")).toBeNull();
+    expect(modelLabel(undefined, undefined)).toBeNull();
   });
 });

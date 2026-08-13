@@ -990,6 +990,12 @@ class _ModelCatalogEntry(BaseModel):
     shows no reasoning control at all — aptitude is not a choice, an
     administrator cannot make a model reason. Non-empty means the row carries
     the toggle. Same established join as `profile_ids` above."""
+    display_name: str | None = None
+    """The ops-authored `model_display_name` of this model's first profile that
+    declares one — the label the composer shows instead of splitting the
+    capability id apart. None means no profile named this model and the
+    frontend falls back to that heuristic. First-declared wins, same
+    first-seen rule as `description` above."""
     reasoning_effort: str | None = None
     """The ops-authored `settings.reasoning_effort` of this model's first
     thinking profile — DERIVED from the settings (never declared twice; the
@@ -1036,11 +1042,15 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
                 provider=provider,
                 name=name,
                 description=profile.description,
+                display_name=profile.model_display_name,
                 profile_ids=[profile.profile_id],
             )
             seen[key] = existing
         else:
             existing.profile_ids.append(profile.profile_id)
+            # First declaring profile wins; a later one only fills a gap.
+            if existing.display_name is None:
+                existing.display_name = profile.model_display_name
         # REASON-01 §5.3: aptitude is per profile, the toggle is per model —
         # this one condition is the whole projection between them.
         if profile.supports_thinking:

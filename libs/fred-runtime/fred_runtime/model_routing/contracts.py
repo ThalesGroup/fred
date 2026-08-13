@@ -231,6 +231,18 @@ class ModelProfile(FrozenModel):
     capability: ModelCapability
     model: ModelConfiguration
     description: str | None = None
+    model_display_name: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Human-readable model name for the UI. Absent means the frontend "
+            "derives one by splitting `model.name` — a heuristic that cannot "
+            "tell a version separator from a variant one ('claude-sonnet-4-6' "
+            "renders 'Claude Sonnet 4 6'). Display only. Declared per profile, "
+            "but describes the model: siblings sharing one (provider, name) "
+            "should agree, and the catalog projection takes the first declared."
+        ),
+    )
     supports_thinking: bool = Field(
         default=False,
         description=(

@@ -717,6 +717,7 @@ export type McpCatalogResponse = {
 };
 export type ModelCatalogEntry = {
   description?: string | null;
+  display_name?: string | null;
   id: string;
   name: string;
   profile_ids?: string[];
@@ -930,6 +931,7 @@ export type CapabilityCatalogEntry = {
   icon: string;
   id: string;
   kind?: "tool" | "agent" | "model";
+  model_display_name?: string | null;
   model_profile_ids?: string[];
   model_reasoning_effort?: string | null;
   model_thinking_profile_ids?: string[];
