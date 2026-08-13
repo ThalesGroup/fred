@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { forwardRef } from "react";
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
 import { ThinkingDots } from "@shared/atoms/ThinkingDots/ThinkingDots";
 import { MarkdownRenderer } from "../MarkdownRenderer/MarkdownRenderer";
@@ -22,12 +23,22 @@ interface AssistantMessageProps {
   onSourceClick?: (index: number) => void;
 }
 
-export function AssistantMessage({ text, isStreaming, onSourceClick }: AssistantMessageProps) {
+// Forwards to MarkdownRenderer's root so a caller (AssistantTurn's copy
+// button) can read the rendered content directly instead of querying the DOM
+// for it. Stays null while only ThinkingDots is rendered — same as before.
+export const AssistantMessage = forwardRef<HTMLDivElement, AssistantMessageProps>(function AssistantMessage(
+  { text, isStreaming, onSourceClick },
+  ref,
+) {
   if (!text && !isStreaming) return null;
 
   return (
     <MessageBubble role="assistant">
-      {text ? <MarkdownRenderer text={text} onSourceClick={onSourceClick} streaming={isStreaming} /> : <ThinkingDots />}
+      {text ? (
+        <MarkdownRenderer ref={ref} text={text} onSourceClick={onSourceClick} streaming={isStreaming} />
+      ) : (
+        <ThinkingDots />
+      )}
     </MessageBubble>
   );
-}
+});

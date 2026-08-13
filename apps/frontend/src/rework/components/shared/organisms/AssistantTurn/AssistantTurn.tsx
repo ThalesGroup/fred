@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
+import { toEmailHtml, toPlainText, writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
 import { UiParts } from "@shared/molecules/UiParts/UiParts";
 import { HorizontalScrollRow } from "@shared/molecules/HorizontalScrollRow/HorizontalScrollRow";
 import { SourceCard } from "@shared/molecules/SourceCard/SourceCard";
 import { SourceDetailModal } from "@shared/molecules/SourcesPanel/SourceDetailModal/SourceDetailModal";
+import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { hitToSource } from "../../../../utils/conversationUtils";
+import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./AssistantTurn.module.css";
 
@@ -52,6 +55,8 @@ export const AssistantTurn = memo(function AssistantTurn({
 }: AssistantTurnProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
@@ -63,6 +68,32 @@ export const AssistantTurn = memo(function AssistantTurn({
     if (!source) return;
     setSelected({ source, index: activeSourceIndex });
   }, [activeSourceIndex, sources]);
+
+  const copyAction = useCallback(() => {
+    // Copy from the rendered markdown, not the raw `text` prop, so the
+    // clipboard gets real bold/lists/tables/links instead of literal
+    // markdown syntax — same email-safe serialisation as manual selection.
+    const node = contentRef.current;
+    const write = node ? writeRichClipboard(toEmailHtml(node), toPlainText(node)) : writeRichClipboard("", text);
+    write.then((success) => {
+      if (success) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    });
+  }, [text]);
+
+  const actions: Action[] = useMemo(
+    () => [
+      {
+        id: "copy",
+        icon: copied ? "check" : "content_copy",
+        label: copied ? "Copied" : "Copy response",
+        onClick: copyAction,
+      },
+    ],
+    [copied, copyAction],
+  );
 
   const hasContent = traceMessages.length > 0 || text.length > 0 || uiParts.length > 0 || isStreaming;
   if (!hasContent) return null;
@@ -82,10 +113,8 @@ export const AssistantTurn = memo(function AssistantTurn({
         <ThoughtTrace messages={traceMessages} done={!isStreaming} pendingToolCallIds={pendingToolCallIds} />
       )}
 
-      {/* No copy button here (removed on review): assistant prose is freely
-          selectable, and selection IS the copy path for a long answer — the
-          user turn keeps its button for the short, grab-it-all case. */}
       <AssistantMessage
+        ref={contentRef}
         text={text}
         isStreaming={isStreaming}
         onSourceClick={uiSources.length > 0 ? setActiveSourceIndex : undefined}
@@ -109,9 +138,10 @@ export const AssistantTurn = memo(function AssistantTurn({
 
       {!isStreaming && uiParts.length > 0 && <UiParts parts={uiParts} />}
 
-      {!isStreaming && text && tokenUsage && (
+      {!isStreaming && text && (
         <div className={styles.footer}>
-          <TokenUsageBadge usage={tokenUsage} />
+          <ActionBar actions={actions} alwaysVisible />
+          {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
         </div>
       )}
 

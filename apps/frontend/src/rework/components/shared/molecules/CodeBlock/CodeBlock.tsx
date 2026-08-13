@@ -52,7 +52,7 @@ export function CodeBlock({
 
   return (
     <div className={styles.block}>
-      <div className={styles.header}>
+      <div className={styles.header} data-clipboard-ignore>
         <span className={styles.lang}>{language ?? "plaintext"}</span>
         {!hideCopy && (
           <button className={styles.copy} onClick={handleCopy} aria-label="Copy code">

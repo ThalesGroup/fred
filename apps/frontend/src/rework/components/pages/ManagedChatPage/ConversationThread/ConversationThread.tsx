@@ -18,6 +18,7 @@
 import { memo, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
@@ -55,6 +56,7 @@ export const ConversationThread = memo(function ConversationThread({
   onHitlFreeTextChange,
 }: ConversationThreadProps) {
   const { t } = useTranslation();
+  useAssistantCopyInterception(scrollContainerRef);
   const turnKey = messages.filter((m) => m.role === "user").length;
   // The pending tool call(s) this HITL prompt gates, if the runtime reported
   // any (see build_tool_approval_request's HumanInputRequest.pending_calls —

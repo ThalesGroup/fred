@@ -426,6 +426,7 @@
       "attachmentDeleteFailedSummary": "Fichier non supprimé",
       "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
+      "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
       "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères."
     },
     "hitlFreeTextLabel": "Votre réponse",

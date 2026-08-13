@@ -28,6 +28,29 @@ describe("normalizeApiError", () => {
       expect(normalizeApiError({ data: { detail: "nope" } })).toEqual({ kind: "unknown" });
     });
 
+    it("extracts the message from a SerializedError (no status field)", () => {
+      // What RTK Query's `.unwrap()` rejects with when a query/mutation throws
+      // before producing a FetchBaseQueryError -- {name, message, stack}, not
+      // a real Error instance.
+      expect(normalizeApiError({ name: "Error", message: "Upload failed", stack: "..." })).toEqual({
+        kind: "unknown",
+        detail: "Upload failed",
+      });
+    });
+
+    it("omits detail for a status-less object with a blank/missing message", () => {
+      expect(normalizeApiError({ name: "Error", message: "  " }).detail).toBeUndefined();
+      expect(normalizeApiError({ name: "Error" }).detail).toBeUndefined();
+    });
+
+    it("leaves a real Error instance alone, so callers can use their own fallback", () => {
+      // Unlike SerializedError, a real Error reaching here (no `status`) is an
+      // unexpected failure, not a serialized RTK rejection -- callers such as
+      // useApiErrorToast prefer their own contextual fallbackDetail over the
+      // raw exception message.
+      expect(normalizeApiError(new Error("boom"))).toEqual({ kind: "unknown" });
+    });
+
     it("returns unknown when status is neither string nor number", () => {
       expect(normalizeApiError({ status: null })).toEqual({ kind: "unknown" });
       expect(normalizeApiError({ status: { weird: true } })).toEqual({ kind: "unknown" });
