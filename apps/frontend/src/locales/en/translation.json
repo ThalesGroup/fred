@@ -1634,7 +1634,15 @@
           "raw": "Raw"
         },
         "loading": "Loading…",
-        "markdownUnavailable": "No Markdown version was generated for this document."
+        "markdownUnavailable": "No Markdown version was generated for this document.",
+        "pdf": {
+          "loadFailed": "Failed to load PDF document.",
+          "unavailable": "Document content is unavailable.",
+          "largeTitle": "Large document",
+          "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
+          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
+          "largeConfirm": "Display anyway"
+        }
       },
       "storage": {
         "aria": "Storage space used",
