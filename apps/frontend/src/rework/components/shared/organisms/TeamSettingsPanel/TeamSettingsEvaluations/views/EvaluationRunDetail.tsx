@@ -24,6 +24,7 @@ import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import type { ColorTheme } from "@shared/utils/Type";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import {
   StatusPill,
   FieldBlock,
@@ -569,18 +570,13 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
   }, []);
 
   const handleCopy = () => {
-    // navigator.clipboard is undefined in non-secure contexts (plain HTTP,
-    // except localhost), older browsers, and some test DOM environments —
-    // accessing .writeText on it would throw synchronously.
-    if (!navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(JSON.stringify(caseData, null, 2))
-      .then(() => {
+    writeRichClipboard("", JSON.stringify(caseData, null, 2)).then((ok) => {
+      if (ok) {
         setCopied(true);
         if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
         copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => {});
+      }
+    });
   };
 
   return (

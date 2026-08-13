@@ -19,6 +19,7 @@ import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge.tsx"
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar.tsx";
 import type { TaskState } from "../../../../features/tasks/taskTypes";
 import type { StepReport, StepStatus } from "../../../../features/pipeline/types";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import styles from "./SelfTestPage.module.css";
 
 // The Task atoms speak the fred-core TaskState vocabulary; map the pipeline
@@ -82,9 +83,11 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
   const progress = total > 0 ? completed / total : null;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(buildReport(steps));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    const ok = await writeRichClipboard("", buildReport(steps));
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
   };
 
   if (total === 0) {

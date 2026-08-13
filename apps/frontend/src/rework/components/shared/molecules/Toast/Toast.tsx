@@ -14,6 +14,7 @@
 
 import React, { useEffect } from "react";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import styles from "./Toast.module.css";
 
 export type ToastSeverity = "success" | "error" | "warning" | "info";
@@ -67,9 +68,7 @@ export function Toast({ id, severity, summary, detail, duration, exiting, onClos
   };
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText([summary, detail].filter(Boolean).join("\n"));
-    } catch {}
+    await writeRichClipboard("", [summary, detail].filter(Boolean).join("\n"));
   };
 
   return (

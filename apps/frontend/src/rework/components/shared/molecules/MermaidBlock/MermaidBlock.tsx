@@ -16,6 +16,7 @@ import { useEffect, useId, useState } from "react";
 import mermaid from "mermaid";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
 import { sanitizeMermaidForParsing } from "./mermaidSanitizer";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { FullPageModal } from "../FullPageModal/FullPageModal";
 import styles from "./MermaidBlock.module.css";
@@ -32,9 +33,11 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   const isDark = useIsDark();
 
   function handleCopy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", code).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     });
   }
 

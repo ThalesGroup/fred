@@ -748,6 +748,14 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     ) -> None:
         async with use_session(self._sessions, session) as s:
             if self._is_postgres:
+                # `jsonb_build_object` is variadic "any": PostgreSQL has no
+                # context to infer a placeholder's type from, and asyncpg's
+                # prepare step fails with "could not determine data type of
+                # parameter $1". The explicit casts are what make it typable --
+                # and they have to be spelled `CAST(:x AS text)`, not
+                # `:x::text`: SQLAlchemy's `text()` bind-parameter regex skips
+                # any `:name` followed by `:`, so the `::` form is left in the
+                # SQL verbatim and never bound at all.
                 await s.execute(
                     text(
                         """
@@ -755,7 +763,10 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                         SET doc = doc || jsonb_build_object(
                             'identity',
                             COALESCE(doc->'identity', '{}'::jsonb)
-                            || jsonb_build_object('modified', :modified, 'last_modified_by', :modified_by)
+                            || jsonb_build_object(
+                                'modified', CAST(:modified AS text),
+                                'last_modified_by', CAST(:modified_by AS text)
+                            )
                         )
                         WHERE document_uid = :document_uid
                         """

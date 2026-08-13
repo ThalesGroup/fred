@@ -16,6 +16,7 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import styles from "./MarkdownRenderer.module.css";
 
 /**
@@ -59,9 +60,11 @@ export function HeadingWithAnchor({ level, children }: HeadingWithAnchorProps) {
 
   const copyLink = () => {
     const url = `${window.location.origin}${window.location.pathname}#${slug}`;
-    void navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", url).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      }
     });
   };
 

@@ -2536,6 +2536,37 @@ _(none yet)_
 
 ---
 
+### `TaskCard` / `TaskDetailPopover`
+
+**Location:** `src/rework/components/shared/molecules/TaskCard/TaskCard.tsx`,
+`src/rework/components/shared/molecules/TaskDetailPopover/TaskDetailPopover.tsx`
+**Status:** `Functional`
+
+The personal-tray task surface (`TaskTray`, `MigrationPage`'s active/terminal grids) —
+`TaskCard` renders one row per task with the ack/dismiss affordance referenced above; clicking
+its status indicator opens `TaskDetailPopover`, a floating detail panel showing state,
+progress %, step, elapsed time, and the raw `task.error` on failure.
+
+#### Open UX issues
+
+_(none yet)_
+
+#### Resolved
+
+- **Error text unreachable/uncopyable on failure, "Ignorer" a no-op for attachment tasks
+  (2026-08-13, #2366)** — three gaps found live-testing a real ingest failure. The popover
+  positioned itself purely from the anchor's rect with no vertical bound, so a long raw
+  backend error (e.g. a DuckDB sniffer dump) could render past the bottom of the viewport with
+  no way to reach the rest — now capped at `min(400px, 100vh - 16px)` with internal scroll, and
+  the vertical position clamps against that same cap. The error text had no copy affordance
+  short of a screenshot — added, reusing the existing `IconButton` + `useCopyConfirmation` +
+  `writeRichClipboard` pattern. And "Ignorer" silently did nothing for a chat-attachment task:
+  `fast/ingest` is synchronous and never creates a server-side task record, so the task is a
+  client-only Redux entry and acknowledging it always 404'd — it now acknowledges locally for
+  these `localOnly` tasks instead of calling an endpoint that never heard of them.
+
+---
+
 ### `WritableDocumentPane` (writable_document capability)
 
 **Location:** `src/rework/features/capabilities/writable_document/WritableDocumentPane.tsx`
