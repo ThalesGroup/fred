@@ -42,7 +42,14 @@ from fred_core.tasks.models import (
     TaskTarget,
     needs_attention,
 )
-from fred_core.tasks.orm_models import TaskEventLogRow, TaskRunRow
+from fred_core.tasks.orm_models import (
+    TaskEventLogColumns,
+    TaskRunColumns,
+    TaskTables,
+    single_active_migration_index_name,
+    task_event_log_table_args,
+    task_run_table_args,
+)
 from fred_core.tasks.service import (
     TaskNotAcknowledgeableError,
     TaskService,
@@ -87,8 +94,12 @@ __all__ = [
     "AcknowledgeTaskResponse",
     "needs_attention",
     # orm models
-    "TaskRunRow",
-    "TaskEventLogRow",
+    "TaskRunColumns",
+    "TaskEventLogColumns",
+    "TaskTables",
+    "task_run_table_args",
+    "task_event_log_table_args",
+    "single_active_migration_index_name",
     # bus
     "IEventBus",
     "MemoryEventBus",

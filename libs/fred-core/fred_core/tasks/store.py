@@ -34,7 +34,7 @@ from fred_core.tasks.models import (
     TaskSummary,
     TaskTarget,
 )
-from fred_core.tasks.orm_models import TaskEventLogRow, TaskRunRow
+from fred_core.tasks.orm_models import TaskRunColumns, TaskTables
 
 _EVENT_ADAPTER: TypeAdapter[TaskEvent] = TypeAdapter(TaskEvent)
 
@@ -78,8 +78,18 @@ class TaskNotFoundError(Exception):
 
 
 class TaskStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    """Persistence for one backend's task pair.
+
+    *tables* names the concrete `<prefix>task_run`/`<prefix>task_event_log` the
+    calling backend owns (#2170) — control-plane and knowledge-flow share the
+    `fred` database, so the table names, not the connection, are what keeps one
+    backend's `GET /tasks` from returning the other's rows.
+    """
+
+    def __init__(self, engine: AsyncEngine, tables: TaskTables) -> None:
         self._sessions = make_session_factory(engine)
+        self._run = tables.run
+        self._event_log = tables.event_log
 
     def new_task_id(self) -> str:
         return str(uuid.uuid4())
@@ -100,7 +110,7 @@ class TaskStore:
         # row (e.g. a document) would vanish on reload whenever no worker is running.
         # `scheduled_for` makes a future-dated task (erasure at expiry) show up in
         # the schedule immediately, before any worker touches it.
-        row = TaskRunRow(
+        row = self._run(
             task_id=task_id,
             kind=kind,
             state=TaskState.pending,
@@ -122,7 +132,7 @@ class TaskStore:
     ) -> int:
         detail = event.detail.model_dump() if event.detail is not None else None
         async with use_session(self._sessions, session) as s:
-            run = await s.get(TaskRunRow, event.task_id)
+            run = await s.get(self._run, event.task_id)
             if run is None:
                 raise TaskNotFoundError(event.task_id)
             next_seq = run.seq + 1
@@ -146,7 +156,7 @@ class TaskStore:
             target = event.target.model_dump() if event.target is not None else None
             if target is not None:
                 run.target = target
-            log_row = TaskEventLogRow(
+            log_row = self._event_log(
                 task_id=event.task_id,
                 kind=event.kind,
                 seq=next_seq,
@@ -166,9 +176,9 @@ class TaskStore:
         self,
         task_id: str,
         session: AsyncSession | None = None,
-    ) -> TaskRunRow | None:
+    ) -> TaskRunColumns | None:
         async with use_session(self._sessions, session) as s:
-            return await s.get(TaskRunRow, task_id)
+            return await s.get(self._run, task_id)
 
     async def set_execution(
         self,
@@ -183,7 +193,7 @@ class TaskStore:
         cannot clobber a concurrent ``record_event`` from the worker.
         """
         async with use_session(self._sessions, session) as s:
-            run = await s.get(TaskRunRow, task_id)
+            run = await s.get(self._run, task_id)
             if run is None:
                 raise TaskNotFoundError(task_id)
             run.execution_id = execution_id
@@ -194,7 +204,7 @@ class TaskStore:
         older_than: datetime,
         limit: int,
         session: AsyncSession | None = None,
-    ) -> list[TaskRunRow]:
+    ) -> list[TaskRunColumns]:
         """Non-terminal tasks that carry an execution binding and have not been
         updated since ``older_than`` — the reconciliation sweeper's work-list."""
         terminal = [
@@ -203,11 +213,11 @@ class TaskStore:
             TaskState.cancelled.value,
         ]
         q = (
-            select(TaskRunRow)
-            .where(TaskRunRow.state.notin_(terminal))
-            .where(TaskRunRow.execution_id.is_not(None))
-            .where(TaskRunRow.updated_at < older_than)
-            .order_by(TaskRunRow.updated_at)
+            select(self._run)
+            .where(self._run.state.notin_(terminal))
+            .where(self._run.execution_id.is_not(None))
+            .where(self._run.updated_at < older_than)
+            .order_by(self._run.updated_at)
             .limit(limit)
         )
         async with use_session(self._sessions, session) as s:
@@ -222,10 +232,10 @@ class TaskStore:
     ) -> list[TaskEvent]:
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
-                select(TaskEventLogRow)
-                .where(TaskEventLogRow.task_id == task_id)
-                .where(TaskEventLogRow.seq > after_seq)
-                .order_by(TaskEventLogRow.seq)
+                select(self._event_log)
+                .where(self._event_log.task_id == task_id)
+                .where(self._event_log.seq > after_seq)
+                .order_by(self._event_log.seq)
             )
             rows = result.scalars().all()
 
@@ -258,18 +268,18 @@ class TaskStore:
         session: AsyncSession | None = None,
     ) -> list[TaskSummary]:
         _TERMINAL = {TaskState.succeeded, TaskState.failed, TaskState.cancelled}
-        q = select(TaskRunRow)
+        q = select(self._run)
         if team_id is not None:
-            q = q.where(TaskRunRow.team_id == team_id)
+            q = q.where(self._run.team_id == team_id)
         if kind is not None:
-            q = q.where(TaskRunRow.kind == kind)
+            q = q.where(self._run.kind == kind)
         if state is not None:
-            q = q.where(TaskRunRow.state == state)
+            q = q.where(self._run.state == state)
         if created_by is not None:
-            q = q.where(TaskRunRow.created_by == created_by)
+            q = q.where(self._run.created_by == created_by)
         if exclude_terminal:
-            q = q.where(TaskRunRow.state.notin_([s.value for s in _TERMINAL]))
-        q = q.order_by(TaskRunRow.created_at.desc())
+            q = q.where(self._run.state.notin_([s.value for s in _TERMINAL]))
+        q = q.order_by(self._run.created_at.desc())
         async with use_session(self._sessions, session) as s:
             result = await s.execute(q)
             rows = result.scalars().all()
@@ -300,7 +310,7 @@ class TaskStore:
         *,
         by: str,
         session: AsyncSession | None = None,
-    ) -> TaskRunRow:
+    ) -> TaskRunColumns:
         """Stamp `acknowledged_at`/`acknowledged_by` on a task (rev. 3 §2.10).
 
         The "needs attention" gate is the CALLER's responsibility
@@ -309,7 +319,7 @@ class TaskStore:
         persistence primitive with no business rule duplicated here.
         """
         async with use_session(self._sessions, session) as s:
-            run = await s.get(TaskRunRow, task_id)
+            run = await s.get(self._run, task_id)
             if run is None:
                 raise TaskNotFoundError(task_id)
             run.acknowledged_at = _utcnow()

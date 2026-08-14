@@ -47,6 +47,7 @@ from control_plane_backend.config.models import (
     MinioContentStorageConfig,
 )
 from control_plane_backend.evaluations.store import EvaluationStore
+from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
@@ -382,6 +383,7 @@ class ApplicationContext:
             )
             self._task_service = TaskService.build(
                 engine=self.get_pg_async_engine(),
+                tables=TASK_TABLES,
                 backend=backend,
                 temporal_client_provider=temporal_provider,
                 postgres_dsn=self.configuration.storage.postgres.dsn()

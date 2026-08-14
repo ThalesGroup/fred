@@ -73,6 +73,7 @@ from control_plane_backend.import_export.importer import (
 from control_plane_backend.import_export.kea_reconciliation import KeaUserResolver
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
@@ -120,7 +121,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     """One file-backed SQLite async engine carrying the full control-plane schema."""
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import fred_core.tasks.orm_models  # noqa: F401
+    import control_plane_backend.models.task_models  # noqa: F401
 
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
@@ -495,7 +496,9 @@ async def _run(
     user_deps: UserServiceDependencies,
     team_deps: TeamServiceDependencies,
 ) -> MigrationReport:
-    task_service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
+    task_service = TaskService.build(
+        engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
+    )
     start = await task_service.start(
         StartMigrationRequest(), created_by=platform_admin.uid
     )
@@ -959,7 +962,9 @@ async def test_run_users_phase_rebac_disabled_guard_precedes_every_counter_incre
         team_deps = _team_deps(engine, cast(Any, spy_rebac))
         user_deps, admin = _writable_user_deps({})
         platform_admin = _admin_user()
-        task_service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
+        task_service = TaskService.build(
+            engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
+        )
         start = await task_service.start(
             StartMigrationRequest(), created_by=platform_admin.uid
         )
