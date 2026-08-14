@@ -155,6 +155,12 @@
           "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
           "title": "Enableallresourcespaces",
           "type": "boolean"
+        },
+        "enableInformationSystems": {
+          "default": false,
+          "description": "Show the Information Systems (SI) team nav entry and page \u2014 rags-services CRUD (#2307).",
+          "title": "Enableinformationsystems",
+          "type": "boolean"
         }
       },
       "title": "FrontendFeatureFlags",
