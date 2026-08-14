@@ -17,6 +17,7 @@ import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/N
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
 import styles from "./AdminNavbar.module.css";
 
@@ -28,6 +29,10 @@ export default function AdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
   const { canAdmin, canObservePlatform } = useUserCapabilities();
+  const { bootstrap } = useFrontendBootstrap();
+  // #2307, default off: Information Systems is new and not yet demo-ready on
+  // every deployment, so it stays behind a flag rather than admin role alone.
+  const enableInformationSystems = bootstrap?.feature_flags?.enableInformationSystems ?? false;
 
   const allItems: (NavigationMenuItemProps & { visible: boolean })[] = [
     {
@@ -79,6 +84,13 @@ export default function AdminNavbar() {
       icon: { category: "outlined", type: "check_circle", filled: false },
       linkProps: { to: "/admin/self-test" },
       visible: canAdmin,
+    },
+    {
+      type: "link",
+      label: t("rework.sidebar.admin.menu.informationSystems"),
+      icon: { category: "outlined", type: "hub", filled: false },
+      linkProps: { to: "/admin/information-systems" },
+      visible: canAdmin && enableInformationSystems,
     },
   ];
   const navigationItems: NavigationMenuItemProps[] = allItems.filter((item) => item.visible);
