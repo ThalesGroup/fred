@@ -423,6 +423,8 @@ class ToolRefRequirement(FrozenModel):
 
     Available constants:
         TOOL_REF_KNOWLEDGE_SEARCH          — search document libraries
+        TOOL_REF_SIMILARITY_SEARCH         — compare an anchor passage against
+                                              explicit target documents
         TOOL_REF_ARTIFACTS_PUBLISH_TEXT    — publish a markdown report
         TOOL_REF_RESOURCES_FETCH_TEXT      — read a config or template file
         TOOL_REF_TRACES_SUMMARIZE_CONVERSATION — summarise an execution trace
