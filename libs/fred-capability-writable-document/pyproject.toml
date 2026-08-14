@@ -66,6 +66,14 @@ fred-core = { path = "../fred-core", editable = true }
 fred-sdk = { path = "../fred-sdk", editable = true }
 fred-runtime = { path = "../fred-runtime", editable = true }
 
+[tool.alembic]
+# This capability owns its own migration tree (#1905, RFC §7.1). At deploy time
+# `python -m fred_runtime migrate` finds it by entry point and sets
+# script_location itself; this block is what lets the `alembic` CLI — and
+# therefore the combined migration checks — reach the same tree (#2373).
+script_location = "%(here)s/fred_capability_writable_document/writable_document_migrations"
+prepend_sys_path = ["."]
+
 [dependency-groups]
 dev = [
   "bandit>=1.8.6",

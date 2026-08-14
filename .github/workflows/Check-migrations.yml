@@ -45,7 +45,11 @@ jobs:
         run: uv sync
         working-directory: libs/fred-runtime
 
-      - name: Check single Alembic head per backend
+      - name: Install dependencies (fred-capability-writable-document)
+        run: uv sync
+        working-directory: libs/fred-capability-writable-document
+
+      - name: Check single Alembic head per tree
         run: make db-check-combined-heads
 
   check-migrations-sqlite:
@@ -74,6 +78,10 @@ jobs:
       - name: Install dependencies (fred-runtime)
         run: uv sync
         working-directory: libs/fred-runtime
+
+      - name: Install dependencies (fred-capability-writable-document)
+        run: uv sync
+        working-directory: libs/fred-capability-writable-document
 
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
@@ -104,6 +112,10 @@ jobs:
       - name: Install dependencies (fred-runtime)
         run: uv sync
         working-directory: libs/fred-runtime
+
+      - name: Install dependencies (fred-capability-writable-document)
+        run: uv sync
+        working-directory: libs/fred-capability-writable-document
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres
