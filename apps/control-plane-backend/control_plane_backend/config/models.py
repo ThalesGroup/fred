@@ -72,6 +72,10 @@ class FrontendFeatureFlags(BaseModel):
         default=False,
         description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe.",
     )
+    enableInformationSystems: bool = Field(
+        default=False,
+        description="Show the Information Systems (SI) team nav entry and page — rags-services CRUD (#2307).",
+    )
 
 
 class UploadWarning(BaseModel):

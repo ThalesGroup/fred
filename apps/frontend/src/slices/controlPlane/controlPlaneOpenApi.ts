@@ -1757,6 +1757,8 @@ export type FrontendFeatureFlags = {
   enableElecWarfare?: boolean;
   /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */
   enableAllResourceSpaces?: boolean;
+  /** Show the Information Systems (SI) team nav entry and page — rags-services CRUD (#2307). */
+  enableInformationSystems?: boolean;
 };
 export type PermissionSummary = {
   /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */

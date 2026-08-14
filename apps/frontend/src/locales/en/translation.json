@@ -1724,6 +1724,10 @@
       "evaluationService": {
         "title": "Evaluation service not running",
         "description": "Start the fred-evaluation service to manage evaluations and runs."
+      },
+      "ragsServices": {
+        "title": "Information Systems service not reachable",
+        "description": "Check that the rags-services service is running."
       }
     },
     "sidebar": {
@@ -1738,7 +1742,8 @@
           "migration": "Platform data",
           "selftest": "Self-test",
           "tasks": "Activity",
-          "teams": "Teams"
+          "teams": "Teams",
+          "informationSystems": "Information Systems"
         },
         "title": "Administration spaces"
       },
@@ -2594,6 +2599,54 @@
           "failed_or_running_excluded": "Failed or running (left untouched)",
           "errors": "Errors"
         }
+      }
+    },
+    "informationSystems": {
+      "title": "Information Systems",
+      "subtitle": "Attach role-tagged documents to a library so Eva, Iris and Gap can assess it.",
+      "loading": "Loading information systems...",
+      "empty": "No information systems yet.",
+      "table": {
+        "name": "Information system",
+        "documents": "Documents",
+        "similarities": "Similarities",
+        "contradictions": "Contradictions",
+        "actions": "Actions",
+        "manageDocuments": "Manage documents",
+        "delete": "Delete"
+      },
+      "deleteDialog": {
+        "title": "Delete information system?",
+        "message": "This deletes \"{{name}}\" and its document role assignments. This cannot be undone.",
+        "confirm": "Delete",
+        "cancel": "Cancel",
+        "success": "Information system deleted",
+        "errorSummary": "Failed to delete information system",
+        "errorFallback": "Could not delete the information system. Please try again."
+      },
+      "create": {
+        "action": "Create",
+        "title": "Create information system",
+        "helperText": "Pick an existing document library. The information system takes that library's name — it cannot be changed here, because the rags agents match on it exactly.",
+        "libraryLabel": "Library",
+        "libraryPlaceholder": "Select a library...",
+        "noLibraries": "No libraries available — every top-level document library already has an information system.",
+        "submit": "Create",
+        "success": "Information system \"{{name}}\" created",
+        "errorSummary": "Failed to create information system",
+        "errorFallback": "Could not create the information system. Please try again.",
+        "errorConflict": "An information system for this library already exists."
+      },
+      "assignDocuments": {
+        "title": "Documents — {{name}}",
+        "subtitle": "Assign each document a role, or leave it unassigned.",
+        "document": "Document",
+        "role": "Role",
+        "roleNone": "— none —",
+        "empty": "This library has no documents yet.",
+        "success": "Document roles updated",
+        "errorSummary": "Failed to update document roles",
+        "errorFallback": "Could not save the document role assignments. Please try again."
       }
     }
   },

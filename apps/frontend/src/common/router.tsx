@@ -16,6 +16,7 @@ import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPag
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import CapabilitiesPage from "@components/pages/admin/CapabilitiesPage/CapabilitiesPage.tsx";
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
+import InformationSystemsPage from "@components/pages/admin/InformationSystemsPage/InformationSystemsPage.tsx";
 // KEA CUTOVER 2026 — temporary, delete this import and its route below a few
 // weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
 import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
@@ -201,6 +202,19 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <SelfTestPage />
+          </Protected>
+        ),
+      },
+      {
+        // Information Systems (SI) admin CRUD over rags-services (#2307),
+        // gated behind the `enableInformationSystems` bootstrap flag (default
+        // off) as well as the admin role — `rags-services` has no team
+        // scoping in its data model, so this is a platform-wide list, not a
+        // per-team one (see InformationSystemsPage's own doc comment).
+        path: "admin/information-systems",
+        element: (
+          <Protected requires="admin">
+            <InformationSystemsPage />
           </Protected>
         ),
       },
