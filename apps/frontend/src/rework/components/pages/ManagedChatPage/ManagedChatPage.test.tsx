@@ -25,12 +25,18 @@ vi.mock("react-i18next", () => ({
 let chatValue: Record<string, unknown>;
 vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
 vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
-  RichInputField: (props: { sendDisabled?: boolean; characterCount?: number; characterLimit?: number }) => (
+  RichInputField: (props: {
+    sendDisabled?: boolean;
+    characterCount?: number;
+    characterLimit?: number;
+    onInterrupt?: () => void;
+  }) => (
     <div
       data-testid="composer"
       data-send-disabled={props.sendDisabled}
       data-character-count={props.characterCount}
       data-character-limit={props.characterLimit}
+      data-has-interrupt={typeof props.onInterrupt === "function"}
     />
   ),
 }));
@@ -106,50 +112,57 @@ vi.mock("@shared/molecules/ComposerActionsMenu/ComposerActionsMenu", () => ({
 
 import ManagedChatPage from "./ManagedChatPage";
 
+const noop = () => undefined;
+
+function managedChatValue(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    agentDisplayName: "Agent",
+    attachments: [],
+    attachmentsUploading: false,
+    capabilityIds: [],
+    chatControls: [],
+    commitTitle: noop,
+    contextPrompts: [],
+    deletePersistedAttachment: noop,
+    handleAbort: noop,
+    handleAddAttachments: noop,
+    handleHitlAnswer: noop,
+    handleSend: noop,
+    hitlFreeText: "complete HITL draft",
+    input: "six!!",
+    inputCharacterCount: 6,
+    inputTooLong: true,
+    isHydratingAttachments: false,
+    isLoadingHistory: false,
+    isPreparingSend: false,
+    maxChatInputChars: 5,
+    messages: [],
+    pendingHitl: { session_id: "session-1", exchange_id: "exchange-1", payload: { free_text: true } },
+    persistedAttachments: [],
+    ragScope: "all",
+    reasoning: false,
+    removeAttachment: noop,
+    searchPolicy: "hybrid",
+    selectedDocumentUids: [],
+    selectedLibraryIds: [],
+    sessionId: "session-1",
+    sessionTitle: "Chat",
+    setHitlFreeText: noop,
+    setInput: noop,
+    setRagScope: noop,
+    setReasoning: noop,
+    setSearchPolicy: noop,
+    setSelectedDocumentUids: noop,
+    setSelectedLibraryIds: noop,
+    threadMessages: [],
+    waitResponse: false,
+    ...overrides,
+  };
+}
+
 describe("ManagedChatPage chat-input policy wiring", () => {
   it("passes the runtime policy to both the composer and active HITL prompt", () => {
-    const noop = () => undefined;
-    chatValue = {
-      agentDisplayName: "Agent",
-      attachments: [],
-      attachmentsUploading: false,
-      capabilityIds: [],
-      chatControls: [],
-      commitTitle: noop,
-      contextPrompts: [],
-      deletePersistedAttachment: noop,
-      handleAbort: noop,
-      handleAddAttachments: noop,
-      handleHitlAnswer: noop,
-      handleSend: noop,
-      hitlFreeText: "complete HITL draft",
-      input: "six!!",
-      inputCharacterCount: 6,
-      inputTooLong: true,
-      isHydratingAttachments: false,
-      isLoadingHistory: false,
-      maxChatInputChars: 5,
-      messages: [],
-      pendingHitl: { session_id: "session-1", exchange_id: "exchange-1", payload: { free_text: true } },
-      persistedAttachments: [],
-      ragScope: "all",
-      reasoning: false,
-      removeAttachment: noop,
-      searchPolicy: "hybrid",
-      selectedDocumentUids: [],
-      selectedLibraryIds: [],
-      sessionId: "session-1",
-      sessionTitle: "Chat",
-      setHitlFreeText: noop,
-      setInput: noop,
-      setRagScope: noop,
-      setReasoning: noop,
-      setSearchPolicy: noop,
-      setSelectedDocumentUids: noop,
-      setSelectedLibraryIds: noop,
-      threadMessages: [],
-      waitResponse: false,
-    };
+    chatValue = managedChatValue();
 
     const html = renderToStaticMarkup(<ManagedChatPage />);
 
@@ -160,5 +173,13 @@ describe("ManagedChatPage chat-input policy wiring", () => {
     expect(html).toContain('data-testid="thread"');
     expect(html).toContain('data-hitl-draft="complete HITL draft"');
     expect(html).toContain('data-has-hitl-change-handler="true"');
+  });
+
+  it("exposes Stop only while the chat hook owns an active runtime request", () => {
+    chatValue = managedChatValue({ isPreparingSend: true, waitResponse: false });
+    expect(renderToStaticMarkup(<ManagedChatPage />)).toContain('data-has-interrupt="false"');
+
+    chatValue = managedChatValue({ isPreparingSend: false, waitResponse: true });
+    expect(renderToStaticMarkup(<ManagedChatPage />)).toContain('data-has-interrupt="true"');
   });
 });

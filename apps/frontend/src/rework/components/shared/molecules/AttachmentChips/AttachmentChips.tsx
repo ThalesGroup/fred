@@ -24,7 +24,7 @@ import styles from "./AttachmentChips.module.css";
 
 interface AttachmentChipsProps {
   attachments: ChatAttachment[];
-  onRemove: (id: string) => void;
+  onRemove?: (id: string) => void;
 }
 
 interface TasksRootState {
@@ -87,7 +87,7 @@ export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps)
           label={attachment.name}
           secondary={attachment.taskIds.length === 0 ? fileLabel(attachment, t) : undefined}
           trailing={<AttachmentTaskStatus taskIds={attachment.taskIds} />}
-          onRemove={() => onRemove(attachment.id)}
+          onRemove={onRemove ? () => onRemove(attachment.id) : undefined}
           removeAriaLabel={t("chatbot.attachmentChip.removeAria", { name: attachment.name })}
         />
       ))}

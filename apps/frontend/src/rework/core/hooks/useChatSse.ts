@@ -19,6 +19,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
+import { getDetailFromData } from "@core/errors/normalizeApiError.ts";
 import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
@@ -193,7 +194,6 @@ class RuntimeHttpError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly limitChars?: number,
-    readonly actualChars?: number,
     message = `Runtime request failed (${status})`,
   ) {
     super(message);
@@ -201,26 +201,119 @@ class RuntimeHttpError extends Error {
   }
 }
 
+const RUNTIME_ERROR_MESSAGE_MAX_CHARS = 1_000;
+const RUNTIME_ERROR_BODY_MAX_BYTES = 16 * 1024;
+
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 }
 
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function boundedErrorMessage(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const message = value.trim();
+  if (!message) return undefined;
+  // Bound by CODE POINTS, not UTF-16 units, matching `countUnicodeCodePoints`
+  // used by the rest of this feature. `slice()` on units can cut a surrogate
+  // pair in half, which renders as a replacement box in the toast.
+  const points = Array.from(message);
+  return points.length <= RUNTIME_ERROR_MESSAGE_MAX_CHARS
+    ? message
+    : `${points.slice(0, RUNTIME_ERROR_MESSAGE_MAX_CHARS).join("")}…`;
+}
+
+async function readBoundedResponseText(response: Response): Promise<string | undefined> {
+  // Abandoning a body without cancelling pins the underlying HTTP connection
+  // until GC finalizes the stream. The `await response.json()` this replaced
+  // always drained it, so every early return here has to cancel explicitly.
+  const discard = (): undefined => {
+    try {
+      // Synchronous throw, not a rejection, when the body is already locked —
+      // so `.catch()` alone would not contain it.
+      void response.body?.cancel()?.catch(() => {});
+    } catch {
+      /* nothing to release */
+    }
+    return undefined;
+  };
+
+  const contentLengthHeader = response.headers.get("Content-Length");
+  if (contentLengthHeader !== null && /^\d+$/.test(contentLengthHeader)) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isSafeInteger(contentLength) && contentLength > RUNTIME_ERROR_BODY_MAX_BYTES) return discard();
+  }
+
+  // `getReader()` throws on an already-locked or disturbed body. It must be
+  // inside a try: an escaping TypeError would surface from `runtimeHttpError`
+  // instead of a RuntimeHttpError, and the caller's `chat_input_too_long`
+  // branch — which restores the user's draft — would never match.
+  let reader: ReadableStreamDefaultReader<Uint8Array>;
+  try {
+    const bodyReader = response.body?.getReader();
+    if (!bodyReader) return undefined;
+    reader = bodyReader;
+  } catch {
+    return discard();
+  }
+
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let bytesRead = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > RUNTIME_ERROR_BODY_MAX_BYTES) {
+        await reader.cancel().catch(() => {});
+        return undefined;
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join("");
+  } catch {
+    await reader.cancel().catch(() => {});
+    return undefined;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
+  const rawBody = await readBoundedResponseText(response);
+  // A zero-length network response still exposes a readable stream in browsers;
+  // only `new Response(null)` has `body === null`. Treat both forms as
+  // unavailable so an ordinary 422 still reaches draft recovery when the
+  // server or proxy omitted its error envelope.
+  if (rawBody === undefined || rawBody.length === 0) {
+    return new RuntimeHttpError(response.status);
+  }
+
   let body: unknown;
   try {
-    body = await response.json();
+    body = JSON.parse(rawBody) as unknown;
   } catch {
     return new RuntimeHttpError(response.status);
   }
+
   const detail = recordValue(recordValue(body)?.detail);
   return new RuntimeHttpError(
     response.status,
     typeof detail?.code === "string" ? detail.code : undefined,
-    typeof detail?.limit_chars === "number" ? detail.limit_chars : undefined,
-    typeof detail?.actual_chars === "number" ? detail.actual_chars : undefined,
-    typeof detail?.message === "string" ? detail.message : undefined,
+    positiveInteger(detail?.limit_chars),
+    // `detail.message` is this app's own HTTPException shape. A bare string
+    // `detail`, FastAPI's validation-error array, and app-level `errors[]` are
+    // handled by `getDetailFromData`; top-level `message` stays runtime-local
+    // so this bounded display policy does not widen every API error consumer.
+    boundedErrorMessage(detail?.message) ??
+      boundedErrorMessage(getDetailFromData(body)) ??
+      boundedErrorMessage(recordValue(body)?.message),
   );
 }
 
@@ -262,6 +355,8 @@ export type ChatSseCallbacks = {
   onTurnStarted?: () => void;
   /** Restores an ordinary composer draft after a runtime length rejection. */
   onTurnRejected?: (draft: string, sessionId: string) => void;
+  /** Releases caller-owned retry state once a length rejection is no longer possible. */
+  onTurnRetryStateReleased?: (draft: string, sessionId: string) => void;
   /** Reads current navigation ownership before applying late turn side effects. */
   isTurnCurrent?: (sessionId: string) => boolean;
   /**
@@ -302,6 +397,7 @@ export function useChatSse(
     onError,
     onTurnStarted,
     onTurnRejected,
+    onTurnRetryStateReleased,
     isTurnCurrent,
     flushPendingWrites,
   } = params;
@@ -355,6 +451,27 @@ export function useChatSse(
   // registry (plugin first, then the capability-agnostic stock kit).
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
   const [maxChatInputChars, setMaxChatInputChars] = useState<number | undefined>();
+  // Invalidates preparation responses that were already in flight when a
+  // runtime rejected a message. A preparation started afterward captures the
+  // new generation and may legitimately publish a raised deployment value.
+  const chatInputLimitRejectionGenerationRef = useRef(0);
+  // Distinguishes a runtime-authoritative rejection value from an advisory
+  // preparation value. An older/legacy runtime may omit the optional
+  // projection; that omission must not erase a limit the execution endpoint
+  // just enforced, while it may still clear an earlier advisory value.
+  const chatInputLimitLearnedFromRejectionRef = useRef(false);
+
+  // A rejection is authoritative over preparations that predate it, but it is
+  // not a permanent floor. This ordering prevents an old eager preparation from
+  // immediately restoring the value another replica just rejected while still
+  // allowing a newly prepared raised deployment limit to take effect.
+  const adoptRejectedChatInputLimit = useCallback((limit: number) => {
+    const adopted = positiveInteger(limit);
+    if (adopted === undefined) return;
+    chatInputLimitRejectionGenerationRef.current += 1;
+    chatInputLimitLearnedFromRejectionRef.current = true;
+    setMaxChatInputChars(adopted);
+  }, []);
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
@@ -364,13 +481,21 @@ export function useChatSse(
   // Applies a prepare-execution response's session-scoped side effects, shared
   // by the eager open-time prep, every send(), and HITL resume.
   const applyPreparation = useCallback(
-    (prep: ExecutionPreparation) => {
+    (prep: ExecutionPreparation, chatInputLimitRejectionGenerationAtStart: number) => {
       setChatControls(prep.chat_controls ?? []);
-      setMaxChatInputChars(
-        typeof prep.max_chat_input_chars === "number" && prep.max_chat_input_chars > 0
-          ? prep.max_chat_input_chars
-          : undefined,
-      );
+      if (chatInputLimitRejectionGenerationAtStart === chatInputLimitRejectionGenerationRef.current) {
+        const rawPreparedLimit = prep.max_chat_input_chars;
+        const preparedLimit = positiveInteger(rawPreparedLimit);
+        if (preparedLimit !== undefined) {
+          chatInputLimitLearnedFromRejectionRef.current = false;
+          setMaxChatInputChars(preparedLimit);
+        } else if (rawPreparedLimit == null && !chatInputLimitLearnedFromRejectionRef.current) {
+          // Absence is a legitimate legacy-runtime response and clears an
+          // advisory value. A present malformed value is ignored instead: it
+          // must not erase the last value known to be usable.
+          setMaxChatInputChars(undefined);
+        }
+      }
       // #1979: publish the instance-bound capability route base URLs so each
       // capability's generated RTK slice can reach its pod routes directly.
       dispatch(setCapabilityBaseUrls(prep.capability_base_urls ?? {}));
@@ -391,7 +516,11 @@ export function useChatSse(
     thoughtBufsRef.current.clear();
     setAll([]);
     setChatControls([]);
-    setMaxChatInputChars(undefined);
+    // `maxChatInputChars` is deliberately NOT cleared here: a session-local
+    // reset would otherwise drop the counter and re-enable an over-long draft
+    // for the moment before the next preparation lands. The eager prep for the
+    // next session overwrites it, and the mount is keyed on agentInstanceId
+    // (common/router.tsx), so it cannot leak across agents.
   }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
 
@@ -734,9 +863,12 @@ export function useChatSse(
         throw await runtimeHttpError(response);
       }
 
-      if (!response.body) throw new Error("Empty response body from runtime");
-
+      // A 2xx is the runtime's acceptance boundary. Even a malformed success
+      // response must not restore a draft or HITL checkpoint the runtime may
+      // already have consumed; body validation remains a visible protocol error.
       onAccepted?.();
+
+      if (!response.body) throw new Error("Empty response body from runtime");
 
       const rankRef = { current: messagesRef.current.length + 1 };
       const deltaRankRef: { current: number | null } = { current: null };
@@ -757,6 +889,7 @@ export function useChatSse(
       sessionId: string | null,
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
+      resolveRuntimeContext?: () => RuntimeContext,
     ) => {
       const sendId = Math.random().toString(36).slice(2, 8);
       console.debug(
@@ -782,6 +915,20 @@ export function useChatSse(
       // the send button disables right away, matching the synchronous lock.
       setWaitResponse(true);
 
+      let callerRetryStateReleased = false;
+      const releaseCallerRetryState = (turnSessionId: string) => {
+        if (
+          callerRetryStateReleased ||
+          ac.signal.aborted ||
+          abortRef.current !== ac ||
+          isTurnCurrent?.(turnSessionId) === false
+        ) {
+          return;
+        }
+        callerRetryStateReleased = true;
+        onTurnRetryStateReleased?.(input, turnSessionId);
+      };
+
       // Releases the preflight lock on every early-return path below —
       // INCLUDING every error path (a rejected await must never leave the
       // lock or waitResponse stuck, or the composer becomes permanently
@@ -796,6 +943,7 @@ export function useChatSse(
           preflightOwnerRef.current = null;
         }
         if (abortRef.current === ac) {
+          releaseCallerRetryState(sessionId ?? "draft");
           abortRef.current = null;
           setWaitResponse(false);
         }
@@ -861,9 +1009,7 @@ export function useChatSse(
       // Pass the session id so the control-plane can resolve and concatenate the
       // session's attached chat-context prompts into `context_prompt_text`.
       let prep: ExecutionPreparation;
-      let effectiveContext: RuntimeContext;
-      let exchangeId: string;
-      let effectiveSessionId: string;
+      const chatInputLimitRejectionGenerationAtPrepareStart = chatInputLimitRejectionGenerationRef.current;
       try {
         prep = await prepareExecution({
           teamId,
@@ -878,33 +1024,7 @@ export function useChatSse(
         console.debug(
           `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
         );
-        applyPreparation(prep);
-
-        // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
-        // team carried in runtime_context (no signed grant). Always include team_id.
-        // `language` rides the same way: it drives backend-rendered copy (e.g.
-        // FredHitlMiddleware's approval prompt), which otherwise defaults to
-        // English regardless of the UI's own locale — read live off i18next
-        // (not memoized) so a mid-session language switch takes effect on the
-        // very next turn, matching the existing pattern for voice transcription
-        // (ManagedChatPage.tsx's handleTranscribeAudio).
-        effectiveContext = mergeReasoningActivation(
-          mergeRoutingPolicy(
-            mergeContextPromptText(
-              {
-                ...(runtimeContext ?? {}),
-                team_id: canonicalizeRuntimeTeamId(teamId),
-                language: i18n.language?.split("-")[0] || undefined,
-              },
-              prep.context_prompt_text,
-            ),
-            prep.chat_default_profile_id,
-            prep.agent_profile_overrides,
-          ),
-          prep.reasoning_enabled_model_ids,
-        );
-        exchangeId = uuidv4();
-        effectiveSessionId = sessionId ?? "draft";
+        applyPreparation(prep, chatInputLimitRejectionGenerationAtPrepareStart);
       } catch (err) {
         // Was previously unguarded: a rejection here (e.g. an unknown/foreign
         // session_id, an unreachable runtime source) propagated as an
@@ -936,6 +1056,44 @@ export function useChatSse(
         failPreflight("token refresh", new Error(staleToken));
         return;
       }
+
+      let effectiveContext: RuntimeContext;
+      try {
+        // Resolve caller-owned context at the final undoable boundary. In
+        // particular, attachment ingestion can finish while token refresh,
+        // session writes, or prepare-execution are awaited. The same late
+        // snapshot then owns both the wire payload and the chips cleared by
+        // `onTurnStarted` immediately below.
+        const callerRuntimeContext = resolveRuntimeContext?.() ?? runtimeContext;
+        // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
+        // team carried in runtime_context (no signed grant). Always include team_id.
+        // `language` rides the same way: it drives backend-rendered copy (e.g.
+        // FredHitlMiddleware's approval prompt), which otherwise defaults to
+        // English regardless of the UI's own locale — read live off i18next
+        // (not memoized) so a mid-session language switch takes effect on the
+        // very next turn, matching the existing pattern for voice transcription
+        // (ManagedChatPage.tsx's handleTranscribeAudio).
+        effectiveContext = mergeReasoningActivation(
+          mergeRoutingPolicy(
+            mergeContextPromptText(
+              {
+                ...(callerRuntimeContext ?? {}),
+                team_id: canonicalizeRuntimeTeamId(teamId),
+                language: i18n.language?.split("-")[0] || undefined,
+              },
+              prep.context_prompt_text,
+            ),
+            prep.chat_default_profile_id,
+            prep.agent_profile_overrides,
+          ),
+          prep.reasoning_enabled_model_ids,
+        );
+      } catch (err) {
+        failPreflight("runtime context resolution", err);
+        return;
+      }
+      const exchangeId = uuidv4();
+      const effectiveSessionId = sessionId ?? "draft";
 
       // The turn is now genuinely starting. Preflight is over — release the
       // reentrancy lock so the existing "a new send() replaces the current
@@ -984,6 +1142,7 @@ export function useChatSse(
           exchangeId,
           effectiveSessionId,
           ac.signal,
+          () => releaseCallerRetryState(effectiveSessionId),
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
@@ -993,20 +1152,24 @@ export function useChatSse(
           console.debug(`[useChatSse][${sendId}] stream error settled after cancellation — side effects suppressed`);
         } else if (name === "AbortError") {
           console.debug(`[useChatSse][${sendId}] streamToMessages aborted (AbortError) — swallowed`);
-        } else if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
+        } else if (err instanceof RuntimeHttpError && err.status === 422) {
           messagesRef.current = messagesRef.current.filter(
             (message) => !(message.exchange_id === exchangeId && message.metadata?.extras?.optimistic_user === true),
           );
           setMessages([...messagesRef.current]);
           onTurnRejected?.(input, effectiveSessionId);
-          if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
-          onError?.(
-            err.limitChars === undefined
-              ? err.message
-              : i18n.t("chatbot.errors.chatInputTooLong", {
-                  limit: err.limitChars.toLocaleString(i18n.language),
-                }),
-          );
+          if (err.code === "chat_input_too_long") {
+            if (err.limitChars !== undefined) adoptRejectedChatInputLimit(err.limitChars);
+            onError?.(
+              err.limitChars === undefined
+                ? err.message
+                : i18n.t("chatbot.errors.chatInputTooLong", {
+                    limit: err.limitChars.toLocaleString(i18n.language),
+                  }),
+            );
+          } else {
+            onError?.(`Streaming failed: ${err.message}`);
+          }
         } else {
           console.error(`[useChatSse][${sendId}] streamToMessages error — ${name}: ${msg}`);
           onError?.(`Streaming failed: ${msg}`);
@@ -1015,7 +1178,9 @@ export function useChatSse(
         console.debug(
           `[useChatSse][${sendId}] finally — ac.signal.aborted=${ac.signal.aborted} → will ${ac.signal.aborted ? "NOT" : ""} clear waitResponse`,
         );
-        if (!ac.signal.aborted) {
+        if (!ac.signal.aborted && abortRef.current === ac) {
+          releaseCallerRetryState(effectiveSessionId);
+          abortRef.current = null;
           setWaitResponse(false);
         }
       }
@@ -1028,9 +1193,11 @@ export function useChatSse(
       onError,
       onTurnStarted,
       onTurnRejected,
+      onTurnRetryStateReleased,
       isTurnCurrent,
       flushPendingWrites,
       applyPreparation,
+      adoptRejectedChatInputLimit,
       i18n,
     ],
   );
@@ -1092,6 +1259,7 @@ export function useChatSse(
       }
 
       let prep: ExecutionPreparation;
+      const chatInputLimitRejectionGenerationAtPrepareStart = chatInputLimitRejectionGenerationRef.current;
       try {
         prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
       } catch (err) {
@@ -1127,7 +1295,7 @@ export function useChatSse(
       // seconds stale by the time the stream opened, and any refresh those
       // awaits triggered would have been discarded.
       const token = KeyCloakService.GetToken() ?? "";
-      applyPreparation(prep);
+      applyPreparation(prep, chatInputLimitRejectionGenerationAtPrepareStart);
 
       // Optimistic cancel: flip every tool call this HITL prompt gated from
       // "running" straight to a cancelled state, without waiting for the resume
@@ -1236,19 +1404,20 @@ export function useChatSse(
         );
       } catch (err) {
         const status = (err as { status?: number })?.status;
-        const aborted = (err as Error)?.name === "AbortError";
+        const abortError = (err as Error)?.name === "AbortError";
+        const superseded = ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(sessionId) === false;
         // 409 = the runtime says this checkpoint is not waiting for a resume
         // (already answered, or a stale interrupt_id after a reload). Restoring
         // the prompt there produces an unanswerable card that re-409s on every
-        // attempt. An abort is the user's own choice and may land AFTER the
-        // resume was delivered, so it must not resurrect a consumed checkpoint
-        // either. Both count as reached.
-        if (status === 409 || aborted) {
+        // attempt. A mid-stream AbortError after a 2xx has already flipped
+        // `acceptedByRuntime` through `onAccepted`; an AbortError before any
+        // response must remain not-reached so the caller can restore safely.
+        if (status === 409) {
           acceptedByRuntime = true;
         }
-        if (!aborted) {
+        if (!superseded && !abortError) {
           if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
-            if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
+            if (err.limitChars !== undefined) adoptRejectedChatInputLimit(err.limitChars);
             onError?.(
               err.limitChars === undefined
                 ? err.message
@@ -1270,7 +1439,17 @@ export function useChatSse(
       // prompt — the checkpoint was consumed. A failure before it never ran.
       return acceptedByRuntime;
     },
-    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, applyPreparation, i18n],
+    [
+      agentInstanceId,
+      teamId,
+      prepareExecution,
+      streamToMessages,
+      onError,
+      applyPreparation,
+      adoptRejectedChatInputLimit,
+      isTurnCurrent,
+      i18n,
+    ],
   );
 
   // Eager prep (RFC §3.7): call prepare-execution at chat open — not only
@@ -1280,12 +1459,13 @@ export function useChatSse(
   // (selected libraries/policy/scope) is unaffected until a real send happens.
   const prepareChatControls = useCallback(
     async (sessionId?: string | null) => {
+      const chatInputLimitRejectionGenerationAtPrepareStart = chatInputLimitRejectionGenerationRef.current;
       const prep = await prepareExecution({
         teamId,
         agentInstanceId,
         ...(sessionId ? { sessionId } : {}),
       }).unwrap();
-      applyPreparation(prep);
+      applyPreparation(prep, chatInputLimitRejectionGenerationAtPrepareStart);
       return prep;
     },
     [teamId, agentInstanceId, prepareExecution, applyPreparation],

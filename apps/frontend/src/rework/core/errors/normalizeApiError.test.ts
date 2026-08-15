@@ -113,6 +113,35 @@ describe("normalizeApiError", () => {
       });
     });
 
+    it("leaves a top-level message to the caller's contextual fallback", () => {
+      expect(normalizeApiError({ status: 503, data: { message: "Temporarily unavailable" } })).toEqual({
+        kind: "unknown",
+        status: 503,
+      });
+    });
+
+    it("prefers a FastAPI validation detail over a generic top-level message", () => {
+      const error = {
+        status: 422,
+        data: {
+          message: "Validation failed",
+          detail: [{ msg: "The title is too long" }],
+        },
+      };
+      expect(normalizeApiError(error).detail).toBe("The title is too long");
+    });
+
+    it("prefers an app error detail over a generic top-level message", () => {
+      const error = {
+        status: 422,
+        data: {
+          message: "Validation failed",
+          errors: [{ detail: "The selected document is unavailable" }],
+        },
+      };
+      expect(normalizeApiError(error).detail).toBe("The selected document is unavailable");
+    });
+
     it("ignores a blank data.detail", () => {
       expect(normalizeApiError({ status: 400, data: { detail: "  " } }).detail).toBeUndefined();
     });

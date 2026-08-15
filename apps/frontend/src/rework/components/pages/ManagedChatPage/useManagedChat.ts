@@ -34,6 +34,7 @@ import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
+import type { ChatAttachment } from "@rework/types/attachments";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -43,6 +44,29 @@ interface UseManagedChatParams {
   agentInstanceId: string;
 }
 
+interface SubmittedDraft {
+  sessionId: string;
+  wireDraft: string;
+  draft: string;
+  started: boolean;
+  draftBeforeTurnStart?: string;
+  draftAfterTurnStart?: string;
+  readyAttachmentIds: readonly string[];
+  readyAttachments: readonly ChatAttachment[];
+  pendingHitl: RuntimeAwaitingHumanEvent | null;
+  hitlDraftOwner: number;
+}
+
+function isSameHitlPrompt(current: RuntimeAwaitingHumanEvent | null, next: RuntimeAwaitingHumanEvent | null): boolean {
+  if (current === null || next === null) return current === next;
+  return (
+    current.session_id === next.session_id &&
+    current.exchange_id === next.exchange_id &&
+    (current.payload.interrupt_id ?? null) === (next.payload.interrupt_id ?? null) &&
+    (current.payload.checkpoint_id ?? null) === (next.payload.checkpoint_id ?? null)
+  );
+}
+
 export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { showError } = useToast();
@@ -50,9 +74,17 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const { t } = useTranslation();
 
   const sessionId = searchParams.get("session");
-  const [input, setInput] = useState("");
-  const submittedDraftRef = useRef<{ sessionId: string; draft: string } | null>(null);
+  const [input, setInputState] = useState("");
+  const inputRef = useRef(input);
+  const setInput = useCallback((next: string) => {
+    inputRef.current = next;
+    setInputState(next);
+  }, []);
+  const [isPreparingSend, setIsPreparingSend] = useState(false);
+  const submittedDraftRef = useRef<SubmittedDraft | null>(null);
   const [pendingHitl, setPendingHitl] = useState<RuntimeAwaitingHumanEvent | null>(null);
+  const pendingHitlRef = useRef<RuntimeAwaitingHumanEvent | null>(pendingHitl);
+  pendingHitlRef.current = pendingHitl;
   const [hitlFreeText, setHitlFreeText] = useState("");
   // Identifies the HITL prompt that owns `hitlFreeText`. A resume can settle
   // after another prompt has arrived; only its own draft may be cleared.
@@ -87,6 +119,14 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // (a single, not-per-session piece of UI state) or show a toast for it.
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId;
+  // Invalidates a history request when a turn starts or a HITL prompt changes
+  // while that request is in flight. Active state alone cannot detect a turn
+  // that starts and settles before the response arrives.
+  const liveActivityRevisionRef = useRef(0);
+  const markLiveActivity = useCallback(() => {
+    liveActivityRevisionRef.current += 1;
+  }, []);
+  const getLiveActivityRevision = useCallback(() => liveActivityRevisionRef.current, []);
   // Live mirror of the rendered thread. `handleHitlAnswer`'s continuation
   // settles after arbitrary delay and must read the CURRENT thread, not the one
   // captured when the user answered.
@@ -246,24 +286,99 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // composer keystroke — would silently invalidate that memoization on every
   // keystroke too, cascading into handleHitlAnswer below and defeating
   // ConversationThread's React.memo (#2221).
-  const handleAwaitingHuman = useCallback((event: RuntimeAwaitingHumanEvent) => {
-    hitlDraftOwnerRef.current += 1;
-    setHitlFreeText("");
-    setPendingHitl(event);
-  }, []);
+  const handleAwaitingHuman = useCallback(
+    (event: RuntimeAwaitingHumanEvent) => {
+      markLiveActivity();
+      hitlDraftOwnerRef.current += 1;
+      setHitlFreeText("");
+      pendingHitlRef.current = event;
+      setPendingHitl(event);
+    },
+    [markLiveActivity],
+  );
   const handleChatError = useCallback((msg: string) => showError({ summary: "Agent error", detail: msg }), [showError]);
   // Fires only once prepare-execution has actually succeeded and the turn is
   // really starting — clearing the composer any earlier would lose the
   // user's text/attachments on a prepare-execution failure (404/503/network).
   const handleTurnStarted = useCallback(() => {
-    setInput("");
-    attachments.clearReadyAttachments();
-  }, [attachments.clearReadyAttachments]);
-  const handleTurnRejected = useCallback((_wireDraft: string, rejectedSessionId: string) => {
+    markLiveActivity();
+    // Clear only the attachments captured in this turn's final wire context.
+    // Files still processing at that boundary remain for the next turn.
     const submitted = submittedDraftRef.current;
-    if (activeSessionIdRef.current !== rejectedSessionId || submitted?.sessionId !== rejectedSessionId) return;
-    setInput(submitted.draft);
+    // The composer is disabled during the write barrier, but an already-running
+    // async producer (for example voice transcription) can still settle. Never
+    // erase text that was not part of this submitted draft.
+    const currentDraft = inputRef.current;
+    if (submitted === null || currentDraft === submitted.draft) {
+      setInput("");
+    } else if (currentDraft.startsWith(submitted.draft)) {
+      // Voice transcription and prompt insertion can finish while preflight is
+      // running. Consume the exact prefix that was accepted and retain only
+      // the late producer's suffix as the next draft.
+      const remainingDraft = currentDraft.slice(submitted.draft.length).trimStart();
+      submitted.draftBeforeTurnStart = currentDraft;
+      submitted.draftAfterTurnStart = remainingDraft;
+      setInput(remainingDraft);
+    }
+    const cleared = attachments.clearReadyAttachments(submitted?.readyAttachmentIds ?? []);
+    if (submitted !== null) {
+      submitted.started = true;
+      submitted.readyAttachments = cleared;
+    }
+  }, [attachments.clearReadyAttachments, markLiveActivity, setInput]);
+  const restoreDisplacedHitl = useCallback((submitted: SubmittedDraft) => {
+    if (
+      submitted.pendingHitl !== null &&
+      hitlDraftOwnerRef.current === submitted.hitlDraftOwner &&
+      pendingHitlRef.current === null
+    ) {
+      pendingHitlRef.current = submitted.pendingHitl;
+      setPendingHitl(submitted.pendingHitl);
+    }
   }, []);
+  const handleTurnRejected = useCallback(
+    (wireDraft: string, rejectedSessionId: string) => {
+      const submitted = submittedDraftRef.current;
+      if (
+        activeSessionIdRef.current !== rejectedSessionId ||
+        submitted?.sessionId !== rejectedSessionId ||
+        submitted.wireDraft !== wireDraft
+      ) {
+        return;
+      }
+      submittedDraftRef.current = null;
+      const currentDraft = inputRef.current;
+      if (
+        submitted.draftBeforeTurnStart !== undefined &&
+        submitted.draftAfterTurnStart !== undefined &&
+        currentDraft === submitted.draftAfterTurnStart
+      ) {
+        // The retained suffix is unchanged. Restore the exact combined draft
+        // captured before turn start, including the producer's separator and
+        // repeated text that may itself begin with the submitted prefix.
+        setInput(submitted.draftBeforeTurnStart);
+      } else if (currentDraft.length === 0) {
+        setInput(submitted.draft);
+      } else if (currentDraft !== submitted.draft && !currentDraft.startsWith(submitted.draft)) {
+        // A producer that settled after Send may have installed a new draft.
+        // Keep both edits instead of choosing which user-authored text to lose.
+        setInput(`${submitted.draft}\n${currentDraft}`);
+      }
+      attachments.restoreReadyAttachments(submitted.readyAttachments);
+      restoreDisplacedHitl(submitted);
+    },
+    [attachments.restoreReadyAttachments, restoreDisplacedHitl, setInput],
+  );
+  const handleTurnRetryStateReleased = useCallback(
+    (wireDraft: string, settledSessionId: string) => {
+      const submitted = submittedDraftRef.current;
+      if (submitted?.sessionId === settledSessionId && submitted.wireDraft === wireDraft) {
+        if (!submitted.started) restoreDisplacedHitl(submitted);
+        submittedDraftRef.current = null;
+      }
+    },
+    [restoreDisplacedHitl],
+  );
   const isTurnCurrent = useCallback((turnSessionId: string) => activeSessionIdRef.current === turnSessionId, []);
 
   const {
@@ -287,9 +402,16 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onError: handleChatError,
     onTurnStarted: handleTurnStarted,
     onTurnRejected: handleTurnRejected,
+    onTurnRetryStateReleased: handleTurnRetryStateReleased,
     isTurnCurrent,
   });
   latestMessagesRef.current = messages;
+
+  // Async history callbacks need the current streaming state, not a boolean
+  // captured when their request started.
+  const waitResponseRef = useRef(waitResponse);
+  waitResponseRef.current = waitResponse;
+  const isTurnActive = useCallback(() => waitResponseRef.current, []);
 
   // Chat controls are resolved per agent instance/config, not per session — a
   // session change should keep showing the last-known controls (no composer
@@ -297,13 +419,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // old agentChatOptionsRef pattern this replaces.
   const chatControlsRef = useRef(chatControls);
   chatControlsRef.current = chatControls;
-
-  // Live-turn indicator handed to useSessionHistory — its async closures need
-  // the CURRENT streaming state at response-arrival time, not the render-time
-  // value a plain boolean capture would freeze.
-  const waitResponseRef = useRef(waitResponse);
-  waitResponseRef.current = waitResponse;
-  const isTurnActive = useCallback(() => waitResponseRef.current, []);
 
   // Mirrors read by the departure-snapshot cleanup below: a cleanup closure
   // captures its own render's values, but must snapshot what is on screen at
@@ -338,11 +453,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     }
     console.debug(`[useManagedChat] sessionId changed → reset() — sessionId=${sessionId ?? "null"}`);
     reset();
-    // reset() aborts any in-flight turn synchronously, but the waitResponse
-    // STATE only flips false on the next render — too late for the history
-    // effect running later in this same commit, whose isTurnActive() must
-    // already see "no live turn" or a cached thread would refuse to render.
+    // reset() clears state synchronously through its ref-owned transport, but
+    // React state updates on the next render. History loading in this commit
+    // must already observe that no turn remains active.
     waitResponseRef.current = false;
+    submittedDraftRef.current = null;
+    pendingHitlRef.current = null;
     setPendingHitl(null);
     hitlDraftOwnerRef.current += 1;
     setHitlFreeText("");
@@ -357,7 +473,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // — not only inside send() — so the composer control slot isn't empty
     // until the first message. Safe with no session yet (sessionId null).
     void prepareChatControls(sessionId).catch(() => {});
-  }, [sessionId, reset, composer.reset, prepareChatControls]);
+  }, [sessionId, reset, composer.reset, prepareChatControls, setInput]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
@@ -397,9 +513,18 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const handleHistoryLoaded = useCallback(
     (msgs: ChatMessage[]) => {
       replaceAllMessages(msgs);
-      hitlDraftOwnerRef.current += 1;
-      setHitlFreeText("");
-      setPendingHitl(reconstructPendingHitl(msgs));
+      const reconstructed = reconstructPendingHitl(msgs);
+      const same = isSameHitlPrompt(pendingHitlRef.current, reconstructed);
+      if (!same) {
+        hitlDraftOwnerRef.current += 1;
+        setHitlFreeText("");
+      }
+      // Keep the existing object when the prompt is unchanged. Cache replay
+      // and revalidation can both load the same prompt; preserving identity
+      // avoids invalidating the memoized conversation thread.
+      const next = same ? pendingHitlRef.current : reconstructed;
+      pendingHitlRef.current = next;
+      setPendingHitl(next);
     },
     [replaceAllMessages],
   );
@@ -410,6 +535,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     agentInstanceId,
     onLoaded: handleHistoryLoaded,
     isTurnActive,
+    getLiveActivityRevision,
   });
   isLoadingHistoryRef.current = isLoadingHistory;
 
@@ -477,7 +603,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    const attachmentContext = attachments.attachmentsMarkdown;
+    const initialAttachmentSnapshot = attachments.getReadyAttachmentSnapshot();
+    const attachmentContext = initialAttachmentSnapshot.attachmentsMarkdown;
+    const readyAttachmentIds = initialAttachmentSnapshot.attachmentIds;
     console.debug(
       `[useManagedChat] handleSend() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
     );
@@ -492,6 +620,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       return;
     }
     handleSendOwnerRef.current = true;
+    setIsPreparingSend(true);
     try {
       // Composer input is left untouched until the session write barrier below
       // confirms success — clearing it eagerly would lose the user's message if
@@ -531,6 +660,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       // onTurnStarted, once prepare-execution inside send() has actually
       // succeeded. A prepare-execution failure (404/503/network) must never
       // wipe text the user still needs to retry with; see useChatSse.ts.
+      // Read the live mirror, not the render-time closure: a history load can
+      // resolve while the write barrier is awaited and reconstruct a prompt.
+      const displacedHitl = pendingHitlRef.current;
+      const displacedHitlDraftOwner = hitlDraftOwnerRef.current;
+      pendingHitlRef.current = null;
       setPendingHitl(null);
       console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
       // `document_scope`'s params carry the same `bound_library_ids` the retired
@@ -564,29 +698,45 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       // `false` that would suppress reasoning the agent never offered to begin
       // with.
       const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
-      touchSessionActivity(sid);
-      // `send()` receives the trimmed wire value, but a backend rejection must
-      // restore the complete editable draft, including surrounding whitespace.
-      submittedDraftRef.current = { sessionId: sid, draft: input };
-      send(
-        text,
-        sid,
+      const buildTurnRuntimeContext = (attachmentsMarkdown: string | null) =>
         buildComposerRuntimeContext({
           selectedLibraryIds: composer.selectedLibraryIds,
           selectedDocumentUids: composer.selectedDocumentUids,
           searchPolicy: composer.searchPolicy,
           ragScope: composer.ragScope,
           boundLibraryIds,
-          attachmentsMarkdown: attachmentContext,
+          attachmentsMarkdown,
           ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
-        }),
-        turnOptions,
-      );
+        });
+      touchSessionActivity(sid);
+      // `send()` receives the trimmed wire value, but a backend rejection must
+      // restore the complete editable draft, including surrounding whitespace.
+      submittedDraftRef.current = {
+        sessionId: sid,
+        wireDraft: text,
+        draft: input,
+        started: false,
+        readyAttachmentIds,
+        // Filled by handleTurnStarted with the attachments actually removed.
+        // A length rejection restores those same chips and inline-image data.
+        readyAttachments: [],
+        pendingHitl: displacedHitl,
+        hitlDraftOwner: displacedHitlDraftOwner,
+      };
+      send(text, sid, buildTurnRuntimeContext(attachmentContext), turnOptions, () => {
+        const finalAttachmentSnapshot = attachments.getReadyAttachmentSnapshot();
+        const submitted = submittedDraftRef.current;
+        if (submitted?.sessionId === sid && submitted.wireDraft === text && !submitted.started) {
+          submitted.readyAttachmentIds = finalAttachmentSnapshot.attachmentIds;
+        }
+        return buildTurnRuntimeContext(finalAttachmentSnapshot.attachmentsMarkdown);
+      });
     } finally {
       handleSendOwnerRef.current = false;
+      setIsPreparingSend(false);
     }
   }, [
-    attachments.attachmentsMarkdown,
+    attachments.getReadyAttachmentSnapshot,
     attachments.hasUploadingAttachments,
     input,
     inputCharacterCount,
@@ -619,6 +769,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       }
       const prompt = pendingHitl;
       const draftOwner = hitlDraftOwnerRef.current;
+      markLiveActivity();
+      // A HITL resume takes over the transport slot from any ordinary turn.
+      // Its ordinary retry snapshot can no longer be used and may retain an
+      // inline-image data URL, so release it at the same point of intent.
+      submittedDraftRef.current = null;
+      pendingHitlRef.current = null;
       setPendingHitl(null);
       // Restore the prompt when the resume never reached the backend: the
       // checkpoint is still paused, so dropping it would strand the turn with
@@ -627,24 +783,41 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       // Whether the restore is still WANTED is derived from the thread itself,
       // not accumulated in a counter. `sendHitlResume` also reports
       // "not reached" when a newer interaction aborted it, and its continuation
-      // can settle arbitrarily late — but if the user has genuinely moved on,
-      // the new turn has already appended its optimistic user message under a
-      // DIFFERENT exchange_id, so the thread says so. A turn that failed before
-      // committing (write barrier, prepare-execution, the token floor) appends
-      // nothing, which is exactly when the prompt should come back.
+      // can settle arbitrarily late. An ordinary attempt that displaced this
+      // prompt owns that decision through its rollback snapshot. Without such
+      // an owner, a different latest exchange means the thread genuinely moved
+      // on and the old prompt must stay dismissed.
       //
-      // This replaced a turn-generation counter with rollbacks and ownership:
-      // three rounds of review found three holes in it (bumping on rejected
-      // sends, a bail that skipped the rollback, one rollback slot with several
-      // owners). Nothing here accumulates, so there is nothing to unwind.
+      // This uses current thread ownership instead of an accumulated counter,
+      // so rejected attempts and competing owners require no counter rollback.
       const restoreIfStillWanted = () => {
         if (activeSessionIdRef.current !== prompt.session_id) return;
+        // A newer awaiting_human that arrived meanwhile owns the slot and must
+        // not be stomped. `pendingHitlRef` is the synchronous truth, so decide
+        // from it rather than mutating a ref inside a setState updater —
+        // updaters must be pure and React double-invokes them under StrictMode.
+        if (pendingHitlRef.current !== null) return;
+
+        // An ordinary send may have displaced this prompt while the resume was
+        // in flight. Rendering the old prompt now would put a stale card over
+        // that newer attempt. Hand it to the ordinary attempt's rollback
+        // snapshot instead: a 422 restores it, while an accepted turn consumes
+        // it when the retry state is released.
+        const submitted = submittedDraftRef.current;
+        if (submitted?.sessionId === prompt.session_id) {
+          if (submitted.pendingHitl === null) {
+            submitted.pendingHitl = prompt;
+            submitted.hitlDraftOwner = draftOwner;
+          }
+          return;
+        }
+
         const thread = latestMessagesRef.current;
         const last = thread.length > 0 ? thread[thread.length - 1] : undefined;
         if (last && last.exchange_id !== prompt.exchange_id) return;
-        // Functional update: a newer awaiting_human that arrived meanwhile owns
-        // the slot and must not be stomped.
-        setPendingHitl((current) => current ?? prompt);
+
+        pendingHitlRef.current = prompt;
+        setPendingHitl(prompt);
       };
       void sendHitlResume(prompt, answer, freeText)
         .then((reached) => {
@@ -663,10 +836,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           restoreIfStillWanted();
         });
     },
-    [maxChatInputChars, pendingHitl, sendHitlResume],
+    [markLiveActivity, maxChatInputChars, pendingHitl, sendHitlResume],
   );
 
   const startNewConversation = useCallback(() => {
+    submittedDraftRef.current = null;
+    pendingHitlRef.current = null;
     setPendingHitl(null);
     hitlDraftOwnerRef.current += 1;
     setHitlFreeText("");
@@ -679,6 +854,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       { replace: true },
     );
   }, [setSearchParams]);
+
+  const handleAbort = useCallback(() => {
+    const submitted = submittedDraftRef.current;
+    if (submitted !== null && !submitted.started) {
+      restoreDisplacedHitl(submitted);
+    }
+    submittedDraftRef.current = null;
+    abort();
+  }, [abort, restoreDisplacedHitl]);
 
   const commitTitle = useCallback(
     (title: string) => {
@@ -785,10 +969,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     threadMessages,
     messages,
     waitResponse,
+    isPreparingSend,
     isLoadingHistory,
     handleSend,
     handleHitlAnswer,
-    handleAbort: abort,
+    handleAbort,
     startNewConversation,
     commitTitle,
   };

@@ -57,6 +57,8 @@ describe("RichInputField send gating", () => {
 
     expect(html).not.toContain("chatbot.characterCounter");
     expect(html).not.toContain("chatbot.errors.chatInputTooLong");
+    expect(html).toContain('<span aria-live="polite"></span>');
+    expect(html).not.toMatch(/aria-live="polite"[^>]*>[^<]*chatbot\.characterCounter/);
     expect(html).not.toContain("maxLength=");
     expect(textarea).not.toBe("");
     expect(textarea).not.toContain("aria-invalid");

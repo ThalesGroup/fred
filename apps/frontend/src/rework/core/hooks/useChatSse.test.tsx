@@ -116,6 +116,7 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 
 import { useChatSse } from "./useChatSse";
 import type { RuntimeAwaitingHumanEvent } from "./useChatSse";
+import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>) => void }) {
   const hook = useChatSse({
@@ -125,6 +126,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onError: (msg) => onErrorMock(msg),
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
+    onTurnRetryStateReleased: (draft, sessionId) => onTurnRetryStateReleasedMock(draft, sessionId),
     isTurnCurrent,
   });
   onRender(hook);
@@ -136,6 +138,7 @@ let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
+const onTurnRetryStateReleasedMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -157,6 +160,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onErrorMock.mockClear();
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
+    onTurnRetryStateReleasedMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -192,6 +196,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(latest.waitResponse).toBe(false);
     // The turn never started — the caller must not clear composer state.
     expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(onTurnRetryStateReleasedMock).toHaveBeenCalledWith("hello", "session-1");
   });
 
   it("passes the target session id to the write barrier", async () => {
@@ -230,13 +235,129 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("resolves runtime context after asynchronous preflight and before the turn starts", async () => {
+    flushPendingWrites = async () => true;
+    const preparation = deferred<unknown>();
+    prepareExecutionImpl = () => preparation.promise;
+    let attachmentContext = "context before preflight";
+    const ordering: string[] = [];
+    const resolveRuntimeContext = vi.fn(() => {
+      ordering.push("context");
+      return { attachments_markdown: attachmentContext };
+    });
+    onTurnStartedMock.mockImplementation(() => ordering.push("started"));
+    let requestBody: Record<string, unknown> | undefined;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      ordering.push("fetch");
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      throw new Error("stop after request capture");
+    });
+    mount();
+
+    const sendPromise = latest.send(
+      "hello",
+      "session-1",
+      { attachments_markdown: "stale context" },
+      undefined,
+      resolveRuntimeContext,
+    );
+    await vi.waitFor(() => expect(prepareExecutionCalls).toHaveLength(1));
+    attachmentContext = "context ready during preflight";
+
+    await act(async () => {
+      preparation.resolve({
+        execute_stream_url: "http://runtime.test/execute_stream",
+        chat_controls: [],
+        capability_base_urls: {},
+      });
+      await sendPromise;
+    });
+
+    expect(resolveRuntimeContext).toHaveBeenCalledTimes(1);
+    expect(ordering).toEqual(["context", "started", "fetch"]);
+    expect(requestBody?.runtime_context).toMatchObject({
+      attachments_markdown: "context ready during preflight",
+    });
+    fetchSpy.mockRestore();
+  });
+
+  it("keeps the turn uncommitted when late runtime-context resolution fails", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1", undefined, undefined, () => {
+        throw new Error("snapshot failed");
+      });
+    });
+
+    expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onTurnRetryStateReleasedMock).toHaveBeenCalledWith("hello", "session-1");
+    expect(onErrorMock).toHaveBeenCalledWith("Could not prepare this turn: snapshot failed");
+    expect(latest.waitResponse).toBe(false);
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("releases caller rollback state immediately after a 2xx response, before the stream finishes", async () => {
+    flushPendingWrites = async () => true;
+    let streamController!: ReadableStreamDefaultController<Uint8Array>;
+    const responseBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(responseBody, { status: 200, headers: { "Content-Type": "text/event-stream" } }));
+    mount();
+
+    let sendSettled = false;
+    let streamClosed = false;
+    let sendPromise: Promise<void> | undefined;
+    try {
+      await act(async () => {
+        sendPromise = latest.send("hello", "session-1");
+        void sendPromise.then(() => {
+          sendSettled = true;
+        });
+        await vi.waitFor(() => {
+          expect(onTurnRetryStateReleasedMock).toHaveBeenCalledWith("hello", "session-1");
+        });
+      });
+
+      expect(onTurnRetryStateReleasedMock).toHaveBeenCalledTimes(1);
+      expect(sendSettled).toBe(false);
+      expect(latest.waitResponse).toBe(true);
+
+      await act(async () => {
+        streamController.close();
+        streamClosed = true;
+        await sendPromise;
+      });
+      expect(onTurnRetryStateReleasedMock).toHaveBeenCalledTimes(1);
+      expect(latest.waitResponse).toBe(false);
+    } finally {
+      if (!streamClosed) {
+        await act(async () => {
+          streamController.close();
+          await sendPromise;
+        });
+      }
+      fetchSpy.mockRestore();
+    }
+  });
+
   it("parses a structured length rejection, removes the optimistic message, and restores the full draft", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => ({
       execute_stream_url: "http://runtime.test/execute_stream",
       chat_controls: [],
       capability_base_urls: {},
-      max_chat_input_chars: 5,
+      max_chat_input_chars: 10,
     });
     const rejectedDraft = "🙂🙂🙂🙂🙂🙂";
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -262,11 +383,565 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
     expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(onTurnRetryStateReleasedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
     expect(latest.messages).toHaveLength(0);
     expect(latest.maxChatInputChars).toBe(5);
     expect(onErrorMock).toHaveBeenCalledWith("chatbot.errors.chatInputTooLong:5");
     expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain(rejectedDraft);
     expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(rejectedDraft);
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    ["non-positive", 0],
+    ["fractional", 5.5],
+    ["unsafe", Number.MAX_SAFE_INTEGER + 1],
+  ])("ignores a malformed %s rejection limit instead of pinning the composer", async (_kind, rejectedLimit) => {
+    flushPendingWrites = async () => true;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 5_000,
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: rejectedLimit,
+            actual_chars: 6,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send("abcdef", "session-1");
+    });
+
+    expect(latest.maxChatInputChars).toBe(5_000);
+    expect(onTurnRejectedMock).toHaveBeenCalledWith("abcdef", "session-1");
+    expect(onErrorMock).toHaveBeenCalledWith("safe backend message");
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    ["zero", 0],
+    ["negative", -1],
+    ["fractional", 5.5],
+    ["unsafe", Number.MAX_SAFE_INTEGER + 1],
+  ])("ignores an invalid %s preparation limit", async (_kind, preparedLimit) => {
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: preparedLimit,
+    });
+    mount();
+
+    await act(async () => {
+      await latest.prepareChatControls("session-1");
+    });
+
+    expect(latest.maxChatInputChars).toBeUndefined();
+  });
+
+  it.each([
+    ["fractional", 5.5],
+    ["unsafe", Number.MAX_SAFE_INTEGER + 1],
+  ])("does not let a present malformed %s preparation erase a valid advisory limit", async (_kind, malformed) => {
+    let preparedLimit = 5_000;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: preparedLimit,
+    });
+    mount();
+
+    await act(async () => {
+      await latest.prepareChatControls("session-1");
+    });
+    expect(latest.maxChatInputChars).toBe(5_000);
+
+    preparedLimit = malformed;
+    await act(async () => {
+      await latest.prepareChatControls("session-1");
+    });
+
+    expect(latest.maxChatInputChars).toBe(5_000);
+  });
+
+  it("keeps a rejection authoritative over older preparations, then accepts a newly prepared limit", async () => {
+    flushPendingWrites = async () => true;
+    const stalePreparation = deferred<unknown>();
+    let preparationCall = 0;
+    prepareExecutionImpl = async () => {
+      preparationCall += 1;
+      if (preparationCall === 1) return stalePreparation.promise;
+      const preparation = {
+        execute_stream_url: "http://runtime.test/execute_stream",
+        chat_controls: [],
+        capability_base_urls: {},
+      };
+      return preparationCall === 3 ? preparation : { ...preparation, max_chat_input_chars: 5_000 };
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 100,
+            actual_chars: 101,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    // Eager preparation starts first but remains in flight while a send reaches
+    // another replica and receives that replica's authoritative rejection.
+    const staleControlsPromise = latest.prepareChatControls("session-1");
+
+    // A rejection is adopted immediately: the composer must reflect what the
+    // runtime actually refused, for the very next keystroke.
+    await act(async () => {
+      await latest.send("x".repeat(101), "session-1");
+    });
+    expect(latest.maxChatInputChars).toBe(100);
+
+    // The older request resolves last. Its advisory value predates the 422 and
+    // must not immediately make the composer accept the same rejected draft.
+    await act(async () => {
+      stalePreparation.resolve({
+        execute_stream_url: "http://runtime.test/execute_stream",
+        chat_controls: [],
+        capability_base_urls: {},
+        max_chat_input_chars: 5_000,
+      });
+      await staleControlsPromise;
+    });
+    expect(latest.maxChatInputChars).toBe(100);
+
+    // A legacy replica omitting the optional projection cannot invalidate the
+    // authoritative limit already learned from a rejection.
+    await act(async () => {
+      await latest.prepareChatControls("session-1");
+    });
+    expect(latest.maxChatInputChars).toBe(100);
+
+    // The rejection is not a permanent floor: a successful preparation STARTED
+    // after it may publish a raised deployment value.
+    await act(async () => {
+      await latest.prepareChatControls("session-1");
+    });
+    expect(latest.maxChatInputChars).toBe(5_000);
+
+    // A session-local reset keeps the last known limit, so the counter does not
+    // flicker while the next eager preparation is in flight.
+    act(() => latest.reset());
+    expect(latest.maxChatInputChars).toBe(5_000);
+
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves a bounded top-level runtime message", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ message: "Temporarily unavailable" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Temporarily unavailable");
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves a nested runtime message independently of status", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: { message: "upstream unavailable" } }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: upstream unavailable");
+    fetchSpy.mockRestore();
+  });
+
+  it("truncates runtime messages by complete Unicode code points", async () => {
+    flushPendingWrites = async () => true;
+    const message = "🙂".repeat(1_001);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ message }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith(`Streaming failed: ${"🙂".repeat(1_000)}…`);
+    expect(onErrorMock.mock.calls[0][0]).not.toContain("�");
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves a string FastAPI detail as the runtime error message", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Unknown agent instance." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Unknown agent instance.");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves the first safe message from a FastAPI validation-detail array", async () => {
+    flushPendingWrites = async () => true;
+    const rejectedDraft = "keep this FastAPI-rejected draft";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              type: "string_too_long",
+              loc: ["body", "input"],
+              msg: "String should have at most 5,000 characters",
+              input: "private rejected content",
+            },
+          ],
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: String should have at most 5,000 characters");
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain("private rejected content");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves the first safe message from an app-level errors array", async () => {
+    flushPendingWrites = async () => true;
+    const rejectedDraft = "keep this app-rejected draft";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          errors: [{ detail: "The selected document is unavailable" }],
+          private_context: "must not be surfaced",
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: The selected document is unavailable");
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain("must not be surfaced");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("does not expose an unstructured plain-text runtime error body", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response("runtime unavailable", { status: 503, headers: { "Content-Type": "text/plain" } }),
+      );
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (503)");
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain("runtime unavailable");
+    expect(onTurnRetryStateReleasedMock).toHaveBeenCalledWith("hello", "session-1");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("does not expose a bare JSON-string runtime error body", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify("private rejected content"), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (500)");
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain("private rejected content");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("rejects an oversized runtime error body before reading it", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const getReader = vi.fn();
+    const cancel = vi.fn(async () => undefined);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 502,
+      headers: new Headers({ "Content-Length": String(32 * 1024) }),
+      body: { getReader, cancel },
+    } as unknown as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(getReader).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (502)");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("restores the ordinary draft when a 422 error body is too large to inspect", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rejectedDraft = "keep this draft";
+    const getReader = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 422,
+      headers: new Headers({ "Content-Length": String(32 * 1024) }),
+      body: { getReader },
+    } as unknown as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(getReader).not.toHaveBeenCalled();
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(latest.maxChatInputChars).toBeUndefined();
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (422)");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("restores the ordinary draft when a 422 response body is already locked", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rejectedDraft = "keep this locked-body draft";
+    const cancelFailure = Promise.reject(new TypeError("Cannot cancel a locked ReadableStream"));
+    const cancelCatch = vi.spyOn(cancelFailure, "catch");
+    const cancel = vi.fn(() => cancelFailure);
+    const getReader = vi.fn(() => {
+      throw new TypeError("ReadableStream is locked");
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 422,
+      headers: new Headers(),
+      body: { getReader, cancel },
+    } as unknown as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(latest.maxChatInputChars).toBeUndefined();
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (422)");
+    expect(getReader).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(cancelCatch).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("restores the ordinary draft when a 422 response has a readable but empty body", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rejectedDraft = "keep this empty-body draft";
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      {
+        status: 422,
+        headers: { "Content-Length": "0" },
+      },
+    );
+    expect(response.body).not.toBeNull();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (422)");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("restores the ordinary draft when reading a 422 response body fails", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rejectedDraft = "keep this failed-read draft";
+    const cancel = vi.fn(async () => undefined);
+    const releaseLock = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 422,
+      headers: new Headers(),
+      body: {
+        getReader: () => ({
+          read: async () => {
+            throw new Error("read failed");
+          },
+          cancel,
+          releaseLock,
+        }),
+      },
+    } as unknown as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (422)");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("stops streaming a runtime error body once the byte limit is exceeded", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let cancelled = false;
+    let chunk = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (chunk >= 17) {
+          controller.close();
+          return;
+        }
+        chunk += 1;
+        controller.enqueue(new Uint8Array(1025));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body, { status: 502 }));
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(chunk).toBe(17);
+    expect(cancelled).toBe(true);
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (502)");
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("cancels a transport chunk that crosses the runtime error buffer limit", async () => {
+    flushPendingWrites = async () => true;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const oversizedChunk = new TextEncoder().encode(
+      JSON.stringify({ detail: { message: "private runtime content ".repeat(1_000) } }),
+    );
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce({ done: false, value: oversizedChunk })
+      .mockResolvedValueOnce({ done: true, value: undefined });
+    const cancel = vi.fn(async () => undefined);
+    const releaseLock = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 502,
+      headers: new Headers(),
+      body: {
+        getReader: () => ({ read, cancel, releaseLock }),
+      },
+    } as unknown as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(oversizedChunk.byteLength).toBeGreaterThan(16 * 1024);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).toHaveBeenCalledWith("Streaming failed: Runtime request failed (502)");
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain("private runtime content");
     errorSpy.mockRestore();
     fetchSpy.mockRestore();
   });
@@ -306,7 +981,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     expect(onTurnRejectedMock).not.toHaveBeenCalled();
     expect(onErrorMock).not.toHaveBeenCalled();
-    expect(latest.maxChatInputChars).toBeUndefined();
+    expect(latest.maxChatInputChars).toBe(10);
     expect(latest.messages).toHaveLength(0);
     fetchSpy.mockRestore();
   });
@@ -349,6 +1024,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onTurnRejectedMock).not.toHaveBeenCalled();
     expect(onErrorMock).not.toHaveBeenCalled();
     expect(latest.maxChatInputChars).toBe(10);
+    expect(latest.waitResponse).toBe(false);
     fetchSpy.mockRestore();
   });
 
@@ -384,6 +1060,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // The turn never started — composer input/attachments must survive so a
     // retry doesn't force the user to retype.
     expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(onTurnRetryStateReleasedMock).toHaveBeenCalledWith("hello", "session-1");
   });
 
   it("a retry after a prepare-execution failure starts exactly one turn", async () => {
@@ -1004,6 +1681,43 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("suppresses a HITL length rejection that settles after the attempt was superseded", async () => {
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 10,
+    });
+    const response = deferred<Response>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
+    mount();
+
+    let reachedPromise!: Promise<boolean>;
+    await act(async () => {
+      reachedPromise = latest.sendHitlResume(hitlEvent, undefined, "sixsix");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    act(() => latest.abort());
+    response.resolve(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 6,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(reachedPromise).resolves.toBe(false);
+    expect(latest.maxChatInputChars).toBe(10);
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
   it("preserves exact HITL free text and canonical choice fields on the wire", async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
@@ -1060,6 +1774,20 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("sendHitlResume() reports reached when a successful response has no body", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    mount();
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      reached = await latest.sendHitlResume(hitlEvent, "proceed");
+    });
+
+    expect(reached).toBe(true);
+    expect(onErrorMock).toHaveBeenCalledWith("HITL resume failed: Empty response body from runtime");
+    fetchSpy.mockRestore();
+  });
+
   it("a refused HITL resume releases the composer instead of wedging it", async () => {
     // sendHitlResume takes abortRef (and clears preflightOwnerRef) from any
     // send() still preflighting, so send()'s ownership-checked cleanup will not
@@ -1101,5 +1829,65 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     await expect(result).resolves.toBe(false);
     expect(prepareExecutionCalls).toHaveLength(0);
     expect(onErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("sendHitlResume() aborted before a runtime response reports not-reached", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const error = new Error("aborted before response");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    });
+    mount();
+
+    let result!: Promise<boolean>;
+    act(() => {
+      result = latest.sendHitlResume(hitlEvent, "proceed");
+    });
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      latest.abort();
+      reached = await result;
+    });
+
+    expect(reached).toBe(false);
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+  it("replaceAllMessages installs the authoritative history snapshot", () => {
+    mount();
+    const current = {
+      session_id: "session-1",
+      exchange_id: "exch-current",
+      rank: 99,
+      role: "user",
+      channel: "final",
+      timestamp: "2026-08-14T00:00:01.000Z",
+      parts: [{ type: "text", text: "current" }],
+      metadata: {},
+    } as unknown as ChatMessage;
+    const persisted = {
+      ...current,
+      exchange_id: "exch-persisted",
+      rank: 1,
+      parts: [{ type: "text", text: "persisted" }],
+    } as unknown as ChatMessage;
+
+    act(() => {
+      latest.replaceAllMessages([current]);
+    });
+    expect(latest.messages).toHaveLength(1);
+
+    act(() => {
+      latest.replaceAllMessages([persisted]);
+    });
+    expect(latest.messages).toHaveLength(1);
+    expect(latest.messages[0].rank).toBe(1);
+    expect((latest.messages[0].parts?.[0] as { text?: string } | undefined)?.text).toBe("persisted");
   });
 });

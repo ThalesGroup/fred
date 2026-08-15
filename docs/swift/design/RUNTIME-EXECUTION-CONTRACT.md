@@ -2830,9 +2830,10 @@ where the resume never reached the runtime — token refusal, prepare-execution
 failure, an abort/supersession before the stream started, *or* the runtime
 rejecting the request outright (a fetch failure, or a non-2xx such as 503 from
 an unready pod). The dividing line is the runtime's own acceptance:
-`streamToMessages` signals `onAccepted` once past its status check, and only
-after that does a failure count as reached — a mid-stream reset must NOT
-resurrect the prompt, because the checkpoint has already been consumed.
+`streamToMessages` signals `onAccepted` immediately once past its status check,
+before validating the success body. Only after that does a failure count as
+reached — a missing body or mid-stream reset must NOT resurrect the prompt,
+because the checkpoint may already have been consumed.
 
 Not-reached is a fact about the backend, not about who owns the UI, so
 `handleHitlAnswer` guards the restore itself, three ways: same session
@@ -2841,12 +2842,15 @@ the thread's last message carries a *different* `exchange_id` than the prompt �
 a turn that genuinely starts appends its optimistic user message under a new
 `exchange_id`, so the thread itself says whether the user has moved past the
 exchange, while a send that fails before committing appends nothing, which is
-exactly when the prompt should return), and empty slot only (a functional
-update, so a newer `awaiting_human` is never overwritten by a late-settling
-continuation). No counter or rollback state is kept for this: nothing
-accumulates, so nothing needs unwinding when a superseding send fails. A
-`.catch()` mirrors the same restore, since `pendingHitl` is cleared before the
-await and this continuation is the only path that can put it back. For the same reason the optimistic "cancelled"
+exactly when the prompt should return), and empty slot only (checked
+synchronously through `pendingHitlRef`, so a newer `awaiting_human` is never
+overwritten by a late-settling continuation). The direct resume path needs no
+counter. If an ordinary send displaces the prompt while the resume is pending,
+the prompt is transferred into that send's attempt-owned `submittedDraftRef`:
+a pre-acceptance failure restores it, while acceptance consumes the rollback
+state. A `.catch()` mirrors the same guarded restore, since `pendingHitl` is
+cleared before the await and this continuation is the only path that can put it
+back. For the same reason the optimistic "cancelled"
 tool_results now go in **after** prepare-execution succeeds, not before:
 applied earlier, a failed preparation left the gated calls displayed as
 cancelled by an attempt that never ran, and because those messages are ranked
@@ -2966,13 +2970,13 @@ runtime.**
    re-check `ac.signal.aborted` after the new await, since it is one more
    window in which the attempt can be superseded.
 
-   Deliberately NOT changed alongside it, both reviewed and kept: `state.closed`
-   stays a one-way door per event loop (a pod boots once and dies once;
-   reopening reintroduces the "rebuild a pool nothing closes" leak the flag
-   exists to stop), and an aborted HITL resume still counts as delivered (a
-   prompt stranded that way is recovered by `reconstructPendingHitl` from
-   server history on reload, whereas restoring it eagerly risks an unanswerable
-   card that 409s on every attempt).
+   `state.closed` deliberately stays a one-way door per event loop (a pod boots
+   once and dies once; reopening reintroduces the "rebuild a pool nothing
+   closes" leak the flag exists to stop). HITL resume delivery follows the
+   runtime-acceptance boundary instead: abort or supersession before a 2xx is
+   reported as not reached and permits the ownership-guarded prompt restore;
+   after any 2xx, a missing body or mid-stream failure still counts as accepted
+   because the checkpoint may already have been consumed.
 
 Regression tests: `test_awrap_tool_call_is_error_artifact_marks_failed`
 (asserts the timer's *absence* of `error_code`/`exception_type`,
@@ -3027,6 +3031,37 @@ project one replica's value while the browser's execution request reaches
 another. The displayed limit is therefore advisory; the receiving runtime
 remains authoritative, returns its own `limit_chars` on rejection, and managed
 chat adopts that returned limit for subsequent validation.
+A valid rejection supersedes execution preparations that were already in flight
+when it arrived, so an older advisory response cannot immediately restore a
+value another replica just rejected. It is not a permanent floor: the next
+successful preparation started after that rejection and carrying a valid limit
+may replace it, including when the deployed limit has been raised. A legacy
+preparation that omits the optional projection does not erase a limit learned
+from an authoritative rejection. The last adopted limit survives a
+session-local reset, so the counter does not flicker while the next eager
+preparation is in flight. Non-positive or non-integral rejection metadata is
+ignored rather than becoming frontend policy. A present malformed preparation
+projection is likewise ignored instead of erasing the last valid advisory
+value; only an omitted legacy projection may clear an advisory value that was
+not learned from a runtime rejection.
+Managed chat appends and decodes at most 16 KiB from a non-success runtime
+response and only surfaces bounded, structured error fields (`detail`,
+`detail.message`, validation-array `msg`/`message`, app-level
+`errors[].detail`/`message`, or top-level `message`). Without a trustworthy
+`Content-Length`, Fetch may deliver one transport chunk larger than the
+remaining budget; the reader cancels immediately without appending or decoding
+that crossing chunk. The browser may hold that chunk transiently, so this is an
+application-buffer bound rather than a transport-read bound. Oversized,
+unreadable, bare-string, and non-JSON bodies become a generic status error so
+rejected input or gateway diagnostics cannot be copied into browser logs and
+persistent toasts. Any explicit HTTP 422
+restores the submitted ordinary draft because the request was rejected before
+stream execution; only `chat_input_too_long` changes the displayed limit. This
+also applies when the 422 body cannot be read within the bound.
+Managed chat resolves caller-owned runtime context immediately before the turn
+starts. This lets attachments that become ready during asynchronous preflight
+join the same wire payload and the same rollback snapshot; attachments still
+processing at that boundary remain owned by the next turn.
 This semantic handler check occurs after HTTP body parsing; whole-request byte
 limits and HTTP 413 remain outside issue #2253.
 

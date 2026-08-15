@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,9 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { act, type ComponentProps } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { HitlPrompt } from "./HitlPrompt";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -76,10 +85,82 @@ describe("HitlPrompt chat-input limit", () => {
 
   it("omits limit UI for an older runtime while preserving free text", () => {
     const html = renderToStaticMarkup(
-      <HitlPrompt event={event} onAnswer={() => undefined} freeTextValue="🙂🙂🙂🙂🙂🙂" />,
+      <HitlPrompt
+        event={event}
+        onAnswer={() => undefined}
+        freeTextValue="🙂🙂🙂🙂🙂🙂"
+        onFreeTextChange={() => undefined}
+      />,
     );
 
     expect(html).not.toContain("chatbot.characterCounter");
     expect(html).toContain("🙂🙂🙂🙂🙂🙂");
+  });
+
+  it("localizes both values in the character counter", () => {
+    const html = renderToStaticMarkup(
+      <HitlPrompt
+        event={event}
+        onAnswer={() => undefined}
+        maxChatInputChars={5_000}
+        freeTextValue={"x".repeat(5_001)}
+        onFreeTextChange={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("chatbot.characterCounter:5,001:5,000");
+  });
+
+  it("submits only the fixed choice id and never an unrelated free-text draft", () => {
+    const onAnswer = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      act(() => {
+        root.render(
+          <HitlPrompt
+            event={event}
+            onAnswer={onAnswer}
+            freeTextValue="unrelated free-text draft"
+            onFreeTextChange={() => undefined}
+          />,
+        );
+      });
+      const choiceButton = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Proceed",
+      );
+      expect(choiceButton).toBeDefined();
+
+      act(() => {
+        choiceButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+
+      expect(onAnswer.mock.calls).toEqual([["proceed"]]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("requires controlled free-text props together at compile time", () => {
+    const baseProps = { event, onAnswer: () => undefined };
+    const uncontrolled: ComponentProps<typeof HitlPrompt> = baseProps;
+    const controlled: ComponentProps<typeof HitlPrompt> = {
+      ...baseProps,
+      freeTextValue: "draft",
+      onFreeTextChange: () => undefined,
+    };
+
+    // @ts-expect-error freeTextValue requires onFreeTextChange.
+    const missingChangeHandler: ComponentProps<typeof HitlPrompt> = { ...baseProps, freeTextValue: "draft" };
+    // @ts-expect-error onFreeTextChange requires freeTextValue.
+    const missingControlledValue: ComponentProps<typeof HitlPrompt> = {
+      ...baseProps,
+      onFreeTextChange: () => undefined,
+    };
+
+    expect([uncontrolled, controlled, missingChangeHandler, missingControlledValue]).toHaveLength(4);
   });
 });

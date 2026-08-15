@@ -30,7 +30,7 @@ const asString = (value: unknown): string | undefined => {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 };
 
-const getDetailFromData = (data: unknown): string | undefined => {
+export const getDetailFromData = (data: unknown): string | undefined => {
   if (!isRecord(data)) return undefined;
 
   const directDetail = asString(data.detail);
@@ -50,12 +50,12 @@ const getDetailFromData = (data: unknown): string | undefined => {
   }
 
   const errors = data.errors;
-  if (!Array.isArray(errors)) return undefined;
-
-  for (const entry of errors) {
-    if (!isRecord(entry)) continue;
-    const message = asString(entry.detail) || asString(entry.message);
-    if (message) return message;
+  if (Array.isArray(errors)) {
+    for (const entry of errors) {
+      if (!isRecord(entry)) continue;
+      const message = asString(entry.detail) || asString(entry.message);
+      if (message) return message;
+    }
   }
 
   return undefined;

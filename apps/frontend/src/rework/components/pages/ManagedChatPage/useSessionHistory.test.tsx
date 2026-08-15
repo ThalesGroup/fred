@@ -25,7 +25,7 @@
 //   brand-new session;
 // - the cache is a bounded LRU.
 
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
@@ -81,14 +81,23 @@ function TestHost({
   sessionId,
   onLoaded,
   isTurnActive,
+  getLiveActivityRevision,
   onRender,
 }: {
   sessionId: string | null;
   onLoaded: (messages: ChatMessage[]) => void;
   isTurnActive: () => boolean;
+  getLiveActivityRevision: () => number;
   onRender: (hook: ReturnType<typeof useSessionHistory>) => void;
 }) {
-  const hook = useSessionHistory({ sessionId, teamId: "team-1", agentInstanceId: "agent-1", onLoaded, isTurnActive });
+  const hook = useSessionHistory({
+    sessionId,
+    teamId: "team-1",
+    agentInstanceId: "agent-1",
+    onLoaded,
+    isTurnActive,
+    getLiveActivityRevision,
+  });
   onRender(hook);
   return null;
 }
@@ -99,18 +108,23 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
   let latest: ReturnType<typeof useSessionHistory>;
   const onLoaded = vi.fn();
   let turnActive = false;
+  let liveActivityRevision = 0;
   const isTurnActive = () => turnActive;
+  const getLiveActivityRevision = () => liveActivityRevision;
+
+  const host = (sessionId: string | null) => (
+    <TestHost
+      sessionId={sessionId}
+      onLoaded={onLoaded}
+      isTurnActive={isTurnActive}
+      getLiveActivityRevision={getLiveActivityRevision}
+      onRender={(h) => (latest = h)}
+    />
+  );
 
   const render = (sessionId: string | null) => {
     act(() => {
-      root.render(
-        <TestHost
-          sessionId={sessionId}
-          onLoaded={onLoaded}
-          isTurnActive={isTurnActive}
-          onRender={(h) => (latest = h)}
-        />,
-      );
+      root.render(host(sessionId));
     });
   };
 
@@ -133,6 +147,7 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     onLoaded.mockClear();
     prepareExecutionCalls.length = 0;
     turnActive = false;
+    liveActivityRevision = 0;
     fetchImpl = async () => okResponse([]);
     vi.stubGlobal("fetch", (url: string) => fetchImpl(String(url)));
   });
@@ -162,6 +177,42 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(getCachedSessionHistory("session-a")).toEqual(history);
   });
 
+  it("keeps an uncached StrictMode load visible until its request settles", async () => {
+    const history = [msg("m1")];
+    const response = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    fetchImpl = () => response.promise;
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<StrictMode>{host("session-a")}</StrictMode>);
+    });
+
+    expect(latest.isLoading).toBe(true);
+
+    response.resolve(okResponse(history));
+    await settle();
+
+    expect(latest.isLoading).toBe(false);
+    expect(onLoaded).toHaveBeenCalledWith(history);
+  });
+
+  it("resets loading when switching from an uncached session to a cached session", () => {
+    const cachedHistory = [msg("b1")];
+    const response = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    setCachedSessionHistory("session-b", cachedHistory);
+    fetchImpl = () => response.promise;
+
+    mount("session-a");
+    expect(latest.isLoading).toBe(true);
+
+    render("session-b");
+
+    expect(latest.isLoading).toBe(false);
+    expect(onLoaded).toHaveBeenLastCalledWith(cachedHistory);
+  });
+
   it("cache hit: renders synchronously with no loading state, then revalidates in the background", async () => {
     const cachedHistory = [msg("m1")];
     const freshHistory = [msg("m1"), msg("m2-from-another-device")];
@@ -180,6 +231,16 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(latest.isLoading).toBe(false);
     expect(onLoaded).toHaveBeenLastCalledWith(freshHistory);
     expect(getCachedSessionHistory("session-a")).toEqual(freshHistory);
+  });
+
+  it("does not replay cached history over a turn that is already active", async () => {
+    setCachedSessionHistory("session-a", [msg("cached-before-live-turn")]);
+    turnActive = true;
+
+    mount("session-a");
+
+    expect(onLoaded).not.toHaveBeenCalled();
+    expect(latest.isLoading).toBe(false);
   });
 
   it("a response landing after a session switch is neither applied nor cached under either session", async () => {
@@ -202,6 +263,24 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(getCachedSessionHistory("session-b")).toEqual(bHistory);
   });
 
+  it("does not let an older session request clear the active session's loading state", async () => {
+    const aResponse = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    const bResponse = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    fetchImpl = (url) => (url.includes("session-a") ? aResponse.promise : bResponse.promise);
+
+    mount("session-a");
+    render("session-b");
+    expect(latest.isLoading).toBe(true);
+
+    aResponse.resolve(okResponse([msg("a1")]));
+    await settle();
+    expect(latest.isLoading).toBe(true);
+
+    bResponse.resolve(okResponse([msg("b1")]));
+    await settle();
+    expect(latest.isLoading).toBe(false);
+  });
+
   it("an empty response is not applied — a brand-new session's optimistic first message survives", async () => {
     fetchImpl = async () => okResponse([]);
     mount("session-new");
@@ -211,17 +290,110 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(getCachedSessionHistory("session-new")).toBeUndefined();
   });
 
-  it("a response never replaces a live streamed turn, and is not cached over it", async () => {
+  it("does not apply or cache a response that arrives during a live turn", async () => {
     const response = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
     fetchImpl = () => response.promise;
 
     mount("session-a");
-    turnActive = true; // a turn starts streaming while history is in flight
+    turnActive = true;
     response.resolve(okResponse([msg("stale-history")]));
     await settle();
 
     expect(onLoaded).not.toHaveBeenCalled();
     expect(getCachedSessionHistory("session-a")).toBeUndefined();
+  });
+
+  it("discards history started before a turn even when that turn has already settled", async () => {
+    const response = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    fetchImpl = () => response.promise;
+
+    mount("session-a");
+    liveActivityRevision += 1;
+    response.resolve(okResponse([msg("stale-history")]));
+    await settle();
+
+    expect(turnActive).toBe(false);
+    expect(onLoaded).not.toHaveBeenCalled();
+    expect(getCachedSessionHistory("session-a")).toBeUndefined();
+  });
+
+  it("discards an overlapping response without scheduling a retry", async () => {
+    vi.useFakeTimers();
+    try {
+      let call = 0;
+      fetchImpl = async () => {
+        call += 1;
+        return okResponse([msg("stale-history")]);
+      };
+
+      mount("session-a");
+      liveActivityRevision += 1;
+      await settle();
+
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(getCachedSessionHistory("session-a")).toBeUndefined();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+
+      expect(call).toBe(1);
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(getCachedSessionHistory("session-a")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not apply or cache an overlapping response that settles after unmount", async () => {
+    const response = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    fetchImpl = () => response.promise;
+
+    mount("session-a");
+    liveActivityRevision += 1;
+    act(() => root.render(null));
+    response.resolve(okResponse([msg("stale-history")]));
+    await settle();
+
+    expect(prepareExecutionCalls).toHaveLength(1);
+    expect(onLoaded).not.toHaveBeenCalled();
+    expect(getCachedSessionHistory("session-a")).toBeUndefined();
+  });
+
+  it("discards a response whose request began while a turn was active", async () => {
+    const response = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    fetchImpl = () => response.promise;
+    turnActive = true;
+
+    mount("session-a");
+    turnActive = false;
+    response.resolve(okResponse([msg("history-without-active-turn")]));
+    await settle();
+
+    expect(onLoaded).not.toHaveBeenCalled();
+    expect(getCachedSessionHistory("session-a")).toBeUndefined();
+  });
+
+  it("replays the cache when the user returns to a session this mount already fetched", async () => {
+    // The fetch guard must sit BELOW the cache replay. Above it, browser
+    // Back/Forward on the same agent (no remount, sessionId → null → same id)
+    // returns to a permanently empty thread.
+    fetchImpl = async () => okResponse([msg("m1")]);
+    mount("session-a");
+    await settle();
+    expect(onLoaded).toHaveBeenCalledWith([msg("m1")]);
+    onLoaded.mockClear();
+    prepareExecutionCalls.length = 0;
+
+    render(null);
+    await settle();
+    render("session-a");
+    await settle();
+
+    expect(onLoaded).toHaveBeenCalledWith([msg("m1")]);
+    // Served from cache — the guard still suppresses a duplicate fetch.
+    expect(prepareExecutionCalls).toHaveLength(0);
   });
 
   it("does not re-fetch on an effect re-fire for the same session", async () => {

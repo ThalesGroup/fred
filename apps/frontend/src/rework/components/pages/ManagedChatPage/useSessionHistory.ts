@@ -23,10 +23,13 @@ interface UseSessionHistoryArgs {
   teamId: string | undefined;
   agentInstanceId: string | undefined;
   onLoaded: (messages: ChatMessage[]) => void;
-  // True while a streamed turn is in progress. A history response — cached or
-  // fetched — must never replace a live turn: history necessarily lacks the
-  // in-flight exchange, so applying it would visibly eat the user's message.
+  // True while a streamed turn is in progress. Cached or fetched history must
+  // not replace a live turn because it cannot contain the in-flight exchange.
   isTurnActive: () => boolean;
+  // A turn can start and finish while a history request is in flight. This
+  // revision detects that overlap even when the turn is no longer active when
+  // the response arrives.
+  getLiveActivityRevision: () => number;
 }
 
 function expandMessagesUrl(template: string, sessionId: string): string {
@@ -39,6 +42,7 @@ export function useSessionHistory({
   agentInstanceId,
   onLoaded,
   isTurnActive,
+  getLiveActivityRevision,
 }: UseSessionHistoryArgs) {
   const [isLoading, setIsLoading] = useState(false);
   // Session whose fetch this mount has already started — keeps an effect
@@ -51,6 +55,25 @@ export function useSessionHistory({
   // staleness can only be detected against a ref.
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId;
+  const isMountedRef = useRef(true);
+  const loadGenerationRef = useRef(0);
+  const loadingResetSessionRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    // Run once per session identity. Re-running this for the session already
+    // being fetched would leave the loading indicator out of step with its request.
+    if (loadingResetSessionRef.current === sessionId) return;
+    loadingResetSessionRef.current = sessionId;
+    loadGenerationRef.current += 1;
+    setIsLoading(false);
+  }, [sessionId]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
@@ -61,12 +84,20 @@ export function useSessionHistory({
     // #2239 instant switch: a previously opened conversation renders straight
     // from the cache — synchronously, no spinner, composer stays enabled —
     // while the fetch below revalidates against the runtime (the source of
-    // truth) in the background and swaps in the fresh history when it lands.
+    // truth) in the background and replaces it with fresh history when safe.
+    // Replayed on EVERY effect run, including a return to a session this mount
+    // already fetched. The fetch guard below must stay BELOW this line: above
+    // it, re-entering a session (browser Back/Forward on the same agent, which
+    // does not remount) renders an empty thread forever.
     const cached = getCachedSessionHistory(sessionId);
     if (cached !== undefined && cached.length > 0 && !isTurnActive()) onLoaded(cached);
 
     if (startedForRef.current === sessionId) return;
     startedForRef.current = sessionId;
+
+    const turnWasActiveAtStart = isTurnActive();
+    const liveActivityRevisionAtStart = getLiveActivityRevision();
+    const loadGeneration = ++loadGenerationRef.current;
 
     const load = async () => {
       // A cache hit downgrades the fetch to a silent background revalidation:
@@ -81,16 +112,14 @@ export function useSessionHistory({
         const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
         if (!resp.ok) return;
         const msgs: ChatMessage[] = await resp.json();
-        // Guards, in order:
-        // - stale response: the user switched sessions while this fetch was
-        //   in flight — applying would render session A's history under
-        //   session B and poison the cache;
-        // - live turn: see `isTurnActive` above;
-        // - empty history: a brand-new session bound at send time has no
-        //   persisted history yet — applying [] would wipe the optimistic
-        //   first message.
-        if (activeSessionIdRef.current !== sessionId) return;
-        if (isTurnActive()) return;
+        // A response that overlapped live activity cannot contain the current
+        // turn. Applying or caching it would replace newer state with an older
+        // snapshot. Do not retry automatically: persistence can still lag the
+        // completed turn, so a later full replacement is not inherently safer.
+        if (!isMountedRef.current || activeSessionIdRef.current !== sessionId) return;
+        if (turnWasActiveAtStart || isTurnActive() || getLiveActivityRevision() !== liveActivityRevisionAtStart) {
+          return;
+        }
         if (msgs.length === 0) return;
         setCachedSessionHistory(sessionId, msgs);
         onLoaded(msgs);
@@ -98,12 +127,18 @@ export function useSessionHistory({
         // History load failure is non-fatal — user continues with the cached
         // (or empty) view.
       } finally {
-        setIsLoading(false);
+        if (
+          isMountedRef.current &&
+          activeSessionIdRef.current === sessionId &&
+          loadGenerationRef.current === loadGeneration
+        ) {
+          setIsLoading(false);
+        }
       }
     };
 
     void load();
-  }, [sessionId, teamId, agentInstanceId, prepareExecution, onLoaded, isTurnActive]);
+  }, [sessionId, teamId, agentInstanceId, prepareExecution, onLoaded, isTurnActive, getLiveActivityRevision]);
 
   return { isLoading };
 }

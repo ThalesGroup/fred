@@ -22,14 +22,24 @@ import type { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import styles from "./HitlPrompt.module.css";
 
-interface HitlPromptProps {
+interface HitlPromptBaseProps {
   event: RuntimeAwaitingHumanEvent;
   onAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
   readonly?: boolean;
   maxChatInputChars?: number;
-  freeTextValue?: string;
-  onFreeTextChange?: (value: string) => void;
 }
+
+type HitlPromptProps = HitlPromptBaseProps &
+  (
+    | {
+        freeTextValue: string;
+        onFreeTextChange: (value: string) => void;
+      }
+    | {
+        freeTextValue?: never;
+        onFreeTextChange?: never;
+      }
+  );
 
 /**
  * Visual treatment for one HITL choice button. The tool-approval gate

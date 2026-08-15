@@ -293,27 +293,28 @@ export default function ManagedChatPage() {
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
-  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory;
+  const composerBusy = chat.isPreparingSend || chat.waitResponse;
+  const composerControlsDisabled = composerBusy || chat.isLoadingHistory;
 
   const composer = (
     <RichInputField
       value={chat.input}
       onChange={chat.setInput}
       onSend={chat.handleSend}
-      onInterrupt={chat.handleAbort}
-      disabled={chat.waitResponse || chat.isLoadingHistory}
+      onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
+      disabled={composerBusy || chat.isLoadingHistory}
       sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}
       characterLimit={chat.maxChatInputChars}
       enableVoiceInput
       onTranscribeAudio={handleTranscribeAudio}
-      voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
+      voiceInputDisabled={composerBusy || chat.isLoadingHistory}
       onVoiceInputError={reportVoiceInputError}
       focusEndRequestId={focusEndRequestId}
       showSendButton
       aboveTextSlot={
         chat.attachments.length > 0 ? (
-          <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
+          <AttachmentChips attachments={chat.attachments} onRemove={composerBusy ? undefined : chat.removeAttachment} />
         ) : undefined
       }
       rightExtraSlot={

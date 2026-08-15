@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -29,6 +29,7 @@ import type { ChatAttachment, ChatImageContext, SessionAttachment } from "@rewor
 
 const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const NO_ATTACHMENT_IDS: ReadonlySet<string> = new Set();
 
 interface FastIngestResponse {
   document_uid?: string;
@@ -116,6 +117,15 @@ export function buildAttachmentsMarkdown(persisted: SessionAttachment[], transie
   const persistedLines = persisted.map(
     (attachment) => `- ${attachment.name}${uidSuffix(attachment.documentUid)}: conversation document`,
   );
+  const persistedIds = new Set(persisted.map((attachment) => attachment.attachmentId));
+  // The mutation marks the local attachment ready synchronously, while the
+  // persisted-attachments query can update on a later render. Keep that short
+  // cache gap from dropping a newly ready document from the turn-start context.
+  const transientDocumentLines = transient.flatMap((attachment) =>
+    attachment.status === "ready" && !attachment.imageContext && !persistedIds.has(attachment.id)
+      ? [`- ${attachment.name}${uidSuffix(attachment.documentUid)}: conversation document`]
+      : [],
+  );
   const inlineImageLines = transient.flatMap((attachment) =>
     attachment.imageContext
       ? [
@@ -125,7 +135,12 @@ export function buildAttachmentsMarkdown(persisted: SessionAttachment[], transie
       : [],
   );
 
-  const lines = ["## Attached files for this conversation", ...persistedLines, ...inlineImageLines];
+  const lines = [
+    "## Attached files for this conversation",
+    ...persistedLines,
+    ...transientDocumentLines,
+    ...inlineImageLines,
+  ];
   return lines.length > 1 ? lines.join("\n") : null;
 }
 
@@ -134,6 +149,18 @@ export function excludeDeletedAttachments(
   deletedAttachmentIds: ReadonlySet<string>,
 ): SessionAttachment[] {
   return persisted.filter((attachment) => !deletedAttachmentIds.has(attachment.attachmentId));
+}
+
+export function mergeRestoredReadyAttachments(
+  current: ChatAttachment[],
+  restored: readonly ChatAttachment[],
+  excludedIds: ReadonlySet<string> = NO_ATTACHMENT_IDS,
+): ChatAttachment[] {
+  const existingIds = new Set(current.map((attachment) => attachment.id));
+  const missing = restored.filter(
+    (attachment) => attachment.status === "ready" && !existingIds.has(attachment.id) && !excludedIds.has(attachment.id),
+  );
+  return missing.length > 0 ? [...current, ...missing] : current;
 }
 
 interface UseChatAttachmentsParams {
@@ -146,10 +173,29 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  // Synchronous source of truth for transitions that can share one React render
+  // window (upload completion, turn-start clear, and rejection rollback).
+  const attachmentsRef = useRef<ChatAttachment[]>([]);
+  const updateAttachments = useCallback((update: (current: ChatAttachment[]) => ChatAttachment[]) => {
+    const next = update(attachmentsRef.current);
+    attachmentsRef.current = next;
+    setAttachments(next);
+  }, []);
   const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<ReadonlySet<string>>(new Set());
-
+  // Synchronous mirror for rejection rollback. The delete action and the
+  // runtime's 422 can settle in the same render window, before React has
+  // committed the state update used by persistedAttachments.
+  const deletedAttachmentIdsRef = useRef<ReadonlySet<string>>(new Set());
+  // Owns rollback per (session, attachment). A failed request may settle after
+  // the user revisits the same session and starts a newer deletion for the
+  // same id; only the latest attempt may remove its tombstone.
+  const deleteAttemptOwnersRef = useRef<Map<string, symbol>>(new Map());
+  const activeSessionIdRef = useRef(sessionId);
+  activeSessionIdRef.current = sessionId;
   useEffect(() => {
-    setDeletedAttachmentIds(new Set());
+    const empty = new Set<string>();
+    deletedAttachmentIdsRef.current = empty;
+    setDeletedAttachmentIds(empty);
   }, [sessionId]);
 
   const { data: persistedAttachmentsData = [], isFetching: isHydratingAttachments } =
@@ -172,6 +218,8 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       ),
     [deletedAttachmentIds, persistedAttachmentsData],
   );
+  const persistedAttachmentsRef = useRef(persistedAttachments);
+  persistedAttachmentsRef.current = persistedAttachments;
 
   const fastIngestAttachment = useCallback(
     async (file: File, activeSessionId: string | null | undefined): Promise<FastIngestResponse | null> => {
@@ -193,8 +241,13 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   const deletePersistedAttachment = useCallback(
     async (attachmentId: string) => {
       if (!teamId || !sessionId) return;
-      setAttachments((prev) => prev.filter((attachment) => attachment.id !== attachmentId));
-      setDeletedAttachmentIds((prev) => new Set(prev).add(attachmentId));
+      const attemptKey = JSON.stringify([sessionId, attachmentId]);
+      const attemptOwner = Symbol(attemptKey);
+      deleteAttemptOwnersRef.current.set(attemptKey, attemptOwner);
+      updateAttachments((prev) => prev.filter((attachment) => attachment.id !== attachmentId));
+      const withDeletedAttachment = new Set(deletedAttachmentIdsRef.current).add(attachmentId);
+      deletedAttachmentIdsRef.current = withDeletedAttachment;
+      setDeletedAttachmentIds(withDeletedAttachment);
       try {
         await deletePersistedAttachmentMutation({
           teamId,
@@ -202,11 +255,15 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           attachmentId,
         }).unwrap();
       } catch (error) {
-        setDeletedAttachmentIds((prev) => {
-          const next = new Set(prev);
-          next.delete(attachmentId);
-          return next;
-        });
+        if (
+          activeSessionIdRef.current === sessionId &&
+          deleteAttemptOwnersRef.current.get(attemptKey) === attemptOwner
+        ) {
+          const withoutFailedDeletion = new Set(deletedAttachmentIdsRef.current);
+          withoutFailedDeletion.delete(attachmentId);
+          deletedAttachmentIdsRef.current = withoutFailedDeletion;
+          setDeletedAttachmentIds(withoutFailedDeletion);
+        }
         notifyApiError(error, {
           summary: t("chatbot.errors.attachmentDeleteFailedSummary"),
           fallbackDetail: t("chatbot.errors.attachmentDeleteFailedDetail"),
@@ -216,9 +273,13 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         // and don't await it -- the error is already surfaced via the toast
         // above and local state is already rolled back, so don't rethrow: an
         // unawaited rejection here becomes an unhandled promise rejection.
+      } finally {
+        if (deleteAttemptOwnersRef.current.get(attemptKey) === attemptOwner) {
+          deleteAttemptOwnersRef.current.delete(attemptKey);
+        }
       }
     },
-    [deletePersistedAttachmentMutation, notifyApiError, sessionId, t, teamId],
+    [deletePersistedAttachmentMutation, notifyApiError, sessionId, t, teamId, updateAttachments],
   );
 
   const addFiles = useCallback(
@@ -247,7 +308,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           { type: "attachment", id, label: file.name },
           source === "drop" ? t("chatbot.attachments.processingPrepare") : t("chatbot.attachments.processingFast"),
         );
-        setAttachments((prev) => [
+        updateAttachments((prev) => [
           ...prev,
           {
             id,
@@ -291,7 +352,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             t("chatbot.attachments.processingDone"),
           );
 
-          setAttachments((prev) =>
+          updateAttachments((prev) =>
             prev.map((attachment) =>
               attachment.id === id
                 ? {
@@ -314,7 +375,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             t("chatbot.attachments.processingFailed"),
             errorMessage,
           );
-          setAttachments((prev) =>
+          updateAttachments((prev) =>
             prev.map((attachment) =>
               attachment.id === id ? { ...attachment, status: "error", error: errorMessage } : attachment,
             ),
@@ -322,34 +383,61 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         }
       }
     },
-    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
+    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId, updateAttachments],
   );
 
   const removeAttachment = useCallback(
     (id: string) => {
-      setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
+      updateAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
       const persisted = persistedAttachments.find((attachment) => attachment.attachmentId === id);
       if (persisted) {
         void deletePersistedAttachment(id);
       }
     },
-    [deletePersistedAttachment, persistedAttachments],
+    [deletePersistedAttachment, persistedAttachments, updateAttachments],
   );
 
-  const clearReadyAttachments = useCallback(() => {
-    setAttachments((prev) =>
-      prev.filter((attachment) => attachment.status === "uploading" || attachment.status === "ingesting"),
+  /** Clears the ready attachments owned by one submitted turn and returns
+   *  exactly those removed so a later rejection can restore the same set. */
+  const clearReadyAttachments = useCallback(
+    (attachmentIds: readonly string[]): readonly ChatAttachment[] => {
+      if (attachmentIds.length === 0) return [];
+      const selectedIds = new Set(attachmentIds);
+      const current = attachmentsRef.current;
+      const cleared = current.filter((attachment) => attachment.status === "ready" && selectedIds.has(attachment.id));
+      updateAttachments((attachmentsAtClear) =>
+        attachmentsAtClear.filter((attachment) => !(attachment.status === "ready" && selectedIds.has(attachment.id))),
+      );
+      return cleared;
+    },
+    [updateAttachments],
+  );
+
+  const restoreReadyAttachments = useCallback(
+    (readyAttachments: readonly ChatAttachment[]) => {
+      if (readyAttachments.length === 0) return;
+      updateAttachments((current) =>
+        mergeRestoredReadyAttachments(current, readyAttachments, deletedAttachmentIdsRef.current),
+      );
+    },
+    [updateAttachments],
+  );
+
+  // Read at the final turn-start boundary rather than when Send is clicked.
+  // Upload completion and deletion both update their refs synchronously, so a
+  // file that becomes ready during async preflight is represented consistently
+  // in both the wire context and the set of chips owned by that turn.
+  const getReadyAttachmentSnapshot = useCallback(() => {
+    const readyAttachments = attachmentsRef.current.filter((attachment) => attachment.status === "ready");
+    const visiblePersisted = excludeDeletedAttachments(
+      persistedAttachmentsRef.current,
+      deletedAttachmentIdsRef.current,
     );
+    return {
+      attachmentIds: readyAttachments.map((attachment) => attachment.id),
+      attachmentsMarkdown: buildAttachmentsMarkdown(visiblePersisted, readyAttachments),
+    };
   }, []);
-
-  const attachmentsMarkdown = useMemo(
-    () =>
-      buildAttachmentsMarkdown(
-        persistedAttachments,
-        attachments.filter((attachment) => attachment.status === "ready"),
-      ),
-    [attachments, persistedAttachments],
-  );
 
   // True while any attachment is still uploading/ingesting. Used to block message
   // send until every attachment has finished, so the agent never answers before
@@ -363,11 +451,12 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     attachments,
     persistedAttachments,
     isHydratingAttachments,
-    attachmentsMarkdown,
     hasUploadingAttachments,
     addFiles,
     removeAttachment,
     deletePersistedAttachment,
+    getReadyAttachmentSnapshot,
     clearReadyAttachments,
+    restoreReadyAttachments,
   };
 }

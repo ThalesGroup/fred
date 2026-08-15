@@ -733,7 +733,8 @@ itself owns only `aria-invalid` and its send gating.
 
 - At or below the limit, nothing is visible — no counter, no error colour — and send stays
   available. An ordinary message sits far below a limit measured in thousands of code points
-  (5,000 in the default template, but it is per-template and admin-configurable), so a
+  (5,000 by default, set per runtime pod in its deployment configuration — not per template;
+  every template of a pod reports that pod's single value), so a
   permanently visible counter would report a non-problem for the whole life of the draft
   (2026-08-13, issue #2358).
 - Above the limit, the error copy and the counter appear together as one error-coloured region,
@@ -748,9 +749,33 @@ itself owns only `aria-invalid` and its send gating.
   region — inside, it would re-announce on every keystroke.
 - Text remains fully editable: neither component sets native `maxLength`, truncates pasted or
   dictated content, nor clears an oversized draft. A backend length rejection restores the
-  ordinary draft or pending HITL prompt safely.
+  ordinary draft and its transient ready attachments (including inline-image context), or the
+  pending HITL prompt, safely. Rollback never resurrects an attachment deleted while the request
+  was in flight; deletion rollback is attempt-owned so an older failure cannot clear a newer
+  tombstone for the same file. Failed attachment chips are not part of a turn's ready snapshot and
+  remain visible when that turn starts. If that deletion later fails, the file returns as a
+  conversation document, but its inline-image data is not restored into the retry; the user must
+  attach the image again to send it as inline context. A displaced HITL prompt is also restored when the
+  ordinary send fails during preflight, and the retained retry snapshot is released as soon as
+  the owning request can no longer return a length rejection. Composer editing is disabled and
+  chip removal is unavailable while the session-write barrier prepares a Send; an asynchronous
+  producer that was already running cannot have its later text erased — once the turn starts, only
+  the accepted draft prefix is consumed and any newly appended suffix remains in the composer; a
+  later 422 restores their exact pre-turn combination when that retained suffix was not edited.
+  Attachment context and chip ownership are captured together at the final turn-start boundary:
+  files that become ready during asynchronous preparation join the current turn, while files still
+  processing at that boundary remain available for the next turn.
+- Background history revalidation preserves an in-progress HITL free-text draft when it
+  reconstructs the same prompt identity; a different or closed prompt clears the old draft.
+  Runtime history replaces the displayed thread only when no live activity overlapped the request.
+  A response started during a turn, received during a turn, or invalidated by a turn that started
+  and settled in between is neither displayed nor cached. No automatic retry follows because
+  persistence may still lag the completed turn, making a later full replacement unsafe. Returning
+  to a conversation this page already loaded still replays its cache immediately instead of
+  rendering empty.
 - During a rolling upgrade, an older runtime may omit the policy. In that state no counter is
-  shown and the runtime remains the authoritative enforcement boundary.
+  shown unless this mounted chat already learned a stricter limit from a runtime rejection; the
+  runtime remains the authoritative enforcement boundary.
 
 ---
 

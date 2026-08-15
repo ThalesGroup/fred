@@ -15,7 +15,7 @@
 // Page-local composition of organisms for ManagedChatPage.
 // Lives under pages/ so it may import from shared/organisms freely.
 
-import { memo, type ReactNode, type RefObject } from "react";
+import { memo, useMemo, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
@@ -63,8 +63,10 @@ export const ConversationThread = memo(function ConversationThread({
   // #2177: one prompt can batch several calls at once) — lets the trace row
   // for each of those tools render "awaiting confirmation" instead of
   // "running" while the prompt below is still unanswered.
-  const pendingToolCallIds =
-    pendingHitl?.payload.pending_calls?.map((c) => c.tool_call_id).filter((id): id is string => !!id) ?? null;
+  const pendingToolCallIds = useMemo(
+    () => pendingHitl?.payload.pending_calls?.map((c) => c.tool_call_id).filter((id): id is string => !!id) ?? null,
+    [pendingHitl],
+  );
 
   return (
     <ChatMessagesArea
