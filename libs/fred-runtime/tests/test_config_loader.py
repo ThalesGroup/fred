@@ -116,7 +116,6 @@ def _write_models_catalog(path: Path, *, chat_name: str = "gpt-5") -> None:
             version: v1
             default_profile_by_capability:
               chat: default.chat
-              language: default.language
             profiles:
               - profile_id: default.chat
                 capability: chat
@@ -124,13 +123,6 @@ def _write_models_catalog(path: Path, *, chat_name: str = "gpt-5") -> None:
                   provider: openai
                   name: {chat_name}
                   settings: {{}}
-              - profile_id: default.language
-                capability: language
-                model:
-                  provider: openai
-                  name: gpt-5-mini
-                  settings: {{}}
-            rules: []
             """
         ).strip(),
         encoding="utf-8",

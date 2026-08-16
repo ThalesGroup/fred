@@ -14,38 +14,42 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
+
 from fred_core.common import TeamId
-from fred_sdk.contracts.context import TeamOperationRouteRule
+from fred_sdk.contracts.context import ModelBinding
 from pydantic import BaseModel, Field
 
 
 class TeamRoutingPolicy(BaseModel):
-    """One team's resolved routing policy (`TEAM-ROUTING-POLICY-RFC.md` §3).
+    """One team's resolved routing policy.
 
     `GET` always returns this shape — an empty policy (`version=0`, both
     fields empty/None) when the team has never written one, resolving to
-    runtime defaults, never a 404 (RFC §10 "GET returns the stored policy or
-    an empty policy that resolves to runtime defaults").
+    runtime defaults, never a 404 ("GET returns the stored policy or an empty
+    policy that resolves to runtime defaults").
     """
 
     team_id: TeamId
     version: int
     chat_default_profile_id: str | None = None
-    operation_rules: list[TeamOperationRouteRule] = Field(default_factory=list)
+    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class UpdateTeamRoutingPolicyRequest(BaseModel):
-    """`PATCH` body — a full typed replacement, no per-field patch semantics
-    (RFC §10)."""
+    """`PATCH` body — a full typed replacement, no per-field patch semantics."""
 
     chat_default_profile_id: str | None = None
-    operation_rules: list[TeamOperationRouteRule] = Field(default_factory=list)
+    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class AvailableModelProfile(BaseModel):
-    """One `can_use`-enabled model profile this team may reference from its
-    routing policy — the option set for the `chat_default_profile_id` /
-    `target_profile_id` picker (`TEAM-ROUTING-POLICY-RFC.md` §13, #2167)."""
+    """One chat profile this team may reference from its routing policy.
+
+    It is `can_use`-enabled and advertised by every model-capable pod; the
+    server derives this set from declared capability, never the profile id.
+    """
 
     profile_id: str
     capability_id: str
@@ -72,59 +76,40 @@ class ProfileNotUsableError(Exception):
 
 
 class UnknownProfileError(Exception):
-    """A routing-policy write references a `target_profile_id` this
-    deployment does not serve uniformly: either no pod has ever advertised
-    it (typo), or only some pods have — a profile must be present on every
-    enabled, model-capable pod to be deployment-global (RFC §9), or it can
-    drift-fail at runtime on whichever pod actually lacks it
-    (2026-08-02, MDL#2)."""
+    """A routing-policy write references an invalid chat profile.
+
+    The id is unknown, non-chat, or absent from at least one enabled
+    model-capable pod. These cases share one client contract: the profile is
+    not selectable by the deployment-wide chat policy.
+    """
 
     def __init__(self, *, profile_ids: list[str]) -> None:
         self.profile_ids = profile_ids
         super().__init__(f"Unknown profile id(s): {profile_ids!r}.")
 
 
-class DuplicateOperationRuleError(Exception):
-    """Two rules in the same write share an (operation, purpose, agent_id) triplet
-    (RFC §3.2 invariant) — the resolver has no defined tie-break for that, so
-    reject rather than silently pick one."""
+class PlatformModelBinding(BaseModel):
+    """The platform-wide `chat` model-binding admin state — chat-only;
+    `language`/`embedding`/`image` have no production consumer and are not
+    representable through this API.
 
-    def __init__(
-        self, *, operation: str | None, purpose: str | None, agent_id: str | None = None
-    ) -> None:
-        self.operation = operation
-        self.purpose = purpose
-        self.agent_id = agent_id
-        super().__init__(
-            f"Duplicate rule for (operation={operation!r}, purpose={purpose!r}, agent_id={agent_id!r})."
-        )
+    `GET/PUT/DELETE /admin/platform/model-bindings` always return this shape
+    — `binding=None` means chat has no platform override and every pod
+    resolves it locally as it always has. `model_capability` is a
+    route-local constant, not the global `ModelCapability` enum: this API
+    surface can only ever describe `chat`, so there is no vocabulary to
+    reuse or duplicate.
+    """
 
-
-class DuplicateRuleIdError(Exception):
-    """Two rules in the same write share a `rule_id` — always a client bug
-    (rule_id is a client-generated stable key, never user-authored), never a
-    legitimate routing intent. Reported separately from
-    `DuplicateOperationRuleError` so the message names the actual offending
-    id instead of a misleading (None, None, None) triplet."""
-
-    def __init__(self, *, rule_id: str) -> None:
-        self.rule_id = rule_id
-        super().__init__(f"Duplicate rule_id {rule_id!r} in the same write.")
+    model_capability: Literal["chat"] = "chat"
+    binding: ModelBinding | None = None
+    updated_by: str | None = None
+    updated_at: datetime | None = None
 
 
-class AmbiguousOperationRuleError(Exception):
-    """Two rules in the same write could both match the same request with
-    equal specificity (RFC §3.2 resolution is "fixed, deterministic, no
-    scoring") — e.g. one rule pinning (operation, agent_id) and another
-    pinning (purpose, agent_id) for the same agent_id. The resolver breaks
-    such ties by declaration order, which this UI never surfaces to an
-    admin, so reject the write instead of leaving an outcome that depends on
-    storage order."""
+class SetPlatformModelBindingRequest(BaseModel):
+    """`PUT` body — wraps `ModelBinding` (its own strict `settings` contract,
+    `ModelBindingSettings`, rejects any credential-shaped or unknown key at
+    request-parsing time, before the service layer even runs)."""
 
-    def __init__(self, *, rule_id_a: str, rule_id_b: str) -> None:
-        self.rule_id_a = rule_id_a
-        self.rule_id_b = rule_id_b
-        super().__init__(
-            f"Rules {rule_id_a!r} and {rule_id_b!r} can both match the same request "
-            "with equal specificity — remove or narrow one so resolution stays deterministic."
-        )
+    binding: ModelBinding

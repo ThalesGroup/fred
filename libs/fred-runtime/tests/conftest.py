@@ -85,16 +85,6 @@ class StaticChatModelFactory:
     def build(self, definition: object, binding: object) -> ToolFriendlyFakeChatModel:
         return self._model
 
-    def build_for_operation(
-        self,
-        *,
-        definition: object,
-        binding: object,
-        purpose: object,
-        operation: object = None,
-    ) -> ToolFriendlyFakeChatModel:
-        return self._model
-
 
 @pytest.fixture
 def minimal_config() -> AgentPodConfig:

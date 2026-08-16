@@ -2967,6 +2967,39 @@ lands on the exact section.
 
 ---
 
+## Platform model binding admin UI (#2365, 2026-08-15)
+
+### `PlatformModelBindingsPanel`
+
+**Location:** `src/rework/components/pages/admin/CapabilitiesPage/PlatformModelBindingsPanel/`
+**Status:** `Functional`
+
+`InlineDrawer` opened from `CapabilitiesPage`'s Models tab, sibling to
+`CapabilityTeamMatrixDrawer`. Renders exactly one row — chat — never a
+4-capability list; V1 has no `language`/`embedding`/`image` binding to show.
+Row states: bound (`{{provider}} / {{name}}`), unset ("Using pod default"),
+loading, and load-error, each with its own translation key. Edit opens a
+form with two `TextInput`s (`provider`, `name`) and a `TextArea` JSON
+settings editor. `provider` is deliberately a free-text input, not a
+generated-enum picker — the server's `ModelBinding` validator (provider
+restricted to `fred_core.model.models.ModelProvider`) is the actual
+authority and 422s an unsupported value; the generated client only supplies
+a closed TypeScript union for the request payload's type, not a picker
+widget. The settings editor parses JSON explicitly, reports invalid JSON
+inline, and disables Save while invalid — it does not re-implement the
+server's typed/credential-shape validation client-side, since
+`ModelBindingSettings` is the real security boundary. Reset ("delete")
+clears the binding back to "Using pod default".
+
+#### Open UX issues
+
+- **Not yet design-reviewed.** Functional and covered by tests, but no
+  designer pass yet on the drawer layout, the raw-JSON settings editor (vs.
+  a structured form), or the provider free-text input's error affordance
+  when a 422 comes back.
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._

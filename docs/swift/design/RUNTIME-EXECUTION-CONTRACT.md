@@ -1938,29 +1938,48 @@ model — see §C.9 and the note below.
 
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
 
+**2026-08-16 — chat-only drift enforcement (#2365).** A team-selected profile
+whose declared capability is not `chat` now raises
+`TeamRoutingProfileDriftError`; it no longer falls through silently to the pod
+chat default. Control-plane prevents new incompatible writes through the
+pod-authored chat-profile projection, while this runtime check covers stored
+legacy state and deployment drift.
+
 **What changed.** `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`)
-carries two new fields threaded from control-plane at session-prep time, the
+carries two fields threaded from control-plane at session-prep time, the
 same three-hop channel `context_prompt_text` already uses:
 
 - `chat_default_profile_id: str | None` — the team's default chat model
   profile, or `None` to fall through to the runtime's own default.
-- `operation_route_rules: tuple[TeamOperationRouteRule, ...]` — zero or more
-  `(rule_id, operation, purpose | None, target_profile_id)` overrides.
+- `agent_profile_overrides: dict[str, str] | None` — `agent_id -> profile_id`,
+  a flat per-agent override map (no rule list, no operation/purpose
+  matching — a duplicate key simply cannot be represented in a `dict`, so
+  there is nothing to disambiguate).
 
 Both are a **session-prep snapshot, not a per-turn lookup** — resolved once
 by `routing_policy/service.py::resolve_execution_routing_snapshot` when
 `ExecutionPreparation` is built, not re-read from control-plane on every
-turn. `fred-runtime`'s `ModelRoutingResolver`
-(`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) consults these
-fields only when the pod's static YAML `rules:` (`models_catalog.yaml`) don't
-already match — the static rules stay the ops escape hatch and always win.
-A referenced `target_profile_id` unknown to the pod fails closed
-(`ModelNotUsableError`), matching the write-time `can_use` validation
-control-plane already performed — this is drift detection, not a second
-authorization gate.
+turn. `fred-runtime`'s `resolve_team_override`
+(`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) is consulted by
+`RoutedChatModelFactory.select` only when the pod's static YAML
+`agent_profile_overrides` (`models_catalog.yaml`) has no entry for this
+agent — that static map stays the pod operator's escape hatch and always
+wins. It is a two-step fallback chain, not a
+specificity-scored matcher: `agent_profile_overrides.get(agent_id)` first,
+else `chat_default_profile_id`, else `None`. A resolved profile id unknown to
+the pod, or declaring a non-chat capability, fails closed
+(`TeamRoutingProfileDriftError`) rather than silently selecting the pod
+default. A resolved concrete model that is no longer team-enabled fails with
+`ModelNotUsableError`; this is runtime enforcement of the existing access
+decision, not profile substitution.
 
-Product/data/API contract (data model, resolution algorithm, authorization,
-frontend surface): `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37.
+Since #2365 (`RUNTIME-EXECUTION-CONTRACT.md` §8.55), a third, trusted field —
+`BoundRuntimeContext.platform_chat_model_binding` — sits above both of these
+in precedence and is resolved fresh every turn rather than snapshotted; see
+§8.55 for why it needs a different trust model than the two fields above.
+
+Product/data/API contract (data model, resolution, authorization, frontend
+surface): `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37.
 
 ---
 
@@ -2054,12 +2073,17 @@ round trip rather than a new one. `_iterate_runtime_event_payloads` now takes
 `reasoning_enabled_model_ids` as a parameter sourced from this resolved
 target instead of reading it off the caller-supplied context.
 
-**Left alone, on purpose:** `chat_default_profile_id`/`operation_route_rules`
+**Left alone, on purpose:** `chat_default_profile_id`/`agent_profile_overrides`
 keep riding the client-forwarded context unchanged. The per-turn model
 `can_use` check already stops a request from reaching a model the team isn't
 authorized for, whatever routing profile it names — narrowing that further
 was assessed and rejected as disproportionate for what is a cost/comfort
-lever, not an access boundary.
+lever, not an access boundary. `platform_chat_model_binding` (§8.55, added
+#2365) is the fourth field in this family and does **not** get the same
+pass: unlike a team's own routing choice, it is the platform operator's
+authority over what a deployment can even reach, so it gets the strictest
+treatment of any of the four — never client-forwarded at all, not just
+resolved fresh.
 
 ---
 
@@ -3518,6 +3542,66 @@ pinned the model knows which it is.
 
 Staleness is deliberate and bounded: editing the catalog reaches the composer
 at the next admin re-toggle, not on open sessions.
+
+---
+
+### 8.55 ✅ Trusted platform-wide `chat` model binding, resolved fresh per turn — issue #2365 (2026-08-15)
+
+**What changed.** `BoundRuntimeContext.platform_chat_model_binding`
+(`libs/fred-sdk/fred_sdk/contracts/context.py`) lets a platform operator
+assert one authoritative `(provider, name, settings)` binding for the `chat`
+capability that overrides whatever every pod would otherwise resolve
+locally. Unlike `chat_default_profile_id`/`agent_profile_overrides` (§8.32),
+it is never carried on the client-forwarded `RuntimeContext` at all — there
+is no field for it there, by construction, so a forged or stale request body
+cannot influence chat model selection. The runtime resolves it itself, fresh
+on every managed turn (including HITL resume), on the same per-turn,
+server-to-server `GET /teams/{team_id}/agent-instances/{id}/runtime` lookup
+that already resolves `reasoning_enabled_model_ids` (§8.35) — one additional
+indexed single-row read inside the same `asyncio.gather`, not a new round
+trip.
+
+**Precedence (unconditional, `RoutedChatModelFactory.select`,
+`libs/fred-runtime/fred_runtime/model_routing/provider.py`).** For the
+`chat` capability, when the binding is set it is returned immediately,
+before the resolver — and therefore before the pod's static
+`models_catalog.yaml` agent override and the team-policy fields in §8.32 — is even
+consulted:
+
+    platform_chat_model_binding  >  pod static agent_profile_overrides  >  team agent_profile_overrides / chat_default_profile_id  >  pod chat default
+
+A team-level override only ever names a profile from *some* pod's local
+menu — the exact limitation an operator-asserted binding exists to route
+around — so a stale team choice can never silently defeat it.
+
+**ReBAC exemption.** The resulting `ModelSelectionSource.PLATFORM_BINDING`
+selection is exempt from the `usable_model_ids` `can_use` gate
+`build_for_chat` otherwise enforces: the platform operator is the authority
+on what is actually reachable/licensed in a deployment, so a team-level
+restriction cannot veto it — the same trust relationship that lets an
+org-admin already grant `can_use` for every team unconditionally, not a new
+authorization surface being bypassed.
+
+**Managed-only scope.** V1 populates this field only for managed
+agent-instance execution — direct (non-managed) `agent_id` execution never
+receives it and stays on pod-local routing. A managed turn that in turn
+invokes a nested agent (`context.invoke_agent`) inherits the same trusted
+binding through private runtime wiring (`LocalRegistryAgentInvoker`), never
+through `RuntimeContext`, `PortableContext`, or any other client-reachable
+channel.
+
+**Settings boundary.** `ModelBindingSettings` is a strict, typed allowlist
+(`extra="forbid"`) — no credential-designated field, no generic
+auth/header/cookie/client passthrough container, and no `timeout`/
+`http_client_limits` (removed deliberately: `fred_core.model.http_clients.
+get_shared_stack()` is a first-call-wins process singleton, so a later
+per-binding tuning request would be silently ignored, contradicting the
+"takes effect on the very next turn" promise this feature makes elsewhere).
+`provider` is restricted to `fred_core.model.models.ModelProvider`, and a
+provider with additional required settings (`azure-openai`, `azure-apim`,
+`vertex-ai`, `vertex-ai-model-garden`) is validated against those exact
+requirements before persistence. Full settings contract, persistence
+boundary, and admin API: `CONTROL-PLANE-PRODUCT-CONTRACT.md` §40.
 
 ---
 

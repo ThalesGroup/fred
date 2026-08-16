@@ -36,32 +36,30 @@ class _Decision(BaseModel):
     route: str
 
 
-def test_structured_model_step_replays_configured_operation() -> None:
+def test_structured_model_step_replays_configured_result() -> None:
     context = FakeGraphNodeContext(
-        structured_by_operation={"route_request": {"route": "specialist"}},
+        structured_results={"route": "specialist"},
     )
 
     result = asyncio.run(
         structured_model_step(
             cast(GraphNodeContext, context),
-            operation="route_request",
             output_model=_Decision,
             user_prompt="Where should this go?",
         )
     )
 
     assert result == _Decision(route="specialist")
-    assert context.structured_operations == ["route_request"]
+    assert context.structured_model_calls == 1
 
 
-def test_structured_model_step_unconfigured_operation_fails_loudly() -> None:
-    context = FakeGraphNodeContext(structured_by_operation={})
+def test_structured_model_step_unconfigured_result_fails_loudly() -> None:
+    context = FakeGraphNodeContext()
 
     with pytest.raises(AssertionError):
         asyncio.run(
             structured_model_step(
                 cast(GraphNodeContext, context),
-                operation="route_request",
                 output_model=_Decision,
                 user_prompt="Where should this go?",
             )
@@ -77,7 +75,6 @@ def test_structured_model_step_still_honours_no_model_fallback() -> None:
     result = asyncio.run(
         structured_model_step(
             cast(GraphNodeContext, context),
-            operation="route_request",
             output_model=_Decision,
             user_prompt="Where should this go?",
             fallback_output={"route": "specialist"},
@@ -85,7 +82,7 @@ def test_structured_model_step_still_honours_no_model_fallback() -> None:
     )
 
     assert result == _Decision(route="specialist")
-    assert context.structured_operations == []
+    assert context.structured_model_calls == 0
 
 
 def test_invoke_agent_records_call_and_replays_result() -> None:

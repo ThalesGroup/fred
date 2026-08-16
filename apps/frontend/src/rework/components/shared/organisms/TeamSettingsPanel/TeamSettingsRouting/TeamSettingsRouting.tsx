@@ -17,15 +17,11 @@ import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import styles from "./TeamSettingsRouting.module.scss";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
 import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
-import type {
-  TeamOperationRouteRule,
-  TeamWithPermissions,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useAvailableModelProfilesQuery,
@@ -34,44 +30,27 @@ import {
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 const NO_DEFAULT = "";
-// Sentinel for the "applies to every agent" option (rule.agent_id = null).
-const AGENT_ANY = "";
+const NO_AGENT = "";
 
 interface TeamSettingsRoutingProps {
   team: TeamWithPermissions;
-  /** Read-only for team_admin (RFC §6/§13) — team_editor writes, team_admin reads. */
+  /** Read-only for team_admin — team_editor writes, team_admin reads. */
   canWrite: boolean;
 }
 
 /** Local editing shape — a stable client-side key so React can track rows
- * across add/remove before a rule_id is chosen, distinct from the field the
- * server actually validates. */
-interface RuleRow extends TeamOperationRouteRule {
+ * across add/remove, distinct from the `agent_id` the row currently holds
+ * (empty until an agent is picked). */
+interface OverrideRow {
   key: string;
+  agentId: string;
+  targetProfileId: string;
 }
 
 let nextKey = 0;
-/** `defaultAgentId` should be the team's first real agent, when it has one —
- * a row with both `operation` and `agent_id` null always fails write-time
- * validation (`validate_at_least_one_criterion`) and free-text `operation`
- * has no meaningful non-null default, so `agent_id` is the only field that
- * can start non-null and still mean something (this PR's whole point is
- * per-agent overrides). Falls back to null (today's "any agent") only when
- * the team has no agents to pick from yet. */
-function newRow(defaultAgentId: string | null): RuleRow {
+function newRow(): OverrideRow {
   nextKey += 1;
-  // `rule_id` is a server-required, non-empty stable identifier
-  // (`TeamOperationRouteRule.rule_id`, min_length=1). The form never surfaces
-  // it, so generate one at creation — without this a new override always failed
-  // write-time validation with a 422. Existing rows keep their own rule_id.
-  return {
-    key: `new-${nextKey}`,
-    rule_id: crypto.randomUUID(),
-    operation: null,
-    purpose: null,
-    agent_id: defaultAgentId,
-    target_profile_id: "",
-  };
+  return { key: `new-${nextKey}`, agentId: NO_AGENT, targetProfileId: "" };
 }
 
 /** Build a picker's option list from a base catalog, keeping any row's
@@ -96,13 +75,12 @@ function withUnavailableFallback(
 }
 
 /**
- * Team-owned LLM model routing policy (TEAM-05, #2118,
- * `TEAM-ROUTING-POLICY-RFC.md`). One default chat profile plus zero or more
- * per-operation overrides. Both profile pickers are scoped to the team's
- * `kind="model"` capability enablement (§7 / §13, `available-models`, #2167)
- * — a stale reference (e.g. a capability disabled after the policy was
- * written) still surfaces as a selectable option rather than silently
- * disappearing, flagged via its option description.
+ * Team-owned LLM model routing policy. One default chat profile plus zero or
+ * more per-agent overrides (`agent_id -> profile_id`). Both profile pickers
+ * are scoped to the team's `kind="model"` capability enablement
+ * (`available-models`) — a stale reference (e.g. a capability disabled after
+ * the policy was written) still surfaces as a selectable option rather than
+ * silently disappearing, flagged via its option description.
  */
 export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRoutingProps) {
   const { t } = useTranslation();
@@ -110,8 +88,8 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
   const { data: availableModels, isLoading: isLoadingModels } = useAvailableModelProfilesQuery({
     teamId: team.id,
   });
-  // The team's agents — for the optional per-rule agent scope. The rule's
-  // `agent_id` matches the runtime's `definition.agent_id`, i.e. the template's
+  // The team's agents — for the per-row agent override. The row's `agentId`
+  // matches the runtime's `definition.agent_id`, i.e. the template's
   // `source_agent_id`.
   const { data: agentTemplates } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery({
     teamId: team.id,
@@ -119,13 +97,19 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
   const [updateRoutingPolicy, { isLoading: isSaving }] = useUpdateTeamRoutingPolicyMutation();
 
   const [chatDefaultProfileId, setChatDefaultProfileId] = useState(NO_DEFAULT);
-  const [rows, setRows] = useState<RuleRow[]>([]);
+  const [rows, setRows] = useState<OverrideRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!policy) return;
     setChatDefaultProfileId(policy.chat_default_profile_id ?? NO_DEFAULT);
-    setRows((policy.operation_rules ?? []).map((rule) => ({ ...rule, key: rule.rule_id })));
+    setRows(
+      Object.entries(policy.agent_profile_overrides ?? {}).map(([agentId, targetProfileId]) => ({
+        key: agentId,
+        agentId,
+        targetProfileId,
+      })),
+    );
   }, [policy]);
 
   const profileOptions: OptionModel<string>[] = useMemo(() => {
@@ -134,15 +118,13 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
       label: `${t(profile.name, { defaultValue: profile.name })} (${profile.profile_id})`,
       key: profile.profile_id,
     }));
-    const currentValues = [chatDefaultProfileId, ...rows.map((row) => row.target_profile_id)];
+    const currentValues = [chatDefaultProfileId, ...rows.map((row) => row.targetProfileId)];
     return withUnavailableFallback(base, currentValues, t("rework.teamSettings.routing.profileUnavailable"));
   }, [availableModels, chatDefaultProfileId, rows, t]);
 
-  const agentOptions: OptionModel<string>[] = useMemo(() => {
-    const base: OptionModel<string>[] = [
-      { value: AGENT_ANY, label: t("rework.teamSettings.routing.operationRules.agentAny"), key: "__any_agent__" },
-    ];
-    const seenTemplateIds = new Set<string>([AGENT_ANY]);
+  const allAgentOptions: OptionModel<string>[] = useMemo(() => {
+    const base: OptionModel<string>[] = [];
+    const seenTemplateIds = new Set<string>();
     (agentTemplates ?? []).forEach((tpl) => {
       if (seenTemplateIds.has(tpl.source_agent_id)) return;
       seenTemplateIds.add(tpl.source_agent_id);
@@ -150,7 +132,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
     });
     return withUnavailableFallback(
       base,
-      rows.map((row) => row.agent_id),
+      rows.map((row) => row.agentId),
       t("rework.teamSettings.routing.profileUnavailable"),
     );
   }, [agentTemplates, rows, t]);
@@ -159,29 +141,34 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
 
   const hasNoModelsAvailable = profileOptions.length === 0;
 
-  const handleAddRow = () => setRows((prev) => [...prev, newRow(agentTemplates?.[0]?.source_agent_id ?? null)]);
+  const handleAddRow = () => setRows((prev) => [...prev, newRow()]);
   const handleRemoveRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
-  const handleRowChange = (key: string, field: "operation" | "purpose", value: string) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value === "" ? null : value } : r)));
-  };
   const handleRowProfileChange = (key: string, targetProfileId: string) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, target_profile_id: targetProfileId } : r)));
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, targetProfileId } : r)));
   };
   const handleRowAgentChange = (key: string, agentId: string) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, agent_id: agentId || null } : r)));
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, agentId } : r)));
   };
 
   const handleSave = async () => {
     setError(null);
+    // A row with only one of the two fields picked is not silently dropped —
+    // that would report success while discarding the edit the user is
+    // clearly still mid-way through.
+    const hasIncompleteRow = rows.some((row) => Boolean(row.agentId) !== Boolean(row.targetProfileId));
+    if (hasIncompleteRow) {
+      setError(t("rework.teamSettings.routing.agentOverrides.incompleteRow"));
+      return;
+    }
     try {
+      const agentProfileOverrides = Object.fromEntries(
+        rows.filter((row) => row.agentId && row.targetProfileId).map((row) => [row.agentId, row.targetProfileId]),
+      );
       await updateRoutingPolicy({
         teamId: team.id,
         updateTeamRoutingPolicyRequest: {
           chat_default_profile_id: chatDefaultProfileId || null,
-          operation_rules: rows.map(({ key, ...rule }) => {
-            void key;
-            return rule;
-          }),
+          agent_profile_overrides: agentProfileOverrides,
         },
       }).unwrap();
     } catch (err) {
@@ -220,47 +207,44 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
 
       {!hasNoModelsAvailable && (
         <div className={styles["form-section"]}>
-          <span className={styles["section-title"]}>{t("rework.teamSettings.routing.operationRules.title")}</span>
+          <span className={styles["section-title"]}>{t("rework.teamSettings.routing.agentOverrides.title")}</span>
           <span className={styles["section-explanation"]}>
-            {t("rework.teamSettings.routing.operationRules.explanation")}
+            {t("rework.teamSettings.routing.agentOverrides.explanation")}
           </span>
-          {rows.map((row) => (
-            <div className={styles["rule-row"]} key={row.key}>
-              <TextInput
-                label={`${t("rework.teamSettings.routing.operationRules.operation")} (optional)`}
-                value={row.operation ?? ""}
-                onChange={(e) => handleRowChange(row.key, "operation", e.target.value)}
-                disabled={!canWrite}
-              />
-              <TextInput
-                label={t("rework.teamSettings.routing.operationRules.purpose")}
-                value={row.purpose ?? ""}
-                onChange={(e) => handleRowChange(row.key, "purpose", e.target.value)}
-                disabled={!canWrite}
-              />
-              <Select
-                size="medium"
-                label={t("rework.teamSettings.routing.operationRules.agent")}
-                value={row.agent_id ?? AGENT_ANY}
-                options={agentOptions}
-                onChange={(value) => handleRowAgentChange(row.key, value)}
-                disabled={!canWrite}
-              />
-              <Select
-                size="medium"
-                label={t("rework.teamSettings.routing.operationRules.targetProfileId")}
-                placeholder={t("rework.teamSettings.routing.operationRules.targetProfilePlaceholder")}
-                value={row.target_profile_id}
-                options={profileOptions}
-                onChange={(value) => handleRowProfileChange(row.key, value)}
-                disabled={!canWrite}
-              />
-              {canWrite && <DeleteIconButton onClick={() => handleRemoveRow(row.key)} />}
-            </div>
-          ))}
+          {rows.map((row) => {
+            // Exclude agents already picked by another row so two rows can
+            // never silently collapse onto the same agent_id key on save.
+            const agentOptions = allAgentOptions.filter(
+              (option) =>
+                option.value === row.agentId || !rows.some((r) => r.key !== row.key && r.agentId === option.value),
+            );
+            return (
+              <div className={styles["rule-row"]} key={row.key}>
+                <Select
+                  size="medium"
+                  label={t("rework.teamSettings.routing.agentOverrides.agent")}
+                  placeholder={t("rework.teamSettings.routing.agentOverrides.agentPlaceholder")}
+                  value={row.agentId}
+                  options={agentOptions}
+                  onChange={(value) => handleRowAgentChange(row.key, value)}
+                  disabled={!canWrite}
+                />
+                <Select
+                  size="medium"
+                  label={t("rework.teamSettings.routing.agentOverrides.targetProfileId")}
+                  placeholder={t("rework.teamSettings.routing.agentOverrides.targetProfilePlaceholder")}
+                  value={row.targetProfileId}
+                  options={profileOptions}
+                  onChange={(value) => handleRowProfileChange(row.key, value)}
+                  disabled={!canWrite}
+                />
+                {canWrite && <DeleteIconButton onClick={() => handleRemoveRow(row.key)} />}
+              </div>
+            );
+          })}
           {canWrite && (
             <Button color="secondary" variant="outlined" size="small" onClick={handleAddRow}>
-              {t("rework.teamSettings.routing.operationRules.addRule")}
+              {t("rework.teamSettings.routing.agentOverrides.addRule")}
             </Button>
           )}
         </div>

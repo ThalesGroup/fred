@@ -1349,9 +1349,9 @@ kind-agnostic).
 
 **Catalog projection, cross-pod.** `fred-runtime` exposes
 `GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
-per distinct `(provider, name)` pair — not per `profile_id` (a model used by
-both the `chat` and `language` capability is one enablement decision, the
-unit an admin actually reasons about) — and deriving the id itself
+per distinct `(provider, name)` pair — not per `profile_id` (a concrete model
+has one enablement decision even if different typed consumers eventually use
+it) — and deriving the id itself
 (`model_capability_id(provider, name)`, fred-sdk). Control-plane
 (`product/service.py::_model_capabilities_for_source`) fetches that endpoint
 per runtime source as a third catalog fetch alongside the existing tool and
@@ -1365,14 +1365,18 @@ last-registration-wins shape silently dropped profiles from whichever pod
 lost the race).
 
 **`CapabilityCatalogEntry` is not a uniform shape across kinds — it is a
-tagged union in practice.** `model_profile_ids: tuple[str, ...]` and
+tagged union in practice.** `model_profile_ids: tuple[str, ...]`,
+`model_chat_profile_ids: tuple[str, ...]`, and
 `model_thinking_profile_ids: tuple[str, ...]` (REASON-01, §33) are real
 fields carried **only** for `kind="model"` — empty for `tool`/`agent`, never
 the reverse. `config_fields`, `team_settings_fields`, `assets`, and
 `default_capability_ids` are conversely always empty for `kind="model"`.
 Treat `kind` as the discriminator when reading this type; a per-kind field
 being present or empty is the contract, not an implementation detail to
-paper over.
+paper over. `model_profile_ids` preserves every profile for model enablement;
+`model_chat_profile_ids` is its explicitly typed chat subset and is the only
+subset the V1 team-routing picker/write path consumes. Capability is never
+inferred from a profile-id prefix.
 
 **Runtime enforcement is fail-closed and differs by kind, deliberately.**
 `kind="tool"`/`kind="agent"` enforce at **write time** — `can_use_capability`
@@ -2080,11 +2084,13 @@ that stayed open past an admin's platform-wide toggle would keep reasoning
 active for the rest of that session: the enforced value is now current as of
 the next turn, not the next session.
 
-`chat_default_profile_id`/`operation_route_rules` are unaffected by this
+`chat_default_profile_id`/`agent_profile_overrides` are unaffected by this
 change and remain resolved once at session prep and forwarded by the frontend
 unchanged — routing-profile choice is a cost/comfort lever already bounded by
 the per-turn model authorization check, not an admin control, so the same
-freshness requirement does not apply to it.
+freshness requirement does not apply to it. The platform-wide `chat` model
+binding (§40, issue #2365) is a fourth, unrelated field that *does* get the
+freshness treatment — see `RUNTIME-EXECUTION-CONTRACT.md` §8.55.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 
@@ -2383,55 +2389,53 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 `/team/:teamId/settings/activity`) remain the canonical, ack-capable place
 for this data; no replacement preset was added.
 
-## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118)
+## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
+
+**2026-08-16 — chat profile typing (#2365).** The pod catalog now projects
+`model_chat_profile_ids` explicitly alongside the complete
+`model_profile_ids` inventory. Team picker, universal multi-pod intersection,
+and write validation consume the chat subset only. This closes the case where
+a known non-chat profile could be saved into `chat_default_profile_id` and
+then ignored by the runtime; profile-id naming remains non-semantic.
 
 A team (or personal space) chooses which of the models already available to
-it (`can_use`-enabled, see above) is the default for
-managed execution, and may override that default for specific operations
-(e.g. `planning`). This feature never grants new model access — it only lets
-the holder of existing access express a preference among it. Runtime-side
-merge/fail-closed rules are `RUNTIME-EXECUTION-CONTRACT.md` §8.32; this
-section is the product/data/API contract.
+it (`can_use`-enabled, see above) is the default for managed execution, and
+may override that default for specific agents. This feature never grants new
+model access — it only lets the holder of existing access express a
+preference among it. Runtime-side merge/fail-closed rules are
+`RUNTIME-EXECUTION-CONTRACT.md` §8.32; this section is the product/data/API
+contract.
 
 **Data model** (`TeamRoutingPolicy`): `team_id`, `version`,
-`chat_default_profile_id: str | None`, `operation_rules:
-list[TeamOperationRouteRule]` (`rule_id`, `operation: str | None`, `purpose:
-str | None`, `agent_id: str | None` — per-agent override, 2026-08-09,
-issue #2267 — `target_profile_id`). `rule_id` unique per team policy;
-`(operation, purpose, agent_id)` unique per team policy. `operation`,
-`purpose`, and `agent_id` are each optional (`null` = wildcard, matches every
-value). `null` `chat_default_profile_id` means "use the runtime catalog
-default."
+`chat_default_profile_id: str | None`, `agent_profile_overrides: dict[str,
+str]` — a flat `agent_id -> profile_id` map, one profile per agent. `null`
+`chat_default_profile_id` means "use the runtime catalog default." There is
+no separate rule/operation/purpose concept: a `dict` key is structurally
+unique, so there is nothing to disambiguate at write time and nothing that
+can collide.
 
-**Resolution (deterministic — most-specific match wins, ambiguity rejected at
-write time, never at resolve time):** among the rules whose non-null criteria
-all match the request, the one defining the most criteria (highest
-specificity: 0-3, counting `operation`/`purpose`/`agent_id`) wins; else
-`chat_default_profile_id` if set; else the runtime catalog default for
-capability `chat`. Write-time validation (below) guarantees the winner is
-always unambiguous — two rules that could both match one request with equal
-specificity can never coexist in a stored policy, so "most specific wins" has
-exactly one answer for every possible request. `resolve_team_override`
-(fred-runtime) additionally breaks a tie by declaration order as a defensive
-fallback; this should be unreachable given the write-time guarantee and exists
-only so a resolve call never raises.
+**Resolution (deterministic two-step fallback, no specificity scoring):**
+`agent_profile_overrides.get(agent_id)` if the agent has an override, else
+`chat_default_profile_id` if set, else the runtime catalog default for
+capability `chat`. `resolve_team_override` (fred-runtime) is exactly this
+lookup — there is no tie to break, since a dict key maps to exactly one
+value.
 
-**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects:
-any referenced profile whose derived capability id
+**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects
+any referenced profile (from `chat_default_profile_id` or any
+`agent_profile_overrides` value) whose derived capability id
 (`model_capability_id(provider, name)` — coarser-grained than a profile id,
 since two profiles can share one `(provider, name)`) is not currently
-`can_use`-enabled for the team; any profile not present on **every** enabled,
-model-capable pod (`capabilities/catalog.py::universally_available_model_profile_ids`,
+`can_use`-enabled for the team, or not present on **every** enabled,
+model-capable pod (`capabilities/catalog.py::universally_available_chat_model_profile_ids`,
 intersection — not the union this section's admission catalog uses, since
 whichever pod serves a turn must resolve the chosen profile or fail closed at
-runtime); a duplicate `rule_id`; two rules sharing an exact `(operation,
-purpose, agent_id)` triplet; and two rules that could both match one request
-with equal specificity but pin different criteria to get there (e.g. one rule
-keying on `operation`+`agent_id`, another on `purpose`+`agent_id`, for the
-same `agent_id`) — the resolver has no defined winner for that case, so the
-write is rejected rather than leaving an outcome that depends on storage
-order. The `available-models` picker (§ below) applies the same intersection
-filter, so it never offers what the write would reject.
+runtime). The same profile id must also map to the same model capability id
+(`provider`, `name`) on every pod; equal names with different concrete meanings
+are excluded. Only ids in each pod's explicit `model_chat_profile_ids` subset are
+eligible; a known language/embedding/image profile is invalid for this
+chat-only policy. The `available-models` picker (§ below) applies the same
+intersection filter, so it never offers what the write would reject.
 
 **Authorization:** read — `team_admin`, `team_editor`, `team_analyst` (a
 plain `team_member` is denied); write — `team_editor` only.
@@ -2449,22 +2453,21 @@ read endpoint distinct from the platform-admin-only
 read gate and the same catalog-aggregation + `usable_capability_ids`
 building blocks the write path validates against.
 
-**Frontend:** one panel (team settings "Routing" entry, gated on
-`canUpdateResources`/`team_editor`, reused unconditionally for personal
-spaces), a picker for `chat_default_profile_id` scoped to enabled+universally-
-available profiles, and zero-or-more operation-rule rows with the same
-constraint per row. A profile referenced by a stored policy that has since
-become unavailable still renders as a selectable option, flagged rather than
-silently dropped. `team_admin` sees the same panel with inputs disabled
-(read-only), not a second component. Hidden entirely when the team has no
-enabled models beyond the deployment default.
+**Frontend:** `TeamSettingsRouting` — one panel (team settings "Routing"
+entry, gated on `canUpdateResources`/`team_editor`, reused unconditionally
+for personal spaces), a picker for `chat_default_profile_id` plus
+zero-or-more per-agent override rows, both scoped to
+enabled+universally-available profiles. A profile referenced by a stored
+policy that has since become unavailable still renders as a selectable
+option, flagged rather than silently dropped. `team_admin` sees the same
+panel with every input disabled (read-only), not a second component.
 
 **Explicit non-goals (V1):** per-user routing inside a shared multi-member
 team (distinct from personal-space support, which is just a team routing
 policy scoped to a one-member team), model temperature/timeout tuning, a
 per-message composer picker, direct `models_catalog.yaml` editing from the
-product. Per-agent routing rules (2026-08-09, issue #2267) are no longer a
-non-goal — see the data model and resolution notes above.
+product. Per-agent routing (`agent_profile_overrides`) is in scope, not a
+non-goal.
 
 ## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
 
@@ -2504,3 +2507,90 @@ When absent, control-plane omits it from the serialized preparation and managed
 chat omits its counter; the runtime backend remains the enforcement boundary.
 Control-plane does not interpret, override, or persist the value and does not
 apply a second chat-message validator.
+
+## 40. Contract Notes — platform-wide chat model binding (2026-08-15, issue #2365)
+
+An org-admin can assert one authoritative `(provider, name, settings)`
+binding for the `chat` capability that overrides whatever every runtime pod
+would otherwise resolve locally — the concrete lever for a deployment where
+the operator knows what's actually reachable/licensed and no pod's shipped
+catalog does. Runtime-side precedence, ReBAC exemption, and the trusted
+per-turn resolution channel are `RUNTIME-EXECUTION-CONTRACT.md` §8.55; this
+section is the product/data/API/persistence contract.
+
+**Chat-only in V1.** `PlatformModelBinding.model_capability` is a
+route-local `Literal["chat"]` constant, not the global `ModelCapability`
+enum — `language`/`embedding`/`image` have no production consumer and are
+not representable through this API. At most one row ever exists, enforced
+by a database `CHECK (model_capability = 'chat')` constraint (not just
+application code), so the store/service path structurally cannot insert a
+`language`/`embedding`/`image` row. An absent row means unset — there is no
+natural "off" value for a `(provider, name)` pair, so "clear this binding"
+is row deletion, not a stored `false`.
+
+**Settings boundary** (`ModelBindingSettings`, `fred-sdk`). A strict, typed
+allowlist (`extra="forbid"`) — every field is a named generation knob
+evidenced by `fred_core.model.factory.get_model()`, never an open
+`dict[str, Any]`. Guarantees, precisely: no credential-designated field
+(`api_key`, `token`, ...) and no generic auth/header/cookie/client
+passthrough container exist to receive one; any key outside the named
+allowlist is rejected, and every URL-typed field rejects non-`http(s)`
+schemes and userinfo (`user:pass@host`); numeric/boolean fields are strict
+(no `"4096"` → `4096`, no `1` → `True`) and range-checked, never silently
+coerced. What it does **not** do: inspect whether an arbitrary *value*
+placed in an allowed field is itself a secret — operators must never place
+a credential in an allowed value, this only closes the field-shape channel.
+`provider` is restricted to `fred_core.model.models.ModelProvider` (closed
+JSON Schema `enum`, published on the generated OpenAPI/TypeScript client —
+never a hand-maintained duplicate list), and a provider with additional
+required settings (`azure-openai`, `azure-apim`, `vertex-ai`,
+`vertex-ai-model-garden`) is validated against those exact requirements
+before persistence — a binding a provider could never actually construct
+against is rejected at write time, not left to fail at runtime model
+construction on every subsequent managed turn. `timeout`/`http_client_limits`
+are deliberately absent (see §8.55); `request_timeout` is present and
+applied fresh per model construction.
+
+**Persistence** (`platform_model_binding` table,
+`PlatformModelBindingStore`). Every read re-validates the row through
+`ModelBinding` — a row that bypassed the store's own writer (or predates a
+contract tightening) fails closed on `get()`, not just at write time. `set()`
+retries once on the concurrent first-insert race (two admins, or a client
+retry, both observing no row and both attempting an insert on the single-row
+primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
+
+**Authorization:** `organization_authz.require_manage_any`
+(`organization#can_manage_platform`), the same shared gate as
+`GET /admin/capabilities` — org-admin only, no team dimension (this is a
+platform-wide routing assertion, not a per-team permission, same reasoning
+as `model_reasoning`).
+
+**API:** `GET`/`PUT`/`DELETE /control-plane/v1/admin/platform/model-bindings`
+— no `{model_capability}` path segment (chat-only, nothing to select
+between). `GET`/`PUT`/`DELETE` all return `PlatformModelBinding`
+(`binding: ModelBinding | None`, `updated_by`, `updated_at`);
+`response_model_exclude_none=True` omits an unset `binding` rather than
+serializing `null`. `PUT`'s body is `SetPlatformModelBindingRequest{binding:
+ModelBinding}` — `ModelBinding`'s own validators (provider enum,
+provider-required-settings, `ModelBindingSettings`) fire at request-parsing
+time, before this route's authz even runs, so a 422 on a bad binding never
+reaches the store.
+
+**Frontend:** `PlatformModelBindingsPanel` — an `InlineDrawer` opened from
+`CapabilitiesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
+Renders exactly one row (chat), never a 4-capability list. Settings are
+edited as raw JSON text (not a key/value rows editor, since
+`ModelBindingSettings` is a strict typed shape a rows editor storing
+`string` per row cannot represent without lossy coercion) — the editor
+parses explicitly, reports invalid JSON inline, and only submits a parsed
+JSON object; the server's strict settings contract remains the actual
+security boundary, the editor does not re-implement a client-side
+credential-key check. Component UX detail: `COMPONENT-UX.md`.
+
+**Explicit non-goals (V1):** `language`/`embedding`/`image` capability
+bindings, process-wide transport tuning through this binding (stays
+pod-local in `models_catalog.yaml`), dynamic shared-client pool
+replacement, a browser-forwarded or session-snapshot resolution channel —
+the binding is trusted and resolved fresh per turn, server-to-server, by
+design (§8.55), never forwarded through the client the way
+`chat_default_profile_id`/`agent_profile_overrides` are.
