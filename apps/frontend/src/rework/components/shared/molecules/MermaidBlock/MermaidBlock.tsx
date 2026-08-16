@@ -16,6 +16,7 @@ import { useEffect, useId, useState } from "react";
 import mermaid from "mermaid";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
 import { sanitizeMermaidForParsing } from "./mermaidSanitizer";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { FullPageModal } from "../FullPageModal/FullPageModal";
 import styles from "./MermaidBlock.module.css";
@@ -32,9 +33,11 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   const isDark = useIsDark();
 
   function handleCopy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", code).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     });
   }
 
@@ -94,7 +97,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
 
   return (
     <div className={styles.block}>
-      <div className={styles.header}>
+      <div className={styles.header} data-clipboard-ignore>
         <span className={styles.lang}>mermaid</span>
         <div className={styles.actions}>
           {svg !== null && (
@@ -117,7 +120,15 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
         ) : (
           // Safe: SVG is produced by the mermaid library from our own agent
           // content — never from raw user input.
-          <div className={styles.diagram} dangerouslySetInnerHTML={{ __html: svg }} />
+          // data-clipboard-diagram-label: the clipboard serialiser degrades this
+          // whole subtree to a placeholder rather than depending on mermaid's
+          // internal SVG structure (which is a rendering-library detail, not a
+          // stable contract).
+          <div
+            className={styles.diagram}
+            data-clipboard-diagram-label="Mermaid diagram"
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
         )}
       </div>
 

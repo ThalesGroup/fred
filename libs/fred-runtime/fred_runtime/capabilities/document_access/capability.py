@@ -74,6 +74,7 @@ Duplicate-search-tool story (pilot decision, RFC §10):
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Sequence
 
@@ -128,6 +129,8 @@ _LLM_FIELDS = frozenset(
 
 _KF_SERVICE = "Knowledge Flow"
 
+logger = logging.getLogger(__name__)
+
 _TREE_MAX_CHARS_BOUNDS = (500, 20_000)
 
 
@@ -158,10 +161,36 @@ def _document_tool_failure(
     imports the adapter's HTTP stack.
     """
 
+    # Server-side, with the stack: the model-facing message below deliberately
+    # compresses the failure, so without this line a programming error caught
+    # by the broad handlers (a TypeError from a renamed port kwarg, say) would
+    # degrade into a plausible "service call failed" and never surface anywhere
+    # a developer looks. Degrading is right for the turn; being silent about
+    # WHY is not.
+    logger.error(
+        "Document tool failure (%s, %.1fs) — degraded to an is_error artifact.",
+        action,
+        elapsed_s,
+        exc_info=exc,
+    )
+
     err_type = type(exc).__name__
     raw = str(exc).strip()
     timed_out = bool(getattr(exc, "timed_out", False))
     status_code = getattr(exc, "status_code", None)
+
+    # `structured` means the adapter identified the failure, so `cause` below
+    # already states it precisely and `raw` only repeats it — for a 401 that
+    # produced "returned HTTP 401 [DocumentPortCallError: Client error '401
+    # Unauthorized' for url ...]". Since the adapter now redacts URLs out of
+    # `raw`, what survived was worse than redundant: an unbalanced quote and
+    # "For more information check:" pointing at nothing.
+    #
+    # The unstructured branch keeps both, because there `raw` is the only
+    # information there is ("All connection attempts failed") and `err_type`
+    # is how an unexpected exception — a TypeError from a renamed port kwarg,
+    # the case the logger above exists for — reaches someone who can act on it.
+    structured = timed_out or status_code is not None
 
     if timed_out:
         cause = f"the {_KF_SERVICE} service timed out after {elapsed_s:.0f}s"
@@ -171,8 +200,11 @@ def _document_tool_failure(
         cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
 
     target = f" (document_uid={document_uid})" if document_uid else ""
-    detail = f": {raw}" if raw else ""
-    message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
+    if structured:
+        message = f"Could not {action}{target}: {cause}."
+    else:
+        detail = f": {raw}" if raw else ""
+        message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
     # `blocks` carries the same diagnostic as `content` (CAPAB-02, same reason
     # as the success-path artifacts above): a Graph agent's plain-dict
     # invocation keeps only the artifact half of a `content_and_artifact`
@@ -609,16 +641,32 @@ class DocumentAccessCapability(
                 )
 
             effective_top_k = top_k if isinstance(top_k, int) and top_k > 0 else None
-            result: DocumentSearchResult = await port.search(
-                question,
-                top_k=effective_top_k or default_top_k,
-                library_tag_ids=scoped_library_tag_ids,
-                document_uids=scoped_document_uids,
-                search_policy=search_policy,
-                attachments_only=(
-                    config.search_attachments_only and config.show_attach_files_control
-                ),
-            )
+            started = time.monotonic()
+            try:
+                result: DocumentSearchResult = await port.search(
+                    question,
+                    top_k=effective_top_k or default_top_k,
+                    library_tag_ids=scoped_library_tag_ids,
+                    document_uids=scoped_document_uids,
+                    search_policy=search_policy,
+                    attachments_only=(
+                        config.search_attachments_only
+                        and config.show_attach_files_control
+                    ),
+                )
+            except Exception as exc:
+                # Same contract as the sibling tools: a failing tool returns an
+                # `is_error=True` artifact rather than raising, or the default
+                # ToolNode handler re-raises and the whole turn dies with an
+                # empty error detail. Observed live on an expired-token 401
+                # (#2073 Item 3) — this is the most-used RAG tool, so it was
+                # the one that took the turn down.
+                return _document_tool_failure(
+                    tool_ref=DOCUMENT_ACCESS_TOOL_REF,
+                    action="search documents",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
             hits = result.hits
 
             content = {

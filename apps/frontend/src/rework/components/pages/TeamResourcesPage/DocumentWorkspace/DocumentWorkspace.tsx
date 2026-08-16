@@ -26,6 +26,12 @@ import type { OptionModel } from "@models/Option.model.ts";
 import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
 import {
+  MAX_FOLDER_DEPTH,
+  exceedsMaxFolderDepth,
+  folderPathDepth,
+  relativeDirSegments,
+} from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
+import {
   DocumentViewer,
   DocumentViewerModeToggle,
   type ViewMode,
@@ -38,15 +44,22 @@ import {
   type TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
+  useCreateTagKnowledgeFlowV1TagsPostMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { buildTree, collectDescendantTagIds, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
+import {
+  buildTree,
+  collectDescendantTagIds,
+  findNode,
+  fullPath,
+  type TagNode,
+} from "../../../../../shared/utils/tagTree.ts";
 import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
-import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
+import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { downloadManyAsZip } from "../../../../../utils/downloadUtils.tsx";
@@ -58,6 +71,7 @@ import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
 import { isPdfFile } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
+import ManageLabelsModal from "../ManageLabelsModal/ManageLabelsModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
@@ -104,11 +118,14 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
 
-type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion";
+type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion" | "labels";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
 }
+
+/** An OS file drag (not a text/element drag) — shared by every drop surface. */
+const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
 
 // identity.document_name is always "Original file name incl. extension" —
 // the source of truth for both display and extension, unlike identity.title
@@ -155,7 +172,7 @@ function rowLabel(row: Row): string {
  */
 function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarn } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
@@ -208,6 +225,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
   >(null);
   // Document whose per-stage ingestion errors are being shown (#2315).
+  // The vocabulary query itself lives inside ManageLabelsModal — it only
+  // needs to be fetched while that dialog is open, which is exactly this
+  // component's own mount lifetime (see the conditional render below).
+  const [labelsTarget, setLabelsTarget] = useState<DocumentMetadata | null>(null);
   // "Just reprocessed" rows pinned to "processing" (#1903-era gap): the
   // reprocess route (`POST /process-documents`) returns only the Temporal
   // workflow id — unlike uploads it creates no TaskService task the SSE task
@@ -263,6 +284,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // without changing navigation. Cleared alongside droppedFiles on close.
   const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  // OS-file drag hovering anywhere over the opened folder's page (not a
+  // specific folder row) — drives the full-page "drop here" overlay.
+  const [pageDragOver, setPageDragOver] = useState(false);
+  // Folder tags created (or resolved) while the CURRENT upload drawer is open,
+  // keyed by full path — sibling subdirectories of one dropped folder share
+  // parent chains through it instead of racing duplicate POST /tags. Cleared
+  // when the drawer closes: a folder deleted later must not resurrect its id.
+  const pendingFolderTagIds = useRef(new Map<string, string>());
   const [createOpen, setCreateOpen] = useState(false);
   // Client-side filter over the current folder's already-loaded rows — not
   // the deferred server-side search from RFC §13.4 (POST .../browse's
@@ -278,6 +307,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
   const [cancelTask] = useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation();
+  const [createTag] = useCreateTagKnowledgeFlowV1TagsPostMutation();
 
   const currentNode = currentFolderFull ? findNode(tree, currentFolderFull) : tree;
   const currentTag = currentNode.tagsHere[0] ?? null;
@@ -329,12 +359,25 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     });
   }, []);
 
-  // Load the current folder's document page on entry (and once when its tag
-  // first resolves) — mirrors the old "load on expand" behavior, now scoped
-  // to whichever single folder is being viewed.
+  // Load the current folder's document page on EVERY entry, not just the first:
+  // a folder opened while its files were still uploading (or their fresh ReBAC
+  // tuples still propagating server-side) would otherwise stay frozen on that
+  // first empty snapshot forever — none of the other refresh paths retries a
+  // page that doesn't yet SHOW the document (the 3s poll needs a visible
+  // processing row, useRefetchOnTaskSettled needs the doc already in the page,
+  // useNotifyOnNewTaskTarget fires before this page exists). loadTagPage keeps
+  // the previous rows while reloading, so re-entering an already-loaded folder
+  // refreshes without a flash of empty.
+  const currentTagId = currentTag?.id ?? null;
   useEffect(() => {
-    if (currentTag && !perTag[currentTag.id]) void loadTagPage(currentTag.id, 0);
-  }, [currentTag, perTag, loadTagPage]);
+    if (currentTagId) void loadTagPage(currentTagId, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
+    // folder identity alone: one load per ENTRY is the contract, so nothing
+    // else may retrigger it. loadTagPage is deliberately not a dep — its
+    // identity tracks rowsPerPage (whose change already reloads explicitly
+    // via handleRowsPerPageChange), and any harness that rebuilds the browse
+    // trigger per render would otherwise refire this into a reload loop.
+  }, [currentTagId]);
 
   // Drop an override once the backend visibly re-stamped the document (its
   // fresh stages no longer match the click-time snapshot — the real derived
@@ -373,11 +416,20 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     // map) are the real dependencies.
     [perTag, reprocessOverrides, activeDocTaskByUid],
   );
+  // While any ingestion is live, poll the folder being viewed too, even if its
+  // loaded page shows no processing row yet: a subfolder entered before its
+  // files' uploads (or their fresh ReBAC tuples) landed keeps an empty
+  // snapshot that no other refresh path retries — this loop picks the rows up
+  // as they become visible, with their live "processing" badge.
+  const pollTagIds =
+    activeDocTaskByUid.size > 0 && currentTagId && !pendingTagIds.includes(currentTagId)
+      ? [...pendingTagIds, currentTagId]
+      : pendingTagIds;
   // Keyed on the ids themselves, not the array identity: the live task map is a
   // new object on every SSE event, and depending on it directly tore down and
   // restarted the interval on each one — so during a bulk ingestion, when this
   // refresh matters most, the 3s never elapsed and the folder never reloaded.
-  const pendingTagKey = pendingTagIds.join(",");
+  const pendingTagKey = pollTagIds.join(",");
   useEffect(() => {
     if (!pendingTagKey) return;
     const interval = setInterval(() => {
@@ -401,10 +453,21 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     setPreviewView("file");
   }, [commands.previewTarget?.documentUid]);
 
-  // When an ingestion task finishes, the browse snapshot that backs its row is
+  // When an ingestion task settles, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
   // just the loaded folder page(s) showing that document so its status goes live.
-  useRefetchOnTaskSuccess("document", (documentUid) => {
+  // Also the moment the storage quota moves, in both directions:
+  //   - success: ingestion saves the metadata (and its file size) at the end of
+  //     the workflow, so the earlier refetchTags() at task registration ran
+  //     while the document still weighed nothing;
+  //   - cancel: the backend erases the half-built document and gives its quota
+  //     back (`delete_cancelled_document`), seconds after the cancel request
+  //     returned — far too late for confirmStopIngestion to refetch anything
+  //     itself, which is why it deliberately does not try.
+  // Without this notification the quota meter stays behind by exactly the
+  // document that just landed, or the one that was just erased.
+  useRefetchOnTaskSettled("document", (documentUid) => {
+    onDocumentsChanged?.();
     for (const [tagId, page] of Object.entries(perTag)) {
       if (page.docs.some((doc) => doc.identity.document_uid === documentUid)) {
         void loadTagPage(tagId, page.offset);
@@ -413,7 +476,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   });
 
   // A brand-new document (just registered by the upload drawer) has no row
-  // anywhere yet, so `useRefetchOnTaskSuccess` above can never trigger its first
+  // anywhere yet, so `useRefetchOnTaskSettled` above can never trigger its first
   // refetch — its check requires the document to already be in a loaded page.
   // Fire on first sighting of the task instead (any state, not just succeeded).
   useNotifyOnNewTaskTarget("document", () => {
@@ -574,12 +637,67 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     for (const { tagId, offset } of pages) void loadTagPage(tagId, offset);
   }, [runningDocIds, perTag, loadTagPage, prevRunningDocIdsRef]);
 
+  /** Seed the ingestion drawer with an OS-file drop, targeting `node`.
+   * `requireDir` (the corpus root, where a file can only live inside a
+   * library): keep only files that came out of a dropped folder — their
+   * chain becomes the library — and reject loose ones, with a toast. */
+  const openDrawerWithDroppedFiles = (event: React.DragEvent, node: TagNode, requireDir = false) => {
+    event.preventDefault();
+    // fromEvent must start synchronously: the DataTransfer entries needed to
+    // walk a dropped directory are dead once the drop handler has returned.
+    void fromEvent(event.nativeEvent).then((items) => {
+      let dropped = items.filter((item): item is File => item instanceof File);
+      if (requireDir) {
+        const foldered = dropped.filter((file) => relativeDirSegments(file).length > 0);
+        if (foldered.length === 0) {
+          if (dropped.length > 0)
+            showError?.({
+              summary: t("rework.resources.rootDrop.rejectedTitle"),
+              detail: t("rework.resources.rootDrop.rejectedDetail"),
+            });
+          return;
+        }
+        if (foldered.length < dropped.length)
+          showWarn?.({
+            summary: t("rework.resources.rootDrop.rejectedTitle"),
+            detail: t("rework.resources.rootDrop.skippedDetail", { count: dropped.length - foldered.length }),
+          });
+        dropped = foldered;
+      }
+      // Depth guardrail (#2355): a file may not end up nested deeper than
+      // MAX_FOLDER_DEPTH levels, destination included — the mirrored tag
+      // chain is bounded the same way server-side (422 past the cap).
+      const destinationDepth = folderPathDepth(node.full);
+      const shallow = dropped.filter((file) => !exceedsMaxFolderDepth(file, destinationDepth));
+      if (shallow.length < dropped.length) {
+        if (shallow.length === 0) {
+          showError?.({
+            summary: t("documentLibrary.tooDeepTitle"),
+            detail: t("documentLibrary.tooDeepRejected", { max: MAX_FOLDER_DEPTH }),
+          });
+          return;
+        }
+        showWarn?.({
+          summary: t("documentLibrary.tooDeepTitle"),
+          detail: t("documentLibrary.tooDeepSkipped", {
+            count: dropped.length - shallow.length,
+            max: MAX_FOLDER_DEPTH,
+          }),
+        });
+        dropped = shallow;
+      }
+      if (dropped.length === 0) return;
+      setDropTargetNode(node);
+      setDroppedFiles(dropped);
+      setUploadOpen(true);
+    });
+  };
+
   /** OS-file drag-and-drop onto a folder row: pre-select that folder and open the
    * ingestion drawer seeded with the dropped files. Same gating as the row's
    * upload action. */
   const folderDropProps = (node: TagNode, droppable: boolean) => {
     if (!droppable) return {};
-    const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
     return {
       "data-drag-over": dragOverFolder === node.full || undefined,
       onDragOver: (event: React.DragEvent) => {
@@ -596,17 +714,11 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         setDragOverFolder((prev) => (prev === node.full ? null : prev));
       },
       onDrop: (event: React.DragEvent) => {
-        event.preventDefault();
+        // The whole page is a drop surface for the opened folder — a drop that
+        // landed on this row must not bubble up and hit that target too.
+        event.stopPropagation();
         setDragOverFolder(null);
-        // fromEvent must start synchronously: the DataTransfer entries needed to
-        // walk a dropped directory are dead once the drop handler has returned.
-        void fromEvent(event.nativeEvent).then((items) => {
-          const dropped = items.filter((item): item is File => item instanceof File);
-          if (dropped.length === 0) return;
-          setDropTargetNode(node);
-          setDroppedFiles(dropped);
-          setUploadOpen(true);
-        });
+        openDrawerWithDroppedFiles(event, node);
       },
     };
   };
@@ -753,6 +865,22 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     if (next !== undefined) patchDocRetrievable(doc.identity.document_uid, next);
   };
 
+  // Same rationale as patchDocRetrievable above: a label add/remove never
+  // changes tag membership or counts, so patch every loaded page holding this
+  // doc instead of a list-wide refetch.
+  const patchDocLabels = (documentUid: string, labels: string[]) => {
+    setPerTag((prev) => {
+      const next: typeof prev = {};
+      for (const [tagId, page] of Object.entries(prev)) {
+        next[tagId] = {
+          ...page,
+          docs: page.docs.map((d) => (d.identity.document_uid === documentUid ? { ...d, labels } : d)),
+        };
+      }
+      return next;
+    });
+  };
+
   const bulkToggleSearchable = async () => {
     // searchToggleMode being defined guarantees the toggle-relevant subset of
     // the selection is uniform (all searchable or all excluded), so toggling
@@ -832,6 +960,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       icon: { category: "outlined", type: "download" },
     });
     if (canCreateFolder) {
+      // Labels are descriptive metadata, not resource management — only
+      // checks the document's own UPDATE access server-side, same gate as
+      // rename, so it's offered under this same condition.
+      options.push({
+        value: "labels",
+        key: "labels",
+        label: t("rework.resources.action.manageLabels"),
+        icon: { category: "outlined", type: "category" },
+      });
       const excludedFromSearch = doc.source.retrievable === false;
       // A tabular-only dataset's `retrievable` is always false without being a
       // real exclusion (see isTabularOnlyDoc) — it stays queryable via the
@@ -1074,6 +1211,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                 } else {
                   if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                   if (value === "download") void commands.download(row.doc);
+                  if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
                   if (value === "stopIngestion") confirmStopIngestion(row.doc);
@@ -1124,8 +1262,89 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const uploadTargetNode = dropTargetNode ?? currentNode;
   const uploadTargetTag = uploadTargetNode.tagsHere[0] ?? null;
 
+  // Walks/creates the tag chain for one dropped subdirectory under the upload
+  // target, returning the leaf's tag id — how a dropped folder keeps its
+  // on-disk structure as nested tags (the drawer calls this once per distinct
+  // subdirectory before uploading). Existing levels are resolved from the
+  // loaded tree or the pendingFolderTagIds cache; missing ones are created
+  // like CreateFolderModal would (same TagCreate shape). A 409 means the tag
+  // exists server-side but not in the loaded tree (stale list, concurrent
+  // creation elsewhere) — refetch and read its id from the fresh list.
+  const ensureFolderPath = useCallback(
+    async (segments: string[]): Promise<string | null> => {
+      let parentFull = uploadTargetNode.full;
+      let parentNode: TagNode | null = uploadTargetNode;
+      let tagId: string | null = uploadTargetNode.tagsHere[0]?.id ?? null;
+      for (const segment of segments) {
+        const full = parentFull ? `${parentFull}/${segment}` : segment;
+        const node: TagNode | null = parentNode?.children.get(segment) ?? null;
+        let id = pendingFolderTagIds.current.get(full) ?? node?.tagsHere[0]?.id ?? null;
+        if (!id) {
+          try {
+            const created = await createTag({
+              tagCreate: {
+                name: segment,
+                path: parentFull || null,
+                type: "document",
+                team_id: isPersonalTeam ? null : teamId,
+              },
+            }).unwrap();
+            id = created.id;
+          } catch (err) {
+            if ((err as { status?: number | string })?.status === 409) {
+              const fresh = await refetchTags().unwrap();
+              id = (fresh ?? []).find((tag) => tag.type === "document" && fullPath(tag) === full)?.id ?? null;
+            }
+            if (!id) {
+              const detail = (err as { data?: { detail?: string } })?.data?.detail;
+              throw new Error(detail ?? t("rework.resources.folderModal.error"));
+            }
+          }
+        }
+        pendingFolderTagIds.current.set(full, id);
+        parentFull = full;
+        parentNode = node;
+        tagId = id;
+      }
+      return tagId;
+    },
+    [uploadTargetNode, createTag, isPersonalTeam, teamId, refetchTags, t],
+  );
+
+  // The full page is a drop surface for the folder being viewed — the drill-down
+  // model shows one folder at a time, so "drop anywhere" reads as "add to this
+  // folder". Folder rows keep their own (more specific) drop target above this
+  // one. Same CAN_UPDATE_RESOURCES gate as the toolbar upload action. At the
+  // corpus root there is no tag to attach plain files to, so only dropped
+  // FOLDERS are accepted there — each one becomes a library mirroring its
+  // structure (openDrawerWithDroppedFiles filters loose files out).
+  const atRoot = !currentFolderFull;
+  const pageDroppable = canCreateFolder && (!!currentTag || atRoot);
+  const pageDropProps = pageDroppable
+    ? {
+        onDragOver: (event: React.DragEvent) => {
+          if (!isFileDrag(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        },
+        onDragEnter: (event: React.DragEvent) => {
+          if (!isFileDrag(event)) return;
+          setPageDragOver(true);
+        },
+        onDragLeave: (event: React.DragEvent) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setPageDragOver(false);
+        },
+        onDrop: (event: React.DragEvent) => {
+          setPageDragOver(false);
+          openDrawerWithDroppedFiles(event, currentNode, atRoot);
+        },
+      }
+    : {};
+  const pageDragActive = pageDroppable && pageDragOver && !dragOverFolder;
+
   return (
-    <div className={styles.workspace}>
+    <div className={styles.workspace} data-page-drag-over={pageDragActive || undefined} {...pageDropProps}>
       <ResourceExplorer<Row>
         breadcrumb={{
           segments: breadcrumbSegments,
@@ -1204,6 +1423,17 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         }
       />
 
+      {pageDragActive && (
+        <div className={styles.pageDropOverlay} aria-hidden>
+          <Icon category="outlined" type="upload" />
+          <span>
+            {atRoot
+              ? t("rework.resources.dropAtRoot")
+              : t("rework.resources.dropInFolder", { folder: currentNode.name })}
+          </span>
+        </div>
+      )}
+
       <InlineDrawer
         open={!!commands.previewTarget}
         onClose={commands.closePreview}
@@ -1230,11 +1460,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           setUploadOpen(false);
           setDroppedFiles(undefined);
           setDropTargetNode(null);
+          pendingFolderTagIds.current.clear();
         }}
         initialFiles={droppedFiles}
         teamId={teamId}
         destinationPath={uploadTargetNode.full || undefined}
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
+        ensureFolderPath={canCreateFolder ? ensureFolderPath : undefined}
+        requireFolderPerFile={!uploadTargetTag}
         onUploadComplete={() => {
           if (uploadTargetTag) void loadTagPage(uploadTargetTag.id, perTag[uploadTargetTag.id]?.offset ?? 0);
           void refetchTags();
@@ -1260,6 +1493,18 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             } else {
               await commands.renameDocument(renameTarget.doc, newName);
             }
+          }}
+        />
+      )}
+      {labelsTarget && (
+        <ManageLabelsModal
+          open={!!labelsTarget}
+          onClose={() => setLabelsTarget(null)}
+          doc={labelsTarget}
+          onMutate={async (patch) => {
+            const next = await commands.mutateLabels(labelsTarget, patch);
+            if (next) patchDocLabels(labelsTarget.identity.document_uid, next);
+            return next;
           }}
         />
       )}

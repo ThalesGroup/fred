@@ -118,54 +118,45 @@ Do not spend migration time on:
 
 ## 7 Phase FRONT-05 — Agentic-Backend Removal From Frontend
 
-**ID:** FRONT-05  **Owner:** Dimitri  **Status:** In progress (rework 20→15)
-**Execution:** GitHub issue [#1840](https://github.com/ThalesGroup/fred/issues/1840) (remaining work); partial landed under #1838
+**ID:** FRONT-05  **Owner:** Dimitri  **Closed:** 2026-08-11
+**Execution:** GitHub issue [#1840](https://github.com/ThalesGroup/fred/issues/1840) (closed); partial landed under #1838
 
-Goal: remove all frontend imports from the legacy agentic generated API slices:
+Goal: remove all frontend imports from the legacy agentic generated API slices
+(`agenticOpenApi.ts`, `agenticInspectionApi.ts`, `agenticSourceApi.ts`) —
+`agentic-backend` was removed from the active monorepo; the managed/rework
+path uses `runtimeOpenApi.ts`, `controlPlaneOpenApi.ts`, or knowledge-flow
+APIs depending on ownership.
 
-- `agenticOpenApi.ts`
-- `agenticInspectionApi.ts`
-- `agenticSourceApi.ts`
+Closed summary:
 
-Context:
-
-- `agentic-backend` has been removed from the active monorepo.
-- The new managed/rework path should use `runtimeOpenApi.ts`,
-  `controlPlaneOpenApi.ts`, or knowledge-flow APIs depending on ownership.
-- Legacy chat components and routes were already deleted on 2026-05-21.
-
-Remaining rework imports (15 files as of 2026-06-26), grouped by migration cost.
-The 2026-06-26 audit pass split these by whether the runtime type is structurally
-identical or genuinely divergent — see the per-type breakdown:
-
-- [ ] **`Channel`** → swap to `runtimeOpenApi`. Runtime is a strict superset
-      (adds `hitl_request`, `hitl_response`). Frontend-only; watch for now-
-      non-exhaustive `switch` handling. No backend change.
-- [ ] **`ChatMessage`** → swap to `runtimeOpenApi`. Runtime equivalent exists and
-      is richer (`ui_parts`, hitl parts, `finish_reason`; `ChatMetadata` differs).
-      Frontend adaptation only (how parts/metadata are read). No backend change.
-      `LinkPart` / `ToolCallPart` / `ToolResultPart` are structurally identical to
-      runtime and ride along in the same (mixed) import files.
-- [ ] **`AwaitingHumanEvent`** → adapt HITL UI (`HitlPrompt`, `ConversationThread`)
-      to the runtime model `AwaitingHumanRuntimeEvent { kind, request:
-      HumanInputRequest, sequence }` (vs agentic `{ type, session_id, exchange_id,
-      payload }`). Frontend-only — `useChatSse` already consumes the runtime event
-      on the streaming path. No backend change.
-- [ ] **`FinishReason`** → **needs a decision (possible backend change).** Agentic
-      exports a named enum (`"stop" | "length" | "content_filter" | "tool_calls" |
-      "cancelled" | "other"`); runtime only has a loose `finish_reason?: string |
-      null` field, no named type. Either (a) the frontend owns this union as a local
-      view-model type, or (b) the runtime OpenAPI emits a named `FinishReason` enum
-      (small backend schema change + regen). Write a short RFC/design note before
-      implementing — this is the only item in FRONT-05 that may touch the backend.
-- [ ] Migrate remaining shared hooks (`useAgentSelector.ts`, `common/agent.ts`)
-      or delete them if no active route uses them.
-- [ ] Delete `agenticOpenApi.ts` once all imports are cleared.
-- [ ] Delete `agenticInspectionApi.ts` and `agenticSourceApi.ts` once consumers
-      are removed.
-
-Already completed:
-
+- [x] **2026-08-11 — `FinishReason`, the last item.** Runtime had no named
+      enum for this (a raw, provider-specific string); rather than have the
+      frontend guess a closed set it can't own, `FinishReason` (`stop | length
+      | content_filter | tool_calls | error | other`) is now normalized
+      **backend-side** in `fred-core` (`coerce_finish_reason`, with an
+      unrecognized value deliberately falling back to `other`, not raising —
+      keeps legacy history rows loadable), applied to both the live SSE
+      contract (`fred-sdk`) and persisted history (`fred-core`) so they can
+      never disagree, and generated into a real `runtimeOpenApi.ts` type. Fixed
+      an existing bug found along the way: Anthropic reports this under
+      `stop_reason`, not `finish_reason` — every Claude turn had a silently
+      empty value before this. Full detail:
+      [`RUNTIME-EXECUTION-CONTRACT.md §8.46`](../design/RUNTIME-EXECUTION-CONTRACT.md).
+      No RFC written — the design was settled through review, not left open;
+      per CLAUDE.md's consolidation-phase guidance this went straight to
+      implementation + this dated contract entry.
+      `agenticOpenApi.ts`/`agenticApi.ts` (+ config) deleted — this was their
+      last consumer.
+- [x] **2026-08-11:** migrated `Channel`/`ChatMessage` (+ ride-along
+      `ToolCallPart`/`ToolResultPart`/`VectorSearchHit`) from `agenticOpenApi` to
+      `runtimeOpenApi` across all remaining rework consumers (12 files + their
+      tests). Also replaced the hand-rolled local `ReqPart`/`RespPart` cast types
+      in `toThreadMessages.ts` with the now-available generated
+      `HitlRequestPart`/`HitlResponsePart` — one less hand-maintained duplicate
+      of a backend shape. `AwaitingHumanEvent` and the
+      `agenticInspectionApi`/`agenticSourceApi` deletion turned out to already be
+      done (stale checkboxes from an earlier pass); `useAgentSelector.ts` /
+      `common/agent.ts` no longer exist either.
 - [x] **2026-06-26:** repointed the 5 rework files importing only structurally
       identical types (`VectorSearchHit` ×4, `LinkPart` ×1) from `agenticOpenApi`
       to `runtimeOpenApi` — `tsc` green, zero behavior change. Rework imports
@@ -178,12 +169,13 @@ Already completed:
 - [x] Migrated `hooks/useChatSse.ts` to `rework/core/hooks/useChatSse.ts`.
 - [x] Migrated `UserInputSearchPolicy` to the rework `SearchPolicySelect`.
 
-Acceptance:
+Acceptance (all met):
 
-- [ ] `rg "agenticOpenApi|agenticInspectionApi|agenticSourceApi" apps/frontend/src`
-      returns no active imports.
-- [ ] frontend code-quality passes.
-- [ ] no removed legacy surface is reintroduced to satisfy type imports.
+- [x] `rg "agenticOpenApi|agenticApi" apps/frontend/src` returns no matches.
+- [x] frontend code-quality passes; full suite green (1068 passed, 2 skipped).
+- [x] no removed legacy surface was reintroduced to satisfy type imports.
+- [x] backend: `fred-core`/`fred-sdk`/`fred-runtime` code-quality + tests green
+      (474 + 242 + 809 passed).
 
 ## 13 Phase FRONT-07 — Rework UI Architecture Compliance
 

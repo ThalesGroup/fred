@@ -2512,3 +2512,20 @@ prompt?, error? }] }`.
 
 **Deferred:** no moderation surface in v1. Unpublish is available to editors of
 the author team, including directly from the marketplace (UX convenience).
+
+---
+
+## 40. Contract Notes — runtime chat-input policy projection (2026-08-12, issue #2253)
+
+`ExecutionPreparation.max_chat_input_chars: int | null` is an optional,
+read-only projection of the selected runtime pod's deployment policy. Runtime
+`/agents/templates` publishes the value per template because it is pod-scoped;
+control-plane reads it from the same template response already used to resolve
+capability metadata. One preparation therefore performs no additional runtime
+request, stores no duplicate setting, and introduces no cache.
+
+The field remains optional for rolling compatibility with older runtime pods.
+When absent, control-plane omits it from the serialized preparation and managed
+chat omits its counter; the runtime backend remains the enforcement boundary.
+Control-plane does not interpret, override, or persist the value and does not
+apply a second chat-message validator.

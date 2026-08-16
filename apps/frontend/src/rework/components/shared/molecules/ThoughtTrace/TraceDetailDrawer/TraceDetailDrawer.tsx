@@ -16,6 +16,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useToast, type ToastInput } from "@shared/molecules/Toast/ToastProvider";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
@@ -210,14 +211,13 @@ function CopyHeaderAction({ text, toast }: { text: string; toast?: ToastInput })
   const { showSuccess } = useToast();
 
   const handleCopy = () => {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
+    writeRichClipboard("", text).then((ok) => {
+      if (ok) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
         if (toast) showSuccess(toast);
-      })
-      .catch(() => {});
+      }
+    });
   };
 
   return (

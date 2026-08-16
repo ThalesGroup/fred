@@ -18,6 +18,7 @@
 import { memo, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
@@ -33,6 +34,9 @@ interface ConversationThreadProps {
   emptyState?: ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement>;
   onHitlAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
+  maxChatInputChars?: number;
+  hitlFreeText: string;
+  onHitlFreeTextChange: (value: string) => void;
 }
 
 // Memoized: ManagedChatPage re-renders on every composer keystroke (the input
@@ -47,8 +51,12 @@ export const ConversationThread = memo(function ConversationThread({
   emptyState,
   scrollContainerRef,
   onHitlAnswer,
+  maxChatInputChars,
+  hitlFreeText,
+  onHitlFreeTextChange,
 }: ConversationThreadProps) {
   const { t } = useTranslation();
+  useAssistantCopyInterception(scrollContainerRef);
   const turnKey = messages.filter((m) => m.role === "user").length;
   // The pending tool call(s) this HITL prompt gates, if the runtime reported
   // any (see build_tool_approval_request's HumanInputRequest.pending_calls —
@@ -96,7 +104,15 @@ export const ConversationThread = memo(function ConversationThread({
           />
         );
       })}
-      {pendingHitl && <HitlPrompt event={pendingHitl} onAnswer={onHitlAnswer} />}
+      {pendingHitl && (
+        <HitlPrompt
+          event={pendingHitl}
+          onAnswer={onHitlAnswer}
+          maxChatInputChars={maxChatInputChars}
+          freeTextValue={hitlFreeText}
+          onFreeTextChange={onHitlFreeTextChange}
+        />
+      )}
     </ChatMessagesArea>
   );
 });

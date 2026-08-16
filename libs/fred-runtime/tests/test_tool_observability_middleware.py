@@ -247,6 +247,115 @@ async def test_awrap_tool_call_tool_message_error_status_marks_failed_without_ra
 
 
 @pytest.mark.asyncio
+async def test_awrap_tool_call_is_error_artifact_marks_failed() -> None:
+    """A tool that handles its own failure and returns an `is_error=True`
+    artifact is still a failure.
+
+    `_document_tool_failure` (document_access) deliberately RETURNS rather than
+    raising, so LangChain never stamps `status="error"`. Before this was
+    handled, such a call was audited `outcome="succeeded"` and never counted in
+    `agent.tool_failed_total`, while `react_runtime` showed the very same step
+    as failed in the user's trace.
+    """
+
+    class _Artifact:
+        is_error = True
+
+    store, kpi = _install_recording_kpi_writer()
+    middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
+    request = _request(name="fake.native", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(
+            content="Could not search documents: HTTP 401",
+            name="fake.native",
+            tool_call_id="call-1",
+            artifact=_Artifact(),
+        )
+
+    with _AuditEvents() as audit:
+        result = await middleware.awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage)
+    assert result.status == "success"  # LangChain's own view is unchanged
+    assert _latency_event(store).dims["status"] == "error"
+    failed = _failed_events(store)
+    assert len(failed) == 1
+    # The LABEL VALUES, not just the fact of a failure. `error_code` is what a
+    # Grafana panel groups by, and `exception_type` must be present even though
+    # nothing was raised: PrometheusKPIStore freezes a metric's label-name
+    # tuple on its FIRST sample, so a handled failure arriving first would
+    # otherwise drop `exception_type` from every raised failure thereafter.
+    assert failed[0].dims["error_code"] == "tool_error_artifact"
+    assert failed[0].dims["exception_type"] == "none"
+    # And NOT on the latency histogram. Writing them there looks like richer
+    # telemetry and delivers none: the first `agent.tool_latency_ms` sample in a
+    # pod is a success carrying neither dim, and PrometheusKPIStore pins the
+    # label-name tuple to that first sample — so every later `error_code` on
+    # this metric is discarded before export. Asserting their ABSENCE keeps the
+    # code honest about what Grafana actually receives.
+    latency_dims = _latency_event(store).dims
+    assert "error_code" not in latency_dims
+    assert "exception_type" not in latency_dims
+    assert audit.records[1].outcome == "failed"  # type: ignore[attr-defined]
+    assert audit.records[1].error_code == "tool_error_artifact"  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_awrap_tool_call_dict_is_error_artifact_marks_failed() -> None:
+    """A dict artifact counts too.
+
+    `normalize_tool_artifact` (react_stream_adapter) model_validates a dict into
+    a `ToolInvocationResult`, so a dict-returning tool shows as failed in the
+    user's trace. An attribute-only check here would have recorded that same
+    call as a success.
+    """
+    store, kpi = _install_recording_kpi_writer()
+    middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
+    request = _request(name="fake.native", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(
+            content="boom",
+            name="fake.native",
+            tool_call_id="call-1",
+            artifact={"is_error": True},
+        )
+
+    with _AuditEvents() as audit:
+        await middleware.awrap_tool_call(request, handler)
+
+    assert len(_failed_events(store)) == 1
+    assert audit.records[1].outcome == "failed"  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_awrap_tool_call_success_artifact_stays_succeeded() -> None:
+    """The artifact check must not turn ordinary successes into failures."""
+
+    class _Artifact:
+        is_error = False
+
+    store, kpi = _install_recording_kpi_writer()
+    middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
+    request = _request(name="fake.native", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(
+            content="ok",
+            name="fake.native",
+            tool_call_id="call-1",
+            artifact=_Artifact(),
+        )
+
+    with _AuditEvents() as audit:
+        await middleware.awrap_tool_call(request, handler)
+
+    assert len(_failed_events(store)) == 0
+    assert audit.records[1].outcome == "succeeded"  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
 async def test_awrap_tool_call_cancelled_emits_cancelled_and_reraises() -> None:
     store, kpi = _install_recording_kpi_writer()
     middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())

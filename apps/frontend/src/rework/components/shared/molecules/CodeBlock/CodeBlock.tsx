@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import styles from "./CodeBlock.module.css";
 
 interface CodeBlockProps {
@@ -44,15 +45,17 @@ export function CodeBlock({
   }
 
   function handleCopy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", code).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     });
   }
 
   return (
     <div className={styles.block}>
-      <div className={styles.header}>
+      <div className={styles.header} data-clipboard-ignore>
         <span className={styles.lang}>{language ?? "plaintext"}</span>
         {!hideCopy && (
           <button className={styles.copy} onClick={handleCopy} aria-label="Copy code">

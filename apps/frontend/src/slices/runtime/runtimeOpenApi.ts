@@ -520,6 +520,7 @@ export type RuntimeErrorEvent = {
   message: string;
   sequence?: number;
 };
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
   /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
@@ -592,7 +593,7 @@ export type LinkPart = {
 };
 export type FinalRuntimeEvent = {
   content?: string;
-  finish_reason?: string | null;
+  finish_reason?: FinishReason | null;
   kind?: "final";
   model_name?: string | null;
   sequence?: number;
@@ -716,10 +717,12 @@ export type McpCatalogResponse = {
 };
 export type ModelCatalogEntry = {
   description?: string | null;
+  display_name?: string | null;
   id: string;
   name: string;
   profile_ids?: string[];
   provider: string;
+  reasoning_effort?: string | null;
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
@@ -737,13 +740,15 @@ export type Channel =
   | "hitl_request"
   | "hitl_response";
 export type ChatTokenUsage = {
+  cache_creation_tokens?: number;
+  cache_read_tokens?: number;
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
 };
 export type ChatMetadata = {
   agent_id?: string | null;
-  finish_reason?: string | null;
+  finish_reason?: FinishReason | null;
   latency_ms?: number | null;
   model?: string | null;
   sources?: VectorSearchHit[];
@@ -926,7 +931,9 @@ export type CapabilityCatalogEntry = {
   icon: string;
   id: string;
   kind?: "tool" | "agent" | "model";
+  model_display_name?: string | null;
   model_profile_ids?: string[];
+  model_reasoning_effort?: string | null;
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
@@ -1010,6 +1017,7 @@ export type AgentTemplateSummary = {
     [key: string]: string;
   } | null;
   kind: ExecutionCategory;
+  max_chat_input_chars: number;
   template_agent_id: string;
   title: string;
 };

@@ -343,10 +343,10 @@ Every implementation and review must preserve these invariants:
 | MCP activation | **Needs load evidence (P1)** — sequential cold discovery, token-scoped pod cache, no singleflight | [TURN-02](../reviews/performance/2026-07-26-agent-turn-core/TURN-02-mcp-cold-path-and-cache-scope.md) |
 | ReAct/Deep model/tool boundary | **Mostly meets design** — canonical KPI/audit middleware and per-tool ReBAC; the authorization cost needs an explicit stage metric and load budget | [core review](../reviews/performance/2026-07-26-agent-turn-core/README.md) |
 | Graph model/tool boundary | **Gap (P1)** — bypasses canonical LLM/tool KPI, tool audit, and per-call ReBAC | [TURN-03](../reviews/performance/2026-07-26-agent-turn-core/TURN-03-graph-runtime-observability-and-authz.md) |
-| Turn resource budgets | **Gap (P1)** — 500-message model window, no default tool-call cap, unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md) |
+| Turn resource budgets | **Partially fixed** — ReAct now has a size-based model-input budget alongside the message-count window (§8.52, 2026-08-13) and a shipped tool-call cap (`apps/fred-agents/tool_pacing.py`, 2026-08-01); **Gap (P1) remains** for Deep, Graph, persisted-checkpoint compaction, and the unused parallel-call policy | [TURN-04](../reviews/performance/2026-07-26-agent-turn-core/TURN-04-turn-resource-bounds.md), [#2343](https://github.com/ThalesGroup/fred/issues/2343) |
 | SSE/history lifecycle | **Needs load evidence (P2)** — full payload buffering and unbounded fire-and-forget persistence tasks | [TURN-05](../reviews/performance/2026-07-26-agent-turn-core/TURN-05-sse-buffering-and-history-backpressure.md) |
 | Pod/SQL admission | **Needs load evidence (P1)** — Uvicorn limit unset; shared async SQL pool defaults to 15 maximum connections | [TURN-06](../reviews/performance/2026-07-26-agent-turn-core/TURN-06-admission-and-sql-capacity.md) |
-| Token refresh | **Gap (P1)** — synchronous Keycloak HTTP is reachable from async Knowledge Flow/MCP recovery | [TURN-07](../reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md) |
+| Token refresh | **Fixed offline 2026-08-07** — the refresh is async, coalesced and bounded; the synchronous helper was removed (§8.48). The pod-level forced-expiry proof is still owed and cannot run until delegated refresh is reachable again | [TURN-07](../reviews/performance/2026-07-26-agent-turn-core/TURN-07-sync-token-refresh-in-async-path.md) |
 | Runtime construction | **Needs load evidence (P2)** — runtime/executor/ReAct compilation repeats per turn | [TURN-08](../reviews/performance/2026-07-26-agent-turn-core/TURN-08-per-turn-runtime-rebuild.md) |
 
 The call-budget estimate and P1/P2 labels above are review findings, not measured
@@ -2499,6 +2499,625 @@ the `folder:` form. Regression tests:
 `test_tree_builder.py`, `test_capability_document_summarize.py`,
 `traceUtils.test.ts`.
 
+### 8.48 ✅ Keycloak user-token refresh is async and coalesced (TURN-07, issue #2125, 2026-08-07)
+
+> **Scope of the ✅:** every acceptance criterion is met offline except the
+> delayed-Keycloak, two-SSE-stream pod test. That one is not merely unrun — it
+> is currently *unrunnable*, because `_authorize_and_resolve` nulls
+> body-supplied refresh tokens and no producer supplies one, so nothing can
+> drive a real refresh end to end. It stays owed until
+> `DELEGATED-DOWNSTREAM-AUTH-RFC.md` lands or the criterion is formally
+> revised. See the TURN-07 dossier for the full accounting.
+
+**Enforces §0.2 invariant #2 on the last path that violated it.**
+`refresh_user_access_token_from_keycloak` was a synchronous `httpx.post(...,
+timeout=10.0)`, and every 401-recovery path reached it through sync methods
+called from `async def` bodies. A single refresh therefore parked the pod's
+event-loop thread for up to ten seconds, stalling every *other* concurrent SSE
+turn, timer, and tool call on that pod — not just the request that triggered
+it. Token expirations arrive in cohorts, so a refresh wave produced a pod-wide
+latency cliff rather than a contained slowdown.
+
+Four call chains reached the blocking helper (the fourth was not in the
+original TURN-07 evidence): `KfBaseClient._request_with_token_refresh` and
+`_execute_authenticated_request` (via `_current_access_token`);
+`ExpiredTokenRetryInterceptor.__call__` for MCP; the media adapter in
+`agent_app.py`; and the workspace filesystem adapter, whose sync `_token()`
+was called from `async def _download`/`ls`/`delete`/`link_for`
+(`integrations/v2_runtime/adapters.py`).
+
+**Now**: the helper is `async def`, backed by a per-event-loop
+`httpx.AsyncClient` with bounded connection limits, and coalesces concurrent
+refreshes through a singleflight registry keyed on a SHA-256 digest of
+`(realm_url, client_id, refresh_token)` — so one identity's concurrent 401s
+share one Keycloak round trip while distinct principals never share a result.
+The in-flight task is `asyncio.shield`ed, so a caller disconnecting mid-turn
+cannot abort the refresh its peers are awaiting. Timeouts and transport errors
+now normalize to `RuntimeError` alongside the pre-existing HTTP-status failure,
+keeping the path fail-closed.
+
+`REFRESH_TIMEOUT_SECONDS` is the **total** budget, enforced inside the shared
+exchange task itself; httpx additionally applies per-phase budgets
+(connect/read/write/pool) that sum to it. The full rationale — why the total
+cannot live at the await site — is a few paragraphs below.
+
+**Replica scope (§0.2 invariant #7): the singleflight registry is pod-local.**
+`fred-agents` runs several replicas with no principal-sticky routing, so
+coalescing holds within one pod only — two replicas refreshing the same
+identity still issue two Keycloak round trips. Making it global would require
+a shared store; the residual failure it would prevent (one of two *cross-pod*
+concurrent refreshes losing the rotation race) degrades to an ordinary 401
+retry, which is why the pod-local scope is accepted rather than escalated.
+
+Within a pod, coalescing is also a **correctness** fix: Keycloak rotates
+refresh tokens, so two concurrent 401s replaying the same token previously made
+the second fail `invalid_grant`.
+
+**Scope note — the blocking call is unreachable, but the path is not.**
+`_refresh_runtime_context_access_token` raises at its `if not refresh_token`
+guard *before any HTTP*, because `runtime_context.refresh_token` is `None` on
+every authenticated request. (`_authorize_and_resolve` neutralises the
+body-supplied value under `if authenticated_user is not None`; with
+`KEYCLOAK_ENABLED=false` nothing neutralises it, but there is equally no
+Keycloak to refresh against, so the path stays unreachable either way.) Two
+independent causes, in this order: the frontend producer was deleted
+on 2026-05-21 (`9680cd5b`, "remove old legacy code", which removed the last
+`GetRefreshToken` call sites along with the WS hook), and `_authorize_and_resolve`
+(control F-B) began nulling any body-supplied `refresh_token` on 2026-06-28
+(`f27fe2f8`, #1862) — five weeks *after* the producer was already gone. **F-B
+sealed an already-dead path; it did not break a working one.**
+
+Two consequences, and the second is the one that matters:
+
+1. TURN-07's event-loop stall cannot occur today: execution never reaches the
+   synchronous `httpx.post`. This change enforces the invariant *ahead of* a
+   producer being wired, so whoever restores delegated refresh does not
+   simultaneously reintroduce a pod-wide stall.
+2. **The guard itself is reached in production and is user-visible.**
+   Expired-token recovery fails outright instead of degrading. Reported three
+   times — [#1948](https://github.com/ThalesGroup/fred/issues/1948) (KEA prod,
+   closed not-planned), [#1951](https://github.com/ThalesGroup/fred/issues/1951)
+   (swift), and [#2073](https://github.com/ThalesGroup/fred/issues/2073) Item 3,
+   reproduced live 2026-07-23 with this exact guard in the stack trace — all
+   closed with no fix, and no open issue now tracks it.
+
+Restoring delegated refresh is **not** simply re-adding the producer: F-B
+neutralizes body-supplied refresh tokens deliberately, and giving a pod a user's
+long-lived refresh token is a security decision, not a bug fix. The design for
+closing the root cause is `docs/swift/rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md`
+(token exchange at admission) — written, not implemented, awaiting its own
+issue. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
+change.
+
+**Contract-visible signature changes** (all internal to `fred-runtime`; the
+`fred-sdk` authoring surface is untouched and no capability package consumes
+these): `KnowledgeFlowAgentContext.refresh_user_access_token`,
+`TokenRefreshCallback`, `KfBaseClient._try_refresh_token` /
+`_current_access_token`, the three v2 agent shims, `_workspace_access_token`,
+and `_refresh_runtime_context_access_token` are now awaitable. The synchronous
+helper was removed rather than deprecated, so no sync network I/O remains
+reachable from an async path.
+
+Refresh duration and outcome are emitted through the existing KPI writer as a
+**dedicated metric**, `auth.token_refresh_latency_ms`, with a single
+`status=ok|error|timeout` dim, measuring the Keycloak exchange itself. Because
+the total deadline lives *inside* the exchange (below), every outcome —
+including a timeout — is emitted exactly once by the exchange that produced it,
+and every coalesced caller sees that same outcome. A `phase` dim on the shared
+`app.phase_latency_ms` was rejected: `phase` is deliberately absent from
+`PROMETHEUS_ALLOWED_LABELS`, so it is stripped at the Prometheus boundary and
+the timings would have been indistinguishable in Grafana from every other phase
+emitter. `status` is already an allowed label, so the series is attributable by
+name and outcome without adding a label (a new label is a deliberate
+cardinality decision — `OBSERVABILITY-AND-AUDIT.md` §3). No token, user,
+session, or team identity reaches the dims. Emitting the `timeout` outcome
+requires leaving the timer block normally and raising afterwards — raising
+*through* `KPIWriter._TimerImpl.__exit__` forces `status="error"` and would
+collapse "Keycloak is slow" into the same series as "Keycloak said no".
+
+Two consequences of moving from a throwaway `httpx.post` to a **shared** client
+had to be handled explicitly, since both are capabilities the old per-call
+client did not have:
+
+- **No cookie persistence.** httpx calls `cookies.extract_cookies(response)` on
+  every response, so one principal's Keycloak cookies would have been replayed
+  on the next principal's refresh. The client is built with a jar that refuses
+  to store. (It is installed on `_cookies` because httpx's public setter
+  re-wraps any value in a plain `Cookies`; the regression test fails loudly if
+  that internal ever changes, which is preferable to silently resuming storage.)
+- **Shutdown drains before closing.** `aclose_token_refresh_client` awaits
+  in-flight refreshes — each already bounded by `REFRESH_TIMEOUT_SECONDS` —
+  before closing the transport, so an orderly shutdown cannot turn a running
+  turn's refresh into "Cannot send a request, as the client has been closed".
+  The state stays registered for the whole drain and is popped only at the end,
+  so a refresh arriving mid-drain reuses this client instead of building a
+  second one behind the closer's back — and the drain re-reads `inflight` each
+  pass rather than working from a snapshot, so that late arrival is waited for
+  too. (A `closing` flag was tried first and was inert: nothing read it, and the
+  snapshot still let a mid-drain exchange have the transport closed under it.)
+  The wait is `asyncio.wait`, not `wait_for(gather(...))`:
+  the latter cancels the gather on timeout, which propagates into every child
+  task, and each shielded waiter would then see `CancelledError` — a
+  `BaseException` that every caller's `except Exception` 401-recovery handler
+  misses, so a rolling restart would kill in-flight turns rather than degrade
+  them.
+
+**`REFRESH_TIMEOUT_SECONDS` is enforced inside the shared exchange task, not at
+the await site.** Per-phase budgets (`connect`/`read`/`write`/`pool`, summing to
+the total) bound the ordinary case, but they are not a total: a peer that sends
+a byte inside every read window resets the read timer indefinitely and no phase
+ever trips. With the only total bound on the waiter, each caller gave up on
+schedule while the exchange ran on — holding its `inflight` slot and a pooled
+connection with nobody left waiting to notice, so `max_connections=32` such
+identities could pin the pool. The deadline therefore wraps the POST *within*
+the task, and callers simply `await asyncio.shield(task)`: bounded by
+construction. The shield still lets the task outlive a *cancelled* caller —
+deliberately, for the coalesced peers still waiting — but never beyond its own
+deadline, which is the bound that was previously missing.
+
+**A cancelled caller never cancels the exchange**, even when it is the only one
+waiting — the await site is a plain `asyncio.shield`, with no waiter
+bookkeeping. Any last-waiter-cancels scheme races the waiters' own resumption
+(reference-counting was tried and reverted for exactly that) and delivers
+`CancelledError` — a `BaseException` every caller's `except Exception`
+401-recovery handler misses — killing turns instead of degrading them. The
+accepted cost is a rotation nobody consumes (the exchange completes, Keycloak
+invalidates the presented token, the replacement is dropped): the
+protocol-inherent lost-rotation race already recorded as
+`DELEGATED-DOWNSTREAM-AUTH-RFC.md` open question 8, which degrades to one
+`invalid_grant` retry. Each waiter also receives its **own** copy of the
+payload, since one task resolves to one object and a shared mutable dict would
+let the first mutator corrupt what its peers already read.
+
+**Coalescing covers overlapping calls only.** A turn whose 401 lands *after* an
+earlier refresh completed finds no in-flight entry and presents a token Keycloak
+has already consumed, so it still gets `invalid_grant`. Closing that needs a
+cached result keyed on the pre-rotation token — live credentials held in pod
+memory, an AUTH-TX decision rather than a refresher one.
+
+**A 2xx is not a promise of a token.** The success path validates the response
+shape — JSON object, non-empty string `access_token`, and an `expires_in` that
+is absent (RFC 6749 §5.1 makes it optional; the documented 300 s default
+applies) or genuinely numeric — and otherwise fails closed with a constant
+message. This is the success-path half of the same OWASP A09 / CWE-532 rule the
+error path already followed: `int(payload["expires_in"])` put the rejected
+value verbatim into a `ValueError` that Knowledge Flow and MCP then log.
+
+**The token-refresh hook contract is enforced on the result, not the callable's
+shape.** Hooks are `Callable[[], Awaitable[str]]`, and every legal shape —
+coroutine function, `async __call__`, coroutine-returning closure — must work;
+no static check can classify these, so none is attempted.
+`resolve_refresh_result` (`common/structures.py`) awaits whatever the hook
+returned. A legacy *synchronous* hook violates this section's contract: it runs
+its network I/O on the event loop once and is named at ERROR, but its token is
+still used — discarding a refresh that succeeded would turn one slow call into
+permanently broken 401 recovery.
+
+Regression tests: `test_user_token_refresher.py` (55 cases, including
+singleflight coalescing, cross-principal isolation, cancellation safety, the
+`timeout` status surviving to the metric, an assertion that every emitted dim
+survives `PROMETHEUS_ALLOWED_LABELS`, proof that a timed-out exchange leaves no
+task and no registry entry behind, malformed-2xx bodies never reaching a log
+sink, a structural guard that every hop in all four 401-recovery chains stays
+awaitable, the closed-client branch pinned against httpx's own wording by
+closing a real client, and an event-loop liveness assertion that fails against
+the pre-change implementation), plus `test_kf_base_client_refresh_shapes.py`
+(all three async hook shapes resolve; a sync wrapper degrades loudly instead of
+being rejected).
+
+**One acceptance criterion is only partially met.** #2125 asks for a
+delayed-Keycloak test proving *unrelated SSE streams keep progressing* during a
+refresh. The liveness assertion proves the mechanism — a ticker task advances
+during the refresh window, 0 ticks against the pre-change code and 18 after —
+but it exercises the refresher directly, not a pod serving concurrent SSE
+turns. The pod-level forced-expiry scenario (`WORKING-PROTOCOL.md` §6) needs a
+live stack and is not reachable from `make test`; it remains owed.
+
+### 8.49 ✅ `search_documents_using_vectorization` degrades instead of killing the turn (2026-08-07)
+
+**Companion to §8.48, and the only part of the expired-token exposure fixable
+without an RFC.** Three tools in `document_access` handled an identical
+downstream failure three different ways. `list_document_tree` and
+`summarize_document` caught it and returned an `is_error=True` artifact via the
+module's shared `_document_tool_failure` helper — whose own docstring states the
+rule: *"a failing tool MUST return such a result instead of raising — a raised
+exception is re-raised by the default `ToolNode` handler, which leaves the tool
+call pending in the trace and yields an empty error detail to the UI."*
+`search_documents_using_vectorization`, the most-used RAG tool, had no
+`try`/`except` at all, so the exception escaped and **killed the whole turn**,
+surfacing a raw `Client error '401 Unauthorized' for url '.../vector/search'`
+with an empty error detail.
+
+That is the failure observed live in #2073 Item 3: the same expired-token 401
+that MCP tools survived (degraded) took the turn down through this tool.
+
+**Now**: the `port.search(...)` call is wrapped like its siblings, returning
+`_document_tool_failure(...)` so the model sees an actionable error and can
+recover or explain, and the trace carries a populated `is_error` row. This does
+not fix the token expiry itself — §8.48 explains why that needs an RFC — it
+bounds the blast radius from "turn dies" to "one tool call failed", for this and
+every other Knowledge Flow failure mode.
+
+Two defects found while reviewing that change had to be fixed with it, or the
+degradation would have been silent:
+
+1. **The search adapter never mapped its errors.** `_wrap_document_port_error`
+   was applied on the tree and summarize adapters but not on
+   `DocumentSearchAdapter.search`, so a raw `httpx` error reached the
+   capability. The capability reads `status_code`/`timed_out` off the exception
+   and never imports the HTTP stack, so the incident's 401 rendered as "the
+   Knowledge Flow service call failed" with no status named. `search` now wraps
+   like its siblings.
+2. **A handled failure was audited as a success.**
+   `ToolObservabilityMiddleware` decided failure purely from
+   `ToolMessage.status == "error"`, which LangChain sets only when a tool
+   *raised*. A tool that returns an `is_error=True` artifact — the contract
+   `_document_tool_failure` implements, and what `react_runtime` already reads
+   to mark the trace step failed — produced an ordinary `ToolMessage`, so the
+   call was recorded `outcome="succeeded"` and never counted in
+   `agent.tool_failed_total`. Converting this tool from raising to returning
+   would therefore have *removed* it from failure accounting. The middleware
+   now also honours the artifact flag, which aligns the audit trail with the
+   trace for all three document tools.
+
+   **This does not fix the MCP case.** `ContextAwareTool._arun` returns its
+   error as *text* with a `None` artifact (`return msg, None`), so there is no
+   `is_error` flag for the middleware to read and an MCP tool failure is still
+   audited `outcome="succeeded"` — the misreporting recorded in #2073 as
+   adjacent to #2011 remains open. Closing it needs a distinct signal from
+   `ContextAwareTool`, which is outside this change.
+
+Regression tests: `test_search_tool_failure_returns_is_error_result` and
+`test_search_adapter_wraps_httpx_error_with_status_code`
+(`test_capability_document_access_1906.py`);
+`test_awrap_tool_call_is_error_artifact_marks_failed` and
+`test_awrap_tool_call_success_artifact_stays_succeeded`
+(`test_tool_observability_middleware.py`). Each fails against its pre-change
+implementation.
+
+### 8.50 ✅ Chat turn-start token preflight: more headroom, no doomed sends (2026-08-07)
+
+**Frontend companion to §8.48/§8.49 — the last no-RFC-needed piece of the
+expired-token exposure.** Two defects in the send path compounded the mid-turn
+expiry window:
+
+1. Turns preflighted with `ensureFreshToken(30)` — the same 30 s threshold as
+   ordinary fetches — so a turn could *begin* with 30 seconds of bearer life
+   while the pod forwards that bearer for the whole turn with no mid-turn
+   renewal (§8.48).
+2. `ensureFreshToken` resolves `false` on refresh failure/timeout instead of
+   rejecting, so the `try/catch` around it in `useChatSse.ts` was dead code and
+   the boolean was discarded: a silently failed refresh removed even the 30 s
+   floor, starting turns with arbitrarily little token life.
+
+**Now** (`useChatSse.ts`, `KeycloakService.ts`): both send paths (send and HITL
+resume) preflight through one helper. It requests `TURN_TOKEN_MIN_VALIDITY_S =
+120` of headroom; on a failed refresh it consults the new
+`GetTokenSecondsLeft()` and **blocks the send with a user-facing message** when
+less than `TURN_TOKEN_HARD_FLOOR_S = 30` remains — a clear error at the
+composer beats an opaque tool failure 30 s into the stream — and otherwise
+proceeds with a console warning. Ordinary fetches keep the 30 s default.
+
+**A refusal must leave the interaction retryable.** `handleHitlAnswer` clears
+`pendingHitl` before awaiting the resume, so a refused HITL resume would have
+hidden a prompt whose checkpoint is still paused server-side, with no way to
+answer it. `sendHitlResume` therefore resolves `false` for **every** outcome
+where the resume never reached the runtime — token refusal, prepare-execution
+failure, an abort/supersession before the stream started, *or* the runtime
+rejecting the request outright (a fetch failure, or a non-2xx such as 503 from
+an unready pod). The dividing line is the runtime's own acceptance:
+`streamToMessages` signals `onAccepted` once past its status check, and only
+after that does a failure count as reached — a mid-stream reset must NOT
+resurrect the prompt, because the checkpoint has already been consumed.
+
+Not-reached is a fact about the backend, not about who owns the UI, so
+`handleHitlAnswer` guards the restore itself, three ways: same session
+(`activeSessionIdRef`), thread-derived staleness (the restore is skipped when
+the thread's last message carries a *different* `exchange_id` than the prompt —
+a turn that genuinely starts appends its optimistic user message under a new
+`exchange_id`, so the thread itself says whether the user has moved past the
+exchange, while a send that fails before committing appends nothing, which is
+exactly when the prompt should return), and empty slot only (a functional
+update, so a newer `awaiting_human` is never overwritten by a late-settling
+continuation). No counter or rollback state is kept for this: nothing
+accumulates, so nothing needs unwinding when a superseding send fails. A
+`.catch()` mirrors the same restore, since `pendingHitl` is cleared before the
+await and this continuation is the only path that can put it back. For the same reason the optimistic "cancelled"
+tool_results now go in **after** prepare-execution succeeds, not before:
+applied earlier, a failed preparation left the gated calls displayed as
+cancelled by an attempt that never ran, and because those messages are ranked
+by `Date.now()` they could never collide with a backend rank in `upsertOne` —
+so the real results arriving on the retry sat *alongside* the fake ones, and
+`groupTraceEntries` (last result per `call_id` in rank order) kept the fake one
+permanently. `upsertOne` now also matches an optimistic cancellation by
+`call_id` within its exchange, so a real result supersedes it in every case.
+
+**Cleared-session fail-closed (2026-08-09).** keycloak-js ends the session
+itself when a refresh comes back HTTP 400 (`clearToken()`), and that state was
+fail-open three ways: `isTokenExpired` starts *throwing* (a bare string) and
+the preflight's fast path sat outside its catch — `dynamicBaseQuery` awaits
+`ensureFreshToken` with no catch at all, so ordinary requests aborted before
+their 401→logout recovery; `GetTokenSecondsLeft()` returned `null` ("no floor
+to enforce") for a session that was dead, letting the preflight proceed
+"unbounded"; and `GetToken()` fell back to the persisted `localStorage` copy,
+so an unexpired-but-orphaned bearer kept authenticating requests the backend
+accepts via offline JWT validation. Now: `ensureFreshToken` keeps its boolean
+contract in that state (resolves `false`, attempts no doomed exchange) and
+reports the headroom it actually obtained — it re-checks the refreshed token
+rather than answering `true` because `updateToken` settled, which on a realm
+whose lifespan is below the requested validity made the guarantee unkeepable and
+silently disabled the hard floor (only consulted when this resolves `false`).
+**`minValidity <= 0` means FORCE**, mapped to keycloak-js's `updateToken(-1)`
+sentinel — its only unconditional-refresh path — and skipping the headroom
+check entirely. That is what `dynamicBaseQuery` asks for after a 401, where the
+browser's own view of the token is precisely what must not be trusted (clock
+skew against admission's `leeway=0`, an SSO logout elsewhere, realm key
+rotation). Merely coercing `0` up to the library's 5 s floor was tried first and
+only moved the hole: a 401 arriving while the browser believed 20 s remained
+still short-circuited, replayed the same bearer, took a second 401 and logged
+the user out. Non-forced thresholds are floored at 5 s so the value tested here
+matches the one `updateToken` will apply, and the single-flight reuse gate
+compares those *proven* thresholds rather than the raw arguments — `0` is the
+strongest request but the weakest raw number. Meanwhile
+`GetTokenSecondsLeft` reports `0` — dead, not unconstrained — once the session
+has actually **died** (tracked from `onAuthLogout`; keycloak-js reports
+`authenticated = false` both for a cleared session and before `init()` has ever
+run, so an absent token alone cannot tell them apart, and treating bootstrap as
+dead would hard-refuse turns at startup). It returns `null` — unconstrained —
+when keycloak-js's `timeSkew` is `null`, which is that library declaring expiry
+undeterminable rather than declaring zero skew; defaulting it to 0 turned a fast
+client clock into a large negative and refused every turn for a bearer the
+server still accepts. And
+`createKeycloakInstance` registers `onAuthLogout` to drop the persisted copy
+the moment Keycloak ends the session. The removal is hygiene against the app's
+own fallback, not a boundary — anything running in the page could keep a copy
+of the token regardless; only the 300 s TTL (and, eventually, the RFC's
+server-side exchange) actually bounds a leaked bearer.
+
+This narrows the window; it does not close it (a turn can still outlive a
+120–300 s token). The close is `DELEGATED-DOWNSTREAM-AUTH-RFC.md` (token
+exchange at admission), deliberately not implemented here.
+
+Regression tests: `useChatSse.test.tsx` (refusal below the hard floor, degraded
+proceed above it, HITL refusal reporting not-reached with no optimistic
+cancellation left behind, and the same for a failed preparation),
+`useManagedChat.test.tsx` (prompt restored on not-reached, stays cleared
+otherwise), `chatSseUtils.test.ts` (supersession by `call_id`, scoped to the
+same exchange). Each fails against its pre-change implementation.
+
+---
+
+### 8.51 ✅ Tool-KPI label discipline, complete pod shutdown, wire-time token rescue (§8.48–§8.50 follow-up, 2026-08-10)
+
+**Three corrections landed with the §8.48–§8.50 change. The first two share
+one shape: a mechanism that looked correct in the source and did nothing at
+runtime.**
+
+1. **`agent.tool_latency_ms` carries `status` and no other outcome dim.**
+   `ToolObservabilityMiddleware` wrote `error_code`/`exception_type` onto the
+   timer's dims on both failure branches. Neither ever reached Grafana:
+   `PrometheusKPIStore._resolve_labeling` freezes a metric's label-name tuple
+   on the metric's **first** sample, and the first tool call in any pod is
+   overwhelmingly a success carrying neither dim — so every later value was
+   discarded before export, with nothing in the code, the metric, or the
+   dashboard to say so. They are removed from the timer rather than back-filled
+   on the success path: the failure taxonomy already lives on
+   `agent.tool_failed_total` (a counter, labelled identically on the raised and
+   the handled-failure branch, per §8.49), and `agent.tool_latency_ms` is a
+   histogram whose bucket series would be multiplied by error-code cardinality
+   for a question — "latency by error code" — nobody asks. `status` alone
+   answers the one that is asked, and `_TimerImpl.__exit__` sets it on every
+   sample.
+
+   **Rule this generalises:** adding a dim to one emission site of a KPI means
+   adding it to *every* site of that metric, success paths included, with a
+   constant filler where it does not apply. A dim only some branches emit is
+   not partially visible — it is absent.
+
+2. **Pod shutdown runs to completion.** `agent_app.py`'s lifespan released
+   gc-diagnostics, the pod container and the Keycloak refresh pool as bare
+   statements after `yield`. An exception propagating out of the app skipped
+   all three, and a raising `container.shutdown()` (a hung KPI task, a failed
+   SQL dispose) stranded the 32-connection refresh pool behind it — silently,
+   since nothing logged either failure. Shutdown is now a `finally` with each
+   step independently guarded and its failure logged with the step named;
+   `CancelledError` deliberately still propagates, because a cancelled shutdown
+   is not a failed step.
+
+3. **The wire-time token gate refreshes once before refusing.**
+   `verifyTokenStillUsable` (`useChatSse.ts`) re-checks the hard floor after
+   the unbounded pre-stream awaits, and used to refuse outright below it. That
+   made the degraded band of §8.50 unreachable on the realms it was built for:
+   where access tokens live under `TURN_TOKEN_MIN_VALIDITY_S` (120 s) the
+   turn-start preflight can *never* reach its target, so it proceeds degraded
+   by design — and a refuse-only gate then hard-failed every turn whose
+   preparation was slow. The gate now takes one `ensureFreshToken` before
+   giving up, asking for `TURN_TOKEN_HARD_FLOOR_S` rather than the turn-start
+   target (at the wire the only remaining question is whether the bearer
+   survives admission and the first tool call; asking for 120 s would report
+   "not fresh" for a refresh that had in fact cleared the floor). **The verdict
+   is always the measured lifetime afterwards, never the refresh's own
+   boolean** — `ensureFreshToken` answers "is THIS caller's headroom
+   satisfied?", and its rejection is not a verdict either. Both call sites
+   re-check `ac.signal.aborted` after the new await, since it is one more
+   window in which the attempt can be superseded.
+
+   Deliberately NOT changed alongside it, both reviewed and kept: `state.closed`
+   stays a one-way door per event loop (a pod boots once and dies once;
+   reopening reintroduces the "rebuild a pool nothing closes" leak the flag
+   exists to stop), and an aborted HITL resume still counts as delivered (a
+   prompt stranded that way is recovered by `reconstructPendingHitl` from
+   server history on reload, whereas restoring it eagerly risks an unanswerable
+   card that 409s on every attempt).
+
+Regression tests: `test_awrap_tool_call_is_error_artifact_marks_failed`
+(asserts the timer's *absence* of `error_code`/`exception_type`,
+`test_tool_observability_middleware.py`),
+`test_lifespan_shutdown_releases_every_resource_even_when_a_step_raises`
+(`test_agent_app.py`), plus
+`test_client_closed_under_an_inflight_exchange_is_reported_as_shutdown` and
+`test_unexpected_runtime_error_is_not_reported_as_an_orderly_shutdown`
+(`test_user_token_refresher.py`), which pin §8.48's closed-client branch
+against httpx's own wording by closing a real client rather than hand-building
+the exception; and, for the gate, `useChatSse.test.tsx`'s pair — a token under
+the floor that the rescue refresh clears (turn proceeds, second refresh asks
+for 30 s not 120 s) and one it cannot (refusal, but only after the attempt).
+Each was verified to fail against its pre-change implementation.
+
+---
+
+### 8.52 ✅ Deployment-scoped chat-input length limit — issue #2253 (2026-08-12)
+
+One submitted chat message is bounded by the runtime-pod startup policy
+`app.max_chat_input_chars` (default `5000`, positive integer). The unit is a
+Unicode code point: Python uses `len(text)`, while managed chat iterates the
+string by code point without materializing a second array. This is deliberately
+a character policy, not a model-token, conversation-history, request-byte, or
+context-window budget.
+
+The runtime is authoritative and validates before exchange lookup, target
+resolution, history persistence, stream construction, or agent execution on
+`POST /agents/execute`, `/agents/execute/stream`, and `/agents/evaluate`.
+Ordinary turns count `RuntimeExecuteRequest.input`. HITL resumes count a bare
+string, or the combined string values of canonical `choice_id`, `answer`, and
+`text` fields; arbitrary JSON keys are not traversed. The OpenAI-compatible
+route applies the same code-point limit to the last user message Fred forwards.
+
+Fred-native rejection is HTTP 422 with `detail.code =
+"chat_input_too_long"`, `message`, `limit_chars`, and `actual_chars`.
+OpenAI compatibility returns HTTP 400 with the corresponding
+`invalid_request_error`, `param = "messages"`, and the same stable code/counts.
+Neither response, logs, metrics, nor traces may include the rejected content.
+A static Pydantic `max_length` is not used because the value is deployment
+policy, HITL is field-aware, and FastAPI's default validation response can echo
+the offending input.
+
+The effective pod-scoped value is mirrored on every `/agents/templates` item,
+following the existing pod-metadata publication pattern. Managed chat receives
+that optional projection through execution preparation, displays a counter,
+blocks an oversized draft without truncation or native `maxLength`, and relies
+on backend enforcement when an older runtime does not yet publish the field.
+During a rolling deployment, replicas configured with different limits may
+temporarily advertise and enforce different values: execution preparation can
+project one replica's value while the browser's execution request reaches
+another. The displayed limit is therefore advisory; the receiving runtime
+remains authoritative, returns its own `limit_chars` on rejection, and managed
+chat adopts that returned limit for subsequent validation.
+This semantic handler check occurs after HTTP body parsing; whole-request byte
+limits and HTTP 413 remain outside issue #2253.
+
+---
+
+### 8.53 ✅ ReAct model-input size budget, in addition to the message-count trim — TURN-04 partial (#2350, 2026-08-13)
+
+**ReAct-only slice of TURN-04's "turn resource bounds" finding** (full finding
+still open for Deep and Graph, and for persisted-checkpoint compaction — see
+[#2343](https://github.com/ThalesGroup/fred/issues/2343)). Field incident
+(2026-08-12, `mistral-small-2603`): a session stayed at ~25 turns, far under
+`_V2_MAX_HISTORY_MESSAGES = 500`, while a 115k-character tool result followed
+a few turns later by a 22k-character generated document pushed one call's
+input to 178,670 tokens — still accepted — and the very next turn then failed
+outright (`finish_reason="error"`, 0 output tokens). The message-count trim
+never engages on payload size; whether the failure itself was specifically a
+provider context-length rejection could not be confirmed from the persisted
+turn history — Fred's own error-path token reporting attaches the last
+successful sub-call's usage to the turn, not the failing request's real size,
+which is exactly the separate `execution_error` persistence gap #2343 flags
+for its own fix.
+
+`CheckpointHygieneMiddleware.awrap_model_call`
+(`fred_runtime/react/middleware/checkpoint_hygiene.py`) now applies a second,
+size-based trim after the existing message-count trim:
+`trim_to_char_budget` (`fred_runtime/support/tool_loop.py`) keeps as many
+trailing messages as fit under `_V2_MAX_HISTORY_CHARS` (200,000 characters,
+`fred_runtime/react/react_tool_loop.py`), then advances to the same safe
+HumanMessage/orphan-ToolMessage boundary as the message-count trim so it
+never hands a provider a payload that starts mid tool-call/result pair.
+
+Character count, not tokens: no exact tokenizer covers every provider this
+deployment can point at (Mistral, Azure, OpenAI, ...), so this is a
+deliberately provider-agnostic proxy, the same reasoning `max_chat_input_chars`
+(#2253) uses for a single message. The 200,000-character default is
+calibrated off the same field incident, not a generic "~4 chars/token" rule
+of thumb: replaying that incident's persisted turn history against its own
+reported token usage gives roughly 1.35 characters per token for this
+deployment's French/HTML-heavy content (240,395 visible characters of prior
+turns fed the call that reported 178,670 input tokens) — a naive 4x
+assumption would correspond to ~800k characters and would never have trimmed
+before this exact failure. 200,000 characters (~148k tokens at the measured
+ratio) sits comfortably below the 178,670 tokens that already nearly failed
+while still covering the incident's own single-document/single-tool-result
+payloads (each well under 150k characters) without trimming them on their
+own. This is one deployment's measured ratio, not a portable constant — see
+`react_tool_loop.py`'s comment for the full derivation and re-check it if the
+configured models or typical content mix change materially. When even the
+trimmed window still exceeds the budget — the CURRENT turn's own content is
+the culprit, and no amount of dropping older history helps — the middleware
+raises `ChatTurnTooLargeError` (numbers only, never the oversized content)
+instead of forwarding a payload the provider will reject anyway. It
+propagates through the existing generic `except Exception` →
+`RuntimeErrorEvent` path (`agent_app.py`) unchanged, so no new frontend
+handling was needed.
+
+**Observability.** A production robustness audit of this exact failure mode
+(same day) found the rejection was only a DEBUG log — invisible without
+digging through OpenSearch, and not how the 200,000-character default (a
+first-pass estimate) would get validated or re-tuned from real traffic. Two
+additions, both numbers/identifiers only, never content: the log is now
+WARNING; and `CheckpointHygieneMiddleware` gained `binding`/`kpi` (following
+`TracingKpiMiddleware`/`ToolObservabilityMiddleware`'s own required-not-
+optional convention for those two params) to emit `agent.turn_rejected_total`
+— a counter, same shape as the sibling `agent.tool_failed_total`
+(`status`/`error_code`/`exception_type` dims, `KPIActor(type="system")`),
+reaching Grafana through the existing `PROMETHEUS_ALLOWED_LABELS` allow-list
+with no new label needed. The identity/correlation dims (`session_id`,
+`user_id`, `team_id`, `agent_instance_id`, `template_agent_id`,
+`correlation_id`, `trace_id`) are built by a new shared
+`identity_kpi_dims(binding)` helper (`react/middleware/shared.py`), factored
+out of `ToolObservabilityMiddleware._base_dims`'s identical logic rather than
+hand-rolling a second copy — that method itself was left untouched to avoid
+touching already-shipped, tested code same-day.
+
+Deliberately out of scope here: Deep and Graph runtimes, persisted-checkpoint
+compaction (`CheckpointHygieneMiddleware` trims only the outgoing model
+request by design, never graph state), and #2330 (making
+`_V2_MAX_HISTORY_MESSAGES` itself configurable) — all tracked separately
+under #2343.
+
+Regression tests: `test_char_budget_*` (`test_tool_loop_trim.py`, pure
+function), `test_history_is_trimmed_by_char_budget`,
+`test_current_turn_alone_over_char_budget_fails_cleanly`, and
+`test_current_turn_too_large_emits_a_kpi_counter`
+(`test_react_loop_regressions_1972.py`, full loop through
+`agent.astream`).
+
+**Three PR-review fixes to the counting itself (same day), each verified by
+reverting and confirming its regression test fails without the fix:**
+
+1. `_message_char_len` only read `AIMessage.content`, which LangChain leaves
+   empty on a pure tool-calling turn — the real payload sits in
+   `tool_calls[*]["args"]` instead (exactly `write_document`'s shape in the
+   motivating field incident). Now sums tool-call arguments
+   (JSON-serialized) too.
+2. The budget ran BEFORE `thread_reasoning_within_open_turn`, so a large
+   open-turn reasoning trace — invisible to `_message_char_len` as
+   structured `thinking`-block content — could pass unmeasured and only
+   balloon past the limit once rehomed into ordinary text. Reordered so the
+   budget measures what the handler actually receives.
+3. `trim_to_char_budget` can legitimately collapse to `[]` when the only
+   message it could keep under budget is a lone trailing ToolMessage with
+   no preceding AIMessage in the window (one oversized tool result, e.g. a
+   big RAG hit) — an unsafe orphan boundary. Measuring that now-empty
+   result silently passed the check and sent the model NO messages at
+   all — worse than a raw crash. The collapse itself is now detected and
+   measured against the pre-trim total instead.
+
+Additional regression tests: `test_char_budget_counts_tool_call_arguments_not_just_content`
+(`test_tool_loop_trim.py`), `test_history_is_trimmed_by_char_budget_from_tool_call_arguments`,
+`test_oversized_reasoning_trace_is_budgeted_after_rehoming`, and
+`test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty`
+(`test_react_loop_regressions_1972.py`).
+
 ---
 
 ### 8.43 ✅ `DocumentMarkdownPort` — paginated full-content read for capabilities (DOCREAD-01, 2026-08-07)
@@ -2582,6 +3201,50 @@ LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
 `test_capability_document_reading.py` (one-call path, empty/truncation/error
 shaping).
 
+### 8.45 ✅ Prompt-cache token visibility in `token_usage` and cost estimation — CACHE-01 (2026-08-10)
+
+**Surfaces prompt-cache detail Fred was already receiving but silently
+dropping.** LangChain's standardized `UsageMetadata.input_token_details` has
+carried `cache_creation`/`cache_read` since `langchain-core` 0.3.9, and
+`runtime_metadata_from_message` (`model_metadata.py`) already read the
+attribute carrying it — `normalize_token_usage` just never extracted the
+nested breakdown. See
+[`PROMPT-CACHE-TOKEN-VISIBILITY-RFC.md`](../rfc/PROMPT-CACHE-TOKEN-VISIBILITY-RFC.md)
+for the full design; open questions (distinct GreenOps rate for cached
+tokens, sovereign-model cache support, per-step trace display) remain
+unresolved there, not settled here.
+
+**Contract additions, both additive:**
+
+- `token_usage` (`ToolCallRuntimeEvent`/`FinalRuntimeEvent`, §5) gains two
+  keys: `cache_read_tokens`, `cache_creation_tokens` — always present
+  (default `0`), same dict shape, no schema break. Flows through
+  `normalize_token_usage`/`sum_token_usage` (`fred-runtime`) and
+  `ChatTokenUsage` (`fred-core`, persisted history) end to end; confirmed
+  surviving a page reload via the same `make_assistant_final`/
+  `_write_turn_history` path §8.38 fixed for the base fields.
+- `Quantities` (`fred-core` KPI event schema) gains `cache_read_tokens`.
+  `agent.turn_completed` now emits it as a quantity — one new Prometheus
+  counter series (`agent_turn_completed_quantity_cache_read_tokens_total`),
+  no new label, no cardinality change (same label set as `input_tokens`).
+- `ModelImpactFactors`/`estimate_green_cost` (`fred-core/kpi/model_impact_factors.py`)
+  gains `cost_per_1k_cached_input_tokens`; `cache_read_tokens` is billed at
+  that reduced rate instead of the full input rate, clamped to
+  `input_tokens` defensively. `cache_creation_tokens` is deliberately **not**
+  given a distinct rate — still billed as ordinary input (RFC scope
+  decision, not an oversight). One dashboard preset
+  (`token_usage_by_model.py`) is wired to the new quantity; the other five
+  token-usage presets are unchanged (still bill every input token at the
+  full rate — not a regression, just not yet upgraded).
+
+**Not done by this work:** real per-model `cost_per_1k_cached_input_tokens`
+rates — `model_impact_factors.yaml` still ships every rate at `0.0`
+("not populated yet"), so the mechanism is correct but every displayed cost
+figure is unchanged until an operator fills in real provider pricing. No
+distinct kWh/CO2e rate for cached tokens. No cache-hit ratio or
+cached-vs-fresh visual on `AnalyticsPage` — `TokenUsageImpact` just becomes
+more accurate once rates are populated, no new UI element shipped.
+
 ---
 
 ### 8.45 ✅ Alembic owns `session_history` DDL; an unmigrated pod fails at startup (issue #2290, 2026-08-07)
@@ -2643,6 +3306,218 @@ Operator recovery path (which revision to stamp, by columns present):
 direct calls from `agent_app.py`) has the identical pattern and is tracked
 separately — its tables are in no Alembic tree yet, so removing lazy creation
 there needs migrations written first.
+
+---
+
+### 8.46 ✅ `FinishReason` — normalized, Fred-owned enum replaces the raw provider string (issue #1840, 2026-08-11)
+
+**Closes FRONT-05 (`FRONTEND-BACKLOG.md §7`).** The frontend's last remaining
+import from the retired `agentic-backend` client was `FinishReason` — a named
+6-value enum that client happened to expose, with nothing equivalent on the
+runtime side (`ChatMetadata.finish_reason` was a plain `Optional[str]`,
+whatever the LLM provider reported verbatim).
+
+**Why a raw passthrough was the wrong shape.** Providers report this under
+different keys and vocabularies — OpenAI: `response_metadata["finish_reason"]
+= "stop"/"length"/"tool_calls"`; Anthropic:
+`response_metadata["stop_reason"] = "end_turn"/"max_tokens"/"tool_use"`
+(**a different key entirely** — Fred only ever read `"finish_reason"`, so
+every Claude-backed turn silently had `finish_reason = None` before this fix);
+Gemini/Vertex: `"STOP"`/`"MAX_TOKENS"`, or `"UNKNOWN_<n>"` when the installed
+SDK doesn't recognize an enum value the API returned. That last case means the
+raw value space is open-ended by construction — no closed type can enumerate
+it, on the frontend or the backend.
+
+**What changed.**
+
+- `fred_core.history.history_schema` (`libs/fred-core`) gains `FinishReason(str,
+  Enum)` — `stop | length | content_filter | tool_calls | error | other` — and
+  `coerce_finish_reason(raw)`, a case-insensitive alias table mapping every
+  known provider value onto it. Anything not in the table (a new provider, a
+  new SDK enum value, a typo) maps to `other` rather than raising — this is a
+  deliberate, designed fallback, not an accidental gap.
+- `ChatMetadata.finish_reason` is now `Optional[FinishReason]`, with a
+  `field_validator(mode="before")` calling `coerce_finish_reason` — applied on
+  **both** construction and `.model_validate()` (read), so a history row
+  persisted before this change, still holding a raw provider string, loads
+  without error instead of failing validation.
+- `fred_sdk.contracts.runtime.FinalRuntimeEvent.finish_reason` (the live SSE
+  contract) is now `FinishReason | None`, with the same tolerant
+  `field_validator` — this is a separate Pydantic model from `ChatMetadata`
+  (one is the live event, one is persisted history), so both needed the fix;
+  fixing only one would have made the live view and a reloaded conversation
+  disagree on the same turn's value.
+- `fred_runtime.runtime_support.model_metadata.runtime_metadata_from_message`
+  now reads `response_metadata["finish_reason"]` **or**
+  `["stop_reason"]` (fixing the Anthropic gap above) and normalizes via
+  `coerce_finish_reason` at the source, once — both the SSE event and the
+  persisted history descend from this same call, so they can never diverge.
+
+**Frontend.** `runtimeOpenApi.ts` now generates a named `FinishReason` union;
+`useChatSse.ts` reads it directly, no cast. `agenticOpenApi.ts`,
+`agenticApi.ts`, and their config are deleted — this was their last consumer,
+closing out `FRONTEND-BACKLOG.md §7` entirely.
+
+**Deliberately out of scope:** no retroactive backfill of `error`/`other`
+misclassification in history rows written before this shipped (the
+`mode="before"` coercion is what keeps them loadable, it does not rewrite
+them); no per-provider GreenOps/cost impact (unrelated to `TokenUsageImpact` /
+issue #2312).
+
+---
+
+### 8.47 ✅ `CorpusTreeService` truncation fix; paginated `list_documents_by_label` in its own capability (issue #2326, 2026-08-12)
+
+**Problem.** `CorpusTreeService`'s size-budgeted folder-tree renderer had a
+silent-truncation bug: `tree_builder.py::_render_budgeted_root`'s final
+fallback rebuilt its candidate lines from bare folder headers only, discarding
+whatever content depth-based pruning had already collapsed into them. A wide,
+shallow match (e.g. 150 folders, one document each) let those 150 bare headers
+fit comfortably under the char budget, so the response shipped
+`truncated=True` with **zero** documents and **zero** omission message —
+indistinguishable from a complete, empty corpus (regression test:
+`test_wide_shallow_tree_never_reports_truncated_with_zero_omission_signal`).
+Separately, `CorpusTreeService._resolve_leaves` resolved tree leaves via
+`MetadataService.get_documents_metadata` → `store.get_all_metadata()` — an
+unbounded `SELECT *` over the whole `metadata` table filtered in Python, run
+on **every** `list_document_tree` call (`document_access` is `DEFAULT_ON`).
+
+There was no agent-facing way to resolve a business label to *every* document
+carrying it, exhaustively — only browsing (`list_document_tree`, a
+size-budgeted folder tree) and single-document lookup.
+
+**Fix.**
+1. `_render_budgeted_root` now measures each candidate as the FULL block
+   (folder header + whatever was already collapsed into it by depth-pruning),
+   never a bare header — `truncated=True` can no longer ship without an
+   explicit, accurate omission signal.
+2. `CorpusTreeService._resolve_leaves` now calls new
+   `MetadataService.get_documents_by_uids` (indexed `get_metadata_by_uids`,
+   ReBAC-filtered after fetch) instead of the full-table scan.
+   `get_metadata_by_uids` and its label-hydration query
+   (`_hydrate_labels`, `postgres_document_store.py`) both chunk their
+   `document_uid IN (...)` statements at `_BULK_UPDATE_CHUNK_SIZE` — the
+   same constant `bulk_mark_vector_done` already chunks its updates with —
+   so a tree spanning the full `_MAX_FOLDERS` (10,000 folders) stays well
+   clear of a driver bind-parameter ceiling instead of sending one unbounded
+   query.
+3. **New port method** `DocumentTreePort.list_by_label(*, label, offset=0,
+   limit=50) -> DocumentLabelPageResult` (`fred-sdk/contracts/runtime.py`) —
+   flat, exhaustive, paginated label resolution, on the SAME port/adapter/
+   client as `tree()` (`KfDocumentClient`/`DocumentTreeAdapter` each gain one
+   more method) rather than a new port class: two distinct, unambiguous agent
+   tools at the LLM-facing layer, one port at the plumbing layer. Backed by
+   new `MetadataService.get_document_uids_with_any_label` (one ReBAC
+   resolution + one indexed `label IN (...)` store query, OR-semantics across
+   labels, UID-only, unpaginated — used by the non-paginated
+   `get_documents_with_label`) and a separate paginated sibling,
+   `get_document_uids_with_any_label_page`/`get_documents_with_label_page`
+   (real `ORDER BY ... OFFSET ... LIMIT ...` plus a matching `COUNT(*)` pushed
+   into the store query, not a fetch-everything-then-slice-in-Python — so
+   enumerating many pages of a large match set does not repeat a full,
+   unbounded label scan on each call; the ReBAC `lookup_user_resources` call
+   itself still runs once per page, same cost every other paginated,
+   authorized listing in this service already pays per call). KNOWN GAP,
+   documented on the port method itself: does NOT accept `library_tag_ids` —
+   Knowledge Flow's label resolution narrows only by document-level READ
+   permission, never by folder/library scope, so an agent configured with
+   `bind_libraries=True` still sees every readable document carrying a label,
+   corpus-wide, through this method. Not silently implemented as a no-op
+   parameter — flagged as follow-up work.
+4. **New capability `document_label_search`**
+   (`fred-runtime/capabilities/document_label_search/`), registered via its
+   own `fred.capabilities` entry point, manifest `team_scope` left at the
+   class default (`ADMIN_GATED` — same reasoning as `document_summarize`,
+   §10.1: no config-shaped trigger a user can reason about, a team admin must
+   opt an agent in explicitly). Owns exactly one tool,
+   `list_documents_by_label`: one page per call (documents as `name [uid]`,
+   `total`, `has_more`); the tool's docstring tells the model to call again
+   with `offset=next_offset` and never report a count without checking
+   `has_more`. Deliberately NOT added to `document_access` (`DEFAULT_ON`):
+   bundling it there would mean every existing `document_access` agent —
+   already in production — picks up a second, semantically-adjacent tool the
+   moment it ships. Both tools answer "documents with label X"; the
+   discriminating axis (where they sit vs. give me all of them) is a harder
+   tool-selection call for the model than the pre-existing
+   `search_documents_using_vectorization` vs. `list_document_tree` split
+   (content question vs. structure question — a much clearer boundary in
+   natural language), with a fail-quiet failure mode (a plausible-looking,
+   silently-incomplete answer once a large match set hits the tree's size
+   budget) instead of a fail-loud one. `list_document_tree` itself does no
+   label filtering at all, by design — a folder tree is the wrong response
+   shape for "give me every document labeled X".
+
+**Backing HTTP route.** `GET /documents/by-label` (query-param transport) is
+paginated: `offset`/`limit` query params, response `LabelDocumentsPage
+{label, documents: [{document_uid, document_name}], total, offset, limit,
+next_offset, has_more}` — a leaner response model than `BrowseDocumentsResponse`
+(full `DocumentMetadata`), which the path-segment `GET /documents/by-label/{label}`
+route keeps unpaginated for existing consumers. Both resolve through the same
+`MetadataService.get_document_uids_with_any_label`; `document_label_search`'s
+tool reaches the same route through `DocumentTreePort.list_by_label` — no new
+route, no plumbing duplication.
+
+**Bounded context.** `CorpusTreeService` is a read-only projection over the
+already-ingested corpus — it stores no bytes, accepts no writes, and is
+intentionally distinct from the future `WorkspaceService` (mutable,
+persistent user/agent files, currently implemented under `/fs`). See
+`FILESYSTEM.md` "Business labels vs. scope tags".
+
+Tests: `test_corpus_tree_builder.py` (renderer invariant),
+`test_corpus_tree_service.py`, `test_metadata_service_labels.py` +
+`test_postgres_document_store_labels.py` (resolver), `test_metadata_labels_controller.py`
+(pagination), `test_capability_document_access_1906.py` (tree tool unchanged,
+2 params, no label awareness), `test_capability_document_label_search.py`
+(new — registration, `ADMIN_GATED` default, tool behavior, real-adapter param
+forwarding), `test_capability_endpoints_1974.py` (catalog advertisement list
+gains `document_label_search`, sorted by id). Tracking:
+[#2326](https://github.com/ThalesGroup/fred/issues/2326).
+
+---
+
+### 8.48 ✅ Reasoning stays ON/OFF per question — effort picker built and withdrawn same-day (2026-08-12)
+
+A per-question `RuntimeContext.reasoning_effort` override (composer effort
+picker, low/medium/high) was implemented and **withdrawn the same day**:
+providers disagree on accepted values (measured: Mistral small rejects
+low/medium with a 400 `Must be one of (none, high)` that fails the whole
+turn), and the per-model declaration/snapshot machinery required to offer
+only valid values wasn't worth the surface. Decision: the effort a reasoning
+turn runs with is the ops-authored `settings.reasoning_effort` of the routed
+profile, full stop — the user's per-question choice remains the §8.30
+tri-state boolean, now presented as a right-edge composer chip
+(model identity + Activé/Désactivé, `docs/swift/ux/COMPONENT-UX.md`). No
+wire, contract, or enforcement change survives; this entry exists so the
+next "let users pick the effort" idea starts from the measured constraint.
+
+---
+
+### 8.54 ✅ Ops name the model — `model_display_name` in `models_catalog.yaml` (2026-08-13)
+
+The composer chip (§8.48) derived its model label by splitting the capability
+id on hyphens. That heuristic cannot tell a version separator from a variant
+one — `claude-sonnet-4-6` rendered "Claude Sonnet 4 6" — and only whoever
+pinned the model knows which it is.
+
+**What changed.**
+
+- `ModelProfile.model_display_name` (optional, per profile) in
+  `models_catalog.yaml`. Display only: routing, enablement and the capability
+  id still key on `(provider, name)`.
+- `GET /agents/models-catalog` gains `ModelCatalogEntry.display_name`, taken
+  from the first profile in the `(provider, name)` group that declares one —
+  same first-seen rule as `description`. `CapabilityCatalogEntry` gains
+  `model_display_name`, carried verbatim; the multi-pod catalog union keeps a
+  name authored on one pod when another serves the model unnamed.
+- control-plane snapshots it into `model_reasoning.display_name` at toggle
+  time (migration `a7d2e9c41f38`), exactly like `default_effort` — the send
+  path still performs no catalog fetch — and serves it on the reasoning
+  control's `params.display_name`, only alongside an unambiguous `model_id`.
+- The frontend prefers that string verbatim and keeps the old heuristic as
+  the fallback, so a catalog that never adopts the key renders as before.
+
+Staleness is deliberate and bounded: editing the catalog reaches the composer
+at the next admin re-toggle, not on open sessions.
 
 ---
 

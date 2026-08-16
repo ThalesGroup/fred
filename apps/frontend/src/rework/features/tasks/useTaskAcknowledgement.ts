@@ -31,6 +31,14 @@ import { taskAcknowledged } from "./taskSlice";
  * stream) — this used to always call control-plane regardless of which
  * backend actually owns the task, so a failed ingestion task's ack 404'd
  * and silently left the button visible (#2123 review).
+ *
+ * `localOnly` tasks (e.g. a chat-attachment fast-ingest failure — see
+ * `useChatAttachments.addFiles`) never had a server-side task record created
+ * for them in the first place (the fast-ingest route is synchronous and
+ * registers no task), so POSTing an ack for one always 404s. Acknowledging
+ * one is a purely local Redux update instead of a network call — same as
+ * `useTaskSseManager` already excludes `localOnly` tasks from its SSE
+ * subscription for the same underlying reason.
  */
 export function useTaskAcknowledgement() {
   const dispatch = useDispatch();
@@ -38,7 +46,11 @@ export function useTaskAcknowledgement() {
   const [ackKnowledgeFlow] = useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
-  const acknowledge = async (taskId: string, kind: string | null) => {
+  const acknowledge = async (taskId: string, kind: string | null, localOnly?: boolean) => {
+    if (localOnly) {
+      dispatch(taskAcknowledged({ taskId, acknowledgedAt: new Date().toISOString() }));
+      return;
+    }
     const backend = taskBackendFor(kind);
     if (backend === "evaluation") {
       // No acknowledgement endpoint exists on the evaluation backend yet

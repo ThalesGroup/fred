@@ -36,6 +36,7 @@ from fred_core.documents.document_structures import (
     Tagging,
     file_type_bucket,
 )
+from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.documents.tag_models import TagRow
 
@@ -60,6 +61,7 @@ __all__ = [
     "file_type_bucket",
     # Store
     "BaseDocumentMetadataStore",
+    "DocumentLabelRow",
     "DocumentMetadataDeserializationError",
     "DocumentMetadataRow",
     "PostgresDocumentMetadataStore",

@@ -16,8 +16,7 @@
 // No business logic here — only shape mapping. Keeps UI components free of
 // knowledge about the wire format.
 
-import type { ChatMessage } from "../../slices/agentic/agenticOpenApi";
-import type { VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 import type { Conversation, Message, MessageContent, Source, TraceMessage } from "../types/conversation.ts";
 import { isFinalChannel, isTraceChannel, textOf } from "./traceUtils.ts";
 

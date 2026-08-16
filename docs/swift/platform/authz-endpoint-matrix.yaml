@@ -652,6 +652,11 @@ operations:
     required_permission: pending_review
   - service: knowledge-flow
     method: GET
+    path: /knowledge-flow/v1/documents/by-label
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
     path: /knowledge-flow/v1/documents/by-label/{label}
     review_status: pending_review
     required_permission: pending_review
@@ -708,6 +713,11 @@ operations:
   - service: knowledge-flow
     method: DELETE
     path: /knowledge-flow/v1/documents/{document_uid}/labels/{label}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: PATCH
+    path: /knowledge-flow/v1/documents/{document_uid}/labels
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
@@ -1003,6 +1013,11 @@ operations:
   - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/prometheus/targets
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/quota/precheck
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

@@ -62,6 +62,18 @@ for the pattern). Mine the body for the user-visible ones. Group findings into t
 sections: **Features**, **Improvements**, **Bug Fixes**, **Security**, and — only when an operator
 must act on upgrade — **Deployment note**.
 
+**One release window, one entry per subject (mandatory).** Work on the same subject inside a
+single release window — the feature commit plus every fix, follow-up and polish commit that
+landed on it before the tag — is written as **one bullet describing the shipped behaviour**. Do
+not list the intermediate bug fixes: users never saw the broken intermediate state, so a "fixed
+X" bullet for a defect that only ever existed between two of our own commits describes a
+regression they never lived through. The same holds for a feature released earlier whose
+follow-ups land now: those *are* real fixes and stay in **Bug Fixes**, because users did see the
+broken behaviour.
+
+Test: would a user upgrading from the previous tag ever have hit this bug? Yes → **Bug Fixes**.
+No, it only existed mid-window → fold it into the feature's own bullet and say nothing about it.
+
 Skip purely internal commits from the notes (Docker build fixes, lockfile relocks, code-quality
 passes, schema regen) — they ship, but they are not release-note material. When in doubt about
 whether a change is user-visible, keep it out of the summary and ask.
@@ -86,7 +98,7 @@ session context. Follow the exact shape of the existing entries:
 
 - **Summary**
 
-  <2–5 sentences, user-focused. Lead with what the user can now do. Plain language.>
+  <2–3 sentences, ~60 words max. User-focused, lead with what the user can now do.>
 
 - **Features**
 
@@ -101,6 +113,10 @@ Writing guidance, distilled from the existing notes:
 
 - **Keep it short.** One line per bullet, one benefit. Trim caveats and mechanism — the developer
   has said the notes must stay concise. If a bullet needs a second clause to breathe, it's too long.
+- **The Summary is the shortest part of the entry, not a digest of it.** Two or three sentences,
+  ~60 words. Name the two or three things that matter and stop — the bullets carry the detail, so
+  a Summary that walks every section is redundant by construction. Do not restate a bullet's
+  mechanism, figures or caveats there; the developer will ask for it shorter, every time.
 - **Summary first, benefit first.** "Agents can now browse your document library and summarize any
   file on demand" — not "adds DocumentTreePort and a summarize adapter".
 - Keep the section set that applies; omit empty sections. Order: Summary → Features → Improvements →

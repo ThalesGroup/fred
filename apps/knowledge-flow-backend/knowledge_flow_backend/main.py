@@ -58,6 +58,7 @@ from knowledge_flow_backend.features.audio.audio_transcription_controller import
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
+from knowledge_flow_backend.features.corpus_tree.controller import CorpusTreeController
 from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
@@ -75,7 +76,6 @@ from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tabular.execution import register_tabular_exception_handlers
 from knowledge_flow_backend.features.tag.tag_controller import TagController
 from knowledge_flow_backend.features.tasks.controller import TasksController
-from knowledge_flow_backend.features.tree.controller import TreeController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
@@ -243,7 +243,7 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TagController(app, router)
     VectorSearchController(router)
-    TreeController(router)
+    CorpusTreeController(router)
     SummarizeController(app, router)
     ExtractController(app, router)
     ResourceController(router)

@@ -25,6 +25,14 @@
   background: var(--surface-container-high);
   padding: var(--spacing-s);
   width: 280px;
+  /* A long backend error (e.g. a raw DuckDB sniffer dump) can be taller than
+     the viewport space below the anchor. Cap and scroll internally instead of
+     overflowing past the viewport edge with no way to reach the rest. Capped
+     to the viewport itself too (16px = 2x MARGIN in the positioning math
+     below) so a short viewport (mobile landscape, a squeezed split window)
+     can't still clip the box past its own bottom edge. */
+  max-height: min(400px, calc(100vh - 16px));
+  overflow-y: auto;
 }
 
 /* Header */
@@ -102,7 +110,7 @@
 /* Error row */
 .errorRow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-xs);
 }
 

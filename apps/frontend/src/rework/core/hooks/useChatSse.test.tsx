@@ -68,12 +68,22 @@ vi.mock("react-redux", () => ({
 // Fixed UI locale so language-forwarding tests are deterministic — no other
 // test in this file inspects request bodies, so a fixed value here is safe.
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ i18n: { language: "fr-FR" } }),
+  useTranslation: () => ({
+    i18n: {
+      language: "fr-FR",
+      t: (key: string, values?: Record<string, unknown>) => `${key}:${values?.limit ?? ""}`,
+    },
+  }),
 }));
 
 vi.mock("../../../security/KeycloakService", () => ({
   KeyCloakService: {
     ensureFreshToken: vi.fn(async () => true),
+    // Consulted only when ensureFreshToken resolves false. Mocked (not omitted)
+    // so the refusal branch runs the real comparison instead of dying on
+    // "GetTokenSecondsLeft is not a function" — the default is comfortably
+    // above TURN_TOKEN_HARD_FLOOR_S so existing tests are unaffected.
+    GetTokenSecondsLeft: vi.fn((): number | null => 3600),
     GetToken: () => "test-token",
     GetUserId: () => "user-1",
   },
@@ -114,14 +124,18 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     flushPendingWrites,
     onError: (msg) => onErrorMock(msg),
     onTurnStarted: () => onTurnStartedMock(),
+    onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
+    isTurnCurrent,
   });
   onRender(hook);
   return null;
 }
 
 let flushPendingWrites: ((sessionId: string) => Promise<boolean>) | undefined;
+let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
+const onTurnRejectedMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -139,8 +153,10 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
   beforeEach(() => {
     flushPendingWrites = undefined;
+    isTurnCurrent = undefined;
     onErrorMock.mockClear();
     onTurnStartedMock.mockClear();
+    onTurnRejectedMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -148,6 +164,13 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       chat_controls: [],
       capability_base_urls: {},
     });
+    // Reset the shared KeyCloakService mocks, including any queued
+    // `...Once` values: without this an unconsumed queue entry leaks into the
+    // next test and makes ordering load-bearing.
+    vi.mocked(KeyCloakService.ensureFreshToken).mockReset();
+    vi.mocked(KeyCloakService.ensureFreshToken).mockResolvedValue(true);
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReset();
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReturnValue(3600);
   });
 
   afterEach(() => {
@@ -205,6 +228,138 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // a reason to have skipped clearing the composer.
     expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
+  });
+
+  it("parses a structured length rejection, removes the optimistic message, and restores the full draft", async () => {
+    flushPendingWrites = async () => true;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 5,
+    });
+    const rejectedDraft = "🙂🙂🙂🙂🙂🙂";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 6,
+            input: rejectedDraft,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    await act(async () => {
+      await latest.send(rejectedDraft, "session-1");
+    });
+
+    expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
+    expect(onTurnRejectedMock).toHaveBeenCalledWith(rejectedDraft, "session-1");
+    expect(latest.messages).toHaveLength(0);
+    expect(latest.maxChatInputChars).toBe(5);
+    expect(onErrorMock).toHaveBeenCalledWith("chatbot.errors.chatInputTooLong:5");
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain(rejectedDraft);
+    expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(rejectedDraft);
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("suppresses a late length rejection after the request's session is reset", async () => {
+    flushPendingWrites = async () => true;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 10,
+    });
+    const response = deferred<Response>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
+    mount();
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = latest.send("old session draft", "session-a");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    act(() => latest.reset());
+    response.resolve(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 17,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await act(async () => sendPromise);
+
+    expect(onTurnRejectedMock).not.toHaveBeenCalled();
+    expect(onErrorMock).not.toHaveBeenCalled();
+    expect(latest.maxChatInputChars).toBeUndefined();
+    expect(latest.messages).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  it("suppresses a late length rejection after navigation changes session before reset runs", async () => {
+    flushPendingWrites = async () => true;
+    let activeSessionId = "session-a";
+    isTurnCurrent = (turnSessionId) => turnSessionId === activeSessionId;
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 10,
+    });
+    const response = deferred<Response>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
+    mount();
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = latest.send("old session draft", "session-a");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    activeSessionId = "session-b";
+    response.resolve(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 17,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await act(async () => sendPromise);
+
+    expect(onTurnRejectedMock).not.toHaveBeenCalled();
+    expect(onErrorMock).not.toHaveBeenCalled();
+    expect(latest.maxChatInputChars).toBe(10);
+    fetchSpy.mockRestore();
+  });
+
+  it("omits the frontend limit when an older preparation does not publish it", async () => {
+    mount();
+
+    await act(async () => {
+      await latest.prepareChatControls();
+    });
+
+    expect(latest.maxChatInputChars).toBeUndefined();
   });
 
   it("surfaces onError, never throws, and never fires onTurnStarted when prepare-execution itself rejects", async () => {
@@ -595,5 +750,356 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(body.interrupt_id).toBe("interrupt-a");
     expect(body.checkpoint_id).toBeNull();
     fetchSpy.mockRestore();
+  });
+
+  it("a token that expires DURING preparation is refused without clearing the composer", async () => {
+    // The preflight certifies headroom before flushPendingWrites and
+    // prepare-execution, neither of which is time-bounded, so the floor is
+    // re-checked at the wire. That gate must sit ABOVE onTurnStarted and the
+    // optimistic user message: refusing after them would clear the user's text
+    // and leave an orphan message in the thread with an error and no reply.
+    flushPendingWrites = async () => true;
+    // ensureFreshToken resolves true, so the preflight never consults the
+    // remaining lifetime — only the wire-time re-check does, and it sees a
+    // token that died while prepare-execution was in flight.
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReturnValue(5);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(onErrorMock.mock.calls[0][0]).toContain("expired while this turn was being prepared");
+    // It refuses only AFTER trying to rescue the turn — the refusal must be
+    // the last resort, not the first answer.
+    expect(vi.mocked(KeyCloakService.ensureFreshToken).mock.calls.map((c) => c[0])).toEqual([120, 30]);
+    // The turn never committed: no onTurnStarted (so the composer keeps its
+    // text) and no optimistic user message left stranded in the thread.
+    expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(latest.messages).toHaveLength(0);
+    expect(latest.waitResponse).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
+  it("a token below the floor at the wire is refreshed once, and the turn proceeds when that clears it", async () => {
+    // This is the case the degraded band (§8.50) exists for: on a realm whose
+    // access tokens live under TURN_TOKEN_MIN_VALIDITY_S the preflight can
+    // NEVER reach its target, so it proceeds degraded by design — and a
+    // refuse-only gate at the wire would hard-fail exactly those realms.
+    flushPendingWrites = async () => true;
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft)
+      .mockReturnValueOnce(12) // at the wire: under the 30 s floor
+      .mockReturnValue(90); // after the rescue refresh: clear
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    // Two refreshes, and the second asks for the FLOOR, not the turn-start
+    // target: on a short-lifespan realm `ensureFreshToken(120)` reports "not
+    // fresh" for a refresh that did in fact clear the floor, which would put
+    // this test's realm right back into a hard refusal.
+    expect(vi.mocked(KeyCloakService.ensureFreshToken).mock.calls.map((c) => c[0])).toEqual([120, 30]);
+    // The turn committed instead of being refused. (The stream itself fails —
+    // there is no network here — which is a different, later error.)
+    expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
+    expect(
+      onErrorMock.mock.calls.filter(([m]) => String(m).includes("expired while this turn was being prepared")),
+    ).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  // ── Turn-start token preflight (§8.50) ───────────────────────────────────
+  //
+  // `ensureFreshToken` RESOLVES false on a failed refresh rather than
+  // rejecting, so these are the branches that actually run in production; the
+  // rejection test above covers only the path keycloak-js never takes.
+
+  const hitlEvent: RuntimeAwaitingHumanEvent = {
+    type: "awaiting_human",
+    session_id: "session-1",
+    exchange_id: "exch-1",
+    payload: {
+      interrupt_id: "interrupt-a",
+      checkpoint_id: null,
+      pending_calls: [{ tool_call_id: "call-1" }],
+    },
+  } as RuntimeAwaitingHumanEvent;
+
+  it("send() refuses to start a turn whose refresh failed with less than the hard floor left", async () => {
+    flushPendingWrites = async () => true;
+    vi.mocked(KeyCloakService.ensureFreshToken).mockResolvedValueOnce(false);
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReturnValueOnce(12);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(onErrorMock.mock.calls[0][0]).toContain("12s");
+    // The whole point: no doomed turn is started.
+    expect(prepareExecutionCalls).toHaveLength(0);
+    expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(latest.waitResponse).toBe(false);
+  });
+
+  it("send() still starts the turn when the refresh failed but ample validity remains", async () => {
+    flushPendingWrites = async () => true;
+    vi.mocked(KeyCloakService.ensureFreshToken).mockResolvedValueOnce(false);
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReturnValueOnce(240);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    // Degraded, not refused — a turn with 240s of bearer left is worth trying.
+    expect(prepareExecutionCalls).toHaveLength(1);
+    expect(onTurnStartedMock).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() reports not-reached and leaves no optimistic cancellation when the token is refused", async () => {
+    vi.mocked(KeyCloakService.ensureFreshToken).mockResolvedValueOnce(false);
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReturnValueOnce(5);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      reached = await latest.sendHitlResume(hitlEvent, "cancel");
+    });
+
+    // false is what tells useManagedChat to put the prompt back.
+    expect(reached).toBe(false);
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(prepareExecutionCalls).toHaveLength(0);
+    // Nothing may be shown as cancelled by an attempt the backend never heard.
+    expect(latest.messages).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() leaves no optimistic cancellation when prepare-execution fails", async () => {
+    prepareExecutionImpl = async () => {
+      throw new Error("prepare boom");
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      reached = await latest.sendHitlResume(hitlEvent, "cancel");
+    });
+
+    expect(reached).toBe(false);
+    // The regression: the optimistic cancel used to be applied BEFORE
+    // prepare-execution, so a failure here left the gated calls displayed as
+    // cancelled while the prompt came back for a retry — and because those
+    // messages are ranked by Date.now(), the real results could never
+    // supersede them.
+    expect(latest.messages).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() applies the optimistic cancellation once preparation has succeeded", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.sendHitlResume(hitlEvent, "cancel");
+    });
+
+    expect(latest.messages).toHaveLength(1);
+    expect(latest.messages[0].channel).toBe("tool_result");
+    expect((latest.messages[0].metadata?.extras as { cancelled_by_user?: boolean })?.cancelled_by_user).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  it("a second cancel for the same calls does not duplicate the optimistic cancellation", async () => {
+    // First resume reaches the backend but its stream fails; the user answers
+    // cancel again. The retry must not add a second Date.now()-ranked
+    // cancelled row for the same call_id — the existing one already tells the
+    // story, and a duplicate would outrank a real result arriving later.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.sendHitlResume(hitlEvent, "cancel");
+    });
+    await act(async () => {
+      await latest.sendHitlResume(hitlEvent, "cancel");
+    });
+
+    expect(latest.messages.filter((m) => m.channel === "tool_result")).toHaveLength(1);
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() reports not-reached when the runtime rejects the resume outright", async () => {
+    // A 503 from an unready pod (or a fetch rejection) means the runtime never
+    // took the resume, so the paused checkpoint still needs an answer. The
+    // previous unconditional `return true` reported "reached" here, so the
+    // caller never restored the prompt and the interaction was unanswerable.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => "runtime unavailable",
+    } as unknown as Response);
+    mount();
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      reached = await latest.sendHitlResume(hitlEvent, "proceed");
+    });
+
+    expect(reached).toBe(false);
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
+
+  it("handles a structured HITL length rejection without echoing its content", async () => {
+    const rejectedText = "🙂🙂🙂🙂🙂🙂";
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      max_chat_input_chars: 10,
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            code: "chat_input_too_long",
+            message: "safe backend message",
+            limit_chars: 5,
+            actual_chars: 6,
+            input: rejectedText,
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mount();
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      reached = await latest.sendHitlResume(hitlEvent, undefined, rejectedText);
+    });
+
+    expect(reached).toBe(false);
+    expect(latest.maxChatInputChars).toBe(5);
+    expect(onErrorMock).toHaveBeenCalledWith("chatbot.errors.chatInputTooLong:5");
+    expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain(rejectedText);
+    expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(rejectedText);
+    errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("preserves exact HITL free text and canonical choice fields on the wire", async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ detail: "runtime unavailable" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    mount();
+
+    await act(async () => {
+      await latest.sendHitlResume(hitlEvent, undefined, "  a  ");
+    });
+    const choiceEvent = {
+      ...hitlEvent,
+      payload: { ...hitlEvent.payload, choices: [{ id: "proceed", label: "Proceed" }] },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(choiceEvent, "proceed", " note ");
+    });
+
+    expect(requestBodies[0].resume_payload).toEqual({ answer: "  a  " });
+    expect(requestBodies[1].resume_payload).toEqual({
+      answer: "proceed",
+      choice_id: "proceed",
+      text: " note ",
+    });
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() reports reached once the runtime accepted it, even if the stream then dies", async () => {
+    // The counterpart: a 2xx means the checkpoint was consumed. A mid-stream
+    // failure must NOT resurrect the prompt — answering it again would resume
+    // an exchange the runtime has already moved past.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: () => Promise.reject(new Error("connection reset mid-stream")),
+          releaseLock: () => {},
+        }),
+      },
+    } as unknown as Response);
+    mount();
+
+    let reached: boolean | undefined;
+    await act(async () => {
+      reached = await latest.sendHitlResume(hitlEvent, "proceed");
+    });
+
+    expect(reached).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  it("a refused HITL resume releases the composer instead of wedging it", async () => {
+    // sendHitlResume takes abortRef (and clears preflightOwnerRef) from any
+    // send() still preflighting, so send()'s ownership-checked cleanup will not
+    // clear waitResponse once this call owns the slot — the refusal must.
+    vi.mocked(KeyCloakService.ensureFreshToken).mockResolvedValueOnce(false);
+    vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReturnValueOnce(5);
+    mount();
+
+    await act(async () => {
+      await latest.sendHitlResume(hitlEvent, "proceed");
+    });
+
+    expect(latest.waitResponse).toBe(false);
+  });
+
+  it("sendHitlResume() aborted during preflight reports not-reached and shows no error", async () => {
+    // The abort path stranded the prompt: it returned "reached" while nothing
+    // had contacted the backend, so the caller never restored pendingHitl and
+    // the paused checkpoint became unanswerable. Not-reached is a fact about
+    // the backend, not about who owns the UI — the caller guards restoration.
+    let releaseToken: (v: boolean) => void = () => {};
+    vi.mocked(KeyCloakService.ensureFreshToken).mockImplementationOnce(
+      () => new Promise<boolean>((r) => (releaseToken = r)),
+    );
+    mount();
+
+    let result: Promise<boolean> | undefined;
+    act(() => {
+      result = latest.sendHitlResume(hitlEvent, "proceed");
+    });
+    act(() => {
+      latest.abort();
+    });
+    await act(async () => {
+      releaseToken(true);
+      await Promise.resolve();
+    });
+
+    await expect(result).resolves.toBe(false);
+    expect(prepareExecutionCalls).toHaveLength(0);
+    expect(onErrorMock).not.toHaveBeenCalled();
   });
 });

@@ -27,7 +27,9 @@ All tests run without any external services.
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock
 
+import fred_runtime.app.openai_compat_router as openai_compat_router_module
 from conftest import (
     StaticChatModelFactory,
     ToolFriendlyFakeChatModel,
@@ -67,7 +69,12 @@ class _HelloAgent(ReActAgent):
     tools = (_demo_hello,)
 
 
-def _build_test_config(tmp_path, *, openai_compat: bool = True) -> AgentPodConfig:
+def _build_test_config(
+    tmp_path,
+    *,
+    openai_compat: bool = True,
+    max_chat_input_chars: int = 5_000,
+) -> AgentPodConfig:
     """
     Build an offline pod config with openai_compat enabled.
 
@@ -86,6 +93,7 @@ def _build_test_config(tmp_path, *, openai_compat: bool = True) -> AgentPodConfi
                 "port": 8000,
                 "log_level": "info",
                 "openai_compat": openai_compat,
+                "max_chat_input_chars": max_chat_input_chars,
             },
             "security": {
                 "m2m": {
@@ -239,6 +247,69 @@ def test_chat_completions_no_user_message_returns_422(monkeypatch, tmp_path) -> 
             },
         )
     assert response.status_code == 422
+
+
+def test_chat_completions_enforces_only_last_user_message(
+    monkeypatch, tmp_path
+) -> None:
+    """The forwarded user message uses code-point counting and a safe error body."""
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="accepted")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _HelloAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(tmp_path, max_chat_input_chars=5),
+    )
+
+    with TestClient(app) as client:
+        accepted = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": definition.agent_id,
+                "messages": [
+                    {"role": "user", "content": "historical message is much longer"},
+                    {"role": "assistant", "content": "history"},
+                    {"role": "user", "content": "🙂" * 5},
+                ],
+            },
+            headers={"X-Fred-Session-Id": "openai-limit-exact"},
+        )
+        target_resolution = AsyncMock()
+        monkeypatch.setattr(
+            openai_compat_router_module,
+            "_resolve_agent_instance",
+            target_resolution,
+        )
+        rejected_text = "界" * 6
+        rejected = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": definition.agent_id,
+                "messages": [{"role": "user", "content": rejected_text}],
+            },
+        )
+
+    assert accepted.status_code == 200
+    assert rejected.status_code == 400
+    assert rejected.json() == {
+        "error": {
+            "message": "Your message exceeds the 5-character limit.",
+            "type": "invalid_request_error",
+            "param": "messages",
+            "code": "chat_input_too_long",
+            "limit_chars": 5,
+            "actual_chars": 6,
+        }
+    }
+    assert rejected_text not in rejected.text
+    target_resolution.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

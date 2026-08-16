@@ -11,9 +11,22 @@ order. The current position is tracked in an `alembic_version` table in the data
 The `--autogenerate` flag compares the current ORM models against the live database and
 drafts the `upgrade()`/`downgrade()` functions automatically.
 
-Each backend that owns database tables has its own Alembic setup under `<backend>/alembic/`.
-ORM models are registered in each backend's `alembic/env.py` so that autogenerate can
-detect differences between the code and the live database.
+Each component that owns database tables has its own tree, its own version table, and its
+own single head — never rebased against another's. ORM models are registered in each tree's
+`env.py` so that autogenerate can detect differences between the code and the live database.
+
+| Tree | Location | Version table |
+| --- | --- | --- |
+| control-plane | `apps/control-plane-backend/alembic/` | `alembic_version_control_plane` |
+| knowledge-flow | `apps/knowledge-flow-backend/alembic/` | `alembic_version_knowledge_flow` |
+| fred-runtime | `libs/fred-runtime/alembic/` | `alembic_version_runtime` |
+| writable-document capability | `libs/fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/` | `cap_writable_document_alembic_version` |
+
+A capability's tree sits inside its package rather than under `alembic/`, because
+`python -m fred_runtime migrate` discovers it by entry point (`fred.capabilities`) and runs
+it after fred-runtime's own. Every tree resolves its `script_location` from a
+`[tool.alembic]` block in the owning package's `pyproject.toml`, which is also what lets the
+`alembic` CLI and the CI checks below reach it.
 
 ## Configuration
 
@@ -236,6 +249,19 @@ make db-check-postgres       # PostgreSQL checks only (assumes container is runn
 make db-check-postgres-down  # stop the PostgreSQL container
 make db-check-postgres-full  # start container, run checks, stop container
 ```
+
+The targets above cover one tree — the one in the directory you run them from. From the
+repo root, the `db-check-combined-*` targets run every tree in the table above against a
+single shared database, which is what `Check-migrations.yml` invokes:
+
+```bash
+make db-check-combined-heads     # one head per tree
+make db-check-combined-sqlite    # all trees: upgrade, check, downgrade
+make db-check-combined-postgres  # same, against a PostgreSQL container
+```
+
+These aggregators are hardcoded lists, not discovery: **a new tree is exercised by nothing
+until it is added to all three by hand** (and given its `uv sync` step in the workflow).
 
 ## How to stamp DB created before Alembic
 

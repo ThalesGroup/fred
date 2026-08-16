@@ -65,7 +65,6 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.security.models import AuthorizationError
-from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
@@ -162,6 +161,7 @@ from ..integrations.v2_runtime.adapters import (
     FredMcpToolProvider,
     FredWorkspaceFs,
     KPIWriterMetricsAdapter,
+    _refresh_runtime_context_access_token,
     build_default_tracer,
 )
 from ..runtime_context import (
@@ -170,7 +170,8 @@ from ..runtime_context import (
     set_runtime_context,
 )
 from ..runtime_context import RuntimeContext as FredRuntimeContext
-from ..runtime_support import refresh_user_access_token_from_keycloak
+from ..runtime_support import aclose_token_refresh_client
+from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
@@ -458,58 +459,26 @@ class _MediaClientAgentAdapter:
         self.runtime_context = binding.runtime_context
         self.agent_settings: AgentSettingsLike = settings
 
-    def refresh_user_access_token(self) -> str:
+    async def refresh_user_access_token(self) -> str:
         """
         Refresh the user access token for media downloads.
 
         Why this exists:
         - media fetch retries need the same Keycloak refresh path as other
-          runtime adapters
+          runtime adapters. It delegates rather than reimplementing: this used
+          to be a ~40-line copy of `_refresh_runtime_context_access_token`
+          which had already drifted — the copy never wrote
+          `access_token_expires_at`, so any consumer gating on expiry saw stale
+          data after a media-path refresh.
 
         How to use it:
-        - called by `KfMarkdownMediaClient` when the current token is expired
+        - awaited by `KfMarkdownMediaClient` when the current token is expired
 
         Example:
-        - `token = adapter.refresh_user_access_token()`
+        - `token = await adapter.refresh_user_access_token()`
         """
 
-        refresh_token = self.runtime_context.refresh_token
-        if not refresh_token:
-            raise RuntimeError(
-                "Cannot refresh user access token: refresh_token missing from runtime context."
-            )
-
-        keycloak_url = get_keycloak_url()
-        client_id = get_keycloak_client_id()
-        if not keycloak_url:
-            raise RuntimeError(
-                "User security realm_url is not configured for Keycloak."
-            )
-        if not client_id:
-            raise RuntimeError(
-                "User security client_id is not configured for Keycloak."
-            )
-
-        payload = refresh_user_access_token_from_keycloak(
-            keycloak_url=keycloak_url,
-            client_id=client_id,
-            refresh_token=refresh_token,
-        )
-        new_access_token = payload.get("access_token")
-        raw_refresh = payload.get("refresh_token")
-        new_refresh_token: str = (
-            raw_refresh
-            if isinstance(raw_refresh, str) and raw_refresh
-            else refresh_token
-        )
-        if not isinstance(new_access_token, str) or not new_access_token:
-            raise RuntimeError(
-                "Keycloak refresh response did not include a valid access_token."
-            )
-
-        self.runtime_context.access_token = new_access_token
-        self.runtime_context.refresh_token = new_refresh_token
-        return new_access_token
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
 def _definition_to_agent_tuning(
@@ -977,6 +946,9 @@ class _AgentTemplateSummary(BaseModel):
     # for); this field is the one control-plane reads to resolve what a
     # `selected_capability_ids = None` instance activates (#1980).
     default_capability_ids: list[str] = Field(default_factory=list)
+    # Pod-scoped deployment policy mirrored per template so control-plane can
+    # publish it to the managed-chat composer without another runtime endpoint.
+    max_chat_input_chars: int
 
 
 class _McpCatalogEntry(BaseModel):
@@ -1018,6 +990,19 @@ class _ModelCatalogEntry(BaseModel):
     shows no reasoning control at all — aptitude is not a choice, an
     administrator cannot make a model reason. Non-empty means the row carries
     the toggle. Same established join as `profile_ids` above."""
+    display_name: str | None = None
+    """The ops-authored `model_display_name` of this model's first profile that
+    declares one — the label the composer shows instead of splitting the
+    capability id apart. None means no profile named this model and the
+    frontend falls back to that heuristic. First-declared wins, same
+    first-seen rule as `description` above."""
+    reasoning_effort: str | None = None
+    """The ops-authored `settings.reasoning_effort` of this model's first
+    thinking profile — DERIVED from the settings (never declared twice; the
+    settings key is the single source of truth per review 2026-08-12). The
+    composer's reasoning menu displays it as the level a reasoning turn will
+    actually run with ("Élevé" for Mistral small); None when no thinking
+    profile ships the key (the menu then falls back to a generic On label)."""
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1057,15 +1042,23 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
                 provider=provider,
                 name=name,
                 description=profile.description,
+                display_name=profile.model_display_name,
                 profile_ids=[profile.profile_id],
             )
             seen[key] = existing
         else:
             existing.profile_ids.append(profile.profile_id)
+            # First declaring profile wins; a later one only fills a gap.
+            if existing.display_name is None:
+                existing.display_name = profile.model_display_name
         # REASON-01 §5.3: aptitude is per profile, the toggle is per model —
         # this one condition is the whole projection between them.
         if profile.supports_thinking:
             existing.thinking_profile_ids.append(profile.profile_id)
+            if existing.reasoning_effort is None:
+                existing.reasoning_effort = (profile.model.settings or {}).get(
+                    "reasoning_effort"
+                )
     return list(seen.values())
 
 
@@ -2253,6 +2246,8 @@ async def _write_turn_history(
                     input_tokens=tu.get("input_tokens", 0),
                     output_tokens=tu.get("output_tokens", 0),
                     total_tokens=tu.get("total_tokens", 0),
+                    cache_read_tokens=tu.get("cache_read_tokens", 0),
+                    cache_creation_tokens=tu.get("cache_creation_tokens", 0),
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
@@ -2309,6 +2304,7 @@ class _TurnOutcome:
     token_usage: dict[str, Any] | None
     input_tokens: int | None
     output_tokens: int | None
+    cache_read_tokens: int | None
     tool_count: int
     is_error: bool
     total_ms: int
@@ -2332,6 +2328,7 @@ def _parse_turn_outcome(
         token_usage=token_usage,
         input_tokens=token_usage.get("input_tokens") if token_usage else None,
         output_tokens=token_usage.get("output_tokens") if token_usage else None,
+        cache_read_tokens=token_usage.get("cache_read_tokens") if token_usage else None,
         tool_count=tool_count,
         is_error=is_error,
         total_ms=total_ms,
@@ -2477,6 +2474,7 @@ def _emit_turn_completed(
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
+                "cache_read_tokens": outcome.cache_read_tokens,
             },
             actor=KPIActor(type="human", user_id=user_id),
         )
@@ -3442,6 +3440,7 @@ def _capability_route_base_url(base_url: str, capability_id: str) -> str:
 def _build_agent_router(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     security_enabled: bool,
+    max_chat_input_chars: int,
     base_url: str = "",
 ) -> APIRouter:
     """
@@ -3465,6 +3464,14 @@ def _build_agent_router(
     # handlers can perform the bearer-token / grant user_id correlation check.
     # Returns None in local-dev mode so dev pods start without Keycloak.
     _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
+
+    def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
+        violation = validate_runtime_request(request, max_chat_input_chars)
+        if violation is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=violation.native_detail(),
+            )
 
     @router.get("")
     async def list_agents() -> list[str]:
@@ -3600,6 +3607,7 @@ def _build_agent_router(
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
+                max_chat_input_chars=max_chat_input_chars,
             )
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
@@ -4295,6 +4303,7 @@ def _build_agent_router(
         - This endpoint does not implement pod discovery or routing.
           Those concerns belong to Kubernetes Service, Ingress, and Argo CD.
         """
+        _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
@@ -4380,6 +4389,7 @@ def _build_agent_router(
         Intended for evaluation harnesses (DeepEval, Promptfoo) that need
         input, output, retrieval_context, tools_called, and steps in one response.
         """
+        _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
@@ -4491,6 +4501,7 @@ def _build_agent_router(
         - This endpoint does not implement pod discovery or routing.
           Those concerns belong to Kubernetes Service, Ingress, and Argo CD.
         """
+        _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
@@ -4715,9 +4726,32 @@ def create_agent_app(
             "prometheus" if config.observability.kpi.prometheus.enabled else "logging",
             list(registry.keys()),
         )
-        yield
-        await gc_diagnostics.stop()
-        await container.shutdown()
+        try:
+            yield
+        finally:
+            # Shutdown must RUN and must COMPLETE.
+            # - `finally`: a plain sequence after `yield` is skipped entirely
+            #   when an exception propagates out of the app through the
+            #   generator, which is exactly the case where releasing sockets
+            #   and stopping tasks matters most.
+            # - per-step guard: these three release INDEPENDENT resources, so a
+            #   raising `container.shutdown()` must not strand the Keycloak
+            #   refresh pool behind it. The pod is going away either way;
+            #   losing a connection pool because an unrelated subsystem failed
+            #   is strictly worse than logging both failures.
+            # `except Exception` deliberately lets `CancelledError` through —
+            # a shutdown being cancelled is not a step failing.
+            for label, close in (
+                ("gc diagnostics", gc_diagnostics.stop),
+                ("pod container", container.shutdown),
+                # Release the Keycloak refresh pool deterministically rather
+                # than leaving it to GC, as the control-plane client above is.
+                ("keycloak refresh pool", aclose_token_refresh_client),
+            ):
+                try:
+                    await close()
+                except Exception:
+                    logger.exception("[fred-runtime] shutdown step failed: %s", label)
 
     app = FastAPI(
         title=config.app.name,
@@ -4750,7 +4784,10 @@ def create_agent_app(
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(
         _build_agent_router(
-            registry, security_enabled=security_enabled, base_url=base_url
+            registry,
+            security_enabled=security_enabled,
+            max_chat_input_chars=config.app.max_chat_input_chars,
+            base_url=base_url,
         )
     )
 
@@ -4780,6 +4817,7 @@ def create_agent_app(
         openai_router = create_openai_compat_router(
             registry,
             security_enabled=security_enabled,
+            max_chat_input_chars=config.app.max_chat_input_chars,
         )
         app.include_router(openai_router, prefix="/v1")
         logger.info("[fred-runtime] OpenAI-compat endpoints enabled at /v1")

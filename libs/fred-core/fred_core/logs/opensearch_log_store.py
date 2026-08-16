@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
+from fred_core.store import ensure_index_mapping
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -162,31 +163,22 @@ class OpenSearchLogStore(BaseLogStore):
                 logger.info("[OPENSEARCH][LOG] created index '%s'.", self.index)
             else:
                 logger.info("[OPENSEARCH][LOG] index '%s' already exists.", self.index)
-                # `category` was added to LOG_INDEX_MAPPING after some indices
-                # were already created. Existing indices predate it, so add it
-                # additively (put_mapping) — otherwise `category` silently
-                # falls under dynamic="false" and is never indexed for search.
-                self._ensure_category_mapping()
-                # If you have a generic validator like KPI does, call it here:
-                # validate_index_mapping(self.client, self.index, LOG_INDEX_MAPPING)
+                # Same repair as the KPI store: an index created before a field
+                # was added to LOG_INDEX_MAPPING (`category` was the first) never
+                # indexes it, since dynamic="false" silently drops what the
+                # mapping doesn't declare. Diffed, not hand-listed — this store
+                # used to patch `category` by name and would have missed the
+                # next one exactly as the KPI store did.
+                #
+                # `validate=False` keeps the existing policy: a log index whose
+                # mapping drifted in a way put_mapping cannot fix degrades search
+                # over old rows, which is not worth refusing to boot over.
+                ensure_index_mapping(
+                    self.client, self.index, LOG_INDEX_MAPPING, validate=False
+                )
         except OpenSearchException as e:
             logger.error("[OPENSEARCH][LOG] ensure_ready failed: %s", e)
             raise
-
-    def _ensure_category_mapping(self) -> None:
-        try:
-            current_mapping_resp = self.client.indices.get_mapping(index=self.index)
-            current_mapping = current_mapping_resp.get(self.index, {}).get(
-                "mappings", {}
-            )
-            top_level_props = current_mapping.get("properties", {})
-            if "category" in top_level_props:
-                return
-            body = {"properties": {"category": {"type": "keyword"}}}
-            self.client.indices.put_mapping(index=self.index, body=body)
-            logger.info("[OPENSEARCH][LOG] added category mapping")
-        except OpenSearchException as e:
-            logger.warning("[OPENSEARCH][LOG] failed to add category mapping: %s", e)
 
     # -- writes ----------------------------------------------------------------
     def index_event(self, event: LogEventDTO) -> None:

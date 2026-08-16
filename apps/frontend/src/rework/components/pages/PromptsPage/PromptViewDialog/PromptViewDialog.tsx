@@ -16,6 +16,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -91,11 +92,13 @@ export default function PromptViewDialog({
 
   const handleCopy = () => {
     if (!detail) return;
-    navigator.clipboard.writeText(detail.text).then(() => {
-      setCopied(true);
-      showSuccess({ summary: t("rework.teams.prompts.view.copiedToast"), duration: 2000 });
-      setTimeout(() => setCopied(false), 2000);
-      onCopied?.();
+    writeRichClipboard("", detail.text).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        showSuccess({ summary: t("rework.teams.prompts.view.copiedToast"), duration: 2000 });
+        setTimeout(() => setCopied(false), 2000);
+        onCopied?.();
+      }
     });
   };
 

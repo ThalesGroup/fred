@@ -86,34 +86,47 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // a fresh `vi.fn()` per render would make those deps look "changed" every
 // render, re-firing the sessionId-change reset effect forever (observed as
 // an OOM from an actual infinite render loop while writing this test).
-const sendMock = vi.fn(async () => {});
+const sendMock = vi.fn(async (..._args: unknown[]) => {});
 const prepareChatControlsMock = vi.fn(async () => ({}));
 const chatSseResetMock = vi.fn();
-const sendHitlResumeMock = vi.fn();
+// Default: the resume reached the backend. `useManagedChat` calls `.then()` on
+// whatever this returns, so an implementation-less `vi.fn()` would throw inside
+// a React continuation the moment a test forgot to arrange one — and `reached
+// === true` is the outcome that asks nothing of the prompt-restore path, so a
+// test that forgets fails on its own assertion rather than on a TypeError.
+const sendHitlResumeMock = vi.fn(async () => true);
 const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
 // Mutable so the #2239 departure-snapshot test below can put a displayed
 // thread on screen; reset to [] in beforeEach.
 let chatSseMessages: unknown[] = [];
+let chatSseMaxChatInputChars: number | undefined;
 let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
 let capturedOnTurnStarted: (() => void) | undefined;
+let capturedOnTurnRejected: ((draft: string, sessionId: string) => void) | undefined;
+let capturedIsTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let capturedOnError: ((msg: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     flushPendingWrites?: (sid: string | null) => Promise<boolean>;
     onTurnStarted?: () => void;
+    onTurnRejected?: (draft: string, sessionId: string) => void;
+    isTurnCurrent?: (sessionId: string) => boolean;
     onError?: (msg: string) => void;
     onAwaitingHuman?: (event: unknown) => void;
   }) => {
     capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
+    capturedOnTurnRejected = params.onTurnRejected;
+    capturedIsTurnCurrent = params.isTurnCurrent;
     capturedOnError = params.onError;
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     return {
       messages: chatSseMessages,
       waitResponse: false,
       chatControls: [],
+      maxChatInputChars: chatSseMaxChatInputChars,
       prepareChatControls: prepareChatControlsMock,
       send: sendMock,
       sendHitlResume: sendHitlResumeMock,
@@ -125,6 +138,7 @@ vi.mock("@hooks/useChatSse", () => ({
 }));
 
 const composerResetMock = vi.fn();
+const composerBindSessionMock = vi.fn();
 const composerValue = {
   searchPolicy: "corpus" as const,
   ragScope: "general" as const,
@@ -135,6 +149,7 @@ const composerValue = {
   setSelectedLibraryIds: vi.fn(),
   setSelectedDocumentUids: vi.fn(),
   reset: composerResetMock,
+  bindSession: composerBindSessionMock,
 };
 vi.mock("./useComposerSettings", () => ({
   useComposerSettings: () => composerValue,
@@ -270,18 +285,49 @@ describe("useManagedChat — session write reliability", () => {
   beforeEach(() => {
     clearSessionHistoryCache();
     chatSseMessages = [];
+    chatSseMaxChatInputChars = undefined;
     registerSessionImpl = async () => ({});
     patchSessionImpl = async () => ({});
     registerSessionCalls.length = 0;
     patchSessionCalls.length = 0;
     sessionData = undefined;
     sessionDataIsStaleForCurrentArgs = false;
-    sendMock.mockClear();
-    showErrorMock.mockClear();
-    notifyApiErrorMock.mockClear();
-    chatAttachmentsValue.clearReadyAttachments.mockClear();
+    // `mockReset`, not `mockClear`: `mockClear` empties the call history and
+    // NOTHING else (@vitest/spy `mockClear` — `state.calls = []` and friends).
+    // It leaves `config.onceMockImplementations` intact, so a
+    // `mockResolvedValueOnce`/`mockImplementationOnce` that its own test never
+    // consumed — a rejected send, a never-resolving resume — stays queued and
+    // fires in whichever LATER test happens to call the mock first. That is a
+    // failure attributed to the wrong test, in a different file section, and
+    // it has already happened once on this branch (in useChatSse.test.tsx).
+    // `mockReset` drains that queue and restores the implementation passed to
+    // `vi.fn(impl)`, which is why every mock below is declared with the default
+    // it needs.
+    // Reset EVERY mock the suite shares, not just the ones a test happens to
+    // assert on: an uncleared spy is a silent cross-test dependency either way.
+    for (const mock of [
+      sendMock,
+      sendHitlResumeMock,
+      prepareChatControlsMock,
+      chatSseResetMock,
+      abortMock,
+      replaceAllMessagesMock,
+      composerResetMock,
+      composerBindSessionMock,
+      showErrorMock,
+      notifyApiErrorMock,
+      chatAttachmentsValue.clearReadyAttachments,
+    ]) {
+      mock.mockReset();
+    }
+    // Captured callbacks are per-mount; leaving a previous test's copy behind
+    // lets an assertion pass against a component that is already unmounted.
     capturedFlushPendingWrites = undefined;
     capturedOnTurnStarted = undefined;
+    capturedOnTurnRejected = undefined;
+    capturedIsTurnCurrent = undefined;
+    capturedOnError = undefined;
+    capturedOnAwaitingHuman = undefined;
   });
 
   afterEach(async () => {
@@ -322,6 +368,97 @@ describe("useManagedChat — session write reliability", () => {
     expect(capturedOnAwaitingHuman).toBe(firstOnAwaitingHuman);
     expect(capturedOnTurnStarted).toBe(firstOnTurnStarted);
     expect(latest.handleHitlAnswer).toBe(firstHandleHitlAnswer);
+  });
+
+  it("counts trimmed Unicode code points and blocks an over-limit draft without clearing it", async () => {
+    chatSseMaxChatInputChars = 5;
+    mount();
+
+    act(() => {
+      latest.setInput("  🙂🙂🙂🙂🙂🙂  ");
+    });
+    rerender();
+
+    expect(latest.inputCharacterCount).toBe(6);
+    expect(latest.inputTooLong).toBe(true);
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(registerSessionCalls).toHaveLength(0);
+    expect(latest.input).toBe("  🙂🙂🙂🙂🙂🙂  ");
+  });
+
+  it("accepts an exact-limit Unicode draft", async () => {
+    chatSseMaxChatInputChars = 5;
+    mount();
+
+    act(() => {
+      latest.setInput("🙂🙂🙂🙂🙂");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect(latest.inputTooLong).toBe(false);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  // #2369: a brand-new conversation's composer settings live only in memory —
+  // there is no session id to key sessionStorage on until handleSend mints
+  // one. So the mint must both hand that id to the composer (making the pick
+  // durable) and NOT trigger the sessionId-change reset(), which would rebuild
+  // the composer from that session's still-empty storage and revert the pick.
+  // Both halves are this hook's job and invisible from useComposerSettings'
+  // own tests, which can only simulate the bind.
+  it("hands a handleSend-minted session id to the composer instead of resetting it", async () => {
+    mount();
+    act(() => {
+      latest.setInput("first question");
+    });
+    rerender();
+    // The mount itself legitimately resets (entering a session, here the empty
+    // one) — only what the send adds on top is under test.
+    const resetsBeforeSend = composerResetMock.mock.calls.length;
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+    rerender();
+
+    const sid = (registerSessionCalls[0] as { createSessionRequest: { session_id: string } }).createSessionRequest
+      .session_id;
+    expect(composerBindSessionMock).toHaveBeenCalledWith(sid);
+    expect(composerResetMock.mock.calls.length).toBe(resetsBeforeSend);
+  });
+
+  it("restores the complete ordinary draft after a backend length rejection", async () => {
+    mount();
+    const draft = "  full draft 🙂  ";
+
+    act(() => {
+      latest.setInput(draft);
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    act(() => capturedOnTurnStarted?.());
+    rerender();
+    expect(latest.input).toBe("");
+
+    const sentSessionId = sendMock.mock.calls[0][1] as string;
+    expect(capturedIsTurnCurrent?.(sentSessionId)).toBe(true);
+    expect(capturedIsTurnCurrent?.("another-session")).toBe(false);
+    act(() => capturedOnTurnRejected?.(draft.trim(), "another-session"));
+    rerender();
+    expect(latest.input).toBe("");
+
+    act(() => capturedOnTurnRejected?.(draft.trim(), sentSessionId));
+    rerender();
+    expect(latest.input).toBe(draft);
   });
 
   it("selecting a context prompt persists it and a send proceeds", async () => {
@@ -1112,5 +1249,335 @@ describe("useManagedChat — session write reliability", () => {
 
     // The exact displayed array was snapshotted under A's session id.
     expect(getCachedSessionHistory(sidA!)).toBe(displayed);
+  });
+
+  // handleHitlAnswer clears pendingHitl BEFORE awaiting the resume, so the
+  // prompt disappears from the UI immediately. When the resume never reaches
+  // the backend (token refusal, prepare-execution failure) the checkpoint is
+  // still paused server-side with nobody able to answer it — the prompt has to
+  // come back, or the turn is stranded until the session is abandoned.
+  const awaitingHumanEvent = {
+    type: "awaiting_human",
+    session_id: "session-1",
+    exchange_id: "exch-1",
+    payload: { interrupt_id: "interrupt-a", checkpoint_id: null },
+  };
+
+  // A HITL prompt always belongs to the ACTIVE session in production, and the
+  // restore guard enforces exactly that — so these tests bind the session
+  // param before dispatching the event, as the real flow does.
+  const bindSession = (sid: string) => {
+    act(() => {
+      capturedSetSearchParams?.((prev: URLSearchParams) => {
+        const next = new URLSearchParams(prev);
+        next.set("session", sid);
+        return next;
+      });
+    });
+    rerender();
+  };
+
+  it("blocks over-limit HITL free text locally while leaving fixed choices available", async () => {
+    chatSseMaxChatInputChars = 5;
+    mount();
+    bindSession("session-1");
+    const freeTextEvent = {
+      ...awaitingHumanEvent,
+      payload: {
+        ...awaitingHumanEvent.payload,
+        free_text: true,
+        choices: [{ id: "proceed", label: "Proceed" }],
+      },
+    };
+
+    act(() => {
+      capturedOnAwaitingHuman?.(freeTextEvent);
+      latest.setHitlFreeText("🙂🙂🙂🙂🙂🙂");
+    });
+    rerender();
+    act(() => latest.handleHitlAnswer(undefined, latest.hitlFreeText));
+
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    expect(latest.pendingHitl).toEqual(freeTextEvent);
+    expect(latest.hitlFreeText).toBe("🙂🙂🙂🙂🙂🙂");
+
+    await act(async () => {
+      latest.handleHitlAnswer("proceed");
+    });
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, "proceed", undefined);
+  });
+
+  it("accepts HITL free text at the exact configured code-point limit", async () => {
+    chatSseMaxChatInputChars = 5;
+    sendHitlResumeMock.mockResolvedValueOnce(true);
+    mount();
+    bindSession("session-1");
+    const freeTextEvent = {
+      ...awaitingHumanEvent,
+      payload: { ...awaitingHumanEvent.payload, free_text: true },
+    };
+
+    act(() => {
+      capturedOnAwaitingHuman?.(freeTextEvent);
+      latest.setHitlFreeText("🙂🙂🙂🙂🙂");
+    });
+    rerender();
+    await act(async () => {
+      latest.handleHitlAnswer(undefined, latest.hitlFreeText);
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, undefined, "🙂🙂🙂🙂🙂");
+  });
+
+  it("restores the HITL prompt when the resume never reached the backend", async () => {
+    sendHitlResumeMock.mockResolvedValueOnce(false);
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+      latest.setHitlFreeText("  complete answer 🙂  ");
+    });
+    rerender();
+    expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+
+    await act(async () => {
+      latest.handleHitlAnswer(undefined, latest.hitlFreeText);
+    });
+    rerender();
+
+    expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(awaitingHumanEvent, undefined, "  complete answer 🙂  ");
+    expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+    expect(latest.hitlFreeText).toBe("  complete answer 🙂  ");
+  });
+
+  it("does not resurrect the prompt over a new turn started in the same session", async () => {
+    // The common abort: the user answers, then immediately sends a new
+    // message. That aborts the resume, which now reports not-reached — but
+    // re-displaying the old confirmation card over the streaming reply would
+    // let them answer an exchange they have already moved past.
+    let resolveResume: (v: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((r) => (resolveResume = r)));
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+    });
+    rerender();
+
+    act(() => {
+      latest.handleHitlAnswer("proceed");
+    });
+    // The user sends a new message while the resume is still in flight. The
+    // supersede must land HERE, synchronously at the point of intent — waiting
+    // for onTurnStarted (a preflight + prepare-execution round trip later)
+    // loses the race against the aborted resume's continuation.
+    // A turn that genuinely starts appends its optimistic user message under a
+    // NEW exchange_id — that, not a counter, is what marks the prompt stale.
+    chatSseMessages = [{ session_id: "session-1", exchange_id: "exch-2", rank: 1 }];
+    act(() => {
+      latest.setInput("a new message");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    await act(async () => {
+      resolveResume(false);
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toBeNull();
+  });
+
+  it("restores the prompt when a superseding send fails without starting a turn", async () => {
+    // The generation bump has to be synchronous (before the resume's
+    // continuation), but a send can still fail asynchronously afterwards — at
+    // prepare-execution, the token floor, or the write barrier. A failed send
+    // supersedes nothing, so the bump must be rolled back or the HITL prompt is
+    // suppressed forever with no turn having replaced it.
+    let resolveResume: (v: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((r) => (resolveResume = r)));
+    // A send that fails before committing appends NOTHING to the thread, so
+    // the last message still belongs to the HITL prompt's own exchange.
+    chatSseMessages = [{ session_id: "session-1", exchange_id: "exch-1", rank: 1 }];
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+    });
+    rerender();
+
+    act(() => {
+      latest.handleHitlAnswer("proceed");
+    });
+    act(() => {
+      latest.setInput("a new message");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    await act(async () => {
+      resolveResume(false);
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+  });
+
+  it("restores the prompt when a superseding send never reaches the backend", async () => {
+    // The write-barrier bail: a failed session write aborts handleSend before
+    // send() is ever called. The old generation counter was already bumped by
+    // then and nothing rolled it back, so the prompt was suppressed forever.
+    // Deriving staleness from the thread has no such hole — nothing was
+    // appended, so the last message still belongs to the prompt's exchange.
+    let resolveResume: (v: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((r) => (resolveResume = r)));
+    chatSseMessages = [{ session_id: "session-1", exchange_id: "exch-1", rank: 1 }];
+    patchSessionImpl = async () => {
+      throw new Error("PATCH failed");
+    };
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+    });
+    rerender();
+
+    act(() => {
+      latest.handleHitlAnswer("proceed");
+    });
+    act(() => {
+      latest.setInput("a new message");
+    });
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    await act(async () => {
+      resolveResume(false);
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+  });
+
+  it("restores the prompt when the resume rejects outright", async () => {
+    // pendingHitl is cleared before awaiting, so a rejection with no .catch()
+    // would strand the paused checkpoint and raise an unhandled rejection.
+    sendHitlResumeMock.mockRejectedValueOnce(new Error("boom"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+    });
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("cancel");
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+    errorSpy.mockRestore();
+  });
+
+  it("does not resurrect the prompt into another session after navigating away", async () => {
+    let resolveResume: (v: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((r) => (resolveResume = r)));
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+    });
+    rerender();
+
+    act(() => {
+      latest.handleHitlAnswer("cancel");
+    });
+    // The user navigates to a fresh conversation while the resume is still
+    // in flight; its late "not reached" must not stomp the new view.
+    act(() => {
+      latest.startNewConversation();
+    });
+    rerender();
+
+    await act(async () => {
+      resolveResume(false);
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toBeNull();
+  });
+
+  it("keeps the HITL prompt cleared once the resume has reached the backend", async () => {
+    sendHitlResumeMock.mockResolvedValueOnce(true);
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+    });
+    rerender();
+    expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
+
+    await act(async () => {
+      latest.handleHitlAnswer("proceed");
+    });
+    rerender();
+
+    expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
+    expect(latest.pendingHitl).toBeNull();
+  });
+
+  it("does not clear a newer HITL prompt's draft when an older resume settles", async () => {
+    let resolveResume: (v: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((r) => (resolveResume = r)));
+    mount();
+    bindSession("session-1");
+
+    act(() => {
+      capturedOnAwaitingHuman?.(awaitingHumanEvent);
+      latest.setHitlFreeText("answer for the first prompt");
+    });
+    rerender();
+    act(() => latest.handleHitlAnswer(undefined, latest.hitlFreeText));
+
+    const newerPrompt = {
+      ...awaitingHumanEvent,
+      exchange_id: "exch-2",
+      payload: { ...awaitingHumanEvent.payload, interrupt_id: "interrupt-b" },
+    };
+    act(() => {
+      capturedOnAwaitingHuman?.(newerPrompt);
+      latest.setHitlFreeText("answer for the newer prompt");
+    });
+    rerender();
+
+    await act(async () => {
+      resolveResume(true);
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(newerPrompt);
+    expect(latest.hitlFreeText).toBe("answer for the newer prompt");
   });
 });

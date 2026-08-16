@@ -193,6 +193,10 @@
         }
       }
     },
+    "document_label_search": {
+      "name": "Search documents by label",
+      "description": "Ability to list every document carrying a given business label, exhaustively and page by page."
+    },
     "document_summarize": {
       "name": "Summarize a document",
       "description": "Ability to summarize a document and make use of the result.",
@@ -324,7 +328,9 @@
     "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "conversationTokenUsage": {
       "total_one": "Total: {{count}} token",
-      "total_other": "Total: {{count}} tokens"
+      "total_other": "Total: {{count}} tokens",
+      "cached_one": "{{count}} token served from the provider's prompt cache",
+      "cached_other": "{{count}} tokens served from the provider's prompt cache"
     },
     "attachFiles": "Attach files",
     "attachmentChip": {
@@ -387,21 +393,29 @@
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
-      "scopeCorpus": "Resources",
-      "scopeCorpusAndWeb": "Model + Resources",
-      "scopeGeneral": "Model",
+      "scopeGeneral": "General knowledge",
+      "scopeCorpus": "Your documents",
+      "scopeCorpusAndWeb": "General knowledge + your documents",
       "scopeRowLabel": "Scope",
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
+      "reasoningOff": "Off",
+      "reasoningOn": "On",
+      "reasoningLow": "Low",
+      "reasoningMedium": "Medium",
+      "reasoningHigh": "High",
+      "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
       "selectLibraryFirst": "Select a library first."
     },
+    "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {
       "tooltip": "Copy message",
-      "success": "Message copied"
+      "response": "Copy response",
+      "copied": "Copied"
     },
     "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",
@@ -413,14 +427,19 @@
       "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again.",
       "attachmentDeleteFailedSummary": "File not deleted",
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
-      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file."
+      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
+      "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
+      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit."
     },
+    "hitlFreeTextLabel": "Your answer",
+    "hitlWaitingAria": "Agent is waiting for your input",
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "sendHitlAnswer": "Send",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -555,6 +574,7 @@
     "downloadStarting": "Getting ready to start downloading...",
     "dropFiles": "Drop your files here",
     "excessSize": "Excess: ",
+    "folderRequired": "Only files inside a folder can be added here — loose files were skipped.",
     "folders": "Folders",
     "ingestionMode": "Ingestion mode",
     "keywords": "Keywords",
@@ -566,6 +586,8 @@
     "makeSearchable": "Make searchable",
     "maxSize": "or click to select (max 200Mb per file)",
     "modifySearch": "Try to modify your search criteria",
+    "nestedFoldersHint_one": "{{count}} subfolder will be created to mirror the dropped folder",
+    "nestedFoldersHint_other": "{{count}} subfolders will be created to mirror the dropped folder",
     "newFilesSize": "Upload Size: ",
     "noDocument": "No document found",
     "noSummary": "No summary available.",
@@ -595,6 +617,10 @@
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
     "supportedFormats": "Supported files: PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "tooDeepRejected": "Nothing was added: the dropped folder would nest files deeper than {{max}} folder levels.",
+    "tooDeepSkipped_one": "{{count}} file was skipped: it would end up nested deeper than {{max}} folder levels.",
+    "tooDeepSkipped_other": "{{count}} files were skipped: they would end up nested deeper than {{max}} folder levels.",
+    "tooDeepTitle": "Folder too deep",
     "uploadAndProcess": "Upload & process",
     "uploadDestination": "Files will be added to",
     "uploadDrawerTitle": "Upload a document",
@@ -1550,6 +1576,14 @@
         "author": "Added by"
       },
       "embeddedTitleHint": "Embedded title: {{title}}",
+      "dropInFolder": "Drop your files to add them to \"{{folder}}\"",
+      "dropAtRoot": "Drop a folder to create it here with its structure",
+      "rootDrop": {
+        "rejectedTitle": "Drop a folder",
+        "rejectedDetail": "Loose files can't land at the top level — drop a folder (it becomes a library), or drop the files into an existing folder.",
+        "skippedDetail_one": "{{count}} loose file was skipped — only the dropped folders' content was kept.",
+        "skippedDetail_other": "{{count}} loose files were skipped — only the dropped folders' content was kept."
+      },
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
@@ -1559,6 +1593,7 @@
         "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
         "download": "Download",
         "includeInSearch": "Include in search",
+        "manageLabels": "Manage labels",
         "more": "More actions",
         "newFolder": "New folder",
         "newSubfolder": "New subfolder in \"{{name}}\"",
@@ -1605,13 +1640,25 @@
         "inFolder": "In",
         "nameLabel": "Name",
         "namePlaceholder": "e.g. Reports 2026",
-        "title": "New folder"
+        "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
+        "title": "New folder",
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
       },
       "renameModal": {
         "title": "Rename",
         "nameLabel": "Name",
         "save": "Save",
         "error": "Could not rename"
+      },
+      "labelsModal": {
+        "title": "Manage labels",
+        "currentEmpty": "No labels yet",
+        "addPlaceholder": "Add a label…",
+        "add": "Add",
+        "createNew": "Create label",
+        "addFieldLabel": "Add a label",
+        "removeAriaLabel": "Remove label \"{{label}}\"",
+        "close": "Close"
       },
       "loading": "Loading resources...",
       "preview": {
@@ -1622,7 +1669,15 @@
           "raw": "Raw"
         },
         "loading": "Loading…",
-        "markdownUnavailable": "No Markdown version was generated for this document."
+        "markdownUnavailable": "No Markdown version was generated for this document.",
+        "pdf": {
+          "loadFailed": "Failed to load PDF document.",
+          "unavailable": "Document content is unavailable.",
+          "largeTitle": "Large document",
+          "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
+          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
+          "largeConfirm": "Display anyway"
+        }
       },
       "storage": {
         "aria": "Storage space used",
@@ -1845,6 +1900,8 @@
       "popover": {
         "acknowledge": "Dismiss",
         "close": "Close",
+        "copyError": "Copy error",
+        "errorCopied": "Error copied",
         "startedAgo": "started {{time}}",
         "title": "Details — {{label}}"
       },

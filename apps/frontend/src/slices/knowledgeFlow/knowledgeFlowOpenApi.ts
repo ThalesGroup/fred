@@ -113,6 +113,13 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.tagSizesRequest,
       }),
     }),
+    mutateDocumentLabels: build.mutation<MutateDocumentLabelsApiResponse, MutateDocumentLabelsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels`,
+        method: "PATCH",
+        body: queryArg.labelMutationRequest,
+      }),
+    }),
     addDocumentLabel: build.mutation<AddDocumentLabelApiResponse, AddDocumentLabelApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
@@ -130,6 +137,16 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     listDocumentsByLabel: build.query<ListDocumentsByLabelApiResponse, ListDocumentsByLabelApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/by-label/${queryArg.label}` }),
+    }),
+    resolveDocumentsByLabel: build.query<ResolveDocumentsByLabelApiResponse, ResolveDocumentsByLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/by-label`,
+        params: {
+          label: queryArg.label,
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
     }),
     documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
@@ -235,6 +252,16 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/upload-process-documents`,
         method: "POST",
         body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
+      }),
+    }),
+    quotaPrecheckKnowledgeFlowV1QuotaPrecheckPost: build.mutation<
+      QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiResponse,
+      QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/quota/precheck`,
+        method: "POST",
+        body: queryArg.quotaPrecheckRequest,
       }),
     }),
     fastMarkdownKnowledgeFlowV1FastTextPost: build.mutation<
@@ -1016,6 +1043,11 @@ export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiResponse =
 export type TagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostApiArg = {
   tagSizesRequest: TagSizesRequest;
 };
+export type MutateDocumentLabelsApiResponse = /** status 200 Successful Response */ string[];
+export type MutateDocumentLabelsApiArg = {
+  documentUid: string;
+  labelMutationRequest: LabelMutationRequest;
+};
 export type AddDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
 export type AddDocumentLabelApiArg = {
   documentUid: string;
@@ -1031,6 +1063,12 @@ export type ListDocumentLabelsApiArg = void;
 export type ListDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type ListDocumentsByLabelApiArg = {
   label: string;
+};
+export type ResolveDocumentsByLabelApiResponse = /** status 200 Successful Response */ LabelDocumentsPage;
+export type ResolveDocumentsByLabelApiArg = {
+  label: string;
+  offset?: number;
+  limit?: number;
 };
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
   /** status 200 Successful Response */ VectorChunk[];
@@ -1105,6 +1143,11 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResp
   /** status 200 Successful Response */ any;
 export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
   bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
+};
+export type QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiResponse =
+  /** status 200 Successful Response */ QuotaPrecheckResponse;
+export type QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiArg = {
+  quotaPrecheckRequest: QuotaPrecheckRequest;
 };
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiResponse = /** status 200 Successful Response */ any;
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiArg = {
@@ -1879,6 +1922,27 @@ export type TagSizesRequest = {
   /** Library tag identifiers to total */
   tag_ids: string[];
 };
+export type LabelMutationRequest = {
+  /** Labels to add. */
+  add?: string[];
+  /** Labels to remove. Wins over `add` when the same value appears in both. */
+  remove?: string[];
+};
+export type LabelDocumentReference = {
+  document_uid: string;
+  document_name: string;
+};
+export type LabelDocumentsPage = {
+  label: string;
+  documents: LabelDocumentReference[];
+  /** Total number of matching documents across all pages. */
+  total: number;
+  offset: number;
+  limit: number;
+  /** Offset to request the next page, or null when there is no more. */
+  next_offset?: number | null;
+  has_more: boolean;
+};
 export type VectorChunk = {
   /** Unique identifier of the chunk */
   chunk_uid: string;
@@ -1930,6 +1994,18 @@ export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
 export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = {
   files: string[];
   metadata_json: string;
+};
+export type QuotaPrecheckResponse = {
+  allowed: boolean;
+  scope?: ("team" | "personal") | null;
+  owner_id?: string | null;
+  current?: number | null;
+  limit?: number | null;
+};
+export type QuotaPrecheckRequest = {
+  tags?: string[];
+  team_id?: string | null;
+  total_size: number;
 };
 export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
   file: string;
@@ -2511,12 +2587,15 @@ export const {
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
+  useMutateDocumentLabelsMutation,
   useAddDocumentLabelMutation,
   useRemoveDocumentLabelMutation,
   useListDocumentLabelsQuery,
   useLazyListDocumentLabelsQuery,
   useListDocumentsByLabelQuery,
   useLazyListDocumentsByLabelQuery,
+  useResolveDocumentsByLabelQuery,
+  useLazyResolveDocumentsByLabelQuery,
   useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
@@ -2540,6 +2619,7 @@ export const {
   useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
+  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
   useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
