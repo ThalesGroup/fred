@@ -2251,6 +2251,7 @@ export type ModelBindingSettings = {
   streaming?: boolean | null;
   stream_usage?: boolean | null;
   request_timeout?: number | null;
+  reasoning_effort?: string | null;
 };
 export type ModelBinding = {
   provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
