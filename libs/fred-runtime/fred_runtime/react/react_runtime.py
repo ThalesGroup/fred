@@ -58,7 +58,6 @@ from fred_sdk.contracts.runtime import (
     AgentRuntime,
     AssistantDeltaRuntimeEvent,
     AwaitingHumanRuntimeEvent,
-    ChatModelFactoryPort,
     ExecutionConfig,
     Executor,
     FinalRuntimeEvent,
@@ -88,9 +87,6 @@ from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 # - the adapter file should deal with LangChain messages, stream payload shapes,
 #   and runnable config translation
 from .react_langchain_adapter import (
-    REACT_MODEL_OPERATION_ROUTING,
-)
-from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
 from .react_langchain_adapter import (
@@ -110,9 +106,6 @@ from .react_langchain_adapter import (
 )
 from .react_langchain_adapter import (
     graph_input_from_react_input as _graph_input_adapter,
-)
-from .react_langchain_adapter import (
-    infer_react_model_operation_from_messages as _infer_react_model_operation_from_messages,
 )
 from .react_langchain_adapter import (
     merge_sources as _merge_sources,
@@ -792,7 +785,6 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             tracer=self.services.tracer,
             kpi=self.services.kpi_writer,
-            chat_model_factory=self.services.chat_model_factory,
             definition=self.definition,
             available_tool_names=available_tool_names,
             max_tool_calls_per_turn=policy.tool_selection.max_tool_calls_per_turn,
@@ -841,7 +833,6 @@ def _create_compiled_react_agent(
     checkpointer: Checkpointer,
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
-    chat_model_factory: ChatModelFactoryPort | None,
     definition: ReActAgentDefinition,
     available_tool_names: set[str] | frozenset[str],
     max_tool_calls_per_turn: int | None = None,
@@ -875,7 +866,8 @@ def _create_compiled_react_agent(
     - construction errors propagate directly
 
     Observability signals to look at:
-    - dynamic routing path: `[V2][MODEL_ROUTING]` logs
+    - model resolution path: `[V2][MODEL_ROUTING]` logs (once per turn, at
+      runtime activation)
     - model-call tracing path: `v2.react.model` spans
     """
     return cast(
@@ -887,10 +879,7 @@ def _create_compiled_react_agent(
             binding=binding,
             approval_policy=approval_policy,
             checkpointer=checkpointer,
-            chat_model_factory=chat_model_factory,
             definition=definition,
-            infer_operation_from_messages=_infer_react_model_operation_from_messages,
-            default_operation=REACT_MODEL_OPERATION_ROUTING,
             available_tool_names=available_tool_names,
             tracer=tracer,
             kpi=kpi,

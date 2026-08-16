@@ -46,7 +46,6 @@ from .context import (
     LinkKind,
     LinkPart,
     RuntimeContext,
-    TeamOperationRouteRule,
 )
 from .execution import (
     ActorContext,
@@ -95,7 +94,6 @@ __all__ = [
     "LinkKind",
     "LinkPart",
     "RuntimeContext",
-    "TeamOperationRouteRule",
     # UiPart union registration (#1977, RFC AGENT-CAPABILITY-RFC.md §3.6/§4)
     "BASE_UI_PARTS",
     "current_ui_part_union",

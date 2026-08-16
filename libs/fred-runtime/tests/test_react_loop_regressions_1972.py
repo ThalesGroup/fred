@@ -24,7 +24,6 @@ its own reimplementation:
 - dangling-tool-call sanitize on a poisoned checkpoint (OpenAI 400 guard)
 - provider reasoning-strip on replayed history (Mistral 422 guard)
 - history trim to the human boundary
-- per-operation model routing (`routing` vs `planning`) with caching
 - legacy tool-output attach on `response_metadata["tools"]`
 
 They only exercise the stable seam `build_tool_loop_compiled_react_agent(...)`
@@ -48,11 +47,6 @@ from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
-from fred_runtime.react.react_model_adapter import (
-    REACT_MODEL_OPERATION_PLANNING,
-    REACT_MODEL_OPERATION_ROUTING,
-    infer_react_model_operation_from_messages,
-)
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import (
     _V2_MAX_HISTORY_CHARS,
@@ -67,7 +61,6 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
-from fred_sdk.contracts.runtime import ChatModelFactoryPort
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -150,7 +143,6 @@ def _compile_agent(
     language: str | None = None,
     approval_enabled: bool = True,
     always_require_tools: tuple[str, ...] = (),
-    chat_model_factory: object | None = None,
     kpi: object | None = None,
 ) -> Any:
     return build_tool_loop_compiled_react_agent(
@@ -163,10 +155,7 @@ def _compile_agent(
             always_require_tools=always_require_tools,
         ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
-        chat_model_factory=cast(ChatModelFactoryPort | None, chat_model_factory),
         definition=cast(ReActAgentDefinition, _FakeDefinition()),
-        infer_operation_from_messages=infer_react_model_operation_from_messages,
-        default_operation=REACT_MODEL_OPERATION_ROUTING,
         available_tool_names={"update_ticket", "get_info"},
         kpi=cast(Any, kpi),
     )
@@ -957,97 +946,6 @@ async def test_current_turn_too_large_emits_a_kpi_counter() -> None:
     # Never the oversized content, on a KPI event any more than in the error
     # message itself.
     assert oversized not in str(matches[0].model_dump())
-
-
-# ---------------------------------------------------------------------------
-# (d) Per-operation model routing
-# ---------------------------------------------------------------------------
-
-
-class _RoutingScriptedModel(RecordingModel):
-    """Scripted per-operation model: tool call on a fresh turn, else final."""
-
-    operation: str = "default"
-
-    def _generate(
-        self,
-        messages: list[BaseMessage],
-        stop: list[str] | None = None,
-        run_manager: Any = None,
-        **kwargs: Any,
-    ) -> ChatResult:
-        self.calls.append(list(messages))
-        if isinstance(messages[-1], ToolMessage):
-            msg = AIMessage(content=f"final-by-{self.operation}")
-        else:
-            msg = AIMessage(
-                content="",
-                tool_calls=[_tool_call("get_info", {"topic": "fred"}, "c-route")],
-            )
-        return ChatResult(generations=[ChatGeneration(message=msg)])
-
-
-class _RecordingChatModelFactory:
-    """Fake ChatModelFactoryPort recording per-operation build requests."""
-
-    def __init__(self) -> None:
-        self.operations: list[str] = []
-        self.models: dict[str, _RoutingScriptedModel] = {}
-
-    def build(self, definition: object, binding: object) -> BaseChatModel:
-        raise AssertionError("the tool loop must use build_for_operation")
-
-    def build_for_operation(
-        self,
-        *,
-        definition: object,
-        binding: object,
-        purpose: str,
-        operation: str,
-    ) -> BaseChatModel:
-        assert purpose == "chat"
-        self.operations.append(operation)
-        model = self.models.get(operation)
-        if model is None:
-            model = _RoutingScriptedModel(operation=operation)
-            self.models[operation] = model
-        return model
-
-
-@pytest.mark.asyncio
-async def test_model_routing_selects_and_caches_per_operation_models() -> None:
-    factory = _RecordingChatModelFactory()
-    default_model = RecordingModel()
-    agent = _compile_agent(
-        default_model, approval_enabled=False, chat_model_factory=factory
-    )
-
-    updates = await _drive(
-        agent, {"messages": [HumanMessage("what about fred?")]}, "t-routing"
-    )
-
-    # Fresh user turn → `routing`; follow-up after the tool result → `planning`.
-    assert factory.operations == [
-        REACT_MODEL_OPERATION_ROUTING,
-        REACT_MODEL_OPERATION_PLANNING,
-    ]
-    routing_model = factory.models[REACT_MODEL_OPERATION_ROUTING]
-    planning_model = factory.models[REACT_MODEL_OPERATION_PLANNING]
-    assert len(routing_model.calls) == 1
-    assert len(planning_model.calls) == 1
-    assert default_model.calls == []
-    finals = [
-        m for m in _update_messages(updates) if isinstance(m, AIMessage) and m.content
-    ]
-    assert [m.content for m in finals] == ["final-by-planning"]
-
-    # Second turn on the same thread: operations are cached, the factory is
-    # not asked again.
-    await _drive(agent, {"messages": [HumanMessage("and again?")]}, "t-routing")
-    assert factory.operations == [
-        REACT_MODEL_OPERATION_ROUTING,
-        REACT_MODEL_OPERATION_PLANNING,
-    ]
 
 
 # ---------------------------------------------------------------------------

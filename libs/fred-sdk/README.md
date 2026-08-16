@@ -255,7 +255,7 @@ context = FakeGraphNodeContext(
     agent_result=AgentInvocationResult(
         agent_id="my.specialist.agent", structured={"trust": "high"}
     ),
-    structured_by_operation={"classify": {"intent": "question_cloud_general"}},
+    structured_results={"intent": "question_cloud_general"},
 )
 result = await my_node(state, cast(GraphNodeContext, context))
 

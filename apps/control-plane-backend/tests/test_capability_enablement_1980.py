@@ -1210,6 +1210,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
             model_thinking_profile_ids=tuple(thinking_profile_ids),
         )
 
@@ -1254,26 +1255,30 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     # Both pods' profile ids survive — neither pod's registration wipes the
     # other's, unlike a plain last-registration-wins overwrite.
     assert set(entry.model_profile_ids) == {"chat.pod-a.gpt5", "chat.pod-b.gpt5"}
+    assert set(entry.model_chat_profile_ids) == {
+        "chat.pod-a.gpt5",
+        "chat.pod-b.gpt5",
+    }
     # pod-b never declared a thinking profile for this model; pod-a's must
     # still carry through rather than being wiped by pod-b's registration.
     assert entry.model_thinking_profile_ids == ("chat.pod-a.gpt5",)
 
 
 @pytest.mark.asyncio
-async def test_universally_available_model_profile_ids_intersects_across_pods(
+async def test_universally_available_chat_model_profile_ids_intersects_across_pods(
     monkeypatch,
 ) -> None:
     """MDL#2 (2026-08-02, follow-up to #2191): the union above is right for
     admission ("does at least one pod know this profile"), but a team routing
     policy needs the opposite question answered — a profile only some pods
     carry can drift-fail at runtime (`TeamRoutingProfileDriftError`) on
-    whichever pod lacks it. `universally_available_model_profile_ids` must
+    whichever pod lacks it. `universally_available_chat_model_profile_ids` must
     return only profile ids every pod agrees on."""
 
     from types import SimpleNamespace
 
     from control_plane_backend.capabilities.catalog import (
-        universally_available_model_profile_ids,
+        universally_available_chat_model_profile_ids,
     )
 
     def _model_entry(profile_ids):
@@ -1286,6 +1291,7 @@ async def test_universally_available_model_profile_ids_intersects_across_pods(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
         )
 
     async def _fake_fetch_models(base_url: str):
@@ -1313,13 +1319,71 @@ async def test_universally_available_model_profile_ids_intersects_across_pods(
         )
     )
 
-    universal = await universally_available_model_profile_ids(deps)
+    universal = await universally_available_chat_model_profile_ids(deps)
 
     assert universal == frozenset({"chat.shared"})
 
 
 @pytest.mark.asyncio
-async def test_universally_available_model_profile_ids_fails_closed_on_unreachable_pod(
+async def test_universal_chat_profile_requires_same_model_on_every_pod(
+    monkeypatch,
+) -> None:
+    """A deployment-global profile id must keep the same concrete meaning.
+
+    Presence alone is insufficient: accepting the same id for two different
+    model capability ids would make the selected model depend on the pod that
+    receives the turn.
+    """
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        universally_available_chat_model_profile_ids,
+    )
+
+    def _model_entry(model_id: str) -> CapabilityCatalogEntry:
+        return CapabilityCatalogEntry(
+            id=model_id,
+            version="1",
+            name=model_id,
+            description=model_id,
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=("chat.shared",),
+            model_chat_profile_ids=("chat.shared",),
+        )
+
+    async def _fake_fetch_models(base_url: str):
+        if base_url == "http://pod-a":
+            return [_model_entry("model__openai__gpt-5")]
+        return [_model_entry("model__openai__gpt-4o")]
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+                    ),
+                ]
+            )
+        )
+    )
+
+    universal = await universally_available_chat_model_profile_ids(deps)
+
+    assert universal == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_universally_available_chat_model_profile_ids_fails_closed_on_unreachable_pod(
     monkeypatch,
 ) -> None:
     """PR #2204 review: an enabled pod that is genuinely unreachable
@@ -1332,7 +1396,7 @@ async def test_universally_available_model_profile_ids_fails_closed_on_unreachab
     from types import SimpleNamespace
 
     from control_plane_backend.capabilities.catalog import (
-        universally_available_model_profile_ids,
+        universally_available_chat_model_profile_ids,
     )
 
     def _model_entry(profile_ids):
@@ -1345,6 +1409,7 @@ async def test_universally_available_model_profile_ids_fails_closed_on_unreachab
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
         )
 
     async def _fake_fetch_models(base_url: str):
@@ -1370,7 +1435,7 @@ async def test_universally_available_model_profile_ids_fails_closed_on_unreachab
         )
     )
 
-    universal = await universally_available_model_profile_ids(deps)
+    universal = await universally_available_chat_model_profile_ids(deps)
 
     assert universal == frozenset()
 
@@ -2295,6 +2360,15 @@ class _FakeReasoningStore:
         return set(self._enabled_model_ids)
 
 
+class _FakeNoPlatformModelBindingStore:
+    """No `chat` binding set — `get_runtime_binding_for_team`
+    now reads this store on the same per-turn call as the reasoning
+    snapshot, so every deps bundle exercising that function needs one."""
+
+    async def get(self):
+        return None
+
+
 @pytest.mark.asyncio
 async def test_runtime_binding_carries_selected_team_settings() -> None:
     from types import SimpleNamespace
@@ -2324,6 +2398,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_agent_instance_store=lambda: instance_store,
         get_team_capability_settings_store=lambda: settings,
         get_model_reasoning_store=_FakeReasoningStore,
+        get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2352,6 +2427,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
         get_model_reasoning_store=lambda: _FakeReasoningStore(
             {"model__openai__gpt-5.1", "model__mistral__small"}
         ),
+        get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]

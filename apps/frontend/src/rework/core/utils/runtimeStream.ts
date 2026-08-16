@@ -18,7 +18,7 @@
 // Keycloak) so both paths share one frame reader and one context-merge rule and
 // cannot drift apart when runtime event handling changes.
 
-import type { RuntimeContext, TeamOperationRouteRule } from "../../../slices/runtime/runtimeOpenApi";
+import type { RuntimeContext } from "../../../slices/runtime/runtimeOpenApi";
 
 /**
  * Iterate the JSON `data:` frames of a runtime/ingestion SSE response body.
@@ -90,20 +90,26 @@ export function mergeContextPromptText(
  * value is present, so an absent policy never overwrites the context with
  * null/empty.
  *
- * Typed against the generated `RuntimeContext`, so a rename of either field
- * on the runtime contract breaks both stream consumers at compile time
- * instead of only the chat path.
+ * The platform-operator chat model binding does NOT ride along here at all:
+ * it is never client-forwarded. The runtime resolves it itself,
+ * trusted, on its own per-turn control-plane lookup — a request-body field
+ * can no longer influence chat model selection or its `usable_model_ids`
+ * exemption.
+ *
+ * Typed against the generated `RuntimeContext`, so a rename of any of these
+ * fields on the runtime contract breaks both stream consumers at compile
+ * time instead of only the chat path.
  */
 export function mergeRoutingPolicy(
   base: Partial<RuntimeContext>,
   chatDefaultProfileId: string | null | undefined,
-  operationRouteRules: TeamOperationRouteRule[] | null | undefined,
+  agentProfileOverrides: Record<string, string> | null | undefined,
 ): RuntimeContext {
   return {
     ...base,
     ...(chatDefaultProfileId != null ? { chat_default_profile_id: chatDefaultProfileId } : {}),
-    ...(operationRouteRules != null && operationRouteRules.length > 0
-      ? { operation_route_rules: operationRouteRules }
+    ...(agentProfileOverrides != null && Object.keys(agentProfileOverrides).length > 0
+      ? { agent_profile_overrides: agentProfileOverrides }
       : {}),
   };
 }

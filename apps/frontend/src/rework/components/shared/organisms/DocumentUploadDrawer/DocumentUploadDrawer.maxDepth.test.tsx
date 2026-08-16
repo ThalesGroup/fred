@@ -52,7 +52,9 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ 
 vi.mock("../../../../../slices/streamDocumentUpload", () => ({
   streamUploadOrProcessDocument: () => Promise.resolve([]),
 }));
-vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({}));
+vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [vi.fn()],
+}));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));

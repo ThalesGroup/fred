@@ -76,7 +76,6 @@ def _context(invoker: AgentInvokerPort) -> _GraphNodeExecutionContext:
         binding=binding,
         services=RuntimeServices(agent_invoker=invoker),
         model=None,
-        model_resolver=None,
         graph_agent_id="caller",
         node_id="node-1",
         allowed_tool_refs=frozenset(),

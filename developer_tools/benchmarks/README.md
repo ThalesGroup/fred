@@ -91,10 +91,11 @@ responseDelay:
 
 ### 2) Point Agentic to the mock server
 
-Edit `agentic-backend/config/configuration_benchmarks.yaml` (or your chosen config):
+Edit the active agent pod's `models_catalog.yaml` and point its selected chat
+profile to the mock server:
 
-- `ai.default_chat_model.settings.base_url: "http://localhost:8383/v1"`
-- `ai.default_language_model.settings.base_url: "http://localhost:8383/v1"`
+- `profiles[].model.settings.base_url: "http://localhost:8383/v1"`
+- `default_profile_by_capability.chat: <that profile id>`
 
 Set `OPENAI_API_KEY` to one of the `apiKeys` in the mock server `config.yaml`.
 
@@ -104,7 +105,7 @@ Example:
 # DO NOT FORGET TO CHANGE THE OPENAI URL IF YOU USE THE MOCK SERVER
 #export OPENAI_API_KEY=key-1
 # export base_url=http://localhost:8383/v1
-export CONFIG_FILE=./agentic-backend/config/configuration_prod.yaml
+export CONFIG_FILE=./apps/fred-agents/config/configuration.yaml
 export OPENAI_API_KEY=key-1
 ```
 

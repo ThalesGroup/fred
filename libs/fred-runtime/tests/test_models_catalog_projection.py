@@ -60,8 +60,8 @@ def _catalog(profiles: tuple[ModelProfile, ...]) -> ModelCatalog:
 
 
 def test_one_entry_per_distinct_provider_and_name() -> None:
-    # Same (provider, name) used by two different routing capabilities
-    # (chat + language) — one admin enablement decision, not two.
+    # Same (provider, name) used by chat and a legacy language profile: one
+    # admin enablement decision, while the chat routing subset stays typed.
     catalog = _catalog(
         (
             _profile("chat.openai.gpt51", capability=ModelCapability.CHAT),
@@ -74,6 +74,8 @@ def test_one_entry_per_distinct_provider_and_name() -> None:
     assert len(entries) == 1
     assert entries[0].provider == "openai"
     assert entries[0].name == "gpt-5.1"
+    assert entries[0].profile_ids == ["chat.openai.gpt51", "language.openai.gpt51"]
+    assert entries[0].chat_profile_ids == ["chat.openai.gpt51"]
 
 
 def test_sibling_profiles_sharing_provider_and_name_are_all_listed() -> None:
@@ -95,6 +97,7 @@ def test_sibling_profiles_sharing_provider_and_name_are_all_listed() -> None:
         "chat.openai.gpt51.default",
         "chat.openai.gpt51.creative",
     ]
+    assert entries[0].chat_profile_ids == entries[0].profile_ids
 
 
 def test_distinct_provider_name_pairs_have_their_own_profile_ids() -> None:
@@ -173,6 +176,7 @@ def test_thinking_profile_ids_is_the_supports_thinking_subset() -> None:
 
     assert len(entries) == 1
     assert entries[0].profile_ids == ["chat.mistral.small", "language.mistral.small"]
+    assert entries[0].chat_profile_ids == ["chat.mistral.small"]
     assert entries[0].thinking_profile_ids == ["chat.mistral.small"]
 
 

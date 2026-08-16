@@ -54,10 +54,6 @@ from typing import Any, cast
 
 import pytest
 from fred_runtime.react.react_message_codec import graph_input_from_react_input
-from fred_runtime.react.react_model_adapter import (
-    REACT_MODEL_OPERATION_ROUTING,
-    infer_react_model_operation_from_messages,
-)
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
@@ -69,7 +65,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.react_contract import ReActInput
-from fred_sdk.contracts.runtime import ChatModelFactoryPort, ExecutionConfig
+from fred_sdk.contracts.runtime import ExecutionConfig
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -196,10 +192,7 @@ async def test_hitl_resume_identity_model_against_real_langgraph_and_sql_checkpo
                 enabled=True, always_require_tools=("update_ticket",)
             ),
             checkpointer=cast(Checkpointer, checkpointer),
-            chat_model_factory=cast(ChatModelFactoryPort | None, None),
             definition=cast(ReActAgentDefinition, _FakeDefinition()),
-            infer_operation_from_messages=infer_react_model_operation_from_messages,
-            default_operation=REACT_MODEL_OPERATION_ROUTING,
             available_tool_names={"update_ticket"},
         )
         thread_id = "t-2216-integration"

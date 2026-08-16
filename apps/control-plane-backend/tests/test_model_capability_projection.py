@@ -89,6 +89,7 @@ async def test_carries_thinking_profile_ids_through_the_projection(
                 "provider": "openai",
                 "name": "mistral-small-latest",
                 "profile_ids": ["chat.mistral.small", "language.mistral.small"],
+                "chat_profile_ids": ["chat.mistral.small"],
                 "thinking_profile_ids": ["chat.mistral.small"],
             },
             {
@@ -113,11 +114,13 @@ async def test_carries_thinking_profile_ids_through_the_projection(
         "chat.mistral.small",
         "language.mistral.small",
     )
+    assert entries[0].model_chat_profile_ids == ("chat.mistral.small",)
     assert entries[0].model_thinking_profile_ids == ("chat.mistral.small",)
     # A pod that advertises no thinking profiles for a model (or a pre-REASON-01
     # pod that never sends the key) reads as "cannot reason" — no toggle, which
     # is the safe direction (§5.6).
     assert entries[1].model_thinking_profile_ids == ()
+    assert entries[1].model_chat_profile_ids == ()
 
 
 @pytest.mark.asyncio

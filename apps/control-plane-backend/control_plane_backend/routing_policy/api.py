@@ -24,20 +24,28 @@ from control_plane_backend.product.dependencies import (
     get_product_service_dependencies,
 )
 from control_plane_backend.routing_policy.schemas import (
-    AmbiguousOperationRuleError,
     AvailableModelProfileList,
-    DuplicateOperationRuleError,
-    DuplicateRuleIdError,
+    PlatformModelBinding,
     ProfileNotUsableError,
+    SetPlatformModelBindingRequest,
     TeamRoutingPolicy,
     UnknownProfileError,
     UpdateTeamRoutingPolicyRequest,
+)
+from control_plane_backend.routing_policy.service import (
+    delete_platform_model_binding as delete_platform_model_binding_from_service,
+)
+from control_plane_backend.routing_policy.service import (
+    get_platform_model_binding as get_platform_model_binding_from_service,
 )
 from control_plane_backend.routing_policy.service import (
     get_team_routing_policy as get_team_routing_policy_from_service,
 )
 from control_plane_backend.routing_policy.service import (
     list_available_model_profiles as list_available_model_profiles_from_service,
+)
+from control_plane_backend.routing_policy.service import (
+    set_platform_model_binding as set_platform_model_binding_from_service,
 )
 from control_plane_backend.routing_policy.service import (
     update_team_routing_policy as update_team_routing_policy_from_service,
@@ -60,24 +68,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(UnknownProfileError)
     async def unknown_profile_handler(
         _request, exc: UnknownProfileError
-    ) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
-
-    @app.exception_handler(DuplicateOperationRuleError)
-    async def duplicate_operation_rule_handler(
-        _request, exc: DuplicateOperationRuleError
-    ) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
-
-    @app.exception_handler(DuplicateRuleIdError)
-    async def duplicate_rule_id_handler(
-        _request, exc: DuplicateRuleIdError
-    ) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
-
-    @app.exception_handler(AmbiguousOperationRuleError)
-    async def ambiguous_operation_rule_handler(
-        _request, exc: AmbiguousOperationRuleError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
@@ -122,3 +112,50 @@ async def update_team_routing_policy(
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamRoutingPolicy:
     return await update_team_routing_policy_from_service(user, team_id, request, deps)
+
+
+@router.get(
+    "/admin/platform/model-bindings",
+    response_model=PlatformModelBinding,
+    response_model_exclude_none=True,
+    tags=["PlatformModelRouting"],
+    summary="Get the platform-wide chat model binding (org admin, V1 chat-only).",
+)
+async def get_platform_model_binding(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PlatformModelBinding:
+    return await get_platform_model_binding_from_service(user=user, deps=deps)
+
+
+@router.put(
+    "/admin/platform/model-bindings",
+    response_model=PlatformModelBinding,
+    response_model_exclude_none=True,
+    tags=["PlatformModelRouting"],
+    summary="Set the platform-wide chat model binding (org admin, V1 chat-only).",
+)
+async def put_platform_model_binding(
+    request: SetPlatformModelBindingRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PlatformModelBinding:
+    return await set_platform_model_binding_from_service(
+        user=user,
+        binding=request.binding,
+        deps=deps,
+    )
+
+
+@router.delete(
+    "/admin/platform/model-bindings",
+    response_model=PlatformModelBinding,
+    response_model_exclude_none=True,
+    tags=["PlatformModelRouting"],
+    summary="Unset the platform-wide chat model binding (org admin, V1 chat-only).",
+)
+async def delete_platform_model_binding(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PlatformModelBinding:
+    return await delete_platform_model_binding_from_service(user=user, deps=deps)

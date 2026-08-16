@@ -20,7 +20,9 @@ from control_plane_backend.config.loader import load_configuration
 # Import Base and every ORM model so they all register with Base.metadata
 # before autogenerate inspects it.  These imports must stay here (not in
 # control_plane_backend/models/__init__.py) to avoid circular imports at runtime.
-from control_plane_backend.models.base import Base
+from control_plane_backend.models.platform_model_binding_models import (
+    PlatformModelBindingRow,
+)
 from fred_core.models.base import Base as CoreBase
 from fred_core.sql import make_alembic_env
 from fred_core.users.user_models import UserRow  # noqa: F401
@@ -34,7 +36,7 @@ if config.config_file_name is not None:
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
     # Both metadata objects so autogenerate sees CPB tables and shared task tables.
-    target_metadata=[Base.metadata, CoreBase.metadata],
+    target_metadata=[PlatformModelBindingRow.metadata, CoreBase.metadata],
     get_postgres_config=lambda: load_configuration().storage.postgres,
     version_table="alembic_version_control_plane",
 )

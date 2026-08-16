@@ -94,9 +94,9 @@ describe("mergeRoutingPolicy", () => {
     });
   });
 
-  it("adds operation_route_rules when non-empty", () => {
-    const rules = [{ rule_id: "r1", operation: "planning", target_profile_id: "chat.openai.gpt5" }];
-    expect(mergeRoutingPolicy({}, null, rules)).toEqual({ operation_route_rules: rules });
+  it("adds agent_profile_overrides when non-empty", () => {
+    const overrides = { mindmap: "chat.openai.gpt5" };
+    expect(mergeRoutingPolicy({}, null, overrides)).toEqual({ agent_profile_overrides: overrides });
   });
 
   it("omits both keys when neither is present", () => {
@@ -108,8 +108,17 @@ describe("mergeRoutingPolicy", () => {
     });
   });
 
-  it("omits operation_route_rules when the array is empty", () => {
-    expect(mergeRoutingPolicy({}, null, [])).toEqual({});
+  it("omits agent_profile_overrides when the object is empty", () => {
+    expect(mergeRoutingPolicy({}, null, {})).toEqual({});
+  });
+
+  it("carries chat_default_profile_id alongside agent_profile_overrides", () => {
+    const overrides = { mindmap: "chat.openai.gpt5" };
+    expect(mergeRoutingPolicy({ search_policy: "hybrid" }, "chat.openai.gpt5", overrides)).toEqual({
+      search_policy: "hybrid",
+      chat_default_profile_id: "chat.openai.gpt5",
+      agent_profile_overrides: overrides,
+    });
   });
 });
 
