@@ -239,7 +239,7 @@ class ModelBindingSettings(FrozenModel):
     - Generation behavior (all OpenAI-compatible providers):
       `temperature`, `max_tokens` (must be positive), `top_p` (0-1),
       `max_retries` (>= 0), `streaming`, `stream_usage`, `request_timeout`
-      (>= 0)
+      (>= 0), `reasoning_effort` (non-empty provider-native value)
 
     A provider with additional required settings (`azure-openai`,
     `azure-apim`, `vertex-ai`, `vertex-ai-model-garden`) is enforced by
@@ -266,6 +266,7 @@ class ModelBindingSettings(FrozenModel):
     streaming: bool | None = Field(default=None, strict=True)
     stream_usage: bool | None = Field(default=None, strict=True)
     request_timeout: _StrictNonNegativeFiniteFloat | None = None
+    reasoning_effort: str | None = Field(default=None, strict=True, min_length=1)
 
 
 # Extra settings `fred_core.model.factory.get_model()` requires per provider

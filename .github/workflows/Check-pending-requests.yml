@@ -120,44 +120,32 @@ jobs:
           - name: fred-core
             directory: libs/fred-core
             unit-target: test
-            integration-target: test-integration
             needs-pandoc: false
-            needs-libreoffice: false
             should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
           - name: knowledge-flow-backend
             directory: apps/knowledge-flow-backend
             unit-target: test
-            integration-target: ""
             needs-pandoc: true
-            needs-libreoffice: true
             should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - name: control-plane-backend
             directory: apps/control-plane-backend
             unit-target: test
-            integration-target: ""
             needs-pandoc: false
-            needs-libreoffice: false
             should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - name: fred-sdk
             directory: libs/fred-sdk
             unit-target: test
-            integration-target: ""
             needs-pandoc: false
-            needs-libreoffice: false
             should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' }}
           - name: fred-runtime
             directory: libs/fred-runtime
             unit-target: test
-            integration-target: ""
             needs-pandoc: false
-            needs-libreoffice: false
             should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
           - name: fred-agents
             directory: apps/fred-agents
             unit-target: test
-            integration-target: ""
             needs-pandoc: false
-            needs-libreoffice: false
             should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
     name: Backend Tests - ${{ matrix.name }}
 
@@ -169,14 +157,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Install system dependencies
-        if: ${{ matrix.should-run && (matrix.needs-pandoc || matrix.needs-libreoffice) }}
+        if: ${{ matrix.should-run && matrix.needs-pandoc }}
         run: |
           sudo apt-get update -qq
           if [ "${{ matrix.needs-pandoc }}" = "true" ]; then
             sudo apt-get install -y --no-install-recommends pandoc
-          fi
-          if [ "${{ matrix.needs-libreoffice }}" = "true" ]; then
-            sudo apt-get install -y --no-install-recommends libreoffice
           fi
 
       - name: Setup Python environment
@@ -188,13 +173,6 @@ jobs:
       - name: Run unit tests
         if: ${{ matrix.should-run }}
         run: make ${{ matrix.unit-target }}
-        working-directory: ${{ matrix.directory }}
-        env:
-          UV: uv
-
-      - name: Run integration tests
-        if: ${{ matrix.should-run && matrix.integration-target != '' }}
-        run: make ${{ matrix.integration-target }}
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv

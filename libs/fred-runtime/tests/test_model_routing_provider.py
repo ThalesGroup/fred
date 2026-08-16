@@ -53,6 +53,7 @@ from fred_runtime.model_routing.contracts import (
 )
 from fred_runtime.model_routing.provider import ModelProvider, RoutedChatModelFactory
 from fred_runtime.model_routing.resolver import ModelRoutingResolver
+from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ModelBinding,
@@ -345,6 +346,34 @@ class TestSelectPlatformBindingBypass:
 
 
 class TestBuildForChatUsableModelIdsGateSkip:
+    def test_platform_binding_preserves_reasoning_when_enabled(self) -> None:
+        """A platform binding is the complete model configuration for this
+        selection path, so its typed reasoning setting must reach the provider
+        when the platform reasoning toggle enables that concrete model."""
+        binding_model = ModelBinding.model_validate(
+            {
+                "provider": "openai",
+                "name": "gpt-5",
+                "settings": {"reasoning_effort": "high"},
+            }
+        )
+        provider = _RecordingProvider()
+        factory = _factory(resolver=_RaisingResolver(), provider=provider)
+
+        factory.build_for_chat(
+            definition=_agent_definition(),
+            binding=_binding(
+                runtime_context=RuntimeContext(
+                    reasoning_enabled_model_ids=[model_capability_id("openai", "gpt-5")]
+                ),
+                platform_chat_model_binding=binding_model,
+            ),
+        )
+
+        built_config, _ = provider.calls[0]
+        assert built_config.settings is not None
+        assert built_config.settings["reasoning_effort"] == "high"
+
     def test_platform_binding_bypasses_empty_usable_model_ids(self) -> None:
         """THE critical gate-bypass regression test. Without the
         `selection.source != PLATFORM_BINDING` guard in `build_for_chat`,

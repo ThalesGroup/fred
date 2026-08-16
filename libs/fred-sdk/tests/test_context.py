@@ -382,6 +382,7 @@ def test_model_binding_settings_preserves_json_types_round_trip() -> None:
                 "max_tokens": 4096,
                 "temperature": 0.2,
                 "azure_openai_api_version": "2024-05-01",
+                "reasoning_effort": "high",
             },
         }
     )
@@ -391,6 +392,7 @@ def test_model_binding_settings_preserves_json_types_round_trip() -> None:
         "max_tokens": 4096,
         "temperature": 0.2,
         "azure_openai_api_version": "2024-05-01",
+        "reasoning_effort": "high",
     }
     assert isinstance(dumped["streaming"], bool)
     assert isinstance(dumped["max_tokens"], int)
