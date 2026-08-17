@@ -237,8 +237,6 @@ def _build(
             reasoning_enabled_model_ids,
             reasoning=reasoning,
         ),
-        purpose="chat",
-        operation=None,
     )
     assert selection.profile_id == "chat.mistral.small"
     return _outbound_params(model)

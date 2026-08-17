@@ -21,36 +21,31 @@ This file is intentionally "product-first": read it as a data contract for
 Minimal mental model:
 
 1. A `ModelProfile` is a named model configuration.
-2. A `ModelRouteRule` says "when criteria match, use `target_profile_id`".
-3. A `ModelRoutingPolicy` contains defaults + profiles + ordered rules.
+2. A `ModelRoutingPolicy` has a default profile per capability, plus an
+   optional per-agent override.
 
-Concrete scenario (team-a, R1/R2 ReAct, G1 Graph):
+Concrete scenario:
 
-- Team-wide ReAct routing:
-  `team_id=team-a`, `purpose=chat`, `operation=routing`
-  -> `chat.ollama.mistral`
-- Team-wide ReAct planning:
-  `team_id=team-a`, `purpose=chat`, `operation=planning`
-  -> `default.chat.openai.prod`
-- Graph G1 specific JSON validation:
-  `team_id=team-a`, `agent_id=internal.graph.g1`,
-  `purpose=chat`, `operation=json_validation_fc`
-  -> `chat.azure_apim.gpt4o`
+- Team-wide chat default: `default_profile_by_capability["chat"]` ->
+  `chat.ollama.mistral`
+- One agent needs a stronger model: `agent_profile_overrides["mindmap"]` ->
+  `chat.azure_apim.gpt4o`
 """
 
 from __future__ import annotations
 
 from enum import Enum
-from typing import TypeAlias
 
 from fred_core.common import ModelConfiguration
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from fred_sdk.contracts.context import FrozenModel, ModelCapability
+from pydantic import Field, model_validator
 
-
-class FrozenModel(BaseModel):
-    """Strict immutable base model for routing contracts."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
+# `FrozenModel` and `ModelCapability` are canonically defined in
+# `fred_sdk.contracts.context` (relocated there so control-plane, which
+# depends on fred_sdk but not fred_runtime, can speak `ModelCapability` too).
+# Imported and re-exported here unchanged so every existing
+# `from .contracts import ModelCapability` / `from fred_runtime.model_routing
+# import ModelCapability` caller keeps working without modification.
 
 
 class ModelNotUsableError(RuntimeError):
@@ -77,23 +72,34 @@ class ModelNotUsableError(RuntimeError):
 
 
 class TeamRoutingProfileDriftError(RuntimeError):
-    """Raised when a team's routing policy (`RuntimeContext.chat_default_profile_id`
-    / `.operation_route_rules`, `TEAM-ROUTING-POLICY-RFC.md` §8.3-8.4) references a
-    `target_profile_id` absent from this runtime deployment's catalog. Deliberately
-    never falls back to another profile — control-plane and this pod's
-    `models_catalog.yaml` have drifted, and silently picking a different model
-    would hide that rather than surface it."""
+    """Raised when a team policy profile is absent or has the wrong capability.
 
-    def __init__(self, *, profile_id: str) -> None:
+    Deliberately never falls back to another profile: control-plane and this
+    pod's catalog have drifted, and silently picking a different model would
+    hide the invalid stored policy.
+    """
+
+    def __init__(
+        self,
+        *,
+        profile_id: str,
+        expected_capability: ModelCapability | None = None,
+        actual_capability: ModelCapability | None = None,
+    ) -> None:
         self.profile_id = profile_id
+        self.expected_capability = expected_capability
+        self.actual_capability = actual_capability
+        if expected_capability is not None and actual_capability is not None:
+            super().__init__(
+                f"Team routing policy references profile {profile_id!r} with "
+                f"capability {actual_capability.value!r}; expected "
+                f"{expected_capability.value!r}."
+            )
+            return
         super().__init__(
             f"Team routing policy references profile {profile_id!r}, which is not "
             "in this runtime deployment's model catalog."
         )
-
-
-# One criterion can be a single exact value or a tuple of allowed values.
-MatchValue: TypeAlias = str | tuple[str, ...]
 
 
 # Provider-passthrough keys inside `ModelConfiguration.settings` that turn
@@ -117,8 +123,8 @@ def without_reasoning_settings(model: ModelConfiguration) -> ModelConfiguration:
     (`AGENT-THINKING-API-RFC.md` §C.8, "Never reaches the model").
 
     Returns the SAME object when there is nothing to strip. This runs on the
-    per-operation model-build path, and the overwhelmingly common case is a
-    profile with no reasoning setting at all — no copy, no allocation for it.
+    model-build path, and the overwhelmingly common case is a profile with no
+    reasoning setting at all — no copy, no allocation for it.
     """
 
     settings = model.settings
@@ -133,86 +139,6 @@ def without_reasoning_settings(model: ModelConfiguration) -> ModelConfiguration:
             }
         }
     )
-
-
-def _validate_match_value(*, field_name: str, value: MatchValue | None) -> None:
-    if value is None:
-        return
-    if isinstance(value, str):
-        if not value.strip():
-            raise ValueError(
-                f"ModelRouteMatch.{field_name} must be a non-empty string when provided."
-            )
-        return
-    if not value:
-        raise ValueError(
-            f"ModelRouteMatch.{field_name} must not be an empty tuple when provided."
-        )
-    for item in value:
-        if not isinstance(item, str) or not item.strip():
-            raise ValueError(
-                f"ModelRouteMatch.{field_name} tuple items must be non-empty strings."
-            )
-
-
-class ModelRouteMatch(FrozenModel):
-    """
-    Match criteria for one routing rule.
-
-    Semantics:
-    - any field left as `None` means wildcard ("any")
-    - all provided fields are combined with logical AND
-    - tuple values mean "one-of"
-
-    Typical examples:
-    - team-wide ReAct routing:
-      `team_id="team-a", purpose="chat", operation="routing"`
-    - one specific Graph operation:
-      `team_id="team-a", agent_id="internal.graph.g1",
-      purpose="chat", operation="json_validation_fc"`
-    """
-
-    purpose: MatchValue | None = None
-    agent_id: MatchValue | None = None
-    team_id: MatchValue | None = None
-    user_id: MatchValue | None = None
-    operation: MatchValue | None = None
-
-    def defined_criteria_count(self) -> int:
-        return sum(
-            1
-            for value in (
-                self.purpose,
-                self.agent_id,
-                self.team_id,
-                self.user_id,
-                self.operation,
-            )
-            if value is not None
-        )
-
-    @model_validator(mode="after")
-    def validate_match_values(self) -> "ModelRouteMatch":
-        _validate_match_value(field_name="purpose", value=self.purpose)
-        _validate_match_value(field_name="agent_id", value=self.agent_id)
-        _validate_match_value(field_name="team_id", value=self.team_id)
-        _validate_match_value(field_name="user_id", value=self.user_id)
-        _validate_match_value(field_name="operation", value=self.operation)
-        return self
-
-
-class ModelCapability(str, Enum):
-    """
-    Capability = technical model family.
-
-    Use this to express what type of model client is required:
-    chat, language, embedding, or image.
-    """
-
-    CHAT = "chat"
-    LANGUAGE = "language"
-    EMBEDDING = "embedding"
-    IMAGE = "image"
 
 
 class ModelProfile(FrozenModel):
@@ -285,110 +211,6 @@ class ModelProfile(FrozenModel):
         return self
 
 
-class ModelRouteRule(FrozenModel):
-    """
-    One routing decision rule.
-
-    Reads as:
-    "If rule criteria apply and `capability` matches, then use
-    `target_profile_id`."
-
-    Supported catalog formats:
-    - Preferred flat format:
-      `operation` (required) + optional criteria (`purpose`, `agent_id`,
-      `team_id`, `user_id`) at rule root.
-    - Legacy format:
-      `match: { ... }` block.
-
-    Transition behavior:
-    - both formats are accepted;
-    - when both are present, criteria are merged and conflicting values fail
-      fast.
-
-    Notes:
-    - `rule_id` is only a stable technical identifier.
-    - Catch-all rules are not allowed here. Global fallback belongs to
-      `default_profile_by_capability` in `ModelRoutingPolicy`.
-    """
-
-    rule_id: str = Field(..., min_length=1)
-    capability: ModelCapability
-    target_profile_id: str = Field(..., min_length=1)
-    purpose: MatchValue | None = None
-    agent_id: MatchValue | None = None
-    team_id: MatchValue | None = None
-    user_id: MatchValue | None = None
-    operation: MatchValue | None = None
-    match: ModelRouteMatch = Field(default_factory=ModelRouteMatch)
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_rule_shape(cls, value: object) -> object:
-        if not isinstance(value, dict):
-            return value
-
-        payload = dict(value)
-        criteria_fields = ("purpose", "agent_id", "team_id", "user_id", "operation")
-        merged_criteria: dict[str, MatchValue] = {}
-
-        for field_name in criteria_fields:
-            field_value = payload.get(field_name)
-            if field_value is not None:
-                merged_criteria[field_name] = field_value
-
-        match_value = payload.get("match")
-        if isinstance(match_value, ModelRouteMatch):
-            match_payload = match_value.model_dump(exclude_none=True)
-        elif isinstance(match_value, dict):
-            match_payload = {
-                field_name: field_value
-                for field_name, field_value in match_value.items()
-                if field_value is not None
-            }
-        elif match_value is None:
-            match_payload = {}
-        else:
-            # Let Pydantic emit the type validation error for malformed `match`.
-            return payload
-
-        for field_name in criteria_fields:
-            if field_name not in match_payload:
-                continue
-            existing = merged_criteria.get(field_name)
-            incoming = match_payload[field_name]
-            if existing is not None and existing != incoming:
-                raise ValueError(
-                    f"ModelRouteRule has conflicting values for '{field_name}' between root and match."
-                )
-            merged_criteria[field_name] = incoming
-
-        # Flat-shape guardrail: once criteria are provided at rule root, operation
-        # must be explicit to avoid broad rules that are hard to reason about.
-        root_criteria_present = any(
-            payload.get(name) is not None for name in criteria_fields
-        )
-        if root_criteria_present and merged_criteria.get("operation") is None:
-            raise ValueError(
-                "ModelRouteRule flat format requires 'operation' at rule root."
-            )
-
-        if merged_criteria:
-            payload["match"] = merged_criteria
-            for field_name in criteria_fields:
-                payload[field_name] = merged_criteria.get(field_name)
-
-        return payload
-
-    @model_validator(mode="after")
-    def validate_non_empty_match(self) -> "ModelRouteRule":
-        if self.match.defined_criteria_count() == 0:
-            raise ValueError(
-                f"ModelRouteRule {self.rule_id!r} has no criteria. "
-                "Use default_profile_id for catch-all behavior."
-            )
-        return self
-
-
 class ModelRoutingPolicy(FrozenModel):
     """
     Complete routing policy.
@@ -396,16 +218,17 @@ class ModelRoutingPolicy(FrozenModel):
     Contains:
     - `default_profile_by_capability`: fallback profile per capability
     - `profiles`: known profile definitions
-    - `rules`: ordered explicit overrides
-
-    Rule resolution order (see resolver):
-    1. most specific match (more defined criteria)
-    2. first declared rule in `rules` when specificity is tied
+    - `agent_profile_overrides`: optional `agent_id -> profile_id` override,
+      the ops-level escape hatch equivalent of a team's own routing policy
+      (`RuntimeContext.agent_profile_overrides`). An override only applies
+      when it exists for the requested `agent_id` and the referenced
+      profile's capability matches the request; otherwise resolution falls
+      through to the capability default.
     """
 
     default_profile_by_capability: dict[ModelCapability, str]
     profiles: tuple[ModelProfile, ...]
-    rules: tuple[ModelRouteRule, ...] = ()
+    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_references(self) -> "ModelRoutingPolicy":
@@ -426,24 +249,17 @@ class ModelRoutingPolicy(FrozenModel):
                     f"default profile {profile_id!r} has capability={profile.capability.value!r}, "
                     f"expected capability={capability.value!r}."
                 )
-        for rule in self.rules:
-            if rule.target_profile_id not in known:
+        for agent_id, profile_id in self.agent_profile_overrides.items():
+            if not agent_id.strip():
                 raise ValueError(
-                    f"Rule {rule.rule_id!r} targets unknown profile_id={rule.target_profile_id!r}."
+                    "ModelRoutingPolicy.agent_profile_overrides keys must be "
+                    "non-empty agent ids."
                 )
-            profile = next(
-                profile
-                for profile in self.profiles
-                if profile.profile_id == rule.target_profile_id
-            )
-            if profile.capability != rule.capability:
+            if profile_id not in known:
                 raise ValueError(
-                    f"Rule {rule.rule_id!r} capability={rule.capability.value!r} targets "
-                    f"profile capability={profile.capability.value!r}."
+                    f"agent_profile_overrides[{agent_id!r}] targets unknown "
+                    f"profile_id={profile_id!r}."
                 )
-        rule_ids = [rule.rule_id for rule in self.rules]
-        if len(set(rule_ids)) != len(rule_ids):
-            raise ValueError("ModelRoutingPolicy.rules must have unique rule_id.")
         return self
 
 
@@ -452,36 +268,29 @@ class ModelSelectionRequest(FrozenModel):
     Runtime input passed to the resolver for one model call.
 
     This is emitted by runtimes per invocation with contextual dimensions:
-    `capability`, `purpose`, `agent_id`, `team_id`, `user_id`, `operation`.
+    `capability`, `agent_id`. `team_id` is deliberately not a matching
+    dimension here — the static `agent_profile_overrides` policy is
+    deployment-wide, not per-team; per-team routing is the separate
+    `resolve_team_override` pass (`RuntimeContext.agent_profile_overrides`).
     """
 
     capability: ModelCapability
-    purpose: str = Field(..., min_length=1)
     agent_id: str | None = None
-    team_id: str | None = None
-    user_id: str | None = None
-    operation: str | None = None
 
 
 class ModelSelectionSource(str, Enum):
     """Where the final selection came from."""
 
     DEFAULT = "default"
-    RULE = "rule"
+    AGENT_OVERRIDE = "agent_override"
     TEAM_POLICY = "team_policy"
+    PLATFORM_BINDING = "platform_binding"
 
 
 class ModelSelection(FrozenModel):
-    """
-    Resolver decision with audit metadata.
-
-    `matched_criteria` is useful in traces/debugging to understand why one rule
-    won against others.
-    """
+    """Resolver decision with audit metadata."""
 
     source: ModelSelectionSource
     capability: ModelCapability
     profile_id: str
     model: ModelConfiguration
-    rule_id: str | None = None
-    matched_criteria: int = Field(default=0, ge=0)

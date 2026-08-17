@@ -20,12 +20,9 @@ from .catalog import (
 )
 from .contracts import (
     FrozenModel,
-    MatchValue,
     ModelCapability,
     ModelNotUsableError,
     ModelProfile,
-    ModelRouteMatch,
-    ModelRouteRule,
     ModelRoutingPolicy,
     ModelSelection,
     ModelSelectionRequest,
@@ -37,13 +34,10 @@ from .resolver import ModelRoutingResolver
 __all__ = [
     "FredCoreModelProvider",
     "FrozenModel",
-    "MatchValue",
     "ModelCapability",
     "ModelCatalog",
     "ModelNotUsableError",
     "ModelProfile",
-    "ModelRouteMatch",
-    "ModelRouteRule",
     "ModelRoutingPolicy",
     "ModelRoutingResolver",
     "ModelSelection",

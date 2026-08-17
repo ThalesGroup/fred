@@ -96,6 +96,7 @@ from control_plane_backend.prompts.store import (
 )
 from control_plane_backend.routing_policy.service import (
     resolve_execution_routing_snapshot,
+    resolve_platform_chat_model_binding,
 )
 from control_plane_backend.scheduler.policies.policy_models import (
     duration_to_seconds,
@@ -392,7 +393,7 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
 # tool/agent/model fetches, `compute_capability_impact`'s
 # `_available_capability_ids_by_source`, and (since MDL-2)
 # `routing_policy.service`'s `aggregate_capability_catalog` +
-# `universally_available_model_profile_ids` pair — each fetch the SAME pod's
+# `universally_available_chat_model_profile_ids` pair — each fetch the SAME pod's
 # `/agents/templates` or `/agents/models-catalog` with the same arguments — a
 # real, uncached HTTP round-trip every time. A `ContextVar` per fetch kind
 # (not a parameter threaded through every function in the chain — that would
@@ -808,6 +809,11 @@ async def _model_capabilities_for_source_uncached(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(entry.get("profile_ids") or ()),
+            # Team routing is chat-only. Preserve the pod-authored capability
+            # projection instead of deriving it from a profile-id naming
+            # convention. Missing on an older pod means no chat profile is
+            # certified there, which makes writes fail closed during rollout.
+            model_chat_profile_ids=tuple(entry.get("chat_profile_ids") or ()),
             # REASON-01 §5.3 — the pod derives this subset from each profile's
             # `supports_thinking`; control-plane carries it verbatim, exactly
             # like `profile_ids` above. Absent on a pre-REASON-01 pod, which
@@ -3236,10 +3242,20 @@ async def prepare_execution(
     # (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5), for the same
     # reason — the runtime must not do a live lookup per turn. Deliberately NOT
     # filtered against this team's usable models: reasoning is global, and the
-    # runtime keys on the model it actually resolves. Two independent reads, so
-    # gathered rather than chained — this is a user-facing send path.
+    # runtime keys on the model it actually resolves.
+    #
+    # The platform-operator chat model binding is deliberately NOT resolved
+    # here: unlike the two snapshots above, it must never be a client-forwarded,
+    # session-open value — it is resolved fresh on every turn by the runtime's
+    # own per-turn `ManagedAgentRuntimeBinding` lookup (`get_runtime_binding_for_team`
+    # below), the same trust boundary as `reasoning_enabled_model_ids` there.
+    # Two independent reads, so gathered rather than chained — this is a
+    # user-facing send path.
     (
-        (chat_default_profile_id, operation_route_rules),
+        (
+            chat_default_profile_id,
+            agent_profile_overrides,
+        ),
         reasoning_display_by_model,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
@@ -3273,7 +3289,7 @@ async def prepare_execution(
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
         chat_default_profile_id=chat_default_profile_id,
-        operation_route_rules=operation_route_rules,
+        agent_profile_overrides=agent_profile_overrides,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
         max_chat_input_chars=max_chat_input_chars,
     )
@@ -3301,6 +3317,14 @@ async def get_runtime_binding_for_team(
       is the one place that can hand back a trustworthy reasoning toggle at no
       extra round-trip cost — see
       `ManagedAgentRuntimeBinding.reasoning_enabled_model_ids`.
+    - Same reasoning for the platform-operator `chat` model binding
+      (`ManagedAgentRuntimeBinding.platform_chat_model_binding`): it must be
+      resolved fresh, trusted, on every turn (including HITL resume) rather
+      than trusted from a client-forwarded, session-open snapshot — the
+      request-forgery and stale-session risk this endpoint's ReBAC-gated,
+      server-to-server nature exists to close. This call is already
+      per-turn, so adding it costs one more cheap, independent store read,
+      not a new round trip.
 
     How to use it:
     - call from the team-scoped resolution endpoint after a team ReBAC check
@@ -3314,12 +3338,17 @@ async def get_runtime_binding_for_team(
     # slices for the capabilities this instance actually selected (CAPAB-01 /
     # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
     selected = set(instance.tuning.selected_capability_ids or [])
-    # Independent reads (neither depends on the other's result) — run
-    # concurrently rather than stacking two sequential DB round trips on the
-    # per-turn runtime-binding path (2026-08-04, PR #2204 review).
-    all_team_settings, reasoning_enabled_model_ids = await asyncio.gather(
+    # Independent reads (none depends on another's result) — run concurrently
+    # rather than stacking sequential DB round trips on the per-turn
+    # runtime-binding path (2026-08-04, PR #2204 review).
+    (
+        all_team_settings,
+        reasoning_enabled_model_ids,
+        platform_chat_model_binding,
+    ) = await asyncio.gather(
         deps.get_team_capability_settings_store().list_for_team(team_id),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
+        resolve_platform_chat_model_binding(deps),
     )
     team_capability_settings = {
         cap_id: settings
@@ -3335,6 +3364,7 @@ async def get_runtime_binding_for_team(
         tuning=instance.tuning,
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
+        platform_chat_model_binding=platform_chat_model_binding,
     )
 
 

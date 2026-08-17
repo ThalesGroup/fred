@@ -125,7 +125,6 @@ def _node_context(
         binding=_binding(),
         services=services if services is not None else RuntimeServices(),
         model=None,
-        model_resolver=None,
         graph_agent_id="graph-agent",
         node_id="node-1",
         allowed_tool_refs=frozenset(),

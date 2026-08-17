@@ -63,7 +63,9 @@ from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
+    BoundRuntimeContext,
     InvocationScope,
+    ModelBinding,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -141,19 +143,40 @@ async def _demo_team_routing(ctx: ToolContext) -> str:
     Return the team routing policy fields bound to the current runtime context.
 
     Why this exists:
-    - control-plane resolves a team's chat_default_profile_id/operation_route_rules
+    - control-plane resolves a team's chat_default_profile_id/agent_profile_overrides
       at prepare-execution and the frontend forwards them unchanged, but the
       runtime rebuilt RuntimeContext from the request and silently dropped both
       fields — so no team's routing policy ever reached model selection
       (fred_runtime.model_routing.provider.resolve_team_override always saw None)
+    - the platform-operator `chat` model binding is different: it is NOT
+      read from `runtime_context` at all — a request
+      body must never be able to set it. It is TRUSTED, resolved by
+      control-plane on the same per-turn `ManagedAgentRuntimeBinding` lookup
+      as the reasoning snapshot, and lands on
+      `ctx.binding.platform_chat_model_binding` — never client-forwarded, so
+      never `none` for a managed turn where the admin has one set and never
+      forgeable via the request body.
 
     How to use it:
     - invoked by the team-routing regression agent through the runtime
     """
 
     rc = ctx.binding.runtime_context
-    rule_ids = ",".join(r.rule_id for r in (rc.operation_route_rules or []))
-    return f"profile:{rc.chat_default_profile_id or 'none'}|rules:{rule_ids or 'none'}"
+    overrides = ",".join(
+        f"{agent_id}={profile_id}"
+        for agent_id, profile_id in (rc.agent_profile_overrides or {}).items()
+    )
+    platform_binding = ctx.binding.platform_chat_model_binding
+    bindings = (
+        f"chat={platform_binding.provider}/{platform_binding.name}"
+        if platform_binding is not None
+        else "none"
+    )
+    return (
+        f"profile:{rc.chat_default_profile_id or 'none'}"
+        f"|overrides:{overrides or 'none'}"
+        f"|bindings:{bindings}"
+    )
 
 
 @tool("demo.reasoning", description="Return the bound reasoning activation snapshot.")
@@ -812,17 +835,24 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
     monkeypatch, tmp_path
 ) -> None:
     """
-    Regression: `runtime_context.chat_default_profile_id`/`operation_route_rules`
-    must reach the agent binding.
+    Regression: `runtime_context.chat_default_profile_id`/`agent_profile_overrides`
+    must reach the agent binding on DIRECT (raw `agent_id`) execution, and the
+    platform-operator chat binding must NOT — the trusted platform binding
+    is scoped to managed agent-instance execution only; direct execution has
+    no per-turn control-plane lookup at all and stays pod-local routing.
 
     Why this exists:
-    - control-plane resolves a team's routing policy at prepare-execution and the
-      frontend forwards it via `runtime_context`, but the runtime rebuilt
-      `RuntimeContext` from the request and silently dropped both fields — so
-      `fred_runtime.model_routing.provider.resolve_team_override` always saw
-      `None`, and no team's routing policy (TEAM-ROUTING-POLICY-RFC.md §3/§8)
-      ever affected a real chat turn's model selection, despite the full
-      control-plane API + frontend settings panel resolving and storing it.
+    - control-plane resolves a team's routing policy at prepare-execution and
+      the frontend forwards it via `runtime_context`, but the runtime once
+      rebuilt `RuntimeContext` from the request and silently dropped both
+      fields — so `fred_runtime.model_routing.provider`'s team-override
+      resolution always saw nothing bound.
+    - a forged `platform_model_bindings` key on the request body below is not
+      even a valid `RuntimeContext` field anymore (that field was removed
+      entirely once the platform binding became a trusted, runtime-resolved
+      value) — pydantic silently ignores it — proving a direct-execution
+      caller has no way to influence chat model selection via a platform
+      binding at all.
 
     How to use it:
     - run via the default offline `make test` suite in `fred-runtime`
@@ -863,13 +893,16 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
                 "runtime_context": {
                     "user_id": "alice",
                     "chat_default_profile_id": "chat.anthropic.claude-sonnet",
-                    "operation_route_rules": [
-                        {
-                            "rule_id": "planning-to-haiku",
-                            "operation": "planning",
-                            "target_profile_id": "chat.anthropic.claude-haiku",
-                        }
-                    ],
+                    "agent_profile_overrides": {
+                        "rags.sample.team_routing": "chat.anthropic.claude-haiku"
+                    },
+                    # Forged: no longer a valid RuntimeContext field at all —
+                    # a direct-execution caller trying the old attack (or a
+                    # stale client) must have this silently ignored, not
+                    # reach the binding.
+                    "platform_model_bindings": {
+                        "chat": {"provider": "attacker", "name": "forged-model"}
+                    },
                 },
             },
         )
@@ -883,10 +916,13 @@ def test_execute_forwards_team_routing_policy_to_agent_binding(
     tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
     assert tool_results, "expected a tool_result event"
     # The tool echoed the bound routing policy — proving both fields survived
-    # the request → RuntimeContext binding (not dropped → not "profile:none").
+    # the request → RuntimeContext binding (not dropped → not
+    # "profile:none"), and that the forged platform binding never reached
+    # the agent at all (direct execution: no trusted per-turn lookup exists).
     echoed = " ".join(p.get("content", "") for p in tool_results)
     assert "profile:chat.anthropic.claude-sonnet" in echoed
-    assert "rules:planning-to-haiku" in echoed
+    assert "overrides:rags.sample.team_routing=chat.anthropic.claude-haiku" in echoed
+    assert "bindings:none" in echoed
 
 
 def _run_managed_reasoning_turn(
@@ -1077,6 +1113,410 @@ def test_agent_with_reasoning_disabled_ignores_platform_activation(
     # Level 4 still travels — it is the user's answer, and it is not this level's
     # job to rewrite it. The empty ceiling above is what makes the turn not reason.
     assert "turn:true" in echoed
+
+
+def test_managed_execution_uses_trusted_platform_chat_binding_not_forged_request(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression / security: a managed turn's platform `chat`
+    model binding must come from control-plane's own per-turn
+    `ManagedAgentRuntimeBinding` response, never from the client-supplied
+    request body — closing the exact gap `platform_model_bindings` used to
+    open when it lived on the client-forwarded `RuntimeContext`: any caller
+    could set it directly and `RoutedChatModelFactory.select()` would honor
+    it unconditionally, including the `usable_model_ids` ReBAC bypass that
+    only a genuine platform binding should get.
+
+    Why this exists:
+    - the fix moved resolution into the runtime's existing per-turn,
+      server-to-server `ManagedAgentRuntimeBinding` lookup — the same trust
+      boundary `reasoning_enabled_model_ids` already crosses (see
+      `_run_managed_reasoning_turn` above) — so a request body can no longer
+      influence it at all, forged field or not.
+    - the fake control-plane response below deliberately returns a
+      DIFFERENT model than the forged request claims, so a test that still
+      somehow read the request's copy fails loudly.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    class _FakeResponse:
+        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+            self._payload = payload
+            self.status_code = status_code
+            self.text = json.dumps(payload)
+            self.reason_phrase = "OK"
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def aclose(self) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            return _FakeResponse(
+                {
+                    "agent_instance_id": "instance-platform-binding",
+                    "template_agent_id": "rags.sample.team_routing",
+                    "owner_scope": "team",
+                    "owner_team_id": "fredlab",
+                    "enabled": True,
+                    "tuning": {
+                        "role": "Team routing probe",
+                        "description": "Reports the team routing policy snapshot it received.",
+                        "tags": [],
+                        "fields": [],
+                    },
+                    # The TRUSTED, control-plane-resolved platform chat
+                    # binding — deliberately different from whatever the
+                    # forged request below claims.
+                    "platform_chat_model_binding": {
+                        "provider": "openai",
+                        "name": "gpt-4o-mini",
+                        "settings": {"temperature": 0.2},
+                    },
+                }
+            )
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-platform-binding-1",
+                        "name": "demo_team_routing",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    definition = _TeamRoutingAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path,
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+        ),
+    )
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/pod/v1/agents/execute/stream",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "agent_instance_id": "instance-platform-binding",
+                "input": "hello",
+                "session_id": "session-platform-binding",
+                "runtime_context": {
+                    "user_id": "alice",
+                    "team_id": "fredlab",
+                    # Forged: no longer a valid RuntimeContext field at all —
+                    # silently ignored by pydantic, and even if it somehow
+                    # reached the binding it names a DIFFERENT model than
+                    # control-plane's fake response above.
+                    "platform_model_bindings": {
+                        "chat": {"provider": "attacker", "name": "forged-model"}
+                    },
+                },
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for line in stream_response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
+    assert tool_results, "expected a tool_result event"
+    echoed = " ".join(p.get("content", "") for p in tool_results)
+    # The trusted control-plane binding reached the agent...
+    assert "bindings:chat=openai/gpt-4o-mini" in echoed
+    # ...and the forged request-body value never did.
+    assert "attacker" not in echoed
+    assert "forged-model" not in echoed
+
+
+def test_managed_hitl_resume_uses_current_trusted_platform_chat_binding(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression / security: HITL resume must resolve the SAME
+    fresh, trusted per-turn platform chat binding as a normal managed turn —
+    there is no session-open snapshot to go stale, because `_authorize_and_resolve`
+    (and therefore the control-plane runtime-binding call) runs identically
+    for `execution_action="resume"` as for a normal execute/stream call. This
+    test calls the resolution helper directly against a fake control-plane
+    response with `execution_action="resume"` set, rather than re-driving a
+    full HITL interrupt/resume cycle (covered elsewhere), to isolate exactly
+    the claim slice 1 makes: resume is not a special or weaker path for this
+    binding.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    class _FakeResponse:
+        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+            self._payload = payload
+            self.status_code = status_code
+            self.text = json.dumps(payload)
+            self.reason_phrase = "OK"
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def aclose(self) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            return _FakeResponse(
+                {
+                    "agent_instance_id": "instance-platform-binding-resume",
+                    "template_agent_id": "rags.sample.team_routing",
+                    "owner_scope": "team",
+                    "owner_team_id": "fredlab",
+                    "enabled": True,
+                    "tuning": {
+                        "role": "Team routing probe",
+                        "description": "Reports the team routing policy snapshot it received.",
+                        "tags": [],
+                        "fields": [],
+                    },
+                    "platform_chat_model_binding": {
+                        "provider": "openai",
+                        "name": "resume-model",
+                        "settings": {},
+                    },
+                }
+            )
+
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    definition = _TeamRoutingAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+
+    async def _resolve() -> agent_app_module._ResolvedExecutionTarget:
+        request = agent_app_module._AgentExecuteRequest(
+            agent_instance_id="instance-platform-binding-resume",
+            context={"execution_action": "resume"},
+            resume_payload={"approved": True, "exchange_id": "ex-resume-1"},
+        )
+        async with agent_app_module.httpx.AsyncClient() as http_client:
+            return await agent_app_module._resolve_agent_instance(
+                request=request,
+                registry=registry,
+                access_token="test-token",
+                control_plane_url="http://control-plane:8222/control-plane/v1",
+                http_client=http_client,
+                team_id="fredlab",
+            )
+
+    target = asyncio.run(_resolve())
+    assert target.platform_chat_model_binding is not None
+    assert target.platform_chat_model_binding.provider == "openai"
+    assert target.platform_chat_model_binding.name == "resume-model"
+
+
+def test_managed_execution_never_calls_llm_when_runtime_binding_resolution_fails(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Fail-closed correction (Slice 1 review): when control-plane's per-turn
+    `ManagedAgentRuntimeBinding` lookup fails (e.g. the platform-binding store
+    read raised, so control-plane's generic exception handler returns 500),
+    the pod must map that to an `HTTPException` INSIDE `_resolve_agent_instance`
+    (`_authorize_and_resolve`'s last step) — awaited and raised before the
+    `/agents/execute/stream` route ever builds the `StreamingResponse`/`_stream`
+    generator that would call the chat model factory. A 500 must never be
+    silently treated as "no platform binding" and routed through to an LLM
+    call under pod/team defaults.
+
+    Why this exists:
+    - proves the mapping is not just a status-code translation
+      (`test_resolve_agent_instance_preserves_http_error_mapping` already
+      covers that in isolation) but that it actually gates the whole
+      execution pipeline: the chat model factory is never even constructed.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    class _FakeResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+            self.text = "simulated control-plane failure"
+            self.reason_phrase = "Internal Server Error"
+
+        def json(self) -> dict[str, object]:
+            raise AssertionError("a failing response's body must never be parsed")
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def aclose(self) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            # Stands in for control-plane's own generic exception handler
+            # turning `resolve_platform_chat_model_binding`'s propagated
+            # store/validation failure into a 500.
+            return _FakeResponse(status_code=500)
+
+    factory_build_calls: list[object] = []
+
+    class _CountingChatModelFactory(StaticChatModelFactory):
+        def build(self, definition: object, binding: object):
+            factory_build_calls.append(definition)
+            return super().build(definition, binding)
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="should never run")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: _CountingChatModelFactory(model),
+    )
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    definition = _TeamRoutingAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path,
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+        ),
+    )
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/pod/v1/agents/execute/stream",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "agent_instance_id": "instance-binding-failure",
+                "input": "hello",
+                "session_id": "session-binding-failure",
+                "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+            },
+        )
+
+    # Mapped from the upstream 500 (>=400, not 404/403) — see
+    # `_resolve_agent_instance`'s status mapping.
+    assert stream_response.status_code == 502
+    assert factory_build_calls == []
+
+
+def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Isolation (Slice 1 review acceptance gate): direct (non-managed)
+    `agent_id` execution takes `_ResolvedExecutionTarget.platform_chat_model_binding`'s
+    default of `None` in `_resolve_agent_instance` — it never calls
+    control-plane at all — so it must report "no platform binding" even when
+    the request body forges the legacy `platform_model_bindings` key
+    (silently dropped by `RuntimeContext`'s ordinary Pydantic parsing, same
+    as the managed-execution forgery regression above).
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-direct-binding-1",
+                        "name": "demo_team_routing",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _TeamRoutingAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/pod/v1/agents/execute/stream",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "agent_id": definition.agent_id,
+                "input": "hello",
+                "session_id": "session-direct-binding",
+                "runtime_context": {
+                    "user_id": "alice",
+                    "team_id": "fredlab",
+                    "platform_model_bindings": {
+                        "chat": {"provider": "attacker", "name": "forged-model"}
+                    },
+                },
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for line in stream_response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
+    assert tool_results, "expected a tool_result event"
+    echoed = " ".join(p.get("content", "") for p in tool_results)
+    assert "bindings:none" in echoed
+    assert "attacker" not in echoed
+    assert "forged-model" not in echoed
 
 
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
@@ -2053,6 +2493,317 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     assert "search_policy" not in context
 
 
+def test_local_registry_invoker_forwards_platform_binding_to_nested_iterate_call(
+    monkeypatch,
+) -> None:
+    """
+    Merge blocker (Slice 1 review): `LocalRegistryAgentInvoker` used to be
+    constructed with only `registry`/`access_token`, so its nested
+    `_iterate_runtime_event_payloads` call always fell back to that
+    parameter's `platform_chat_model_binding=None` default — silently
+    dropping the parent turn's trusted platform chat binding for every
+    `context.invoke_agent(...)` child, even inside a fully managed
+    execution. This proves the exact kwarg reaches the nested call.
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+    """
+
+    seen: dict[str, object] = {}
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        platform_chat_model_binding=None,
+        **_kwargs,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        seen["platform_chat_model_binding"] = platform_chat_model_binding
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    trusted_binding = ModelBinding(provider="openai", name="gpt-4o-mini")
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+        platform_chat_model_binding=trusted_binding,
+    )
+
+    asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="alice",
+                    tenant="tenant-a",
+                    environment=PortableEnvironment.DEV,
+                    session_id="session-1",
+                    user_id="alice",
+                    team_id="fredlab",
+                ),
+            )
+        )
+    )
+
+    assert seen["platform_chat_model_binding"] == trusted_binding
+
+    # An invoker built for a direct/unmanaged turn (no trusted binding) must
+    # forward None, not silently reuse some other invoker's value.
+    seen.clear()
+    unmanaged_invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+    )
+    asyncio.run(
+        unmanaged_invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-2",
+                    correlation_id="corr-2",
+                    actor="alice",
+                    tenant="tenant-a",
+                    environment=PortableEnvironment.DEV,
+                    session_id="session-1",
+                    user_id="alice",
+                    team_id="fredlab",
+                ),
+            )
+        )
+    )
+    assert seen["platform_chat_model_binding"] is None
+
+
+def test_build_runtime_services_wires_the_current_turns_binding_onto_the_invoker(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    `_build_runtime_services` is the only place a `LocalRegistryAgentInvoker`
+    is constructed in production code; this pins that it always passes THIS
+    turn's own `BoundRuntimeContext.platform_chat_model_binding` — not a
+    stale or foreign one — onto the invoker it builds. A narrow constructor-
+    level check, deliberately paired with
+    `test_local_registry_invoker_propagates_trusted_platform_binding_through_a_real_nested_turn`
+    below, which proves the binding actually reaches a REAL nested agent
+    turn rather than just this assignment.
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+    """
+
+    definition = _EchoAgent()
+    registry = {definition.agent_id: definition}
+    trusted_binding = ModelBinding(provider="openai", name="gpt-4o-mini")
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(
+            session_id="s", user_id="alice", team_id="fredlab"
+        ),
+        portable_context=PortableContext(
+            request_id="r",
+            correlation_id="c",
+            actor="alice",
+            tenant="fredlab",
+            environment=PortableEnvironment.DEV,
+            session_id="s",
+            user_id="alice",
+            team_id="fredlab",
+        ),
+        platform_chat_model_binding=trusted_binding,
+    )
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    with TestClient(app):
+        services = agent_app_module._build_runtime_services(
+            definition,
+            binding,
+            team_id="fredlab",
+            registry=registry,
+            access_token="token-1",
+        )
+
+        assert isinstance(
+            services.agent_invoker, agent_app_module.LocalRegistryAgentInvoker
+        )
+        assert (
+            services.agent_invoker._platform_chat_model_binding  # noqa: SLF001 — pinning the private wiring itself
+            == trusted_binding
+        )
+
+        # No registry → no in-process agent invoker at all (unrelated
+        # existing invariant); confirms this wiring didn't change that gate.
+        services_no_registry = agent_app_module._build_runtime_services(
+            definition, binding, team_id="fredlab", access_token="token-1"
+        )
+        assert services_no_registry.agent_invoker is None
+
+
+def test_local_registry_invoker_propagates_trusted_platform_binding_through_a_real_nested_turn(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Merge blocker (Slice 1 review): proves the trusted platform chat binding
+    reaches a nested `context.invoke_agent(...)` child through REAL nested
+    execution, not merely a constructor assertion.
+
+    `_GraphNodeExecutionContext.invoke_agent` (fred-sdk graph runtime) does
+    nothing more than call `services.agent_invoker.invoke(request)` — this
+    test calls that identical seam directly, so it exercises the same code a
+    real TeamAgent "route" node runs, all the way through
+    `LocalRegistryAgentInvoker.invoke` -> a REAL (non-mocked)
+    `_iterate_runtime_event_payloads` call -> `_build_runtime_services` ->
+    the child's own capability/tool context. The child's tool reads
+    `ctx.binding.platform_chat_model_binding` — the exact field
+    `RoutedChatModelFactory.select` reads unconditionally for the `chat`
+    capability (`fred_runtime/model_routing/provider.py`) — so capturing it
+    here is capturing precisely the input that would drive the child's own
+    chat-model selection, not a proxy for it.
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+    captured: list[ModelBinding | None] = []
+
+    @tool(
+        "test.capture_platform_binding",
+        description="Capture the bound platform chat model binding.",
+    )
+    async def _capture_platform_binding(ctx: ToolContext) -> str:
+        captured.append(ctx.binding.platform_chat_model_binding)
+        return "captured"
+
+    class _CaptureBindingAgent(ReActAgent):
+        agent_id: str = "test.capture_platform_binding_child"
+        role: str = "Binding capture probe"
+        description: str = "Captures the bound platform chat model binding via a tool."
+        system_prompt_template: str = (
+            "Use the capture_platform_binding tool, then answer."
+        )
+        tools = (_capture_platform_binding,)
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-nested-binding-1",
+                        "name": "capture_platform_binding",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    child = _CaptureBindingAgent()
+    registry: dict[str, ReActAgentDefinition] = {child.agent_id: child}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app):
+        # As if resolved by control-plane for THIS managed parent turn —
+        # never read from any client-controlled field.
+        trusted_binding = ModelBinding.model_validate(
+            {
+                "provider": "openai",
+                "name": "gpt-4o-mini",
+                "settings": {"temperature": 0.2},
+            }
+        )
+        parent_binding = BoundRuntimeContext(
+            runtime_context=RuntimeContext(
+                session_id="s", user_id="alice", team_id="fredlab"
+            ),
+            portable_context=PortableContext(
+                request_id="req-parent",
+                correlation_id="corr-parent",
+                actor="alice",
+                tenant="fredlab",
+                environment=PortableEnvironment.DEV,
+                session_id="s",
+                user_id="alice",
+                team_id="fredlab",
+            ),
+            platform_chat_model_binding=trusted_binding,
+        )
+        services = agent_app_module._build_runtime_services(
+            child,
+            parent_binding,
+            team_id="fredlab",
+            registry=registry,
+            access_token="token-parent",
+        )
+        assert services.agent_invoker is not None
+
+        result = asyncio.run(
+            services.agent_invoker.invoke(
+                AgentInvocationRequest(
+                    agent_id=child.agent_id,
+                    message="hello",
+                    context=parent_binding.portable_context,
+                )
+            )
+        )
+
+    assert result.is_error is False
+    assert captured == [trusted_binding]
+
+
+def test_local_registry_invoker_child_cannot_replace_binding_via_portable_context() -> (
+    None
+):
+    """
+    Isolation (Slice 1 review): `PortableContext` is `extra="forbid"` — there
+    is structurally no field on it (or on `AgentInvocationRequest`) a nested
+    child, or a compromised parent, could use to carry a DIFFERENT platform
+    chat binding into the nested turn. The only channel is the invoker's own
+    private `platform_chat_model_binding` attribute, wired exclusively from
+    `_build_runtime_services`'s own `BoundRuntimeContext`.
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+    """
+    with pytest.raises(Exception, match="platform_chat_model_binding"):
+        PortableContext(
+            request_id="req-1",
+            correlation_id="corr-1",
+            actor="alice",
+            tenant="fredlab",
+            environment=PortableEnvironment.DEV,
+            session_id="s",
+            user_id="alice",
+            team_id="fredlab",
+            platform_chat_model_binding={"provider": "attacker", "name": "forged"},  # pyright: ignore[reportCallIssue]
+        )
+
+
 def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
     """
     Ensure resume requests fail fast when the checkpoint is not waiting for input.
@@ -2348,7 +3099,6 @@ def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> Non
     LangGraph's own interrupt/resume mechanics.
     """
 
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
     from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
 
@@ -2613,7 +3363,6 @@ def _make_counting_react_runtime():
     proof that a rejected or duplicate resume never executes the tool loop.
     """
 
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
     from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
 
@@ -3032,7 +3781,6 @@ def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
     waiting out any TTL.
     """
 
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
     from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
 
@@ -3208,7 +3956,6 @@ async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
     disconnect or `AbortController` ultimately triggers server-side.
     """
 
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
     from fred_sdk.contracts.runtime import AgentRuntime, Executor, FinalRuntimeEvent
 
@@ -3841,7 +4588,6 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
         CapabilityManifest,
         EmptyModel,
     )
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.models import (
         AgentTuning,
         GraphAgentDefinition,
@@ -3966,7 +4712,6 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         CapabilityManifest,
         EmptyModel,
     )
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.models import (
         AgentTuning,
         GraphAgentDefinition,
@@ -4084,7 +4829,6 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
         EmptyModel,
         HitlSpec,
     )
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.models import (
         AgentTuning,
         GraphAgentDefinition,

@@ -539,6 +539,21 @@ operations:
     path: /control-plane/v1/admin/capabilities/{capability_id}/reasoning
     review_status: approved
     required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (platform_admin from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/model-bindings
+    review_status: approved
+    required_permission: can_manage_platform # platform-wide chat model binding (chat-only) — organization_authz.require_manage_any (organization#can_manage_platform), same shared gate as GET /admin/capabilities. binding=null when unset.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/model-bindings
+    review_status: approved
+    required_permission: can_manage_platform # organization_authz.require_manage_any. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/model-bindings
+    review_status: approved
+    required_permission: can_manage_platform # organization_authz.require_manage_any. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
 
   - service: knowledge-flow
     method: GET

@@ -1119,6 +1119,33 @@
         "reasoningOnToast": "Raisonnement activé pour ce modèle.",
         "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle."
       },
+      "platformModelBindings": {
+        "openButton": "Liaison de modèle plateforme",
+        "title": "Liaison de modèle de discussion plateforme",
+        "subtitle": "Impose un modèle de discussion concret (fournisseur, nom) sur tous les pods d'exécution — remplace le modèle par défaut de chaque pod. Laissez non défini pour conserver le comportement actuel par pod.",
+        "loading": "Chargement de la liaison de modèle de discussion plateforme…",
+        "loadError": "Impossible de charger la liaison de modèle de discussion plateforme.",
+        "capability": {
+          "chat": "Discussion"
+        },
+        "podDefault": "Utilise le défaut du pod",
+        "boundState": "{{provider}} / {{name}}",
+        "editAction": "Modifier",
+        "deleteAction": "Rétablir le défaut du pod",
+        "saveToast": "Liaison de modèle de discussion plateforme enregistrée.",
+        "saveError": "Impossible d'enregistrer la liaison de modèle de discussion plateforme.",
+        "deleteToast": "Liaison de modèle de discussion plateforme rétablie au défaut du pod.",
+        "deleteError": "Impossible de rétablir la liaison de modèle de discussion plateforme.",
+        "form": {
+          "provider": "Fournisseur",
+          "name": "Nom du modèle",
+          "settingsTitle": "Paramètres (JSON)",
+          "settingsHint": "Un objet JSON de paramètres du fournisseur, ex. {\"temperature\": 0.2}. Les clés inconnues sont rejetées — il n'y a ici aucun champ d'en-têtes, de cookies ou d'authentification : n'y placez jamais d'identifiant.",
+          "settingsInvalidJson": "Saisissez un objet JSON valide.",
+          "save": "Enregistrer",
+          "cancel": "Annuler"
+        }
+      },
       "corpusAudit": {
         "title": "Audit du corpus",
         "subtitle": "Compare l'état de traitement de chaque document en base à ce qui est réellement présent dans le magasin de contenu et le magasin vectoriel, et permet de nettoyer les données orphelines.",
@@ -2005,20 +2032,19 @@
         "title": "Routage des modèles",
         "defaultProfile": {
           "title": "Modèle de chat par défaut",
-          "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune règle d'opération ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
+          "explanation": "Le profil de modèle utilisé pour les agents de chat gérés de cette équipe quand aucune substitution d'agent ci-dessous ne s'applique. Laisser vide pour utiliser le défaut du déploiement.",
           "label": "Identifiant du profil par défaut",
           "useDeploymentDefault": "Utiliser le défaut du déploiement"
         },
-        "operationRules": {
-          "title": "Règles par opération",
-          "explanation": "Remplacer le modèle par défaut pour une opération runtime spécifique (ex. planning), éventuellement affinée par un objectif (purpose).",
-          "operation": "Opération",
-          "purpose": "Objectif (optionnel)",
-          "agent": "Agent (optionnel)",
-          "agentAny": "Tous les agents",
+        "agentOverrides": {
+          "title": "Substitutions par agent",
+          "explanation": "Remplacer le modèle par défaut pour un agent spécifique.",
+          "agent": "Agent",
+          "agentPlaceholder": "Sélectionner un agent",
           "targetProfileId": "Identifiant du profil",
           "targetProfilePlaceholder": "Sélectionner un modèle",
-          "addRule": "Ajouter une règle"
+          "addRule": "Ajouter une substitution",
+          "incompleteRow": "Choisissez un agent et un profil pour chaque ligne de substitution (ou supprimez la ligne) avant d'enregistrer."
         },
         "profileUnavailable": "Plus activé pour cette équipe",
         "emptyState": "Cette équipe n'a encore aucun modèle activé. Demandez à un administrateur de la plateforme d'activer au moins une capability de modèle avant de configurer des règles de routage.",

@@ -37,8 +37,10 @@ How to use it:
   exactly as you would for any other `GraphNodeContext` double
 - configure only what the node under test actually calls: `agent_result`
   (optionally keyed by `agent_id` when a node calls more than one agent) for
-  `invoke_agent`, `structured_by_operation` for `structured_model_step`,
-  `tool_result` (optionally keyed by `tool_ref`) for `invoke_tool`
+  `invoke_agent`, `structured_results` for `structured_model_step` — one
+  value, or a list when the node under test calls it more than once (each
+  call pops the next queued value, in order), `tool_result` (optionally
+  keyed by `tool_ref`) for `invoke_tool`
 - a call the test did not configure raises `AssertionError` immediately,
   so an under-specified test fails loudly instead of silently returning
   `None` or an empty result into your node's business logic
@@ -53,17 +55,17 @@ context = FakeGraphNodeContext(
     agent_result=AgentInvocationResult(
         agent_id="tessa", content="", structured={"trust": "high"}
     ),
-    structured_by_operation={"classify": {"intent": "question_cloud_general"}},
+    structured_results={"intent": "question_cloud_general"},
 )
 result = await my_node(state, cast(GraphNodeContext, context))
 assert context.agent_calls[0]["agent_id"] == "tessa"
-assert context.structured_operations == ["classify"]
+assert context.structured_model_calls == 1
 ```
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .contracts.context import AgentInvocationResult, ToolInvocationResult
@@ -82,18 +84,24 @@ class FakeGraphNodeContext:
         agent_result: AgentInvocationResult
         | Mapping[str, AgentInvocationResult]
         | None = None,
-        structured_by_operation: Mapping[str, Any] | None = None,
+        structured_results: Any | Sequence[Any] | None = None,
         tool_result: ToolInvocationResult
         | Mapping[str, ToolInvocationResult]
         | None = None,
         model: object | None = object(),
     ) -> None:
         self._agent_result = agent_result
-        self._structured_by_operation = dict(structured_by_operation or {})
+        self._structured_results: list[Any] = (
+            list(structured_results)
+            if isinstance(structured_results, list)
+            else [structured_results]
+            if structured_results is not None
+            else []
+        )
         self._tool_result = tool_result
         self.model = model
         self.agent_calls: list[dict[str, Any]] = []
-        self.structured_operations: list[str] = []
+        self.structured_model_calls = 0
         self.tool_calls: list[dict[str, Any]] = []
 
     def emit_status(self, *args: Any, **kwargs: Any) -> None:
@@ -153,13 +161,11 @@ class FakeGraphNodeContext:
         self,
         output_model: type,
         messages: Any,
-        *,
-        operation: str = "default",
     ) -> Any:
-        self.structured_operations.append(operation)
-        if operation not in self._structured_by_operation:
+        if not self._structured_results:
             raise AssertionError(
-                "FakeGraphNodeContext.invoke_structured_model: no canned output "
-                f"configured for operation={operation!r}."
+                "FakeGraphNodeContext.invoke_structured_model was called but no "
+                "(more) structured_results were configured."
             )
-        return self._structured_by_operation[operation]
+        self.structured_model_calls += 1
+        return self._structured_results.pop(0)

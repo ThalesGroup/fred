@@ -1119,6 +1119,33 @@
         "reasoningOnToast": "Reasoning enabled for this model.",
         "reasoningToggleError": "Could not change this model's reasoning setting."
       },
+      "platformModelBindings": {
+        "openButton": "Platform model binding",
+        "title": "Platform chat model binding",
+        "subtitle": "Assert one concrete (provider, name) chat model across every runtime pod — overrides each pod's own catalog default. Leave unset to keep today's per-pod behavior.",
+        "loading": "Loading the platform chat model binding…",
+        "loadError": "Could not load the platform chat model binding.",
+        "capability": {
+          "chat": "Chat"
+        },
+        "podDefault": "Using pod default",
+        "boundState": "{{provider}} / {{name}}",
+        "editAction": "Edit",
+        "deleteAction": "Reset to pod default",
+        "saveToast": "Platform chat model binding saved.",
+        "saveError": "Could not save the platform chat model binding.",
+        "deleteToast": "Platform chat model binding reset to pod default.",
+        "deleteError": "Could not reset the platform chat model binding.",
+        "form": {
+          "provider": "Provider",
+          "name": "Model name",
+          "settingsTitle": "Settings (JSON)",
+          "settingsHint": "A JSON object of provider settings, e.g. {\"temperature\": 0.2}. Unknown keys are rejected — there is no headers, cookies, or auth field here, so never put a credential in a value.",
+          "settingsInvalidJson": "Enter a valid JSON object.",
+          "save": "Save",
+          "cancel": "Cancel"
+        }
+      },
       "corpusAudit": {
         "title": "Corpus audit",
         "subtitle": "Compares each document's processing-stage record against what is actually present in the content store and vector store, and lets you clean up orphan data.",
@@ -2005,20 +2032,19 @@
         "title": "Model routing",
         "defaultProfile": {
           "title": "Default chat model",
-          "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
+          "explanation": "The model profile used for this team's managed chat agents when no agent override matches below. Leave empty to use the deployment default.",
           "label": "Default profile id",
           "useDeploymentDefault": "Use deployment default"
         },
-        "operationRules": {
-          "title": "Operation overrides",
-          "explanation": "Override the default model for a specific runtime operation (e.g. planning), optionally refined further by purpose.",
-          "operation": "Operation",
-          "purpose": "Purpose (optional)",
-          "agent": "Agent (optional)",
-          "agentAny": "All agents",
+        "agentOverrides": {
+          "title": "Agent overrides",
+          "explanation": "Override the default model for one specific agent.",
+          "agent": "Agent",
+          "agentPlaceholder": "Select an agent",
           "targetProfileId": "Profile id",
           "targetProfilePlaceholder": "Select a model",
-          "addRule": "Add rule"
+          "addRule": "Add override",
+          "incompleteRow": "Pick both an agent and a profile for every override row (or remove the row) before saving."
         },
         "profileUnavailable": "No longer enabled for this team",
         "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",

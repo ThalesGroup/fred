@@ -54,8 +54,9 @@ async def aggregate_capability_catalog(
     Best-effort: an unreachable pod is logged and skipped (its capabilities are
     simply absent this pass), never fatal. Later-registration wins on id
     collision, matching the aggregation the product catalog already performs —
-    with one exception: for `kind="model"` entries, `model_profile_ids` and
-    `model_thinking_profile_ids` are unioned across pods rather than
+    with one exception: for `kind="model"` entries, `model_profile_ids`,
+    `model_chat_profile_ids`, and `model_thinking_profile_ids` are unioned
+    across pods rather than
     overwritten (2026-08-01, GitHub #2191). A `(provider, name)` pair routed
     by more than one pod, each with its own `profile_id` namespace, would
     otherwise have the earlier pod's profile ids silently dropped —
@@ -165,6 +166,10 @@ async def aggregate_capability_catalog(
                         "model_profile_ids": _union_profile_ids(
                             existing.model_profile_ids, entry.model_profile_ids
                         ),
+                        "model_chat_profile_ids": _union_profile_ids(
+                            existing.model_chat_profile_ids,
+                            entry.model_chat_profile_ids,
+                        ),
                         "model_thinking_profile_ids": _union_profile_ids(
                             existing.model_thinking_profile_ids,
                             entry.model_thinking_profile_ids,
@@ -183,12 +188,19 @@ async def aggregate_capability_catalog(
     return catalog
 
 
-async def universally_available_model_profile_ids(
+async def universally_available_chat_model_profile_ids(
     deps: ProductServiceDependencies,
 ) -> frozenset[str]:
-    """`model_profile_ids` present on every enabled, model-capable pod — the
-    intersection dual of `aggregate_capability_catalog`'s union above
-    (2026-08-02, `TEAM-ROUTING-POLICY-RFC.md` §7.2/§9).
+    """Chat profile ids present on every enabled, model-capable pod.
+
+    This is the intersection dual of `aggregate_capability_catalog`'s union
+    above (2026-08-02, `TEAM-ROUTING-POLICY-RFC.md` §7.2/§9). It deliberately
+    consumes `model_chat_profile_ids`, not every model profile: the current
+    team policy can select chat models only.
+
+    "Available" also means semantically identical: a shared profile id must
+    map to the same `(provider, name)` capability id on every pod. Otherwise
+    the chosen model would depend on which pod serves the turn.
 
     `aggregate_capability_catalog`'s union answers "does at least one pod
     know this profile" — the right question for admission/enablement, where
@@ -216,7 +228,7 @@ async def universally_available_model_profile_ids(
     # — breaks the product.service <-> capabilities import cycle.
     from control_plane_backend.product.service import _model_capabilities_for_source
 
-    per_pod_profile_ids: list[set[str]] = []
+    per_pod_profiles: list[dict[str, str]] = []
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
             continue
@@ -232,9 +244,25 @@ async def universally_available_model_profile_ids(
             return frozenset()
         if not entries:
             continue
-        per_pod_profile_ids.append(
-            {profile_id for entry in entries for profile_id in entry.model_profile_ids}
-        )
-    if not per_pod_profile_ids:
+        profile_models: dict[str, str] = {}
+        conflicting_profile_ids: set[str] = set()
+        for entry in entries:
+            for profile_id in entry.model_chat_profile_ids:
+                existing_model_id = profile_models.get(profile_id)
+                if existing_model_id is not None and existing_model_id != entry.id:
+                    conflicting_profile_ids.add(profile_id)
+                    continue
+                profile_models[profile_id] = entry.id
+        for profile_id in conflicting_profile_ids:
+            profile_models.pop(profile_id, None)
+        per_pod_profiles.append(profile_models)
+    if not per_pod_profiles:
         return frozenset()
-    return frozenset(set.intersection(*per_pod_profile_ids))
+    shared_profile_ids = set.intersection(
+        *(set(profiles) for profiles in per_pod_profiles)
+    )
+    return frozenset(
+        profile_id
+        for profile_id in shared_profile_ids
+        if len({profiles[profile_id] for profiles in per_pod_profiles}) == 1
+    )

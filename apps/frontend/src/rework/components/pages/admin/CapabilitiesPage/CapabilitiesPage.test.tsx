@@ -49,6 +49,17 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSetCapabilityDefaultOnMutation: () => [vi.fn(), { isLoading: false }],
   useSetModelReasoningMutation: () => [vi.fn(), { isLoading: false }],
   useLazyCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
+  // The always-mounted PlatformModelBindingsPanel child calls this
+  // unconditionally regardless of its own `open` prop; the panel's own
+  // behavior is exercised by PlatformModelBindingsPanel.test.tsx, so an
+  // unset binding is enough here.
+  usePlatformModelBindingQuery: () => ({
+    data: { model_capability: "chat", binding: null },
+    isLoading: false,
+    isError: false,
+  }),
+  useSetPlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
+  useDeletePlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({

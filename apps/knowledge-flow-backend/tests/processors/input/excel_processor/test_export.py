@@ -39,6 +39,7 @@ from knowledge_flow_backend.core.processors.input.excel_processor.excel_processo
 # ========================================================================== #
 # Export du classeur de démo (intégration, via demo_run)
 # ========================================================================== #
+@pytest.mark.integration
 def test_markdown_summary_written(demo_run):
     md = os.path.join(demo_run.output_dir, "output.md")
     assert os.path.exists(md)
@@ -50,6 +51,7 @@ def test_markdown_summary_written(demo_run):
         assert f"## Sheet: {name}" in content
 
 
+@pytest.mark.integration
 def test_one_csv_per_non_empty_table(demo_run):
     csv_dir = os.path.join(demo_run.output_dir, "csv")
     files = sorted(os.listdir(csv_dir))
@@ -58,6 +60,7 @@ def test_one_csv_per_non_empty_table(demo_run):
     assert all(f.endswith(".csv") for f in files)
 
 
+@pytest.mark.integration
 def test_csv_filenames_are_sanitized(demo_run):
     csv_dir = os.path.join(demo_run.output_dir, "csv")
     files = os.listdir(csv_dir)
@@ -66,6 +69,7 @@ def test_csv_filenames_are_sanitized(demo_run):
     assert "Separateur_80_.t1.csv" in files
 
 
+@pytest.mark.integration
 def test_csv_roundtrip_typage(demo_run):
     csv_dir = os.path.join(demo_run.output_dir, "csv")
     df = pd.read_csv(os.path.join(csv_dir, "Typage.t1.csv"), sep=";", dtype=str)
@@ -84,6 +88,7 @@ def test_csv_roundtrip_typage(demo_run):
     assert df["Code_Postal"].iloc[0] == "01000"
 
 
+@pytest.mark.integration
 def test_markdown_references_csv_links(demo_run):
     md = os.path.join(demo_run.output_dir, "output.md")
     with open(md, encoding="utf-8") as f:
@@ -91,6 +96,7 @@ def test_markdown_references_csv_links(demo_run):
     assert "(csv/Typage.t1.csv)" in content
 
 
+@pytest.mark.integration
 def test_tables_json_lists_every_non_empty_table(demo_run):
     with open(os.path.join(demo_run.output_dir, "tables.json"), encoding="utf-8") as f:
         entries = json.load(f)

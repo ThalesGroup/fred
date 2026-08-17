@@ -142,6 +142,7 @@ from control_plane_backend.import_export.kea_reconciliation import (  # KEA CUTO
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.prompt_models import PromptRow
+from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.service import (
     grant_existing_teams_served_templates,
@@ -287,6 +288,11 @@ class MigrationReport:
     # tracked as a follow-up rather than smuggled into this change.
     prompts_imported: int = 0
     prompts_skipped: int = 0
+    # Same "internal-only, surfaced via summary/warnings" contract as
+    # prompts_imported/_skipped above — extending MigrationResult's public
+    # shape is a separate OpenAPI + generated-client change, not smuggled in.
+    routing_policies_imported: int = 0
+    routing_policies_skipped: int = 0
     tuples_written: int = 0
     tuples_dropped: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -500,6 +506,7 @@ _STEP_LABELS: dict[str, str] = {
     "tags": "Importing tags",
     "metadata": "Importing documents",
     "team_metadata": "Importing team settings",
+    "team_routing_policy": "Importing team routing policies",
     "users": "Provisioning users",
     "tuples": "Restoring permissions",
 }
@@ -1374,6 +1381,10 @@ async def _run_import_body(
     # their raw `team_metadata` rows as-is; the kea path replaces this with
     # `plan.team_metadata` below (merged + orphan-dropped).
     raw_team_metadata = list(bundle.iter_table(team_table)) if is_swift_native else []
+    # Routing policy never existed in a kea bundle (`EXPORT_TABLES` has no
+    # equivalent table) — `iter_table` already returns empty for a missing
+    # file, so no `is_swift_native` gate is needed here.
+    raw_team_routing_policy = list(bundle.iter_table("team_routing_policy"))
 
     # ── KEA CUTOVER 2026 — team merge, OpenFGA tuple restore, and platform-role
     # resolution, all BEFORE the Postgres transaction opens: `build_kea_reconciliation_plan`
@@ -1656,6 +1667,44 @@ async def _run_import_body(
                 session=session,
             )
 
+            # --- team routing policy (agent_profile_overrides) ---
+            async def _import_team_routing_policy(
+                row: dict[str, Any], s: AsyncSession
+            ) -> bool:
+                team_id = row["team_id"]
+                # Idempotent, same as every other phase here: skip if the row
+                # already exists rather than overwriting a live policy.
+                if await s.get(TeamRoutingPolicyRow, team_id) is not None:
+                    return False
+                s.add(
+                    TeamRoutingPolicyRow(
+                        team_id=team_id,
+                        version=row.get("version")
+                        if row.get("version") is not None
+                        else 1,
+                        chat_default_profile_id=row.get("chat_default_profile_id"),
+                        agent_profile_overrides_json=row.get(
+                            "agent_profile_overrides_json"
+                        )
+                        or "{}",
+                        updated_by=row.get("updated_by"),
+                        updated_at=_coerce_dt(row.get("updated_at")),
+                    )
+                )
+                return True
+
+            (
+                report.routing_policies_imported,
+                report.routing_policies_skipped,
+            ) = await _run_phase(
+                task_service=task_service,
+                task_id=task_id,
+                step_id="team_routing_policy",
+                items=raw_team_routing_policy,
+                import_fn=_import_team_routing_policy,
+                session=session,
+            )
+
     # ── Phase 4bis: OpenFGA tuple restore, kea path only (MIGR-05.04) ─────────
     # Outside the DB transaction: OpenFGA is a separate store with its own
     # idempotence (`add_relation` ignores duplicates), so a partial tuple
@@ -1836,6 +1885,9 @@ async def _run_import_body(
                     if report.tuples_written
                     else None,
                     f"{report.teams_imported} teams" if report.teams_imported else None,
+                    f"{report.routing_policies_imported} routing policies"
+                    if report.routing_policies_imported
+                    else None,
                     f"{report.identities_created} identities created"
                     if report.identities_created
                     else None,

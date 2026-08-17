@@ -29,16 +29,9 @@ This is the pure decision layer used by `RoutedChatModelFactory`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from fred_sdk.contracts.context import TeamOperationRouteRule
-
 from .contracts import (
-    MatchValue,
     ModelCapability,
     ModelProfile,
-    ModelRouteMatch,
-    ModelRouteRule,
     ModelRoutingPolicy,
     ModelSelection,
     ModelSelectionRequest,
@@ -46,61 +39,20 @@ from .contracts import (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class _Candidate:
-    """One matching rule plus its deterministic tie-break metadata."""
-
-    rule: ModelRouteRule
-    order_index: int
-    specificity: int
-
-
-def _value_matches(expected: MatchValue | None, actual: str | None) -> bool:
-    """Return True when one criterion value matches one request value."""
-
-    if expected is None:
-        return True
-    if actual is None:
-        return False
-    if isinstance(expected, str):
-        return actual == expected
-    return actual in expected
-
-
-def _rule_matches(match: ModelRouteMatch, request: ModelSelectionRequest) -> bool:
-    """Return True when all non-null rule criteria match the request."""
-
-    return (
-        _value_matches(match.purpose, request.purpose)
-        and _value_matches(match.agent_id, request.agent_id)
-        and _value_matches(match.team_id, request.team_id)
-        and _value_matches(match.user_id, request.user_id)
-        and _value_matches(match.operation, request.operation)
-    )
-
-
 class ModelRoutingResolver:
     """
     Resolve one runtime model-selection query against a static policy.
 
     Practical reading:
-    - Request comes from runtime context (`team_id`, `agent_id`, `operation`, ...)
-    - Resolver chooses one `target_profile_id`
+    - Request comes from runtime context (`capability`, `agent_id`)
+    - Resolver chooses one `target_profile_id`: the policy's
+      `agent_profile_overrides[agent_id]` when set and capability-compatible,
+      else the capability default
     - Provider/factory will later build the actual model client from it
 
-    Rule precedence:
-    1. Highest specificity (number of criteria in rule.match)
-    2. First rule order in policy
-
     When is this called (current integration):
-    - ReAct v2:
-      - called through `RoutedChatModelFactory.select(...)`
-      - typically once per phase in an execution (`routing`, `planning`)
-        because runtime caches resolved models by operation for the current run
-    - Graph v2:
-      - currently called during runtime activation/model build
-      - selected model is then reused by graph node executions
-        (unless future runtime wiring introduces per-operation graph routing)
+    - ReAct/Deep v2: once per turn, at runtime activation
+    - Graph v2: once per turn, at runtime activation — same call, same timing
     """
 
     def __init__(self, policy: ModelRoutingPolicy):
@@ -125,67 +77,34 @@ class ModelRoutingResolver:
         - any future capability-specific routed factories
 
         When it is called:
-        - each model selection request (runtime-dependent frequency)
-
-        Expected inputs / invariants:
-        - `request.capability` is set
-        - policy contains profile ids referenced by matching/default rules
+        - once per turn (runtime-dependent frequency)
 
         Return / side effects:
-        - returns one `ModelSelection` (winner rule or capability default)
+        - returns one `ModelSelection` (agent override or capability default)
         - no side effects, no external I/O
 
-        Precedence (real implementation):
-        1. rule capability must equal request capability
-        2. all defined match fields must match request
-        3. highest specificity wins (`defined_criteria_count`)
-        4. for equal specificity, first rule declared in catalog wins
-
         Fallback / errors:
-        - no matching rule -> `_default_selection(...)`
+        - no override for `request.agent_id`, or its profile's capability
+          doesn't match -> `_default_selection(...)`
         - no default profile for capability -> `ValueError`
-        - unknown `target_profile_id`/default profile id -> `KeyError`
-
-        Observability signals to look at:
-        - resolver itself does not log
-        - inspect provider/factory logs that include source/rule/profile metadata
         """
 
-        candidates: list[_Candidate] = []
-        for order_index, rule in enumerate(self._policy.rules):
-            if rule.capability != request.capability:
-                continue
-            if _rule_matches(rule.match, request):
-                candidates.append(
-                    _Candidate(
-                        rule=rule,
-                        order_index=order_index,
-                        specificity=rule.match.defined_criteria_count(),
+        if request.agent_id is not None:
+            profile_id = self._policy.agent_profile_overrides.get(request.agent_id)
+            if profile_id is not None:
+                profile = self._profile(profile_id)
+                if profile.capability == request.capability:
+                    return ModelSelection(
+                        source=ModelSelectionSource.AGENT_OVERRIDE,
+                        capability=request.capability,
+                        profile_id=profile.profile_id,
+                        model=profile.model.model_copy(deep=True),
                     )
-                )
 
-        if not candidates:
-            return self._default_selection(capability=request.capability)
-
-        winner = min(
-            candidates,
-            key=lambda candidate: (
-                -candidate.specificity,
-                candidate.order_index,
-            ),
-        )
-        profile = self._profile(winner.rule.target_profile_id)
-        return ModelSelection(
-            source=ModelSelectionSource.RULE,
-            capability=request.capability,
-            profile_id=profile.profile_id,
-            model=profile.model.model_copy(deep=True),
-            rule_id=winner.rule.rule_id,
-            matched_criteria=winner.specificity,
-        )
+        return self._default_selection(capability=request.capability)
 
     def _default_selection(self, *, capability: ModelCapability) -> ModelSelection:
-        """Return capability default when no explicit rule matches."""
+        """Return capability default when no agent override applies."""
 
         default_profile_id = self._policy.default_profile_by_capability.get(capability)
         if default_profile_id is None:
@@ -198,8 +117,6 @@ class ModelRoutingResolver:
             capability=capability,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
-            rule_id=None,
-            matched_criteria=0,
         )
 
     def _profile(self, profile_id: str) -> ModelProfile:
@@ -210,45 +127,26 @@ class ModelRoutingResolver:
     def profile_or_none(self, profile_id: str) -> ModelProfile | None:
         """Public counterpart to `_profile` for callers outside this class that
         must not raise `KeyError` on an unknown id — e.g. `RoutedChatModelFactory`
-        resolving a team-policy `target_profile_id` (§8.4 drift rule,
-        `TEAM-ROUTING-POLICY-RFC.md`), which needs to distinguish "unknown to this
-        deployment" from a Python-internal error and raise its own typed
-        `TeamRoutingProfileDriftError` instead."""
+        resolving a team-policy `target_profile_id` (drift rule), which needs to
+        distinguish "unknown to this deployment" from a Python-internal error
+        and raise its own typed `TeamRoutingProfileDriftError` instead."""
 
         return self._profiles_by_id.get(profile_id)
 
 
 def resolve_team_override(
     *,
-    operation_route_rules: list[TeamOperationRouteRule] | None,
+    agent_profile_overrides: dict[str, str] | None,
     chat_default_profile_id: str | None,
-    operation: str | None,
-    purpose: str,
-    agent_id: str | None = None,
+    agent_id: str | None,
 ) -> str | None:
     """
     Second, narrower resolution pass applied only when the static
-    `models_catalog.yaml` `rules:` fell through to the capability default
-    (`TEAM-ROUTING-POLICY-RFC.md` §8.3) — never consulted otherwise, so a
-    static rule always wins over team policy.
+    `models_catalog.yaml` `agent_profile_overrides` fell through to the
+    capability default — never consulted otherwise, so a static override
+    always wins over team policy.
 
-    Precedence, identical in shape to `ModelRoutingResolver.resolve`: `operation`,
-    `purpose`, and `agent_id` are all optional criteria (None = wildcard). A rule
-    matches when every criterion it defines equals the request. The winner is the
-    rule with the most defined criteria (highest specificity), ties broken by
-    declaration order — so `agent+operation+purpose` beats `agent+operation` /
-    `operation+purpose` / `agent`, etc. Two rules that could tie in specificity
-    for an overlapping request can never both be stored for the same team:
-    control-plane's write-time validation (`routing_policy/service.py
-    ::_validate_write`, `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37) rejects that
-    combination outright, so the declaration-order tie-break below is a
-    defensive fallback that should be unreachable in practice, not a documented
-    resolution rule callers may rely on.
-
-    Backward compatible with agent-agnostic rules: a rule that leaves
-    agent_id=None behaves as before.
-
-    1. the most specific matching rule wins
+    1. `agent_profile_overrides[agent_id]` if `agent_id` is set and present
     2. else `chat_default_profile_id` if set
     3. else `None` — caller keeps the static catalog default unchanged
 
@@ -256,25 +154,8 @@ def resolve_team_override(
     from the resolver/provider wiring.
     """
 
-    best_profile_id: str | None = None
-    best_specificity = -1
-    for rule in operation_route_rules or []:
-        if rule.operation is not None and rule.operation != operation:
-            continue
-        if rule.purpose is not None and rule.purpose != purpose:
-            continue
-        if rule.agent_id is not None and rule.agent_id != agent_id:
-            continue
-        # Count the optional criteria this rule pins down.
-        specificity = (
-            (rule.operation is not None)
-            + (rule.purpose is not None)
-            + (rule.agent_id is not None)
-        )
-        if specificity > best_specificity:
-            best_specificity = specificity
-            best_profile_id = rule.target_profile_id
-
-    if best_profile_id is not None:
-        return best_profile_id
+    if agent_id is not None and agent_profile_overrides:
+        profile_id = agent_profile_overrides.get(agent_id)
+        if profile_id is not None:
+            return profile_id
     return chat_default_profile_id

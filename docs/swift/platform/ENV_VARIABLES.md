@@ -104,12 +104,8 @@ This chapter lists env vars that change startup behavior or enable/disable runti
 | Variable                                  | Effect                                                             |
 | ----------------------------------------- | ------------------------------------------------------------------ |
 | `FRED_MODELS_CATALOG_FILE`                | Override models catalog path.                                      |
-| `FRED_V2_MODELS_CATALOG_FILE`             | Backward-compatible alias for models catalog path.                 |
 | `FRED_AGENTS_CATALOG_FILE`                | Override agents catalog path.                                      |
 | `FRED_MCP_CATALOG_FILE`                   | Override MCP catalog path.                                         |
-| `FRED_MODELS_DEFAULT_CHAT_PROFILE_ID`     | Force default chat profile from models catalog.                    |
-| `FRED_MODELS_DEFAULT_LANGUAGE_PROFILE_ID` | Force default language profile from models catalog.                |
-| `FRED_V2_MODEL_ROUTING_PRESETS_ENABLED`   | Enable legacy presets when no catalog controls are available.      |
 | `FRED_ENVIRONMENT`                        | Agentic portable environment selection (`dev`, `staging`, `prod`). |
 
 ## 3) External/Pass-Through Variables (Not Fred-Owned Runtime Controls)
@@ -146,6 +142,10 @@ These exist in templates/docs/deploy values but no active runtime read was found
 | `VITE_USE_AUTH`           | deploy values                                          | No active frontend code read found.      |
 | `FRED_AUTH_VERBOSE`       | docs only                                              | No runtime read found.                   |
 | `FRED_TEMPORAL_CODEC_KEY` | docs only                                              | No runtime read found.                   |
+| `FRED_V2_MODELS_CATALOG_FILE` | historical documentation only                      | No active runtime read; use `FRED_MODELS_CATALOG_FILE`. |
+| `FRED_MODELS_DEFAULT_CHAT_PROFILE_ID` | historical documentation only                  | No active runtime read; configure `default_profile_by_capability.chat`. |
+| `FRED_MODELS_DEFAULT_LANGUAGE_PROFILE_ID` | historical documentation only              | No active runtime read; first-party agent routing is chat-only. |
+| `FRED_V2_MODEL_ROUTING_PRESETS_ENABLED` | historical documentation only                 | No active runtime read; the rule/preset path was removed. |
 
 ## 4) Naming Convention Going Forward
 

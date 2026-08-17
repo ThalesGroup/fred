@@ -41,6 +41,7 @@ import {
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
+import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import {
   enabledTeamCount,
@@ -79,6 +80,7 @@ export default function CapabilitiesPage() {
 
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
   const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
+  const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<"tool" | "agent" | "model">("tool");
@@ -438,6 +440,19 @@ export default function CapabilitiesPage() {
       <PageHeader
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}
+        actions={
+          kindFilter === "model" && (
+            <Button
+              color="on-surface"
+              variant="outlined"
+              size="small"
+              icon={{ category: "outlined", type: "tune" }}
+              onClick={() => setPlatformBindingsPanelOpen(true)}
+            >
+              {t("rework.admin.platformModelBindings.openButton")}
+            </Button>
+          )
+        }
         tabs={
           <ButtonGroup
             size="small"
@@ -478,6 +493,11 @@ export default function CapabilitiesPage() {
         teamsError={isTeamsError}
         open={matrixCapability !== null}
         onClose={() => setMatrixCapabilityId(null)}
+      />
+
+      <PlatformModelBindingsPanel
+        open={platformBindingsPanelOpen}
+        onClose={() => setPlatformBindingsPanelOpen(false)}
       />
 
       <SuspendedInstancesDrawer
