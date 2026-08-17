@@ -1948,7 +1948,7 @@
         "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing — that is the Editor role.",
         "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
         "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
-        "team_member": "The baseline everyone on the team holds — added automatically by any role above. Use the team's agents and prompts, and manage your own personal prompts."
+        "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
       },
       "warnings": {
         "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."

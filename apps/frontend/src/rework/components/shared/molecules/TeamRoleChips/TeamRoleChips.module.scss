@@ -7,14 +7,16 @@
   gap: var(--spacing-xs);
 }
 
-// Geometry shared by the baseline badge and the role toggles. They sit side by
-// side in one row, so neither owns these numbers alone — retuning chip height
-// or padding in `.roleChip` without this would silently desync the two.
+// The pill the baseline badge and the role toggles both wear. They sit side by
+// side in one row and are meant to look like one set, so the whole resting
+// appearance lives here — retuning it in `.roleChip` alone would desync them.
 %pill {
   display: flex;
   justify-content: center;
   align-items: center;
+  border: 1px solid var(--outline);
   border-radius: 999px;
+  background: transparent;
   padding: 0 var(--spacing-s);
   height: 2rem;
   color: var(--on-surface-retreat);
@@ -22,14 +24,14 @@
   white-space: nowrap;
 }
 
-// The implicit `team_member` baseline: same pill geometry as `.roleChip`,
-// deliberately none of its affordances — dashed border, no hover or active
-// state, no pointer. It must read as a statement of fact, not a fourth toggle.
+// The implicit `team_member` baseline. Visually identical to a role toggle at
+// rest, on purpose — it belongs to the same row and the same set. What it does
+// not have is any affordance: no pointer, no hover, no active state, no click
+// handler. It states a fact; it is not a fourth toggle.
 .baselineChip {
   @extend %pill;
 
   cursor: default;
-  border: 1px dashed var(--outline-variant);
 }
 
 .roleChip {
@@ -40,8 +42,6 @@
     border-color 100ms ease,
     color 100ms ease;
   cursor: pointer;
-  border: 1px solid var(--outline);
-  background: transparent;
 
   &:hover:not([data-active="true"]):not([aria-disabled="true"]) {
     border-color: var(--outline);
