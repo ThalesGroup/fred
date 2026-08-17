@@ -35,8 +35,14 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+// `t` keeps its interpolation options: the chip's whole visible output is a
+// NUMBER, so a stub that drops {{count}} would make every count assertion
+// vacuous.
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key}:${JSON.stringify(opts)}` : key),
+    i18n: { language: "en" },
+  }),
 }));
 vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
 
@@ -71,6 +77,14 @@ const TAGS = [
   { id: "tag-deep", name: "Deep", path: "Nested", type: "document", item_ids: ["doc-deep"] },
   { id: "tag-broken", name: "Broken", path: "", type: "document", item_ids: ["doc-broken", "doc-ok"] },
   { id: "tag-done", name: "Done", path: "", type: "document", item_ids: ["doc-done", "doc-idle"] },
+  // Enough documents to exercise the hover panel's cap.
+  {
+    id: "tag-bulk",
+    name: "Bulk",
+    path: "",
+    type: "document",
+    item_ids: Array.from({ length: 13 }, (_, i) => `doc-bulk-${i}`),
+  },
 ];
 
 // `tasks` is the whole store (selectAllTasks); `selectActiveTasks` is derived
@@ -84,6 +98,9 @@ let tasks: ReturnType<typeof task>[] = [];
 // feed left, which is exactly the case that used to leave the Corpus root
 // looking clean while folders below it held failures.
 let taskHistory: { state: string; target: { type: string; id: string; label: string }; updated_at: string }[] = [];
+// The args the workspace asked the history with — asserted directly, since a
+// regression there (wrong scope, missing kind) is invisible in the rendered row.
+let taskHistoryArgs: Record<string, unknown> = {};
 const historyEntry = (uid: string, state: string, label: string, updatedAt: string) => ({
   state,
   target: { type: "document", id: uid, label },
@@ -104,11 +121,13 @@ const snapshotPage = (stage: string) => ({
 });
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  // The team-scoped terminal ingestion history (#2384) — what survives a page
-  // reload, once an explicit `state` turns off the route's terminal masking.
-  useListTasksKnowledgeFlowV1TasksGetQuery: (arg: { state?: string }) => ({
-    data: { tasks: taskHistory.filter((t) => t.state === arg.state) },
-  }),
+  // The team's terminal ingestion history (#2384) — what survives a page
+  // reload. ONE unfiltered call: a team-scoped query already returns every
+  // state, so the args are asserted rather than used to filter.
+  useListTasksKnowledgeFlowV1TasksGetQuery: (arg: Record<string, unknown>) => {
+    taskHistoryArgs = arg;
+    return { data: { tasks: taskHistory } };
+  },
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({ data: TAGS, isLoading: false, refetch: () => {} }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     (arg: { browseDocumentsByTagRequest: { tag_id: string } }) => ({
@@ -218,6 +237,7 @@ async function visitAndReturn(name: string): Promise<void> {
 beforeEach(() => {
   tasks = [];
   taskHistory = [];
+  taskHistoryArgs = {};
   snapshotDoc = null;
 });
 
@@ -412,6 +432,42 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
 
     expect(folderRow("Done").textContent).not.toContain(JUST_DONE);
     expect(folderRow("Done").textContent).not.toContain("rework.resources.status");
+  });
+
+  it("asks for the team's ingestion history in one unfiltered call", async () => {
+    // A team-scoped query already returns every state (exclude_terminal only
+    // defaults to hiding them on the `user` branch), so filtering by state would
+    // cost a second round-trip and drop `cancelled` plus teammates' in-flight
+    // runs. Asserted here because none of it is visible in the rendered row.
+    await renderWorkspace();
+
+    expect(taskHistoryArgs).toEqual({ scope: "team", teamId: "team-1", kind: "ingestion" });
+    expect(taskHistoryArgs.state).toBeUndefined();
+  });
+
+  it("counts every failure under the folder, not just one", async () => {
+    tasks = [task("t-1", "doc-broken", "failed", "Broken report.pdf"), task("t-2", "doc-ok", "failed", "Fine.pdf")];
+    await renderWorkspace();
+
+    expect(folderRow("Broken").textContent).toContain(`${FAILED_COUNT}:{"count":2}`);
+  });
+
+  it("names the first ten failures and summarizes the rest", async () => {
+    // The hover panel is portaled outside the chip, so its scrollbar is
+    // unreachable — an uncapped list would be clipped with no way to read past
+    // the fold.
+    taskHistory = Array.from({ length: 13 }, (_, i) =>
+      historyEntry(`doc-bulk-${i}`, "failed", `Bulk-${i}.pdf`, "2026-08-17T10:00:00Z"),
+    );
+    await renderWorkspace();
+
+    const row = folderRow("Bulk");
+    expect(row.textContent).toContain(`${FAILED_COUNT}:{"count":13}`);
+    const panel = hoverChip(row);
+    expect(panel).toContain("Bulk-0.pdf");
+    expect(panel).toContain("Bulk-9.pdf");
+    expect(panel).not.toContain("Bulk-10.pdf");
+    expect(panel).toContain(`folderFailedMore:{"count":3}`);
   });
 
   it("shows nothing anywhere when no document has any state to report", async () => {

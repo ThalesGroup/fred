@@ -34,22 +34,6 @@
   color: var(--on-error-container);
 }
 
-/* Failed-document names behind the folder rollup chip. Same zero-padding
- * caveat as .errorTooltip above (the rich Tooltip panel ships with none), and
- * the same height cap so a folder with many failures cannot cover the rows
- * around it. */
-.failedTooltip {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3xs);
-  margin: 0;
-  padding: var(--spacing-s);
-  max-width: 32rem;
-  max-height: 40vh;
-  overflow-y: auto;
-  text-align: left;
-}
-
 .failedTooltipTitle {
   font: var(--font-label-large);
 }
@@ -94,12 +78,14 @@
   }
 }
 
-/* Hover detail of a failed ingestion (#2315): per-stage messages inside the
- * shared Tooltip's rich-content panel. The rich panel deliberately ships with
- * zero padding (the content owns its internal spacing), so it is restated
- * here. Capped height with its own scrollbar so a many-stage failure cannot
- * cover the rows around it. */
-.errorTooltip {
+/* Hover panel of a failure: per-stage messages for one document (#2315), or the
+ * failed documents under a folder (#2384). One rule for both — the two panels
+ * differ only in row spacing, and the 32rem/40vh caps below have to move
+ * together or they drift apart. The rich Tooltip panel deliberately ships with
+ * zero padding (the content owns its internal spacing), so it is restated here;
+ * the height cap keeps a long list from covering the rows around it. */
+.errorTooltip,
+.failedTooltip {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
@@ -109,6 +95,10 @@
   max-height: 40vh;
   overflow-y: auto;
   text-align: left;
+}
+
+.failedTooltip {
+  gap: var(--spacing-3xs);
 }
 
 .errorEntry {
