@@ -995,6 +995,25 @@ class AgentDefinition(FrozenModel, ABC):
     mode.  They must still be registered so the runtime can find and execute
     them, but they should not be presented as top-level chat models.
     """
+    supports_capabilities: bool = Field(
+        default=True,
+        description=(
+            "Whether this agent honestly participates in capability selection "
+            "(the platform's HITL-gated tool packs offered by agent-instance "
+            "creation/editing), as opposed to just happening to have some "
+            "compatible capability registered on its pod. Defaults to True on "
+            "the shared base — ReAct agents' whole execution model is tool/"
+            "capability selection, so every existing ReAct agent keeps working "
+            "unchanged. GraphAgentDefinition overrides this to False by default "
+            "(see there) since today's graph node functions do not consume "
+            "capability-provided tools; a graph agent author who deliberately "
+            "wants their agent to participate opts back in explicitly with "
+            "`supports_capabilities = True` on their own definition. This is "
+            "orthogonal to `declared_tool_refs` / `default_mcp_servers` (the "
+            "separate, older mechanism both agent kinds already use to declare "
+            "their own hardcoded tool needs) — do not conflate the two."
+        ),
+    )
 
     def preview(self) -> AgentPreview:
         return AgentPreview.none(note="No preview provided by this agent definition.")
@@ -1065,6 +1084,18 @@ class GraphAgentDefinition(AgentDefinition, ABC):
     """
 
     execution_category: ExecutionCategory = ExecutionCategory.GRAPH
+    supports_capabilities: bool = Field(
+        default=False,
+        description=(
+            "Graph agents default to False: no graph agent's node functions "
+            "consume capability-provided tools today (they use "
+            "`declared_tool_refs` / `default_mcp_servers` or direct calls "
+            "instead), so the honest default is 'not offered'. Override to "
+            "True on a specific GraphAgentDefinition subclass only if that "
+            "agent's own node functions genuinely read from the capability/"
+            "tool-selection surface at runtime."
+        ),
+    )
     declared_tool_refs: tuple[ToolRequirement, ...] = Field(
         default=(),
         description=(

@@ -2117,6 +2117,7 @@
             "actionsIntegration": "Actions and integration"
           },
           "actionsIntegrationEmpty": "No capability in this section yet.",
+          "notSupported": "This agent does not support capability selection.",
           "packs": {
             "teamResources": {
               "title": "Access to team resources",

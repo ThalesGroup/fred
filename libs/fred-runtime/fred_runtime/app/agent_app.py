@@ -602,9 +602,11 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         self,
         registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
         access_token: str | None,
+        capability_registry: CapabilityRegistry | None = None,
     ) -> None:
         self._registry = registry
         self._access_token = access_token
+        self._capability_registry = capability_registry
 
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
         definition = self._registry.get(request.agent_id)
@@ -648,6 +650,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             access_token=self._access_token,
             team_id=request.context.team_id,
             registry=self._registry,
+            capability_registry=self._capability_registry,
         ):
             kind = payload.get("kind")
             if kind == "final":
@@ -679,6 +682,7 @@ def _build_runtime_services(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
+    capability_registry: CapabilityRegistry | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -772,6 +776,7 @@ def _build_runtime_services(
         LocalRegistryAgentInvoker(
             registry=registry,
             access_token=access_token,
+            capability_registry=capability_registry,
         )
         if registry is not None
         else None
@@ -934,9 +939,14 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Capabilities installed on this pod (#1974, RFC §3.8): pod-scoped, so every
-    # template from one pod advertises the same set — mirrored per template the
-    # same way available_mcp_servers is, so control-plane aggregation and the
+    # Capabilities this template genuinely offers for selection (#1974, RFC
+    # §3.8). Sourced from capabilities installed on this pod, filtered down
+    # to what the individual definition actually declares support for:
+    # `[]` outright when `AgentDefinition.supports_capabilities` is False
+    # (the honest "this agent doesn't support capabilities" signal — not a
+    # pod-registration coincidence), then further narrowed to
+    # `execution_models`-compatible entries for Graph templates that do opt
+    # in. Mirrored per template so control-plane aggregation and the
     # agent-creation UI need no second fetch.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
     # This template's declared default capability ids (RFC §2), verbatim from
@@ -2718,6 +2728,14 @@ def _effective_capability_ids(
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # A definition that declares it does not support capability selection
+        # (see AgentDefinition.supports_capabilities) never activates one —
+        # including a stale explicit selection saved before this field
+        # existed. Treat it exactly like "no selection made" so it falls
+        # through to the `default_mcp_servers` path below, the separate,
+        # still-active mechanism for an agent's own hardcoded MCP needs.
+        selected = None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
     if capability_registry is None:
@@ -2824,6 +2842,14 @@ def _build_capability_block(
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # Mirrors the same guard in `_effective_capability_ids`: a definition
+        # that opts out of capability selection ignores any saved selection
+        # outright, including a stale one from before this field existed
+        # (e.g. an agent instance with capabilities saved while its template
+        # still let the picker offer them). Never raise for it below — just
+        # treat it as unselected.
+        selected = None
     capability_config = tuning.capability_config if tuning is not None else {}
     if capability_registry is None:
         # A None selection with no registry is inert; a real selection is a bug.
@@ -3221,6 +3247,7 @@ async def _iterate_runtime_event_payloads(
         team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,
+        capability_registry=capability_registry,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -3595,8 +3622,18 @@ def _build_agent_router(
                 # time regardless, but a picker that lists it first invites the
                 # exact "select it, save it, discover the incompatibility at
                 # first launch" flow the loud refusal exists to prevent.
+                #
+                # Definitions that declare `supports_capabilities=False` (the
+                # default for GraphAgentDefinition) never participate in
+                # capability selection at all, regardless of what happens to
+                # be registered on this pod — that list is a fact about this
+                # pod's registry, not about what the agent's own definition
+                # declares. Short-circuit to [] rather than let coincidental
+                # pod registration leak into the picker.
                 available_capabilities=(
-                    all_capability_entries
+                    []
+                    if not definition.supports_capabilities
+                    else all_capability_entries
                     if not isinstance(definition, GraphAgentDefinition)
                     else [
                         entry

@@ -3888,6 +3888,10 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
         agent_id: str = "test.graph_capability"
         role: str = "test"
         description: str = "test"
+        # This test specifically exercises the Graph capability-block build
+        # path — opt back in from GraphAgentDefinition's False default (see
+        # AgentDefinition.supports_capabilities).
+        supports_capabilities: bool = True
 
         def build_graph(self) -> GraphDefinition:
             return GraphDefinition(
@@ -4003,6 +4007,10 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         agent_id: str = "test.graph_capability_react_only"
         role: str = "test"
         description: str = "test"
+        # This test specifically exercises the Graph capability-block build
+        # path — opt back in from GraphAgentDefinition's False default (see
+        # AgentDefinition.supports_capabilities).
+        supports_capabilities: bool = True
 
         def build_graph(self) -> GraphDefinition:
             return GraphDefinition(
@@ -4126,6 +4134,10 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
         agent_id: str = "test.graph_capability_hitl_gated"
         role: str = "test"
         description: str = "test"
+        # This test specifically exercises the Graph capability-block build
+        # path — opt back in from GraphAgentDefinition's False default (see
+        # AgentDefinition.supports_capabilities).
+        supports_capabilities: bool = True
 
         def build_graph(self) -> GraphDefinition:
             return GraphDefinition(
@@ -4174,6 +4186,143 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
             team_id=None,
             agent_instance_id=None,
         )
+
+
+def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent() -> (
+    None
+):
+    """
+    A `GraphAgentDefinition` that leaves `supports_capabilities` at its False
+    default (the honest "this agent doesn't support capabilities" signal, see
+    `AgentDefinition.supports_capabilities`) must never build a block or raise
+    — not even when the managed instance's saved tuning still names a
+    HITL-gated, otherwise Graph-incompatible capability. This is exactly the
+    live-broken-instance case the field was introduced to fix: an agent
+    instance whose capability selection was saved back when the picker (still
+    driven by pod-wide registration, not the definition's own declaration)
+    wrongly offered it. `_effective_capability_ids` and `_build_capability_block`
+    both discard the stale selection instead of erroring on it.
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent -q`
+    """
+    from collections.abc import Mapping as _Mapping
+
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_sdk.contracts.capability import (
+        AgentCapability,
+        CapabilityContext,
+        CapabilityManifest,
+        EmptyModel,
+        HitlSpec,
+    )
+    from fred_sdk.contracts.context import BoundRuntimeContext
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        GraphAgentDefinition,
+        GraphDefinition,
+        GraphNodeDefinition,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+    from langchain_core.tools import BaseTool
+    from langchain_core.tools import tool as lc_tool
+    from pydantic import BaseModel
+
+    class _NoConfig(BaseModel):
+        pass
+
+    class _HitlGatedCapability(AgentCapability[_NoConfig, _NoConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="document_extract",
+            version="1.0.0",
+            name="cap.document_extract.name",
+            description="cap.document_extract.description",
+            icon="Build",
+        )
+        ConfigModel = _NoConfig
+
+        def tools(
+            self, ctx: CapabilityContext[_NoConfig, EmptyModel]
+        ) -> list[BaseTool]:
+            del ctx
+
+            @lc_tool
+            def gated_probe(text: str) -> str:
+                """Echo text back."""
+                return text
+
+            return [gated_probe]
+
+        def hitl_specs(self) -> list[HitlSpec]:
+            return [HitlSpec(tool="gated_probe", require=True)]
+
+    class _MinInput(BaseModel):
+        message: str = ""
+
+    class _MinState(BaseModel):
+        message: str = ""
+
+    class _MinGraphAgent(GraphAgentDefinition):
+        agent_id: str = "test.graph_capability_unsupported_stale_selection"
+        role: str = "test"
+        description: str = "test"
+        # Deliberately NOT overriding `supports_capabilities` — this mirrors
+        # a real GraphAgentDefinition subclass like Eva, which relies on the
+        # False default rather than declaring it.
+
+        def build_graph(self) -> GraphDefinition:
+            return GraphDefinition(
+                state_model_name="MinState",
+                entry_node="n",
+                nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+            )
+
+        def input_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def state_model(self) -> type[BaseModel]:
+            return _MinState
+
+        def output_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def build_initial_state(
+            self, input_model: BaseModel, binding: BoundRuntimeContext
+        ) -> BaseModel:
+            return _MinState(message=getattr(input_model, "message", ""))
+
+        def node_handlers(self) -> _Mapping[str, object]:
+            return {}
+
+        def build_output(self, state: BaseModel) -> BaseModel:
+            return _MinInput(message=getattr(state, "message", ""))
+
+    definition = _MinGraphAgent()
+    assert definition.supports_capabilities is False
+    registry = CapabilityRegistry()
+    registry.register(_HitlGatedCapability())
+    # Mirrors the actual saved tuning on the live-broken Eva instance this bug
+    # was reported against: a HITL-gated, non-MCP capability selected while
+    # the picker was still (wrongly) offering it.
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["document_extract"],
+    )
+
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is None
 
 
 def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name() -> (

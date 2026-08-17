@@ -47,32 +47,46 @@ export function SimpleCapabilitiesView({
 }: SimpleCapabilitiesViewProps) {
   const { t } = useTranslation();
   const activeIds = new Set(selection.selectedCapabilityIds);
+  // The template's own `available_capabilities` is now the honest signal
+  // (see AgentDefinition.supports_capabilities) — empty means this agent
+  // doesn't participate in capability selection at all, not just that
+  // nothing happens to be enabled. A "reasoning"-kind pack maps to a plain
+  // form field, not a backend capability, so it stays interactive regardless.
+  const templateSupportsCapabilities = availableIds.size > 0;
 
   return (
     <div className={styles.view}>
-      {TOOL_PACK_SECTIONS.map((section) => (
-        <section key={section.id} className={styles.section}>
-          <h3 className={styles.sectionHeader}>{t(section.titleKey)}</h3>
-          {section.emptyState ? (
-            <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.actionsIntegrationEmpty")}</p>
-          ) : (
-            <ul className={styles.packList}>
-              {section.packs.map((pack) => (
-                <ToolPackCard
-                  key={pack.id}
-                  pack={pack}
-                  checked={derivePackChecked(pack, selection)}
-                  disabled={disabled}
-                  availableIds={availableIds}
-                  activeIds={activeIds}
-                  onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
-                  options={renderPackOptions?.(pack)}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
-      ))}
+      {TOOL_PACK_SECTIONS.map((section) => {
+        const isCapabilityBackedSection =
+          section.packs.length > 0 && section.packs.every((pack) => pack.kind === "capabilities");
+        const showNotSupported = isCapabilityBackedSection && !templateSupportsCapabilities;
+
+        return (
+          <section key={section.id} className={styles.section}>
+            <h3 className={styles.sectionHeader}>{t(section.titleKey)}</h3>
+            {section.emptyState ? (
+              <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.actionsIntegrationEmpty")}</p>
+            ) : showNotSupported ? (
+              <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.notSupported")}</p>
+            ) : (
+              <ul className={styles.packList}>
+                {section.packs.map((pack) => (
+                  <ToolPackCard
+                    key={pack.id}
+                    pack={pack}
+                    checked={derivePackChecked(pack, selection)}
+                    disabled={disabled}
+                    availableIds={availableIds}
+                    activeIds={activeIds}
+                    onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
+                    options={renderPackOptions?.(pack)}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
