@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fred_core.models import Base as CoreBase
+from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.models.task_models import TASK_TABLES
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import (
     StartIngestionParams,
@@ -16,12 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
-    import fred_core.tasks.orm_models  # noqa: F401
-
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
+        await conn.run_sync(CPBase.metadata.create_all)
     return engine
 
 
@@ -32,7 +31,9 @@ async def test_task_service_start_creates_task_run(
 ) -> None:
     engine = await _make_engine(tmp_path, f"svc_start_{created_by}.sqlite3")
     try:
-        service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
+        service = TaskService.build(
+            engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
+        )
         req = StartIngestionRequest(params=StartIngestionParams(resource_ids=["doc1"]))
         response = await service.start(req, created_by=created_by)
 
@@ -50,7 +51,9 @@ async def test_task_service_start_creates_task_run(
 async def test_task_service_cancel_unknown_task_raises(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "svc_cancel.sqlite3")
     try:
-        service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
+        service = TaskService.build(
+            engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
+        )
         with pytest.raises(TaskNotFoundError):
             await service.cancel("nonexistent-id")
     finally:
@@ -61,7 +64,9 @@ async def test_task_service_cancel_unknown_task_raises(tmp_path: Path) -> None:
 async def test_task_service_replay_empty_before_any_events(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "svc_replay.sqlite3")
     try:
-        service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
+        service = TaskService.build(
+            engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
+        )
         req = StartIngestionRequest(params=StartIngestionParams(resource_ids=["doc1"]))
         response = await service.start(req, created_by=None)
 

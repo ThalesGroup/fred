@@ -50,7 +50,7 @@ from fred_core.tasks.models import TaskState
 
 if TYPE_CHECKING:
     from fred_core.documents.document_store import BaseDocumentMetadataStore
-    from fred_core.tasks.orm_models import TaskRunRow
+    from fred_core.tasks.orm_models import TaskRunColumns
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ async def repair_document_after_terminal(document_uid: str, state: TaskState, me
         await delete_cancelled_document(document_uid, created_by)
 
 
-async def on_reconciled_terminal(run: "TaskRunRow", state: TaskState, message: str) -> None:
+async def on_reconciled_terminal(run: "TaskRunColumns", state: TaskState, message: str) -> None:
     """`TaskService.on_reconciled_terminal` hook — the reconciliation-side entry
     into `repair_document_after_terminal`; unwraps the run's document target."""
     target = run.target or {}

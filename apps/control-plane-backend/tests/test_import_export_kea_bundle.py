@@ -33,6 +33,7 @@ from control_plane_backend.import_export.kea_reconciliation import (
 )
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.prompt_models import PromptRow
+from control_plane_backend.models.task_models import TASK_TABLES
 from fred_core import Relation, RelationType, team_organization_relation
 from fred_core.documents.tag_models import TagRow
 from fred_core.models import Base as CoreBase
@@ -255,10 +256,10 @@ class FakeRebac:
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
-    # prompt_models is already imported above (PromptRow) — only agent_instance_models
-    # and orm_models still need a registration-only import here.
+    # prompt_models is already imported above (PromptRow) and the task models come
+    # with the module-level TASK_TABLES import — only agent_instance_models still
+    # needs a registration-only import here.
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import fred_core.tasks.orm_models  # noqa: F401
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / name}")
     async with engine.begin() as conn:
@@ -283,8 +284,9 @@ async def _import(
     try:
         async with tasks_engine.begin() as conn:
             await conn.run_sync(CoreBase.metadata.create_all)
+            await conn.run_sync(CPBase.metadata.create_all)
         task_service = TaskService.build(
-            engine=tasks_engine, backend=SchedulerBackend.MEMORY
+            engine=tasks_engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
         )
         start = await task_service.start(StartMigrationRequest(), created_by="tester")
         report = await run_import(

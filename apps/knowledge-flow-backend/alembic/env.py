@@ -17,11 +17,11 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 import fred_core.documents.document_models  # noqa: F401 — registers metadata + tag tables with CoreBase (via fred_core.documents.__init__)
-import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
 from fred_core.models.base import Base as CoreBase
 from fred_core.sql import make_alembic_env
 
 import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401
+import knowledge_flow_backend.models.task_models  # noqa: F401 — registers kf_task_run / kf_task_event_log with Base
 from alembic import context
 from knowledge_flow_backend.common.config_loader import load_configuration
 
@@ -38,7 +38,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    # Both metadata objects so autogenerate sees KFB tables and shared task tables.
+    # Both metadata objects so autogenerate sees KFB tables (incl. its own
+    # kf_task_* pair, #2170) and the shared fred-core tables.
     target_metadata=[Base.metadata, CoreBase.metadata],
     get_postgres_config=lambda: load_configuration().storage.postgres,
     version_table="alembic_version_knowledge_flow",

@@ -12,9 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Per-service task persistence schema (TASK-EVENT-STREAM-RFC §2.6).
+
+This module deliberately exposes **no mapped class**. Every backend that
+records tasks declares its own concrete pair on its own declarative ``Base``,
+under its own table prefix — `control_plane_backend.models.task_models`
+(``cp_``) and `knowledge_flow_backend.models.task_models` (``kf_``):
+
+    class CpTaskRunRow(TaskRunColumns, Base):
+        __tablename__ = "cp_task_run"
+        __table_args__ = task_run_table_args("cp_task_run")
+
+Why not one shared mapped class (#2170): control-plane and knowledge-flow run
+their Alembic trees against the *same* `fred` database. A single `task_run`
+registered on the shared `CoreBase` therefore gave both backends one physical
+table — so each backend's `GET /tasks` returned the other's rows and the
+Activity page showed every task twice. Distinct table names per owner fix that
+without a second database, and take these two tables out of the shared-`CoreBase`
+ownership ambiguity tracked in #2314: each pair now lives in exactly one
+backend's metadata, which is what `make_alembic_env`'s `include_name` filter
+reads to decide what a tree owns.
+
+The columns themselves stay here, once: the two tables are the same schema with
+two owners, not two schemas.
+"""
+
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
@@ -32,47 +59,35 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.sqlite import INTEGER as SQLITE_INTEGER
 from sqlalchemy.orm import Mapped, mapped_column
 
-from fred_core.models.base import Base
-
 # BigInteger PK that autorements correctly on SQLite (INTEGER rowid alias).
 _PK_BIG = BigInteger().with_variant(SQLITE_INTEGER(), "sqlite")
 _JSONB = JSONB().with_variant(JSON(), "sqlite")
+
+_NON_TERMINAL_MIGRATION = (
+    "kind = 'migration' AND state NOT IN ('succeeded', 'failed', 'cancelled')"
+)
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class TaskRunRow(Base):
-    """Current-state summary for a task. One row per task, updated in place."""
+class TaskRunColumns:
+    """Current-state summary for a task. One row per task, updated in place.
 
-    __tablename__ = "task_run"
-    __table_args__ = (
-        # Index for the reconciliation sweeper, which scans non-terminal tasks by age.
-        Index("ix_task_run_state_updated", "state", "updated_at"),
-        # Atomic exclusion for concurrent migration-task launches (import/reset/
-        # reset-full, `import_export/api.py`, all created with kind="migration").
-        # Every row this partial index covers already has kind='migration' (the
-        # predicate says so) — a unique index on `kind` among only those rows
-        # therefore enforces "at most one non-terminal migration-kind row can
-        # exist at any time", without constraining any other task kind
-        # (ingestion/evaluation/erasure/log never appear in the filtered set).
-        # This replaces a check-then-act race (list active tasks, then insert)
-        # with a real DB-level guarantee: two concurrent inserts can't both
-        # succeed, the loser gets an IntegrityError translated to a 409
-        # (`import_export/api.py::_is_concurrent_migration_violation`).
-        Index(
-            "uq_task_run_single_active_migration",
-            "kind",
-            unique=True,
-            sqlite_where=text(
-                "kind = 'migration' AND state NOT IN ('succeeded', 'failed', 'cancelled')"
-            ),
-            postgresql_where=text(
-                "kind = 'migration' AND state NOT IN ('succeeded', 'failed', 'cancelled')"
-            ),
-        ),
-    )
+    A declarative mixin, not a mapped class — SQLAlchemy copies these columns
+    into each concrete subclass, so `cp_task_run` and `kf_task_run` cannot
+    drift apart. Single-column indexes (`index=True`) are named after the
+    concrete table by SQLAlchemy itself (`ix_cp_task_run_kind`, …); the
+    composite and partial ones need `task_run_table_args` below.
+    """
+
+    if TYPE_CHECKING:
+        # A mixin is not itself mapped, so type checkers only see
+        # `object.__init__` and reject the keyword construction `TaskStore` does.
+        # The concrete subclass really does get SQLAlchemy's kwargs constructor —
+        # declaring it outside `TYPE_CHECKING` would shadow it at runtime.
+        def __init__(self, **kw: Any) -> None: ...
 
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -116,13 +131,12 @@ class TaskRunRow(Base):
     acknowledged_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
-class TaskEventLogRow(Base):
+class TaskEventLogColumns:
     """Append-only event journal. Source of truth for SSE replay."""
 
-    __tablename__ = "task_event_log"
-    __table_args__ = (
-        UniqueConstraint("task_id", "seq", name="uq_task_event_log_task_seq"),
-    )
+    if TYPE_CHECKING:
+        # See `TaskRunColumns.__init__`.
+        def __init__(self, **kw: Any) -> None: ...
 
     id: Mapped[int] = mapped_column(_PK_BIG, primary_key=True, autoincrement=True)
     task_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -138,3 +152,59 @@ class TaskEventLogRow(Base):
     emitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+
+
+def single_active_migration_index_name(table: str) -> str:
+    """Name of the partial unique index built by `task_run_table_args`.
+
+    Exported so `import_export/api.py` can recognise the constraint in an
+    `IntegrityError` string without restating the naming rule — the two used to
+    be kept in sync by a "must match" comment.
+    """
+    return f"uq_{table}_single_active_migration"
+
+
+def task_run_table_args(table: str) -> tuple[Index, ...]:
+    """`__table_args__` for a concrete `<prefix>task_run`.
+
+    Index names are derived from *table* because Postgres scopes index names
+    per schema: `cp_task_run` and `kf_task_run` live side by side in the same
+    database and cannot both own an index called `ix_task_run_state_updated`.
+    """
+    return (
+        # Index for the reconciliation sweeper, which scans non-terminal tasks by age.
+        Index(f"ix_{table}_state_updated", "state", "updated_at"),
+        # Atomic exclusion for concurrent migration-task launches (import/reset/
+        # reset-full, `import_export/api.py`, all created with kind="migration").
+        # Every row this partial index covers already has kind='migration' (the
+        # predicate says so) — a unique index on `kind` among only those rows
+        # therefore enforces "at most one non-terminal migration-kind row can
+        # exist at any time", without constraining any other task kind
+        # (ingestion/evaluation/erasure/log never appear in the filtered set).
+        # This replaces a check-then-act race (list active tasks, then insert)
+        # with a real DB-level guarantee: two concurrent inserts can't both
+        # succeed, the loser gets an IntegrityError translated to a 409
+        # (`import_export/api.py::_is_concurrent_migration_violation`).
+        Index(
+            single_active_migration_index_name(table),
+            "kind",
+            unique=True,
+            sqlite_where=text(_NON_TERMINAL_MIGRATION),
+            postgresql_where=text(_NON_TERMINAL_MIGRATION),
+        ),
+    )
+
+
+def task_event_log_table_args(table: str) -> tuple[UniqueConstraint, ...]:
+    """`__table_args__` for a concrete `<prefix>task_event_log`. Same
+    per-database uniqueness reason as `task_run_table_args`."""
+    return (UniqueConstraint("task_id", "seq", name=f"uq_{table}_task_seq"),)
+
+
+@dataclass(frozen=True)
+class TaskTables:
+    """The concrete pair a backend owns, handed to `TaskStore`/`TaskService.build`
+    so fred-core's persistence code stays table-name agnostic."""
+
+    run: type[TaskRunColumns]
+    event_log: type[TaskEventLogColumns]

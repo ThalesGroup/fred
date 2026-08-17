@@ -42,12 +42,12 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.structure import KeycloakUser
 from fred_core.tasks.models import TaskListResponse
-from fred_core.tasks.orm_models import TaskRunRow
+from fred_core.tasks.orm_models import TaskRunColumns
 from fred_core.tasks.service import TaskService
 
 
 async def authorize_task_access(
-    user: KeycloakUser, run: TaskRunRow, rebac: RebacEngine
+    user: KeycloakUser, run: TaskRunColumns, rebac: RebacEngine
 ) -> None:
     """Authorize *viewing* a task (list detail / stream) by one rule: its creator,
     a platform admin, or a member with CAN_READ_MEMBERS on the task's team. Tasks
@@ -76,7 +76,7 @@ authorize_task_stream = authorize_task_access
 
 
 async def authorize_task_mutation(
-    user: KeycloakUser, run: TaskRunRow, rebac: RebacEngine
+    user: KeycloakUser, run: TaskRunColumns, rebac: RebacEngine
 ) -> None:
     """Authorize *mutating* a task (cancel). Deliberately a stricter subset of the
     view rule: the creator or a platform admin only — NOT a team reader. Canceling

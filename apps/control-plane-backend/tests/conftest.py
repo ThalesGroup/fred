@@ -20,7 +20,7 @@ def _setup_test_schema() -> None:
     import control_plane_backend.models.prompt_models  # noqa: F401
     import control_plane_backend.models.purge_queue_models  # noqa: F401
     import control_plane_backend.models.session_metadata_models  # noqa: F401
-    import fred_core.tasks.orm_models  # noqa: F401
+    import control_plane_backend.models.task_models  # noqa: F401
     from control_plane_backend.models.base import Base as CPBase
     from fred_core.models.base import Base as FredCoreBase
     from fred_core.teams import TeamMetadataRow  # noqa: F401
