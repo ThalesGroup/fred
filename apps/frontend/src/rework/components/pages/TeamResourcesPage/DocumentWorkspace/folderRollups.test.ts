@@ -98,7 +98,15 @@ describe("resolveDocOutcomes", () => {
 
   it("carries the document name from the winning outcome", () => {
     const outcomes = resolveDocOutcomes([history("doc", "failed", "2026-08-17T10:00:00Z", "Rapport.pdf")], []);
-    expect(outcomes.failed.get("doc")).toBe("Rapport.pdf");
+    expect(outcomes.failed.get("doc")?.name).toBe("Rapport.pdf");
+  });
+
+  it("carries the message the ingestion task reported", () => {
+    // The only account of a run that died before any pipeline stage started —
+    // `processing.errors` is keyed by stage and stays empty for it.
+    const task = { ...history("doc", "failed", "2026-08-17T10:00:00Z"), error: "Worker timed out" } as TaskSummary;
+    const outcomes = resolveDocOutcomes([task], []);
+    expect(outcomes.failed.get("doc")?.error).toBe("Worker timed out");
   });
 });
 
@@ -116,7 +124,7 @@ describe("indexFoldersByDocUid", () => {
 
 function rollupsFor(overrides: {
   failedDocsByTagId?: Map<string, FailedDoc[]>;
-  outcomes?: { failed: Map<string, string>; resolved: Set<string> };
+  outcomes?: { failed: Map<string, FailedDoc>; resolved: Set<string> };
   activeDocUids?: string[];
   justCompletedDocUids?: Set<string>;
   pendingTagIds?: string[];
@@ -150,7 +158,7 @@ describe("buildFolderRollups", () => {
   it("counts a document failing in both sources only once", () => {
     const rollups = rollupsFor({
       failedDocsByTagId: new Map([["t-a", [{ uid: "doc-a", name: "doc-a.pdf" }]]]),
-      outcomes: { failed: new Map([["doc-a", "doc-a.pdf"]]), resolved: new Set() },
+      outcomes: { failed: new Map([["doc-a", { uid: "doc-a", name: "doc-a.pdf" }]]), resolved: new Set() },
     });
     expect(rollups.get("A")?.failed).toHaveLength(1);
   });
@@ -162,7 +170,9 @@ describe("buildFolderRollups", () => {
   });
 
   it("ignores documents that belong to no visible folder", () => {
-    const rollups = rollupsFor({ outcomes: { failed: new Map([["ghost", "ghost.pdf"]]), resolved: new Set() } });
+    const rollups = rollupsFor({
+      outcomes: { failed: new Map([["ghost", { uid: "ghost", name: "ghost.pdf" }]]), resolved: new Set() },
+    });
     expect(rollups.get("A")?.failed).toEqual([]);
   });
 

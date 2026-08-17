@@ -2987,6 +2987,16 @@ The rendered list names the first 10 failures and summarizes the rest ("and 12
 more"), but **copy always writes the full list** — copying is exactly when the
 whole thing is wanted.
 
+A document's panel also carries the message the ingestion **task** reported,
+under "Signalé par le traitement", alongside the per-stage `processing.errors`.
+A run killed before any pipeline stage started (worker saturation, a Temporal
+`TIMED_OUT` verdict) stamps nothing per stage, so the tab used to show "Erreur"
+with an empty panel while the message sat on the task — visible only in the task
+popover, which is not mounted for most users. The parent workflow already pulls
+it out of the Temporal child job (`_wf_file_terminal_event_args`, #2315) and the
+rollup already fetches it with the task history, so this is a wiring change, not
+a new source. It is skipped when a stage message already says the same thing.
+
 One coupling worth knowing: terminal tasks are never evicted today because
 `taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
 from the app. If the tray is remounted, `EVICTION_DELAY_MS` (5 min) starts

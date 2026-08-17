@@ -1618,6 +1618,7 @@
         "stopIngestionTitle": "Stop ingestion"
       },
       "errorTooltip": {
+        "reported": "Reported by the pipeline",
         "stage": "Stage: {{stage}}"
       },
       "empty": {

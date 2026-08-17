@@ -43,6 +43,11 @@ interface StatusChipProps {
   status: ChipStatus;
   /** Per-stage messages from `processing.errors`; shown on hover when failed (#2315). */
   errors?: Record<string, string> | null;
+  /** What the ingestion task itself reported when it died — the message the
+   *  parent workflow extracted from the Temporal child job. A run that failed
+   *  before any stage started stamps nothing in `processing.errors`, so without
+   *  this the chip says "Erreur" and the panel has nothing to show. */
+  taskError?: string | null;
   /** The ingestion succeeded during this browser session (its SSE task reached
    *  `succeeded`). Marks the otherwise-silent "ready" state with a success
    *  badge so a user who just launched uploads can spot what finished — on a
@@ -74,7 +79,7 @@ const ICON_SIZE = 12;
  * Stage keys are shown as-is: they are backend pipeline identifiers
  * (preview/vector/sql/…), useful verbatim in a support ticket.
  */
-export function StatusChip({ status, errors, justCompleted, failedDocuments }: StatusChipProps) {
+export function StatusChip({ status, errors, justCompleted, failedDocuments, taskError }: StatusChipProps) {
   const { t } = useTranslation();
   // Folder rollup: the count is the label ("2 errors"), because restating
   // "Error" on a folder says nothing the row's own subtree doesn't already
@@ -138,24 +143,37 @@ export function StatusChip({ status, errors, justCompleted, failedDocuments }: S
   );
 
   const errorEntries = status === "failed" ? Object.entries(errors ?? {}) : [];
-  if (errorEntries.length === 0) return chip;
+  const reportedError = status === "failed" ? taskError?.trim() : undefined;
+  // A stage message is more precise than the task's, so it is not repeated when
+  // it already says the same thing.
+  const showReportedError = reportedError && !errorEntries.some(([, message]) => message.trim() === reportedError);
+  if (errorEntries.length === 0 && !showReportedError) return chip;
+
+  const copyText = [
+    ...errorEntries.map(([stage, message]) => `${stage}: ${message}`),
+    ...(showReportedError ? [reportedError] : []),
+  ].join("\n");
 
   return (
-    <DetailPanel
-      title={t("rework.resources.status.failed")}
-      copyText={errorEntries.map(([stage, message]) => `${stage}: ${message}`).join("\n")}
-      chip={chip}
-    >
-      <dl className={styles.errorTooltip}>
-        {errorEntries.map(([stage, message]) => (
-          <div key={stage} className={styles.errorEntry}>
-            {/* The raw key alone ("preview", "vector") reads as jargon —
-                labelling it as a pipeline stage tells the user what failed. */}
-            <dt className={styles.errorStage}>{t("rework.resources.errorTooltip.stage", { stage })}</dt>
-            <dd className={styles.errorMessage}>{message}</dd>
-          </div>
-        ))}
-      </dl>
+    <DetailPanel title={t("rework.resources.status.failed")} copyText={copyText} chip={chip}>
+      {errorEntries.length > 0 && (
+        <dl className={styles.errorTooltip}>
+          {errorEntries.map(([stage, message]) => (
+            <div key={stage} className={styles.errorEntry}>
+              {/* The raw key alone ("preview", "vector") reads as jargon —
+                  labelling it as a pipeline stage tells the user what failed. */}
+              <dt className={styles.errorStage}>{t("rework.resources.errorTooltip.stage", { stage })}</dt>
+              <dd className={styles.errorMessage}>{message}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {showReportedError && (
+        <div className={styles.errorEntry}>
+          <span className={styles.errorStage}>{t("rework.resources.errorTooltip.reported")}</span>
+          <span className={styles.errorMessage}>{reportedError}</span>
+        </div>
+      )}
     </DetailPanel>
   );
 }

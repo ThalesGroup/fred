@@ -97,12 +97,18 @@ let tasks: ReturnType<typeof task>[] = [];
 // `tasks`: after a page reload the Redux store is empty and this is the ONLY
 // feed left, which is exactly the case that used to leave the Corpus root
 // looking clean while folders below it held failures.
-let taskHistory: { state: string; target: { type: string; id: string; label: string }; updated_at: string }[] = [];
+let taskHistory: {
+  state: string;
+  error?: string | null;
+  target: { type: string; id: string; label: string };
+  updated_at: string;
+}[] = [];
 // The args the workspace asked the history with — asserted directly, since a
 // regression there (wrong scope, missing kind) is invisible in the rendered row.
 let taskHistoryArgs: Record<string, unknown> = {};
 const historyEntry = (uid: string, state: string, label: string, updatedAt: string) => ({
   state,
+  error: null as string | null,
   target: { type: "document", id: uid, label },
   updated_at: updatedAt,
 });
@@ -498,6 +504,31 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
     expect(written).toHaveLength(1);
     expect(written[0].split("\n")).toHaveLength(13);
     expect(written[0]).toContain("Bulk-12.pdf");
+  });
+
+  it("shows the task's own error on a document whose failure never reached a stage", async () => {
+    // The gap this closes: a run killed before any pipeline stage started
+    // stamps nothing in `processing.errors`, so the Resources tab used to show
+    // "Erreur" with an empty panel while the message sat on the task, visible
+    // only in the task popover. The parent workflow already extracts it from
+    // the Temporal child job (#2315).
+    snapshotDoc = { stage: "failed" };
+    taskHistory = [
+      { ...historyEntry("doc-snapshot", "failed", "Snapshot.pdf", "2026-08-17T10:00:00Z"), error: "Worker timed out" },
+    ];
+    await renderWorkspace();
+    await click(folderRow("Broken").querySelector("button")!);
+
+    const chip = [...container.querySelectorAll('[class*="chip"]')].find((el) =>
+      el.textContent?.includes("rework.resources.status.failed"),
+    );
+    if (!chip) throw new Error("failed chip not rendered");
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+
+    const panel = document.querySelector('[role="tooltip"]');
+    expect(panel!.textContent).toContain("Worker timed out");
   });
 
   it("shows nothing anywhere when no document has any state to report", async () => {

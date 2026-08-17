@@ -862,7 +862,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const pendingTagIdsKey = [...pendingTagIds].sort().join(KEY_SEP);
   const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(KEY_SEP);
   const failedDocKey = [...docOutcomes.failed]
-    .map(([uid, name]) => `${uid}${KEY_SEP}${name}`)
+    .map(([uid, doc]) => `${uid}${KEY_SEP}${doc.name}${KEY_SEP}${doc.error ?? ""}`)
     .sort()
     .join(KEY_SEP);
   const justCompletedKey = [...justCompletedDocUids].sort().join(KEY_SEP);
@@ -1277,6 +1277,13 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           <StatusChip
             status={getDocStatus(row.doc)}
             errors={row.doc.processing?.errors}
+            // The failure a Temporal child job reported: for a run that died
+            // before any stage started, this is the ONLY account of it —
+            // `processing.errors` is keyed by stage and stays empty. Already in
+            // hand from the task feed, so the Resources tab stops being the one
+            // surface that shows "Erreur" with nothing behind it (#2315 put the
+            // message on the task; it only ever reached the task popover).
+            taskError={docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
             justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
           />
         );

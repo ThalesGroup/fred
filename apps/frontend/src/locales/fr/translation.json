@@ -1618,6 +1618,7 @@
         "stopIngestionTitle": "Arrêter l'ingestion"
       },
       "errorTooltip": {
+        "reported": "Signalé par le traitement",
         "stage": "Étape : {{stage}}"
       },
       "empty": {

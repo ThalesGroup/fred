@@ -17,10 +17,15 @@ import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/
 import { collectDescendantDocUids, type TagNode } from "../../../../../shared/utils/tagTree.ts";
 import { deriveDocStatus } from "./deriveDocStatus.ts";
 
-/** A document a folder chip stands for: its uid, and the name to show on hover. */
+/** A document a failure chip stands for. */
 export interface FailedDoc {
   uid: string;
   name: string;
+  /** What the ingestion reported when it died — the message the parent workflow
+   *  pulled out of the Temporal child job (`_wf_file_terminal_event_args`,
+   *  #2315) and stamped on the task. It is the only account of a failure that
+   *  never reached a pipeline stage, so `processing.errors` is empty for it. */
+  error?: string | null;
 }
 
 /** What a folder row shows, summarizing everything under it (#2384). */
@@ -45,7 +50,7 @@ export interface FolderRollup {
  * clear a failure another source still believes in.
  */
 export interface DocOutcomes {
-  failed: Map<string, string>;
+  failed: Map<string, FailedDoc>;
   resolved: Set<string>;
 }
 
@@ -53,6 +58,7 @@ interface RankedOutcome {
   uid: string;
   state: string;
   name: string;
+  error?: string | null;
   /** Comparable only against outcomes from the SAME clock — see below. */
   at: number;
 }
@@ -92,6 +98,7 @@ export function resolveDocOutcomes(history: TaskSummary[], live: TaskViewModel[]
               uid: task.target.id,
               state: task.state,
               name: task.target.label || task.target.id,
+              error: task.error,
               at: rankable(Date.parse(task.updated_at)),
             },
           ]
@@ -106,6 +113,7 @@ export function resolveDocOutcomes(history: TaskSummary[], live: TaskViewModel[]
               uid: task.target.id,
               state: task.state,
               name: task.target.label || task.target.id,
+              error: task.error,
               at: task.terminalAt ?? task.registeredAt,
             },
           ]
@@ -113,10 +121,10 @@ export function resolveDocOutcomes(history: TaskSummary[], live: TaskViewModel[]
     ),
   );
 
-  const failed = new Map<string, string>();
+  const failed = new Map<string, FailedDoc>();
   const resolved = new Set<string>();
   for (const [uid, outcome] of new Map([...fromHistory, ...fromLive])) {
-    if (outcome.state === "failed") failed.set(uid, outcome.name);
+    if (outcome.state === "failed") failed.set(uid, { uid, name: outcome.name, error: outcome.error });
     // `cancelled` is not a failure — the user stopped it on purpose — but it
     // does resolve one, which is why it lands here rather than being ignored.
     else resolved.add(uid);
@@ -216,9 +224,9 @@ export function buildFolderRollups(input: FolderRollupInput): Map<string, Folder
     const rollup = rollups.get(folderByDocUid.get(uid) ?? "");
     if (rollup) rollup.processing = true;
   }
-  for (const [uid, name] of outcomes.failed) {
+  for (const [uid, doc] of outcomes.failed) {
     const failed = failedByFolder.get(folderByDocUid.get(uid) ?? "");
-    if (failed && !failed.has(uid)) failed.set(uid, { uid, name });
+    if (failed && !failed.has(uid)) failed.set(uid, doc);
   }
   for (const uid of justCompletedDocUids) {
     const rollup = rollups.get(folderByDocUid.get(uid) ?? "");
