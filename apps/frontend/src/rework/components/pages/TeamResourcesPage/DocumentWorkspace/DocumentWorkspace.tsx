@@ -47,6 +47,7 @@ import {
   useCreateTagKnowledgeFlowV1TagsPostMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListTasksKnowledgeFlowV1TasksGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -59,7 +60,7 @@ import {
   type TagNode,
 } from "../../../../../shared/utils/tagTree.ts";
 import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
-import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
+import { TERMINAL_STATES, type TaskState, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
@@ -266,39 +267,86 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     }
     return byUid;
   }, [activeTasks]);
-  // How each document's ingestion ENDED during this browser session, keyed by
-  // uid — the "just finished" dot on an otherwise-silent ready row, and (#2384)
-  // the folder rollup's failure list. The task feed lives in Redux memory, so a
-  // refresh clears both by itself; that ephemerality is the feature (spot what
-  // just happened), not a bug.
+  // How each document's ingestion ENDED, keyed by uid — the "just finished" dot
+  // on an otherwise-silent ready row, and (#2384) the folder rollup's failure
+  // list.
   //
-  // Only the LAST terminal task per document counts. A document can carry
-  // several — a failed run followed by a successful re-upload of the same file
-  // (the uid is derived from the content, so it is the same document) — and
-  // nothing ever removes the old one from the store: `taskEvicted` is only
-  // dispatched by `TaskTray`, which is currently unmounted. Reading every task
-  // equally would leave a folder flagged with a failure the user has already
-  // fixed, for the rest of the session, with no way to clear it.
+  // Two feeds, merged. The Redux task store carries this session's own tasks
+  // live over SSE, but it is memory-only and `GET /tasks?scope=user` hides
+  // terminal tasks, so after a page reload it knows nothing — which left a
+  // folder full of failures looking clean at the Corpus root until the user
+  // opened it. The team-scoped query below restores them: passing an explicit
+  // `state` is what turns off the route's terminal-task masking (authz.py,
+  // `exclude_terminal=(state is None)`), and team scope also surfaces a
+  // TEAMMATE's failures, which the user-scoped feed can never see.
+  //
+  // Both states are fetched on purpose. Querying only `failed` would resurrect
+  // a failure the user has already fixed: re-uploading a file produces a second
+  // task for the same uid (uids are content-derived), and without the
+  // succeeding one there is nothing to outrank the old failure.
   const allTasks = useSelector(selectAllTasks);
-  const docTaskOutcomes = useMemo(() => {
-    const lastByUid = new Map<string, TaskViewModel>();
+  // `scope=team` needs CAN_READ_MEMBERS (or platform admin) — a plain member
+  // gets a 403, which is left to fail silently: the rollup simply falls back to
+  // this session's own tasks plus whatever loaded pages report. A personal
+  // space has no team to scope to, so it asks for its own tasks instead.
+  const teamTaskArgs = isPersonalTeam ? { scope: "user" as const } : { scope: "team" as const, teamId };
+  const { data: failedTaskHistory } = useListTasksKnowledgeFlowV1TasksGetQuery({
+    ...teamTaskArgs,
+    kind: "ingestion",
+    state: "failed",
+  });
+  const { data: succeededTaskHistory } = useListTasksKnowledgeFlowV1TasksGetQuery({
+    ...teamTaskArgs,
+    kind: "ingestion",
+    state: "succeeded",
+  });
+  // Which documents FAILED, latest outcome wins, across both feeds. A document
+  // can carry several terminal tasks and nothing ever removes the old one from
+  // the Redux store (`taskEvicted` is only dispatched by `TaskTray`, currently
+  // unmounted), so reading them equally would keep flagging a folder the user
+  // has already repaired.
+  const failedDocsByUid = useMemo(() => {
+    const lastByUid = new Map<string, { state: TaskState; name: string; settledAt: number }>();
+    const consider = (uid: string, state: TaskState, name: string, settledAt: number) => {
+      if (!TERMINAL_STATES.has(state)) return;
+      const previous = lastByUid.get(uid);
+      if (!previous || settledAt >= previous.settledAt) lastByUid.set(uid, { state, name, settledAt });
+    };
+    for (const summary of [...(failedTaskHistory?.tasks ?? []), ...(succeededTaskHistory?.tasks ?? [])]) {
+      if (summary.target?.type !== "document" || !summary.target.id) continue;
+      consider(
+        summary.target.id,
+        summary.state,
+        summary.target.label || summary.target.id,
+        Date.parse(summary.updated_at),
+      );
+    }
+    // The live store goes in last so an in-session outcome wins a tie against
+    // the snapshot the queries were loaded with.
     for (const task of allTasks) {
-      if (!TERMINAL_STATES.has(task.state)) continue;
       if (task.target?.type !== "document" || !task.target.id) continue;
-      const previous = lastByUid.get(task.target.id);
-      if (!previous || taskSettledAt(task) >= taskSettledAt(previous)) lastByUid.set(task.target.id, task);
+      consider(task.target.id, task.state, task.target.label || task.target.id, taskSettledAt(task));
     }
-    const succeeded = new Set<string>();
     const failed = new Map<string, string>();
-    for (const [uid, task] of lastByUid) {
-      if (task.state === "succeeded") succeeded.add(uid);
-      // `cancelled` is neither: the user stopped it on purpose, so it is
-      // nothing to celebrate and nothing to flag.
-      else if (task.state === "failed") failed.set(uid, task.target?.label || uid);
+    for (const [uid, outcome] of lastByUid) {
+      // `cancelled` is not a failure: the user stopped it on purpose.
+      if (outcome.state === "failed") failed.set(uid, outcome.name);
     }
-    return { succeeded, failed };
+    return failed;
+  }, [allTasks, failedTaskHistory, succeededTaskHistory]);
+
+  // Documents that finished during THIS browser session. Read from the Redux
+  // store ALONE, deliberately — the `succeeded` history above exists only to
+  // outrank a stale failure, and folding it in here would mark every document
+  // the team ever ingested as "just finished", turning a transient "your upload
+  // landed" cue into a permanent green tick on every ready row (#2315).
+  const justCompletedDocUids = useMemo(() => {
+    const uids = new Set<string>();
+    for (const task of allTasks) {
+      if (task.state === "succeeded" && task.target?.type === "document" && task.target.id) uids.add(task.target.id);
+    }
+    return uids;
   }, [allTasks]);
-  const justCompletedDocUids = docTaskOutcomes.succeeded;
   // A just-reprocessed doc must read as "processing" even though its stale
   // `processing.stages` snapshot hasn't caught up yet — see reprocessOverrides
   // above. Centralized here since every status-driven cell (menu label,
@@ -872,7 +920,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // failure was first recorded must still reach the tooltip.
   const pendingTagIdsKey = [...pendingTagIds].sort().join(KEY_SEP);
   const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(KEY_SEP);
-  const failedDocKey = [...docTaskOutcomes.failed]
+  const failedDocKey = [...failedDocsByUid]
     .map(([uid, name]) => `${uid}${KEY_SEP}${name}`)
     .sort()
     .join(KEY_SEP);
@@ -899,7 +947,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       const rollup = full ? rollups.get(full) : undefined;
       if (rollup) rollup.processing = true;
     }
-    for (const [uid, name] of docTaskOutcomes.failed) {
+    for (const [uid, name] of failedDocsByUid) {
       const full = folderByDocUid.get(uid);
       const failed = full ? failedByFolder.get(full) : undefined;
       if (failed && !failed.has(uid)) failed.set(uid, { uid, name });

@@ -75,6 +75,9 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  // The rollup reads the team's terminal ingestion history (#2384); no
+  // history in these fixtures, so it falls back to the live task feed.
+  useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     isLoading: false,
     isFetching: false,

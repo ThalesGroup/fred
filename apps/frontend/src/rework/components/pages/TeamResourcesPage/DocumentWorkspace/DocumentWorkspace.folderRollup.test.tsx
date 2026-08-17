@@ -79,6 +79,16 @@ const TAGS = [
 // app cannot produce either.
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 let tasks: ReturnType<typeof task>[] = [];
+// What `GET /tasks?scope=team&state=…` returns. Deliberately separate from
+// `tasks`: after a page reload the Redux store is empty and this is the ONLY
+// feed left, which is exactly the case that used to leave the Corpus root
+// looking clean while folders below it held failures.
+let taskHistory: { state: string; target: { type: string; id: string; label: string }; updated_at: string }[] = [];
+const historyEntry = (uid: string, state: string, label: string, updatedAt: string) => ({
+  state,
+  target: { type: "document", id: uid, label },
+  updated_at: updatedAt,
+});
 
 // A document the browse snapshot alone reports on, with no task behind it at
 // all: a stage left `in_progress`/`failed` by a dead worker, or a teammate's
@@ -94,6 +104,11 @@ const snapshotPage = (stage: string) => ({
 });
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  // The team-scoped terminal ingestion history (#2384) — what survives a page
+  // reload, once an explicit `state` turns off the route's terminal masking.
+  useListTasksKnowledgeFlowV1TasksGetQuery: (arg: { state?: string }) => ({
+    data: { tasks: taskHistory.filter((t) => t.state === arg.state) },
+  }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({ data: TAGS, isLoading: false, refetch: () => {} }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     (arg: { browseDocumentsByTagRequest: { tag_id: string } }) => ({
@@ -202,6 +217,7 @@ async function visitAndReturn(name: string): Promise<void> {
 
 beforeEach(() => {
   tasks = [];
+  taskHistory = [];
   snapshotDoc = null;
 });
 
@@ -333,6 +349,69 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
     const row = folderRow("Broken");
     expect(row.textContent).toContain(FAILED_COUNT);
     expect(hoverChip(row)).toContain("Snapshot.pdf");
+  });
+
+  it("still counts failures after a reload, from the team history alone", async () => {
+    // No live tasks at all — the Redux store is empty on a fresh page load, and
+    // GET /tasks?scope=user hides terminal tasks. Before the team-scoped
+    // history was merged in, the Corpus root went blank on refresh and the
+    // badge only came back once the user opened the folder.
+    taskHistory = [historyEntry("doc-broken", "failed", "Broken report.pdf", "2026-08-17T10:00:00Z")];
+    await renderWorkspace();
+
+    const row = folderRow("Broken");
+    expect(row.textContent).toContain(FAILED_COUNT);
+    expect(hoverChip(row)).toContain("Broken report.pdf");
+  });
+
+  it("surfaces a teammate's failure, which the user-scoped feed can never see", async () => {
+    // doc-deep sits two levels down and was ingested by someone else: nothing
+    // in this browser session knows about it.
+    taskHistory = [historyEntry("doc-deep", "failed", "Collegue.pdf", "2026-08-17T10:00:00Z")];
+    await renderWorkspace();
+
+    expect(folderRow("Nested").textContent).toContain(FAILED_COUNT);
+  });
+
+  it("does not resurrect a failure the history also reports as later fixed", async () => {
+    // Why both states are fetched: re-uploading a file produces a second task
+    // for the same uid, and a `failed`-only query would keep flagging a folder
+    // the user has already repaired, on every reload, forever.
+    taskHistory = [
+      historyEntry("doc-broken", "failed", "Broken report.pdf", "2026-08-17T10:00:00Z"),
+      historyEntry("doc-broken", "succeeded", "Broken report.pdf", "2026-08-17T11:00:00Z"),
+    ];
+    await renderWorkspace();
+
+    expect(folderRow("Broken").textContent).not.toContain(FAILED_COUNT);
+  });
+
+  it("lets an in-session outcome override the history it was loaded with", async () => {
+    // The history is a snapshot taken at mount; a run that finishes afterwards
+    // arrives over SSE and must win.
+    taskHistory = [historyEntry("doc-broken", "failed", "Broken report.pdf", "2026-08-17T10:00:00Z")];
+    tasks = [
+      {
+        ...task("t-fix", "doc-broken", "succeeded", "Broken report.pdf"),
+        terminalAt: Date.parse("2026-08-17T12:00:00Z"),
+      },
+    ];
+    await renderWorkspace();
+
+    expect(folderRow("Broken").textContent).not.toContain(FAILED_COUNT);
+    expect(folderRow("Broken").textContent).toContain(JUST_DONE);
+  });
+
+  it("never marks a folder done from the history alone", async () => {
+    // The `succeeded` history is fetched ONLY to outrank a stale failure. Were
+    // it folded into the just-finished set, every document the team has ever
+    // ingested would count, turning a transient "your upload landed" cue into a
+    // permanent green tick on every folder and every ready row (#2315).
+    taskHistory = [historyEntry("doc-done", "succeeded", "Done doc.pdf", "2026-08-17T10:00:00Z")];
+    await renderWorkspace();
+
+    expect(folderRow("Done").textContent).not.toContain(JUST_DONE);
+    expect(folderRow("Done").textContent).not.toContain("rework.resources.status");
   });
 
   it("shows nothing anywhere when no document has any state to report", async () => {

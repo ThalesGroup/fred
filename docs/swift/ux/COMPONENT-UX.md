@@ -2885,14 +2885,34 @@ source families are unioned, because neither subsumes the other:
   the exact confusion the feature removes.
 - the **SSE task feed** the document badge already reads (#2315), matched
   against the tag tree's `item_ids` via `collectDescendantDocUids`. Reaches
-  folders that were never opened, but is `scope=user` (`useTaskRehydration`) and
-  — since `GET /tasks?scope=user` hides terminal tasks unless a state filter is
-  passed — only for the current browser session.
+  folders that were never opened, live over SSE, but is memory-only and
+  `scope=user`.
+- the **team's terminal ingestion history**, two cached
+  `GET /tasks?scope=team&kind=ingestion&state=…` calls. Passing an explicit
+  `state` is what turns off the route's terminal-task masking
+  (`exclude_terminal=(state is None)`, authz.py) — with no filter the route
+  returns only in-flight tasks, which is why the Corpus root used to go blank on
+  every page reload and only lit up again once the user opened the folder. Team
+  scope also surfaces a **teammate's** failure, which a user-scoped feed can
+  never see. `can_read_members` is granted to `team_member`, which every team
+  role inherits, so this is not an admin-only capability: a member who cannot
+  ingest at all sees the failures other people's uploads produced, and for them
+  it is the only feed that ever reports anything.
 
-That lifetime difference is what makes "done" session-only and a failure
-persistent, and it lines up with what each state is for: completion is a
-transient "your upload landed", which the memory-only task store expires for
-free on refresh; a failure still needs someone to act on it.
+Both states are fetched on purpose. A `failed`-only query would resurrect a
+failure the user has already repaired: re-uploading a file produces a second
+task for the same uid (uids are content-derived), and without the succeeding one
+there is nothing to outrank the old failure. Only the LAST terminal outcome per
+document counts, across all feeds, with the live store applied last so an
+in-session result wins a tie against the snapshot the queries were loaded with.
+
+The `succeeded` history feeds **only** that outranking. It is deliberately kept
+out of `justCompletedDocUids`: folding it in would count every document the team
+has ever ingested, turning the transient "your upload landed" cue into a
+permanent green tick on every ready row and every folder. Completion therefore
+stays read from the Redux store alone — session-only, expiring for free on
+refresh — while a failure persists, because it still needs someone to act on
+it.
 
 The rollup is an inverted index, not a walk: `folderByDocUid` maps every
 document uid to the visible child folder it sits under, built once per tag tree
@@ -2915,8 +2935,13 @@ reach the tooltip.
 Known scope, all of it inherent to deriving this client-side rather than from a
 server-side per-tag counter:
 
-- an unvisited sub-folder holding only a teammate's in-flight ingestion shows
-  nothing — neither source covers it;
+- a teammate's **in-flight** ingestion in a never-opened sub-folder still shows
+  nothing: the history covers terminal tasks, and the live SSE feed is
+  user-scoped. Their finished failures do show;
+- the task-history queries carry no server-side LIMIT, so they return the team's
+  whole terminal ingestion history (narrowed to `kind=ingestion`). They are
+  fetched once and cached, not polled; adding a bound is a small backend
+  follow-up if a large team feels it;
 - the snapshot half of the failure count only sees the loaded page
   (`rowsPerPage`, 50 by default), so a visited folder holding 200 documents of
   which 60 failed can report fewer than 60, and the number moves as the user
