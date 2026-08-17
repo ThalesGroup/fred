@@ -7,15 +7,13 @@
   gap: var(--spacing-xs);
 }
 
-// The implicit `team_member` baseline. Shares the pill geometry of `.roleChip`
-// but deliberately not its affordances: dashed border, no hover/active state,
-// no pointer — it must read as a statement of fact, not a fourth toggle.
-.baselineChip {
+// Geometry shared by the baseline badge and the role toggles. They sit side by
+// side in one row, so neither owns these numbers alone — retuning chip height
+// or padding in `.roleChip` without this would silently desync the two.
+%pill {
   display: flex;
   justify-content: center;
   align-items: center;
-  cursor: default;
-  border: 1px dashed var(--outline-variant);
   border-radius: 999px;
   padding: 0 var(--spacing-s);
   height: 2rem;
@@ -24,25 +22,28 @@
   white-space: nowrap;
 }
 
+// The implicit `team_member` baseline: same pill geometry as `.roleChip`,
+// deliberately none of its affordances — dashed border, no hover or active
+// state, no pointer. It must read as a statement of fact, not a fourth toggle.
+.baselineChip {
+  @extend %pill;
+
+  cursor: default;
+  border: 1px dashed var(--outline-variant);
+}
+
 .roleChip {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  @extend %pill;
+
   transition:
     background 100ms ease,
     border-color 100ms ease,
     color 100ms ease;
   cursor: pointer;
   border: 1px solid var(--outline);
-  border-radius: 999px;
   background: transparent;
-  padding: 0 var(--spacing-s);
-  height: 2rem;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-  white-space: nowrap;
 
-  &:hover:not([data-active="true"]):not(:disabled) {
+  &:hover:not([data-active="true"]):not([aria-disabled="true"]) {
     border-color: var(--outline);
     background: var(--surface-container-high);
     color: var(--on-surface);
@@ -54,19 +55,17 @@
     color: var(--on-primary);
   }
 
-  &:disabled {
+  // Keyed off `aria-disabled`, not `:disabled` — the chip stays a focusable,
+  // hoverable button on purpose so its tooltip still explains the role to
+  // someone who cannot grant it (TeamRoleChips.tsx). Inertness is enforced in
+  // the click handler, so this rule only has to say "not actionable".
+  &[aria-disabled="true"] {
     cursor: default;
     border-color: var(--outline-variant);
-    // Lets the pointer fall through to the wrapping `Tooltip` span: browsers
-    // suppress pointer events on disabled form controls, so without this a
-    // chip the actor may not administer would also silently lose its
-    // description — exactly the reader who most needs to know what the role
-    // is and why it's out of reach.
-    pointer-events: none;
     color: var(--state-text-disabled);
   }
 
-  &[data-active="true"]:disabled {
+  &[data-active="true"][aria-disabled="true"] {
     border-color: var(--outline-variant);
     background: var(--state-on-surface-disabled);
     color: var(--state-text-disabled);

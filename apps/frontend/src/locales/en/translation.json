@@ -1951,7 +1951,7 @@
         "team_member": "The baseline everyone on the team holds — added automatically by any role above. Use the team's agents and prompts, and manage your own personal prompts."
       },
       "warnings": {
-        "team_analyst": "Technical role: it also opens access to the conversation data those evaluations are built from. Grant it deliberately."
+        "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
       }
     },
     "teamSettings": {

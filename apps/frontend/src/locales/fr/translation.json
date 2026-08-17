@@ -1941,7 +1941,7 @@
     },
     "teamRoles": {
       "team_admin": "Admin",
-      "team_editor": "Editeur",
+      "team_editor": "Éditeur",
       "team_analyst": "Analyste",
       "team_member": "Membre",
       "descriptions": {
@@ -1951,7 +1951,7 @@
         "team_member": "La base que porte tout membre de l'équipe — ajoutée automatiquement par n'importe quel rôle ci-dessus. Permet d'utiliser les agents et prompts de l'équipe et de gérer ses prompts personnels."
       },
       "warnings": {
-        "team_analyst": "Rôle technique : il ouvre aussi l'accès aux données de conversation sur lesquelles ces évaluations s'appuient. À accorder en connaissance de cause."
+        "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
       }
     },
     "teamSettings": {

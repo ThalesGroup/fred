@@ -65,9 +65,13 @@ function toggleFor(role: UserTeamRelation): HTMLButtonElement | undefined {
   return Array.from(container.querySelectorAll("button")).find((b) => b.textContent === `rework.teamRoles.${role}`);
 }
 
+// Matched on the CSS-module class, not on "a span whose text is Member": the
+// Tooltip wrapper is itself a span with the same textContent and comes first in
+// the DOM, so a text-only lookup silently returns the wrapper and every
+// assertion below about the badge's own tag/attributes passes vacuously.
 function baselineBadge(): HTMLElement {
-  const el = Array.from(container.querySelectorAll("span")).find(
-    (s) => s.textContent === "rework.teamRoles.team_member",
+  const el = Array.from(container.querySelectorAll("*")).find((e) =>
+    /(^|\s|_)baselineChip/.test(e.className.toString()),
   );
   if (!el) throw new Error("baseline Member badge not found");
   return el as HTMLElement;
@@ -143,26 +147,45 @@ describe("TeamRoleChips — role descriptions", () => {
     renderChips({ heldRoles: [] });
 
     expect(hover(toggleFor("team_analyst")!)).toContain("rework.teamRoles.warnings.team_analyst");
-    expect(hover(toggleFor("team_admin")!)).not.toContain("rework.teamRoles.warnings");
-    expect(hover(toggleFor("team_editor")!)).not.toContain("rework.teamRoles.warnings");
+
+    // Each negative is paired with a positive on the same panel: `hover()`
+    // returns "" when no tooltip opened at all, which would let a broken
+    // tooltip satisfy `not.toContain` and report this as "only Analyst warns".
+    for (const role of ["team_admin", "team_editor"] as UserTeamRelation[]) {
+      const panel = hover(toggleFor(role)!);
+      expect(panel).toContain(`rework.teamRoles.descriptions.${role}`);
+      expect(panel).not.toContain("rework.teamRoles.warnings");
+    }
   });
 
-  // A chip the actor cannot administer is rendered `disabled`, and browsers
-  // suppress pointer events on disabled controls — the CSS drops
-  // `pointer-events` so the hover still reaches the Tooltip wrapper. Without
-  // that, the reader least able to act on a role would also be the one denied
-  // the explanation of what it is. Only the wiring is asserted here: happy-dom
-  // does no hit-testing, so whether the pointer actually reaches the wrapper
-  // is a real-browser question this test cannot answer — hence dispatching on
-  // the wrapper directly, which is where the CSS is meant to land the event.
+  // A chip the actor cannot administer is marked `aria-disabled` rather than
+  // `disabled`, precisely so it keeps explaining itself: a truly `disabled`
+  // button leaves the tab order and fires no pointer events, which would deny
+  // the description to the reader least able to act on the role.
   it("still explains a role the actor is not allowed to administer", () => {
+    const onToggle = renderChips({ heldRoles: [], canAdminister: () => false });
+
+    const chip = toggleFor("team_analyst")!;
+    expect(chip.getAttribute("aria-disabled")).toBe("true");
+    expect(chip.disabled).toBe(false);
+    expect(hover(chip)).toContain("rework.teamRoles.descriptions.team_analyst");
+
+    // Still inert — the guard lives in the click handler, not in the DOM.
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  // The counterpart to the hover path: keyboard users reach the description by
+  // tabbing, which only works because the chip stays focusable.
+  it("explains a non-administrable role on keyboard focus as well", () => {
     renderChips({ heldRoles: [], canAdminister: () => false });
 
     const chip = toggleFor("team_analyst")!;
-    expect(chip.disabled).toBe(true);
-
     act(() => {
-      chip.parentElement!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+      chip.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     });
     expect(document.querySelector('[role="tooltip"]')?.textContent).toContain(
       "rework.teamRoles.descriptions.team_analyst",
