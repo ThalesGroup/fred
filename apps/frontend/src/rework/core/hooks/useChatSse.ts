@@ -899,7 +899,7 @@ export function useChatSse(
               prep.context_prompt_text,
             ),
             prep.chat_default_profile_id,
-            prep.operation_route_rules,
+            prep.agent_profile_overrides,
           ),
           prep.reasoning_enabled_model_ids,
         );

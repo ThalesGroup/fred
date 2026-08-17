@@ -12,6 +12,7 @@ Zip layout (``source_platform="swift"``)::
     postgres/tag.jsonl              swift tag rows
     postgres/metadata.jsonl         swift document metadata rows
     postgres/team_metadata.jsonl    swift team_metadata rows (branding + retention)
+    postgres/team_routing_policy.jsonl  swift team_routing_policy rows
 
 Not included (handled by ops / preserved across reset):
 - OpenFGA tuples — reset() deletes only Postgres rows, so team ownership
@@ -35,6 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +114,17 @@ def _team_metadata_to_dict(row: TeamMetadataRow) -> dict:
     }
 
 
+def _team_routing_policy_to_dict(row: TeamRoutingPolicyRow) -> dict:
+    return {
+        "team_id": row.team_id,
+        "version": row.version,
+        "chat_default_profile_id": row.chat_default_profile_id,
+        "agent_profile_overrides_json": row.agent_profile_overrides_json,
+        "updated_by": row.updated_by,
+        "updated_at": _dt(row.updated_at),
+    }
+
+
 def _jsonl(rows: list[dict]) -> bytes:
     return "\n".join(json.dumps(r, ensure_ascii=False) for r in rows).encode("utf-8")
 
@@ -138,6 +151,12 @@ async def run_export(engine: AsyncEngine) -> bytes:
             _team_metadata_to_dict(r)
             for r in (await session.execute(select(TeamMetadataRow))).scalars().all()
         ]
+        team_routing_policy = [
+            _team_routing_policy_to_dict(r)
+            for r in (await session.execute(select(TeamRoutingPolicyRow)))
+            .scalars()
+            .all()
+        ]
 
     manifest = {
         "format_version": FORMAT_VERSION,
@@ -149,6 +168,7 @@ async def run_export(engine: AsyncEngine) -> bytes:
             "tag": len(tags),
             "metadata": len(metadata),
             "team_metadata": len(team_metadata),
+            "team_routing_policy": len(team_routing_policy),
         },
         "tuple_count": 0,
         "realm_exported": False,
@@ -165,12 +185,15 @@ async def run_export(engine: AsyncEngine) -> bytes:
         zf.writestr("postgres/tag.jsonl", _jsonl(tags))
         zf.writestr("postgres/metadata.jsonl", _jsonl(metadata))
         zf.writestr("postgres/team_metadata.jsonl", _jsonl(team_metadata))
+        zf.writestr("postgres/team_routing_policy.jsonl", _jsonl(team_routing_policy))
 
     logger.info(
-        "[import-export] export: %d agents, %d tags, %d docs, %d teams",
+        "[import-export] export: %d agents, %d tags, %d docs, %d teams, "
+        "%d routing policies",
         len(agents),
         len(tags),
         len(metadata),
         len(team_metadata),
+        len(team_routing_policy),
     )
     return buffer.getvalue()

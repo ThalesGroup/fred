@@ -561,7 +561,6 @@ def typed_node(
 async def model_text_step(
     context: GraphNodeContext,
     *,
-    operation: str,
     user_prompt: str,
     system_prompt: str | None = None,
     fallback_text: str = "",
@@ -576,14 +575,13 @@ async def model_text_step(
       prompt ownership from the agent
 
     How to use it:
-    - pass one operation name plus the user and optional system prompt
+    - pass the user and optional system prompt
     - provide `fallback_text` when the node should stay runnable without a model
 
     Example:
     ```python
     text = await model_text_step(
         context,
-        operation="draft_sql",
         system_prompt="Write one read-only SQL query.",
         user_prompt=question,
         fallback_text="SELECT 1",
@@ -597,14 +595,13 @@ async def model_text_step(
     messages: list[BaseMessage] = [HumanMessage(content=user_prompt)]
     if system_prompt is not None:
         messages.insert(0, SystemMessage(content=system_prompt))
-    response = await context.invoke_model(messages, operation=operation)
+    response = await context.invoke_model(messages)
     return str(getattr(response, "content", "")).strip() or fallback_text
 
 
 async def structured_model_step(
     context: GraphNodeContext,
     *,
-    operation: str,
     output_model: type[StructuredT],
     user_prompt: str,
     system_prompt: str | None = None,
@@ -628,7 +625,6 @@ async def structured_model_step(
     ```python
     decision = await structured_model_step(
         context,
-        operation="route_request",
         output_model=RouteDecision,
         system_prompt="Classify the request.",
         user_prompt=user_text,
@@ -648,18 +644,13 @@ async def structured_model_step(
             )
         return _validate_structured_output(output_model, fallback_output)
 
-    resolved = await context.invoke_structured_model(
-        output_model,
-        messages,
-        operation=operation,
-    )
+    resolved = await context.invoke_structured_model(output_model, messages)
     return _validate_structured_output(output_model, resolved)
 
 
 async def intent_router_step(
     context: GraphNodeContext,
     *,
-    operation: str,
     route_model: type[StructuredT],
     user_prompt: str,
     system_prompt: str | None = None,
@@ -685,7 +676,6 @@ async def intent_router_step(
     ```python
     return await intent_router_step(
         context,
-        operation="route_request",
         route_model=RouteDecision,
         system_prompt=ROUTER_PROMPT,
         user_prompt=state.latest_user_text,
@@ -696,7 +686,6 @@ async def intent_router_step(
 
     decision = await structured_model_step(
         context,
-        operation=operation,
         output_model=route_model,
         user_prompt=user_prompt,
         system_prompt=system_prompt,

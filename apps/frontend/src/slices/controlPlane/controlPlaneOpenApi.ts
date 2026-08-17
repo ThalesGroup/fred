@@ -589,6 +589,28 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
     }),
+    getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: build.query<
+      GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse,
+      GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings` }),
+    }),
+    putPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPut: build.mutation<
+      PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiResponse,
+      PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/model-bindings`,
+        method: "PUT",
+        body: queryArg.setPlatformModelBindingRequest,
+      }),
+    }),
+    deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: build.mutation<
+      DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse,
+      DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings`, method: "DELETE" }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -1308,6 +1330,17 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
 };
+export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg = void;
+export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiArg = {
+  setPlatformModelBindingRequest: SetPlatformModelBindingRequest;
+};
+export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg = void;
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -1923,6 +1956,7 @@ export type CapabilityCatalogEntry = {
   route_base_url?: string | null;
   default_capability_ids?: string[];
   model_profile_ids?: string[];
+  model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
   model_reasoning_effort?: string | null;
   model_display_name?: string | null;
@@ -2198,6 +2232,32 @@ export type ManagedAgentTuning = {
         };
   };
 };
+export type ModelBindingSettings = {
+  base_url?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_tenant_id?: string | null;
+  project?: string | null;
+  location?: string | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  max_retries?: number | null;
+  streaming?: boolean | null;
+  stream_usage?: boolean | null;
+  request_timeout?: number | null;
+  reasoning_effort?: string | null;
+};
+export type ModelBinding = {
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  name: string;
+  settings?: ModelBindingSettings;
+};
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
   template_agent_id: string;
@@ -2213,6 +2273,7 @@ export type ManagedAgentRuntimeBinding = {
     };
   };
   reasoning_enabled_model_ids?: string[];
+  platform_chat_model_binding?: ModelBinding | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -2272,13 +2333,6 @@ export type ChatControlDescriptor = {
     [key: string]: any;
   } | null;
 };
-export type TeamOperationRouteRule = {
-  rule_id: string;
-  operation?: string | null;
-  purpose?: string | null;
-  agent_id?: string | null;
-  target_profile_id: string;
-};
 export type ExecutionPreparation = {
   agent_instance_id: string;
   team_id: string;
@@ -2307,8 +2361,10 @@ export type ExecutionPreparation = {
   };
   /** Team's default chat model profile id, resolved from its stored TeamRoutingPolicy at session prep (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05, #2118). Null when the team has no routing policy — the runtime then uses its own deployment default. The frontend folds this onto RuntimeContext exactly like context_prompt_text (same three-hop channel, same 'resolved once per session, not re-fetched per turn' contract). */
   chat_default_profile_id?: string | null;
-  /** Team's per-operation model-routing overrides, same resolution notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2). */
-  operation_route_rules?: TeamOperationRouteRule[];
+  /** Team's per-agent model-profile overrides (agent_id -> profile_id), same resolution notes as chat_default_profile_id above. */
+  agent_profile_overrides?: {
+    [key: string]: string;
+  };
   /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
   reasoning_enabled_model_ids?: string[];
 };
@@ -2423,11 +2479,15 @@ export type TeamRoutingPolicy = {
   team_id: string;
   version: number;
   chat_default_profile_id?: string | null;
-  operation_rules?: TeamOperationRouteRule[];
+  agent_profile_overrides?: {
+    [key: string]: string;
+  };
 };
 export type UpdateTeamRoutingPolicyRequest = {
   chat_default_profile_id?: string | null;
-  operation_rules?: TeamOperationRouteRule[];
+  agent_profile_overrides?: {
+    [key: string]: string;
+  };
 };
 export type AvailableModelProfile = {
   profile_id: string;
@@ -2437,6 +2497,15 @@ export type AvailableModelProfile = {
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
+};
+export type PlatformModelBinding = {
+  model_capability?: "chat";
+  binding?: ModelBinding | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetPlatformModelBindingRequest = {
+  binding: ModelBinding;
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -2878,6 +2947,10 @@ export const {
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
+  useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
+  usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
+  useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

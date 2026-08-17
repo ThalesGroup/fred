@@ -76,6 +76,7 @@ from control_plane_backend.capabilities.schemas import (
     PersonalScope,
     TeamCapabilityEnablementResult,
 )
+from control_plane_backend.organization_authz import require_manage_any
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.service import (
     count_all_collaborative_teams,
@@ -282,7 +283,7 @@ async def list_capability_enablement(
     # organization singleton via the same admin relation. Kept before every
     # other step below — authorization must resolve before any of this
     # request's work runs.
-    await _require_manage_any(rebac, user)
+    await require_manage_any(rebac, user)
 
     # Lazy import breaks the product.service ↔ capabilities import cycle, same
     # reason `catalog.py`/`impact.py` defer their own product.service imports.
@@ -338,16 +339,6 @@ async def list_capability_enablement(
     )
     items.sort(key=lambda item: item.id)
     return CapabilityEnablementList(items=items)
-
-
-async def _require_manage_any(rebac: RebacEngine, user: KeycloakUser) -> None:
-    """Org-admin gate for the aggregate list (equivalent to `can_manage`)."""
-
-    from fred_core import OrganizationPermission
-
-    await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-    )
 
 
 async def _revive_after_grant(

@@ -31,6 +31,8 @@ import pytest
 
 from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
 
+pytestmark = pytest.mark.integration
+
 # --------------------------------------------------------------------------- #
 # Vue d'ensemble
 # --------------------------------------------------------------------------- #

@@ -13,51 +13,29 @@
 # limitations under the License.
 
 """
-Model-call routing and tracing helpers for ReAct execution.
+Model-call tracing helpers for ReAct execution.
 
 Why this module exists:
-- LangChain can call the chat model directly, but Fred adds two platform concerns
-  around those calls: model routing and tracing
-- routing needs small operation labels such as `routing` and `planning`
-- tracing needs stable helpers to read model names from models and responses
-- keeping that logic here prevents those SDK-specific details from spreading into
-  the Fred runtime contract or prompt code
+- Fred tags every model call with tracing metadata (span, KPI, logs); this
+  module holds the small, SDK-specific helpers that read model names from
+  models and responses
+- keeping that logic here prevents those SDK-specific details from spreading
+  into the Fred runtime contract or prompt code
 
 How to use:
-- use `infer_react_model_operation_from_messages(...)` before a model call when
-  deciding whether the turn is initial routing or tool-driven planning
 - the model-call span/KPI instrumentation itself lives in
   `middleware.TracingKpiMiddleware` (re-homed there by #1972)
-
-Example:
-- operation inference:
-  `operation = infer_react_model_operation_from_messages(messages)`
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping
 from typing import Protocol
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage
 
 TRACE_MODEL_SPAN_NAME = "v2.react.model"
-
-
-# Model-operation labels are Fred tracing metadata, not agent-facing concepts.
-# Why they exist:
-# - routed model factories may choose different model configs for different kinds
-#   of ReAct work inside one turn
-# - tracing should make that split visible without leaking SDK event shapes
-# How to use:
-# - `routing` is the safe default for generic assistant turns
-# - `planning` marks turns where the assistant is already in a tool-driven loop
-# Example:
-# - the first assistant response in a turn usually traces as `routing`
-# - a follow-up model call after tool execution traces as `planning`
-REACT_MODEL_OPERATION_ROUTING = "routing"
-REACT_MODEL_OPERATION_PLANNING = "planning"
 
 
 class CompiledReActAgent(Protocol):
@@ -146,31 +124,6 @@ def extract_model_name_from_model_response(response: object) -> str | None:
         if model_name is not None:
             return model_name
     return None
-
-
-def infer_react_model_operation_from_messages(
-    messages: Sequence[object],
-) -> str:
-    """
-    Infer the current ReAct phase from message history.
-
-    Why this exists:
-    - Fred model routing and tracing distinguish routing from planning turns
-    - one best-effort inference function keeps those decisions consistent
-
-    How to use:
-    - pass the chronological conversation history before a model call
-
-    Example:
-    - `infer_react_model_operation_from_messages(messages)`
-    """
-
-    for message in reversed(messages):
-        if message.__class__.__name__ == "ToolMessage":
-            return REACT_MODEL_OPERATION_PLANNING
-        if isinstance(message, HumanMessage):
-            return REACT_MODEL_OPERATION_ROUTING
-    return REACT_MODEL_OPERATION_ROUTING
 
 
 def _extract_model_name_from_message(message: BaseMessage | object) -> str | None:

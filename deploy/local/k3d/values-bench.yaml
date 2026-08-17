@@ -65,7 +65,6 @@ applications:
     models_catalog:
       default_profile_by_capability:
         chat: default.chat.mock
-        language: default.language.mock
       profiles:
         - profile_id: default.chat.mock
           capability: chat
@@ -75,25 +74,6 @@ applications:
             name: mock-openai-chat
             settings:
               base_url: http://mock-openai-server:8383/v1
-        - profile_id: default.language.mock
-          capability: language
-          model_display_name: "Mock OpenAI Chat"
-          model:
-            provider: openai
-            name: mock-openai-chat
-            settings:
-              base_url: http://mock-openai-server:8383/v1
-      rules:
-        - rule_id: fred-assistant-chat-mock
-          capability: chat
-          target_profile_id: default.chat.mock
-          match:
-            agent_id: fred.github.assistant
-        - rule_id: fred-assistant-language-mock
-          capability: language
-          target_profile_id: default.language.mock
-          match:
-            agent_id: fred.github.assistant
     dotenv:
       OPENAI_API_KEY: "key-1" # pragma: allowlist secret
 

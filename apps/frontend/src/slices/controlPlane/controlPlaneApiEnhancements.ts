@@ -15,6 +15,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneRoutingPolicy",
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
+    "ControlPlanePlatformModelBinding",
   ],
   endpoints: {
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
@@ -295,6 +296,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy", id: arg.teamId }],
     },
+    // Platform-wide chat model binding — chat-only, at most one binding ever
+    // exists, so a single LIST tag covers it, same shape as the admin
+    // capabilities catalog above.
+    getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: {
+      providesTags: [{ type: "ControlPlanePlatformModelBinding" as const, id: "LIST" }],
+    },
+    putPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
+    },
+    deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
+    },
   },
 });
 
@@ -364,4 +377,9 @@ export const {
   // Fired on demand from the disable-confirmation dialog (lazy — not on render).
   useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery:
     useLazyCapabilityRevokeImpactQuery,
+  // Platform-wide chat model binding — chat-only.
+  useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery: usePlatformModelBindingQuery,
+  usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
+  useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
+    useDeletePlatformModelBindingMutation,
 } = enhancedControlPlaneApi;

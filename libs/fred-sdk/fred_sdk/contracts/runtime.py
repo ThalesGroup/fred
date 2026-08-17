@@ -396,34 +396,12 @@ class ChatModelFactoryPort(ABC):
     ) -> ChatModelHandle:
         """
         Resolve the canonical chat model for the currently bound agent runtime.
+        Called once per turn, at runtime activation.
 
         This port exists so v2 runtimes stay platform-owned and testable:
         agent definitions remain pure declarations, while model selection stays
         an injected capability that Fred can later align with a broader SDK.
         """
-
-    def build_for_operation(
-        self,
-        *,
-        definition: AgentDefinition,
-        binding: BoundRuntimeContext,
-        purpose: str,
-        operation: str | None,
-    ) -> ChatModelHandle | None:
-        """
-        Optionally resolve a chat model for a specific operation within one turn.
-
-        Why this exists:
-        - advanced routing factories (e.g. RoutedChatModelFactory) can select
-          different models for different phases of a ReAct/Graph turn (e.g.
-          "routing" vs "planning" vs "answering")
-        - base implementations return None to signal "use build() instead"
-
-        How to use it:
-        - runtimes call this first; fall back to build() when None is returned
-        - do not override if the factory does not support per-operation routing
-        """
-        return None
 
 
 class ToolInvokerPort(ABC):

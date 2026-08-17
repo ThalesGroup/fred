@@ -213,8 +213,6 @@ class GraphNodeContext(Protocol):
     async def invoke_model(
         self,
         messages: list[BaseMessage],
-        *,
-        operation: str = "default",
     ) -> BaseMessage:
         raise NotImplementedError()
 
@@ -222,8 +220,6 @@ class GraphNodeContext(Protocol):
         self,
         output_model: type[BaseModel],
         messages: list[BaseMessage],
-        *,
-        operation: str = "default",
     ) -> BaseModel:
         raise NotImplementedError()
 

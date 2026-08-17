@@ -437,7 +437,6 @@ async def judge_pairs_step(
             }
         verdict = await structured_model_step(
             context,
-            operation="comparison_judge_pair",
             output_model=PairVerdict,
             system_prompt=_judge_system_prompt(context, language),
             user_prompt=_judge_user_prompt(anchor_text, match_text),

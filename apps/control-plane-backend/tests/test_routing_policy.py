@@ -13,13 +13,14 @@
 # limitations under the License.
 
 """
-Team routing policy (TEAM-05, #2118, `TEAM-ROUTING-POLICY-RFC.md`).
+Team routing policy.
 
-Covers: the store's upsert/get + version increment (§3), the service's
-write-time validation (§3.2 duplicate rules, §7.1-§7.2 id-space translation
-+ enablement check), the authz gate each service function requests
-(§6 — read=can_read_members, write=can_update_resources), and the
-session-prep snapshot resolver (§8.2).
+Covers: the store's upsert/get + version increment, the service's
+write-time validation (id-space translation + enablement check — uniqueness
+of the override itself is structural, `agent_profile_overrides` is a
+`dict`), the authz gate each service function requests
+(read=can_read_members, write=can_update_resources), and the session-prep
+snapshot resolver.
 """
 
 from __future__ import annotations
@@ -30,9 +31,6 @@ import pytest
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy import service as routing_policy_service
 from control_plane_backend.routing_policy.schemas import (
-    AmbiguousOperationRuleError,
-    DuplicateOperationRuleError,
-    DuplicateRuleIdError,
     ProfileNotUsableError,
     UnknownProfileError,
     UpdateTeamRoutingPolicyRequest,
@@ -42,28 +40,10 @@ from fred_core import AuthorizationError, KeycloakUser, TeamPermission
 from fred_core.common import PostgresStoreConfig, TeamId
 from fred_core.sql import create_async_engine_from_config
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
-from fred_sdk.contracts.context import TeamOperationRouteRule
 
 
 def _user() -> KeycloakUser:
     return KeycloakUser(uid="u1", username="u1", roles=["viewer"], email=None)
-
-
-def _rule(
-    rule_id: str,
-    *,
-    operation: str | None,
-    purpose: str | None,
-    target: str,
-    agent_id: str | None = None,
-) -> TeamOperationRouteRule:
-    return TeamOperationRouteRule(
-        rule_id=rule_id,
-        operation=operation,
-        purpose=purpose,
-        agent_id=agent_id,
-        target_profile_id=target,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -93,11 +73,10 @@ async def test_get_returns_none_when_no_policy_stored(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_upsert_then_get_round_trips(tmp_path) -> None:
     store = await _make_store(tmp_path)
-    rule = _rule("r1", operation="planning", purpose=None, target="chat.gpt5")
     await store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="default.chat.mistral",
-        operation_rules=[rule],
+        agent_profile_overrides={"rico": "chat.gpt5"},
         updated_by="u1",
     )
 
@@ -105,7 +84,7 @@ async def test_upsert_then_get_round_trips(tmp_path) -> None:
 
     assert stored is not None
     assert stored.chat_default_profile_id == "default.chat.mistral"
-    assert stored.operation_rules == (rule,)
+    assert stored.agent_profile_overrides == {"rico": "chat.gpt5"}
     assert stored.version == 1
 
 
@@ -115,13 +94,13 @@ async def test_second_upsert_increments_version_and_replaces(tmp_path) -> None:
     await store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="p1",
-        operation_rules=[],
+        agent_profile_overrides={},
         updated_by="u1",
     )
     await store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="p2",
-        operation_rules=[],
+        agent_profile_overrides={},
         updated_by="u2",
     )
 
@@ -139,7 +118,7 @@ async def test_upsert_is_scoped_per_team(tmp_path) -> None:
     await store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="p1",
-        operation_rules=[],
+        agent_profile_overrides={},
         updated_by="u1",
     )
 
@@ -147,7 +126,7 @@ async def test_upsert_is_scoped_per_team(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# service.py — write-time validation (§3.2, §7.1-§7.2)
+# service.py — write-time validation
 # ---------------------------------------------------------------------------
 
 
@@ -160,21 +139,21 @@ class _FakeStore:
         return self._stored
 
     async def upsert(
-        self, *, team_id, chat_default_profile_id, operation_rules, updated_by
+        self, *, team_id, chat_default_profile_id, agent_profile_overrides, updated_by
     ):
         from control_plane_backend.routing_policy.store import StoredTeamRoutingPolicy
 
         self.upserted = {
             "team_id": team_id,
             "chat_default_profile_id": chat_default_profile_id,
-            "operation_rules": operation_rules,
+            "agent_profile_overrides": agent_profile_overrides,
             "updated_by": updated_by,
         }
         record = StoredTeamRoutingPolicy(
             team_id=team_id,
             version=1,
             chat_default_profile_id=chat_default_profile_id,
-            operation_rules=tuple(operation_rules),
+            agent_profile_overrides=dict(agent_profile_overrides),
             updated_by=updated_by,
             updated_at=None,
         )
@@ -182,27 +161,61 @@ class _FakeStore:
         return record
 
 
+class _FakeAgentInstance:
+    def __init__(self, source_runtime_id: str) -> None:
+        self.source_runtime_id = source_runtime_id
+
+
+class _FakeAgentInstanceStore:
+    def __init__(self, source_runtime_ids: list[str] | None = None) -> None:
+        self._instances = [
+            _FakeAgentInstance(rid) for rid in (source_runtime_ids or [])
+        ]
+
+    async def list_by_team(self, team_id):
+        return self._instances
+
+
 class _FakeDeps:
     """Minimal stand-in for ProductServiceDependencies — only the attributes
     routing_policy.service actually reads."""
 
-    def __init__(self, *, store: _FakeStore, rebac: Any) -> None:
+    def __init__(
+        self,
+        *,
+        store: _FakeStore,
+        rebac: Any,
+        source_runtime_ids: list[str] | None = None,
+    ) -> None:
         self._store = store
         self.team_dependencies = type("_TD", (), {"rebac": rebac})()
+        self._agent_instance_store = _FakeAgentInstanceStore(source_runtime_ids)
 
     def get_team_routing_policy_store(self):
         return self._store
 
+    def get_agent_instance_store(self):
+        return self._agent_instance_store
 
-def _deps(*, store: _FakeStore, rebac: Any) -> ProductServiceDependencies:
-    """`_FakeDeps` duck-types `ProductServiceDependencies` (only the two
+
+def _deps(
+    *, store: _FakeStore, rebac: Any, source_runtime_ids: list[str] | None = None
+) -> ProductServiceDependencies:
+    """`_FakeDeps` duck-types `ProductServiceDependencies` (only the
     attributes `routing_policy.service` reads) — one acknowledged type: ignore
     here instead of one per call site below."""
 
-    return _FakeDeps(store=store, rebac=rebac)  # type: ignore[return-value]
+    return _FakeDeps(  # type: ignore[return-value]
+        store=store, rebac=rebac, source_runtime_ids=source_runtime_ids
+    )
 
 
-def _model_entry(capability_id: str, profile_ids: list[str]) -> CapabilityCatalogEntry:
+def _model_entry(
+    capability_id: str,
+    profile_ids: list[str],
+    *,
+    chat_profile_ids: list[str] | None = None,
+) -> CapabilityCatalogEntry:
     return CapabilityCatalogEntry(
         id=capability_id,
         version="1",
@@ -211,6 +224,9 @@ def _model_entry(capability_id: str, profile_ids: list[str]) -> CapabilityCatalo
         icon="neurology",
         kind="model",
         model_profile_ids=tuple(profile_ids),
+        model_chat_profile_ids=tuple(
+            profile_ids if chat_profile_ids is None else chat_profile_ids
+        ),
     )
 
 
@@ -219,7 +235,7 @@ def _stub_team_lookup(monkeypatch: pytest.MonkeyPatch):
     """Every service test exercises validation/store logic, not
     `teams.service.require_team_access` itself (covered by teams' own suite) —
     stub it to a no-op that records the requested permission, so assertions
-    can confirm §6's read/write gate without a real team+rebac round trip."""
+    can confirm the read/write gate without a real team+rebac round trip."""
 
     calls: list[list[TeamPermission]] = []
 
@@ -238,8 +254,8 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
     """Stub the aggregated model catalog so validation tests control exactly
     which profile_ids/capability ids exist, without a real runtime pod fetch.
 
-    Also stubs `universally_available_model_profile_ids` to the full set of
-    profile_ids in `catalog` by default — i.e. "every pod agrees", so every
+    Also stubs `universally_available_chat_model_profile_ids` to the full set
+    of chat profile ids in `catalog` by default — i.e. "every pod agrees", so every
     existing test keeps its original no-drift baseline. Tests that need to
     simulate a pod-coverage gap (MDL#2) override this stub directly.
     """
@@ -251,17 +267,22 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
         "model__openai__gpt-4o": _model_entry(
             "model__openai__gpt-4o", ["chat.openai.gpt4o"]
         ),
+        "model__openai__text-embedding-3-small": _model_entry(
+            "model__openai__text-embedding-3-small",
+            ["embedding.openai.small"],
+            chat_profile_ids=[],
+        ),
     }
     universal = frozenset(
         profile_id
         for entry in catalog.values()
-        for profile_id in entry.model_profile_ids
+        for profile_id in entry.model_chat_profile_ids
     )
 
     async def _fake_aggregate(deps):
         return catalog
 
-    async def _fake_universal(deps):
+    async def _fake_universal(deps, *, source_runtime_ids=None):
         return universal
 
     monkeypatch.setattr(
@@ -269,7 +290,7 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(
         routing_policy_service,
-        "universally_available_model_profile_ids",
+        "universally_available_chat_model_profile_ids",
         _fake_universal,
     )
     return catalog
@@ -324,95 +345,7 @@ async def test_get_with_no_stored_policy_returns_empty_version_zero() -> None:
     )
     assert policy.version == 0
     assert policy.chat_default_profile_id is None
-    assert policy.operation_rules == []
-
-
-@pytest.mark.asyncio
-async def test_duplicate_rule_id_rejected() -> None:
-    deps = _deps(store=_FakeStore(), rebac=None)
-    request = UpdateTeamRoutingPolicyRequest(
-        operation_rules=[
-            _rule(
-                "same", operation="planning", purpose=None, target="chat.openai.gpt5"
-            ),
-            _rule(
-                "same", operation="routing", purpose=None, target="chat.openai.gpt4o"
-            ),
-        ]
-    )
-    with pytest.raises(DuplicateRuleIdError):
-        await routing_policy_service.update_team_routing_policy(
-            _user(), TeamId("team-1"), request, deps
-        )
-
-
-@pytest.mark.asyncio
-async def test_duplicate_operation_purpose_pair_rejected() -> None:
-    deps = _deps(store=_FakeStore(), rebac=None)
-    request = UpdateTeamRoutingPolicyRequest(
-        operation_rules=[
-            _rule("r1", operation="planning", purpose="gap", target="chat.openai.gpt5"),
-            _rule(
-                "r2", operation="planning", purpose="gap", target="chat.openai.gpt4o"
-            ),
-        ]
-    )
-    with pytest.raises(DuplicateOperationRuleError):
-        await routing_policy_service.update_team_routing_policy(
-            _user(), TeamId("team-1"), request, deps
-        )
-
-
-@pytest.mark.asyncio
-async def test_ambiguous_equal_specificity_tie_rejected() -> None:
-    """One rule pins (operation, agent_id), another pins (purpose, agent_id)
-    for the same agent — both specificity 2, both would match a request
-    carrying that operation, purpose, and agent_id at once. The resolver has
-    no defined winner for that, so the write must be rejected rather than
-    silently resolved by declaration order."""
-    deps = _deps(store=_FakeStore(), rebac=None)
-    request = UpdateTeamRoutingPolicyRequest(
-        operation_rules=[
-            _rule(
-                "r1",
-                operation="planning",
-                purpose=None,
-                target="chat.openai.gpt5",
-                agent_id="rico",
-            ),
-            _rule(
-                "r2",
-                operation=None,
-                purpose="critical",
-                target="chat.openai.gpt4o",
-                agent_id="rico",
-            ),
-        ]
-    )
-    with pytest.raises(AmbiguousOperationRuleError):
-        await routing_policy_service.update_team_routing_policy(
-            _user(), TeamId("team-1"), request, deps
-        )
-
-
-@pytest.mark.asyncio
-async def test_equal_specificity_non_overlapping_rules_allowed() -> None:
-    """Two rules with equal specificity but disjoint concrete values on a
-    shared field (different operations) can never both match one request —
-    not ambiguous, must not be rejected."""
-    deps = _deps(store=_FakeStore(), rebac=_FakeRebacAllowAll())
-    request = UpdateTeamRoutingPolicyRequest(
-        operation_rules=[
-            _rule("r1", operation="planning", purpose=None, target="chat.openai.gpt4o"),
-            _rule(
-                "r2", operation="summarize", purpose=None, target="chat.openai.gpt4o"
-            ),
-        ]
-    )
-    result = await routing_policy_service.update_team_routing_policy(
-        _user(), TeamId("team-1"), request, deps
-    )
-    assert len(result.operation_rules) == 2
+    assert policy.agent_profile_overrides == {}
 
 
 @pytest.mark.asyncio
@@ -427,6 +360,32 @@ async def test_unknown_profile_id_rejected() -> None:
 
 
 @pytest.mark.asyncio
+async def test_override_targeting_unknown_profile_rejected() -> None:
+    deps = _deps(store=_FakeStore(), rebac=None)
+    request = UpdateTeamRoutingPolicyRequest(
+        agent_profile_overrides={"rico": "ghost.profile"}
+    )
+    with pytest.raises(UnknownProfileError) as exc_info:
+        await routing_policy_service.update_team_routing_policy(
+            _user(), TeamId("team-1"), request, deps
+        )
+    assert exc_info.value.profile_ids == ["ghost.profile"]
+
+
+@pytest.mark.asyncio
+async def test_non_chat_profile_rejected_even_when_the_model_is_known() -> None:
+    deps = _deps(store=_FakeStore(), rebac=_FakeRebacAllowAll())
+    request = UpdateTeamRoutingPolicyRequest(
+        chat_default_profile_id="embedding.openai.small"
+    )
+    with pytest.raises(UnknownProfileError) as exc_info:
+        await routing_policy_service.update_team_routing_policy(
+            _user(), TeamId("team-1"), request, deps
+        )
+    assert exc_info.value.profile_ids == ["embedding.openai.small"]
+
+
+@pytest.mark.asyncio
 async def test_profile_missing_from_some_pods_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -436,12 +395,12 @@ async def test_profile_missing_from_some_pods_rejected(
     rejected at write time, not left to fail at runtime on whichever pod
     lacks it (`TeamRoutingProfileDriftError`)."""
 
-    async def _fake_universal(deps):
+    async def _fake_universal(deps, *, source_runtime_ids=None):
         return frozenset({"chat.openai.gpt4o"})  # chat.openai.gpt5 missing on some pod
 
     monkeypatch.setattr(
         routing_policy_service,
-        "universally_available_model_profile_ids",
+        "universally_available_chat_model_profile_ids",
         _fake_universal,
     )
     deps = _deps(store=_FakeStore(), rebac=_FakeRebacAllowAll())
@@ -480,9 +439,7 @@ async def test_usable_profile_accepted_and_persisted() -> None:
     deps = _deps(store=fake_store, rebac=_FakeRebacAllowAll())
     request = UpdateTeamRoutingPolicyRequest(
         chat_default_profile_id="chat.openai.gpt5",
-        operation_rules=[
-            _rule("r1", operation="planning", purpose=None, target="chat.openai.gpt4o")
-        ],
+        agent_profile_overrides={"rico": "chat.openai.gpt4o"},
     )
     result = await routing_policy_service.update_team_routing_policy(
         _user(), TeamId("team-1"), request, deps
@@ -508,14 +465,7 @@ async def test_sibling_profiles_sharing_capability_only_checked_once() -> None:
     deps = _deps(store=_FakeStore(), rebac=_CountingRebac())
     request = UpdateTeamRoutingPolicyRequest(
         chat_default_profile_id="chat.openai.gpt5",
-        operation_rules=[
-            _rule(
-                "r1",
-                operation="planning",
-                purpose=None,
-                target="chat.openai.gpt5.creative",
-            )
-        ],
+        agent_profile_overrides={"rico": "chat.openai.gpt5.creative"},
     )
     await routing_policy_service.update_team_routing_policy(
         _user(), TeamId("team-1"), request, deps
@@ -536,7 +486,7 @@ async def test_empty_request_skips_catalog_and_rebac_entirely(monkeypatch) -> No
 
 
 # ---------------------------------------------------------------------------
-# service.py — list_available_model_profiles (routing-policy picker, #2167)
+# service.py — list_available_model_profiles (routing-policy picker)
 # ---------------------------------------------------------------------------
 
 
@@ -610,18 +560,18 @@ async def test_available_models_excludes_profile_missing_from_some_pods(
     monkeypatch,
 ) -> None:
     """MDL#2: the picker must never offer a choice the write-path would then
-    reject — both read from `universally_available_model_profile_ids`."""
+    reject — both read from `universally_available_chat_model_profile_ids`."""
 
     async def _fake_usable(rebac, team_id):
         return None
 
-    async def _fake_universal(deps):
+    async def _fake_universal(deps, *, source_runtime_ids=None):
         return frozenset({"chat.openai.gpt4o"})
 
     monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
     monkeypatch.setattr(
         routing_policy_service,
-        "universally_available_model_profile_ids",
+        "universally_available_chat_model_profile_ids",
         _fake_universal,
     )
     deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
@@ -634,7 +584,7 @@ async def test_available_models_excludes_profile_missing_from_some_pods(
 
 
 # ---------------------------------------------------------------------------
-# service.py — _require_elevated_team_role read gate (#2167 follow-up)
+# service.py — _require_elevated_team_role read gate
 # ---------------------------------------------------------------------------
 
 
@@ -678,10 +628,10 @@ async def test_available_models_denied_for_plain_team_member(monkeypatch) -> Non
 
 @pytest.mark.asyncio
 async def test_elevated_role_check_skipped_for_personal_space() -> None:
-    # A personal-space owner holds team_editor unconditionally (RFC §1) and
-    # must never be denied here even if a real ReBAC round trip would say
-    # otherwise (e.g. a not-yet-self-healed tuple) — `is_personal_team_id`
-    # short-circuits before `has_permissions` is ever called.
+    # A personal-space owner holds team_editor unconditionally and must never
+    # be denied here even if a real ReBAC round trip would say otherwise
+    # (e.g. a not-yet-self-healed tuple) — `is_personal_team_id` short-
+    # circuits before `has_permissions` is ever called.
     rebac = _FakeRebacElevatedCheck([False, False, False])
     deps = _deps(store=_FakeStore(), rebac=rebac)
     policy = await routing_policy_service.get_team_routing_policy(
@@ -692,18 +642,21 @@ async def test_elevated_role_check_skipped_for_personal_space() -> None:
 
 
 # ---------------------------------------------------------------------------
-# service.py — resolve_execution_routing_snapshot (§8.2)
+# service.py — resolve_execution_routing_snapshot
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_snapshot_resolves_none_and_empty_when_no_policy_stored() -> None:
     deps = _deps(store=_FakeStore(), rebac=None)
-    default_id, rules = await routing_policy_service.resolve_execution_routing_snapshot(
+    (
+        default_id,
+        overrides,
+    ) = await routing_policy_service.resolve_execution_routing_snapshot(
         TeamId("team-1"), deps
     )
     assert default_id is None
-    assert rules == []
+    assert overrides == {}
 
 
 @pytest.mark.asyncio
@@ -712,17 +665,17 @@ async def test_snapshot_resolves_stored_policy() -> None:
     await fake_store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="chat.openai.gpt5",
-        operation_rules=[
-            _rule("r1", operation="planning", purpose=None, target="chat.openai.gpt4o")
-        ],
+        agent_profile_overrides={"rico": "chat.openai.gpt4o"},
         updated_by="u1",
     )
     deps = _deps(store=fake_store, rebac=None)
 
-    default_id, rules = await routing_policy_service.resolve_execution_routing_snapshot(
+    (
+        default_id,
+        overrides,
+    ) = await routing_policy_service.resolve_execution_routing_snapshot(
         TeamId("team-1"), deps
     )
 
     assert default_id == "chat.openai.gpt5"
-    assert len(rules) == 1
-    assert rules[0].rule_id == "r1"
+    assert overrides == {"rico": "chat.openai.gpt4o"}
