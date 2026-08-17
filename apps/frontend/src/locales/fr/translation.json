@@ -1618,6 +1618,7 @@
         "stopIngestionTitle": "Arrêter l'ingestion"
       },
       "errorTooltip": {
+        "reported": "Signalé par le traitement",
         "stage": "Étape : {{stage}}"
       },
       "empty": {
@@ -1690,8 +1691,17 @@
         "prev": "Page précédente"
       },
       "status": {
+        "copyDetail": "Copier le détail",
+        "detailCopied": "Détail copié",
+        "detailTitle": "Détail : {{label}}",
         "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
+        "folderFailedMore_one": "et {{count}} autre",
+        "folderFailedMore_other": "et {{count}} autres",
+        "folderFailedTooltip_one": "Échec du traitement de {{count}} document :",
+        "folderFailedTooltip_other": "Échec du traitement de {{count}} documents :",
+        "folderFailed_one": "{{count}} erreur",
+        "folderFailed_other": "{{count}} erreurs",
         "justDone": "Terminé",
         "processing": "Traitement...",
         "raw": "En attente",

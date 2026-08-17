@@ -1618,6 +1618,7 @@
         "stopIngestionTitle": "Stop ingestion"
       },
       "errorTooltip": {
+        "reported": "Reported by the pipeline",
         "stage": "Stage: {{stage}}"
       },
       "empty": {
@@ -1690,8 +1691,17 @@
         "prev": "Previous page"
       },
       "status": {
+        "copyDetail": "Copy detail",
+        "detailCopied": "Detail copied",
+        "detailTitle": "Detail: {{label}}",
         "excludedFromSearch": "Excluded from search",
         "failed": "Error",
+        "folderFailedMore_one": "and {{count}} more",
+        "folderFailedMore_other": "and {{count}} more",
+        "folderFailedTooltip_one": "{{count}} document failed to process:",
+        "folderFailedTooltip_other": "{{count}} documents failed to process:",
+        "folderFailed_one": "{{count}} error",
+        "folderFailed_other": "{{count}} errors",
         "justDone": "Done",
         "processing": "Processing...",
         "raw": "Pending",
