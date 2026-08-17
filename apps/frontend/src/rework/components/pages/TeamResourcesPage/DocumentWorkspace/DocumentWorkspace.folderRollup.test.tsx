@@ -60,14 +60,17 @@ const task = (taskId: string, documentUid: string, state: string, label: string)
 // Corpus root holds four folders:
 //   Live    → its own doc-live                      (task fixtures decide)
 //   Nested  → nothing of its own; Nested/Deep holds doc-deep
-//   Broken  → doc-broken
-//   Done    → doc-done
+//   Broken  → doc-broken + doc-ok
+//   Done    → doc-done + doc-idle
+// The last two folders hold TWO documents each on purpose: a single-document
+// subtree cannot tell "any child finished" from "every child finished", nor a
+// per-document precedence rule from a per-folder one.
 const TAGS = [
   { id: "tag-live", name: "Live", path: "", type: "document", item_ids: ["doc-live"] },
   { id: "tag-nested", name: "Nested", path: "", type: "document", item_ids: [] },
   { id: "tag-deep", name: "Deep", path: "Nested", type: "document", item_ids: ["doc-deep"] },
-  { id: "tag-broken", name: "Broken", path: "", type: "document", item_ids: ["doc-broken"] },
-  { id: "tag-done", name: "Done", path: "", type: "document", item_ids: ["doc-done"] },
+  { id: "tag-broken", name: "Broken", path: "", type: "document", item_ids: ["doc-broken", "doc-ok"] },
+  { id: "tag-done", name: "Done", path: "", type: "document", item_ids: ["doc-done", "doc-idle"] },
 ];
 
 // `tasks` is the whole store (selectAllTasks); `selectActiveTasks` is derived
@@ -246,11 +249,32 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
     expect(hoverChip(row)).toContain("Broken report.pdf");
   });
 
-  it("marks a folder done for the session once its documents have succeeded", async () => {
+  it("marks a folder done once something under it finished and nothing is left running or failed", async () => {
+    // "Done" also holds doc-idle, which was never ingested this session. The
+    // mark means "what you started here has landed", not "every document in
+    // this folder was processed" — a folder of long-stored documents would
+    // never qualify under the stricter reading, and the transient mark exists
+    // precisely to answer "did my upload finish?".
     tasks = [task("t-done", "doc-done", "succeeded", "Done doc.pdf")];
     await renderWorkspace();
 
     expect(folderRow("Done").textContent).toContain(JUST_DONE);
+  });
+
+  it("clears a failure once the same document is re-ingested successfully", async () => {
+    // A document uid is derived from content, so re-uploading a file that
+    // failed produces a SECOND task for the same uid. Nothing removes the old
+    // one from the store (taskEvicted is only dispatched by the unmounted
+    // TaskTray), so only the latest terminal task may count — otherwise the
+    // folder stays flagged for the rest of the session with no way to clear it.
+    tasks = [
+      { ...task("t-broken", "doc-broken", "failed", "Broken report.pdf"), terminalAt: 1000 },
+      { ...task("t-retry", "doc-broken", "succeeded", "Broken report.pdf"), terminalAt: 2000 },
+    ];
+    await renderWorkspace();
+
+    expect(folderRow("Broken").textContent).not.toContain(FAILED_COUNT);
+    expect(folderRow("Broken").textContent).toContain(JUST_DONE);
   });
 
   it("keeps processing ahead of a failure while anything is still running", async () => {
@@ -267,14 +291,25 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
   });
 
   it("keeps a failure ahead of done once everything has settled", async () => {
+    // Two different documents in one folder: one landed, one did not. The
+    // unresolved failure is the more actionable of the two, so it wins.
     tasks = [
       task("t-broken", "doc-broken", "failed", "Broken report.pdf"),
-      task("t-broken-2", "doc-broken", "succeeded", "Broken report.pdf"),
+      task("t-ok", "doc-ok", "succeeded", "Fine.pdf"),
     ];
     await renderWorkspace();
 
     expect(folderRow("Broken").textContent).toContain(FAILED_COUNT);
     expect(folderRow("Broken").textContent).not.toContain(JUST_DONE);
+  });
+
+  it("does not flag a cancelled ingestion as a failure", async () => {
+    // Stopping an ingestion on purpose is neither an error to chase nor a
+    // completion to celebrate.
+    tasks = [task("t-cancel", "doc-broken", "cancelled", "Broken report.pdf")];
+    await renderWorkspace();
+
+    expect(folderRow("Broken").textContent).not.toContain("rework.resources.status");
   });
 
   it("badges a visited folder whose loaded page shows a processing row with no live task", async () => {

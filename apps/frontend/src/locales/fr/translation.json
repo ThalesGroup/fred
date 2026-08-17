@@ -1692,6 +1692,8 @@
       "status": {
         "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
+        "folderFailedMore_one": "et {{count}} autre",
+        "folderFailedMore_other": "et {{count}} autres",
         "folderFailedTooltip_one": "Échec du traitement de {{count}} document :",
         "folderFailedTooltip_other": "Échec du traitement de {{count}} documents :",
         "folderFailed_one": "{{count}} erreur",

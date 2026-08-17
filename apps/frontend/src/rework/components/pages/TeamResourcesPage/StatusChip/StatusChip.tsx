@@ -26,7 +26,14 @@ import styles from "./StatusChip.module.css";
  * "warning", and widening the shared type would push a meaningless case onto
  * every `DocStatusBadge` consumer.
  */
-export type ChipStatus = DocStatus | "warning";
+type ChipStatus = DocStatus | "warning";
+
+/** How many failed documents the hover panel names before it summarizes the
+ *  rest. The panel is portaled outside the chip, so moving the pointer toward
+ *  it closes the tooltip — its scrollbar is unreachable, and an uncapped list
+ *  (a 300-file batch that all failed) would be clipped with no way to read
+ *  past the fold. */
+const MAX_NAMED_FAILURES = 10;
 
 interface StatusChipProps {
   status: ChipStatus;
@@ -35,9 +42,10 @@ interface StatusChipProps {
   /** The ingestion succeeded during this browser session (its SSE task reached
    *  `succeeded`). Marks the otherwise-silent "ready" state with a success
    *  badge so a user who just launched uploads can spot what finished — on a
-   *  folder row, that every document underneath it is now done. Session-only by
-   *  design: the task feed lives in Redux memory, so a page refresh clears the
-   *  marker without any timer or persistence. */
+   *  folder row, that something under it finished and nothing under it is
+   *  still running or failed. Session-only by design: the task feed lives in
+   *  Redux memory, so a page refresh clears the marker without any timer or
+   *  persistence. */
   justCompleted?: boolean;
   /** The failed documents a `warning` folder chip stands for. The chip counts
    *  them and names them on hover — a folder is only ever the sum of what is
@@ -68,8 +76,10 @@ export function StatusChip({ status, errors, justCompleted, failedDocuments }: S
   // "Error" on a folder says nothing the row's own subtree doesn't already
   // imply — how many, and which ones, is the actionable part.
   if (status === "warning") {
-    const count = failedDocuments?.length ?? 0;
+    const failed = failedDocuments ?? [];
+    const count = failed.length;
     if (count === 0) return null;
+    const named = failed.slice(0, MAX_NAMED_FAILURES);
     return (
       <Tooltip
         content={
@@ -77,7 +87,16 @@ export function StatusChip({ status, errors, justCompleted, failedDocuments }: S
             <span className={styles.failedTooltipTitle}>
               {t("rework.resources.status.folderFailedTooltip", { count })}
             </span>
-            <ul className={styles.failedList}>{failedDocuments?.map((doc) => <li key={doc.uid}>{doc.name}</li>)}</ul>
+            <ul className={styles.failedList}>
+              {named.map((doc) => (
+                <li key={doc.uid}>{doc.name}</li>
+              ))}
+            </ul>
+            {count > named.length && (
+              <span className={styles.failedTooltipMore}>
+                {t("rework.resources.status.folderFailedMore", { count: count - named.length })}
+              </span>
+            )}
           </div>
         }
       >

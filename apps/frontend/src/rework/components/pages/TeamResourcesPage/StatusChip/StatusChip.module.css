@@ -17,7 +17,14 @@
   color: var(--on-tertiary-container);
 }
 
-.chip[data-variant="pending"] {
+/* "pending" is a document waiting to be processed; "warning" is the folder
+ * rollup (#2384) — some documents underneath failed. One rule on purpose: the
+ * folder is not itself broken, so it must not take the error palette, and a
+ * later change to this warning tone has to move both together. The static
+ * warning triangle (against pending's breathing `sync`) is what tells them
+ * apart. */
+.chip[data-variant="pending"],
+.chip[data-variant="warning"] {
   background: var(--warning-container);
   color: var(--on-warning-container);
 }
@@ -25,16 +32,6 @@
 .chip[data-variant="failed"] {
   background: var(--error-container);
   color: var(--on-error-container);
-}
-
-/* Folder rollup only (#2384): some documents underneath failed. Deliberately
- * the warning palette, not the error one — the folder itself is fine, and a red
- * folder standing over a subtree the user has no single action for reads as a
- * bigger problem than it is. Shares its colors with "pending"; the static
- * warning triangle (vs pending's breathing sync) is the differentiator. */
-.chip[data-variant="warning"] {
-  background: var(--warning-container);
-  color: var(--on-warning-container);
 }
 
 /* Failed-document names behind the folder rollup chip. Same zero-padding
@@ -55,6 +52,11 @@
 
 .failedTooltipTitle {
   font: var(--font-label-large);
+}
+
+.failedTooltipMore {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .failedList {

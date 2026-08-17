@@ -2837,12 +2837,26 @@ folder rows. Three states, in strict precedence:
 | --- | --- | --- |
 | something still ingesting | `StatusChip status="processing"` | until the last child settles |
 | some documents failed | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent |
-| everything finished this session | `status="ready" justCompleted` ("Done") | session-only |
+| something under it finished this session | `status="ready" justCompleted` ("Done") | session-only |
 
 `raw` is never rolled up: a folder of stored-but-unprocessed documents is a
 steady state, not news. Precedence is processing > failures > done — while
 anything runs the folder is not settled, and once it is, an unresolved failure
 outranks a "your upload landed" marker.
+
+"Done" means *something* under the folder finished this session and nothing
+under it is still running or failed — not that every document it holds has been
+processed. The stricter reading would never fire on a folder of long-stored
+documents, and the mark exists to answer "did what I just started land?". It is
+therefore normal for a folder holding fifty old documents to read "Done" after
+one upload into it, until the next refresh.
+
+Only the LAST terminal task per document counts. A document uid is derived from
+its content, so re-uploading a file that failed produces a second task for the
+same uid, and nothing removes the first (see the eviction note below) — reading
+every task equally left a folder flagged with a failure the user had already
+fixed, for the rest of the session, with no way to clear it. `cancelled` counts
+as neither outcome: stopping an ingestion on purpose is not an error to chase.
 
 Why the folder chip and not the document rows alone: from the top of the tree
 the only way to tell whether a bulk upload had landed was to walk into each
@@ -2880,23 +2894,49 @@ persistent, and it lines up with what each state is for: completion is a
 transient "your upload landed", which the memory-only task store expires for
 free on refresh; a failure still needs someone to act on it.
 
-Both live inputs are read through stable sorted string keys, never their own
-identities: the task store is a fresh object on every SSE progress event, and
-depending on it directly re-walks the tree on each one — the same trap
-`pendingTagKey` avoids for the 3s poll. Keys join on NUL (`KEY_SEP`), not a
-comma, so two different id sets cannot collide onto one key: a document uid is
-not always a uuid (scheduler pulls build `pull-{source_tag}-{hash}` from a
-configurable tag). They are compared, never split back apart. The single
-O(documents in the subtree) walk is skipped outright when nothing is in play —
-the steady state — which matters because the tag list refetches once per
-uploaded file via `useNotifyOnNewTaskTarget`.
+The rollup is an inverted index, not a walk: `folderByDocUid` maps every
+document uid to the visible child folder it sits under, built once per tag tree
+(subtrees are disjoint — a document is tagged into exactly one folder), and each
+rollup is then O(tasks in flight) lookups against it. Walking each subtree per
+recompute instead would re-read the team's whole corpus at the Corpus root,
+every page load and every 3s poll tick during an ingestion.
 
-Known scope: an unvisited sub-folder holding only a teammate's in-flight
-ingestion still shows nothing — closing that would need a server-side per-tag
-counter. And `item_ids` is a snapshot refreshed on tag refetch, so on the very
-first file of a batch the chip can appear a beat late, then self-corrects —
-acceptable for an advisory indicator, unlike the folder-deletion count which had
-to move to live totals (#2173).
+The live inputs are read through stable sorted string keys, never their own
+identities: the task store is a fresh object on every SSE progress event, and
+depending on it directly recomputes on each one — the same trap `pendingTagKey`
+avoids for the 3s poll. Keys join on NUL (`KEY_SEP`), not a comma, so two
+different id sets cannot collide onto one key: a document uid is not always a
+uuid (scheduler pulls build `pull-{source_tag}-{hash}` from a configurable tag).
+They are compared, never split back apart. The failure key carries the names
+too, not just the uids — `taskEventReceived` rewrites `target` on any event that
+carries one, so a label refined after the failure was first recorded must still
+reach the tooltip.
+
+Known scope, all of it inherent to deriving this client-side rather than from a
+server-side per-tag counter:
+
+- an unvisited sub-folder holding only a teammate's in-flight ingestion shows
+  nothing — neither source covers it;
+- the snapshot half of the failure count only sees the loaded page
+  (`rowsPerPage`, 50 by default), so a visited folder holding 200 documents of
+  which 60 failed can report fewer than 60, and the number moves as the user
+  pages. The session half is uncapped, so the case this feature was built for —
+  "I just uploaded, what broke?" — is counted in full;
+- a document stuck `in_progress` (dead worker, #2279) pins its folder to
+  "processing" for as long as the snapshot says so, and because processing wins
+  the precedence, real failures under that folder stay hidden behind the
+  spinner. That is the same stuck state the document's own row shows; fixing it
+  belongs to #2279, not here;
+- `item_ids` is a snapshot refreshed on tag refetch, so on the very first file
+  of a batch the chip can appear a beat late, then self-corrects.
+
+The chip is advisory throughout — not a count the user acts on directly, unlike
+the folder-deletion count which had to move to live totals (#2173).
+
+The hover panel names the first 10 failures and summarizes the rest ("and 12
+more"). The `Tooltip` panel is portaled outside the chip, so moving the pointer
+toward it closes the tooltip and its scrollbar is unreachable — an uncapped list
+would be clipped with no way to read past the fold.
 
 One coupling worth knowing: terminal tasks are never evicted today because
 `taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted

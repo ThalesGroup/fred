@@ -59,7 +59,7 @@ import {
   type TagNode,
 } from "../../../../../shared/utils/tagTree.ts";
 import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
-import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
+import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
@@ -93,6 +93,11 @@ const DEFAULT_PAGE_SIZE = 50;
 // processing, its folder page is reloaded on this cadence so the badge flips
 // to Ready/Failed without a manual refresh.
 const DOC_STATUS_POLL_MS = 3000;
+/** When a terminal task actually settled — `terminalAt` is stamped by the
+ *  reducer on the first terminal event, but a task rehydrated straight into
+ *  a terminal state has none, so registration time is the fallback. */
+const taskSettledAt = (task: TaskViewModel): number => task.terminalAt ?? task.registeredAt;
+
 // Separator for the memo keys the folder rollup below tracks its live inputs
 // by. NUL can never appear inside a tag id or a document uid, so two different
 // id sets can never join to the same string — unlike a comma, which a
@@ -261,18 +266,39 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     }
     return byUid;
   }, [activeTasks]);
-  // Documents whose ingestion finished during THIS browser session — they get
-  // a small "just finished" dot on their otherwise-silent ready state. The
-  // task feed lives in Redux memory, so a refresh clears the set by itself;
-  // that ephemerality is the feature (spot what just finished), not a bug.
+  // How each document's ingestion ENDED during this browser session, keyed by
+  // uid — the "just finished" dot on an otherwise-silent ready row, and (#2384)
+  // the folder rollup's failure list. The task feed lives in Redux memory, so a
+  // refresh clears both by itself; that ephemerality is the feature (spot what
+  // just happened), not a bug.
+  //
+  // Only the LAST terminal task per document counts. A document can carry
+  // several — a failed run followed by a successful re-upload of the same file
+  // (the uid is derived from the content, so it is the same document) — and
+  // nothing ever removes the old one from the store: `taskEvicted` is only
+  // dispatched by `TaskTray`, which is currently unmounted. Reading every task
+  // equally would leave a folder flagged with a failure the user has already
+  // fixed, for the rest of the session, with no way to clear it.
   const allTasks = useSelector(selectAllTasks);
-  const justCompletedDocUids = useMemo(() => {
-    const uids = new Set<string>();
+  const docTaskOutcomes = useMemo(() => {
+    const lastByUid = new Map<string, TaskViewModel>();
     for (const task of allTasks) {
-      if (task.state === "succeeded" && task.target?.type === "document" && task.target.id) uids.add(task.target.id);
+      if (!TERMINAL_STATES.has(task.state)) continue;
+      if (task.target?.type !== "document" || !task.target.id) continue;
+      const previous = lastByUid.get(task.target.id);
+      if (!previous || taskSettledAt(task) >= taskSettledAt(previous)) lastByUid.set(task.target.id, task);
     }
-    return uids;
+    const succeeded = new Set<string>();
+    const failed = new Map<string, string>();
+    for (const [uid, task] of lastByUid) {
+      if (task.state === "succeeded") succeeded.add(uid);
+      // `cancelled` is neither: the user stopped it on purpose, so it is
+      // nothing to celebrate and nothing to flag.
+      else if (task.state === "failed") failed.set(uid, task.target?.label || uid);
+    }
+    return { succeeded, failed };
   }, [allTasks]);
+  const justCompletedDocUids = docTaskOutcomes.succeeded;
   // A just-reprocessed doc must read as "processing" even though its stale
   // `processing.stages` snapshot hasn't caught up yet — see reprocessOverrides
   // above. Centralized here since every status-driven cell (menu label,
@@ -818,66 +844,82 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     }
     return byTag;
   }, [perTag]);
-  // Failed ingestions from this session, for documents no loaded page covers.
-  // `target.label` is the document name the backend stamped on the task, so a
-  // failure in a never-opened sub-folder is still nameable without a request.
-  const failedDocsByUid = useMemo(() => {
+
+  // Which visible child folder each document sits under, built ONCE per tag
+  // tree rather than per rollup. The rollup used to walk every subtree on each
+  // recompute — at the Corpus root that is the team's whole corpus, and the
+  // recompute fires on every page load, every 3s poll tick and every change to
+  // the task feed. Inverting it makes each rollup O(tasks in flight) lookups
+  // against this map instead. Subtrees are disjoint (a document is tagged into
+  // exactly one folder), so one pass fills it.
+  const folderByDocUid = useMemo(() => {
     const byUid = new Map<string, string>();
-    for (const task of allTasks) {
-      if (task.state !== "failed" || task.target?.type !== "document" || !task.target.id) continue;
-      byUid.set(task.target.id, task.target.label || task.target.id);
+    for (const node of childFolders) {
+      for (const uid of collectDescendantDocUids(node)) byUid.set(uid, node.full);
     }
     return byUid;
-  }, [allTasks]);
+  }, [childFolders]);
 
-  // Stable keys for every live input below: the task store is a fresh object on
-  // EVERY SSE progress event, so depending on those identities would re-walk
-  // the tree on each one — the same trap `pendingTagKey` avoids for the poll
-  // interval above. Joined on NUL rather than a comma because a document uid is
-  // not always a plain uuid (scheduler pulls build `pull-{source_tag}-{hash}`
-  // from a configurable tag), and two different id sets must not collide onto
-  // the same key. These are memo keys only — never split back apart.
-  const pendingTagIdsKey = pendingTagIds.join(KEY_SEP);
+  // Stable keys for the live inputs below: the task store is a fresh object on
+  // EVERY SSE progress event, so depending on those identities would recompute
+  // on each one — the same trap `pendingTagKey` avoids for the poll interval
+  // above. Joined on NUL rather than a comma because a document uid is not
+  // always a plain uuid (scheduler pulls build `pull-{source_tag}-{hash}` from
+  // a configurable tag), and two different sets must not collide onto the same
+  // key. These are memo keys only — never split back apart. The failure key
+  // carries the NAMES too, not just the uids: `taskEventReceived` rewrites
+  // `target` on any event that carries one, so a label refined after the
+  // failure was first recorded must still reach the tooltip.
+  const pendingTagIdsKey = [...pendingTagIds].sort().join(KEY_SEP);
   const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(KEY_SEP);
-  const failedDocUidKey = [...failedDocsByUid.keys()].sort().join(KEY_SEP);
+  const failedDocKey = [...docTaskOutcomes.failed]
+    .map(([uid, name]) => `${uid}${KEY_SEP}${name}`)
+    .sort()
+    .join(KEY_SEP);
   const justCompletedKey = [...justCompletedDocUids].sort().join(KEY_SEP);
 
   const folderRollups = useMemo(() => {
     const rollups = new Map<string, { processing: boolean; failed: { uid: string; name: string }[] }>();
     const pending = new Set(pendingTagIds);
-    const liveUids = [...activeDocTaskByUid.keys()];
-    const failedUids = [...failedDocsByUid.keys()];
-    const doneUids = [...justCompletedDocUids];
     const justDone = new Set<string>();
+    const failedByFolder = new Map<string, Map<string, { uid: string; name: string }>>();
+
     for (const node of childFolders) {
       const tagIds = folderDescendantTagIds.get(node.full) ?? [];
-      let processing = tagIds.some((id) => pending.has(id));
-      const failed = new Map(tagIds.flatMap((id) => (failedDocsByTagId.get(id) ?? []).map((doc) => [doc.uid, doc])));
-      // The only O(documents in the subtree) step, so it is skipped outright
-      // whenever nothing at all is in play — the steady state — and the tag
-      // list refetches once per uploaded file (useNotifyOnNewTaskTarget).
-      // Matching the (small) uid lists against the folder's set, rather than
-      // the reverse, keeps the lookups themselves cheap.
-      if (liveUids.length > 0 || failedUids.length > 0 || doneUids.length > 0) {
-        const docUids = collectDescendantDocUids(node);
-        processing = processing || liveUids.some((uid) => docUids.has(uid));
-        for (const uid of failedUids) {
-          if (docUids.has(uid) && !failed.has(uid)) failed.set(uid, { uid, name: failedDocsByUid.get(uid)! });
-        }
-        if (doneUids.some((uid) => docUids.has(uid))) justDone.add(node.full);
-      }
-      rollups.set(node.full, { processing, failed: [...failed.values()] });
+      rollups.set(node.full, { processing: tagIds.some((id) => pending.has(id)), failed: [] });
+      failedByFolder.set(
+        node.full,
+        new Map(tagIds.flatMap((id) => (failedDocsByTagId.get(id) ?? []).map((doc) => [doc.uid, doc] as const))),
+      );
     }
+    // Everything below is driven by the (small) in-flight/terminal task lists,
+    // resolved through folderByDocUid — no subtree walk here.
+    for (const uid of activeDocTaskByUid.keys()) {
+      const full = folderByDocUid.get(uid);
+      const rollup = full ? rollups.get(full) : undefined;
+      if (rollup) rollup.processing = true;
+    }
+    for (const [uid, name] of docTaskOutcomes.failed) {
+      const full = folderByDocUid.get(uid);
+      const failed = full ? failedByFolder.get(full) : undefined;
+      if (failed && !failed.has(uid)) failed.set(uid, { uid, name });
+    }
+    for (const uid of justCompletedDocUids) {
+      const full = folderByDocUid.get(uid);
+      if (full && rollups.has(full)) justDone.add(full);
+    }
+    for (const [full, rollup] of rollups) rollup.failed = [...(failedByFolder.get(full)?.values() ?? [])];
     return { rollups, justDone };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see the key block
     // above: the live inputs are read from their sources, tracked by key.
   }, [
     childFolders,
     folderDescendantTagIds,
+    folderByDocUid,
     failedDocsByTagId,
     pendingTagIdsKey,
     activeDocUidKey,
-    failedDocUidKey,
+    failedDocKey,
     justCompletedKey,
   ]);
 
