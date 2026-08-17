@@ -77,9 +77,7 @@ export function StatusChip({ status, errors, justCompleted, failedDocuments }: S
             <span className={styles.failedTooltipTitle}>
               {t("rework.resources.status.folderFailedTooltip", { count })}
             </span>
-            <ul className={styles.failedList}>
-              {failedDocuments?.map((doc) => <li key={doc.uid}>{doc.name}</li>)}
-            </ul>
+            <ul className={styles.failedList}>{failedDocuments?.map((doc) => <li key={doc.uid}>{doc.name}</li>)}</ul>
           </div>
         }
       >

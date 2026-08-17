@@ -2827,52 +2827,82 @@ client-side team-only quota math; the check is advisory (upload endpoints
 still re-check received sizes), so a precheck transport error falls through
 to the save rather than blocking it.
 
-### `DocumentWorkspace` — folder rows inherit their subtree's "processing" state (#2384, 2026-08-17)
+### `DocumentWorkspace` — folder rows roll up their subtree's ingestion state (#2384, 2026-08-17)
 
-A folder row now carries the same `StatusChip status="processing"` as a document
-row for as long as **any** document under it is still ingesting — its own and
-every sub-folder's, at any depth. Without it, the only way to tell whether a
-bulk upload had finished was to walk into each sub-folder and look for
-still-processing rows; from the top of the tree the status column was blank
-either way.
+A folder row now summarizes everything under it — its own documents and every
+sub-folder's, at any depth — in the status column that used to be blank on
+folder rows. Three states, in strict precedence:
 
-A folder shows **only** that one state — never ready/raw, and deliberately
-never `failed`. The chip is driven by `selectActiveTasks`, which already drops
-every terminal state, so it clears itself the moment the last child settles,
-whichever way it settled; a failed ingestion stays announced on its own
-document row, where the per-stage error tooltip lives (#2315). Aggregating
-failure upward would leave a red folder standing over a subtree the user has
-no single action for.
+| State | Chip | Lifetime |
+| --- | --- | --- |
+| something still ingesting | `StatusChip status="processing"` | until the last child settles |
+| some documents failed | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent |
+| everything finished this session | `status="ready" justCompleted` ("Done") | session-only |
 
-No new endpoint — two in-memory sources are unioned, because neither subsumes
-the other:
+`raw` is never rolled up: a folder of stored-but-unprocessed documents is a
+steady state, not news. Precedence is processing > failures > done — while
+anything runs the folder is not settled, and once it is, an unresolved failure
+outranks a "your upload landed" marker.
 
-- `pendingTagIds`, the tags whose already-loaded page shows a processing row.
-  Being the same derived status the rows themselves render, it also covers what
-  the browse snapshot knows and the task feed does not — a teammate's ingestion,
-  or a document a dead worker left `in_progress` (#2279). Only reaches folders
-  visited this session, but without it a folder could read "settled" while a row
-  inside it visibly spins, which is the exact confusion the feature removes.
-- the SSE task feed the document badge already reads (#2315), matched against
-  the tag tree's `item_ids` via `collectDescendantDocUids`. Reaches folders that
-  were never opened, but is `scope=user` (`useTaskRehydration`), so it alone
-  cannot see a teammate's run — hence the pair.
+Why the folder chip and not the document rows alone: from the top of the tree
+the only way to tell whether a bulk upload had landed was to walk into each
+sub-folder and read the rows one by one. That is also why failures are **named**
+rather than only counted — hovering answers "which files do I go and look at?",
+which a count cannot. The names cost nothing: `TaskTarget.label` for a session
+failure (so a never-opened sub-folder is still nameable) and
+`identity.document_name` for anything a loaded page covers.
+
+The `warning` status is `StatusChip`'s alone, never `DocStatus`'s — no document
+is ever "warning", and widening the shared type would push a meaningless case
+onto every `DocStatusBadge` consumer. It uses the warning palette, not the error
+one: the folder itself is not broken, and a red folder standing over a subtree
+reads as a bigger problem than it is. It shares those colors with `pending`, so
+the static warning triangle (against pending's breathing `sync`) is the
+differentiator.
+
+No new endpoint, no new backend status, no persisted field — two in-memory
+source families are unioned, because neither subsumes the other:
+
+- the **already-loaded pages** (`perTag`), read per tag id. Survives a page
+  reload, and is the only source that sees what the browse snapshot knows and
+  the task feed cannot: a teammate's ingestion, or a document a dead worker left
+  `in_progress`/failed (#2279). Only reaches folders visited this session — but
+  without it a folder could read "settled" while a row inside it visibly spins,
+  the exact confusion the feature removes.
+- the **SSE task feed** the document badge already reads (#2315), matched
+  against the tag tree's `item_ids` via `collectDescendantDocUids`. Reaches
+  folders that were never opened, but is `scope=user` (`useTaskRehydration`) and
+  — since `GET /tasks?scope=user` hides terminal tasks unless a state filter is
+  passed — only for the current browser session.
+
+That lifetime difference is what makes "done" session-only and a failure
+persistent, and it lines up with what each state is for: completion is a
+transient "your upload landed", which the memory-only task store expires for
+free on refresh; a failure still needs someone to act on it.
 
 Both live inputs are read through stable sorted string keys, never their own
-identities: the task map is a fresh object on every SSE progress event, and
+identities: the task store is a fresh object on every SSE progress event, and
 depending on it directly re-walks the tree on each one — the same trap
-`pendingTagKey` avoids for the 3s poll. The uid walk (O(documents in the
-subtree), and the tag list refetches once per uploaded file via
-`useNotifyOnNewTaskTarget`) is skipped outright when nothing is live. Keys are
-memo keys only, never split back apart: a document uid is not always a uuid
-(scheduler pulls build `pull-{source_tag}-{hash}`).
+`pendingTagKey` avoids for the 3s poll. Keys join on NUL (`KEY_SEP`), not a
+comma, so two different id sets cannot collide onto one key: a document uid is
+not always a uuid (scheduler pulls build `pull-{source_tag}-{hash}` from a
+configurable tag). They are compared, never split back apart. The single
+O(documents in the subtree) walk is skipped outright when nothing is in play —
+the steady state — which matters because the tag list refetches once per
+uploaded file via `useNotifyOnNewTaskTarget`.
 
 Known scope: an unvisited sub-folder holding only a teammate's in-flight
 ingestion still shows nothing — closing that would need a server-side per-tag
 counter. And `item_ids` is a snapshot refreshed on tag refetch, so on the very
 first file of a batch the chip can appear a beat late, then self-corrects —
-acceptable for a transient indicator, unlike the folder-deletion count which
-had to move to live totals (#2173).
+acceptable for an advisory indicator, unlike the folder-deletion count which had
+to move to live totals (#2173).
+
+One coupling worth knowing: terminal tasks are never evicted today because
+`taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
+from the app. If the tray is remounted, `EVICTION_DELAY_MS` (5 min) starts
+applying and both the session "done" mark and any task-sourced failure would
+begin disappearing on that timer. The snapshot-sourced half is unaffected.
 
 `countUniqueDocs` was deleted in the same change: it had lost its last caller in
 #2173 and its DFS is now `collectDescendantDocUids`.
