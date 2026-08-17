@@ -7,6 +7,23 @@
   gap: var(--spacing-xs);
 }
 
+// The implicit `team_member` baseline. Shares the pill geometry of `.roleChip`
+// but deliberately not its affordances: dashed border, no hover/active state,
+// no pointer — it must read as a statement of fact, not a fourth toggle.
+.baselineChip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: default;
+  border: 1px dashed var(--outline-variant);
+  border-radius: 999px;
+  padding: 0 var(--spacing-s);
+  height: 2rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
 .roleChip {
   display: flex;
   justify-content: center;
@@ -40,6 +57,12 @@
   &:disabled {
     cursor: default;
     border-color: var(--outline-variant);
+    // Lets the pointer fall through to the wrapping `Tooltip` span: browsers
+    // suppress pointer events on disabled form controls, so without this a
+    // chip the actor may not administer would also silently lose its
+    // description — exactly the reader who most needs to know what the role
+    // is and why it's out of reach.
+    pointer-events: none;
     color: var(--state-text-disabled);
   }
 
@@ -48,4 +71,39 @@
     background: var(--state-on-surface-disabled);
     color: var(--state-text-disabled);
   }
+}
+
+// `.tooltip-content-rich` zeroes the atom's own padding and hands spacing to
+// the content, so this panel owns both. Width is capped because these are
+// prose sentences, not the short label/value rows the atom's nowrap default
+// was sized for.
+.roleTooltip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 22rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.roleTooltipTitle {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.roleTooltipText {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.roleTooltipWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+  margin-top: var(--spacing-2xs);
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-xs);
+  color: var(--warning);
+  font: var(--font-body-small);
 }
