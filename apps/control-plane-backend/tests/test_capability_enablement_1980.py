@@ -1383,15 +1383,16 @@ async def test_universal_chat_profile_requires_same_model_on_every_pod(
 
 
 @pytest.mark.asyncio
-async def test_universally_available_chat_model_profile_ids_fails_closed_on_unreachable_pod(
+async def test_universally_available_chat_model_profile_ids_skips_unreachable_pod(
     monkeypatch,
 ) -> None:
-    """PR #2204 review: an enabled pod that is genuinely unreachable
-    (`_model_capabilities_for_source` returns `None`, not `[]`) must not be
-    silently excluded from the intersection the way a reachable-but-empty pod
-    is — that would let the *other* pods' common profiles look "universal"
-    while this one is down, reintroducing the write-now-drift-later gap this
-    function exists to close. The whole result must be empty instead."""
+    """An enabled pod that is genuinely unreachable
+    (`_model_capabilities_for_source` returns `None`, not `[]`) is skipped
+    (best-effort), not treated as zeroing the whole result: a pod being down
+    must not block every team's routing UI just because it is enabled
+    somewhere in the platform config. Genuine drift on a pod a team actually
+    uses is still caught at turn time by `RoutedChatModelFactory.select`
+    raising `TeamRoutingProfileDriftError`, not by this write-time check."""
 
     from types import SimpleNamespace
 
@@ -1437,7 +1438,69 @@ async def test_universally_available_chat_model_profile_ids_fails_closed_on_unre
 
     universal = await universally_available_chat_model_profile_ids(deps)
 
-    assert universal == frozenset()
+    assert universal == frozenset({"chat.shared"})
+
+
+@pytest.mark.asyncio
+async def test_universally_available_chat_model_profile_ids_scoped_to_team_pods(
+    monkeypatch,
+) -> None:
+    """`source_runtime_ids` scopes the intersection to the pods a team's own
+    agent instances actually run on — a pod the team has no instance on is
+    excluded from consideration even while it is unreachable, matching
+    `capabilities.impact.resolve_availability_for_team`'s precedent. This is
+    the regression for the bug where a team saw "no models activated" just
+    because an unrelated, unused pod happened to be down."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        universally_available_chat_model_profile_ids,
+    )
+
+    def _model_entry(profile_ids):
+        return CapabilityCatalogEntry(
+            id="model__openai__gpt-5.1",
+            version="1",
+            name="gpt-5.1",
+            description="gpt-5.1",
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
+        )
+
+    async def _fake_fetch_models(base_url: str):
+        if base_url == "http://pod-a":
+            return [_model_entry(["chat.shared", "chat.pod-a-only"])]
+        raise AssertionError(
+            "pod-b is out of scope for this team and must not be fetched"
+        )
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+                    ),
+                ]
+            )
+        )
+    )
+
+    universal = await universally_available_chat_model_profile_ids(
+        deps, source_runtime_ids={"runtime-a"}
+    )
+
+    assert universal == frozenset({"chat.shared", "chat.pod-a-only"})
 
 
 # ---------------------------------------------------------------------------

@@ -161,24 +161,53 @@ class _FakeStore:
         return record
 
 
+class _FakeAgentInstance:
+    def __init__(self, source_runtime_id: str) -> None:
+        self.source_runtime_id = source_runtime_id
+
+
+class _FakeAgentInstanceStore:
+    def __init__(self, source_runtime_ids: list[str] | None = None) -> None:
+        self._instances = [
+            _FakeAgentInstance(rid) for rid in (source_runtime_ids or [])
+        ]
+
+    async def list_by_team(self, team_id):
+        return self._instances
+
+
 class _FakeDeps:
     """Minimal stand-in for ProductServiceDependencies — only the attributes
     routing_policy.service actually reads."""
 
-    def __init__(self, *, store: _FakeStore, rebac: Any) -> None:
+    def __init__(
+        self,
+        *,
+        store: _FakeStore,
+        rebac: Any,
+        source_runtime_ids: list[str] | None = None,
+    ) -> None:
         self._store = store
         self.team_dependencies = type("_TD", (), {"rebac": rebac})()
+        self._agent_instance_store = _FakeAgentInstanceStore(source_runtime_ids)
 
     def get_team_routing_policy_store(self):
         return self._store
 
+    def get_agent_instance_store(self):
+        return self._agent_instance_store
 
-def _deps(*, store: _FakeStore, rebac: Any) -> ProductServiceDependencies:
-    """`_FakeDeps` duck-types `ProductServiceDependencies` (only the two
+
+def _deps(
+    *, store: _FakeStore, rebac: Any, source_runtime_ids: list[str] | None = None
+) -> ProductServiceDependencies:
+    """`_FakeDeps` duck-types `ProductServiceDependencies` (only the
     attributes `routing_policy.service` reads) — one acknowledged type: ignore
     here instead of one per call site below."""
 
-    return _FakeDeps(store=store, rebac=rebac)  # type: ignore[return-value]
+    return _FakeDeps(  # type: ignore[return-value]
+        store=store, rebac=rebac, source_runtime_ids=source_runtime_ids
+    )
 
 
 def _model_entry(
@@ -253,7 +282,7 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
     async def _fake_aggregate(deps):
         return catalog
 
-    async def _fake_universal(deps):
+    async def _fake_universal(deps, *, source_runtime_ids=None):
         return universal
 
     monkeypatch.setattr(
@@ -366,7 +395,7 @@ async def test_profile_missing_from_some_pods_rejected(
     rejected at write time, not left to fail at runtime on whichever pod
     lacks it (`TeamRoutingProfileDriftError`)."""
 
-    async def _fake_universal(deps):
+    async def _fake_universal(deps, *, source_runtime_ids=None):
         return frozenset({"chat.openai.gpt4o"})  # chat.openai.gpt5 missing on some pod
 
     monkeypatch.setattr(
@@ -536,7 +565,7 @@ async def test_available_models_excludes_profile_missing_from_some_pods(
     async def _fake_usable(rebac, team_id):
         return None
 
-    async def _fake_universal(deps):
+    async def _fake_universal(deps, *, source_runtime_ids=None):
         return frozenset({"chat.openai.gpt4o"})
 
     monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)

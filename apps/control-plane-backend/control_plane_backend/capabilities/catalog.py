@@ -190,8 +190,10 @@ async def aggregate_capability_catalog(
 
 async def universally_available_chat_model_profile_ids(
     deps: ProductServiceDependencies,
+    *,
+    source_runtime_ids: set[str] | None = None,
 ) -> frozenset[str]:
-    """Chat profile ids present on every enabled, model-capable pod.
+    """Chat profile ids resolvable on every pod relevant to one team.
 
     This is the intersection dual of `aggregate_capability_catalog`'s union
     above (2026-08-02, `TEAM-ROUTING-POLICY-RFC.md` §7.2/§9). It deliberately
@@ -206,22 +208,35 @@ async def universally_available_chat_model_profile_ids(
     know this profile" — the right question for admission/enablement, where
     a capability just needs to exist somewhere to be toggled on. A team
     routing policy asks a different question: whichever pod ends up serving
-    a given turn must be able to resolve the chosen profile, or
-    `RoutedChatModelFactory.select` (fred-runtime) fails closed with
-    `TeamRoutingProfileDriftError`. Validating a routing-policy write against
-    this intersection instead of the union means a write that succeeds can
-    never drift-fail at runtime on some other pod.
+    a given turn must be able to resolve the chosen profile. Validating a
+    routing-policy write against this intersection instead of the union
+    means a write is checked against the pods that can actually serve it.
 
-    Fails closed, unlike `aggregate_capability_catalog`'s best-effort skip: an
-    enabled pod that is genuinely unreachable (`_model_capabilities_for_source`
-    returns `None`) makes the whole result `frozenset()` rather than being
-    silently excluded — excluding it would let the *other* pods' common
-    profiles look "universal" while this one is down, which is exactly the
-    write-now-drift-later gap this function exists to close (2026-08-04,
-    PR #2204 review). A pod that answered but genuinely registers no model
-    (`[]`, e.g. a non-agent pod) is not the same thing and is excluded as
-    before — it never was model-capable, so it has no opinion to poison the
-    intersection with.
+    `source_runtime_ids` scopes the intersection to the pods that matter for
+    one team — pass the `source_runtime_id`s of that team's own
+    `AgentInstanceRecord`s (same input `capabilities.impact
+    .resolve_availability_for_team` takes). Each `AgentInstance` is pinned to
+    exactly one pod for its whole life (`source_runtime_id` is set once at
+    enrollment and a turn is always prepared against that same pod), so a
+    pod this team has no instance on has no opinion on what "available"
+    means for this team. `None` or an empty set (a team with no agent
+    instances yet, so no pod can be ruled out as irrelevant) falls back to
+    every enabled source.
+
+    Best-effort per relevant pod, not fail-closed platform-wide as an earlier
+    revision did (PR #2204 review): an unreachable pod outside
+    `source_runtime_ids` used to still zero the result for every team on the
+    deployment, which is disproportionate — a pod a team does not use going
+    down must not block that team's routing UI. A currently-unreachable pod
+    the team DOES use is simply skipped here too; the write-time check only
+    needs to catch a KNOWN mismatch on a pod it can currently see. Genuine
+    drift — a pod resolving a turn for a profile it turns out not to carry —
+    is still caught at the moment it would matter by
+    `RoutedChatModelFactory.select` (fred-runtime) raising
+    `TeamRoutingProfileDriftError`; that per-turn check is what has to stay
+    airtight, not this one. A pod that answered but genuinely registers no
+    model (`[]`, e.g. a non-agent pod) is excluded the same way — it never
+    was model-capable, so it has no opinion to poison the intersection with.
     """
 
     # Lazy import for the same reason as `aggregate_capability_catalog` above
@@ -232,16 +247,19 @@ async def universally_available_chat_model_profile_ids(
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
             continue
+        if source_runtime_ids and source.runtime_id not in source_runtime_ids:
+            continue
         entries = await _model_capabilities_for_source(source.base_url)
         if entries is None:
             logger.warning(
-                "[capability-catalog] %s unreachable while computing universally "
-                "available model profiles — failing closed (no profile is "
-                "certified available this pass) rather than risk approving a "
-                "routing-policy write this pod cannot actually serve",
+                "[capability-catalog] %s unreachable while computing available "
+                "chat model profiles (source_runtime_ids=%s) — skipping this "
+                "pod (best-effort) rather than failing closed for the whole "
+                "result",
                 source.base_url,
+                source_runtime_ids,
             )
-            return frozenset()
+            continue
         if not entries:
             continue
         profile_models: dict[str, str] = {}

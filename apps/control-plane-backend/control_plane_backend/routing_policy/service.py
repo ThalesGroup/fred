@@ -139,6 +139,18 @@ def _referenced_profile_ids(
     return ids
 
 
+async def _team_source_runtime_ids(
+    deps: ProductServiceDependencies, team_id: TeamId
+) -> set[str]:
+    """The pods `team_id`'s own agent instances actually run on — the only
+    pods a chosen routing profile needs to resolve on for this team (see
+    `universally_available_chat_model_profile_ids`). Same derivation
+    `capabilities.service._revive_after_grant` uses."""
+
+    instances = await deps.get_agent_instance_store().list_by_team(team_id)
+    return {instance.source_runtime_id for instance in instances}
+
+
 async def _validate_write(
     deps: ProductServiceDependencies,
     *,
@@ -153,12 +165,12 @@ async def _validate_write(
     a `dict`, so a duplicate key simply cannot be represented.
 
     "Known to this deployment" (profile ids are deployment-global, not
-    pod-local) means present on *every* enabled, model-capable pod, not just
-    one — `UnknownProfileError` also covers a profile a single pod's YAML
-    still carries but the deployment as a whole no longer serves uniformly.
-    Validating against anything looser would let a write succeed today and
-    drift-fail at runtime on whichever pod actually lacks it
-    (`TeamRoutingProfileDriftError`).
+    pod-local) means present on every pod `team_id`'s own agent instances
+    actually run on, not just one — `UnknownProfileError` also covers a
+    profile a single such pod's YAML still carries but the others this team
+    uses no longer serve uniformly. Validating against anything looser would
+    let a write succeed today and drift-fail at runtime on a pod this team
+    is actually using (`TeamRoutingProfileDriftError`).
     """
 
     referenced = _referenced_profile_ids(
@@ -167,6 +179,8 @@ async def _validate_write(
     )
     if not referenced:
         return
+
+    source_runtime_ids = await _team_source_runtime_ids(deps, team_id)
 
     # `_pod_catalog_fetch_scope` (product.service, lazy import to break the
     # product.service <-> routing_policy import cycle) de-dupes the pod
@@ -178,7 +192,9 @@ async def _validate_write(
 
     with _pod_catalog_fetch_scope():
         profile_to_capability = await _profile_to_capability_id_map(deps)
-        universal = await universally_available_chat_model_profile_ids(deps)
+        universal = await universally_available_chat_model_profile_ids(
+            deps, source_runtime_ids=source_runtime_ids
+        )
     unknown = sorted(
         {p for p in referenced if p not in profile_to_capability or p not in universal}
     )
@@ -238,23 +254,27 @@ async def list_available_model_profiles(
     team's own enablement state, not the platform-admin aggregate list gated
     on `capability#can_manage`.
 
-    Also filtered to `universally_available_chat_model_profile_ids` (2026-08-02,
-    MDL#2) so this picker never offers a choice `_validate_write` would then
-    reject — the two must agree on what "available" means, or a team could
-    pick an option here and have the save fail.
+    Also filtered to `universally_available_chat_model_profile_ids`, scoped to
+    this team's own agent-instance pods (MDL#2), so this picker never offers
+    a choice `_validate_write` would then reject — the two must agree on
+    what "available" means, or a team could pick an option here and have the
+    save fail.
     """
 
     team_id = await require_team_access(
         user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
     )
     await _require_elevated_team_role(user, team_id, deps)
+    source_runtime_ids = await _team_source_runtime_ids(deps, team_id)
     # `_pod_catalog_fetch_scope` (see `_validate_write` for why) de-dupes the
     # pod `/agents/models-catalog` fetch across these two catalog reads.
     from control_plane_backend.product.service import _pod_catalog_fetch_scope
 
     with _pod_catalog_fetch_scope():
         catalog = await aggregate_capability_catalog(deps)
-        universal = await universally_available_chat_model_profile_ids(deps)
+        universal = await universally_available_chat_model_profile_ids(
+            deps, source_runtime_ids=source_runtime_ids
+        )
     usable = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
     profiles = [
         AvailableModelProfile(
