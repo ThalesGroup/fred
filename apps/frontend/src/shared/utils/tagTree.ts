@@ -74,12 +74,22 @@ export function collectDescendantTagIds(node: TagNode): string[] {
   return Array.from(new Set(ids));
 }
 
-export function countUniqueDocs(node: TagNode): number {
+/**
+ * Every `document_uid` tagged under `node`, its sub-folders included — a tag's
+ * own `item_ids` never cover nested tags, same reason `collectDescendantTagIds`
+ * exists. Deduplicated: a document is tagged into exactly one folder, but the
+ * DFS is written not to rely on that.
+ *
+ * Snapshot semantics: `item_ids` only refreshes when the tag list is refetched,
+ * so this is fine for a transient indicator but NOT for a count the user acts on
+ * (see #2173 — the folder-deletion dialog counts live totals instead).
+ */
+export function collectDescendantDocUids(node: TagNode): Set<string> {
   const docIds = new Set<string>();
   function dfs(n: TagNode) {
     n.tagsHere.forEach((t) => (t.item_ids || []).forEach((id) => docIds.add(id)));
     n.children.forEach((child) => dfs(child));
   }
   dfs(node);
-  return docIds.size;
+  return docIds;
 }

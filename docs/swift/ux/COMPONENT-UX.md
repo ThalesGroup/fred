@@ -2827,6 +2827,56 @@ client-side team-only quota math; the check is advisory (upload endpoints
 still re-check received sizes), so a precheck transport error falls through
 to the save rather than blocking it.
 
+### `DocumentWorkspace` — folder rows inherit their subtree's "processing" state (#2384, 2026-08-17)
+
+A folder row now carries the same `StatusChip status="processing"` as a document
+row for as long as **any** document under it is still ingesting — its own and
+every sub-folder's, at any depth. Without it, the only way to tell whether a
+bulk upload had finished was to walk into each sub-folder and look for
+still-processing rows; from the top of the tree the status column was blank
+either way.
+
+A folder shows **only** that one state — never ready/raw, and deliberately
+never `failed`. The chip is driven by `selectActiveTasks`, which already drops
+every terminal state, so it clears itself the moment the last child settles,
+whichever way it settled; a failed ingestion stays announced on its own
+document row, where the per-stage error tooltip lives (#2315). Aggregating
+failure upward would leave a red folder standing over a subtree the user has
+no single action for.
+
+No new endpoint — two in-memory sources are unioned, because neither subsumes
+the other:
+
+- `pendingTagIds`, the tags whose already-loaded page shows a processing row.
+  Being the same derived status the rows themselves render, it also covers what
+  the browse snapshot knows and the task feed does not — a teammate's ingestion,
+  or a document a dead worker left `in_progress` (#2279). Only reaches folders
+  visited this session, but without it a folder could read "settled" while a row
+  inside it visibly spins, which is the exact confusion the feature removes.
+- the SSE task feed the document badge already reads (#2315), matched against
+  the tag tree's `item_ids` via `collectDescendantDocUids`. Reaches folders that
+  were never opened, but is `scope=user` (`useTaskRehydration`), so it alone
+  cannot see a teammate's run — hence the pair.
+
+Both live inputs are read through stable sorted string keys, never their own
+identities: the task map is a fresh object on every SSE progress event, and
+depending on it directly re-walks the tree on each one — the same trap
+`pendingTagKey` avoids for the 3s poll. The uid walk (O(documents in the
+subtree), and the tag list refetches once per uploaded file via
+`useNotifyOnNewTaskTarget`) is skipped outright when nothing is live. Keys are
+memo keys only, never split back apart: a document uid is not always a uuid
+(scheduler pulls build `pull-{source_tag}-{hash}`).
+
+Known scope: an unvisited sub-folder holding only a teammate's in-flight
+ingestion still shows nothing — closing that would need a server-side per-tag
+counter. And `item_ids` is a snapshot refreshed on tag refetch, so on the very
+first file of a batch the chip can appear a beat late, then self-corrects —
+acceptable for a transient indicator, unlike the folder-deletion count which
+had to move to live totals (#2173).
+
+`countUniqueDocs` was deleted in the same change: it had lost its last caller in
+#2173 and its DFS is now `collectDescendantDocUids`.
+
 ### `DocumentWorkspace` — embedded-title hint on the Name column
 
 The Name column always shows `identity.document_name` (the real filename) now,

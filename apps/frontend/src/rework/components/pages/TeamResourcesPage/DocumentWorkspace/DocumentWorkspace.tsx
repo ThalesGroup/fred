@@ -52,6 +52,7 @@ import {
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   buildTree,
+  collectDescendantDocUids,
   collectDescendantTagIds,
   findNode,
   fullPath,
@@ -772,6 +773,60 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folderTagIdsKey, fetchTagSizes]);
 
+  // #2384 — a folder row carries a "processing" chip while ANY document under
+  // it (its own + every sub-folder's, at any depth) is still being ingested.
+  // Without it, the only way to tell whether a bulk upload has finished is to
+  // walk into every sub-folder and look for still-processing rows.
+  //
+  // Two evidence sources, unioned — neither subsumes the other:
+  //  - `pendingTagIds`: tags whose ALREADY-LOADED page shows a processing row.
+  //    This is the same derived status the rows themselves render, so it also
+  //    covers what the browse snapshot alone knows and the task feed does not
+  //    (a teammate's ingestion, a document left `in_progress` by a dead
+  //    worker). Limited to folders visited this session — but without it a
+  //    folder could read "settled" while a row inside it visibly spins, the
+  //    exact confusion this feature exists to remove.
+  //  - the live SSE task feed (`activeDocTaskByUid`, the signal the document
+  //    badge reads since #2315) matched against the tag tree's `item_ids`.
+  //    Reaches folders that were never opened, but carries only the current
+  //    user's tasks (`GET /tasks?scope=user`, useTaskRehydration).
+  //
+  // Deliberately never aggregates failure: `selectActiveTasks` drops every
+  // terminal state and `pendingTagIds` counts `processing` only, so the chip
+  // clears itself the moment the last child settles — whichever way it
+  // settled. A failed ingestion stays announced on its own document row,
+  // where the per-stage error tooltip is.
+  const pendingTagIdsKey = pendingTagIds.join(",");
+  const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(",");
+  const ingestingFolders = useMemo(() => {
+    const marked = new Set<string>();
+    const pending = new Set(pendingTagIds);
+    // Unlike the tag-id walk, this one is O(documents in the subtree) — and
+    // the tag list refetches once per uploaded file (useNotifyOnNewTaskTarget),
+    // so it is skipped entirely whenever nothing is live, which is the steady
+    // state. Iterating the (small) live-task list against each folder's uid set
+    // rather than the reverse keeps the match itself cheap.
+    const liveUids = [...activeDocTaskByUid.keys()];
+    for (const node of childFolders) {
+      if ((folderDescendantTagIds.get(node.full) ?? []).some((id) => pending.has(id))) {
+        marked.add(node.full);
+        continue;
+      }
+      if (liveUids.length === 0) continue;
+      const docUids = collectDescendantDocUids(node);
+      if (liveUids.some((uid) => docUids.has(uid))) marked.add(node.full);
+    }
+    return marked;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- both live inputs
+    // are read through stable string keys instead of their own identities: the
+    // task map (and so `pendingTagIds`) is a fresh object on EVERY SSE progress
+    // event, and depending on it directly would re-walk the tree on each one —
+    // the same trap `pendingTagKey` avoids for the poll interval above. Read
+    // from the sources, not from the keys: a document uid is not always a plain
+    // uuid (scheduler pulls build `pull-{source_tag}-{hash}`), so splitting the
+    // key back apart would be wrong.
+  }, [childFolders, folderDescendantTagIds, pendingTagIdsKey, activeDocUidKey]);
+
   const rows: Row[] = useMemo(
     () => [
       ...childFolders.map((node): Row => ({ kind: "folder", node })),
@@ -1140,7 +1195,11 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       label: "",
       size: "8rem",
       cellRenderer: (row) => {
-        if (row.kind !== "document") return null;
+        // A folder only ever shows "processing" (see ingestingFolders) — never
+        // ready/raw/failed, which stay per-document states.
+        if (row.kind === "folder") {
+          return ingestingFolders.has(row.node.full) ? <StatusChip status="processing" /> : null;
+        }
         return (
           <StatusChip
             status={getDocStatus(row.doc)}
