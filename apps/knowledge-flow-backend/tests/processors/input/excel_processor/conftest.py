@@ -100,6 +100,10 @@ def _configure_processor(**cfg) -> ExcelProcessor:
     config value (it is a `convert_file_to_markdown` argument), so it is dropped.
     """
     cfg.pop("output_dir", None)
+    # Unit tests build deterministic workbooks with openpyxl and do not need an
+    # external office suite. LibreOffice recalculation belongs to the explicitly
+    # marked integration tests (`demo_run` / `test_integration.py`).
+    cfg.setdefault("recalc", False)
     proc = ExcelProcessor()
     for key, value in cfg.items():
         setattr(proc, key, value)
