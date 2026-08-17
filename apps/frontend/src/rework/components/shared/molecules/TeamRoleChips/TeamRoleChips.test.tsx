@@ -102,6 +102,21 @@ describe("TeamRoleChips — the implicit Member baseline", () => {
     expect(toggleFor("team_analyst")?.getAttribute("aria-pressed")).toBe("false");
   });
 
+  // Order is deliberate: the three grantable roles first, the baseline closing
+  // the row. Reading left to right, the row goes from "what you can change" to
+  // "what is always true".
+  it("places the Member badge last, after the three role toggles", () => {
+    renderChips({ heldRoles: [] });
+
+    const group = container.querySelector('[role="group"]')!;
+    expect(Array.from(group.children).map((child) => child.textContent)).toEqual([
+      "rework.teamRoles.team_admin",
+      "rework.teamRoles.team_editor",
+      "rework.teamRoles.team_analyst",
+      "rework.teamRoles.team_member",
+    ]);
+  });
+
   it("keeps showing the Member badge alongside an elevated role", () => {
     renderChips({ heldRoles: ["team_admin"] });
 

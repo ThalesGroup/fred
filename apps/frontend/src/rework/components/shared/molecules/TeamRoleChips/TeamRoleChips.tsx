@@ -71,19 +71,6 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister }: Te
 
   return (
     <div className={styles.roleChips} role="group">
-      {/* Informational, never a fourth toggle: `team_member` is the implicit
-          baseline — automatic for anyone holding an elevated role, granted
-          directly to anyone holding none (REBAC.md §Team member) — and the API
-          refuses to revoke a member's last remaining relation. Rendering it as
-          a static badge keeps a plain member from reading as role-less, which
-          three inactive pills otherwise look exactly like. `role="note"` plus
-          the tab stop is what makes its description reachable without a mouse;
-          without them the badge is bare text inside a group of controls. */}
-      <Tooltip content={panels[BASELINE_TEAM_ROLE]}>
-        <span className={styles.baselineChip} role="note" tabIndex={0}>
-          {t(`rework.teamRoles.${BASELINE_TEAM_ROLE}`)}
-        </span>
-      </Tooltip>
       {ELEVATED_TEAM_ROLES.map((role) => {
         const held = heldRoles.includes(role);
         // `aria-disabled` rather than `disabled`: a disabled button leaves the
@@ -108,6 +95,20 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister }: Te
           </Tooltip>
         );
       })}
+      {/* Closes the row, after the three toggles. Informational, never a fourth
+          toggle: `team_member` is the implicit baseline — automatic for anyone
+          holding an elevated role, granted directly to anyone holding none
+          (REBAC.md §Team member) — and the API refuses to revoke a member's
+          last remaining relation. It therefore always renders held, and keeps a
+          plain member from reading as role-less, which three unheld pills
+          otherwise look exactly like. `role="note"` plus the tab stop is what
+          makes its description reachable without a mouse; without them the
+          badge is bare text inside a group of controls. */}
+      <Tooltip content={panels[BASELINE_TEAM_ROLE]}>
+        <span className={styles.baselineChip} role="note" tabIndex={0}>
+          {t(`rework.teamRoles.${BASELINE_TEAM_ROLE}`)}
+        </span>
+      </Tooltip>
     </div>
   );
 }

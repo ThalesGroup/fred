@@ -24,12 +24,23 @@
   white-space: nowrap;
 }
 
-// The implicit `team_member` baseline. Visually identical to a role toggle at
-// rest, on purpose — it belongs to the same row and the same set. What it does
-// not have is any affordance: no pointer, no hover, no active state, no click
-// handler. It states a fact; it is not a fourth toggle.
+// The "held" appearance. Shared, because a held role and the baseline badge
+// mean the same thing to the reader — this person has it — and so must look
+// the same. The baseline wears it unconditionally: `team_member` is always
+// held, which is the whole point of showing it.
+%pill-held {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+// The implicit `team_member` baseline. Same pill as a role toggle and the same
+// held fill, on purpose — it belongs to the same row and the same set, and it
+// is genuinely on. What it does not have is any affordance: no pointer, no
+// hover, no toggling. It states a fact; it is not a fourth toggle.
 .baselineChip {
   @extend %pill;
+  @extend %pill-held;
 
   cursor: default;
 }
@@ -50,9 +61,7 @@
   }
 
   &[data-active="true"] {
-    border-color: var(--primary);
-    background: var(--primary);
-    color: var(--on-primary);
+    @extend %pill-held;
   }
 
   // Keyed off `aria-disabled`, not `:disabled` — the chip stays a focusable,
