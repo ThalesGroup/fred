@@ -86,7 +86,6 @@ class _FakeBundle:
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import control_plane_backend.models.task_models  # noqa: F401
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / name}")
     async with engine.begin() as conn:

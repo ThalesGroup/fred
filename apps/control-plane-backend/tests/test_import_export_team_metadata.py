@@ -51,7 +51,6 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     # Import the ORM modules so every table is registered on the two metadatas
     # before create_all runs.
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import control_plane_backend.models.task_models  # noqa: F401
 
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")

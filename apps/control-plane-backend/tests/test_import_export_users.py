@@ -121,7 +121,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     """One file-backed SQLite async engine carrying the full control-plane schema."""
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import control_plane_backend.models.task_models  # noqa: F401
 
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")

@@ -256,10 +256,10 @@ class FakeRebac:
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
-    # prompt_models is already imported above (PromptRow) — only agent_instance_models
-    # and the task models still need a registration-only import here.
+    # prompt_models is already imported above (PromptRow) and the task models come
+    # with the module-level TASK_TABLES import — only agent_instance_models still
+    # needs a registration-only import here.
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import control_plane_backend.models.task_models  # noqa: F401
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / name}")
     async with engine.begin() as conn:
