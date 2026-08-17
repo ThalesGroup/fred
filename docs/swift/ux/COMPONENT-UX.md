@@ -213,11 +213,9 @@ As of REASON-01 (#2166) the platform contributed its first non-capability contro
 **gone from the tune menu**: reasoning is now a **plain text button + chevron**
 (`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
 edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button leads with the MODEL IDENTITY (`params.model_id`, the
-single enabled reasoning model — read-only today, the model picker slot once
-multi-model ships, each model carrying its own reasoning mode): "Mistral
-Small · Élevé" when on, "Mistral Small · Désactivé" when off (bare
-"Raisonnement"/level labels when no unambiguous model is served); its menu
+reference. The button leads with the MODEL IDENTITY: "Mistral Small · Élevé"
+when on, "Mistral Small · Désactivé" when off (bare "Raisonnement"/level
+labels when no model resolves at all); its menu
 opens above, right-aligned, with the effort/latency explainer as a muted
 header and two check-circle rows: Désactivé, and the ON row labeled with the
 level. The level is the model's own
@@ -228,12 +226,17 @@ on values they don't support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48), so the
 wire stays the on/off tri-state and the pod always applies the live settings
 value.
 The chip renders in primary/selected colors whenever an effort level is active.
-Multi-model is deliberately NOT displayed yet — the model identity arrives as a
-plain profile-id prop so the menu can grow a model section when that feature ships.
-The gating is unchanged: the chip appears only when the agent's author turned
-Reasoning on in the form's Capabilities tab AND a platform admin enabled the model's
-reasoning — a closed upstream gate removes it entirely rather than disabling it
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
+
+**Superseded in part by #2387 — see "Composer model label" below.** Until then
+the model identity came from `params.model_id` on this very control, i.e. the
+single model whose REASONING was enabled platform-wide, which is unrelated to
+routing; and the chip as a whole was gated on the reasoning control existing.
+Both changed: the identity now comes from
+`GET /teams/{team_id}/routing-policy/effective-chat-model`, the model shows even
+when no reasoning is offered, and the reasoning MENU additionally requires the
+routed model to be reasoning-enabled. The author/admin gates below still decide
+whether the control is emitted at all — a closed upstream gate removes it
+entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
 section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
 through the same `CapabilityCard` component every real capability uses (generalized
 to a plain `name`/`description`/`subForm` API for this) even though the reasoning
@@ -3030,3 +3033,46 @@ _Priority order for the next UX session. Update before each session._
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
 24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
+
+## Composer model label (#2387, 2026-08-17)
+
+### `ReasoningChip`
+
+**Location:** `src/rework/features/capabilities/ReasoningChip.tsx`
+**Status:** `Functional`
+
+The composer's right-edge chip. Two concerns, now independent:
+
+- **Model identity** — the model the next turn will actually route to, from
+  `GET /teams/{team_id}/routing-policy/effective-chat-model`. Read-only; the
+  choice lives in the team routing policy and the platform binding.
+- **Reasoning toggle** — still emitted only when the agent's author enabled
+  reasoning and a platform-enabled reasoning model exists (REASON-01 §8's
+  diagnosability rule: a control that can do nothing must be absent).
+
+Previously the model identity rode on the `reasoning_toggle` control's own
+`params`, i.e. the single model whose *reasoning* an admin had enabled
+platform-wide. That is unrelated to routing, so the chip contradicted any
+platform binding or team override in force. The name is kept (`ReasoningChip`)
+because the reasoning menu is still what makes it interactive.
+
+Three render states:
+
+| Condition | Renders |
+| --------- | ------- |
+| Reasoning control present **and** `reasoning_enabled` | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click. |
+| Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
+| No reasoning control at all, model resolved | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable. |
+| Neither | Nothing (`null`). An empty chip would be worse than none. |
+
+**Unavailable model.** When `enabled_for_team` is `false` the turn will fail
+with `ModelNotUsableError` before the LLM call. The model name takes
+`--error` + `line-through` via `.model[data-unavailable]`, an `error_outline`
+icon sits beside it, and the reason reaches the accessible name and `title` —
+colour alone would leave a colour-blind reader with no signal.
+
+**Label fallback**: `modelLabel(display_name, name, capability_id)` prefers the
+ops-authored `model_display_name`, then prettifies the real model `name`, then
+falls back to splitting the capability id. The `name` step matters because
+`model_capability_id` normalizes non-id-safe characters — derived from the id,
+`mistral:latest` would read "Mistral Latest".

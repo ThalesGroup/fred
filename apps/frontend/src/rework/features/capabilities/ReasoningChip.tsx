@@ -39,7 +39,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
-import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 import styles from "./ReasoningChip.module.css";
 
@@ -50,8 +50,12 @@ export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
  *  below. Ops win because only they know whether a hyphen is a version
  *  separator ("claude-sonnet-4-6") or a variant one ("gpt-4.1-mini").
  *  Exported for tests. */
-export function modelLabel(displayName: unknown, modelId: unknown): string | null {
+export function modelLabel(displayName: unknown, modelName: unknown, modelId: unknown): string | null {
   if (typeof displayName === "string" && displayName.trim()) return displayName.trim();
+  // The real model name before the capability id, because `model_capability_id`
+  // normalizes characters outside the id charset to `-`: derived from the id,
+  // "mistral:latest" would read "Mistral Latest" (#2387).
+  if (typeof modelName === "string" && modelName.trim()) return prettifyModelName(modelName.trim());
   return modelLabelFromCapabilityId(modelId);
 }
 
@@ -63,16 +67,18 @@ export function modelLabelFromCapabilityId(modelId: unknown): string | null {
   if (typeof modelId !== "string") return null;
   const parts = modelId.split("__");
   if (parts.length < 3 || parts[0] !== "model") return null;
+  return prettifyModelName(parts.slice(2).join("__"));
+}
+
+/** Turn a raw model name into a display label — "gpt-4.1-mini" → "GPT 4.1 Mini".
+ *  Shared by the `name` and capability-id paths above so both prettify
+ *  identically. Exported for tests. */
+export function prettifyModelName(rawName: string): string | null {
   // Split on hyphens ONLY: dots are version numbers (gpt-4.1, gemini-2.5-pro)
-  // and must survive; the provider/name separator is the double underscore
-  // consumed above. Anthropic-style 8-digit date stamps (…-20251001) are
+  // and must survive. Anthropic-style 8-digit date stamps (…-20251001) are
   // release plumbing, not identity — dropped. "latest" is kept: it is part of
   // how ops pinned the model and says something true about it.
-  const words = parts
-    .slice(2)
-    .join("__")
-    .split("-")
-    .filter((word) => word.length > 0 && !/^\d{8}$/.test(word));
+  const words = rawName.split("-").filter((word) => word.length > 0 && !/^\d{8}$/.test(word));
   if (words.length === 0) return null;
   const acronyms: Record<string, string> = { gpt: "GPT", chatgpt: "ChatGPT", deepseek: "DeepSeek" };
   return words
@@ -102,9 +108,19 @@ interface ReasoningChipProps {
   composer: ChatTurnControlComposerState;
   /** Mirrors the add/tune menu buttons: no picking while a response streams. */
   disabled?: boolean;
+  /** The model the next turn will actually route to (#2387).
+   *
+   *  The chip used to take its model identity from the reasoning control's own
+   *  `params` — i.e. the single model whose REASONING an admin had enabled
+   *  platform-wide, which has nothing to do with routing. With a platform
+   *  binding or any override in force it therefore named a model that was not
+   *  answering. This prop is the resolved answer instead, and the two concerns
+   *  are now independent: the model always shows, the reasoning menu still only
+   *  appears when the `reasoning_toggle` control does. */
+  effectiveModel?: EffectiveChatModel;
 }
 
-export function ReasoningChip({ chatControls, composer, disabled = false }: ReasoningChipProps) {
+export function ReasoningChip({ chatControls, composer, disabled = false, effectiveModel }: ReasoningChipProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,23 +149,76 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
 
   // Only agents whose author enabled reasoning (and with a platform-enabled
   // reasoning model) emit the platform reasoning_toggle control — no control,
-  // no button, same gate the tune-menu row used.
-  const control = chatControls.find((entry) => entry.widget === "reasoning_toggle");
-  if (!control) return null;
+  // no reasoning MENU, same gate the tune-menu row used. It no longer gates the
+  // chip itself: the model label is independent of reasoning (#2387), so an
+  // agent that offers no reasoning still gets to say which model answers.
+  const platformControl = chatControls.find((entry) => entry.widget === "reasoning_toggle");
+  // The control says "the platform enabled reasoning on SOME model and this
+  // agent offers it" — it cannot say whether the model this turn routes to is
+  // one of them, because computing that needs the pod catalog and the
+  // prepare-execution path must stay free of catalog fetches.
+  //
+  // So the routed model has the last word. `RoutedChatModelFactory` STRIPS the
+  // reasoning settings for a model whose reasoning is off, so offering the
+  // toggle here would be offering something inert: the user flips it on and the
+  // turn silently does not reason. Concretely, with reasoning enabled on Mistral
+  // Small and a team override routing to Mistral Medium, the chip used to render
+  // "Mistral Medium · Désactivé" with a working-looking toggle behind it.
+  //
+  // `undefined` (no resolution yet, or an older backend) leaves the control as
+  // the platform served it — the pre-#2387 behaviour, not a silent hide.
+  const control = effectiveModel?.reasoning_enabled === false ? undefined : platformControl;
 
   const on = composer.reasoning;
   const title = t("chatbot.composerSettings.reasoningRowLabel");
-  const params = control.params as { effort?: unknown; model_id?: unknown; display_name?: unknown } | undefined;
+  const params = control?.params as { effort?: unknown } | undefined;
   const levelKey = effortLabelKey(params?.effort);
   const onLabel = levelKey ? t(levelKey) : t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
   // Model identity first, Claude-style ("Mistral Small Élevé"): model in the
   // regular button text, reasoning state one step fainter
-  // (--on-surface-muted) — the color contrast is the separator. Read-only
-  // today, the model picker slot tomorrow. Without an unambiguous model the
-  // button falls back to the mockup's bare labels.
-  const displayLabel = modelLabel(params?.display_name, params?.model_id);
+  // (--on-surface-muted) — the color contrast is the separator.
+  //
+  // Sourced from the RESOLVED model, never from the reasoning control: the
+  // capability id is the same `model__{provider}__{name}` shape `modelLabel`
+  // already knew how to split, so the id-splitting fallback still covers a
+  // model whose catalog names no `model_display_name`.
+  const displayLabel = modelLabel(effectiveModel?.display_name, effectiveModel?.name, effectiveModel?.capability_id);
   const stateLabel = on ? onLabel : offLabel;
+  // The turn will fail with ModelNotUsableError before the LLM call. Say so
+  // here rather than letting the user discover an opaque error — the same
+  // diagnosability rule REASON-01 §8 applies to the reasoning control itself.
+  const unavailable = effectiveModel?.enabled_for_team === false;
+  const unavailableLabel = t("chatbot.composerSettings.modelNotEnabledForTeam");
+
+  // Nothing to show and nothing to pick: no reasoning control, and no model
+  // resolved (a pod that declares no chat default and has no team policy, or an
+  // unreachable pod). Rendering an empty chip would be worse than none.
+  if (!control && !displayLabel) return null;
+
+  // Model label with no reasoning menu behind it — a plain, non-interactive
+  // statement of which model answers. Deliberately not a disabled button: there
+  // is no action being withheld, so nothing should look clickable.
+  if (!control) {
+    return (
+      <div className={styles.wrap}>
+        <span
+          className={styles.static}
+          title={unavailable ? unavailableLabel : undefined}
+          aria-label={unavailable ? `${displayLabel} — ${unavailableLabel}` : (displayLabel ?? undefined)}
+        >
+          <span className={styles.model} data-unavailable={unavailable || undefined}>
+            {displayLabel}
+          </span>
+          {unavailable && (
+            <span className={styles.warning} aria-hidden="true">
+              <Icon category="outlined" type="error_outline" />
+            </span>
+          )}
+        </span>
+      </div>
+    );
+  }
 
   const pick = (next: boolean) => {
     composer.onReasoningChange(next);
@@ -167,12 +236,24 @@ export function ReasoningChip({ chatControls, composer, disabled = false }: Reas
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`${title}: ${on ? onLabel : offLabel}`}
+        aria-label={
+          unavailable
+            ? `${title}: ${on ? onLabel : offLabel} — ${unavailableLabel}`
+            : `${title}: ${on ? onLabel : offLabel}`
+        }
+        title={unavailable ? unavailableLabel : undefined}
         onClick={() => setOpen((current) => !current)}
       >
         {displayLabel ? (
           <>
-            <span className={styles.model}>{displayLabel}</span>
+            <span className={styles.model} data-unavailable={unavailable || undefined}>
+              {displayLabel}
+            </span>
+            {unavailable && (
+              <span className={styles.warning} aria-hidden="true">
+                <Icon category="outlined" type="error_outline" />
+              </span>
+            )}
             <span className={styles.state}>{stateLabel}</span>
           </>
         ) : (

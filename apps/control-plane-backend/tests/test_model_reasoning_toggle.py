@@ -520,9 +520,9 @@ def test_control_is_emitted_when_every_gate_is_open() -> None:
     # Default OFF is a safety decision, not a style one: Amendment C measured
     # reasoning re-issuing duplicate tool calls in 10/10 turns on this stack.
     # Author-settable since Amendment B, but this stays the value an author
-    # who does nothing gets. The single enabled model rides along as the
-    # button's identity.
-    assert control.params == {"default": False, "model_id": THINKING_MODEL}
+    # who does nothing gets. No model identity rides along any more (#2387) —
+    # see test_params_never_carry_a_model_identity below.
+    assert control.params == {"default": False}
 
 
 def test_params_effort_carries_the_models_own_level() -> None:
@@ -539,84 +539,45 @@ def test_params_effort_carries_the_models_own_level() -> None:
     )
 
     assert control is not None
-    assert control.params == {
-        "default": False,
-        "effort": "high",
-        "model_id": THINKING_MODEL,
-    }
+    assert control.params == {"default": False, "effort": "high"}
 
 
-def test_params_model_id_carries_the_single_enabled_model() -> None:
-    # The button leads with the model identity ("Mistral Small · Élevé") —
-    # emitted only when unambiguous (exactly one enabled reasoning model);
-    # multi-model will turn this into the model picker's value.
+def test_params_never_carry_a_model_identity() -> None:
+    """#2387 — `model_id`/`display_name` are GONE from this control.
+
+    They carried the single reasoning-enabled model's identity, which the
+    composer rendered as its model label. That identity has nothing to do with
+    which model a turn routes to, so the composer contradicted every platform
+    binding and team override. The composer reads
+    `EffectiveChatModel` for the model now; this control is authoritative only
+    about whether a toggle should exist, and at what effort.
+    """
+
     from control_plane_backend.product.service import _platform_reasoning_control
 
     single = _platform_reasoning_control(
         reasoning_enabled=True,
         reasoning_default_on=False,
         reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot("high")},
+        display_by_model={THINKING_MODEL: _snapshot("high", "Mistral Small 4")},
     )
     assert single is not None
-    assert single.params == {
-        "default": False,
-        "effort": "high",
-        "model_id": THINKING_MODEL,
-    }
+    assert single.params == {"default": False, "effort": "high"}
+    assert "model_id" not in (single.params or {})
+    assert "display_name" not in (single.params or {})
 
+    # Same with several enabled models — nothing about model identity here.
     two = _platform_reasoning_control(
         reasoning_enabled=True,
         reasoning_default_on=False,
         reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
         display_by_model={
-            THINKING_MODEL: _snapshot("high"),
+            THINKING_MODEL: _snapshot("high", "Mistral Small 4"),
             PLAIN_MODEL: _snapshot("high"),
         },
     )
     assert two is not None
-    assert "model_id" not in (two.params or {})
-
-
-def test_params_display_name_rides_with_the_model_id() -> None:
-    # The label belongs to the model it names, so it ships only alongside an
-    # unambiguous model_id, and only when ops actually named the model.
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    named = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot("high", "Mistral Small 4")},
-    )
-    assert named is not None
-    assert named.params == {
-        "default": False,
-        "effort": "high",
-        "model_id": THINKING_MODEL,
-        "display_name": "Mistral Small 4",
-    }
-
-    unnamed = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot("high")},
-    )
-    assert unnamed is not None
-    assert "display_name" not in (unnamed.params or {})
-
-    ambiguous = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
-        display_by_model={
-            THINKING_MODEL: _snapshot("high", "Mistral Small 4"),
-            PLAIN_MODEL: _snapshot("high", "GPT-4o"),
-        },
-    )
-    assert ambiguous is not None
-    assert "display_name" not in (ambiguous.params or {})
+    assert two.params == {"default": False, "effort": "high"}
 
 
 def test_params_effort_omitted_when_unknown_or_ambiguous() -> None:
@@ -630,10 +591,7 @@ def test_params_effort_omitted_when_unknown_or_ambiguous() -> None:
         reasoning_enabled_model_ids=[THINKING_MODEL],
         display_by_model={THINKING_MODEL: _snapshot(None)},
     )
-    assert unknown is not None and unknown.params == {
-        "default": False,
-        "model_id": THINKING_MODEL,
-    }
+    assert unknown is not None and unknown.params == {"default": False}
 
     ambiguous = _platform_reasoning_control(
         reasoning_enabled=True,
@@ -665,7 +623,7 @@ def test_author_can_preselect_reasoning_on_new_conversations() -> None:
     )
 
     assert control is not None
-    assert control.params == {"default": True, "model_id": THINKING_MODEL}
+    assert control.params == {"default": True}
 
 
 def test_preselect_cannot_conjure_a_control_the_gates_refused() -> None:

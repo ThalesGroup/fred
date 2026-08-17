@@ -47,6 +47,7 @@ from control_plane_backend.capabilities.enablement import (
 )
 from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
 from control_plane_backend.product import service as product_service
+from control_plane_backend.product.service import PodModelCatalog
 from fred_core import CapabilityPermission, RebacDisabledResult
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -941,7 +942,7 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
         return []
 
     async def _fake_fetch_models(base_url: str):
-        return []
+        return PodModelCatalog(entries=[])
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1008,17 +1009,19 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     async def _fake_fetch_models(base_url: str):
         # OBSERV-02 v3 (RFC §8.7): kind="model" is a THIRD separate fetch,
         # same union contract as kind="agent" above.
-        return [
-            CapabilityCatalogEntry(
-                id="model__openai__gpt-5.1",
-                version="1",
-                name="gpt-5.1",
-                description="gpt-5.1",
-                icon="neurology",
-                kind="model",
-                team_scope=TeamScopePolicy.ADMIN_GATED,
-            )
-        ]
+        return PodModelCatalog(
+            entries=[
+                CapabilityCatalogEntry(
+                    id="model__openai__gpt-5.1",
+                    version="1",
+                    name="gpt-5.1",
+                    description="gpt-5.1",
+                    icon="neurology",
+                    kind="model",
+                    team_scope=TeamScopePolicy.ADMIN_GATED,
+                )
+            ]
+        )
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1089,7 +1092,7 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
         ]
 
     async def _fake_fetch_models(base_url: str):
-        return []
+        return PodModelCatalog(entries=[])
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1144,17 +1147,19 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
         return []
 
     async def _fake_fetch_models(base_url: str):
-        return [
-            CapabilityCatalogEntry(
-                id=colliding_tool_id,
-                version="1",
-                name="gpt-5.1",
-                description="gpt-5.1",
-                icon="neurology",
-                kind="model",
-                team_scope=TeamScopePolicy.ADMIN_GATED,
-            )
-        ]
+        return PodModelCatalog(
+            entries=[
+                CapabilityCatalogEntry(
+                    id=colliding_tool_id,
+                    version="1",
+                    name="gpt-5.1",
+                    description="gpt-5.1",
+                    icon="neurology",
+                    kind="model",
+                    team_scope=TeamScopePolicy.ADMIN_GATED,
+                )
+            ]
+        )
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1222,8 +1227,10 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
 
     async def _fake_fetch_models(base_url: str):
         if base_url == "http://pod-a":
-            return [_model_entry(["chat.pod-a.gpt5"], ["chat.pod-a.gpt5"])]
-        return [_model_entry(["chat.pod-b.gpt5"])]
+            return PodModelCatalog(
+                entries=[_model_entry(["chat.pod-a.gpt5"], ["chat.pod-a.gpt5"])]
+            )
+        return PodModelCatalog(entries=[_model_entry(["chat.pod-b.gpt5"])])
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1298,8 +1305,10 @@ async def test_universally_available_chat_model_profile_ids_intersects_across_po
         # Both pods carry "chat.shared" — pod-a additionally carries a
         # profile pod-b doesn't (e.g. a rollout in progress).
         if base_url == "http://pod-a":
-            return [_model_entry(["chat.shared", "chat.pod-a-only"])]
-        return [_model_entry(["chat.shared"])]
+            return PodModelCatalog(
+                entries=[_model_entry(["chat.shared", "chat.pod-a-only"])]
+            )
+        return PodModelCatalog(entries=[_model_entry(["chat.shared"])])
 
     monkeypatch.setattr(
         product_service, "_model_capabilities_for_source", _fake_fetch_models
@@ -1356,8 +1365,8 @@ async def test_universal_chat_profile_requires_same_model_on_every_pod(
 
     async def _fake_fetch_models(base_url: str):
         if base_url == "http://pod-a":
-            return [_model_entry("model__openai__gpt-5")]
-        return [_model_entry("model__openai__gpt-4o")]
+            return PodModelCatalog(entries=[_model_entry("model__openai__gpt-5")])
+        return PodModelCatalog(entries=[_model_entry("model__openai__gpt-4o")])
 
     monkeypatch.setattr(
         product_service, "_model_capabilities_for_source", _fake_fetch_models
@@ -1415,7 +1424,7 @@ async def test_universally_available_chat_model_profile_ids_skips_unreachable_po
 
     async def _fake_fetch_models(base_url: str):
         if base_url == "http://pod-a":
-            return [_model_entry(["chat.shared"])]
+            return PodModelCatalog(entries=[_model_entry(["chat.shared"])])
         return None  # pod-b is unreachable, distinct from "reachable, empty"
 
     monkeypatch.setattr(
@@ -1473,7 +1482,9 @@ async def test_universally_available_chat_model_profile_ids_scoped_to_team_pods(
 
     async def _fake_fetch_models(base_url: str):
         if base_url == "http://pod-a":
-            return [_model_entry(["chat.shared", "chat.pod-a-only"])]
+            return PodModelCatalog(
+                entries=[_model_entry(["chat.shared", "chat.pod-a-only"])]
+            )
         raise AssertionError(
             "pod-b is out of scope for this team and must not be fetched"
         )

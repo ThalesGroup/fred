@@ -722,6 +722,10 @@ export type ModelCatalogEntry = {
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
+  agent_chat_profile_overrides?: {
+    [key: string]: string;
+  };
+  default_chat_profile_id?: string | null;
   models: ModelCatalogEntry[];
 };
 export type Channel =

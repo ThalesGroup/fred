@@ -24,7 +24,10 @@ TestClient harness).
 from __future__ import annotations
 
 from fred_core.common import ModelConfiguration
-from fred_runtime.app.agent_app import _project_model_catalog_entries
+from fred_runtime.app.agent_app import (
+    _project_model_catalog_entries,
+    _project_model_catalog_response,
+)
 from fred_runtime.model_routing.catalog import ModelCatalog
 from fred_runtime.model_routing.contracts import ModelCapability, ModelProfile
 
@@ -335,3 +338,85 @@ def test_display_name_never_leaks_across_models() -> None:
         "mistral-small-latest": "Mistral Small",
         "gpt-4o": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# _project_model_catalog_response — the two pod-owned precedence levels
+# control-plane needs to predict the routed chat model (#2387)
+# ---------------------------------------------------------------------------
+
+
+def test_response_advertises_the_pod_chat_default() -> None:
+    catalog = _catalog((_profile("chat.a"), _profile("chat.b", name="gpt-4.1")))
+    response = _project_model_catalog_response(catalog)
+    assert response.default_chat_profile_id == "chat.a"
+
+
+def test_response_chat_default_is_none_when_catalog_declares_none() -> None:
+    """A legal pod with no chat default. Control-plane must see `None` rather
+    than a guess, so it reports "nothing routed" instead of naming a model."""
+
+    catalog = ModelCatalog(
+        default_profile_by_capability={}, profiles=(_profile("chat.a"),)
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.default_chat_profile_id is None
+
+
+def test_response_advertises_static_chat_agent_overrides() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(_profile("chat.a"), _profile("chat.b", name="gpt-4.1")),
+        agent_profile_overrides={"rico": "chat.b"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {"rico": "chat.b"}
+
+
+def test_response_drops_a_non_chat_static_override() -> None:
+    """Mirrors the runtime's own skip: a static override naming a profile of a
+    different capability can never route a chat turn, so advertising it would
+    make control-plane predict a model the pod would not use."""
+
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(
+            _profile("chat.a"),
+            _profile("embed.a", capability=ModelCapability.EMBEDDING, name="embed-3"),
+        ),
+        agent_profile_overrides={"rico": "embed.a"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {}
+
+
+def test_response_drops_a_static_override_naming_an_absent_profile() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(_profile("chat.a"),),
+        agent_profile_overrides={"rico": "ghost"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {}
+
+
+def test_response_keeps_only_the_chat_entries_of_a_mixed_override_map() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(
+            _profile("chat.a"),
+            _profile("chat.b", name="gpt-4.1"),
+            _profile("embed.a", capability=ModelCapability.EMBEDDING, name="embed-3"),
+        ),
+        agent_profile_overrides={"rico": "chat.b", "vito": "embed.a", "nico": "ghost"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {"rico": "chat.b"}
+
+
+def test_response_models_match_the_entries_projection() -> None:
+    """The response must not re-derive the inventory — same list, same order."""
+
+    catalog = _catalog((_profile("chat.a"), _profile("chat.b", name="gpt-4.1")))
+    response = _project_model_catalog_response(catalog)
+    assert response.models == _project_model_catalog_entries(catalog)

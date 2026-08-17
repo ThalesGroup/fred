@@ -407,7 +407,8 @@
       "reasoningMedium": "Medium",
       "reasoningHigh": "High",
       "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
-      "selectLibraryFirst": "Select a library first."
+      "selectLibraryFirst": "Select a library first.",
+      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",

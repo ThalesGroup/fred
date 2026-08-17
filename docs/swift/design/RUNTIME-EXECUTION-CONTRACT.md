@@ -3543,6 +3543,18 @@ pinned the model knows which it is.
 Staleness is deliberate and bounded: editing the catalog reaches the composer
 at the next admin re-toggle, not on open sessions.
 
+**Amended by §8.56 (#2387, 2026-08-17).** The last two bullets no longer hold.
+The composer's label is not served on the reasoning control any more — that
+control carries no model identity at all — and it no longer reads the
+`model_reasoning.display_name` snapshot: it comes from
+`EffectiveChatModel.display_name`, taken from the LIVE pod catalog entry for the
+model the turn actually routes to. The staleness bound moves with it — the label
+refreshes when the chat page opens, not at the next admin re-toggle. The
+`model_reasoning.display_name` column and its snapshot-at-toggle-time behaviour
+still exist and are still written, but nothing reads them today; the ops-authored
+`model_display_name` in `models_catalog.yaml` (the first bullet) remains the
+single source of the string.
+
 ---
 
 ### 8.55 ✅ Trusted platform-wide `chat` model binding, resolved fresh per turn — issue #2365 (2026-08-15)
@@ -3982,3 +3994,76 @@ implicit relaxation of the same-pod boundary.
 
 See [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)
 for the two open gaps (MEMORY-02, MEMORY-06).
+
+### 8.56 ✅ Pod advertises its own two precedence levels; one shared precedence implementation — issue #2387 (2026-08-17)
+
+**Problem.** The composer labelled itself with the single model whose
+*reasoning* a platform admin had enabled (§8.54's `model_display_name`, carried
+on the `reasoning_toggle` control) — a value unrelated to routing. With a
+platform binding (§8.55) or any override in force it therefore named a model
+that was not answering, which reads to anyone testing model routing as "routing
+is broken".
+
+Telling the composer the truth means resolving §8.55's precedence chain
+control-plane-side, and two of its four profile-valued levels live only in the
+pod's `models_catalog.yaml`.
+
+**`GET /agents/models-catalog` — two additive top-level fields.**
+
+| Field | Meaning |
+| ----- | ------- |
+| `default_chat_profile_id: str \| None` | This pod's `default_profile_by_capability.chat` — the LOWEST precedence level. `None` when the catalog declares no chat default. |
+| `agent_chat_profile_overrides: dict[str, str]` | This pod's ops-authored `agent_profile_overrides`, RESTRICTED to entries targeting a chat profile — the HIGHEST level below the platform binding. |
+
+Both are pod-level, not per-model, so they sit beside `models` rather than on
+each entry: `aggregate_capability_catalog` unions entries by id across pods, and
+a pod-level value riding on an entry would be overwritten or unioned
+nonsensically (the failure mode §8.7's `_union_profile_ids` guard already
+describes).
+
+The override map is filtered pod-side, mirroring the runtime's long-standing
+rule that a static override naming a profile of a different capability is
+skipped, not fatal. An entry naming a profile absent from the catalog is dropped
+for the same reason: neither can ever route a chat turn.
+
+**No new field for the concrete pair.** `CapabilityCatalogEntry.name` already
+carries the model name for a `kind="model"` entry, and `id` identifies the
+`(provider, name)` pair uniquely, so the composer needs nothing more. Worth
+recording for whoever ever needs the provider on its own:
+`model_capability_id` NORMALIZES characters outside the id charset to `-`, so
+`id` is **not reversible** into the real pair and a split will not recover
+it — it would need its own carried field.
+
+**One precedence implementation, shared.** `resolve_team_override`
+(`fred_runtime/model_routing/resolver.py`) is **deleted**, not renamed. The
+single implementation is now
+`fred_sdk.contracts.context.resolve_effective_chat_profile`, called by both
+`RoutedChatModelFactory.select` and control-plane. It returns a
+`ChatProfileResolution` (`profile_id` + `ChatProfileOrigin`), and the runtime
+maps origin → `ModelSelectionSource` through an explicit table so the
+`[V2][MODEL_ROUTING]` log line operators grep is unchanged: both team levels
+still report `team_policy`, with `profile=` distinguishing them.
+
+The precedence itself is unchanged from §8.55 — the pod static override remains
+the operator's local escape hatch above every team level. `ModelRoutingResolver`
+gains `agent_overrides_for(capability)` / `default_profile_id_for(capability)`,
+precomputed at construction (the policy is immutable for the pod's lifetime;
+`select` runs per turn).
+
+**Not in `ExecutionPreparation`, deliberately.** Resolving this needs the pod
+catalog, and prepare-execution runs on **every send** while being contractually
+free of pod-catalog fetches. The read lives on control-plane's
+`GET /teams/{team_id}/routing-policy/effective-chat-model` instead — per
+chat-page open, same cost profile as `available-models` beside it. See
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` for that endpoint.
+
+**Rolling upgrade.** A pod not yet advertising the two fields reads as
+"declares no chat default and no static override", so the composer shows no
+model rather than guessing one — the same fail-quiet direction
+`model_chat_profile_ids` takes.
+
+**`params.model_id` / `params.display_name` are removed from the
+`reasoning_toggle` control.** They carried the single reasoning-enabled model's
+identity, which the composer displayed as its model label — the root of this
+issue. The control now ships only what it is authoritative about (`default`,
+`effort`).

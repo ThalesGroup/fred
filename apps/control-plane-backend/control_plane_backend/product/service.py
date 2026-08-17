@@ -411,7 +411,7 @@ _template_fetch_cache_var: contextvars.ContextVar[
     "dict[tuple[str, bool], asyncio.Future[list[_RuntimeTemplatePayload]]] | None"
 ] = contextvars.ContextVar("_template_fetch_cache_var", default=None)
 _model_catalog_fetch_cache_var: contextvars.ContextVar[
-    "dict[str, asyncio.Future[list[CapabilityCatalogEntry] | None]] | None"
+    "dict[str, asyncio.Future[PodModelCatalog | None]] | None"
 ] = contextvars.ContextVar("_model_catalog_fetch_cache_var", default=None)
 
 
@@ -736,9 +736,31 @@ async def _agent_capabilities_for_source(
     ]
 
 
+@dataclass(frozen=True)
+class PodModelCatalog:
+    """One pod's `/agents/models-catalog` payload, projected.
+
+    Why this exists rather than the bare `list[CapabilityCatalogEntry]` this
+    fetch used to return (#2387): the payload carries two pod-level values that
+    are not per-model and were therefore being dropped on the floor —
+    `default_chat_profile_id` and `agent_chat_profile_overrides`, the two
+    precedence levels only the pod knows. Control-plane needs them to predict
+    which model a chat turn will route to.
+
+    Carrying them on the SAME object the request-scoped fetch cache already
+    holds (`_model_catalog_fetch_cache_var`) is the point: both consumers — the
+    capability-catalog aggregation and the effective-chat-model resolution —
+    now share one fetch per pod per request scope instead of one each.
+    """
+
+    entries: list[CapabilityCatalogEntry] = field(default_factory=list)
+    default_chat_profile_id: str | None = None
+    agent_chat_profile_overrides: dict[str, str] = field(default_factory=dict)
+
+
 async def _model_capabilities_for_source(
     base_url: str,
-) -> list[CapabilityCatalogEntry] | None:
+) -> PodModelCatalog | None:
     """De-duplicating wrapper around `_model_capabilities_for_source_uncached`
     (see `_pod_catalog_fetch_scope` above) — same cache-miss-fetches,
     cache-hit-awaits-the-same-future shape as `_fetch_runtime_templates`."""
@@ -757,7 +779,7 @@ async def _model_capabilities_for_source(
 
 async def _model_capabilities_for_source_uncached(
     base_url: str,
-) -> list[CapabilityCatalogEntry] | None:
+) -> PodModelCatalog | None:
     """
     Project one pod's routable models into `kind="model"` catalog entries
     (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
@@ -799,7 +821,7 @@ async def _model_capabilities_for_source_uncached(
             exc,
         )
         return None
-    return [
+    entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
             version="1",
@@ -832,6 +854,27 @@ async def _model_capabilities_for_source_uncached(
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
     ]
+    raw_overrides = payload.get("agent_chat_profile_overrides")
+    return PodModelCatalog(
+        entries=entries,
+        # Both absent on a pre-#2387 pod, which reads as "this pod declares no
+        # chat default and no static override". During a rolling upgrade that
+        # makes the effective-model resolution report nothing for turns served
+        # by an old pod rather than guessing — the same fail-quiet direction
+        # `model_chat_profile_ids` already takes above.
+        default_chat_profile_id=(
+            raw_default
+            if isinstance(raw_default := payload.get("default_chat_profile_id"), str)
+            else None
+        ),
+        agent_chat_profile_overrides={
+            str(agent_id): str(profile_id)
+            for agent_id, profile_id in raw_overrides.items()
+            if isinstance(agent_id, str) and isinstance(profile_id, str)
+        }
+        if isinstance(raw_overrides, dict)
+        else {},
+    )
 
 
 async def _fetch_chat_controls(
@@ -1010,10 +1053,20 @@ def _platform_reasoning_control(
     a stored enabled row can only ever name a reasoning-capable model. No catalog
     fetch is needed on this send path.
 
-    Deliberately NOT narrowed to the profile this turn will route to: routing
-    resolves per *operation* at runtime while chat controls are computed once per
-    session (RFC §12 q3). Under-hiding — showing a control a later operation
-    might not honour — beats over-hiding one that would have worked.
+    NOT narrowed to the model this turn routes to, and that is now a deliberate
+    division of labour rather than the compromise it used to be (#2387). The
+    reason recorded here before — "routing resolves per *operation* at runtime
+    while chat controls are computed once per session" — had become false twice
+    over: #2365 removed operations, and prepare-execution returns a fresh
+    `chat_controls` on every send.
+
+    Narrowing it here is still not possible, for a different and durable reason:
+    resolving the routed model needs the pod's `/agents/models-catalog`, and this
+    send path must stay free of pod-catalog fetches. So this function answers
+    only "did the platform enable reasoning anywhere, and does this agent offer
+    it" — the two gates it can answer cheaply — and the composer combines that
+    with `EffectiveChatModel.reasoning_enabled` from its own read to decide
+    whether the toggle is worth showing for the model actually answering.
     """
 
     if not reasoning_enabled:
@@ -1038,22 +1091,14 @@ def _platform_reasoning_control(
         if snapshot.effort is not None
     }
     effort = distinct_efforts.pop() if len(distinct_efforts) == 1 else None
-    # The model identity the composer button displays next to the reasoning
-    # state ("Mistral Small · Élevé") — the enabled reasoning model's own
-    # capability id, emitted when it is unambiguous (exactly one enabled).
-    # Multi-model is coming (the button becomes a model picker, with a
-    # per-model reasoning mode); until then the frontend shows it read-only.
-    model_id = (
-        reasoning_enabled_model_ids[0]
-        if len(reasoning_enabled_model_ids) == 1
-        else None
-    )
-    # That model's ops-authored label. Emitted only alongside an unambiguous
-    # `model_id` — a name without the id it belongs to would let the button
-    # claim an identity the rest of the payload doesn't back. Omitted when
-    # unnamed, and the frontend falls back to splitting the id apart.
-    snapshot = snapshots.get(model_id) if model_id else None
-    display_name = snapshot.display_name if snapshot else None
+    # NOTE (#2387): `model_id` and `display_name` used to ship here too — the
+    # single reasoning-enabled model's capability id and label, which the
+    # composer displayed as its model identity. They are gone, not deprecated:
+    # that identity had nothing to do with which model the turn routes to, so
+    # the composer contradicted every platform binding and team override. The
+    # composer reads `EffectiveChatModel` for the model now, and this control
+    # carries only what it is actually authoritative about — whether a reasoning
+    # toggle should exist, and at what effort.
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -1066,8 +1111,6 @@ def _platform_reasoning_control(
         params={
             "default": reasoning_default_on,
             **({"effort": effort} if effort else {}),
-            **({"model_id": model_id} if model_id else {}),
-            **({"display_name": display_name} if display_name else {}),
         },
     )
 

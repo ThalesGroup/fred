@@ -27,7 +27,7 @@ import {
   modelLabel,
   modelLabelFromCapabilityId,
 } from "./ReasoningChip";
-import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 
 vi.mock("react-i18next", () => ({
@@ -60,9 +60,23 @@ function composerState(over: Partial<ChatTurnControlComposerState> = {}): ChatTu
   } as ChatTurnControlComposerState;
 }
 
-function render(controls: ChatControlDescriptor[], reasoning: boolean, disabled = false): string {
+function effectiveModel(over: Partial<EffectiveChatModel> = {}): EffectiveChatModel {
+  return { enabled_for_team: true, ...over } as EffectiveChatModel;
+}
+
+function render(
+  controls: ChatControlDescriptor[],
+  reasoning: boolean,
+  disabled = false,
+  model?: EffectiveChatModel,
+): string {
   return renderToStaticMarkup(
-    <ReasoningChip chatControls={controls} composer={composerState({ reasoning })} disabled={disabled} />,
+    <ReasoningChip
+      chatControls={controls}
+      composer={composerState({ reasoning })}
+      disabled={disabled}
+      effectiveModel={model}
+    />,
   );
 }
 
@@ -95,10 +109,9 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
   });
 
   it("leads the button with the bold model identity and a muted state", () => {
-    const html = render(
-      [reasoningControl({ default: false, effort: "high", model_id: "model__openai__mistral-small-latest" })],
-      true,
-    );
+    const html = render([reasoningControl({ default: false, effort: "high" })], true, false, {
+      ...effectiveModel({ capability_id: "model__openai__mistral-small-latest" }),
+    });
     // Two spans, weight/color contrast as the separator (no middot).
     expect(html).toMatch(/Mistral Small Latest<\/span>.*chatbot\.composerSettings\.reasoningHigh/);
     expect(html).not.toContain("·");
@@ -110,20 +123,159 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
   });
 
   it("shows the ops-authored display name instead of the derived guess", () => {
+    const html = render([reasoningControl({ default: false, effort: "high" })], true, false, {
+      ...effectiveModel({
+        capability_id: "model__anthropic__claude-sonnet-4-6",
+        display_name: "Claude Sonnet 4.6",
+      }),
+    });
+    expect(html).toContain("Claude Sonnet 4.6");
+    // What the heuristic gets wrong: it reads "4-6" as two words.
+    expect(html).not.toContain("Claude Sonnet 4 6");
+  });
+
+  // #2387 — the model label and the reasoning menu are independent. What went
+  // wrong before: the chip took its model identity from the reasoning control's
+  // params, i.e. the single model whose REASONING was enabled platform-wide, so
+  // it contradicted any platform binding or team override in force.
+
+  it("names the resolved model even when the agent offers no reasoning", () => {
+    const html = render([], false, false, effectiveModel({ capability_id: "model__openai__gpt-4.1" }));
+    expect(html).toContain("GPT 4.1");
+    // No menu, no chevron, nothing clickable — there is no action being withheld.
+    expect(html).not.toContain('aria-haspopup="menu"');
+    expect(html).not.toContain("<button");
+  });
+
+  it("renders nothing when there is neither a reasoning control nor a model", () => {
+    expect(render([], false, false, undefined)).toBe("");
+  });
+
+  it("ignores a model identity smuggled in through the reasoning control params", () => {
+    // The old source of truth. It must no longer be read at all, or the chip
+    // would keep naming the reasoning-enabled model.
     const html = render(
       [
         reasoningControl({
           default: false,
-          effort: "high",
-          model_id: "model__anthropic__claude-sonnet-4-6",
-          display_name: "Claude Sonnet 4.6",
+          model_id: "model__openai__mistral-small-latest",
+          display_name: "Mistral Small 4",
         }),
       ],
-      true,
+      false,
     );
-    expect(html).toContain("Claude Sonnet 4.6");
-    // What the heuristic gets wrong: it reads "4-6" as two words.
-    expect(html).not.toContain("Claude Sonnet 4 6");
+    expect(html).not.toContain("Mistral Small 4");
+    expect(html).not.toContain("Mistral");
+  });
+
+  it("prefers the resolved model over anything the control claims", () => {
+    const html = render(
+      [reasoningControl({ default: false, model_id: "model__openai__mistral-small-latest" })],
+      false,
+      false,
+      effectiveModel({ capability_id: "model__openai__gpt-4.1", display_name: "GPT-4.1" }),
+    );
+    expect(html).toContain("GPT-4.1");
+    expect(html).not.toContain("Mistral");
+  });
+
+  it("flags a model the team is not enabled for, in the interactive chip", () => {
+    const html = render(
+      [reasoningControl({ default: false })],
+      false,
+      false,
+      effectiveModel({ capability_id: "model__openai__gpt-4.1", enabled_for_team: false }),
+    );
+    expect(html).toContain("GPT 4.1");
+    expect(html).toContain("data-unavailable");
+    expect(html).toContain('data-icon="error_outline"');
+    // The reason must reach the accessible name, not only the colour.
+    expect(html).toContain("chatbot.composerSettings.modelNotEnabledForTeam");
+  });
+
+  it("flags a model the team is not enabled for, with no reasoning control", () => {
+    const html = render(
+      [],
+      false,
+      false,
+      effectiveModel({ capability_id: "model__openai__gpt-4.1", enabled_for_team: false }),
+    );
+    expect(html).toContain("data-unavailable");
+    expect(html).toContain("chatbot.composerSettings.modelNotEnabledForTeam");
+  });
+
+  it("does not flag an enabled model", () => {
+    const html = render(
+      [reasoningControl({ default: false })],
+      false,
+      false,
+      effectiveModel({ capability_id: "model__openai__gpt-4.1" }),
+    );
+    expect(html).not.toContain("data-unavailable");
+    expect(html).not.toContain('data-icon="error_outline"');
+  });
+
+  // The bug seen in production: reasoning enabled on mistral-small-latest, a team
+  // override routing to mistral-medium-latest, and the composer offered a toggle
+  // the pod would then strip. The routed model has the last word.
+
+  it("hides the reasoning menu when the routed model has reasoning off", () => {
+    const html = render(
+      [reasoningControl({ default: false, effort: "high" })],
+      false,
+      false,
+      effectiveModel({
+        capability_id: "model__openai__mistral-medium-latest",
+        name: "mistral-medium-latest",
+        display_name: "Mistral Medium 3.5",
+        reasoning_enabled: false,
+      }),
+    );
+    // The model is still named — only the inert toggle goes away.
+    expect(html).toContain("Mistral Medium 3.5");
+    expect(html).not.toContain('aria-haspopup="menu"');
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("chatbot.composerSettings.reasoningOff");
+  });
+
+  it("keeps the reasoning menu when the routed model has reasoning on", () => {
+    const html = render(
+      [reasoningControl({ default: false, effort: "high" })],
+      true,
+      false,
+      effectiveModel({
+        capability_id: "model__openai__mistral-small-latest",
+        name: "mistral-small-latest",
+        reasoning_enabled: true,
+      }),
+    );
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain("chatbot.composerSettings.reasoningHigh");
+  });
+
+  it("leaves the control alone when reasoning support is unknown", () => {
+    // No resolution yet, or an older backend: fall back to what the platform
+    // served rather than silently hiding a control that may well work.
+    const html = render([reasoningControl({ default: false })], false, false, undefined);
+    expect(html).toContain('aria-haspopup="menu"');
+  });
+
+  it("still hides an inert toggle for a model that is also not enabled for the team", () => {
+    const html = render(
+      [reasoningControl({ default: false })],
+      false,
+      false,
+      effectiveModel({
+        capability_id: "model__openai__gpt-4.1",
+        name: "gpt-4.1",
+        reasoning_enabled: false,
+        enabled_for_team: false,
+      }),
+    );
+    expect(html).not.toContain('aria-haspopup="menu"');
+    // Both facts still reach the user.
+    expect(html).toContain("GPT 4.1");
+    expect(html).toContain("data-unavailable");
   });
 
   it("owns the reasoning_toggle promotion out of the tune popover", () => {
@@ -173,26 +325,36 @@ describe("modelLabelFromCapabilityId (the fallback when ops named nothing)", () 
   });
 });
 
-describe("modelLabel (ops-authored name wins, heuristic is the fallback)", () => {
+describe("modelLabel (ops-authored name, then the real model name, then the id)", () => {
   it("returns the authored name verbatim", () => {
     // Verbatim: no re-casing, no token rewriting. Ops already decided.
-    expect(modelLabel("Mistral Small", "model__openai__mistral-small-latest")).toBe("Mistral Small");
-    expect(modelLabel("Mistral (Ollama)", "model__ollama__mistral:latest")).toBe("Mistral (Ollama)");
+    expect(modelLabel("Mistral Small", "mistral-small-latest", "model__openai__mistral-small-latest")).toBe(
+      "Mistral Small",
+    );
+    expect(modelLabel("Mistral (Ollama)", "mistral:latest", "model__ollama__mistral:latest")).toBe("Mistral (Ollama)");
   });
 
-  it("falls back to the derived label when the catalog names nothing", () => {
-    expect(modelLabel(undefined, "model__openai__gpt-4.1-mini")).toBe("GPT 4.1 Mini");
-    expect(modelLabel(null, "model__openai__gpt-4o")).toBe("GPT 4o");
+  it("prefers the real model name over the capability id (#2387)", () => {
+    // `model_capability_id` normalizes non-id-safe characters, so the id path
+    // would mangle this one — the whole reason `name` is carried.
+    expect(modelLabel(undefined, "mistral:latest", "model__ollama__mistral-latest")).toBe("Mistral:latest");
+    expect(modelLabel(undefined, "gpt-4.1-mini", "model__openai__gpt-4.1-mini")).toBe("GPT 4.1 Mini");
+  });
+
+  it("falls back to the derived label when neither a display name nor a model name is served", () => {
+    expect(modelLabel(undefined, undefined, "model__openai__gpt-4.1-mini")).toBe("GPT 4.1 Mini");
+    expect(modelLabel(null, null, "model__openai__gpt-4o")).toBe("GPT 4o");
   });
 
   it("treats a blank or non-string name as unauthored", () => {
     // A YAML key left as `model_display_name: ""` must not blank the button.
-    expect(modelLabel("   ", "model__openai__gpt-4o")).toBe("GPT 4o");
-    expect(modelLabel(42, "model__openai__gpt-4o")).toBe("GPT 4o");
+    expect(modelLabel("   ", undefined, "model__openai__gpt-4o")).toBe("GPT 4o");
+    expect(modelLabel(42, undefined, "model__openai__gpt-4o")).toBe("GPT 4o");
+    expect(modelLabel(undefined, "  ", "model__openai__gpt-4o")).toBe("GPT 4o");
   });
 
-  it("stays null when neither source can name the model", () => {
-    expect(modelLabel(undefined, "document_access")).toBeNull();
-    expect(modelLabel(undefined, undefined)).toBeNull();
+  it("stays null when no source can name the model", () => {
+    expect(modelLabel(undefined, undefined, "document_access")).toBeNull();
+    expect(modelLabel(undefined, undefined, undefined)).toBeNull();
   });
 });

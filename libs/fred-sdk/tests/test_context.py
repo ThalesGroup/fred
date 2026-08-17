@@ -46,12 +46,14 @@ import pytest
 from fred_core.model.models import ModelProvider
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    ChatProfileOrigin,
     ModelBinding,
     ModelBindingSettings,
     ModelCapability,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    resolve_effective_chat_profile,
 )
 from pydantic import ValidationError
 
@@ -471,3 +473,125 @@ def test_bound_runtime_context_platform_chat_model_binding_round_trips() -> None
     assert restored.platform_chat_model_binding.settings == ModelBindingSettings(
         temperature=0.2
     )
+
+
+# ---------------------------------------------------------------------------
+# resolve_effective_chat_profile — the one implementation of chat-profile
+# precedence (#2387), shared by the pod runtime and control-plane. Migrated
+# here from libs/fred-runtime/tests/test_model_routing.py, where it covered the
+# team-only `resolve_team_override` half of the same rule.
+# ---------------------------------------------------------------------------
+
+
+def _resolve(**kwargs: Any):
+    """Call the resolver with every level absent unless the test names it, so
+    each case reads as exactly the levels it exercises."""
+
+    return resolve_effective_chat_profile(
+        **{
+            "agent_id": None,
+            "pod_agent_chat_profile_overrides": None,
+            "pod_default_chat_profile_id": None,
+            "team_agent_profile_overrides": None,
+            "team_chat_default_profile_id": None,
+            **kwargs,
+        }
+    )
+
+
+class TestResolveEffectiveChatProfile:
+    def test_no_level_set_returns_none(self) -> None:
+        assert _resolve(agent_id="rico") is None
+
+    def test_pod_default_is_the_last_resort(self) -> None:
+        result = _resolve(agent_id="rico", pod_default_chat_profile_id="pod.default")
+        assert result is not None
+        assert result.profile_id == "pod.default"
+        assert result.origin is ChatProfileOrigin.POD_DEFAULT
+
+    def test_team_default_beats_pod_default(self) -> None:
+        result = _resolve(
+            agent_id="rico",
+            pod_default_chat_profile_id="pod.default",
+            team_chat_default_profile_id="team.default",
+        )
+        assert result is not None
+        assert result.profile_id == "team.default"
+        assert result.origin is ChatProfileOrigin.TEAM_DEFAULT
+
+    def test_team_agent_override_beats_team_default(self) -> None:
+        result = _resolve(
+            agent_id="rico",
+            pod_default_chat_profile_id="pod.default",
+            team_agent_profile_overrides={"rico": "team.rico"},
+            team_chat_default_profile_id="team.default",
+        )
+        assert result is not None
+        assert result.profile_id == "team.rico"
+        assert result.origin is ChatProfileOrigin.TEAM_AGENT_OVERRIDE
+
+    def test_pod_agent_override_beats_every_team_level(self) -> None:
+        """The operator's local escape hatch (`LLM_ROUTING_FRED.md`
+        §Deterministic precedence) — a team can never beat it."""
+
+        result = _resolve(
+            agent_id="rico",
+            pod_agent_chat_profile_overrides={"rico": "pod.rico"},
+            pod_default_chat_profile_id="pod.default",
+            team_agent_profile_overrides={"rico": "team.rico"},
+            team_chat_default_profile_id="team.default",
+        )
+        assert result is not None
+        assert result.profile_id == "pod.rico"
+        assert result.origin is ChatProfileOrigin.POD_AGENT_OVERRIDE
+
+    def test_override_for_another_agent_does_not_leak(self) -> None:
+        result = _resolve(
+            agent_id="other",
+            pod_agent_chat_profile_overrides={"rico": "pod.rico"},
+            team_agent_profile_overrides={"rico": "team.rico"},
+            team_chat_default_profile_id="team.default",
+        )
+        assert result is not None
+        assert result.profile_id == "team.default"
+        assert result.origin is ChatProfileOrigin.TEAM_DEFAULT
+
+    def test_none_agent_id_skips_both_override_maps(self) -> None:
+        """Nested-agent and direct-execution paths can arrive without an
+        agent_id; neither override map may match on a null key."""
+
+        result = _resolve(
+            agent_id=None,
+            pod_agent_chat_profile_overrides={"rico": "pod.rico"},
+            team_agent_profile_overrides={"rico": "team.rico"},
+            team_chat_default_profile_id="team.default",
+        )
+        assert result is not None
+        assert result.profile_id == "team.default"
+        assert result.origin is ChatProfileOrigin.TEAM_DEFAULT
+
+    def test_empty_override_maps_are_not_treated_as_a_hit(self) -> None:
+        result = _resolve(
+            agent_id="rico",
+            pod_agent_chat_profile_overrides={},
+            team_agent_profile_overrides={},
+            pod_default_chat_profile_id="pod.default",
+        )
+        assert result is not None
+        assert result.profile_id == "pod.default"
+        assert result.origin is ChatProfileOrigin.POD_DEFAULT
+
+    def test_team_default_alone_wins_with_no_pod_default(self) -> None:
+        """A pod whose catalog declares no chat default still routes when the
+        team chose one — the resolver must not require the pod fallback."""
+
+        result = _resolve(agent_id="rico", team_chat_default_profile_id="team.default")
+        assert result is not None
+        assert result.profile_id == "team.default"
+        assert result.origin is ChatProfileOrigin.TEAM_DEFAULT
+
+    def test_resolution_is_immutable(self) -> None:
+        result = _resolve(agent_id="rico", pod_default_chat_profile_id="pod.default")
+        assert result is not None
+        with pytest.raises(ValidationError):
+            result.profile_id = "tampered"  # type: ignore[misc]

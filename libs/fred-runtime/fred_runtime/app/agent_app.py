@@ -1031,6 +1031,34 @@ class _ModelCatalogEntry(BaseModel):
 
 class _ModelCatalogResponse(BaseModel):
     models: list[_ModelCatalogEntry]
+    default_chat_profile_id: str | None = None
+    """This pod's `default_profile_by_capability.chat` — the LOWEST precedence
+    level (`LLM_ROUTING_FRED.md` §Deterministic precedence), and the one that
+    actually serves the turn whenever nobody chose anything.
+
+    Advertised for control-plane (#2387), which resolves the same precedence at
+    its own `effective-chat-model` read to tell the composer which model the
+    next turn will use (not at prepare-execution — that path must stay free of
+    pod-catalog fetches).
+    Before this field existed control-plane could not see the two pod-owned
+    levels at all, so the composer named the single reasoning-enabled model
+    instead — a value unrelated to routing, and wrong the moment any override
+    applied.
+
+    `None` when the catalog declares no chat default: a legal pod that simply
+    cannot serve a chat turn unless a higher level names a profile."""
+    agent_chat_profile_overrides: dict[str, str] = Field(default_factory=dict)
+    """This pod's ops-authored `agent_profile_overrides`, restricted to entries
+    targeting a CHAT profile — the deployment's local escape hatch, and the
+    HIGHEST precedence level below the platform binding. A team can never beat
+    it, which is exactly why control-plane has to know about it: a team override
+    that loses to a static one must not be displayed as if it had won.
+
+    Restricted to chat here rather than by the consumer, mirroring the runtime's
+    long-standing rule that a static override naming a profile of a different
+    capability is skipped, not fatal (`ModelRoutingResolver.agent_overrides_for`).
+    That keeps `resolve_effective_chat_profile`'s precondition — both override
+    maps are already chat-only — satisfied at the source for both callers."""
 
 
 def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
@@ -1088,6 +1116,39 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
                     "reasoning_effort"
                 )
     return list(seen.values())
+
+
+def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
+    """Project a loaded `ModelCatalog` into the full `/agents/models-catalog`
+    payload: the per-(provider, name) inventory plus the two pod-owned
+    precedence levels control-plane needs (#2387).
+
+    Pure, for the same reason `_project_model_catalog_entries` is — this is the
+    logic worth unit-testing, and `agent_app.py` has no FastAPI TestClient
+    harness. `catalog` is typed `Any` to keep `..model_routing` out of this
+    module's import graph; callers pass a real `ModelCatalog`.
+    """
+
+    from ..model_routing import ModelCapability
+
+    capability_by_profile_id = {
+        profile.profile_id: profile.capability for profile in catalog.profiles
+    }
+    return _ModelCatalogResponse(
+        models=_project_model_catalog_entries(catalog),
+        default_chat_profile_id=catalog.default_profile_by_capability.get(
+            ModelCapability.CHAT
+        ),
+        agent_chat_profile_overrides={
+            agent_id: profile_id
+            for agent_id, profile_id in catalog.agent_profile_overrides.items()
+            # Skips both a non-chat target and one naming a profile this catalog
+            # does not contain — neither can ever route a chat turn, so
+            # advertising them would make control-plane predict a model the pod
+            # would not actually use.
+            if capability_by_profile_id.get(profile_id) == ModelCapability.CHAT
+        },
+    )
 
 
 class _ResolvedAgentInstance(BaseModel):
@@ -3730,7 +3791,7 @@ def _build_agent_router(
         if not catalog_path:
             return _ModelCatalogResponse(models=[])
         catalog = load_model_catalog(catalog_path)
-        return _ModelCatalogResponse(models=_project_model_catalog_entries(catalog))
+        return _project_model_catalog_response(catalog)
 
     @router.post("/capabilities/{capability_id}/validate-config")
     async def validate_capability_config(

@@ -32,7 +32,8 @@ from fred_core import (
     TeamPermission,
 )
 from fred_core.common import TeamId, is_personal_team_id
-from fred_sdk.contracts.context import ModelBinding
+from fred_sdk.contracts.capability.manifest import model_capability_id
+from fred_sdk.contracts.context import ModelBinding, resolve_effective_chat_profile
 
 from control_plane_backend.capabilities.authz import (
     can_use_capability,
@@ -47,6 +48,7 @@ from control_plane_backend.product.dependencies import ProductServiceDependencie
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfile,
     AvailableModelProfileList,
+    EffectiveChatModel,
     PlatformModelBinding,
     ProfileNotUsableError,
     TeamRoutingPolicy,
@@ -287,6 +289,140 @@ async def list_available_model_profiles(
     ]
     profiles.sort(key=lambda p: p.profile_id)
     return AvailableModelProfileList(profiles=profiles)
+
+
+async def resolve_effective_chat_model(
+    user: KeycloakUser,
+    team_id: TeamId,
+    agent_instance_id: str,
+    deps: ProductServiceDependencies,
+) -> EffectiveChatModel:
+    """Which concrete model a chat turn with `agent_instance_id` will use
+    (#2387) — the composer's model label.
+
+    Read gate is plain team membership (`CAN_READ_MEMEBERS`), deliberately NOT
+    the elevated-role gate the policy read uses: anyone who can hold a
+    conversation with this agent is entitled to know which model answers them.
+    That is safe precisely because the result names only the MODEL — never which
+    precedence level or profile id chose it, which is policy detail #2167
+    restricts to an elevated role.
+
+    Resolution mirrors `RoutedChatModelFactory.select` level for level, sharing
+    its one implementation of the precedence
+    (`fred_sdk.contracts.context.resolve_effective_chat_profile`). The pod
+    consulted is the instance's OWN `source_runtime_id`, not an aggregate: an
+    `AgentInstance` is pinned to one pod for its whole life and a turn is always
+    prepared against that same pod, so another pod's catalog has no say in what
+    this agent will run.
+
+    Best-effort on an unreachable pod: returns an all-`None` result rather than
+    raising. A pod being down must not break the chat page — the composer simply
+    shows no model label, and the turn's own failure (or success) remains the
+    authoritative signal.
+    """
+
+    team_id = await require_team_access(
+        user, team_id, deps.team_dependencies, [TeamPermission.CAN_READ_MEMEBERS]
+    )
+    empty = EffectiveChatModel()
+
+    instance = await deps.get_agent_instance_store().get_for_team(
+        agent_instance_id, team_id
+    )
+    if instance is None:
+        return empty
+
+    # Whether reasoning actually runs on the model we end up naming. Read once
+    # here and applied to every return path below: the composer must not offer
+    # an inert toggle for a model whose reasoning is off, because
+    # `RoutedChatModelFactory` strips the reasoning settings in that case.
+    reasoning_enabled_ids = (
+        await deps.get_model_reasoning_store().list_enabled_model_ids()
+    )
+
+    # A platform binding outranks every profile-valued level and bypasses team
+    # enablement by design, so it short-circuits before any pod fetch — the
+    # cheap path is also the authoritative one.
+    platform_binding = await resolve_platform_chat_model_binding(deps)
+    if platform_binding is not None:
+        binding_capability_id = model_capability_id(
+            platform_binding.provider, platform_binding.name
+        )
+        return EffectiveChatModel(
+            name=platform_binding.name,
+            capability_id=binding_capability_id,
+            reasoning_enabled=binding_capability_id in reasoning_enabled_ids,
+            # No `display_name`: an operator binding may name a model absent
+            # from every pod catalog, so there is no profile to read an
+            # ops-authored label from. The prettifying fallback covers it.
+        )
+
+    from control_plane_backend.product.service import (
+        _model_capabilities_for_source,
+        _pod_catalog_fetch_scope,
+    )
+
+    source = next(
+        (
+            candidate
+            for candidate in deps.configuration.platform.runtime_catalog_sources
+            # `enabled` matters as much as the id match: a disabled source is one
+            # `prepare_execution` will refuse to prepare against, so naming a
+            # model from its catalog would promise a turn that then fails.
+            if candidate.enabled and candidate.runtime_id == instance.source_runtime_id
+        ),
+        None,
+    )
+    if source is None:
+        return empty
+    with _pod_catalog_fetch_scope():
+        pod_models = await _model_capabilities_for_source(source.base_url)
+    if pod_models is None:
+        return empty
+
+    stored = await deps.get_team_routing_policy_store().get(team_id=team_id)
+    resolution = resolve_effective_chat_profile(
+        agent_id=instance.source_agent_id,
+        pod_agent_chat_profile_overrides=pod_models.agent_chat_profile_overrides,
+        pod_default_chat_profile_id=pod_models.default_chat_profile_id,
+        team_agent_profile_overrides=(
+            stored.agent_profile_overrides if stored is not None else None
+        ),
+        team_chat_default_profile_id=(
+            stored.chat_default_profile_id if stored is not None else None
+        ),
+    )
+    if resolution is None:
+        return empty
+
+    entry = next(
+        (
+            candidate
+            for candidate in pod_models.entries
+            if resolution.profile_id in candidate.model_chat_profile_ids
+        ),
+        None,
+    )
+    if entry is None:
+        # The winning profile is not a chat profile this pod advertises. For a
+        # team-origin id that is exactly the drift
+        # `TeamRoutingProfileDriftError` raises at turn time; either way there
+        # is no concrete model to name, and inventing one would be worse than
+        # showing none.
+        return empty
+
+    usable = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
+    return EffectiveChatModel(
+        # `CapabilityCatalogEntry.name` already IS the concrete model name for a
+        # `kind="model"` entry.
+        name=entry.name,
+        display_name=entry.model_display_name,
+        capability_id=entry.id,
+        # `None` means unrestricted (every capability usable), matching
+        # `usable_capability_ids`' own contract — not "nothing usable".
+        enabled_for_team=usable is None or entry.id in usable,
+        reasoning_enabled=entry.id in reasoning_enabled_ids,
+    )
 
 
 async def update_team_routing_policy(

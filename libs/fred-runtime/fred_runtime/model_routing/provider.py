@@ -28,7 +28,11 @@ from typing import Protocol
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
 from fred_sdk.contracts.capability.manifest import model_capability_id
-from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    ChatProfileOrigin,
+    resolve_effective_chat_profile,
+)
 from fred_sdk.contracts.models import AgentDefinition
 from fred_sdk.contracts.runtime import ChatModelFactoryPort
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -42,9 +46,25 @@ from .contracts import (
     TeamRoutingProfileDriftError,
     without_reasoning_settings,
 )
-from .resolver import ModelRoutingResolver, resolve_team_override
+from .resolver import ModelRoutingResolver
 
 logger = logging.getLogger(__name__)
+
+# The `source` each precedence level reports. Kept as an explicit table rather
+# than derived from the origin name: `ModelSelectionSource` is the OBSERVABILITY
+# contract (it lands in the `[V2][MODEL_ROUTING]` log line operators grep and in
+# `RUNTIME-EXECUTION-CONTRACT.md` §8), while `ChatProfileOrigin` names the
+# precedence level. They are deliberately not one-to-one — both team levels
+# report `team_policy`, because an operator reading the log cares that the
+# team's policy decided, and the `profile=` field already says which of the two
+# it was. Collapsing them into one enum would leak a UI distinction into an
+# operator-facing signal, or force a log-format change on a frozen contract.
+_SOURCE_BY_CHAT_PROFILE_ORIGIN: dict[ChatProfileOrigin, ModelSelectionSource] = {
+    ChatProfileOrigin.POD_AGENT_OVERRIDE: ModelSelectionSource.AGENT_OVERRIDE,
+    ChatProfileOrigin.TEAM_AGENT_OVERRIDE: ModelSelectionSource.TEAM_POLICY,
+    ChatProfileOrigin.TEAM_DEFAULT: ModelSelectionSource.TEAM_POLICY,
+    ChatProfileOrigin.POD_DEFAULT: ModelSelectionSource.DEFAULT,
+}
 
 
 class ModelProvider(Protocol):
@@ -268,14 +288,20 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         - no side effects
 
         Fallback / errors:
-        - resolver fallback/default and errors are handled in `ModelRoutingResolver`
-        - when the static resolver falls through to the capability default, a
-          second, narrower pass applies the team's own routing policy if one
-          exists — see `resolve_team_override`. A static
+        - for `chat`, the four profile-valued precedence levels are decided by
+          `fred_sdk.contracts.context.resolve_effective_chat_profile` — the one
+          implementation of that rule, shared with control-plane so the composer
+          can name this same model on its own effective-chat-model read
+          (#2387). A static
           `models_catalog.yaml` override always wins over team policy; team
           policy only fills the gap a static override left open. Raises
-          `TeamRoutingProfileDriftError` if the team policy names a profile
-          this deployment's catalog doesn't have.
+          `TeamRoutingProfileDriftError` if the team policy names a profile this
+          deployment's catalog doesn't have, or one declaring a non-chat
+          capability — never a silent fall-through to the pod default, because a
+          team's stored preference going stale has to be visible.
+        - for every other capability, resolution stays pod-local and is handled
+          by `ModelRoutingResolver.resolve` (no team layer exists for it: V1's
+          only other capability, `embedding`, has no production consumer yet).
 
         Observability signals to look at:
         - this function does not log directly
@@ -317,36 +343,54 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     ),
                 ),
             )
-        request = ModelSelectionRequest(
-            capability=capability,
-            agent_id=definition.agent_id,
-        )
-        selection = self._resolver.resolve(request)
-        if (
-            selection.source != ModelSelectionSource.DEFAULT
-            or capability != ModelCapability.CHAT
-        ):
-            return selection
+        if capability != ModelCapability.CHAT:
+            return self._resolver.resolve(
+                ModelSelectionRequest(
+                    capability=capability, agent_id=definition.agent_id
+                )
+            )
 
-        team_profile_id = resolve_team_override(
-            agent_profile_overrides=binding.runtime_context.agent_profile_overrides,
-            chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
+        resolution = resolve_effective_chat_profile(
             agent_id=definition.agent_id,
+            pod_agent_chat_profile_overrides=self._resolver.agent_overrides_for(
+                capability
+            ),
+            pod_default_chat_profile_id=self._resolver.default_profile_id_for(
+                capability
+            ),
+            team_agent_profile_overrides=binding.runtime_context.agent_profile_overrides,
+            team_chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
         )
-        if team_profile_id is None:
-            return selection
+        if resolution is None:
+            # Same failure the resolver's own default lookup raised before: the
+            # catalog declares no chat default and no other level produced one.
+            raise ValueError(
+                f"No default profile configured for capability={capability.value!r}."
+            )
 
-        profile = self._resolver.profile_or_none(team_profile_id)
+        profile = self._resolver.profile_or_none(resolution.profile_id)
+        team_origin = resolution.origin in (
+            ChatProfileOrigin.TEAM_AGENT_OVERRIDE,
+            ChatProfileOrigin.TEAM_DEFAULT,
+        )
         if profile is None:
-            raise TeamRoutingProfileDriftError(profile_id=team_profile_id)
+            if team_origin:
+                raise TeamRoutingProfileDriftError(profile_id=resolution.profile_id)
+            # A pod-origin id that resolves to nothing means the catalog passed
+            # `ModelRoutingPolicy`'s own validation while naming a profile it
+            # does not contain — an invariant violation in this package, not a
+            # team's stale choice, so it must not be reported as team drift.
+            raise KeyError(resolution.profile_id)
         if profile.capability != capability:
+            # Only reachable for a team-origin id: the pod maps handed to the
+            # resolver above are capability-filtered at construction.
             raise TeamRoutingProfileDriftError(
-                profile_id=team_profile_id,
+                profile_id=resolution.profile_id,
                 expected_capability=capability,
                 actual_capability=profile.capability,
             )
         return ModelSelection(
-            source=ModelSelectionSource.TEAM_POLICY,
+            source=_SOURCE_BY_CHAT_PROFILE_ORIGIN[resolution.origin],
             capability=capability,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),

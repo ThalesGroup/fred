@@ -281,6 +281,11 @@ operations:
     required_permission: can_read_members+elevated_team_role # TEAM-05.1, #2167, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — same read gate as GET .../routing-policy (team_admin/team_editor/team_analyst); team-facing can_use-enabled model list backing the routing-policy picker
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/routing-policy/effective-chat-model
+    review_status: approved
+    required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/agent-instances
     review_status: pending_review
     required_permission: pending_review

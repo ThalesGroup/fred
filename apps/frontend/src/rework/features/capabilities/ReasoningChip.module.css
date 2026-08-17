@@ -45,6 +45,37 @@
   line-height: 1;
 }
 
+/* Model label with no reasoning menu behind it (#2387) — same metrics as
+   .trigger so the composer row keeps its rhythm, but no hover surface, no
+   pointer, no focus ring: nothing here is actionable. */
+.static {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: 0 var(--spacing-s);
+  height: 38px;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  white-space: nowrap;
+}
+
+/* The resolved model is not can_use-enabled for this team, so the turn will
+   fail before the LLM call. Colour alone would be the only signal for a
+   colour-blind reader, so the icon below carries it too and the accessible
+   name spells it out. */
+.model[data-unavailable] {
+  color: var(--error);
+  text-decoration: line-through;
+}
+
+.warning {
+  display: inline-flex;
+  align-items: center;
+  color: var(--error);
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .state {
   /* One step fainter than retreat in both themes — the colour contrast alone
      separates the model name from the reasoning state. */
