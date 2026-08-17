@@ -1673,13 +1673,17 @@ every badge** (2026-08-17, #2383). Two complaints from team admins, one
 fix. (1) A member holding no elevated role rendered as three *inactive*
 pills — visually indistinguishable from a row that hadn't loaded. A
 non-interactive `Member` badge now closes the row, after the three toggles,
-always visible. It is styled *identically to a held toggle* — the resting
-pill geometry lives in a `%pill` placeholder and the `--primary` fill in a
-`%pill-held` one, and the badge `@extend`s both — because `team_member` is
-genuinely always held, so anything less than the held fill would misreport
-it. What it lacks is affordance, not appearance: `cursor: default`,
-`role="note"`, no hover state, no `aria-pressed`, no click handler. It is
-deliberately not a fourth toggle —
+always visible. It shares the toggles' pill geometry (a `%pill` placeholder
+both `@extend`, so height/padding cannot desync mid-row) but carries its own
+fill: tonal `secondary-container` / `on-secondary-container`, with a
+transparent 1px border to keep the geometry identical. Deliberately *not*
+the toggles' `--primary` fill — in this row `--primary` reads as "someone
+granted this and someone can revoke it", whereas `team_member` is neither
+granted nor revocable, just always true. The same tonal pairing already
+marks non-interactive identity in `UserAvatar`, `MessageBubble`, and the
+agent-card icon. What the badge lacks is affordance, not presence: `cursor:
+default`, `role="note"`, no hover state, no `aria-pressed`, no click
+handler. It is deliberately not a fourth toggle —
 `team_member` is the implicit baseline (automatic for anyone holding an
 elevated role, granted directly to anyone holding none) and the API refuses
 to revoke a member's last relation, so a toggle would promise an action

@@ -24,25 +24,21 @@
   white-space: nowrap;
 }
 
-// The "held" appearance. Shared, because a held role and the baseline badge
-// mean the same thing to the reader — this person has it — and so must look
-// the same. The baseline wears it unconditionally: `team_member` is always
-// held, which is the whole point of showing it.
-%pill-held {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--on-primary);
-}
-
-// The implicit `team_member` baseline. Same pill as a role toggle and the same
-// held fill, on purpose — it belongs to the same row and the same set, and it
-// is genuinely on. What it does not have is any affordance: no pointer, no
-// hover, no toggling. It states a fact; it is not a fourth toggle.
+// The implicit `team_member` baseline. Filled, so it reads as on — but tonal
+// `secondary-container` rather than the toggles' `--primary`, because in this
+// row `--primary` means "someone granted this, and someone can revoke it".
+// Member is neither granted nor revocable: it is simply always true, the floor
+// every team member stands on. The same tonal pairing already marks
+// non-interactive identity elsewhere in the app (`UserAvatar`,
+// `MessageBubble`, the agent-card icon). The border stays 1px and transparent
+// so the pill matches the toggles' geometry exactly.
 .baselineChip {
   @extend %pill;
-  @extend %pill-held;
 
   cursor: default;
+  border-color: transparent;
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
 }
 
 .roleChip {
@@ -61,7 +57,9 @@
   }
 
   &[data-active="true"] {
-    @extend %pill-held;
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
   }
 
   // Keyed off `aria-disabled`, not `:disabled` — the chip stays a focusable,
