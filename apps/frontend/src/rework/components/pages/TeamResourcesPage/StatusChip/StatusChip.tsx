@@ -19,16 +19,31 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import styles from "./StatusChip.module.css";
 
+/**
+ * `DocStatus` plus the one state only a FOLDER row can be in (#2384): some
+ * documents underneath it failed while the folder itself is neither processing
+ * nor broken. Deliberately not added to `DocStatus` — no document is ever
+ * "warning", and widening the shared type would push a meaningless case onto
+ * every `DocStatusBadge` consumer.
+ */
+export type ChipStatus = DocStatus | "warning";
+
 interface StatusChipProps {
-  status: DocStatus;
+  status: ChipStatus;
   /** Per-stage messages from `processing.errors`; shown on hover when failed (#2315). */
   errors?: Record<string, string> | null;
-  /** The document's ingestion succeeded during this browser session (its SSE
-   *  task reached `succeeded`). Marks the otherwise-silent "ready" state with
-   *  a success badge so a user who just launched uploads can spot what
-   *  finished. Session-only by design: the task feed lives in Redux memory,
-   *  so a page refresh clears the marker without any timer or persistence. */
+  /** The ingestion succeeded during this browser session (its SSE task reached
+   *  `succeeded`). Marks the otherwise-silent "ready" state with a success
+   *  badge so a user who just launched uploads can spot what finished — on a
+   *  folder row, that every document underneath it is now done. Session-only by
+   *  design: the task feed lives in Redux memory, so a page refresh clears the
+   *  marker without any timer or persistence. */
   justCompleted?: boolean;
+  /** The failed documents a `warning` folder chip stands for. The chip counts
+   *  them and names them on hover — a folder is only ever the sum of what is
+   *  under it, so unlike `errors` (one document's pipeline stages) this panel
+   *  answers "which files do I have to look at?". */
+  failedDocuments?: { uid: string; name: string }[];
 }
 
 const ICON_SIZE = 12;
@@ -47,8 +62,34 @@ const ICON_SIZE = 12;
  * Stage keys are shown as-is: they are backend pipeline identifiers
  * (preview/vector/sql/…), useful verbatim in a support ticket.
  */
-export function StatusChip({ status, errors, justCompleted }: StatusChipProps) {
+export function StatusChip({ status, errors, justCompleted, failedDocuments }: StatusChipProps) {
   const { t } = useTranslation();
+  // Folder rollup: the count is the label ("2 errors"), because restating
+  // "Error" on a folder says nothing the row's own subtree doesn't already
+  // imply — how many, and which ones, is the actionable part.
+  if (status === "warning") {
+    const count = failedDocuments?.length ?? 0;
+    if (count === 0) return null;
+    return (
+      <Tooltip
+        content={
+          <div className={styles.failedTooltip}>
+            <span className={styles.failedTooltipTitle}>
+              {t("rework.resources.status.folderFailedTooltip", { count })}
+            </span>
+            <ul className={styles.failedList}>
+              {failedDocuments?.map((doc) => <li key={doc.uid}>{doc.name}</li>)}
+            </ul>
+          </div>
+        }
+      >
+        <span className={styles.chip} data-variant="warning">
+          <Icon category="outlined" type="warning" />
+          {t("rework.resources.status.folderFailed", { count })}
+        </span>
+      </Tooltip>
+    );
+  }
   if (status === "ready") {
     if (!justCompleted) return null;
     return (

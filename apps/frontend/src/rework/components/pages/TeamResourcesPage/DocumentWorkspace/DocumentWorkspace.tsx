@@ -93,6 +93,12 @@ const DEFAULT_PAGE_SIZE = 50;
 // processing, its folder page is reloaded on this cadence so the badge flips
 // to Ready/Failed without a manual refresh.
 const DOC_STATUS_POLL_MS = 3000;
+// Separator for the memo keys the folder rollup below tracks its live inputs
+// by. NUL can never appear inside a tag id or a document uid, so two different
+// id sets can never join to the same string — unlike a comma, which a
+// scheduler-pull uid (`pull-{source_tag}-{hash}`, from a configurable tag)
+// could carry. Keys are compared, never split back apart.
+const KEY_SEP = "\u0000";
 // How long a just-reprocessed row stays pinned to "processing" when the
 // backend never re-stamps its stages (dead worker, dropped workflow).
 const REPROCESS_OVERRIDE_TTL_MS = 90_000;
@@ -773,59 +779,107 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folderTagIdsKey, fetchTagSizes]);
 
-  // #2384 — a folder row carries a "processing" chip while ANY document under
-  // it (its own + every sub-folder's, at any depth) is still being ingested.
-  // Without it, the only way to tell whether a bulk upload has finished is to
-  // walk into every sub-folder and look for still-processing rows.
+  // #2384 — a folder row summarizes the ingestion state of everything under it
+  // (its own documents + every sub-folder's, at any depth): still processing,
+  // some failed, or all finished during this session. Without it, the only way
+  // to tell whether a bulk upload has landed is to walk into each sub-folder
+  // and read the rows one by one.
   //
-  // Two evidence sources, unioned — neither subsumes the other:
-  //  - `pendingTagIds`: tags whose ALREADY-LOADED page shows a processing row.
-  //    This is the same derived status the rows themselves render, so it also
-  //    covers what the browse snapshot alone knows and the task feed does not
-  //    (a teammate's ingestion, a document left `in_progress` by a dead
-  //    worker). Limited to folders visited this session — but without it a
-  //    folder could read "settled" while a row inside it visibly spins, the
-  //    exact confusion this feature exists to remove.
-  //  - the live SSE task feed (`activeDocTaskByUid`, the signal the document
-  //    badge reads since #2315) matched against the tag tree's `item_ids`.
-  //    Reaches folders that were never opened, but carries only the current
-  //    user's tasks (`GET /tasks?scope=user`, useTaskRehydration).
+  // Every input is already in memory — no new endpoint, no new backend status.
+  // Two families of source, unioned per state because neither subsumes the
+  // other:
+  //  - the ALREADY-LOADED pages (`perTag`), read per tag id. Survives a page
+  //    reload, and is the only source that sees what the browse snapshot knows
+  //    and the task feed cannot: a teammate's ingestion, or a document a dead
+  //    worker left `in_progress`/failed (#2279). Limited to folders visited
+  //    this session — but without it a folder could read "settled" while a row
+  //    inside it visibly spins, the exact confusion this feature removes.
+  //  - the SSE task feed, matched against the tag tree's `item_ids`. Reaches
+  //    folders that were never opened, but carries only the current user's
+  //    tasks (`GET /tasks?scope=user`, useTaskRehydration) and — since that
+  //    route hides terminal tasks — only for this browser session.
   //
-  // Deliberately never aggregates failure: `selectActiveTasks` drops every
-  // terminal state and `pendingTagIds` counts `processing` only, so the chip
-  // clears itself the moment the last child settles — whichever way it
-  // settled. A failed ingestion stays announced on its own document row,
-  // where the per-stage error tooltip is.
-  const pendingTagIdsKey = pendingTagIds.join(",");
-  const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(",");
-  const ingestingFolders = useMemo(() => {
-    const marked = new Set<string>();
-    const pending = new Set(pendingTagIds);
-    // Unlike the tag-id walk, this one is O(documents in the subtree) — and
-    // the tag list refetches once per uploaded file (useNotifyOnNewTaskTarget),
-    // so it is skipped entirely whenever nothing is live, which is the steady
-    // state. Iterating the (small) live-task list against each folder's uid set
-    // rather than the reverse keeps the match itself cheap.
-    const liveUids = [...activeDocTaskByUid.keys()];
-    for (const node of childFolders) {
-      if ((folderDescendantTagIds.get(node.full) ?? []).some((id) => pending.has(id))) {
-        marked.add(node.full);
-        continue;
-      }
-      if (liveUids.length === 0) continue;
-      const docUids = collectDescendantDocUids(node);
-      if (liveUids.some((uid) => docUids.has(uid))) marked.add(node.full);
+  // Hence the deliberate asymmetry between the two rolled-up terminal states:
+  // "all done" is session-only (it is a transient "your upload landed", and
+  // the memory-only task store expires it for free on refresh), while a
+  // failure stays visible for every folder the snapshot covers, because it
+  // still needs someone to act on it.
+  const failedDocsByTagId = useMemo(() => {
+    const byTag = new Map<string, { uid: string; name: string }[]>();
+    for (const [tagId, page] of Object.entries(perTag)) {
+      // Read straight from the snapshot's stages rather than through
+      // getDocStatus: a failed task is never in the ACTIVE feed, so the live
+      // map could add nothing here, and staying off it keeps this memo out of
+      // the per-SSE-event churn.
+      const failed = page.docs
+        .filter((doc) => Object.values(doc.processing?.stages ?? {}).some((stage) => stage === "failed"))
+        .map((doc) => ({ uid: doc.identity.document_uid, name: documentDisplayName(doc) }));
+      if (failed.length > 0) byTag.set(tagId, failed);
     }
-    return marked;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- both live inputs
-    // are read through stable string keys instead of their own identities: the
-    // task map (and so `pendingTagIds`) is a fresh object on EVERY SSE progress
-    // event, and depending on it directly would re-walk the tree on each one —
-    // the same trap `pendingTagKey` avoids for the poll interval above. Read
-    // from the sources, not from the keys: a document uid is not always a plain
-    // uuid (scheduler pulls build `pull-{source_tag}-{hash}`), so splitting the
-    // key back apart would be wrong.
-  }, [childFolders, folderDescendantTagIds, pendingTagIdsKey, activeDocUidKey]);
+    return byTag;
+  }, [perTag]);
+  // Failed ingestions from this session, for documents no loaded page covers.
+  // `target.label` is the document name the backend stamped on the task, so a
+  // failure in a never-opened sub-folder is still nameable without a request.
+  const failedDocsByUid = useMemo(() => {
+    const byUid = new Map<string, string>();
+    for (const task of allTasks) {
+      if (task.state !== "failed" || task.target?.type !== "document" || !task.target.id) continue;
+      byUid.set(task.target.id, task.target.label || task.target.id);
+    }
+    return byUid;
+  }, [allTasks]);
+
+  // Stable keys for every live input below: the task store is a fresh object on
+  // EVERY SSE progress event, so depending on those identities would re-walk
+  // the tree on each one — the same trap `pendingTagKey` avoids for the poll
+  // interval above. Joined on NUL rather than a comma because a document uid is
+  // not always a plain uuid (scheduler pulls build `pull-{source_tag}-{hash}`
+  // from a configurable tag), and two different id sets must not collide onto
+  // the same key. These are memo keys only — never split back apart.
+  const pendingTagIdsKey = pendingTagIds.join(KEY_SEP);
+  const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(KEY_SEP);
+  const failedDocUidKey = [...failedDocsByUid.keys()].sort().join(KEY_SEP);
+  const justCompletedKey = [...justCompletedDocUids].sort().join(KEY_SEP);
+
+  const folderRollups = useMemo(() => {
+    const rollups = new Map<string, { processing: boolean; failed: { uid: string; name: string }[] }>();
+    const pending = new Set(pendingTagIds);
+    const liveUids = [...activeDocTaskByUid.keys()];
+    const failedUids = [...failedDocsByUid.keys()];
+    const doneUids = [...justCompletedDocUids];
+    const justDone = new Set<string>();
+    for (const node of childFolders) {
+      const tagIds = folderDescendantTagIds.get(node.full) ?? [];
+      let processing = tagIds.some((id) => pending.has(id));
+      const failed = new Map(tagIds.flatMap((id) => (failedDocsByTagId.get(id) ?? []).map((doc) => [doc.uid, doc])));
+      // The only O(documents in the subtree) step, so it is skipped outright
+      // whenever nothing at all is in play — the steady state — and the tag
+      // list refetches once per uploaded file (useNotifyOnNewTaskTarget).
+      // Matching the (small) uid lists against the folder's set, rather than
+      // the reverse, keeps the lookups themselves cheap.
+      if (liveUids.length > 0 || failedUids.length > 0 || doneUids.length > 0) {
+        const docUids = collectDescendantDocUids(node);
+        processing = processing || liveUids.some((uid) => docUids.has(uid));
+        for (const uid of failedUids) {
+          if (docUids.has(uid) && !failed.has(uid)) failed.set(uid, { uid, name: failedDocsByUid.get(uid)! });
+        }
+        if (doneUids.some((uid) => docUids.has(uid))) justDone.add(node.full);
+      }
+      rollups.set(node.full, { processing, failed: [...failed.values()] });
+    }
+    return { rollups, justDone };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see the key block
+    // above: the live inputs are read from their sources, tracked by key.
+  }, [
+    childFolders,
+    folderDescendantTagIds,
+    failedDocsByTagId,
+    pendingTagIdsKey,
+    activeDocUidKey,
+    failedDocUidKey,
+    justCompletedKey,
+  ]);
 
   const rows: Row[] = useMemo(
     () => [
@@ -1195,10 +1249,17 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       label: "",
       size: "8rem",
       cellRenderer: (row) => {
-        // A folder only ever shows "processing" (see ingestingFolders) — never
-        // ready/raw/failed, which stay per-document states.
+        // Folder rollup (#2384). Precedence is processing > failures > done:
+        // while anything is still running the folder is not settled yet, and
+        // once it is, an unresolved failure is more actionable than a "your
+        // upload landed" marker. `raw` is never rolled up — a folder holding
+        // never-processed documents is a normal steady state, not news.
         if (row.kind === "folder") {
-          return ingestingFolders.has(row.node.full) ? <StatusChip status="processing" /> : null;
+          const rollup = folderRollups.rollups.get(row.node.full);
+          if (rollup?.processing) return <StatusChip status="processing" />;
+          const failed = rollup?.failed ?? [];
+          if (failed.length > 0) return <StatusChip status="warning" failedDocuments={failed} />;
+          return folderRollups.justDone.has(row.node.full) ? <StatusChip status="ready" justCompleted /> : null;
         }
         return (
           <StatusChip
