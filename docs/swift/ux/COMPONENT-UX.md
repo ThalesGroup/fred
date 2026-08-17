@@ -1664,7 +1664,43 @@ closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
 text, default (inactive) border `1px solid outline` — was `0.5px
 outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
-`spacing-xs`/`8px`).
+`spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
+`@extend`ed by both the toggles and the baseline badge below, so the two
+cannot drift apart in the same row.
+
+**`TeamRoleChips`: a static `Member` badge and a description tooltip on
+every badge** (2026-08-17, #2383). Two complaints from team admins, one
+fix. (1) A member holding no elevated role rendered as three *inactive*
+pills — visually indistinguishable from a row that hadn't loaded. A
+non-interactive `Member` badge now closes the row, after the three toggles,
+always visible. It shares the toggles' pill geometry (a `%pill` placeholder
+both `@extend`, so height/padding cannot desync mid-row) but carries its own
+fill: tonal `secondary-container` / `on-secondary-container`, with a
+transparent 1px border to keep the geometry identical. Deliberately *not*
+the toggles' `--primary` fill — in this row `--primary` reads as "someone
+granted this and someone can revoke it", whereas `team_member` is neither
+granted nor revocable, just always true. The same tonal pairing already
+marks non-interactive identity in `UserAvatar`, `MessageBubble`, and the
+agent-card icon. What the badge lacks is affordance, not presence: `cursor:
+default`, `role="note"`, no hover state, no `aria-pressed`, no click
+handler. It is deliberately not a fourth toggle —
+`team_member` is the implicit baseline (automatic for anyone holding an
+elevated role, granted directly to anyone holding none) and the API refuses
+to revoke a member's last relation, so a toggle would promise an action
+that cannot happen. (2) The role names carried no meaning on the page: all
+four badges now open a rich `Tooltip` (title + one-line description), copy
+condensed from the help centre's `features/roles.md` tables so the two
+surfaces agree. The Analyst panel alone carries a `--warning` footer row —
+it grants evaluation-campaign execution *and* the limited conversation
+slices those datasets are built from, which a flat pill row hinted at
+nowhere.
+
+A chip the actor may not administer switched from `disabled` to
+`aria-disabled` + a guard in the click handler. The visual state is
+unchanged (`[aria-disabled="true"]` replaces `:disabled` in the SCSS), but
+a `disabled` button leaves the tab order and fires no pointer events, so it
+would have been the one badge unable to explain itself — to exactly the
+reader who cannot act on the role and most needs to know what it is.
 
 **Members table: role chips are a live, single-click toggle in both
 directions.** `TeamRoleChips` renders identically here and in the
