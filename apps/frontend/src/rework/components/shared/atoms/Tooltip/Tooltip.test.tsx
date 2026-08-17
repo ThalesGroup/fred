@@ -275,7 +275,73 @@ describe("Tooltip", () => {
 
     expect(parseFloat(panel.style.maxHeight)).toBe(400 - 8);
     expect(parseFloat(panel.style.maxWidth)).toBe(300 - 8);
-    // Centred on a 300px-wide viewport, a full-width panel sits at its middle.
-    expect(parseFloat(panel.style.left)).toBe(4 + (300 - 8) / 2);
+    // A panel as wide as the viewport can only sit at the margin.
+    expect(parseFloat(panel.style.left)).toBe(4);
+  });
+
+  it("anchors by the top edge even when opening above, so a bad measurement cannot clip it", () => {
+    // Regression (#2384, found live): the panel used to be placed by its BOTTOM
+    // edge via translateY(-100%). A height measured smaller than what finally
+    // rendered then grew the panel upward, past the top of the window, with its
+    // title and first lines unreachable. Anchoring the top makes `top >= margin`
+    // structural rather than a consequence of measuring correctly.
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    // Room above for a 300px panel, so it opens upward.
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 350, bottom: 370, left: 400, right: 460, width: 60, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 300 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // Both coordinates are the panel's own edges: no transform to reason about.
+    expect(parseFloat(panel.style.top)).toBe(46);
+    expect(panel.style.transform).toBe("");
+    // Left-aligned with the trigger, so the panel visibly comes from it.
+    expect(parseFloat(panel.style.left)).toBe(400);
+  });
+
+  it("keeps a panel too tall to sit above fully on screen", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 350, bottom: 370, left: 400, right: 460, width: 60, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 380 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    const top = parseFloat(panel.style.top);
+    expect(top).toBeGreaterThanOrEqual(4);
+    expect(top + 380).toBeLessThanOrEqual(400 - 4);
   });
 });

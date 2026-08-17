@@ -189,25 +189,31 @@ export const Tooltip = ({ text, content, children, interactive = false }: Toolti
     const height = Math.min(rawHeight, availableHeight);
     const width = Math.min(rawWidth, availableWidth);
 
+    // Positioned by its TOP edge in BOTH directions, never by its bottom via a
+    // -100% translate. That translate is what let a stale measurement push the
+    // panel off-screen: it makes `top` the bottom edge, so a height measured
+    // smaller than what finally renders grows the panel UPWARD, past the top of
+    // the window, with its first lines unreachable. Anchoring the top instead
+    // makes the guarantee structural — `top` is clamped to at least the margin,
+    // and `maxHeight` above caps the panel to the viewport, so the bottom edge
+    // cannot escape either however wrong the measurement was. Above-vs-below
+    // still uses the measured height, but getting that wrong now only costs a
+    // less pretty placement, never a clipped panel.
     const fitsAbove = triggerRect.top - height - TOOLTIP_GAP_PX >= VIEWPORT_MARGIN_PX;
-    const translateY = fitsAbove ? "-100%" : "0%";
-    // Above: `fitsAbove` already proved there is room, and translateY makes
-    // `top` the panel's BOTTOM edge. Below: `top` is its top edge, and a tall
-    // panel must be pulled up or it runs past the viewport — the case a trigger
-    // near the top of the page hits, since it has no room above either and
-    // there is nowhere to fall back to.
-    const top = fitsAbove
-      ? triggerRect.top - TOOLTIP_GAP_PX
-      : Math.max(
-          VIEWPORT_MARGIN_PX,
-          Math.min(triggerRect.bottom + TOOLTIP_GAP_PX, viewportHeight() - VIEWPORT_MARGIN_PX - height),
-        );
+    const desiredTop = fitsAbove ? triggerRect.top - TOOLTIP_GAP_PX - height : triggerRect.bottom + TOOLTIP_GAP_PX;
+    const top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
 
-    const idealLeft = triggerRect.left + triggerRect.width / 2;
-    const minLeft = VIEWPORT_MARGIN_PX + width / 2;
-    const maxLeft = viewportWidth() - VIEWPORT_MARGIN_PX - width / 2;
-    // `minLeft` wins when the two cross — a panel as wide as the viewport.
-    const left = Math.max(Math.min(idealLeft, maxLeft), minLeft);
+    // Aligned on the trigger's own edge, with no transform: `left` is the
+    // panel's real left edge. Centring it on the trigger (translateX(-50%))
+    // reads fine for a one-line hint but detaches a wide panel from the small
+    // chip that opened it — the panel spreads either side, then gets clamped,
+    // and ends up floating somewhere the user has to hunt for. Anchoring an
+    // edge keeps the panel visibly coming from its trigger, and makes the
+    // on-screen guarantee as simple in this axis as in the other: both
+    // coordinates are real edges, both are clamped, both are capped.
+    const fitsLeftAligned = triggerRect.left + width <= viewportWidth() - VIEWPORT_MARGIN_PX;
+    const desiredLeft = fitsLeftAligned ? triggerRect.left : triggerRect.left + triggerRect.width - width;
+    const left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
 
     setContentStyle({
       top,
@@ -215,7 +221,6 @@ export const Tooltip = ({ text, content, children, interactive = false }: Toolti
       maxHeight: availableHeight,
       maxWidth: availableWidth,
       overflow: "auto",
-      transform: `translate(-50%, ${translateY})`,
     });
   }, [triggerRect]);
 

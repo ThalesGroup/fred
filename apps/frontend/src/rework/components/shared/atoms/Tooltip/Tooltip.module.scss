@@ -6,7 +6,7 @@
 /* Rendered in a portal on document.body (Tooltip.tsx) so it can pop above
  * its trigger without being clipped by an ancestor's `overflow: hidden` /
  * `scroll` (e.g. DataTable's scroll body) — `position: fixed` plus the
- * top/left/transform set inline per-instance from the trigger's own
+ * top/left set inline per-instance (real edges, no transform) from the trigger's own
  * viewport rect is what makes that escape possible; a `position: absolute`
  * tooltip would still be clipped by the nearest scrolling ancestor even
  * once moved to body in the DOM. Mount/unmount now drives visibility
