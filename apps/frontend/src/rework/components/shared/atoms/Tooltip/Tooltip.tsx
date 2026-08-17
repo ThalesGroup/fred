@@ -26,11 +26,22 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { viewportWidth } from "@shared/utils/viewport.ts";
+import { viewportHeight, viewportWidth } from "@shared/utils/viewport.ts";
 import styles from "./Tooltip.module.scss";
 
 interface TooltipProps {
   text?: string;
+  /**
+   * Let the pointer travel INTO the panel and act on it — select the text,
+   * click a button inside. A plain tooltip is inert (`pointer-events: none`)
+   * and vanishes the moment the pointer leaves the trigger, so anything the
+   * user needs to read closely, copy, or click has to opt in here.
+   *
+   * Costs: the panel keeps the tooltip open while hovered, and closing is
+   * delayed just long enough to cross the gap between the two. Off by default —
+   * a one-line hint should not linger or swallow clicks.
+   */
+  interactive?: boolean;
   /** Rich content instead of a plain text hint (e.g. a multi-row info panel).
    *  Unlike `text`, the tooltip widens to fit and wraps instead of forcing a
    *  single nowrap line. Takes precedence over `text` when both are set. */
@@ -42,6 +53,9 @@ interface TooltipProps {
 // the tooltip for free via `margin-bottom`. A portaled tooltip is positioned
 // in raw viewport pixels instead, so the same value has to be restated here.
 const TOOLTIP_GAP_PX = 4;
+// Long enough to cross the gap between trigger and panel without the panel
+// vanishing under the pointer, short enough not to feel sticky.
+const INTERACTIVE_CLOSE_DELAY_MS = 150;
 // Minimum breathing room from the viewport edge when clamping/flipping.
 const VIEWPORT_MARGIN_PX = 4;
 
@@ -70,7 +84,7 @@ function trackFocusModality() {
 
 if (typeof document !== "undefined") trackFocusModality();
 
-export const Tooltip = ({ text, content, children }: TooltipProps) => {
+export const Tooltip = ({ text, content, children, interactive = false }: TooltipProps) => {
   const tooltipId = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const contentRef = useRef<HTMLSpanElement>(null);
@@ -101,8 +115,23 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
     setTriggerRect({ top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width });
   }, []);
 
-  const handleMouseEnter = useCallback(() => setIsHovering(true), []);
-  const handleMouseLeave = useCallback(() => setIsHovering(false), []);
+  // Interactive panels close on a short delay so the pointer can cross the gap
+  // between the trigger and the panel without the panel disappearing under it.
+  // `clearTimeout(undefined)` is a documented no-op, so no null guard is needed.
+  const hideTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(hideTimer.current), []);
+  const handleMouseEnter = useCallback(() => {
+    window.clearTimeout(hideTimer.current);
+    setIsHovering(true);
+  }, []);
+  const handleMouseLeave = useCallback(() => {
+    if (!interactive) {
+      setIsHovering(false);
+      return;
+    }
+    window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => setIsHovering(false), INTERACTIVE_CLOSE_DELAY_MS);
+  }, [interactive]);
   // A plain `onFocus` also fires for the lingering focus a mouse click leaves
   // behind on the trigger (e.g. clicking the preview/more icon buttons), which
   // would pop the tooltip open and pin it there until something else steals
@@ -148,18 +177,46 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
     }
     const el = contentRef.current;
     if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
+    // Cap BEFORE measuring how it lands: clamping `top` alone cannot save a
+    // panel that is simply taller than the screen — it would still spill past
+    // whichever edge it was pushed toward. With a cap the panel scrolls
+    // internally instead, and the clamp below then always has a size it can
+    // actually fit. Applied to every tooltip, not just rich ones: a long
+    // one-line hint on a short window has the same problem.
+    const availableHeight = viewportHeight() - 2 * VIEWPORT_MARGIN_PX;
+    const availableWidth = viewportWidth() - 2 * VIEWPORT_MARGIN_PX;
+    const { width: rawWidth, height: rawHeight } = el.getBoundingClientRect();
+    const height = Math.min(rawHeight, availableHeight);
+    const width = Math.min(rawWidth, availableWidth);
 
     const fitsAbove = triggerRect.top - height - TOOLTIP_GAP_PX >= VIEWPORT_MARGIN_PX;
-    const top = fitsAbove ? triggerRect.top - TOOLTIP_GAP_PX : triggerRect.bottom + TOOLTIP_GAP_PX;
     const translateY = fitsAbove ? "-100%" : "0%";
+    // Above: `fitsAbove` already proved there is room, and translateY makes
+    // `top` the panel's BOTTOM edge. Below: `top` is its top edge, and a tall
+    // panel must be pulled up or it runs past the viewport — the case a trigger
+    // near the top of the page hits, since it has no room above either and
+    // there is nowhere to fall back to.
+    const top = fitsAbove
+      ? triggerRect.top - TOOLTIP_GAP_PX
+      : Math.max(
+          VIEWPORT_MARGIN_PX,
+          Math.min(triggerRect.bottom + TOOLTIP_GAP_PX, viewportHeight() - VIEWPORT_MARGIN_PX - height),
+        );
 
     const idealLeft = triggerRect.left + triggerRect.width / 2;
     const minLeft = VIEWPORT_MARGIN_PX + width / 2;
     const maxLeft = viewportWidth() - VIEWPORT_MARGIN_PX - width / 2;
-    const left = Math.min(Math.max(idealLeft, minLeft), maxLeft);
+    // `minLeft` wins when the two cross — a panel as wide as the viewport.
+    const left = Math.max(Math.min(idealLeft, maxLeft), minLeft);
 
-    setContentStyle({ top, left, transform: `translate(-50%, ${translateY})` });
+    setContentStyle({
+      top,
+      left,
+      maxHeight: availableHeight,
+      maxWidth: availableWidth,
+      overflow: "auto",
+      transform: `translate(-50%, ${translateY})`,
+    });
   }, [triggerRect]);
 
   const child = isValidElement(children)
@@ -168,6 +225,7 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
 
   const contentClasses = [styles["tooltip-content"]];
   if (content) contentClasses.push(styles["tooltip-content-rich"]);
+  if (interactive) contentClasses.push(styles["tooltip-content-interactive"]);
 
   return (
     <span
@@ -187,6 +245,8 @@ export const Tooltip = ({ text, content, children }: TooltipProps) => {
             className={contentClasses.join(" ")}
             role="tooltip"
             style={contentStyle}
+            onMouseEnter={interactive ? handleMouseEnter : undefined}
+            onMouseLeave={interactive ? handleMouseLeave : undefined}
           >
             {content ?? text}
           </span>,

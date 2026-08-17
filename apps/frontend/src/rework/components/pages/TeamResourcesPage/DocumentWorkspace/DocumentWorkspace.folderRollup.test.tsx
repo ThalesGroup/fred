@@ -178,7 +178,10 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({ InlineDrawer: () => null }));
+// The shared clipboard write every copy site in the app routes through (#2366).
+vi.mock("../../../../utils/clipboardUtils", () => ({ writeRichClipboard: vi.fn(async () => true) }));
 
+import { writeRichClipboard } from "../../../../utils/clipboardUtils";
 import DocumentWorkspace from "./DocumentWorkspace";
 
 const PROCESSING = "rework.resources.status.processing";
@@ -213,17 +216,19 @@ async function click(el: Element): Promise<void> {
   });
 }
 
-/** Hovers a folder's rollup chip and returns the portaled tooltip's text.
+/** Hovers a folder's rollup chip and returns the portaled tooltip's text. The
+ *  folder list is scanned at a glance, so it stays a hover panel — unlike the
+ *  per-stage error on a document row, which is click-opened to be copyable.
  *  React derives onMouseEnter from the bubbling `mouseover` (see Tooltip.test). */
-function hoverChip(row: HTMLElement): string {
+function openChip(row: HTMLElement): string {
   const chip = [...row.querySelectorAll("span")].find((el) => el.textContent?.includes(FAILED_COUNT));
   if (!chip) throw new Error("failure chip not rendered on this row");
   act(() => {
     chip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
   });
-  const tooltip = document.querySelector('[role="tooltip"]');
-  if (!tooltip) throw new Error("tooltip did not open");
-  return tooltip.textContent ?? "";
+  const panel = document.querySelector('[role="tooltip"]');
+  if (!panel) throw new Error("detail panel did not open");
+  return panel.textContent ?? "";
 }
 
 /** Opens a folder and comes straight back, leaving its page loaded in `perTag`. */
@@ -282,7 +287,7 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
     expect(row.textContent).not.toContain(PROCESSING);
     // The name comes from the task's own target label — no request, and it
     // works for a folder the user has never opened.
-    expect(hoverChip(row)).toContain("Broken report.pdf");
+    expect(openChip(row)).toContain("Broken report.pdf");
   });
 
   it("marks a folder done once something under it finished and nothing is left running or failed", async () => {
@@ -368,7 +373,7 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
 
     const row = folderRow("Broken");
     expect(row.textContent).toContain(FAILED_COUNT);
-    expect(hoverChip(row)).toContain("Snapshot.pdf");
+    expect(openChip(row)).toContain("Snapshot.pdf");
   });
 
   it("still counts failures after a reload, from the team history alone", async () => {
@@ -381,7 +386,7 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
 
     const row = folderRow("Broken");
     expect(row.textContent).toContain(FAILED_COUNT);
-    expect(hoverChip(row)).toContain("Broken report.pdf");
+    expect(openChip(row)).toContain("Broken report.pdf");
   });
 
   it("surfaces a teammate's failure, which the user-scoped feed can never see", async () => {
@@ -463,11 +468,36 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
 
     const row = folderRow("Bulk");
     expect(row.textContent).toContain(`${FAILED_COUNT}:{"count":13}`);
-    const panel = hoverChip(row);
+    const panel = openChip(row);
     expect(panel).toContain("Bulk-0.pdf");
     expect(panel).toContain("Bulk-9.pdf");
     expect(panel).not.toContain("Bulk-10.pdf");
     expect(panel).toContain(`folderFailedMore:{"count":3}`);
+  });
+
+  it("copies every failure, including the ones the panel only summarizes", async () => {
+    // The rendered list stops at ten; the clipboard must not. Copying is
+    // precisely when the whole list is wanted — a support ticket, or a message
+    // to whoever uploaded them. Reachable at all only because the panel is
+    // interactive: a plain tooltip would vanish before the pointer got there.
+    const written: string[] = [];
+    vi.mocked(writeRichClipboard).mockImplementation(async (_html: string, text: string) => {
+      written.push(text);
+      return true;
+    });
+    taskHistory = Array.from({ length: 13 }, (_, i) =>
+      historyEntry(`doc-bulk-${i}`, "failed", `Bulk-${i}.pdf`, "2026-08-17T10:00:00Z"),
+    );
+    await renderWorkspace();
+    openChip(folderRow("Bulk"));
+
+    const copyButton = document.querySelector('[role="tooltip"] button');
+    if (!copyButton) throw new Error("copy button not rendered");
+    await click(copyButton);
+
+    expect(written).toHaveLength(1);
+    expect(written[0].split("\n")).toHaveLength(13);
+    expect(written[0]).toContain("Bulk-12.pdf");
   });
 
   it("shows nothing anywhere when no document has any state to report", async () => {

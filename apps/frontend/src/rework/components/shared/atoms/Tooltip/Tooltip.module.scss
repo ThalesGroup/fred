@@ -38,3 +38,13 @@
   overflow: hidden;
   white-space: normal;
 }
+
+/* Opt-in interactive panel (Tooltip's `interactive` prop): the pointer can
+   enter it, select its text and click inside. The base rule sets
+   `pointer-events: none` so an inert hint never swallows a click on whatever
+   sits under it — that is exactly what has to be lifted here. */
+.tooltip-content-interactive {
+  cursor: auto;
+  pointer-events: auto;
+  user-select: text;
+}

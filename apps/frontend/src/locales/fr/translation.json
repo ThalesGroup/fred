@@ -1690,6 +1690,9 @@
         "prev": "Page précédente"
       },
       "status": {
+        "copyDetail": "Copier le détail",
+        "detailCopied": "Détail copié",
+        "detailTitle": "Détail : {{label}}",
         "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
         "folderFailedMore_one": "et {{count}} autre",

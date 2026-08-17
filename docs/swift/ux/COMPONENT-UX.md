@@ -2975,10 +2975,17 @@ server-side per-tag counter:
 The chip is advisory throughout — not a count the user acts on directly, unlike
 the folder-deletion count which had to move to live totals (#2173).
 
-The hover panel names the first 10 failures and summarizes the rest ("and 12
-more"). The `Tooltip` panel is portaled outside the chip, so moving the pointer
-toward it closes the tooltip and its scrollbar is unreachable — an uncapped list
-would be clipped with no way to read past the fold.
+Both failure panels — the folder rollup's file list and a document's per-stage
+errors — are **interactive** hover panels: the pointer can move into them,
+select the text, and hit a copy button. That is `Tooltip`'s new `interactive`
+mode rather than a bespoke popover, so every other hover panel in the app can
+opt into the same affordance. The clipboard write goes through
+`writeRichClipboard` and the receipt through `useCopyConfirmation`, the two
+mechanisms every copy site already shares (#2366, #2359).
+
+The rendered list names the first 10 failures and summarizes the rest ("and 12
+more"), but **copy always writes the full list** — copying is exactly when the
+whole thing is wanted.
 
 One coupling worth knowing: terminal tasks are never evicted today because
 `taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted

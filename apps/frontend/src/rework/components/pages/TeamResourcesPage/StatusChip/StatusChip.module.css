@@ -2,8 +2,15 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-3xs);
+  /* The failure chips render as <button> so their detail can open on click; the
+     rest stay <span>. Neutralise the button chrome here rather than in a second
+     class, so both render identically. */
+  cursor: inherit;
+  border: none;
   border-radius: var(--radius-full);
+  background: none;
   padding: var(--spacing-3xs) var(--spacing-xs);
+  color: inherit;
   font: var(--font-label-small);
   white-space: nowrap;
 }
@@ -32,10 +39,6 @@
 .chip[data-variant="failed"] {
   background: var(--error-container);
   color: var(--on-error-container);
-}
-
-.failedTooltipTitle {
-  font: var(--font-label-large);
 }
 
 .failedTooltipMore {
@@ -84,21 +87,11 @@
  * together or they drift apart. The rich Tooltip panel deliberately ships with
  * zero padding (the content owns its internal spacing), so it is restated here;
  * the height cap keeps a long list from covering the rows around it. */
-.errorTooltip,
-.failedTooltip {
+.errorTooltip {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
   margin: 0;
-  padding: var(--spacing-s);
-  max-width: 32rem;
-  max-height: 40vh;
-  overflow-y: auto;
-  text-align: left;
-}
-
-.failedTooltip {
-  gap: var(--spacing-3xs);
 }
 
 .errorEntry {
@@ -137,4 +130,38 @@
     transform: scale(0.85);
     opacity: 0.4;
   }
+}
+
+/* Layout of the failure panel inside the interactive Tooltip (#2384). The
+   surface itself (background, border, shadow, placement, viewport clamping)
+   belongs to the Tooltip atom — only the header/body split is ours, so the copy
+   button stays put while a long list scrolls under it. */
+.detailPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-s);
+  max-width: 32rem;
+  text-align: left;
+}
+
+.detailHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.detailTitle {
+  font: var(--font-label-large);
+}
+
+.detailBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  /* Capped so a long list cannot cover the rows around it; the Tooltip's own
+     placement keeps the panel inside the viewport, this keeps it reasonable. */
+  max-height: 40vh;
+  overflow-y: auto;
 }
