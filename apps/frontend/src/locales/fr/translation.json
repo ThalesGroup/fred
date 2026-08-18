@@ -1619,6 +1619,7 @@
         "stopIngestionTitle": "Arrêter l'ingestion"
       },
       "errorTooltip": {
+        "reported": "Signalé par le traitement",
         "stage": "Étape : {{stage}}"
       },
       "empty": {
@@ -1691,8 +1692,17 @@
         "prev": "Page précédente"
       },
       "status": {
+        "copyDetail": "Copier le détail",
+        "detailCopied": "Détail copié",
+        "detailTitle": "Détail : {{label}}",
         "excludedFromSearch": "Exclu de la recherche",
         "failed": "Erreur",
+        "folderFailedMore_one": "et {{count}} autre",
+        "folderFailedMore_other": "et {{count}} autres",
+        "folderFailedTooltip_one": "Échec du traitement de {{count}} document :",
+        "folderFailedTooltip_other": "Échec du traitement de {{count}} documents :",
+        "folderFailed_one": "{{count}} erreur",
+        "folderFailed_other": "{{count}} erreurs",
         "justDone": "Terminé",
         "processing": "Traitement...",
         "raw": "En attente",
@@ -1969,9 +1979,18 @@
     },
     "teamRoles": {
       "team_admin": "Admin",
-      "team_editor": "Editeur",
+      "team_editor": "Éditeur",
       "team_analyst": "Analyste",
-      "team_member": "Membre"
+      "team_member": "Membre",
+      "descriptions": {
+        "team_admin": "Gouverne l'équipe : gère les membres et leurs rôles, et définit la politique d'équipe (quotas, modèles autorisés, serveurs MCP, limites de stockage). Ne donne aucun droit sur les agents, les prompts ou le routage - c'est le rôle Éditeur.",
+        "team_editor": "Gère ce que l'équipe construit : agents, prompts partagés, politique de routage et corpus documentaire. Ne donne aucun droit sur les membres ni sur la politique d'équipe.",
+        "team_analyst": "Crée et lance les campagnes d'évaluation d'agents, et gère les corpus d'évaluation.",
+        "team_member": "L'accès par défaut de toute personne de l'équipe : utiliser les agents et les prompts de l'équipe, et gérer les siens. Aucun droit de configuration ni d'administration."
+      },
+      "warnings": {
+        "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
+      }
     },
     "teamSettings": {
       "members": {

@@ -1619,6 +1619,7 @@
         "stopIngestionTitle": "Stop ingestion"
       },
       "errorTooltip": {
+        "reported": "Reported by the pipeline",
         "stage": "Stage: {{stage}}"
       },
       "empty": {
@@ -1691,8 +1692,17 @@
         "prev": "Previous page"
       },
       "status": {
+        "copyDetail": "Copy detail",
+        "detailCopied": "Detail copied",
+        "detailTitle": "Detail: {{label}}",
         "excludedFromSearch": "Excluded from search",
         "failed": "Error",
+        "folderFailedMore_one": "and {{count}} more",
+        "folderFailedMore_other": "and {{count}} more",
+        "folderFailedTooltip_one": "{{count}} document failed to process:",
+        "folderFailedTooltip_other": "{{count}} documents failed to process:",
+        "folderFailed_one": "{{count}} error",
+        "folderFailed_other": "{{count}} errors",
         "justDone": "Done",
         "processing": "Processing...",
         "raw": "Pending",
@@ -1971,7 +1981,16 @@
       "team_admin": "Admin",
       "team_editor": "Editor",
       "team_analyst": "Analyst",
-      "team_member": "Member"
+      "team_member": "Member",
+      "descriptions": {
+        "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
+        "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
+        "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
+        "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
+      },
+      "warnings": {
+        "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
+      }
     },
     "teamSettings": {
       "members": {
