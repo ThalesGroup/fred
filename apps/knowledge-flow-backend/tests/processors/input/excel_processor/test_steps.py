@@ -188,6 +188,48 @@ def test_a2_captures_error_cells(make_extractor):
     assert (0, 3) not in structure["errors"]
 
 
+@pytest.mark.parametrize("masking", [True, False])
+def test_a2_blank_sheet_returns_empty_grid(make_extractor, masking):
+    # Feuille sans aucune cellule : openpyxl ignore une borne `0` passée à
+    # iter_rows et retombe sur <dimension> (>= 1x1), ce qui écrivait dans une
+    # grille 0x0 → IndexError. Les deux chemins (masquage on/off) sont couverts.
+    ext = make_extractor([{"name": "F1", "cells": {"A1": "x", "B1": 1}}, {"name": "Vide"}], apply_format_masking=masking)
+    ext.a1_inventory()
+    grid, structure = ext.a2_load_and_capture("Vide")
+    assert grid.shape == (0, 0)
+    assert structure == {"merges": [], "outline": {}, "errors": set(), "hidden_rows": set(), "hidden_cols": set()}
+
+
+def test_a2_formatting_only_sheet_returns_empty_grid(make_extractor):
+    # Cellules existantes mais sans valeur (format seul) + fusion : _real_extent
+    # ne retient rien, la feuille est vide au sens du pipeline.
+    ext = make_extractor(
+        [
+            {"name": "F1", "cells": {"A1": "x", "B1": 1}},
+            {"name": "Deco", "number_formats": {"C3": "0.00"}, "merges": ["A1:D1"], "hidden_cols": ["B"]},
+        ]
+    )
+    ext.a1_inventory()
+    grid, _ = ext.a2_load_and_capture("Deco")
+    assert grid.shape == (0, 0)
+
+
+def test_extract_flags_empty_sheet_and_keeps_others(make_extractor):
+    ext = make_extractor(
+        [
+            {"name": "F1", "cells": {"A1": "h1", "B1": "h2", "A2": 1, "B2": 2}},
+            {"name": "Vide"},
+        ]
+    )
+    summaries = ext.extract()
+    by_name = {s.name: s for s in summaries}
+    assert by_name["Vide"].is_empty is True
+    assert by_name["Vide"].tables == [] and by_name["Vide"].residuals == []
+    # la feuille vide n'interrompt pas le traitement des autres
+    assert by_name["F1"].is_empty is False
+    assert by_name["F1"].tables
+
+
 def test_a2_hidden_cells_detected_when_excluded(make_extractor):
     ext = make_extractor(
         [

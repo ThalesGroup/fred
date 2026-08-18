@@ -581,12 +581,30 @@ class ExcelProcessor(BaseMarkdownProcessor):
                 lines.append("")
         return lines
 
-    @staticmethod
-    def _residual_value(content: Any) -> str:
+    # A residual value is spreadsheet text injected INSIDE a Markdown list item.
+    # A line starting with a block marker would open a block of its own — a cell
+    # reading "- all" produced a SECOND bullet next to the residual's. Escaping
+    # the marker keeps the text readable and the line inside its bullet.
+    _MD_BULLET_START = re.compile(r"^([-*+>#])")
+    _MD_ORDERED_START = re.compile(r"^(\d+)([.)])")
+
+    @classmethod
+    def _md_escape_line_start(cls, line: str) -> str:
+        """Neutralize a Markdown block marker at the start of a value line."""
+        line = cls._MD_BULLET_START.sub(r"\\\1", line, count=1)
+        return cls._MD_ORDERED_START.sub(r"\1\\\2", line, count=1)
+
+    @classmethod
+    def _residual_value(cls, content: Any) -> str:
         """All the non-empty values of a residual.
 
         A single value stays on the line (`value="OK"`); several values (stacked
         cells, or a single multi-line cell) are unrolled below it, one per line.
+
+        The unrolled lines stay part of the SAME bullet: each is indented under
+        the list item and ends with the two spaces of a Markdown hard break, so
+        the line break the cell actually contains is rendered without turning
+        the value into extra bullets.
         """
         if content is None:
             return ""
@@ -606,8 +624,10 @@ class ExcelProcessor(BaseMarkdownProcessor):
             return ""
         if len(flat) == 1:
             return f'  value="{flat[0]}"'
-        body = "\n".join(flat)
-        return f'  value="\n{body}\n"'
+        body = [f"  {cls._md_escape_line_start(v)}" for v in flat]
+        body[-1] += '"'
+        # "  \n" = trailing hard break + newline, on every line but the last.
+        return '  value="' + "  \n" + "  \n".join(body)
 
     @staticmethod
     def _md_sheet_lines(
@@ -619,6 +639,11 @@ class ExcelProcessor(BaseMarkdownProcessor):
         object_keys: Optional[dict[str, str]] = None,
     ) -> list[str]:
         vis = "hidden" if not s.visible else "visible"
+        # An empty sheet is still NAMED in the summary: a reader (or an agent)
+        # must see that the sheet exists and holds nothing, not wonder whether
+        # extraction skipped or lost it. No coverage — it means nothing here.
+        if s.is_empty:
+            return [f"## Sheet: {s.name}  ({vis}, empty)", "", "No data — sheet holds no value (blank, or formatting only).", ""]
         lines = [f"## Sheet: {s.name}  ({vis}, coverage={s.coverage * 100:.0f}%)", ""]
         if s.tables:
             lines.append(f"Tables ({len(s.tables)}):")

@@ -206,12 +206,35 @@ def test_residual_value_single_from_grid():
 def test_residual_value_multiple_unrolled():
     out = ExcelProcessor._residual_value([["Sous-total", 240]])
     assert "Sous-total" in out and "240" in out
-    assert out.startswith('  value="\n')
+    # « ␣␣\n » = saut de ligne dur Markdown ; les lignes déroulées sont indentées
+    # sous la puce, donc rendues dans la MÊME puce.
+    assert out == '  value="  \n  Sous-total  \n  240"'
 
 
 def test_residual_value_splits_internal_newlines():
     out = ExcelProcessor._residual_value("ligne1\nligne2")
-    assert "ligne1" in out and "ligne2" in out
+    assert out == '  value="  \n  ligne1  \n  ligne2"'
+
+
+@pytest.mark.parametrize(
+    "line, escaped",
+    [
+        ("- all", "\\- all"),
+        ("* item", "\\* item"),
+        ("+ item", "\\+ item"),
+        ("> cité", "\\> cité"),
+        ("# titre", "\\# titre"),
+        ("1. faire", "1\\. faire"),
+        ("2) refaire", "2\\) refaire"),
+        ("all -", "all -"),  # marqueur ailleurs qu'en début de ligne : intact
+        ("240", "240"),
+    ],
+)
+def test_residual_value_escapes_markdown_line_starts(line, escaped):
+    # Une ligne de cellule commençant par un marqueur Markdown ouvrait un bloc à
+    # elle (puce/titre/citation supplémentaire à côté du résidu).
+    out = ExcelProcessor._residual_value([["Organizations", line]])
+    assert out == f'  value="  \n  Organizations  \n  {escaped}"'
 
 
 # --------------------------------------------------------------------------- #
