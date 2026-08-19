@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 
-
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
