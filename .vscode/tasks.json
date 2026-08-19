@@ -166,7 +166,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM; make run-worker-prod"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM; make run-worker"
       ],
       "options": {
         "cwd": "${workspaceFolder}/apps/control-plane-backend"
