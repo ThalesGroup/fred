@@ -401,8 +401,8 @@
       "searchPolicyRowLabel": "Recherche",
       "searchPolicyTitle": "Politique de recherche",
       "reasoningRowLabel": "Raisonnement",
-      "reasoningOff": "Désactivé",
-      "reasoningOn": "Activé",
+      "reasoningOff": "Rapide",
+      "reasoningOn": "Boost",
       "reasoningHint": "Avec le raisonnement activé, la réponse est plus approfondie et est donc plus longue à produire.",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
       "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe — le message échouera. Demandez à un administrateur de la plateforme de l'activer."

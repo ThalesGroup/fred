@@ -213,11 +213,26 @@ As of REASON-01 (#2166) the platform contributed its first non-capability contro
 **gone from the tune menu**: reasoning is now a **plain text button + chevron**
 (`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
 edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button leads with the MODEL IDENTITY: "Mistral Small · Activé"
-when on, "Mistral Small · Désactivé" when off (bare "Raisonnement"/state
-labels when no model resolves at all); its menu opens above, right-aligned,
-with the effort/latency explainer as a muted header and two check-circle rows:
-Désactivé and Activé.
+reference. The button leads with the MODEL IDENTITY, followed by the reasoning
+MODE: "Mistral Small · Boost" when on, "Mistral Small · Rapide" when off (bare
+"Raisonnement"/mode labels when no model resolves at all); its menu opens
+above, right-aligned, with the effort/latency explainer as a muted header and
+the two modes as check-circle rows.
+
+**Two modes, not an on/off switch (#2387).** "Mistral Small · Désactivé" read
+as though the MODEL were disabled — the state word sat beside the model name
+with nothing tying it to reasoning. Naming both modes removes that reading:
+neither describes anything as off. EN uses Fast / Boost.
+
+`Boost` also wears the Chat button's spectrum (`.state[data-on]`), so the one
+"the AI is doing more" signal reads the same on the agent card and in the
+composer. Two departures from that border: linear rather than conic (a conic
+sweep across ~40px of text smears), and no white stops (white travels a border
+but is a hole in text, invisible on the light theme) — leaving cyan → violet →
+pink. A solid `--primary` sits underneath as the fallback for engines that
+ignore `background-clip: text`, and `forced-colors` drops the gradient for the
+system palette. The WORD carries the state either way, so colour is
+reinforcement, never the only signal.
 
 Deliberately NOT a low/medium/high picker — a same-day effort picker was
 withdrawn (providers 400 on values they don't support,

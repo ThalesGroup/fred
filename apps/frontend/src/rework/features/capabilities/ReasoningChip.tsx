@@ -15,10 +15,13 @@
 // The per-question reasoning control (REASON-01 level 4), styled after the
 // designer's Composer.html mockup (2026-08-12): a plain TEXT BUTTON with a
 // chevron at the right edge of the composer's bottomRow (RichInputField's
-// `rightExtraSlot`, before the mic). The button reads "Raisonnement" when off
-// and "Activé" when on; its menu opens above, right-aligned, with the
-// effort/latency explainer as a muted header and two check-circle rows:
-// Désactivé and Activé.
+// `rightExtraSlot`, before the mic). The state reads as two MODES, not as an
+// on/off switch: "Rapide" and "Boost" (#2387). "Désactivé" next to a model name
+// read as though the MODEL were disabled — the state word sat beside the model
+// with nothing tying it to reasoning. Naming both modes removes that reading:
+// neither describes anything as off. The menu opens above, right-aligned, with
+// the effort/latency explainer as a muted header and the two modes as
+// check-circle rows.
 //
 // Deliberately NOT a level picker, and since #2387 not a level DISPLAY either.
 // The effort a reasoning turn runs with is the model's ops-authored
@@ -163,9 +166,9 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
 
   const on = composer.reasoning;
   const title = t("chatbot.composerSettings.reasoningRowLabel");
-  // Plain on/off, never a level. The effort a reasoning turn runs with is the
+  // Two modes, never a level. The effort a reasoning turn runs with is the
   // pod's ops-authored `settings.reasoning_effort`, applied live — quoting it
-  // back at the user implied a choice that never existed (#2387).
+  // back at the user implied a per-question choice that never existed (#2387).
   const onLabel = t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
   // Model identity first, Claude-style ("Mistral Small Élevé"): model in the
@@ -229,6 +232,9 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
+        // The visible words name the MODE ("Rapide"/"Boost"); the accessible
+        // name adds what they are a mode OF, which sighted users get from the
+        // menu's own header.
         aria-label={
           unavailable
             ? `${title}: ${on ? onLabel : offLabel} — ${unavailableLabel}`
@@ -247,7 +253,9 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
                 <Icon category="outlined" type="error_outline" />
               </span>
             )}
-            <span className={styles.state}>{stateLabel}</span>
+            <span className={styles.state} data-on={on || undefined}>
+              {stateLabel}
+            </span>
           </>
         ) : (
           <span className={styles.value}>{on ? onLabel : title}</span>

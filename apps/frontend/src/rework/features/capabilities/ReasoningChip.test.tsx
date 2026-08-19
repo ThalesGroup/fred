@@ -262,6 +262,30 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
     expect(html).toContain("data-unavailable");
   });
 
+  // #2387 — the state reads as two modes, not on/off. "Désactivé" beside a model
+  // name read as though the MODEL were off; nothing tied the word to reasoning.
+
+  it("marks the active mode so colour reinforces the word", () => {
+    const on = render([reasoningControl({ default: false })], true, false, effectiveModel({ name: "gpt-4.1" }));
+    expect(on).toContain("data-on");
+    expect(on).toContain("chatbot.composerSettings.reasoningOn");
+
+    const off = render([reasoningControl({ default: false })], false, false, effectiveModel({ name: "gpt-4.1" }));
+    // The resting mode carries no marker — and still says which mode it is,
+    // so the accent is reinforcement and never the only signal.
+    expect(off).not.toContain("data-on");
+    expect(off).toContain("chatbot.composerSettings.reasoningOff");
+  });
+
+  it("ties the state to reasoning in the accessible name", () => {
+    // The visible words name the mode alone; a screen-reader user gets the
+    // subject too, which sighted users read off the menu header.
+    const html = render([reasoningControl({ default: false })], false, false, effectiveModel({ name: "gpt-4.1" }));
+    expect(html).toContain(
+      'aria-label="chatbot.composerSettings.reasoningRowLabel: chatbot.composerSettings.reasoningOff"',
+    );
+  });
+
   it("owns the reasoning_toggle promotion out of the tune popover", () => {
     // ComposerControlSlot and ManagedChatPage filter on this set; the button
     // and the filters must agree or the setting shows up twice (or nowhere).

@@ -401,8 +401,8 @@
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
-      "reasoningOff": "Off",
-      "reasoningOn": "On",
+      "reasoningOff": "Fast",
+      "reasoningOn": "Boost",
       "reasoningHint": "With the reasoning on, the response is more thorough and therefore takes longer to produce.",
       "selectLibraryFirst": "Select a library first.",
       "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
