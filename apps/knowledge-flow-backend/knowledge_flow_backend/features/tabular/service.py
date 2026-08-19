@@ -18,10 +18,13 @@ import asyncio
 import hashlib
 import logging
 import re
+import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
+from typing import Callable, Iterator
 
 import duckdb
 import pandas as pd
@@ -31,6 +34,7 @@ from fred_core.documents.document_structures import DocumentMetadata
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
+from knowledge_flow_backend.core.stores.content.gcs_content_store import GcsContentStore
 from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
     TabularTableArtifactV1,
@@ -87,9 +91,10 @@ class TabularDatasetAccessUnsupportedError(RuntimeError):
     Raised when a tabular artifact cannot be exposed to DuckDB.
 
     Why this exists:
-    - Tabular reads need either a backend-internal signed URL or a local file
-      path. Some content stores, notably GCS before internal V4 signing lands,
-      support object streams but not DuckDB-readable locations.
+    - Tabular reads need a backend-internal signed URL, a direct local file
+      path, or a store-side download to a job-local file (GCS, #2364). A store
+      that provides none of these can stream objects without ever yielding a
+      DuckDB-readable location.
 
     How to use:
     - Let controllers map this to an explicit unsupported-operation response.
@@ -211,6 +216,48 @@ def _redacting_query_execution_errors():
 # Below this length a keyword is too generic to locate anything useful; the
 # value-locator rejects it rather than matching a large fraction of every table.
 _MIN_KEYWORD_LENGTH = 2
+
+
+@dataclass
+class _JobDiskBudget:
+    """
+    Cumulative disk budget for one job's locally materialized artifacts.
+
+    Why this exists:
+    - The GCS access path downloads Parquet artifacts onto the pod's ephemeral
+      storage, and without a bound one query mounting many large datasets could
+      evict the pod — DuckDB spilling is disabled for exactly that reason
+      (execution.py).
+    - `precheck(...)` refuses an artifact whose declared ingestion size alone
+      busts the budget *before* a single byte is written, so one oversized
+      artifact cannot fill the disk mid-download. `charge(...)` then accounts
+      the actual on-disk bytes, which stays correct for legacy artifacts that
+      declared no size (they skip the precheck and are charged after the
+      fact — overshoot bounded by that one artifact, deleted with the scope).
+
+    How to use:
+    - One instance per `_dataset_location_scope()`; call `precheck(...)` before
+      and `charge(...)` after every download.
+    """
+
+    limit_bytes: int
+    used_bytes: int = 0
+
+    def precheck(self, declared_size_bytes: int) -> None:
+        if declared_size_bytes > 0 and self.used_bytes + declared_size_bytes > self.limit_bytes:
+            raise TabularQueryError(self._over_budget_message())
+
+    def charge(self, size_bytes: int) -> None:
+        self.used_bytes += size_bytes
+        if self.used_bytes > self.limit_bytes:
+            raise TabularQueryError(self._over_budget_message())
+
+    def _over_budget_message(self) -> str:
+        return (
+            f"Materializing the referenced datasets exceeds the per-query local storage budget ({self.limit_bytes} bytes). "
+            "Query fewer or smaller datasets; reading a single dataset above the budget requires raising "
+            "storage.tabular_store.query.max_local_artifact_bytes."
+        )
 
 
 class TabularService:
@@ -562,26 +609,30 @@ class TabularService:
         )
 
         def _job(handle: DuckDBAbortHandle) -> tuple[str, list[dict], list[ResolvedDataset]]:
-            connection = open_duckdb_connection(handle, config=query_config)
-            try:
-                handle.raise_if_aborted()
-                # Validation parses the SQL and already knows which authorized
-                # aliases it touches, so it runs here — inside the worker, since
-                # it opens its own DuckDB connection — and its result decides
-                # what gets mounted.
-                validated = validate_read_query(request.sql_text, allowed_relations=allowed_aliases)
-                mounted_datasets = self._datasets_to_mount(
-                    selected_datasets=selected_datasets,
-                    referenced_relations=validated.referenced_relations,
-                )
-                self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle)
-                handle.raise_if_aborted()
-                limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
-                with _redacting_query_execution_errors():
-                    rows_df = connection.execute(limited_query).df()
-                return validated.sql, rows_df.to_dict(orient="records"), mounted_datasets
-            finally:
-                close_duckdb_connection(handle, connection)
+            # The location scope wraps the whole connection lifetime: DuckDB
+            # opens Parquet lazily at execution time, and GCS-materialized temp
+            # files must only be unlinked after the connection released them.
+            with self._dataset_location_scope() as resolve_location:
+                connection = open_duckdb_connection(handle, config=query_config)
+                try:
+                    handle.raise_if_aborted()
+                    # Validation parses the SQL and already knows which authorized
+                    # aliases it touches, so it runs here — inside the worker, since
+                    # it opens its own DuckDB connection — and its result decides
+                    # what gets mounted.
+                    validated = validate_read_query(request.sql_text, allowed_relations=allowed_aliases)
+                    mounted_datasets = self._datasets_to_mount(
+                        selected_datasets=selected_datasets,
+                        referenced_relations=validated.referenced_relations,
+                    )
+                    self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle, resolve_location=resolve_location)
+                    handle.raise_if_aborted()
+                    limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
+                    with _redacting_query_execution_errors():
+                        rows_df = connection.execute(limited_query).df()
+                    return validated.sql, rows_df.to_dict(orient="records"), mounted_datasets
+                finally:
+                    close_duckdb_connection(handle, connection)
 
         started_at = time.perf_counter()
         sql_query, rows, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
@@ -671,22 +722,21 @@ class TabularService:
             )
 
         def _job(handle: DuckDBAbortHandle) -> tuple[str, list[TabularTableMatch], bool]:
-            connection = open_duckdb_connection(handle, config=query_config)
-            try:
-                handle.raise_if_aborted()
-                # Normalize the keyword through the exact same DuckDB expression the
-                # column values pass through, so both operands are strictly comparable.
-                keyword_probe_sql = f"SELECT {self._normalize_expr(quote_string_literal(raw_keyword))}"
-                probe_row = connection.execute(keyword_probe_sql).fetchone()
-                probe_keyword = probe_row[0] if probe_row else None
-                if not probe_keyword:
-                    raise ValueError("Keyword is empty after normalization; provide a more specific value")
+            # Scope outside the connection lifetime — see query_read._job.
+            with self._dataset_location_scope() as resolve_location:
+                connection = open_duckdb_connection(handle, config=query_config)
+                try:
+                    handle.raise_if_aborted()
+                    # Normalize the keyword through the exact same DuckDB expression the
+                    # column values pass through, so both operands are strictly comparable.
+                    keyword_probe_sql = f"SELECT {self._normalize_expr(quote_string_literal(raw_keyword))}"
+                    probe_row = connection.execute(keyword_probe_sql).fetchone()
+                    probe_keyword = probe_row[0] if probe_row else None
+                    if not probe_keyword:
+                        raise ValueError("Keyword is empty after normalization; provide a more specific value")
 
-                self._mount_datasets(connection=connection, datasets=scanned_datasets, handle=handle)
-
-                matches: list[TabularTableMatch] = []
-                tables_truncated = selection_truncated
-                with _redacting_dataset_read_errors():
+                    matches: list[TabularTableMatch] = []
+                    tables_truncated = selection_truncated
                     for dataset in scanned_datasets:
                         if len(matches) >= request.max_matching_tables:
                             # The cap is reached and at least one more table remains
@@ -694,17 +744,23 @@ class TabularService:
                             tables_truncated = True
                             break
                         handle.raise_if_aborted()
-                        match = self._search_one_table(
-                            connection=connection,
-                            dataset=dataset,
-                            normalized_keyword=probe_keyword,
-                            max_rows_per_table=request.max_rows_per_table,
-                        )
+                        # Mounted lazily, one dataset at a time: the early break
+                        # above must also skip the artifact fetch — on GCS an
+                        # eager mount would download (and charge against the
+                        # per-job disk budget) datasets the scan never opens.
+                        self._mount_datasets(connection=connection, datasets=[dataset], handle=handle, resolve_location=resolve_location)
+                        with _redacting_dataset_read_errors():
+                            match = self._search_one_table(
+                                connection=connection,
+                                dataset=dataset,
+                                normalized_keyword=probe_keyword,
+                                max_rows_per_table=request.max_rows_per_table,
+                            )
                         if match is not None:
                             matches.append(match)
-                return probe_keyword, matches, tables_truncated
-            finally:
-                close_duckdb_connection(handle, connection)
+                    return probe_keyword, matches, tables_truncated
+                finally:
+                    close_duckdb_connection(handle, connection)
 
         started_at = time.perf_counter()
         normalized_keyword, matches, tables_truncated = await run_duckdb_job(_job, config=query_config, operation="search")
@@ -1085,6 +1141,7 @@ class TabularService:
         connection: duckdb.DuckDBPyConnection,
         datasets: list[ResolvedDataset],
         handle: DuckDBAbortHandle,
+        resolve_location: Callable[[TabularArtifactV1], str],
     ) -> None:
         """
         Mount authorized Parquet datasets as temporary DuckDB views.
@@ -1096,17 +1153,20 @@ class TabularService:
         How to use:
         - Call on a fresh in-memory connection, inside the worker thread, before
           executing one SQL query.
+        - `resolve_location` comes from `_dataset_location_scope()`, so remote
+          materialization (GCS downloads) stays scoped to the calling job.
         - The abort handle is checked before each dataset because this loop is
           the one part of a job `connection.interrupt()` cannot stop: resolving a
-          location and opening a remote Parquet are blocking calls outside
-          DuckDB's own interruptible execution. Checking between datasets bounds
-          how much of an abandoned mount still runs.
+          location (a full artifact download on GCS) and opening a remote Parquet
+          are blocking calls outside DuckDB's own interruptible execution.
+          Checking between datasets bounds how much of an abandoned mount still
+          runs.
         """
 
         dataset_locations: list[tuple[ResolvedDataset, str]] = []
         for dataset in datasets:
             handle.raise_if_aborted()
-            location = self._resolve_dataset_location(dataset.artifact.object_key)
+            location = resolve_location(dataset.artifact)
             dataset_locations.append((dataset, location))
 
         if any(self._requires_httpfs(location) for _, location in dataset_locations):
@@ -1117,16 +1177,98 @@ class TabularService:
                 handle.raise_if_aborted()
                 connection.from_parquet(location).create_view(dataset.query_alias)
 
+    @contextmanager
+    def _dataset_location_scope(self) -> Iterator[Callable[[TabularArtifactV1], str]]:
+        """
+        Yield a per-job resolver turning artifacts into DuckDB-readable locations.
+
+        Why this exists:
+        - On GCS, tabular reads bypass signed URLs entirely (#2364): minting a
+          V4 URL needs `iam.serviceAccounts.signBlob`, which sovereign
+          deployments (tp-s3ns) do not grant, while the store's ADC client
+          already downloads objects with plain `storage.objects.get`. Artifacts
+          are materialized into one temp directory per job and DuckDB reads
+          them as local files — no `httpfs` involved, and GCS client errors are
+          stripped of store internals before they surface.
+        - The temp directory must live exactly as long as the job: DuckDB opens
+          Parquet lazily at execution time, not at view creation, so cleanup
+          cannot happen right after mounting.
+        - Each replica downloads into its own pod-local temp directory, so this
+          stays correct with several knowledge-flow pods — the content store
+          remains the single store of record.
+        - The branch is keyed on the concrete class on purpose: this is a
+          *strategy* choice, not a capability probe. GCS implements internal
+          presigned URLs but must not use them, so "supports download" cannot
+          be the discriminator — any store could implement a download.
+
+        How to use:
+        - Open the scope before creating the DuckDB connection and close it
+          after the connection is closed, so materialized files are never
+          unlinked while DuckDB still holds them open.
+        - Pass the yielded callable to `_mount_datasets(...)` or call it
+          directly with a dataset's artifact.
+        """
+
+        if isinstance(self.content_store, GcsContentStore):
+            gcs_store = self.content_store
+            budget = _JobDiskBudget(limit_bytes=self.tabular_config.query.max_local_artifact_bytes)
+            with tempfile.TemporaryDirectory(prefix="tabular-datasets-") as temp_dir:
+                temp_root = Path(temp_dir)
+                yield lambda artifact: self._materialize_gcs_dataset(store=gcs_store, artifact=artifact, temp_dir=temp_root, budget=budget)
+            return
+
+        yield lambda artifact: self._resolve_dataset_location(artifact.object_key)
+
+    @staticmethod
+    def _materialize_gcs_dataset(*, store: GcsContentStore, artifact: TabularArtifactV1, temp_dir: Path, budget: _JobDiskBudget) -> str:
+        """
+        Download one GCS Parquet artifact into the job's temp directory.
+
+        Why this exists:
+        - See `_dataset_location_scope`: GCS reads use the ADC-authenticated
+          client instead of signed URLs, so DuckDB consumes a local file.
+        - The file name is a digest of the object key: traversal-safe,
+          collision-free within the job, and stable so an artifact referenced
+          twice by one job is downloaded once.
+        - The job's disk budget is prechecked with the artifact's declared
+          ingestion size before downloading and charged with the actual bytes
+          after, so one query cannot fill the pod's ephemeral storage — not
+          even with a single oversized artifact.
+        - Download errors are re-raised with store internals stripped: the
+          tabular controllers surface `str(e)` to API/MCP callers, and neither
+          the object key (404 path) nor the raw GCS REST URL embedded in google
+          client errors (500 path) is theirs to see. This mirrors what
+          `_redacting_dataset_read_errors` does for the `httpfs` path.
+
+        How to use:
+        - Only call with the temp directory and budget owned by the current job
+          scope.
+        """
+
+        destination = temp_dir / f"{hashlib.sha256(artifact.object_key.encode('utf-8')).hexdigest()}.parquet"
+        if not destination.exists():
+            budget.precheck(artifact.file_size_bytes)
+            try:
+                store.download_object_to_path(artifact.object_key, destination)
+            except FileNotFoundError as exc:
+                raise FileNotFoundError("Tabular dataset artifact was not found in content storage") from exc
+            except Exception as exc:  # noqa: BLE001 — google client errors embed the raw object URL
+                raise TabularDatasetReadError(_redact_signed_urls(str(exc))) from exc
+            budget.charge(destination.stat().st_size)
+        return str(destination)
+
     def _resolve_dataset_location(self, object_key: str) -> str:
         """
         Resolve one content-store object to a DuckDB-readable location.
 
         Why this exists:
-        - Remote object stores use backend-internal presigned URLs through
-          DuckDB `httpfs`.
+        - Remote S3-compatible object stores use backend-internal presigned
+          URLs through DuckDB `httpfs`.
         - The local filesystem content store used in local development and
           offline tests should expose a direct file path instead of emulating a
           remote download flow.
+        - GCS never reaches this helper: `_dataset_location_scope` materializes
+          its artifacts to job-local files instead (#2364).
 
         How to use:
         - Call while mounting the per-query DuckDB session.
@@ -1263,21 +1405,23 @@ class TabularService:
         query_config = self.tabular_config.query
 
         def _job(handle: DuckDBAbortHandle) -> pd.DataFrame:
-            connection = open_duckdb_connection(handle, config=query_config)
-            try:
-                handle.raise_if_aborted()
-                location = self._resolve_dataset_location(dataset.artifact.object_key)
-                if self._requires_httpfs(location):
-                    self._ensure_httpfs_ready(connection)
+            # Scope outside the connection lifetime — see query_read._job.
+            with self._dataset_location_scope() as resolve_location:
+                connection = open_duckdb_connection(handle, config=query_config)
+                try:
+                    handle.raise_if_aborted()
+                    location = resolve_location(dataset.artifact)
+                    if self._requires_httpfs(location):
+                        self._ensure_httpfs_ready(connection)
 
-                handle.raise_if_aborted()
-                with _redacting_dataset_read_errors():
-                    relation = connection.from_parquet(location)
-                    if max_rows is not None:
-                        relation = relation.limit(max_rows)
-                    return relation.df()
-            finally:
-                close_duckdb_connection(handle, connection)
+                    handle.raise_if_aborted()
+                    with _redacting_dataset_read_errors():
+                        relation = connection.from_parquet(location)
+                        if max_rows is not None:
+                            relation = relation.limit(max_rows)
+                        return relation.df()
+                finally:
+                    close_duckdb_connection(handle, connection)
 
         started_at = time.perf_counter()
         frame = await run_duckdb_job(_job, config=query_config, operation="preview")

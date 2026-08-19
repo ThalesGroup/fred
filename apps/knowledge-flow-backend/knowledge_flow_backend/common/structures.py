@@ -196,12 +196,12 @@ class GcsStorageConfig(BaseModel):
     signing_service_account_email: Optional[str] = Field(
         default=None,
         description=(
-            "Service account email used to sign V4 signed URLs for backend-internal "
-            "tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON "
-            "key). Required for content_storage.type=gcs; startup fails clearly when "
-            "omitted. The Workload Identity service account must hold "
-            "iam.serviceAccounts.signBlob on this account, which must have "
-            "storage.objects.get on the objects bucket."
+            "Optional service account email used to sign V4 signed URLs via IAM "
+            "signBlob under Workload Identity (no JSON key). Tabular Parquet reads "
+            "no longer need it: they download artifacts server-side with the ADC "
+            "client, which only requires storage.objects.get on the objects bucket "
+            "(#2364). Set it only to re-enable internal V4 signed URLs for code "
+            "paths that explicitly call get_presigned_url_internal."
         ),
     )
 
@@ -861,12 +861,12 @@ class TabularQueryConfig(BaseModel):
     )
     access_mode: Literal["presigned_url"] = Field(
         default="presigned_url",
-        description="Primary object-access method for remote tabular artifacts.",
+        description="Primary object-access method for remote tabular artifacts on S3-compatible stores. GCS ignores it: artifacts are downloaded server-side to a job-local file instead (#2364).",
     )
     internal_presigned_ttl_seconds: int = Field(
         default=3600,
         ge=1,
-        description="TTL in seconds for backend-internal object-storage URLs used by tabular DuckDB reads.",
+        description="TTL in seconds for backend-internal object-storage URLs used by tabular DuckDB reads on S3-compatible stores. Unused on GCS (no URLs are minted).",
     )
     default_max_rows: int = Field(
         default=200,
@@ -907,6 +907,19 @@ class TabularQueryConfig(BaseModel):
         default=50,
         ge=1,
         description="Maximum datasets one request may mount or scan. Backstop for searches and for queries whose referenced-relation set is still too large.",
+    )
+    max_local_artifact_bytes: int = Field(
+        default=512 * 1024 * 1024,
+        ge=1,
+        description=(
+            "Per-job disk budget, in bytes, for tabular artifacts materialized onto the "
+            "pod's local storage (GCS access path, #2364). A query needing more fails as "
+            "a caller error (400) instead of filling the pod's ephemeral storage; the "
+            "declared artifact size is checked before downloading. This is also the "
+            "effective per-artifact ceiling on GCS - raise it on deployments that ingest "
+            "very large tabular files. Instantaneous worst case per pod: "
+            "max_concurrent_queries times this value."
+        ),
     )
 
 

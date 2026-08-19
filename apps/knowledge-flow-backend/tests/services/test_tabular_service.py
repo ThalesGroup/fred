@@ -28,7 +28,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     document_artifact_prefix,
     read_tabular_artifact,
 )
-from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularService
+from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularQueryError, TabularService
 from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
@@ -258,8 +258,10 @@ class _UnsupportedRemoteContentStore:
     Remote-style content store wrapper with no DuckDB-readable location support.
 
     Why this exists:
-    - GCS can stream objects through the Python client while still lacking
-      backend-internal signed URLs for DuckDB Parquet reads.
+    - A hypothetical store can stream objects through its client while offering
+      neither backend-internal signed URLs, nor a local path, nor the GCS
+      job-local download path (#2364) — tabular reads must then fail as an
+      explicit capability error.
 
     How to use:
     - Wrap the local test content store to exercise the unsupported remote
@@ -275,6 +277,90 @@ class _UnsupportedRemoteContentStore:
 
     def __getattr__(self, name):
         return getattr(self._delegate, name)
+
+
+class _FakeGcsBlob:
+    """In-memory stand-in for the two google blob calls the tabular path uses."""
+
+    def __init__(self, objects: dict, name: str):
+        self._objects = objects
+        self.name = name
+
+    def upload_from_filename(self, path, content_type=None):
+        del content_type
+        with open(path, "rb") as handle:
+            self._objects[self.name] = handle.read()
+
+    def download_to_filename(self, path, timeout=None):
+        from google.cloud.exceptions import NotFound
+
+        del timeout
+        if self.name not in self._objects:
+            # Mirror the real client: the destination is created (then truncated)
+            # before the request fails, so the store must clean up the leftover.
+            open(path, "wb").close()
+            raise NotFound(self.name)
+        with open(path, "wb") as handle:
+            handle.write(self._objects[self.name])
+
+
+def _fake_gcs_content_store(monkeypatch):
+    """Build a real GcsContentStore backed by an in-memory fake client.
+
+    Why this exists:
+    - The service selects the GCS materialization path with an isinstance
+      check (a deliberate strategy choice, see _dataset_location_scope), so
+      tests need an actual GcsContentStore instance — a delegate wrapper like
+      the ones above would not be recognized.
+    """
+    from knowledge_flow_backend.core.stores.content import gcs_content_store
+
+    objects: dict[str, bytes] = {}
+    bucket = SimpleNamespace(blob=lambda name: _FakeGcsBlob(objects, name))
+    monkeypatch.setattr(gcs_content_store, "build_gcs_client", lambda project_id=None: SimpleNamespace(bucket=lambda name: bucket))
+    store = gcs_content_store.GcsContentStore(document_bucket="kf-documents", object_bucket="kf-objects")
+    store._fake_objects = objects  # test-only handle to mutate the bucket
+    return store
+
+
+async def _gcs_tabular_setup(*, tmp_path, metadata_store, monkeypatch, documents):
+    """Ingest CSVs, move their Parquet artifacts into a fake GCS bucket, and
+    return `(service, gcs_store, downloaded_paths)` with downloads tracked.
+
+    Why this exists:
+    - Every GCS tabular test needs the same arrangement: local ingestion, the
+      artifact re-homed into the fake GCS objects bucket (so reads can only
+      succeed through the download path), the service's store swapped, and a
+      tracking wrapper around `download_object_to_path`.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    gcs_store = _fake_gcs_content_store(monkeypatch)
+    for document_uid, file_name, content in documents:
+        metadata = await _ingest_csv(
+            tmp_path=tmp_path,
+            metadata_store=metadata_store,
+            document_uid=document_uid,
+            file_name=file_name,
+            content=content,
+        )
+        artifact = read_tabular_artifact(metadata)
+        assert artifact is not None
+        gcs_store.object_bucket.blob(artifact.object_key).upload_from_filename(str(content_store.object_root / artifact.object_key))
+
+    service = TabularService()
+    service.content_store = gcs_store
+
+    downloaded_paths: list[Path] = []
+    original_download = gcs_store.download_object_to_path
+
+    def _tracked_download(key, destination, **kwargs):
+        downloaded_paths.append(destination)
+        return original_download(key, destination, **kwargs)
+
+    monkeypatch.setattr(gcs_store, "download_object_to_path", _tracked_download)
+    return service, gcs_store, downloaded_paths
 
 
 @pytest.mark.asyncio
@@ -753,9 +839,9 @@ async def test_tabular_service_fails_cleanly_without_signed_url_or_local_path(tm
     Verify unsupported content stores fail as an explicit tabular capability error.
 
     Why this exists:
-    - GCS Workload Identity deployments can write Parquet artifacts before GCS
-      V4 signed URLs are implemented, but DuckDB cannot read those artifacts
-      through `get_object_stream(...)`.
+    - A store can write Parquet artifacts and stream objects while offering no
+      DuckDB-readable location: no signed URLs, no local path, and not the GCS
+      job-local download path (#2364).
 
     How to use:
     - The API layer maps this service exception to an unsupported-operation
@@ -778,6 +864,186 @@ async def test_tabular_service_fails_cleanly_without_signed_url_or_local_path(tm
 
     with pytest.raises(TabularDatasetAccessUnsupportedError, match="Unsupported operation"):
         await service.read_dataset_frame(_user(), "doc-sales")
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_reads_gcs_datasets_via_job_local_download(tmp_path, metadata_store, monkeypatch):
+    """
+    GCS tabular reads materialize the Parquet artifact server-side (#2364).
+
+    Why this exists:
+    - Deployments without iam.serviceAccounts.signBlob (tp-s3ns) cannot mint
+      the V4 signed URLs the httpfs path needs. On GCS the service must
+      download artifacts through the ADC client into a job-scoped temp
+      directory, query them as local files, never mint a URL, and delete the
+      temp files with the job.
+    """
+
+    service, gcs_store, downloaded_paths = await _gcs_tabular_setup(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        monkeypatch=monkeypatch,
+        documents=[("doc-sales", "sales.csv", "city,amount\nParis,10\nLyon,20\n")],
+    )
+    monkeypatch.setattr(gcs_store, "get_presigned_url_internal", lambda *args, **kwargs: pytest.fail("GCS tabular reads must not mint signed URLs"))
+
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    response = await service.query_read(
+        _user(),
+        request=TabularQueryRequest(sql=f"SELECT city, amount FROM {alias} ORDER BY amount DESC"),
+    )
+
+    assert [row["city"] for row in response.rows] == ["Lyon", "Paris"]
+    assert downloaded_paths, "expected the artifact to be downloaded from GCS"
+
+    frame = await service.read_dataset_preview_frame(_user(), "doc-sales", max_rows=1)
+    assert len(frame) == 1
+
+    # Job-scoped cleanup: every materialized file and its temp directory are
+    # gone once their job returned.
+    assert all(not path.exists() for path in downloaded_paths)
+    assert all(not path.parent.exists() for path in downloaded_paths)
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_gcs_disk_budget_refuses_before_downloading(tmp_path, metadata_store, monkeypatch):
+    """
+    One query may not fill the pod's ephemeral storage (#2364).
+
+    Why this exists:
+    - GCS materialization writes to pod-local disk, where DuckDB spilling is
+      already deliberately disabled to protect ephemeral storage. An artifact
+      whose declared ingestion size busts the budget must be refused as a
+      caller error (400) BEFORE any byte is written — otherwise one oversized
+      artifact could fill the disk mid-download.
+    """
+
+    service, _gcs_store, downloaded_paths = await _gcs_tabular_setup(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        monkeypatch=monkeypatch,
+        documents=[("doc-sales", "sales.csv", "city,amount\nParis,10\nLyon,20\n")],
+    )
+    monkeypatch.setattr(service.tabular_config.query, "max_local_artifact_bytes", 1)
+
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    with pytest.raises(TabularQueryError, match="local storage budget"):
+        await service.query_read(
+            _user(),
+            request=TabularQueryRequest(sql=f"SELECT city FROM {alias}"),
+        )
+
+    assert not downloaded_paths, "the declared-size precheck must refuse the artifact before downloading it"
+
+
+def test_job_disk_budget_charges_actual_bytes_when_no_size_declared():
+    """Legacy artifacts (declared size 0) skip the precheck but are still charged."""
+    from knowledge_flow_backend.features.tabular.service import _JobDiskBudget
+
+    budget = _JobDiskBudget(limit_bytes=10)
+    budget.precheck(0)
+    budget.charge(8)
+    with pytest.raises(TabularQueryError, match="local storage budget"):
+        budget.charge(8)
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_gcs_missing_artifact_does_not_leak_object_key(tmp_path, metadata_store, monkeypatch):
+    """
+    A missing GCS artifact surfaces without the internal object key (#2364).
+
+    Why this exists:
+    - Tabular controllers put `str(e)` in the 404 detail, and
+      `_dataset_to_response` deliberately never exposes the content-store key;
+      the download path must not leak it either.
+    """
+
+    service, gcs_store, _downloaded_paths = await _gcs_tabular_setup(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        monkeypatch=monkeypatch,
+        documents=[("doc-sales", "sales.csv", "city,amount\nParis,10\n")],
+    )
+    gcs_store._fake_objects.clear()
+
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    with pytest.raises(FileNotFoundError, match="was not found in content storage") as exc_info:
+        await service.query_read(
+            _user(),
+            request=TabularQueryRequest(sql=f"SELECT city FROM {alias}"),
+        )
+
+    assert "tabular/datasets" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_gcs_download_errors_are_redacted(tmp_path, metadata_store, monkeypatch):
+    """
+    Google client errors must not leak the raw GCS REST URL to callers (#2364).
+
+    Why this exists:
+    - `str()` of google exceptions embeds the full object URL (bucket + key);
+      the controller's catch-all returns `str(e)` as the 500 detail, so the
+      materializer must re-raise them redacted, exactly as the httpfs path
+      redacts signed URLs.
+    """
+    from google.api_core.exceptions import Forbidden
+
+    from knowledge_flow_backend.features.tabular.service import TabularDatasetReadError
+
+    service, gcs_store, _downloaded_paths = await _gcs_tabular_setup(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        monkeypatch=monkeypatch,
+        documents=[("doc-sales", "sales.csv", "city,amount\nParis,10\n")],
+    )
+
+    def _forbidden(key, destination, **kwargs):
+        raise Forbidden("403 GET https://storage.googleapis.com/download/storage/v1/b/kf-objects/o/tabular%2Fdatasets%2Fdoc%2Frev%2Fdata.parquet?alt=media: denied")
+
+    monkeypatch.setattr(gcs_store, "download_object_to_path", _forbidden)
+
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    with pytest.raises(TabularDatasetReadError) as exc_info:
+        await service.query_read(
+            _user(),
+            request=TabularQueryRequest(sql=f"SELECT city FROM {alias}"),
+        )
+
+    assert "<redacted-signed-url>" in str(exc_info.value)
+    assert "storage.googleapis.com" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_gcs_search_downloads_lazily_until_match_cap(tmp_path, metadata_store, monkeypatch):
+    """
+    `search_values` must not download datasets its early break never scans (#2364).
+
+    Why this exists:
+    - The scan loop stops at `max_matching_tables`; with eager mounting every
+      selected dataset would be fully downloaded (and charged against the disk
+      budget) even when never opened.
+    """
+    from knowledge_flow_backend.features.tabular.structures import TabularSearchRequest
+
+    service, _gcs_store, downloaded_paths = await _gcs_tabular_setup(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        monkeypatch=monkeypatch,
+        documents=[
+            ("doc-a", "a.csv", "city,amount\nParis,10\n"),
+            ("doc-b", "b.csv", "city,amount\nParis,20\n"),
+        ],
+    )
+
+    response = await service.search_values(
+        _user(),
+        request=TabularSearchRequest(keyword="Paris", max_matching_tables=1),
+    )
+
+    assert len(response.matches) == 1
+    assert response.tables_truncated is True
+    assert len(downloaded_paths) == 1, "the second dataset must not be downloaded once the match cap is reached"
 
 
 @pytest.mark.asyncio
@@ -1235,9 +1501,9 @@ async def test_query_mounts_only_the_datasets_the_sql_references(tmp_path):
     mounted: list[list[str]] = []
     original_mount = service._mount_datasets
 
-    def _record(*, connection, datasets, handle):
+    def _record(*, connection, datasets, handle, resolve_location):
         mounted.append([dataset.query_alias for dataset in datasets])
-        return original_mount(connection=connection, datasets=datasets, handle=handle)
+        return original_mount(connection=connection, datasets=datasets, handle=handle, resolve_location=resolve_location)
 
     service._mount_datasets = _record
 

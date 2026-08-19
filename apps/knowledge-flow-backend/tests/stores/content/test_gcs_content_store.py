@@ -68,7 +68,15 @@ class _FakeBlob:
             return data
         return data[start : (end + 1) if end is not None else None]
 
-    def download_to_filename(self, path):
+    def download_to_filename(self, path, timeout=None):
+        from google.cloud.exceptions import NotFound
+
+        del timeout
+        if self.name not in self._bucket:
+            # Mirror the real client: the file is created (then truncated) before
+            # the request fails, so the store must clean up the empty leftover.
+            open(path, "wb").close()
+            raise NotFound(self.name)
         with open(path, "wb") as f:
             f.write(self._bucket[self.name][0])
 
@@ -192,6 +200,26 @@ def test_missing_object_raises(gcs_store):
         gcs_store.delete_object("nope")
 
 
+def test_download_object_to_path_roundtrip(gcs_store, tmp_path):
+    """Tabular reads download artifacts via ADC instead of signed URLs (#2364)."""
+    gcs_store.put_object("tabular/datasets/d/r/data.parquet", BytesIO(b"PARQUET"), content_type="application/vnd.apache.parquet")
+
+    destination = tmp_path / "data.parquet"
+    gcs_store.download_object_to_path("tabular/datasets/d/r/data.parquet", destination)
+
+    assert destination.read_bytes() == b"PARQUET"
+
+
+def test_download_object_to_path_missing_raises_and_leaves_no_file(gcs_store, tmp_path):
+    """A missing object maps to FileNotFoundError without a truncated leftover file."""
+    destination = tmp_path / "data.parquet"
+
+    with pytest.raises(FileNotFoundError, match="nope"):
+        gcs_store.download_object_to_path("nope", destination)
+
+    assert not destination.exists()
+
+
 def test_clear_empties_both_buckets(gcs_store, tmp_path):
     gcs_store.save_input("doc1", _make_doc(tmp_path) / "input")
     gcs_store.put_object("k", BytesIO(b"x"), content_type="text/plain")
@@ -292,11 +320,17 @@ def test_get_presigned_url_internal_mints_v4_signed_url(monkeypatch):
 
 
 def test_get_presigned_url_internal_requires_signing_email(monkeypatch):
-    """Signing without a configured SA email fails clearly (defensive guard)."""
+    """Signing without a configured SA email fails as an unsupported capability.
+
+    NotImplementedError (not RuntimeError) on purpose: since #2364 nothing
+    validates the email at startup, and the base-class contract treats
+    NotImplementedError as "presigned URLs unsupported", letting callers degrade
+    to their explicit unsupported-operation path instead of an opaque 500.
+    """
     captured: dict = {}
     store = _signing_store(monkeypatch, captured, email=None)
 
-    with pytest.raises(RuntimeError, match="signing_service_account_email"):
+    with pytest.raises(NotImplementedError, match="signing_service_account_email"):
         store.get_presigned_url_internal("tabular/datasets/doc/rev/data.parquet")
 
 

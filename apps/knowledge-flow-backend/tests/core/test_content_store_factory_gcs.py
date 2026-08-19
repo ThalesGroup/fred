@@ -12,27 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Factory-level tests for the GCS content store fail-fast guard (FILES-06)."""
+"""Factory-level tests for the GCS content store construction (FILES-06, #2364)."""
 
-import pytest
+from types import SimpleNamespace
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import GcsStorageConfig
 
 
-def test_gcs_content_store_factory_fails_fast_without_signing_email(app_context: ApplicationContext):
-    """A GCS content store without a signing SA email must refuse to build.
+def test_gcs_content_store_factory_builds_without_signing_email(app_context: ApplicationContext, monkeypatch):
+    """A GCS content store must boot without a signing SA email (#2364).
 
     Why this exists:
-    - tabular_store is always configured, so there is no per-feature flag to
-      detect tabular usage; a missing signing email is a deployment error that
-      must surface clearly at startup rather than as an opaque later failure.
+    - Tabular Parquet reads download artifacts through the ADC client instead
+      of minting V4 signed URLs, so deployments that cannot grant
+      iam.serviceAccounts.signBlob (tp-s3ns) must start normally with the
+      email unset. The old fail-fast guard would have blocked exactly them.
     """
+    from knowledge_flow_backend.core.stores.content import gcs_content_store
+
+    monkeypatch.setattr(gcs_content_store, "build_gcs_client", lambda project_id=None: SimpleNamespace(bucket=lambda name: None))
     config = app_context.get_config()
     config.content_storage = GcsStorageConfig(type="gcs", bucket_name="fred")
 
-    with pytest.raises(ValueError, match="signing_service_account_email"):
-        app_context.get_content_store()
+    store = app_context.get_content_store()
+
+    assert store.signing_service_account_email is None
 
 
 def test_get_content_store_builds_once_and_reuses_the_instance(app_context: ApplicationContext):
