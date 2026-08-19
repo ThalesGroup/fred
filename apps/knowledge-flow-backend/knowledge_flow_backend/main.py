@@ -132,9 +132,15 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        import fred_core.tasks.orm_models  # noqa: F401 — registers ORM models with CoreBase
         from fred_core.models.base import Base as CoreBase
 
+        # #2170: the task tables are no longer among these. They are
+        # `kf_task_run`/`kf_task_event_log` on knowledge-flow's own `Base`, created
+        # by Alembic (`c8f2d5b13ea6`) and by nothing else — so the registration
+        # import that used to sit here would now be a no-op.
+        # This unfiltered `create_all` over the *shared* CoreBase is itself the
+        # defect tracked in #2313, consolidated into #2314; removing it is that
+        # issue's acceptance criterion, deliberately not bundled here.
         async with application_context.get_pg_async_engine().begin() as conn:
             await conn.run_sync(CoreBase.metadata.create_all)
 

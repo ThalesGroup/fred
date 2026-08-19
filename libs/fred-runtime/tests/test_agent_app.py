@@ -4961,7 +4961,6 @@ def test_build_capability_block_ignores_stale_selection_for_capability_unsupport
         EmptyModel,
         HitlSpec,
     )
-    from fred_sdk.contracts.context import BoundRuntimeContext
     from fred_sdk.contracts.models import (
         AgentTuning,
         GraphAgentDefinition,

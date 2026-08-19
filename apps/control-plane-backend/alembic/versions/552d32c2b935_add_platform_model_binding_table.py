@@ -29,7 +29,7 @@ No natural "off" sentinel for a `(provider, name)` pair, unlike
 and no default row is written here.
 
 Revision ID: 552d32c2b935
-Revises: 7fde1b42d5d0
+Revises: b4d5e6f7a8c9
 Create Date: 2026-08-14 07:37:46.474847
 
 """
@@ -42,7 +42,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "552d32c2b935"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "7fde1b42d5d0"  # pragma: allowlist secret
+    "b4d5e6f7a8c9"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

@@ -29,7 +29,7 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Tooltip } from "./Tooltip";
 
 let container: HTMLDivElement;
@@ -156,5 +156,192 @@ describe("Tooltip", () => {
       trigger.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
     });
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
+
+  // Regression (#2384): a rich content panel opening BELOW its trigger used to
+  // be placed at `trigger.bottom + gap` with no lower bound, so a trigger near
+  // the top of the page — which has no room above either — rendered the panel
+  // past the viewport's bottom edge, its internal scrollbar out of reach.
+  it("keeps a panel that opens below fully inside the viewport", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>A long failure detail</div>}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    // The WRAPPER span is what Tooltip measures, not the child.
+    const wrapper = container.firstElementChild as HTMLElement;
+    // No room above for a 300px panel, and not enough left below it either —
+    // the squeeze a trigger high on a long page lands in.
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 130, bottom: 150, left: 40, right: 100, width: 60, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 300 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // Unclamped this would sit at 154, putting its bottom edge at 454 in a
+    // 400px viewport.
+    expect(parseFloat(panel.style.top)).toBeLessThanOrEqual(400 - 4 - 300);
+    expect(parseFloat(panel.style.top)).toBeGreaterThanOrEqual(4);
+  });
+
+  it("stays open while the pointer moves into an interactive panel", () => {
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        root.render(
+          <Tooltip interactive content={<button>Copy</button>}>
+            <button>Trigger</button>
+          </Tooltip>,
+        );
+      });
+      const trigger = container.querySelector("button") as HTMLButtonElement;
+      act(() => {
+        trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      });
+      const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+      expect(panel).not.toBeNull();
+
+      // Leaving the trigger *for the panel* must not dismiss it — otherwise the
+      // copy button inside could never be reached, which is the whole point of
+      // the interactive mode.
+      act(() => {
+        trigger.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: panel }));
+        panel.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+        vi.advanceTimersByTime(1000);
+      });
+      expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+
+      // Leaving the panel itself does close it, after the grace delay.
+      act(() => {
+        panel.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+        vi.advanceTimersByTime(1000);
+      });
+      expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still dismisses immediately when it is not interactive", () => {
+    // The default stays a plain hint: no lingering, no swallowed clicks.
+    const trigger = renderTooltip();
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
+
+  it("caps a panel taller than the screen instead of letting it spill", () => {
+    // Clamping `top` cannot save a panel bigger than the viewport — it would
+    // spill past whichever edge it was pushed toward. The cap is what makes the
+    // clamp always solvable.
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 300, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Very long detail</div>}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 200, bottom: 220, left: 150, right: 200, width: 50, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 900, height: 900 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    expect(parseFloat(panel.style.maxHeight)).toBe(400 - 8);
+    expect(parseFloat(panel.style.maxWidth)).toBe(300 - 8);
+    // A panel as wide as the viewport can only sit at the margin.
+    expect(parseFloat(panel.style.left)).toBe(4);
+  });
+
+  it("anchors by the top edge even when opening above, so a bad measurement cannot clip it", () => {
+    // Regression (#2384, found live): the panel used to be placed by its BOTTOM
+    // edge via translateY(-100%). A height measured smaller than what finally
+    // rendered then grew the panel upward, past the top of the window, with its
+    // title and first lines unreachable. Anchoring the top makes `top >= margin`
+    // structural rather than a consequence of measuring correctly.
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    // Room above for a 300px panel, so it opens upward.
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 350, bottom: 370, left: 400, right: 460, width: 60, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 300 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // Both coordinates are the panel's own edges: no transform to reason about.
+    expect(parseFloat(panel.style.top)).toBe(46);
+    expect(panel.style.transform).toBe("");
+    // Left-aligned with the trigger, so the panel visibly comes from it.
+    expect(parseFloat(panel.style.left)).toBe(400);
+  });
+
+  it("keeps a panel too tall to sit above fully on screen", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 350, bottom: 370, left: 400, right: 460, width: 60, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 380 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    const top = parseFloat(panel.style.top);
+    expect(top).toBeGreaterThanOrEqual(4);
+    expect(top + 380).toBeLessThanOrEqual(400 - 4);
   });
 });

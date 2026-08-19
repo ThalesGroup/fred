@@ -46,10 +46,14 @@ _INDEX_NAME = "uq_task_run_single_active_migration"
 _WHERE_CLAUSE = "kind = 'migration' AND state NOT IN ('succeeded', 'failed', 'cancelled')"
 
 
+def _task_run_exists() -> bool:
+    return "task_run" in sa.inspect(op.get_bind()).get_table_names()
+
+
 def _task_run_indexes() -> set[str]:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
-    if "task_run" not in inspector.get_table_names():
+    if not _task_run_exists():
         return {_INDEX_NAME}
     return {ix["name"] for ix in inspector.get_indexes("task_run") if ix["name"] is not None}
 
@@ -67,6 +71,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
-    if _INDEX_NAME in _task_run_indexes():
+    """Downgrade schema.
+
+    `_task_run_indexes`'s "table absent → treat as present" sentinel is written
+    for `upgrade` (skip the create). Downgrade needs the opposite reading: since
+    #2170 split the task tables per backend, the shared `task_run` is genuinely
+    gone by the time this unwinds, and DROP INDEX would fail on a missing table.
+    """
+    if _task_run_exists() and _INDEX_NAME in _task_run_indexes():
         op.drop_index(_INDEX_NAME, table_name="task_run")

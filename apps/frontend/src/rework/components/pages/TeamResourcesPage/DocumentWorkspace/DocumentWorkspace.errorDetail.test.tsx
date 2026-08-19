@@ -59,6 +59,9 @@ const readyDoc = {
 };
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  // The rollup reads the team's terminal ingestion history (#2384); no
+  // history in these fixtures, so it falls back to the live task feed.
+  useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
     isLoading: false,
@@ -103,7 +106,10 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({ InlineDrawer: () => null }));
+// The shared clipboard write every copy site in the app routes through (#2366).
+vi.mock("../../../../utils/clipboardUtils", () => ({ writeRichClipboard: vi.fn(async () => true) }));
 
+import { writeRichClipboard } from "../../../../utils/clipboardUtils";
 import DocumentWorkspace from "./DocumentWorkspace";
 
 let container: HTMLDivElement;
@@ -148,22 +154,45 @@ function openMenu(button: HTMLButtonElement): Element[] {
   ];
 }
 
+/** Hovers the failed chip and leaves its interactive panel open. */
+function openDetail(): void {
+  // The chip also carries its Icon's ligature text, so match on the class.
+  const chip = [...container.querySelectorAll('[class*="chip"]')].find((el) =>
+    el.textContent?.includes("rework.resources.status.failed"),
+  );
+  if (!chip) throw new Error("failed chip not rendered");
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+}
+
 describe("DocumentWorkspace — ingestion error detail on the status chip", () => {
   it("shows each failed stage and its message when hovering the failed chip", () => {
-    const chip = [...container.querySelectorAll("span")].find((el) =>
-      el.textContent?.includes("rework.resources.status.failed"),
-    );
-    expect(chip).toBeTruthy();
+    openDetail();
+    const panel = document.querySelector('[role="tooltip"]');
+    expect(panel).not.toBeNull();
+    expect(panel!.textContent).toContain("preview");
+    expect(panel!.textContent).toContain("Execution timed_out");
+  });
 
-    // React derives onMouseEnter from the bubbling `mouseover` (see Tooltip.test).
-    act(() => {
-      chip!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  it("copies the whole per-stage detail as text", async () => {
+    // The panel is interactive (Tooltip's `interactive` mode), so the pointer
+    // can reach the copy button instead of the panel vanishing on the way.
+    const written: string[] = [];
+    vi.mocked(writeRichClipboard).mockImplementation(async (_html: string, text: string) => {
+      written.push(text);
+      return true;
+    });
+    openDetail();
+    const copyButton = document.querySelector('[role="tooltip"] button');
+    if (!copyButton) throw new Error("copy button not rendered");
+    await act(async () => {
+      copyButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    const tooltip = document.querySelector('[role="tooltip"]');
-    expect(tooltip).not.toBeNull();
-    expect(tooltip!.textContent).toContain("preview");
-    expect(tooltip!.textContent).toContain("Execution timed_out");
+    expect(written).toHaveLength(1);
+    expect(written[0]).toContain("preview");
+    expect(written[0]).toContain("Execution timed_out");
   });
 
   it("no longer offers an 'Error details' entry in the failed document's row menu", () => {

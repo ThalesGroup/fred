@@ -64,6 +64,9 @@ const refetchLabels = vi.fn();
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListDocumentLabelsQuery: () => ({ data: vocabulary, refetch: refetchLabels }),
+  // The rollup reads the team's terminal ingestion history (#2384); no
+  // history in these fixtures, so it falls back to the live task feed.
+  useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
     isLoading: false,

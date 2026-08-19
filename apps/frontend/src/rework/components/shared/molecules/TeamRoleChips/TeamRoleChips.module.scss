@@ -7,15 +7,13 @@
   gap: var(--spacing-xs);
 }
 
-.roleChip {
+// The pill the baseline badge and the role toggles both wear. They sit side by
+// side in one row and are meant to look like one set, so the whole resting
+// appearance lives here — retuning it in `.roleChip` alone would desync them.
+%pill {
   display: flex;
   justify-content: center;
   align-items: center;
-  transition:
-    background 100ms ease,
-    border-color 100ms ease,
-    color 100ms ease;
-  cursor: pointer;
   border: 1px solid var(--outline);
   border-radius: 999px;
   background: transparent;
@@ -24,8 +22,35 @@
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
   white-space: nowrap;
+}
 
-  &:hover:not([data-active="true"]):not(:disabled) {
+// The implicit `team_member` baseline. Filled, so it reads as on — but tonal
+// `secondary-container` rather than the toggles' `--primary`, because in this
+// row `--primary` means "someone granted this, and someone can revoke it".
+// Member is neither granted nor revocable: it is simply always true, the floor
+// every team member stands on. The same tonal pairing already marks
+// non-interactive identity elsewhere in the app (`UserAvatar`,
+// `MessageBubble`, the agent-card icon). The border stays 1px and transparent
+// so the pill matches the toggles' geometry exactly.
+.baselineChip {
+  @extend %pill;
+
+  cursor: default;
+  border-color: transparent;
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.roleChip {
+  @extend %pill;
+
+  transition:
+    background 100ms ease,
+    border-color 100ms ease,
+    color 100ms ease;
+  cursor: pointer;
+
+  &:hover:not([data-active="true"]):not([aria-disabled="true"]) {
     border-color: var(--outline);
     background: var(--surface-container-high);
     color: var(--on-surface);
@@ -37,15 +62,54 @@
     color: var(--on-primary);
   }
 
-  &:disabled {
+  // Keyed off `aria-disabled`, not `:disabled` — the chip stays a focusable,
+  // hoverable button on purpose so its tooltip still explains the role to
+  // someone who cannot grant it (TeamRoleChips.tsx). Inertness is enforced in
+  // the click handler, so this rule only has to say "not actionable".
+  &[aria-disabled="true"] {
     cursor: default;
     border-color: var(--outline-variant);
     color: var(--state-text-disabled);
   }
 
-  &[data-active="true"]:disabled {
+  &[data-active="true"][aria-disabled="true"] {
     border-color: var(--outline-variant);
     background: var(--state-on-surface-disabled);
     color: var(--state-text-disabled);
   }
+}
+
+// `.tooltip-content-rich` zeroes the atom's own padding and hands spacing to
+// the content, so this panel owns both. Width is capped because these are
+// prose sentences, not the short label/value rows the atom's nowrap default
+// was sized for.
+.roleTooltip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 22rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.roleTooltipTitle {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.roleTooltipText {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.roleTooltipWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+  margin-top: var(--spacing-2xs);
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-xs);
+  color: var(--warning);
+  font: var(--font-body-small);
 }

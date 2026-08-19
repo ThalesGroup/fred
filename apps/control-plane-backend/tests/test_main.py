@@ -8841,6 +8841,8 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     """CTRLP-12: a deferred delete creates a future-dated `erasure` task, so a
     platform/team admin sees the scheduled erasure — with its due date, target and
     team — immediately via GET /tasks, before any worker runs."""
+    from control_plane_backend.models.base import Base as CPBase
+    from control_plane_backend.models.task_models import TASK_TABLES
     from control_plane_backend.product.service import delete_or_defer_session
     from fred_core.common import PostgresStoreConfig
     from fred_core.models.base import Base as CoreBase
@@ -8855,8 +8857,11 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     )
     async with engine.begin() as conn:
         await conn.run_sync(CoreBase.metadata.create_all)
+        await conn.run_sync(CPBase.metadata.create_all)
     task_service = TaskService(
-        store=TaskStore(engine), bus=MemoryEventBus(), control=NoopWorkflowControl()
+        store=TaskStore(engine, TASK_TABLES),
+        bus=MemoryEventBus(),
+        control=NoopWorkflowControl(),
     )
 
     session_store = _FakeSessionMetadataStore(

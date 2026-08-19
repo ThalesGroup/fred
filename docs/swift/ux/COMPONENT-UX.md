@@ -1664,7 +1664,43 @@ closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
 text, default (inactive) border `1px solid outline` — was `0.5px
 outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
-`spacing-xs`/`8px`).
+`spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
+`@extend`ed by both the toggles and the baseline badge below, so the two
+cannot drift apart in the same row.
+
+**`TeamRoleChips`: a static `Member` badge and a description tooltip on
+every badge** (2026-08-17, #2383). Two complaints from team admins, one
+fix. (1) A member holding no elevated role rendered as three *inactive*
+pills — visually indistinguishable from a row that hadn't loaded. A
+non-interactive `Member` badge now closes the row, after the three toggles,
+always visible. It shares the toggles' pill geometry (a `%pill` placeholder
+both `@extend`, so height/padding cannot desync mid-row) but carries its own
+fill: tonal `secondary-container` / `on-secondary-container`, with a
+transparent 1px border to keep the geometry identical. Deliberately *not*
+the toggles' `--primary` fill — in this row `--primary` reads as "someone
+granted this and someone can revoke it", whereas `team_member` is neither
+granted nor revocable, just always true. The same tonal pairing already
+marks non-interactive identity in `UserAvatar`, `MessageBubble`, and the
+agent-card icon. What the badge lacks is affordance, not presence: `cursor:
+default`, `role="note"`, no hover state, no `aria-pressed`, no click
+handler. It is deliberately not a fourth toggle —
+`team_member` is the implicit baseline (automatic for anyone holding an
+elevated role, granted directly to anyone holding none) and the API refuses
+to revoke a member's last relation, so a toggle would promise an action
+that cannot happen. (2) The role names carried no meaning on the page: all
+four badges now open a rich `Tooltip` (title + one-line description), copy
+condensed from the help centre's `features/roles.md` tables so the two
+surfaces agree. The Analyst panel alone carries a `--warning` footer row —
+it grants evaluation-campaign execution *and* the limited conversation
+slices those datasets are built from, which a flat pill row hinted at
+nowhere.
+
+A chip the actor may not administer switched from `disabled` to
+`aria-disabled` + a guard in the click handler. The visual state is
+unchanged (`[aria-disabled="true"]` replaces `:disabled` in the SCSS), but
+a `disabled` button leaves the tab order and fires no pointer events, so it
+would have been the one badge unable to explain itself — to exactly the
+reader who cannot act on the role and most needs to know what it is.
 
 **Members table: role chips are a live, single-click toggle in both
 directions.** `TeamRoleChips` renders identically here and in the
@@ -2790,6 +2826,185 @@ excess) and disables Save until the file list changes. This replaced the
 client-side team-only quota math; the check is advisory (upload endpoints
 still re-check received sizes), so a precheck transport error falls through
 to the save rather than blocking it.
+
+### `DocumentWorkspace` — folder rows roll up their subtree's ingestion state (#2384, 2026-08-17)
+
+A folder row now summarizes everything under it — its own documents and every
+sub-folder's, at any depth — in the status column that used to be blank on
+folder rows. Three states, in strict precedence:
+
+| State | Chip | Lifetime |
+| --- | --- | --- |
+| something still ingesting | `StatusChip status="processing"` | until the last child settles |
+| some documents failed | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent |
+| something under it finished this session | `status="ready" justCompleted` ("Done") | session-only |
+
+`raw` is never rolled up: a folder of stored-but-unprocessed documents is a
+steady state, not news. Precedence is processing > failures > done — while
+anything runs the folder is not settled, and once it is, an unresolved failure
+outranks a "your upload landed" marker.
+
+"Done" means *something* under the folder finished this session and nothing
+under it is still running or failed — not that every document it holds has been
+processed. The stricter reading would never fire on a folder of long-stored
+documents, and the mark exists to answer "did what I just started land?". It is
+therefore normal for a folder holding fifty old documents to read "Done" after
+one upload into it, until the next refresh.
+
+Only the LAST terminal task per document counts. A document uid is derived from
+its content, so re-uploading a file that failed produces a second task for the
+same uid, and nothing removes the first (see the eviction note below) — reading
+every task equally left a folder flagged with a failure the user had already
+fixed, for the rest of the session, with no way to clear it. `cancelled` counts
+as neither outcome: stopping an ingestion on purpose is not an error to chase.
+
+Why the folder chip and not the document rows alone: from the top of the tree
+the only way to tell whether a bulk upload had landed was to walk into each
+sub-folder and read the rows one by one. That is also why failures are **named**
+rather than only counted — hovering answers "which files do I go and look at?",
+which a count cannot. The names cost nothing: `TaskTarget.label` for a session
+failure (so a never-opened sub-folder is still nameable) and
+`identity.document_name` for anything a loaded page covers.
+
+The `warning` status is `StatusChip`'s alone, never `DocStatus`'s — no document
+is ever "warning", and widening the shared type would push a meaningless case
+onto every `DocStatusBadge` consumer. It uses the warning palette, not the error
+one: the folder itself is not broken, and a red folder standing over a subtree
+reads as a bigger problem than it is. It shares those colors with `pending`, so
+the static warning triangle (against pending's breathing `sync`) is the
+differentiator.
+
+No new endpoint, no new backend status, no persisted field — two in-memory
+source families are unioned, because neither subsumes the other:
+
+- the **already-loaded pages** (`perTag`), read per tag id. Survives a page
+  reload, and is the only source that sees what the browse snapshot knows and
+  the task feed cannot: a teammate's ingestion, or a document a dead worker left
+  `in_progress`/failed (#2279). Only reaches folders visited this session — but
+  without it a folder could read "settled" while a row inside it visibly spins,
+  the exact confusion the feature removes.
+- the **SSE task feed** the document badge already reads (#2315), matched
+  against the tag tree's `item_ids` via `collectDescendantDocUids`. Reaches
+  folders that were never opened, live over SSE, but is memory-only and
+  `scope=user`.
+- the **team's ingestion history**, ONE unfiltered
+  `GET /tasks?scope=team&kind=ingestion`. The Redux store is memory-only, and at
+  the Corpus root no child page is loaded either, so without this the whole tree
+  went blank on every reload and only lit up once the user opened a folder.
+  `exclude_terminal` only defaults to hiding terminal tasks on the `scope=user`
+  branch (authz.py); a team-scoped query returns every state, so **filtering by
+  state would cost extra round-trips and drop data** — `cancelled` tasks, needed
+  to clear a failure whose retry the user stopped, and teammates' in-flight runs.
+  Team scope also surfaces a **teammate's** failure, which a user-scoped feed can
+  never see. `can_read_members` is granted to `team_member`, which every team
+  role inherits, so this is not admin-only: a member who cannot ingest at all
+  sees the failures other people's uploads produced, and for them it is the only
+  feed that ever reports anything.
+
+A personal space cannot use team scope — personal uploads deliberately leave the
+task's `team_id` NULL (`ingestion_controller.py`), so the query would come back
+empty. It asks `scope=user` instead, which filters by creator rather than by
+space; the caveat only bites if the same file was ingested into both a team and
+a personal space, since uids are content-derived.
+
+Only the LAST terminal outcome per document counts (`resolveDocOutcomes`), and
+it governs **both** failure sources — a `succeeded` or `cancelled` outcome
+clears a failure the loaded-page snapshot still reports, not just one the task
+feed reported. Ranking is per clock domain and the two are never compared: the
+history carries the server's `updated_at`, the Redux store the browser's
+`Date.now()`, and a laptop minutes behind the server would otherwise leave a
+just-repaired document flagged. A live entry wins outright, which is correct by
+construction since it was observed after the page and its history loaded. An
+unrankable timestamp sorts last rather than pinning whichever entry arrived
+first.
+
+The history feeds that ranking **only**. It is deliberately kept out of
+`justCompletedDocUids`: folding it in would count every document the team has
+ever ingested, turning the transient "your upload landed" cue into a permanent
+green tick on every ready row and every folder. Completion therefore stays read
+from the Redux store alone — session-only, expiring for free on refresh — while
+a failure persists, because it still needs someone to act on it.
+
+The derivation itself is pure and lives in `folderRollups.ts` beside
+`deriveDocStatus.ts`, not inline in the workspace: it is directly unit-testable
+(clock skew, unrankable timestamps, cross-source dedup) without rendering
+anything, and reusable by any other tag-tree view. `deriveDocStatus` stays the
+single owner of the "which stages mean failed" rule — the rollup calls it rather
+than re-deriving stages, so a folder chip can never disagree with the rows it
+summarizes.
+
+The rollup is an inverted index, not a walk: `folderByDocUid` maps every
+document uid to the visible child folder it sits under, built once per tag tree
+(subtrees are disjoint — a document is tagged into exactly one folder), and each
+rollup is then O(tasks in flight) lookups against it. Walking each subtree per
+recompute instead would re-read the team's whole corpus at the Corpus root,
+every page load and every 3s poll tick during an ingestion.
+
+The live inputs are read through stable sorted string keys, never their own
+identities: the task store is a fresh object on every SSE progress event, and
+depending on it directly recomputes on each one — the same trap `pendingTagKey`
+avoids for the 3s poll. Keys join on NUL (`KEY_SEP`), not a comma, so two
+different id sets cannot collide onto one key: a document uid is not always a
+uuid (scheduler pulls build `pull-{source_tag}-{hash}` from a configurable tag).
+They are compared, never split back apart. The failure key carries the names
+too, not just the uids — `taskEventReceived` rewrites `target` on any event that
+carries one, so a label refined after the failure was first recorded must still
+reach the tooltip.
+
+Known scope, all of it inherent to deriving this client-side rather than from a
+server-side per-tag counter:
+
+- the history query carries no server-side LIMIT, so it returns the team's whole
+  ingestion history (narrowed to `kind=ingestion`), and this API slice is
+  configured `keepUnusedDataFor: 0` + `refetchOnMountOrArgChange: true`, so it is
+  re-fetched on every mount of the workspace rather than cached across them.
+  Bounding it server-side is a small follow-up if a large team feels it;
+- the snapshot half of the failure count only sees the loaded page
+  (`rowsPerPage`, 50 by default), so a visited folder holding 200 documents of
+  which 60 failed can report fewer than 60, and the number moves as the user
+  pages. The session half is uncapped, so the case this feature was built for —
+  "I just uploaded, what broke?" — is counted in full;
+- a document stuck `in_progress` (dead worker, #2279) pins its folder to
+  "processing" for as long as the snapshot says so, and because processing wins
+  the precedence, real failures under that folder stay hidden behind the
+  spinner. That is the same stuck state the document's own row shows; fixing it
+  belongs to #2279, not here;
+- `item_ids` is a snapshot refreshed on tag refetch, so on the very first file
+  of a batch the chip can appear a beat late, then self-corrects.
+
+The chip is advisory throughout — not a count the user acts on directly, unlike
+the folder-deletion count which had to move to live totals (#2173).
+
+Both failure panels — the folder rollup's file list and a document's per-stage
+errors — are **interactive** hover panels: the pointer can move into them,
+select the text, and hit a copy button. That is `Tooltip`'s new `interactive`
+mode rather than a bespoke popover, so every other hover panel in the app can
+opt into the same affordance. The clipboard write goes through
+`writeRichClipboard` and the receipt through `useCopyConfirmation`, the two
+mechanisms every copy site already shares (#2366, #2359).
+
+The rendered list names the first 10 failures and summarizes the rest ("and 12
+more"), but **copy always writes the full list** — copying is exactly when the
+whole thing is wanted.
+
+A document's panel also carries the message the ingestion **task** reported,
+under "Signalé par le traitement", alongside the per-stage `processing.errors`.
+A run killed before any pipeline stage started (worker saturation, a Temporal
+`TIMED_OUT` verdict) stamps nothing per stage, so the tab used to show "Erreur"
+with an empty panel while the message sat on the task — visible only in the task
+popover, which is not mounted for most users. The parent workflow already pulls
+it out of the Temporal child job (`_wf_file_terminal_event_args`, #2315) and the
+rollup already fetches it with the task history, so this is a wiring change, not
+a new source. It is skipped when a stage message already says the same thing.
+
+One coupling worth knowing: terminal tasks are never evicted today because
+`taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
+from the app. If the tray is remounted, `EVICTION_DELAY_MS` (5 min) starts
+applying and both the session "done" mark and any task-sourced failure would
+begin disappearing on that timer. The snapshot-sourced half is unaffected.
+
+`countUniqueDocs` was deleted in the same change: it had lost its last caller in
+#2173 and its DFS is now `collectDescendantDocUids`.
 
 ### `DocumentWorkspace` — embedded-title hint on the Name column
 

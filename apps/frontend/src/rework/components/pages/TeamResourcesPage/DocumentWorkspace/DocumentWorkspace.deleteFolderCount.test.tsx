@@ -54,6 +54,9 @@ const browseDocumentsByTag = vi.fn((arg: { browseDocumentsByTagRequest: { tag_id
 const showConfirmationDialog = vi.fn();
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  // The rollup reads the team's terminal ingestion history (#2384); no
+  // history in these fixtures, so it falls back to the live task feed.
+  useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     data: [
       // Four ids the workspace was told about at upload time; three of those

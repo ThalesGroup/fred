@@ -39,7 +39,7 @@ from fred_core.tasks.models import (
     TaskTarget,
     needs_attention,
 )
-from fred_core.tasks.orm_models import TaskRunRow
+from fred_core.tasks.orm_models import TaskRunColumns, TaskTables
 from fred_core.tasks.store import TaskNotFoundError, TaskStore
 from fred_core.tasks.workflow_control import (
     ExecutionStatus,
@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # Invoked only on a terminal executor verdict, never when the status is unknown,
 # so the never-false-fail rule in `_reconciled_terminal` extends to whatever the
 # hook writes. Failures inside the hook are swallowed by the caller.
-ReconciledTerminalHook = Callable[["TaskRunRow", TaskState, str], Awaitable[None]]
+ReconciledTerminalHook = Callable[["TaskRunColumns", TaskState, str], Awaitable[None]]
 
 
 def _utcnow() -> datetime:
@@ -93,12 +93,13 @@ class TaskService:
     def build(
         cls,
         engine: AsyncEngine,
+        tables: TaskTables,
         backend: SchedulerBackend,
         temporal_client_provider: TemporalClientProvider | None = None,
         postgres_dsn: str | None = None,
         on_reconciled_terminal: ReconciledTerminalHook | None = None,
     ) -> "TaskService":
-        store = TaskStore(engine)
+        store = TaskStore(engine, tables)
         if backend == SchedulerBackend.TEMPORAL:
             if temporal_client_provider is None:
                 raise ValueError(
@@ -166,7 +167,7 @@ class TaskService:
             acknowledged_by=acknowledged.acknowledged_by,
         )
 
-    async def get_run(self, task_id: str) -> TaskRunRow | None:
+    async def get_run(self, task_id: str) -> TaskRunColumns | None:
         return await self.store.get_run(task_id)
 
     async def replay(self, task_id: str, after_seq: int) -> list[TaskEvent]:
@@ -237,7 +238,7 @@ class TaskService:
         return None
 
     def _build_terminal_event(
-        self, run: TaskRunRow, state: TaskState, message: str
+        self, run: TaskRunColumns, state: TaskState, message: str
     ) -> TaskEvent:
         """Build a terminal event whose ``kind`` MATCHES the run's kind.
 
@@ -312,7 +313,7 @@ class TaskService:
             detail=TaskLogDetail(level=level, message=message),
         )
 
-    def _build_failed_event(self, run: TaskRunRow, message: str) -> TaskEvent:
+    def _build_failed_event(self, run: TaskRunColumns, message: str) -> TaskEvent:
         """Build a ``failed`` terminal event (thin wrapper over the general builder)."""
         return self._build_terminal_event(run, TaskState.failed, message)
 

@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from fred_core.models import Base as CoreBase
+from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.models.task_models import TASK_TABLES
 from fred_core.tasks.models import (
     ErasureDetail,
     IngestionDetail,
@@ -22,12 +23,10 @@ _NOW = datetime(2026, 6, 4, tzinfo=timezone.utc)
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
-    import fred_core.tasks.orm_models  # noqa: F401 — registers ORM models with CoreBase
-
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
+        await conn.run_sync(CPBase.metadata.create_all)
     return engine
 
 
@@ -35,7 +34,7 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
 async def test_task_store_create_and_get_run(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_create.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="t1", kind="ingestion", created_by="user-1")
         row = await store.get_run("t1")
         assert row is not None
@@ -51,7 +50,7 @@ async def test_task_store_create_and_get_run(tmp_path: Path) -> None:
 async def test_task_store_get_run_returns_none_for_missing(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_missing.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         assert await store.get_run("no-such-id") is None
     finally:
         await engine.dispose()
@@ -63,7 +62,7 @@ async def test_task_store_record_event_updates_run_and_appends_log(
 ) -> None:
     engine = await _make_engine(tmp_path, "store_record.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="t2", kind="ingestion", created_by=None)
 
         # seq is a placeholder — store auto-assigns monotonically from run.seq
@@ -92,7 +91,7 @@ async def test_task_store_record_event_updates_run_and_appends_log(
 async def test_task_store_record_event_raises_for_unknown_task(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_unknown.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         event = IngestionTaskEvent(
             task_id="ghost", state=TaskState.running, seq=1, timestamp=_NOW
         )
@@ -106,7 +105,7 @@ async def test_task_store_record_event_raises_for_unknown_task(tmp_path: Path) -
 async def test_task_store_replay_events_returns_ordered_subset(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_replay.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="t3", kind="ingestion", created_by=None)
 
         # All events carry seq=0 (placeholder); store assigns 1, 2, 3 monotonically.
@@ -132,7 +131,7 @@ async def test_task_store_replay_events_returns_ordered_subset(tmp_path: Path) -
 async def test_task_store_list_tasks_filters_by_team_and_state(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_list.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(
             task_id="a1", kind="ingestion", created_by="u1", team_id="team-x"
         )
@@ -168,7 +167,7 @@ async def test_task_store_list_tasks_filters_by_team_and_state(tmp_path: Path) -
 async def test_task_store_replay_preserves_target_and_owner(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_target.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="t4", kind="ingestion", created_by="user-42")
 
         event = IngestionTaskEvent(
@@ -202,7 +201,7 @@ async def test_task_store_list_tasks_projects_typed_migration_detail_with_result
     reload."""
     engine = await _make_engine(tmp_path, "store_migration_detail.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(
             task_id="m1",
             kind="migration",
@@ -253,7 +252,7 @@ async def test_task_store_list_tasks_detail_is_none_for_legacy_task(
     the addition is backward compatible (AUTHZ-07 Step 3)."""
     engine = await _make_engine(tmp_path, "store_legacy_detail.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="legacy1", kind="ingestion", created_by="u1")
         await store.record_event(
             IngestionTaskEvent(
@@ -276,7 +275,7 @@ async def test_task_store_list_tasks_projects_other_kinds_without_regression(
     correctly after the union field was added (AUTHZ-07 Step 3)."""
     engine = await _make_engine(tmp_path, "store_other_kinds_detail.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="i1", kind="ingestion", created_by="u1")
         await store.record_event(
             IngestionTaskEvent(

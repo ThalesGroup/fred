@@ -23,7 +23,6 @@ import pytest
 import pytest_asyncio
 
 from fred_core.common import PostgresStoreConfig
-from fred_core.models.base import Base
 from fred_core.sql import create_async_engine_from_config
 from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import (
@@ -31,7 +30,6 @@ from fred_core.tasks.models import (
     StartIngestionRequest,
     TaskState,
 )
-from fred_core.tasks.orm_models import TaskRunRow
 from fred_core.tasks.service import TaskService
 from fred_core.tasks.sse import task_event_stream
 from fred_core.tasks.store import TaskStore
@@ -40,6 +38,7 @@ from fred_core.tasks.workflow_control import (
     NoopWorkflowControl,
     TemporalWorkflowControl,
 )
+from fred_core.tests.tasks.task_tables import TASK_TABLES, Base, TaskRunRow
 
 _NOW = datetime(2026, 6, 17, tzinfo=timezone.utc)
 
@@ -149,7 +148,7 @@ async def build_service():
             await conn.run_sync(Base.metadata.create_all)
         control = _StubControl(status_by_eid)
         service = TaskService(
-            store=TaskStore(engine),
+            store=TaskStore(engine, TASK_TABLES),
             bus=MemoryEventBus(),
             control=control,
             on_reconciled_terminal=on_reconciled_terminal,

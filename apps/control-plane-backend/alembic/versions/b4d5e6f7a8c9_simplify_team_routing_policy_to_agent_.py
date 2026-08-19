@@ -30,7 +30,7 @@ duplicate `agent_id` (write-time validation already prevented duplicates, so
 this is a no-op in practice).
 
 Revision ID: b4d5e6f7a8c9
-Revises: c9e1f74b2a63
+Revises: b7e1c4a09d52
 Create Date: 2026-08-13 00:00:00.000000
 
 """
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # revision identifiers, used by Alembic.
 revision: str = "b4d5e6f7a8c9"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "c9e1f74b2a63"  # pragma: allowlist secret
+    "b7e1c4a09d52"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

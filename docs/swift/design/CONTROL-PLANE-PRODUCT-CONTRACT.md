@@ -927,10 +927,49 @@ task kinds that support cooperative cancellation.
 
 ### Persistence
 
-Two new tables in `fred_swift` (Alembic-managed, both mandatory):
+**One pair of tables per task-producing backend, prefixed by its owner** (settled
+2026-08-14, issue #2170 — supersedes the "dedicated database per backend" design
+in `TASK-EVENT-STREAM-RFC.md` rev. 4 §2.9, which was confirmed but never built):
 
-- `task_run` — current-state summary (one row per task, updated in place)
-- `task_event_log` — append-only event journal (one row per `TaskEvent`, source of truth for SSE replay)
+| Owner           | Tables                              | Alembic tree           |
+| --------------- | ----------------------------------- | ---------------------- |
+| control-plane   | `cp_task_run`, `cp_task_event_log`  | `alembic_version_control_plane` |
+| knowledge-flow  | `kf_task_run`, `kf_task_event_log`  | `alembic_version_knowledge_flow` |
+| evaluation      | `task_run`, `task_event_log`        | its own database (provisioned 2026-07-07) |
+
+- `<prefix>task_run` — current-state summary (one row per task, updated in place)
+- `<prefix>task_event_log` — append-only event journal (one row per `TaskEvent`, source of truth for SSE replay)
+
+Column definitions live once, in `fred_core.tasks.orm_models`, as declarative
+mixins (`TaskRunColumns` / `TaskEventLogColumns`); each backend declares the
+concrete pair on **its own** `Base` and hands the pair to `TaskStore` /
+`TaskService.build` as a `TaskTables`. fred-core maps nothing itself.
+
+**Why prefixes rather than a database per backend.** control-plane and
+knowledge-flow share the `fred` database, and both mapped the *same* `task_run`
+on the shared `CoreBase`. Nothing scoped either backend's `GET /tasks` to the
+rows it created, so each returned the other's and the Activity page — which
+queries every backend and merges client-side, by design — listed every task
+twice. Distinct names per owner fix that at the schema layer with no new
+infrastructure, no second engine, and no `RemoteTaskClient`-style coupling. They
+also take these two tables out of the shared-`CoreBase` ownership ambiguity of
+issue #2314: each pair now appears in exactly one backend's metadata, which is
+what `make_alembic_env`'s `include_name` filter reads to decide what a tree owns.
+
+Postgres scopes index names per schema, so **every** index and constraint name
+embeds its table name (`ix_cp_task_run_kind`, `uq_kf_task_event_log_task_seq`, …)
+— built by `task_run_table_args` / `task_event_log_table_args`, never hand-written.
+`import_export/api.py` derives the single-active-migration index name it matches
+in an `IntegrityError` from `single_active_migration_index_name` for the same reason.
+
+Task rows are progress bookkeeping, so the split ships with **no backfill**. It
+also does **not drop** the old shared `task_run`/`task_event_log`: they are left
+orphaned for a later release. The two Temporal workers have no `migration:` block
+in `deploy/charts/fred/values.yaml`, so they get no scale-down hook and keep
+running old code — which writes the shared table through an unguarded activity
+that is the first step of every push-file ingestion. Dropping it mid-deploy would
+fail those workflows outright and lose the document, not just its task row.
+Expand now, contract in a later release.
 
 ### Ownership boundary
 
@@ -2387,16 +2426,24 @@ any referenced profile (from `chat_default_profile_id` or any
 `agent_profile_overrides` value) whose derived capability id
 (`model_capability_id(provider, name)` — coarser-grained than a profile id,
 since two profiles can share one `(provider, name)`) is not currently
-`can_use`-enabled for the team, or not present on **every** enabled,
-model-capable pod (`capabilities/catalog.py::universally_available_chat_model_profile_ids`,
+`can_use`-enabled for the team, or not present on **every pod the team's own
+agent instances actually run on**
+(`capabilities/catalog.py::universally_available_chat_model_profile_ids`,
 intersection — not the union this section's admission catalog uses, since
-whichever pod serves a turn must resolve the chosen profile or fail closed at
-runtime). The same profile id must also map to the same model capability id
-(`provider`, `name`) on every pod; equal names with different concrete meanings
-are excluded. Only ids in each pod's explicit `model_chat_profile_ids` subset are
-eligible; a known language/embedding/image profile is invalid for this
-chat-only policy. The `available-models` picker (§ below) applies the same
-intersection filter, so it never offers what the write would reject.
+whichever of the team's own pods serves a turn must resolve the chosen
+profile). Each `AgentInstance` is pinned to one pod for its life, so a pod
+this team has no instance on is out of scope; a team with no instances yet
+falls back to every enabled pod. The check is best-effort per relevant pod —
+an unreachable pod is skipped, not treated as failing every team's write —
+since genuine drift is still caught at the moment it would matter by
+`RoutedChatModelFactory.select` (fred-runtime) failing closed with
+`TeamRoutingProfileDriftError`. The same profile id must also map to the same
+model capability id (`provider`, `name`) on every pod in scope; equal names
+with different concrete meanings are excluded. Only ids in each pod's
+explicit `model_chat_profile_ids` subset are eligible; a known
+language/embedding/image profile is invalid for this chat-only policy. The
+`available-models` picker (§ below) applies the same intersection filter, so
+it never offers what the write would reject.
 
 **Authorization:** read — `team_admin`, `team_editor`, `team_analyst` (a
 plain `team_member` is denied); write — `team_editor` only.
