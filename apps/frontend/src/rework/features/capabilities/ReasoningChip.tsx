@@ -16,17 +16,18 @@
 // designer's Composer.html mockup (2026-08-12): a plain TEXT BUTTON with a
 // chevron at the right edge of the composer's bottomRow (RichInputField's
 // `rightExtraSlot`, before the mic). The button reads "Raisonnement" when off
-// and the model's effort level when on ("Élevé"); its menu opens above,
-// right-aligned, with the effort/latency explainer as a muted header and two
-// check-circle rows: Désactivé, and the ON row labeled with the level.
+// and "Activé" when on; its menu opens above, right-aligned, with the
+// effort/latency explainer as a muted header and two check-circle rows:
+// Désactivé and Activé.
 //
-// The level shown is the model's own ops-authored `settings.reasoning_effort`
-// — the single source of truth (no separate supported-efforts declaration) —
-// served on the control's `params.effort`. The wire stays the tri-state
-// boolean: picking the level row means `reasoning: true` and the pod applies
-// the live settings value; no per-question effort override exists
-// (RUNTIME-EXECUTION-CONTRACT §8.48 records why: providers 400 on values
-// they don't support). No effort in params = generic "Activé" label.
+// Deliberately NOT a level picker, and since #2387 not a level DISPLAY either.
+// The effort a reasoning turn runs with is the model's ops-authored
+// `settings.reasoning_effort`, applied live by the pod; surfacing it here
+// implied a per-question choice that never existed, and it was snapshotted
+// through two DB columns to reach the composer at all. A same-day effort
+// picker was withdrawn for a related reason (RUNTIME-EXECUTION-CONTRACT §8.48:
+// providers 400 on values they do not support). The wire stays the tri-state
+// boolean.
 //
 // `COMPOSER_CHIP_WIDGETS` is the single source of truth for which widget ids
 // are promoted out of the "tune" popover: `ComposerControlSlot` excludes them
@@ -90,15 +91,6 @@ export function prettifyModelName(rawName: string): string | null {
       return word.charAt(0).toUpperCase() + word.slice(1);
     })
     .join(" ");
-}
-
-/** i18n key for one ops-authored effort value; null for unknown/absent values
- *  (the caller then falls back to the generic On label). Exported for tests. */
-export function effortLabelKey(effort: unknown): string | null {
-  if (effort === "low") return "chatbot.composerSettings.reasoningLow";
-  if (effort === "medium") return "chatbot.composerSettings.reasoningMedium";
-  if (effort === "high") return "chatbot.composerSettings.reasoningHigh";
-  return null;
 }
 
 interface ReasoningChipProps {
@@ -171,9 +163,10 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
 
   const on = composer.reasoning;
   const title = t("chatbot.composerSettings.reasoningRowLabel");
-  const params = control?.params as { effort?: unknown } | undefined;
-  const levelKey = effortLabelKey(params?.effort);
-  const onLabel = levelKey ? t(levelKey) : t("chatbot.composerSettings.reasoningOn");
+  // Plain on/off, never a level. The effort a reasoning turn runs with is the
+  // pod's ops-authored `settings.reasoning_effort`, applied live — quoting it
+  // back at the user implied a choice that never existed (#2387).
+  const onLabel = t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
   // Model identity first, Claude-style ("Mistral Small Élevé"): model in the
   // regular button text, reasoning state one step fainter

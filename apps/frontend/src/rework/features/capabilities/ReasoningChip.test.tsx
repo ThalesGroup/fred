@@ -20,13 +20,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import {
-  COMPOSER_CHIP_WIDGETS,
-  ReasoningChip,
-  effortLabelKey,
-  modelLabel,
-  modelLabelFromCapabilityId,
-} from "./ReasoningChip";
+import { COMPOSER_CHIP_WIDGETS, ReasoningChip, modelLabel, modelLabelFromCapabilityId } from "./ReasoningChip";
 import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
 
@@ -86,22 +80,12 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
   });
 
   it("reads the setting name when off — never a level", () => {
-    const html = render([reasoningControl({ default: false, effort: "high" })], false);
+    const html = render([reasoningControl({ default: false })], false);
     expect(html).toContain("chatbot.composerSettings.reasoningRowLabel");
-    expect(html).not.toContain("chatbot.composerSettings.reasoningHigh");
+    expect(html).not.toContain("chatbot.composerSettings.reasoningOn");
     expect(html).toContain('aria-haspopup="menu"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('data-icon="keyboard_arrow_down"');
-  });
-
-  it("reads the model's ops-authored level when on", () => {
-    const html = render([reasoningControl({ default: false, effort: "high" })], true);
-    expect(html).toContain("chatbot.composerSettings.reasoningHigh");
-  });
-
-  it("falls back to a generic On label when no effort is served", () => {
-    const html = render([reasoningControl()], true);
-    expect(html).toContain("chatbot.composerSettings.reasoningOn");
   });
 
   it("is disabled while a response streams", () => {
@@ -109,21 +93,21 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
   });
 
   it("leads the button with the bold model identity and a muted state", () => {
-    const html = render([reasoningControl({ default: false, effort: "high" })], true, false, {
+    const html = render([reasoningControl({ default: false })], true, false, {
       ...effectiveModel({ capability_id: "model__openai__mistral-small-latest" }),
     });
     // Two spans, weight/color contrast as the separator (no middot).
-    expect(html).toMatch(/Mistral Small Latest<\/span>.*chatbot\.composerSettings\.reasoningHigh/);
+    expect(html).toMatch(/Mistral Small Latest<\/span>.*chatbot\.composerSettings\.reasoningOn/);
     expect(html).not.toContain("·");
   });
 
   it("keeps the bare reasoning labels when no model is served", () => {
-    const html = render([reasoningControl({ default: false, effort: "high" })], false);
+    const html = render([reasoningControl({ default: false })], false);
     expect(html).not.toContain("Mistral");
   });
 
   it("shows the ops-authored display name instead of the derived guess", () => {
-    const html = render([reasoningControl({ default: false, effort: "high" })], true, false, {
+    const html = render([reasoningControl({ default: false })], true, false, {
       ...effectiveModel({
         capability_id: "model__anthropic__claude-sonnet-4-6",
         display_name: "Claude Sonnet 4.6",
@@ -221,7 +205,7 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
 
   it("hides the reasoning menu when the routed model has reasoning off", () => {
     const html = render(
-      [reasoningControl({ default: false, effort: "high" })],
+      [reasoningControl({ default: false })],
       false,
       false,
       effectiveModel({
@@ -240,7 +224,7 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
 
   it("keeps the reasoning menu when the routed model has reasoning on", () => {
     const html = render(
-      [reasoningControl({ default: false, effort: "high" })],
+      [reasoningControl({ default: false })],
       true,
       false,
       effectiveModel({
@@ -250,7 +234,7 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
       }),
     );
     expect(html).toContain('aria-haspopup="menu"');
-    expect(html).toContain("chatbot.composerSettings.reasoningHigh");
+    expect(html).toContain("chatbot.composerSettings.reasoningOn");
   });
 
   it("leaves the control alone when reasoning support is unknown", () => {
@@ -283,18 +267,6 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
     // and the filters must agree or the setting shows up twice (or nowhere).
     expect(COMPOSER_CHIP_WIDGETS.has("reasoning_toggle")).toBe(true);
     expect(COMPOSER_CHIP_WIDGETS.has("rag_scope")).toBe(false);
-  });
-});
-
-describe("effortLabelKey", () => {
-  it("maps the closed set and rejects anything else", () => {
-    expect(effortLabelKey("low")).toBe("chatbot.composerSettings.reasoningLow");
-    expect(effortLabelKey("medium")).toBe("chatbot.composerSettings.reasoningMedium");
-    expect(effortLabelKey("high")).toBe("chatbot.composerSettings.reasoningHigh");
-    // Unknown provider-specific values (xhigh, max…) must not crash the menu
-    // — they fall back to the generic On label.
-    expect(effortLabelKey("xhigh")).toBeNull();
-    expect(effortLabelKey(undefined)).toBeNull();
   });
 });
 

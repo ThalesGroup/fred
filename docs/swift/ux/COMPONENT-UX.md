@@ -213,19 +213,19 @@ As of REASON-01 (#2166) the platform contributed its first non-capability contro
 **gone from the tune menu**: reasoning is now a **plain text button + chevron**
 (`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
 edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button leads with the MODEL IDENTITY: "Mistral Small · Élevé"
-when on, "Mistral Small · Désactivé" when off (bare "Raisonnement"/level
-labels when no model resolves at all); its menu
-opens above, right-aligned, with the effort/latency explainer as a muted
-header and two check-circle rows: Désactivé, and the ON row labeled with the
-level. The level is the model's own
-ops-authored `settings.reasoning_effort` (single source of truth, served on
-`params.effort`; generic "Activé" when absent) — deliberately NOT a
-low/medium/high picker: a same-day effort picker was withdrawn (providers 400
-on values they don't support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48), so the
-wire stays the on/off tri-state and the pod always applies the live settings
-value.
-The chip renders in primary/selected colors whenever an effort level is active.
+reference. The button leads with the MODEL IDENTITY: "Mistral Small · Activé"
+when on, "Mistral Small · Désactivé" when off (bare "Raisonnement"/state
+labels when no model resolves at all); its menu opens above, right-aligned,
+with the effort/latency explainer as a muted header and two check-circle rows:
+Désactivé and Activé.
+
+Deliberately NOT a low/medium/high picker — a same-day effort picker was
+withdrawn (providers 400 on values they don't support,
+`RUNTIME-EXECUTION-CONTRACT.md` §8.48) — and since #2387 not a level DISPLAY
+either. The level a reasoning turn runs with is the model's ops-authored
+`settings.reasoning_effort`, applied live by the pod; showing it implied a
+per-question choice that never existed, and it took two snapshot columns to
+reach the composer at all (§8.54). The wire stays the on/off tri-state.
 
 **Superseded in part by #2387 — see "Composer model label" below.** Until then
 the model identity came from `params.model_id` on this very control, i.e. the

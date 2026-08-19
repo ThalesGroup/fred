@@ -52,7 +52,6 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
-from control_plane_backend.capabilities.reasoning_store import ModelReasoningDisplay
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -842,10 +841,6 @@ async def _model_capabilities_for_source_uncached(
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
-            # Derived pod-side from the thinking profile's own
-            # `settings.reasoning_effort` — the single source of truth for the
-            # level a reasoning turn runs with (review 2026-08-12).
-            model_reasoning_effort=entry.get("reasoning_effort"),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -1021,7 +1016,6 @@ def _platform_reasoning_control(
     reasoning_enabled: bool,
     reasoning_default_on: bool,
     reasoning_enabled_model_ids: Sequence[str],
-    display_by_model: Mapping[str, ModelReasoningDisplay] | None = None,
 ) -> ChatControlDescriptor | None:
     """The composer's reasoning toggle, or `None` when a gate upstream is closed
     (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
@@ -1078,27 +1072,20 @@ def _platform_reasoning_control(
             _REASONING_TOGGLE_WIDGET,
         )
         return None
-    # The level a reasoning turn actually runs with — the model's own
-    # ops-authored settings.reasoning_effort, snapshotted at toggle time
-    # (display only; the pod applies the live settings value). Emitted when
-    # the enabled models agree on one distinct value; omitted otherwise, and
-    # the composer menu falls back to a generic On label. `params` is
-    # schema-free on the wire, so this needs no contract regeneration.
-    snapshots = display_by_model or {}
-    distinct_efforts = {
-        snapshot.effort
-        for snapshot in snapshots.values()
-        if snapshot.effort is not None
-    }
-    effort = distinct_efforts.pop() if len(distinct_efforts) == 1 else None
-    # NOTE (#2387): `model_id` and `display_name` used to ship here too — the
-    # single reasoning-enabled model's capability id and label, which the
-    # composer displayed as its model identity. They are gone, not deprecated:
-    # that identity had nothing to do with which model the turn routes to, so
-    # the composer contradicted every platform binding and team override. The
-    # composer reads `EffectiveChatModel` for the model now, and this control
-    # carries only what it is actually authoritative about — whether a reasoning
-    # toggle should exist, and at what effort.
+    # NOTE (#2387): this control used to carry three more params —
+    # `model_id`/`display_name` (the single reasoning-enabled model's identity,
+    # which the composer showed as its model label) and `effort` (that model's
+    # ops-authored `settings.reasoning_effort`, snapshotted at toggle time).
+    #
+    # All three are gone. The identity was simply wrong: it named the model
+    # whose REASONING was on, not the model a turn routes to, so the composer
+    # contradicted every platform binding and team override. The effort went
+    # with it because the menu is now a plain on/off — the level a turn runs
+    # with is the pod's business (it applies the live `settings.reasoning_effort`
+    # either way), not something the user picks or needs quoted back at them.
+    #
+    # What remains is the only thing this function is authoritative about:
+    # whether a reasoning toggle should exist at all, and where it starts.
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -1108,10 +1095,7 @@ def _platform_reasoning_control(
         # False remains the default because `AGENT-THINKING-API-RFC.md`
         # Amendment C measured reasoning re-issuing duplicate tool calls in
         # 10/10 turns on this stack. Starting ON is an author's opt-in.
-        params={
-            "default": reasoning_default_on,
-            **({"effort": effort} if effort else {}),
-        },
+        params={"default": reasoning_default_on},
     )
 
 
@@ -3299,15 +3283,16 @@ async def prepare_execution(
             chat_default_profile_id,
             agent_profile_overrides,
         ),
-        reasoning_display_by_model,
+        reasoning_enabled_ids,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
-        # Same single indexed read as the former list_enabled_model_ids, two
-        # extra columns: the toggle-time snapshot of each model's ops-authored
-        # effort and display name — still no catalog fetch on this send path.
-        deps.get_model_reasoning_store().list_enabled_display_snapshots(),
+        # One indexed read of the enabled ids, no catalog fetch on this send
+        # path. It used to pull two extra snapshot columns for the composer's
+        # effort and model labels; #2387 removed both, so the narrow read is
+        # back.
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
-    sorted_reasoning_model_ids = sorted(reasoning_display_by_model)
+    sorted_reasoning_model_ids = sorted(reasoning_enabled_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
@@ -3315,7 +3300,6 @@ async def prepare_execution(
         reasoning_enabled=instance.tuning.reasoning_enabled,
         reasoning_default_on=instance.tuning.reasoning_default_on,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
-        display_by_model=reasoning_display_by_model,
     )
     if reasoning_control is not None:
         chat_controls = [*chat_controls, reasoning_control]

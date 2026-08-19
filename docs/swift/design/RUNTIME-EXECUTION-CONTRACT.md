@@ -3516,44 +3516,56 @@ next "let users pick the effort" idea starts from the measured constraint.
 
 ---
 
-### 8.54 ✅ Ops name the model — `model_display_name` in `models_catalog.yaml` (2026-08-13)
+### 8.54 ✅ Ops name the model — `model_display_name` in `models_catalog.yaml` (2026-08-13, reduced 2026-08-18)
 
-The composer chip (§8.48) derived its model label by splitting the capability
-id on hyphens. That heuristic cannot tell a version separator from a variant
-one — `claude-sonnet-4-6` rendered "Claude Sonnet 4 6" — and only whoever
-pinned the model knows which it is.
+The composer chip derived its model label by splitting the capability id on
+hyphens. That heuristic cannot tell a version separator from a variant one —
+`claude-sonnet-4-6` rendered "Claude Sonnet 4 6" — and only whoever pinned the
+model knows which it is.
 
-**What changed.**
+**What survives.**
 
 - `ModelProfile.model_display_name` (optional, per profile) in
-  `models_catalog.yaml`. Display only: routing, enablement and the capability
-  id still key on `(provider, name)`.
-- `GET /agents/models-catalog` gains `ModelCatalogEntry.display_name`, taken
-  from the first profile in the `(provider, name)` group that declares one —
-  same first-seen rule as `description`. `CapabilityCatalogEntry` gains
-  `model_display_name`, carried verbatim; the multi-pod catalog union keeps a
-  name authored on one pod when another serves the model unnamed.
-- control-plane snapshots it into `model_reasoning.display_name` at toggle
-  time (migration `a7d2e9c41f38`), exactly like `default_effort` — the send
-  path still performs no catalog fetch — and serves it on the reasoning
-  control's `params.display_name`, only alongside an unambiguous `model_id`.
-- The frontend prefers that string verbatim and keeps the old heuristic as
-  the fallback, so a catalog that never adopts the key renders as before.
+  `models_catalog.yaml`. Display only: routing, enablement and the capability id
+  still key on `(provider, name)`.
+- `GET /agents/models-catalog` carries it as `ModelCatalogEntry.display_name`,
+  taken from the first profile in the `(provider, name)` group that declares one
+  — same first-seen rule as `description`. `CapabilityCatalogEntry` carries it
+  as `model_display_name`; the multi-pod union keeps a name authored on one pod
+  when another serves the model unnamed.
+- The frontend prefers that string verbatim, then prettifies the real model
+  `name`, then falls back to splitting the capability id.
 
-Staleness is deliberate and bounded: editing the catalog reaches the composer
-at the next admin re-toggle, not on open sessions.
+**What was removed (#2387, 2026-08-18).** The original delivery path went
+through two snapshot columns on `model_reasoning` — `display_name` and
+`default_effort`, copied from the catalog entry when an admin toggled a model's
+reasoning — and reached the composer on the `reasoning_toggle` control's
+`params.display_name` / `params.effort`.
 
-**Amended by §8.56 (#2387, 2026-08-17).** The last two bullets no longer hold.
-The composer's label is not served on the reasoning control any more — that
-control carries no model identity at all — and it no longer reads the
-`model_reasoning.display_name` snapshot: it comes from
-`EffectiveChatModel.display_name`, taken from the LIVE pod catalog entry for the
-model the turn actually routes to. The staleness bound moves with it — the label
-refreshes when the chat page opens, not at the next admin re-toggle. The
-`model_reasoning.display_name` column and its snapshot-at-toggle-time behaviour
-still exist and are still written, but nothing reads them today; the ops-authored
-`model_display_name` in `models_catalog.yaml` (the first bullet) remains the
-single source of the string.
+Both columns, both params, and the `ModelCatalogEntry.reasoning_effort` /
+`CapabilityCatalogEntry.model_reasoning_effort` projections that fed them are
+gone, along with their two migrations (`a7d2e9c41f38`, `c9e1f74b2a63`), deleted
+outright rather than reverted: neither had shipped in a tagged release or a
+deployed instance.
+
+Two independent reasons:
+
+1. The label rode on the wrong object. `params.display_name` named the model
+   whose REASONING was enabled platform-wide, not the model a turn routes to, so
+   the composer contradicted every platform binding and team override (§8.56).
+   The label now comes from `EffectiveChatModel.display_name`, read live from
+   the pod catalog entry for the model that actually answers.
+2. The effort had no business being displayed. The composer's reasoning menu is
+   a plain on/off; the level a turn runs with is the pod's ops-authored
+   `settings.reasoning_effort`, applied live at model construction. Quoting it
+   back at the user implied a per-question choice that never existed — the same
+   confusion that got the effort *picker* withdrawn the same day it was built
+   (§8.48).
+
+`settings.reasoning_effort` in `models_catalog.yaml` is untouched and still
+governs behaviour — only its display projection is gone. The staleness caveat
+this section used to carry ("editing the catalog reaches the composer at the
+next admin re-toggle") no longer applies: there is no snapshot left to go stale.
 
 ---
 

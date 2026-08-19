@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import NamedTuple
+
 
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import select
@@ -24,21 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from control_plane_backend.models.model_reasoning_models import ModelReasoningRow
 
 logger = logging.getLogger(__name__)
-
-
-class ModelReasoningDisplay(NamedTuple):
-    """One enabled model's toggle-time display snapshot.
-
-    Both fields are display only and both are `None`-able: `effort` is the
-    level a reasoning turn runs with (the pod always applies the live
-    `settings.reasoning_effort`, never this copy), `display_name` is the
-    composer chip's model label. One tuple rather than two parallel dicts so
-    the send path stays one query and a model cannot be paired with another
-    model's label.
-    """
-
-    effort: str | None
-    display_name: str | None
 
 
 class ModelReasoningStore:
@@ -65,16 +50,13 @@ class ModelReasoningStore:
         model_capability_id: str,
         reasoning_enabled: bool,
         updated_by: str | None,
-        default_effort: str | None = None,
-        display_name: str | None = None,
         session: AsyncSession | None = None,
     ) -> bool:
-        # `default_effort` and `display_name` are display SNAPSHOTs of the
-        # model's ops-authored `settings.reasoning_effort` and
-        # `model_display_name`, taken by the service at toggle time so the
-        # send path never fetches the catalog; the pod always applies the live
-        # settings value. NULL = no effort key on the thinking profile / no
-        # display name authored in `models_catalog.yaml`.
+        # NOTE (#2387): `default_effort` and `display_name` display snapshots
+        # were taken here so the send path could label the composer without a
+        # catalog fetch. Both are gone: the chip names the ROUTED model from
+        # its own read, and the reasoning menu is a plain on/off — no level to
+        # display, so no snapshot to keep in sync.
         async with use_session(self._sessions, session) as s:
             existing = (
                 await s.execute(
@@ -88,15 +70,11 @@ class ModelReasoningStore:
                     ModelReasoningRow(
                         model_capability_id=model_capability_id,
                         reasoning_enabled=reasoning_enabled,
-                        default_effort=default_effort,
-                        display_name=display_name,
                         updated_by=updated_by,
                     )
                 )
             else:
                 existing.reasoning_enabled = reasoning_enabled
-                existing.default_effort = default_effort
-                existing.display_name = display_name
                 existing.updated_by = updated_by
         return reasoning_enabled
 
@@ -122,30 +100,3 @@ class ModelReasoningStore:
                 )
             ).scalars()
             return set(rows)
-
-    async def list_enabled_display_snapshots(
-        self, *, session: AsyncSession | None = None
-    ) -> dict[str, ModelReasoningDisplay]:
-        """Enabled model ids → their toggle-time display snapshot.
-
-        Same single indexed read as `list_enabled_model_ids`, two extra
-        columns — feeds the composer control's `params.effort` and
-        `params.display_name` at session prep. Either field being `None` is
-        normal, not an error: no effort key on the thinking profile (the menu
-        falls back to a generic On label), no `model_display_name` authored
-        (the frontend derives a label from the capability id)."""
-
-        async with use_session(self._sessions, session) as s:
-            rows = (
-                await s.execute(
-                    select(
-                        ModelReasoningRow.model_capability_id,
-                        ModelReasoningRow.default_effort,
-                        ModelReasoningRow.display_name,
-                    ).where(ModelReasoningRow.reasoning_enabled.is_(True))
-                )
-            ).all()
-        return {
-            model_id: ModelReasoningDisplay(effort=effort, display_name=display_name)
-            for model_id, effort, display_name in rows
-        }

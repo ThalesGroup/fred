@@ -605,12 +605,9 @@ async def set_model_reasoning(
         model_capability_id=capability_id,
         reasoning_enabled=reasoning_enabled,
         updated_by=user.uid,
-        # Display snapshots of the ops-authored settings.reasoning_effort and
-        # model_display_name, taken HERE (the one write path already holding
-        # the catalog entry) so session prep never fetches the catalog. Both
-        # refreshed per toggle.
-        default_effort=entry.model_reasoning_effort,
-        display_name=entry.model_display_name,
+        # No display snapshot is taken here any more (#2387): the composer
+        # names the ROUTED model from its own read, and the reasoning menu is a
+        # plain on/off, so there is no level or label left to copy.
     )
     logger.info(
         "[capability-reasoning] model=%s reasoning_enabled=%s by=%s",
