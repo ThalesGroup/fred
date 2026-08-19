@@ -718,10 +718,13 @@ export type ModelCatalogEntry = {
   name: string;
   profile_ids?: string[];
   provider: string;
-  reasoning_effort?: string | null;
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
+  agent_chat_profile_overrides?: {
+    [key: string]: string;
+  };
+  default_chat_profile_id?: string | null;
   models: ModelCatalogEntry[];
 };
 export type Channel =
@@ -930,7 +933,6 @@ export type CapabilityCatalogEntry = {
   model_chat_profile_ids?: string[];
   model_display_name?: string | null;
   model_profile_ids?: string[];
-  model_reasoning_effort?: string | null;
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;

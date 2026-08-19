@@ -90,6 +90,32 @@ The platform binding is absolute. Without it, a pod static override is the
 operator's local escape hatch. Team per-agent selection then wins over the team
 default. No scoring or rule ordering is involved.
 
+The four profile-valued levels have **one** implementation,
+`fred_sdk.contracts.context.resolve_effective_chat_profile`, shared by the pod
+runtime (which resolves it per turn to build the chat client) and the control
+plane (which resolves it to tell the composer which model the next turn will
+use). The platform binding sits above all four and is handled by each caller,
+because it names a concrete `(provider, name)` rather than a profile.
+
+## What the composer shows
+
+The chat composer names the model the next turn will actually route to, resolved
+for that team and that agent instance through the precedence above. It is not a
+picker — the choice belongs to the team policy and the platform binding.
+
+Two things it deliberately does:
+
+- It shows the model even when the agent offers no reasoning toggle. Model
+  identity and reasoning are independent; conflating them is what made the
+  composer previously display the single reasoning-enabled model regardless of
+  routing.
+- It flags a model that is not enabled for the team. That turn will fail before
+  the LLM call, and saying so beats an opaque error later.
+
+It shows nothing at all when nothing resolves — an unreachable pod, a pod
+declaring no chat default with no team policy, or a stored team profile the pod
+no longer advertises. Guessing a model would be worse than naming none.
+
 ## Platform administration
 
 The Models view represents a concrete model by `(provider, name)`. If several
@@ -168,6 +194,11 @@ The pod exposes `/agents/models-catalog`. Each concrete model entry contains all
 of its profile ids for platform enablement and an explicit `chat_profile_ids`
 subset for chat policy. This preserves the difference between “this deployment
 knows this model” and “this profile is valid for chat routing.”
+
+The response also advertises the two precedence levels only this pod knows —
+`default_chat_profile_id` and `agent_chat_profile_overrides` (chat entries only).
+The control plane needs both to predict the routed model without guessing; a pod
+that omits them reads as declaring neither.
 
 ## Failure behavior
 

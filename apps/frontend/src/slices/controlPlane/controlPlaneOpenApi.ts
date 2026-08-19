@@ -589,6 +589,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
     }),
+    getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/effective-chat-model`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+        },
+      }),
+    }),
     getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: build.query<
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse,
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg
@@ -1330,6 +1341,12 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
 };
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
+  /** status 200 Successful Response */ EffectiveChatModel;
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg = void;
@@ -1958,7 +1975,6 @@ export type CapabilityCatalogEntry = {
   model_profile_ids?: string[];
   model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
-  model_reasoning_effort?: string | null;
   model_display_name?: string | null;
 };
 export type AgentTemplateSummary = {
@@ -2498,6 +2514,20 @@ export type AvailableModelProfile = {
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
 };
+export type EffectiveChatModel = {
+  /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
+  name?: string | null;
+  /** The ops-authored `model_display_name` for this model, when the pod catalog names one. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
+  display_name?: string | null;
+  /** The `(provider, name)`-keyed `kind="model"` capability id, so the caller can join this against team enablement and the models admin view. `None` for an unresolved model. */
+  capability_id?: string | null;
+  /** False when the resolved model is not `can_use`-enabled for this team, in which case the turn fails before the LLM call (`ModelNotUsableError`). Reported rather than hidden so the composer can say WHY a turn will fail instead of letting the user discover an opaque error — the same diagnosability rule REASON-01 §8 applies to the reasoning control. Always True for a platform binding, which bypasses team enablement by design: the operator is the authority on what is reachable. */
+  enabled_for_team?: boolean;
+  /** Whether reasoning actually runs on THIS model — i.e. whether a platform admin switched its reasoning on (REASON-01 §5). The composer must not offer the reasoning toggle when this is False: `RoutedChatModelFactory` STRIPS the reasoning settings for a model absent from `reasoning_enabled_model_ids` (§5.6.2), so the toggle would be inert and the turn would silently not reason.
+    
+    Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
+  reasoning_enabled?: boolean;
+};
 export type PlatformModelBinding = {
   model_capability?: "chat";
   binding?: ModelBinding | null;
@@ -2947,6 +2977,8 @@ export const {
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,

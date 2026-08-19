@@ -34,10 +34,7 @@ from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
     ReasoningNotSupported,
 )
-from control_plane_backend.capabilities.reasoning_store import (
-    ModelReasoningDisplay,
-    ModelReasoningStore,
-)
+from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from fred_core import KeycloakUser
 from fred_core.common import PostgresStoreConfig
 from fred_core.sql import create_async_engine_from_config
@@ -116,79 +113,15 @@ async def test_a_stored_false_is_indistinguishable_from_no_row(tmp_path) -> None
     assert await store.list_enabled_model_ids() == {THINKING_MODEL}
 
 
-@pytest.mark.asyncio
-async def test_display_snapshot_round_trips(tmp_path) -> None:
-    # Both composer-chip labels come from this toggle-time snapshot: the level
-    # from settings.reasoning_effort, the model name from model_display_name.
-    # NULL on either must read back as "not authored", never as a value.
-    store = await _make_store(tmp_path)
-
-    await store.set_enabled(
-        model_capability_id=THINKING_MODEL,
-        reasoning_enabled=True,
-        updated_by="admin-1",
-        default_effort="high",
-        display_name="Mistral Small",
-    )
-    assert await store.list_enabled_display_snapshots() == {
-        THINKING_MODEL: ModelReasoningDisplay(
-            effort="high", display_name="Mistral Small"
-        )
-    }
-
-    await store.set_enabled(
-        model_capability_id=THINKING_MODEL,
-        reasoning_enabled=True,
-        updated_by="admin-1",
-        default_effort=None,
-        display_name=None,
-    )
-    assert await store.list_enabled_display_snapshots() == {
-        THINKING_MODEL: ModelReasoningDisplay(effort=None, display_name=None)
-    }
-
-
-@pytest.mark.asyncio
-async def test_re_toggling_refreshes_a_renamed_model(tmp_path) -> None:
-    # The snapshot has a deliberate staleness window: editing
-    # models_catalog.yaml does not reach open sessions, the next re-toggle
-    # does. Pinned because a snapshot that never refreshed would keep the old
-    # name forever.
-    store = await _make_store(tmp_path)
-
-    await store.set_enabled(
-        model_capability_id=THINKING_MODEL,
-        reasoning_enabled=True,
-        updated_by="admin-1",
-        display_name="Mistral Small",
-    )
-    await store.set_enabled(
-        model_capability_id=THINKING_MODEL,
-        reasoning_enabled=True,
-        updated_by="admin-1",
-        display_name="Mistral Small 4",
-    )
-
-    snapshots = await store.list_enabled_display_snapshots()
-    assert snapshots[THINKING_MODEL].display_name == "Mistral Small 4"
-
-
 # ---------------------------------------------------------------------------
 # Service — aptitude is declared, never granted (§5.3)
 # ---------------------------------------------------------------------------
-
-
-def _snapshot(
-    effort: str | None, display_name: str | None = None
-) -> ModelReasoningDisplay:
-    return ModelReasoningDisplay(effort=effort, display_name=display_name)
 
 
 def _model_entry(
     capability_id: str,
     *,
     thinking_profile_ids: tuple[str, ...] = (),
-    reasoning_effort: str | None = None,
     display_name: str | None = None,
 ) -> CapabilityCatalogEntry:
     return CapabilityCatalogEntry(
@@ -200,7 +133,6 @@ def _model_entry(
         kind="model",
         model_profile_ids=("chat.some.profile",),
         model_thinking_profile_ids=thinking_profile_ids,
-        model_reasoning_effort=reasoning_effort,
         model_display_name=display_name,
     )
 
@@ -208,9 +140,6 @@ def _model_entry(
 class _RecordingStore:
     def __init__(self, enabled: set[str] | None = None) -> None:
         self.writes: list[tuple[str, bool]] = []
-        # (model_id, effort, display_name) captured by set_enabled — the
-        # display snapshot the composer chip is labelled from.
-        self.display_snapshots: list[tuple[str, str | None, str | None]] = []
         self._enabled = enabled or set()
 
     async def set_enabled(
@@ -219,23 +148,12 @@ class _RecordingStore:
         model_capability_id: str,
         reasoning_enabled: bool,
         updated_by: str | None,
-        default_effort: str | None = None,
-        display_name: str | None = None,
     ) -> bool:
         self.writes.append((model_capability_id, reasoning_enabled))
-        self.display_snapshots.append(
-            (model_capability_id, default_effort, display_name)
-        )
         return reasoning_enabled
 
     async def list_enabled_model_ids(self) -> set[str]:
         return set(self._enabled)
-
-    async def list_enabled_display_snapshots(self) -> dict[str, ModelReasoningDisplay]:
-        return {
-            model_id: ModelReasoningDisplay(effort=None, display_name=None)
-            for model_id in self._enabled
-        }
 
 
 class _FakeDeps:
@@ -267,7 +185,6 @@ def _stub_gate_and_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
         THINKING_MODEL: _model_entry(
             THINKING_MODEL,
             thinking_profile_ids=("chat.mistral.small",),
-            reasoning_effort="high",
             display_name="Mistral Small",
         ),
         PLAIN_MODEL: _model_entry(PLAIN_MODEL),
@@ -302,9 +219,7 @@ async def test_enabling_reasoning_on_a_thinking_model_stores_the_row() -> None:
 
     assert result.reasoning_enabled is True
     assert store.writes == [(THINKING_MODEL, True)]
-    # The one write path already holds the catalog entry, so it is where both
-    # snapshots are taken; missing them leaves the chip unlabelled silently.
-    assert store.display_snapshots == [(THINKING_MODEL, "high", "Mistral Small")]
+    # Nothing else is captured: no display snapshot is taken any more (#2387).
 
 
 @pytest.mark.asyncio
@@ -520,131 +435,42 @@ def test_control_is_emitted_when_every_gate_is_open() -> None:
     # Default OFF is a safety decision, not a style one: Amendment C measured
     # reasoning re-issuing duplicate tool calls in 10/10 turns on this stack.
     # Author-settable since Amendment B, but this stays the value an author
-    # who does nothing gets. The single enabled model rides along as the
-    # button's identity.
-    assert control.params == {"default": False, "model_id": THINKING_MODEL}
+    # who does nothing gets. No model identity rides along any more (#2387) —
+    # see test_params_never_carry_a_model_identity below.
+    assert control.params == {"default": False}
 
 
-def test_params_effort_carries_the_models_own_level() -> None:
-    # The menu's ON row is labeled with the level the turn actually runs with
-    # — the model's ops-authored settings.reasoning_effort, snapshotted at
-    # toggle time.
+def test_params_carry_only_the_starting_value() -> None:
+    """#2387 — the control is a plain on/off switch and says nothing more.
+
+    It used to ship `model_id`/`display_name` (the single reasoning-enabled
+    model's identity, which the composer rendered as its model label) and
+    `effort` (that model's ops-authored `settings.reasoning_effort`). The
+    identity was wrong — it named the model whose REASONING was on, not the one
+    a turn routes to — and the effort went with it when the menu became a plain
+    on/off. The level a turn runs with stays the pod's business: it applies the
+    live settings value either way.
+    """
+
     from control_plane_backend.product.service import _platform_reasoning_control
 
     control = _platform_reasoning_control(
         reasoning_enabled=True,
         reasoning_default_on=False,
         reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot("high")},
     )
-
     assert control is not None
-    assert control.params == {
-        "default": False,
-        "effort": "high",
-        "model_id": THINKING_MODEL,
-    }
+    assert control.params == {"default": False}
 
-
-def test_params_model_id_carries_the_single_enabled_model() -> None:
-    # The button leads with the model identity ("Mistral Small · Élevé") —
-    # emitted only when unambiguous (exactly one enabled reasoning model);
-    # multi-model will turn this into the model picker's value.
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    single = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot("high")},
-    )
-    assert single is not None
-    assert single.params == {
-        "default": False,
-        "effort": "high",
-        "model_id": THINKING_MODEL,
-    }
-
+    # Several enabled models change nothing — there is no per-model value left
+    # to disagree about, which is the point of removing them.
     two = _platform_reasoning_control(
         reasoning_enabled=True,
         reasoning_default_on=False,
         reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
-        display_by_model={
-            THINKING_MODEL: _snapshot("high"),
-            PLAIN_MODEL: _snapshot("high"),
-        },
     )
     assert two is not None
-    assert "model_id" not in (two.params or {})
-
-
-def test_params_display_name_rides_with_the_model_id() -> None:
-    # The label belongs to the model it names, so it ships only alongside an
-    # unambiguous model_id, and only when ops actually named the model.
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    named = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot("high", "Mistral Small 4")},
-    )
-    assert named is not None
-    assert named.params == {
-        "default": False,
-        "effort": "high",
-        "model_id": THINKING_MODEL,
-        "display_name": "Mistral Small 4",
-    }
-
-    unnamed = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot("high")},
-    )
-    assert unnamed is not None
-    assert "display_name" not in (unnamed.params or {})
-
-    ambiguous = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
-        display_by_model={
-            THINKING_MODEL: _snapshot("high", "Mistral Small 4"),
-            PLAIN_MODEL: _snapshot("high", "GPT-4o"),
-        },
-    )
-    assert ambiguous is not None
-    assert "display_name" not in (ambiguous.params or {})
-
-
-def test_params_effort_omitted_when_unknown_or_ambiguous() -> None:
-    # No effort key on the profile, or two enabled models disagreeing — the
-    # composer then shows a generic On label instead of a wrong level.
-    from control_plane_backend.product.service import _platform_reasoning_control
-
-    unknown = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL],
-        display_by_model={THINKING_MODEL: _snapshot(None)},
-    )
-    assert unknown is not None and unknown.params == {
-        "default": False,
-        "model_id": THINKING_MODEL,
-    }
-
-    ambiguous = _platform_reasoning_control(
-        reasoning_enabled=True,
-        reasoning_default_on=False,
-        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
-        display_by_model={
-            THINKING_MODEL: _snapshot("high"),
-            PLAIN_MODEL: _snapshot("medium"),
-        },
-    )
-    assert ambiguous is not None and ambiguous.params == {"default": False}
+    assert two.params == {"default": False}
 
 
 # ---------------------------------------------------------------------------
@@ -665,7 +491,7 @@ def test_author_can_preselect_reasoning_on_new_conversations() -> None:
     )
 
     assert control is not None
-    assert control.params == {"default": True, "model_id": THINKING_MODEL}
+    assert control.params == {"default": True}
 
 
 def test_preselect_cannot_conjure_a_control_the_gates_refused() -> None:

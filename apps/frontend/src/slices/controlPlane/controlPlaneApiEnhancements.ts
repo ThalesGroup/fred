@@ -296,6 +296,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy", id: arg.teamId }],
     },
+    // The composer's model label (#2387). Tagged under the same
+    // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
+    // use, so saving a routing policy refetches it: without that, the composer
+    // would keep naming the previous model until a reload — the exact kind of
+    // stale label this issue exists to remove.
+    getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
+    },
     // Platform-wide chat model binding — chat-only, at most one binding ever
     // exists, so a single LIST tag covers it, same shape as the admin
     // capabilities catalog above.
@@ -337,6 +345,8 @@ export const {
   // Routing-policy picker option set (#2167).
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery:
     useAvailableModelProfilesQuery,
+  // The model a chat turn will actually route to — the composer label (#2387).
+  useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,

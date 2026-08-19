@@ -401,13 +401,11 @@
       "searchPolicyRowLabel": "Recherche",
       "searchPolicyTitle": "Politique de recherche",
       "reasoningRowLabel": "Raisonnement",
-      "reasoningOff": "Désactivé",
-      "reasoningOn": "Activé",
-      "reasoningLow": "Faible",
-      "reasoningMedium": "Moyen",
-      "reasoningHigh": "Élevé",
-      "reasoningHint": "Plus l'effort est élevé, plus la réponse est approfondie — et plus elle est longue à produire.",
-      "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
+      "reasoningOff": "Rapide",
+      "reasoningOn": "Boost",
+      "reasoningHint": "Active le raisonnement pour les questions approfondies (augmente le temps de réponse et la consommation de tokens).",
+      "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
+      "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe — le message échouera. Demandez à un administrateur de la plateforme de l'activer."
     },
     "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",

@@ -38,6 +38,7 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional
 from urllib.parse import urlsplit
@@ -544,6 +545,112 @@ class RuntimeContext(BaseModel):
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None
     attachments_markdown: Optional[str] = None
+
+
+class ChatProfileOrigin(str, Enum):
+    """Which precedence level produced an effective chat profile id.
+
+    The four *profile-valued* levels only. The platform binding
+    (`BoundRuntimeContext.platform_chat_model_binding`) outranks all of them but
+    is not a profile — it names a concrete `(provider, name)` directly — so its
+    callers short-circuit before consulting `resolve_effective_chat_profile`
+    rather than being handed a fifth member here that could never carry a
+    profile id.
+    """
+
+    POD_AGENT_OVERRIDE = "pod_agent_override"
+    TEAM_AGENT_OVERRIDE = "team_agent_override"
+    TEAM_DEFAULT = "team_default"
+    POD_DEFAULT = "pod_default"
+
+
+class ChatProfileResolution(FrozenModel):
+    """One resolved chat profile id plus the level that produced it."""
+
+    profile_id: str
+    origin: ChatProfileOrigin
+
+
+def resolve_effective_chat_profile(
+    *,
+    agent_id: str | None,
+    pod_agent_chat_profile_overrides: Mapping[str, str] | None,
+    pod_default_chat_profile_id: str | None,
+    team_agent_profile_overrides: Mapping[str, str] | None,
+    team_chat_default_profile_id: str | None,
+) -> ChatProfileResolution | None:
+    """The single implementation of chat-profile precedence, shared by the pod
+    runtime and control-plane (`LLM_ROUTING_FRED.md` §Deterministic precedence).
+
+    Why this lives in the SDK rather than in fred-runtime, where the routing it
+    serves runs: two callers need the same answer at two different moments, and a
+    second implementation would drift.
+
+    - The pod resolves it per turn to build the actual chat client.
+    - Control-plane resolves it on its own
+      `GET /teams/{team_id}/routing-policy/effective-chat-model` read, to tell
+      the composer which model the next turn will use (#2387). NOT at
+      prepare-execution: that runs on every send and is contractually free of
+      pod-catalog fetches, which resolving the pod-owned levels requires.
+      Before this existed the composer named the single reasoning-enabled
+      model instead, which silently contradicted any platform binding or team
+      override in force.
+
+    Precedence, highest first — the platform binding sits above all four and is
+    the caller's job (see `ChatProfileOrigin`):
+
+    1. `pod_agent_chat_profile_overrides[agent_id]` — the ops-authored
+       `models_catalog.yaml` static override, the deployment's local escape
+       hatch. A team can never beat it.
+    2. `team_agent_profile_overrides[agent_id]` — the team's per-agent choice.
+    3. `team_chat_default_profile_id` — the team's default.
+    4. `pod_default_chat_profile_id` — `default_profile_by_capability.chat`.
+
+    `None` means no level produced anything: a pod whose catalog declares no
+    chat default, with no team policy. Callers treat that as "nothing to show /
+    nothing to route" rather than substituting a guess.
+
+    Capability filtering is deliberately NOT done here. Both override maps must
+    already be chat-only:
+
+    - the pod map is filtered where the catalog's per-profile capability is
+      known (`ModelRoutingResolver`, and the pod's `/agents/models-catalog`
+      projection), matching the runtime's long-standing rule that a static
+      override declaring the wrong capability is skipped, not fatal;
+    - a *team* profile that is unknown or non-chat is a drift error the caller
+      raises (`TeamRoutingProfileDriftError`) — it must never silently fall
+      through to the next level here, because a team's stored preference going
+      stale has to be visible, not papered over.
+
+    Pure: no I/O, no side effects, no ordering dependence on dict iteration.
+    """
+
+    if agent_id is not None:
+        if pod_agent_chat_profile_overrides:
+            profile_id = pod_agent_chat_profile_overrides.get(agent_id)
+            if profile_id is not None:
+                return ChatProfileResolution(
+                    profile_id=profile_id,
+                    origin=ChatProfileOrigin.POD_AGENT_OVERRIDE,
+                )
+        if team_agent_profile_overrides:
+            profile_id = team_agent_profile_overrides.get(agent_id)
+            if profile_id is not None:
+                return ChatProfileResolution(
+                    profile_id=profile_id,
+                    origin=ChatProfileOrigin.TEAM_AGENT_OVERRIDE,
+                )
+    if team_chat_default_profile_id is not None:
+        return ChatProfileResolution(
+            profile_id=team_chat_default_profile_id,
+            origin=ChatProfileOrigin.TEAM_DEFAULT,
+        )
+    if pod_default_chat_profile_id is not None:
+        return ChatProfileResolution(
+            profile_id=pod_default_chat_profile_id,
+            origin=ChatProfileOrigin.POD_DEFAULT,
+        )
+    return None
 
 
 class ConversationTurn(FrozenModel):

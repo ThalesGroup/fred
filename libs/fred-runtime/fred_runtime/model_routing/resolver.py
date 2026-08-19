@@ -60,12 +60,46 @@ class ModelRoutingResolver:
         self._profiles_by_id = {
             profile.profile_id: profile for profile in policy.profiles
         }
+        # The static overrides that actually apply, grouped by the capability
+        # they target. Precomputed here rather than filtered per turn: the
+        # policy is immutable for the pod's lifetime, and `select()` runs on
+        # every turn. An override naming a profile of a different capability is
+        # dropped at this point — the same skip `resolve()` has always applied,
+        # moved one level earlier so `agent_overrides_for` can hand callers a
+        # map that is already safe to use without re-checking.
+        overrides_by_capability: dict[ModelCapability, dict[str, str]] = {}
+        for agent_id, profile_id in policy.agent_profile_overrides.items():
+            profile = self._profiles_by_id.get(profile_id)
+            if profile is None:
+                continue
+            overrides_by_capability.setdefault(profile.capability, {})[agent_id] = (
+                profile_id
+            )
+        self._agent_overrides_by_capability = overrides_by_capability
 
     @property
     def policy(self) -> ModelRoutingPolicy:
         """Expose the immutable policy used by this resolver."""
 
         return self._policy
+
+    def agent_overrides_for(self, capability: ModelCapability) -> dict[str, str]:
+        """This pod's static `agent_id -> profile_id` overrides that target
+        `capability`, precomputed at construction.
+
+        Handed to `resolve_effective_chat_profile` as the highest
+        profile-valued precedence level. Already capability-filtered, which is
+        that function's stated precondition.
+        """
+
+        return self._agent_overrides_by_capability.get(capability, {})
+
+    def default_profile_id_for(self, capability: ModelCapability) -> str | None:
+        """This pod's `default_profile_by_capability` entry, or `None` when the
+        catalog declares no default for `capability` — the lowest precedence
+        level, and the last thing standing between a turn and a `ValueError`."""
+
+        return self._policy.default_profile_by_capability.get(capability)
 
     def resolve(self, request: ModelSelectionRequest) -> ModelSelection:
         """
@@ -134,28 +168,10 @@ class ModelRoutingResolver:
         return self._profiles_by_id.get(profile_id)
 
 
-def resolve_team_override(
-    *,
-    agent_profile_overrides: dict[str, str] | None,
-    chat_default_profile_id: str | None,
-    agent_id: str | None,
-) -> str | None:
-    """
-    Second, narrower resolution pass applied only when the static
-    `models_catalog.yaml` `agent_profile_overrides` fell through to the
-    capability default — never consulted otherwise, so a static override
-    always wins over team policy.
-
-    1. `agent_profile_overrides[agent_id]` if `agent_id` is set and present
-    2. else `chat_default_profile_id` if set
-    3. else `None` — caller keeps the static catalog default unchanged
-
-    Pure function, no I/O, no side effects — easy to unit test in isolation
-    from the resolver/provider wiring.
-    """
-
-    if agent_id is not None and agent_profile_overrides:
-        profile_id = agent_profile_overrides.get(agent_id)
-        if profile_id is not None:
-            return profile_id
-    return chat_default_profile_id
+# NOTE (#2387): `resolve_team_override` lived here and implemented the
+# team-vs-pod cascade for the chat capability alone. It is gone, not renamed:
+# control-plane needs the identical answer at prepare-execution to tell the
+# composer which model the next turn will use, and two implementations of a
+# precedence rule drift. The one implementation is now
+# `fred_sdk.contracts.context.resolve_effective_chat_profile`, which both this
+# package (`provider.RoutedChatModelFactory.select`) and control-plane call.
