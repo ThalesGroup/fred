@@ -403,7 +403,7 @@
       "reasoningRowLabel": "Reasoning",
       "reasoningOff": "Fast",
       "reasoningOn": "Boost",
-      "reasoningHint": "With the reasoning on, the response is more thorough and therefore takes longer to produce.",
+      "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
       "selectLibraryFirst": "Select a library first.",
       "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
     },
