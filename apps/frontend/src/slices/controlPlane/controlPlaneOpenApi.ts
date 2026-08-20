@@ -589,6 +589,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
     }),
+    getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/effective-chat-model`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+        },
+      }),
+    }),
     getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: build.query<
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse,
       GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg
@@ -1330,6 +1341,12 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
 };
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
+  /** status 200 Successful Response */ EffectiveChatModel;
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg = void;
@@ -1820,6 +1837,30 @@ export type FrontendUserAuthConfig = {
   realm_url?: string | null;
   client_id?: string | null;
 };
+export type InfoBannerLink = {
+  /** Link target URL. */
+  url: string;
+  /** Locale → label map (e.g. {"en": "...", "fr": "..."}). */
+  labels?: {
+    [key: string]: string;
+  };
+};
+export type InfoBanner = {
+  /** Banner background CSS color. */
+  color?: string;
+  /** Seconds after which the banner hides itself, measured from app load. Omit for a persistent banner — the default. */
+  auto_hide_seconds?: number | null;
+  /** Locale → title map (e.g. {"en": "...", "fr": "..."}). */
+  titles?: {
+    [key: string]: string;
+  };
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+  /** Links rendered on the right side of the banner. */
+  links?: InfoBannerLink[];
+};
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
@@ -1827,6 +1868,8 @@ export type FrontendConfig = {
   root_bootstrap_completed: boolean;
   /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
   root_bootstrap_required: boolean;
+  /** Deployer-configured global announcement banner, from `platform.frontend.info_banner`. `None` when the deployment configures none — the frontend then renders nothing. Deliberately on this public pre-auth surface, not the authenticated `FrontendBootstrap`: the banner shows on every page, including the GCU-acceptance and root-bootstrap screens, which render before `/frontend/bootstrap` can succeed. Carries only deployer-authored announcement content — never anything sensitive. */
+  info_banner?: InfoBanner | null;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -1958,7 +2001,6 @@ export type CapabilityCatalogEntry = {
   model_profile_ids?: string[];
   model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
-  model_reasoning_effort?: string | null;
   model_display_name?: string | null;
 };
 export type AgentTemplateSummary = {
@@ -2498,6 +2540,20 @@ export type AvailableModelProfile = {
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
 };
+export type EffectiveChatModel = {
+  /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
+  name?: string | null;
+  /** The ops-authored `model_display_name` for this model, when the pod catalog names one. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
+  display_name?: string | null;
+  /** The `(provider, name)`-keyed `kind="model"` capability id, so the caller can join this against team enablement and the models admin view. `None` for an unresolved model. */
+  capability_id?: string | null;
+  /** False when the resolved model is not `can_use`-enabled for this team, in which case the turn fails before the LLM call (`ModelNotUsableError`). Reported rather than hidden so the composer can say WHY a turn will fail instead of letting the user discover an opaque error — the same diagnosability rule REASON-01 §8 applies to the reasoning control. Always True for a platform binding, which bypasses team enablement by design: the operator is the authority on what is reachable. */
+  enabled_for_team?: boolean;
+  /** Whether reasoning actually runs on THIS model — i.e. whether a platform admin switched its reasoning on (REASON-01 §5). The composer must not offer the reasoning toggle when this is False: `RoutedChatModelFactory` STRIPS the reasoning settings for a model absent from `reasoning_enabled_model_ids` (§5.6.2), so the toggle would be inert and the turn would silently not reason.
+    
+    Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
+  reasoning_enabled?: boolean;
+};
 export type PlatformModelBinding = {
   model_capability?: "chat";
   binding?: ModelBinding | null;
@@ -2947,6 +3003,8 @@ export const {
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,

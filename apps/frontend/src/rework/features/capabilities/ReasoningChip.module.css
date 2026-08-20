@@ -45,11 +45,86 @@
   line-height: 1;
 }
 
+/* Model label with no reasoning menu behind it (#2387) — same metrics as
+   .trigger so the composer row keeps its rhythm, but no hover surface, no
+   pointer, no focus ring: nothing here is actionable. */
+.static {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: 0 var(--spacing-s);
+  height: 38px;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  white-space: nowrap;
+}
+
+/* The resolved model is not can_use-enabled for this team, so the turn will
+   fail before the LLM call. Colour alone would be the only signal for a
+   colour-blind reader, so the icon below carries it too and the accessible
+   name spells it out. */
+.model[data-unavailable] {
+  color: var(--error);
+  text-decoration: line-through;
+}
+
+.warning {
+  display: inline-flex;
+  align-items: center;
+  color: var(--error);
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .state {
+  /* Extra breathing room on this side only, so the mode reads as a separate
+     piece of information rather than a suffix to the model name. Applied here
+     rather than widening the row's `gap`, which would push the chevron out
+     too and re-open the space the mockup keeps tight. */
+  margin-left: var(--spacing-2xs);
   /* One step fainter than retreat in both themes — the colour contrast alone
      separates the model name from the reasoning state. */
   color: var(--on-surface-muted);
   line-height: 1;
+}
+
+/* Boost is a live mode, not a resting state: it steps forward instead of
+   retreating, wearing the same spectrum as the Chat button's rotating border
+   (AgentCard.module.scss) so the one "this is the AI doing more" signal reads
+   the same in both places.
+
+   design-token exception: same rationale as that border — no semantic token
+   family covers this sequence.
+
+   Two deliberate departures from the border version. It is a LINEAR gradient,
+   not conic: a conic sweep across ~40px of text reads as an arbitrary smear
+   rather than a sweep. And the border's white stops are dropped — white is
+   what makes the highlight travel around a border, but in text it is a hole,
+   invisible on the light theme. What is left is the saturated run
+   (cyan → violet → pink), which keeps the identity and stays readable in both
+   themes.
+
+   The WORD still carries the state on its own, so this is reinforcement and
+   never the only signal — a colour-blind reader reads "Boost" vs "Rapide". */
+.state[data-on] {
+  background: linear-gradient(90deg, #65e0f6, #9299ff, #d665b4);
+  background-clip: text;
+  -webkit-background-clip: text;
+  /* Fallback first: any engine that ignores background-clip: text keeps a
+     solid, readable colour instead of transparent (invisible) text. */
+  color: var(--primary);
+  font-weight: 500;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Forced-colours users get the system palette, not our spectrum — a gradient
+   clipped to text is exactly what that mode exists to override. */
+@media (forced-colors: active) {
+  .state[data-on] {
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+    color: highlight;
+  }
 }
 
 .chevron {

@@ -37,7 +37,10 @@ import { selectSidePanelOpenRequest } from "../../../features/capabilities/sideP
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
-import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useEffectiveChatModelQuery,
+  useGetTeamQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
@@ -128,6 +131,13 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+  // The model this agent's next turn will actually route to (#2387) — the
+  // composer's label. Its own read rather than part of prepare-execution:
+  // prepare runs on every send and is contractually free of pod-catalog
+  // fetches, while resolving the pod-owned precedence levels needs one.
+  // Tagged ControlPlaneRoutingPolicy/teamId, so saving a routing policy
+  // refetches this instead of leaving a stale model name on screen.
+  const { data: effectiveChatModel } = useEffectiveChatModelQuery({ teamId, agentInstanceId });
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
@@ -307,7 +317,12 @@ export default function ManagedChatPage() {
         ) : undefined
       }
       rightExtraSlot={
-        <ReasoningChip chatControls={chat.chatControls} composer={composerState} disabled={composerControlsDisabled} />
+        <ReasoningChip
+          chatControls={chat.chatControls}
+          composer={composerState}
+          disabled={composerControlsDisabled}
+          effectiveModel={effectiveChatModel}
+        />
       }
       leftSlot={
         <>

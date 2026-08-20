@@ -101,9 +101,8 @@ async def aggregate_capability_catalog(
         # `kind="model"` projections (OBSERV-02 v3, RFC §8.7) — a third,
         # separate fetch, same best-effort contract as the agent fetch above:
         # `None` on an unreachable pod, treated as empty here.
-        entries = entries + (
-            await _model_capabilities_for_source(source.base_url) or []
-        )
+        pod_models = await _model_capabilities_for_source(source.base_url)
+        entries = entries + (pod_models.entries if pod_models is not None else [])
         for entry in entries:
             if not _CAPABILITY_ID_RE.fullmatch(entry.id):
                 # A pod on pre-#1988 code (or a third-party pod) can advertise
@@ -249,8 +248,8 @@ async def universally_available_chat_model_profile_ids(
             continue
         if source_runtime_ids and source.runtime_id not in source_runtime_ids:
             continue
-        entries = await _model_capabilities_for_source(source.base_url)
-        if entries is None:
+        pod_models = await _model_capabilities_for_source(source.base_url)
+        if pod_models is None:
             logger.warning(
                 "[capability-catalog] %s unreachable while computing available "
                 "chat model profiles (source_runtime_ids=%s) — skipping this "
@@ -260,11 +259,11 @@ async def universally_available_chat_model_profile_ids(
                 source_runtime_ids,
             )
             continue
-        if not entries:
+        if not pod_models.entries:
             continue
         profile_models: dict[str, str] = {}
         conflicting_profile_ids: set[str] = set()
-        for entry in entries:
+        for entry in pod_models.entries:
             for profile_id in entry.model_chat_profile_ids:
                 existing_model_id = profile_models.get(profile_id)
                 if existing_model_id is not None and existing_model_id != entry.id:

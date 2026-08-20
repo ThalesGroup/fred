@@ -60,6 +60,91 @@ class AvailableModelProfileList(BaseModel):
     profiles: list[AvailableModelProfile] = Field(default_factory=list)
 
 
+class EffectiveChatModel(BaseModel):
+    """The concrete model a chat turn with one agent instance will actually use
+    (#2387), resolved for one team.
+
+    Why this exists as its own read: the composer used to label itself with the
+    single model whose *reasoning* an admin had enabled platform-wide, which is
+    unrelated to routing — so it contradicted any platform binding or override
+    in force and read as "model routing is broken". This is the answer to the
+    question the composer actually needs to ask.
+
+    Deliberately NOT part of `ExecutionPreparation`: that runs on every send and
+    is contractually free of pod-catalog fetches, while resolving the two
+    pod-owned precedence levels requires the pod's `/agents/models-catalog`.
+    This read is per chat-page open instead, the same cost profile as
+    `available-models` next to it.
+
+    Scoped to what the composer renders. It deliberately does NOT report which
+    precedence level won or which profile id it came from: that describes the
+    POLICY, which only an elevated team role may read (#2167), and no surface
+    displays it. Adding it would mean either leaking the policy to a plain
+    member or gating a field nobody reads. `[V2][MODEL_ROUTING]` in the pod log
+    remains the place to see the deciding level.
+
+    Every model field is `None` together, meaning nothing resolved at all — a
+    pod declaring no chat default with no team policy, or (during a rolling
+    upgrade) a pod not yet advertising its defaults. The composer shows no model
+    rather than guessing one.
+    """
+
+    name: str | None = Field(
+        default=None,
+        description=(
+            "The concrete model name. `capability_id` below identifies the "
+            "`(provider, name)` pair uniquely for a caller that needs to join "
+            "against team enablement or the models admin view."
+        ),
+    )
+    display_name: str | None = Field(
+        default=None,
+        description=(
+            "The ops-authored `model_display_name` for this model, when the pod "
+            "catalog names one. `None` leaves the frontend on its name/id "
+            "prettifying fallback — the same fallback the composer already had."
+        ),
+    )
+    capability_id: str | None = Field(
+        default=None,
+        description=(
+            'The `(provider, name)`-keyed `kind="model"` capability id, so the '
+            "caller can join this against team enablement and the models admin "
+            "view. `None` for an unresolved model."
+        ),
+    )
+    enabled_for_team: bool = Field(
+        default=True,
+        description=(
+            "False when the resolved model is not `can_use`-enabled for this "
+            "team, in which case the turn fails before the LLM call "
+            "(`ModelNotUsableError`). Reported rather than hidden so the "
+            "composer can say WHY a turn will fail instead of letting the user "
+            "discover an opaque error — the same diagnosability rule REASON-01 "
+            "§8 applies to the reasoning control. Always True for a platform "
+            "binding, which bypasses team enablement by design: the operator is "
+            "the authority on what is reachable."
+        ),
+    )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether reasoning actually runs on THIS model — i.e. whether a "
+            "platform admin switched its reasoning on (REASON-01 §5). The "
+            "composer must not offer the reasoning toggle when this is False: "
+            "`RoutedChatModelFactory` STRIPS the reasoning settings for a model "
+            "absent from `reasoning_enabled_model_ids` (§5.6.2), so the toggle "
+            "would be inert and the turn would silently not reason.\n\n"
+            "Needed because the reasoning control is emitted from the PLATFORM "
+            "list — 'some model has reasoning on' — while routing may land on a "
+            "different model entirely. With reasoning enabled on Mistral Small "
+            "and a team override routing to Mistral Medium, the composer used to "
+            "render 'Mistral Medium · Élevé' and offer the toggle while the pod "
+            "ran no reasoning at all."
+        ),
+    )
+
+
 class ProfileNotUsableError(Exception):
     """One or more profile ids in a routing-policy write are not `can_use`-enabled
     for this team (RFC §7.2) — the write-time counterpart of the runtime's

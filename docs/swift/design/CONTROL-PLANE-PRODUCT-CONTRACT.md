@@ -178,6 +178,10 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
+  - `info_banner` — **added 2026-08-19** — optional deployer-configured
+    global announcement banner (`platform.frontend.info_banner`), rendered
+    full-width above the app on every page. Omitted/`null` → nothing
+    rendered. See §42 for why it is pre-auth.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -2602,3 +2606,130 @@ replacement, a browser-forwarded or session-snapshot resolution channel —
 the binding is trusted and resolved fresh per turn, server-to-server, by
 design (§8.55), never forwarded through the client the way
 `chat_default_profile_id`/`agent_profile_overrides` are.
+
+## 41. Contract Notes — the composer's effective chat model (2026-08-17, issue #2387)
+
+**Problem.** The composer named the model whose *reasoning* was enabled
+platform-wide (§40 / REASON-01 §7), not the one the turn routes to. With a
+platform binding or any override in force, it displayed a model that was not
+answering.
+
+The justification recorded in `_platform_reasoning_control`'s docstring rested
+on two premises, both of which had become false: that routing "resolves per
+*operation* at runtime" (operations were removed by #2365) and that "chat
+controls are computed once per session" (prepare-execution returns a fresh
+`chat_controls` on every send).
+
+**New endpoint.**
+
+    GET /control-plane/v1/teams/{team_id}/routing-policy/effective-chat-model
+        ?agent_instance_id={id}
+    → EffectiveChatModel
+
+| Field | Meaning |
+| ----- | ------- |
+| `name` | The concrete model name. All model fields are `None` together, meaning nothing resolved. |
+| `display_name` | Ops-authored label; `None` leaves the frontend on its name/id prettifying fallback. |
+| `capability_id` | The `kind="model"` capability id, for joining against team enablement. |
+| `enabled_for_team` | `false` when the resolved model is not `can_use`-enabled for this team, so the turn will fail with `ModelNotUsableError` before the LLM call. |
+| `reasoning_enabled` | Whether reasoning actually runs on **this** model. The composer must not offer the reasoning toggle when `false`. |
+
+**Scoped to what the composer renders.** It deliberately does not report which
+precedence level won, or the winning profile id. That is POLICY detail, readable
+only by an elevated team role (§37 / #2167), and no surface displays it —
+returning it would mean either leaking the policy to a plain member or gating a
+field nobody reads. `[V2][MODEL_ROUTING]` in the pod log remains where the
+deciding level is visible.
+
+**Authorization — plain membership (`can_read_members`), deliberately NOT the
+elevated-role gate** §37's policy reads use. Anyone entitled to hold a
+conversation with an agent is entitled to know which model answers them, and
+that is safe precisely because the response carries no policy detail (above).
+Editing the policy stays `team_editor`-only.
+
+**`reasoning_enabled` and the reasoning toggle.** The `reasoning_toggle` control
+on `ExecutionPreparation` answers "the platform enabled reasoning on *some*
+model and this agent offers it" — it cannot answer "the model this turn routes
+to is one of them", because that needs the pod catalog and the send path must
+stay free of catalog fetches. So the composer combines the two: the control
+decides whether a toggle could exist, `reasoning_enabled` decides whether it
+would do anything. `RoutedChatModelFactory` STRIPS reasoning settings for a model
+absent from `reasoning_enabled_model_ids` (§8.55 / REASON-01 §5.6.2), so
+offering the toggle without this check meant offering an inert control — observed
+in production with reasoning on `mistral-small-latest` and a team override
+routing to `mistral-medium-latest`.
+
+**Why its own read, not an `ExecutionPreparation` field.** Resolving the two
+pod-owned precedence levels requires the pod's `/agents/models-catalog`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.56). Prepare-execution runs on **every
+send** and is contractually free of pod-catalog fetches, and
+`aggregate_capability_catalog` is uncached — putting this there would fan out to
+every pod per message. This endpoint is called per chat-page open instead, the
+same cost profile as `available-models` beside it, and it is tagged under the
+same `ControlPlaneRoutingPolicy`/`teamId` RTK entity as the policy read/write so
+saving a policy refetches the label instead of leaving a stale model on screen.
+
+**One deliberate widening, recorded.** When a platform binding is in force, this
+endpoint reveals the bound model's `name` (and its derived `capability_id`) to
+any team member, where §40's admin CRUD surface is org-admin only. No contract
+made that identity confidential, and naming the model that answers is the whole
+point of the feature — but it is a real change in who can observe it, so it is
+written down rather than left implicit. `ModelBinding.settings` (base URLs,
+Azure endpoints) is never returned; only the two identity scalars are.
+
+Symmetrically, the read is scoped to a pod, not to the deployment-wide
+intersection §37's picker uses. That is not a contradiction: the intersection
+governs what a team may *select* (and is enforced at write time so a saved
+choice means the same thing everywhere), while this answers what one pinned
+instance will actually *run*. If a pod's catalog drifts after a write, the
+per-pod answer is the truthful one.
+
+**Pod scoping.** The pod consulted is the instance's own `source_runtime_id`,
+never an aggregate: an `AgentInstance` is pinned to one pod for its whole life
+and a turn is always prepared against that same pod, so another pod's catalog
+has no say in what this agent will run.
+
+**Degradation.** An unreachable pod, an unknown instance, a pod source that is
+missing from the platform catalog **or disabled in it**, or team-policy drift (a stored profile the pod does
+not advertise — the condition `TeamRoutingProfileDriftError` raises at turn time)
+all return an all-`None` result rather than raising. A pod being down must not
+break the chat page, and inventing a model would be worse than showing none.
+
+**`enabled_for_team` is reported, not hidden.** The composer names the model and
+flags it, so a user learns *why* a turn will fail instead of meeting an opaque
+error — the same diagnosability rule REASON-01 §8 applies to the reasoning
+control. Always `true` when a platform binding decided, which bypasses team
+enablement by design (§40's ReBAC exemption).
+
+**Explicit non-goals:** making the chip a model *picker* (it stays read-only),
+surfacing the deciding precedence level in the UI, per-turn re-resolution, and
+any non-chat capability — `embedding` has no
+production consumer.
+
+## 42. Contract Notes — global info banner (2026-08-19)
+
+`FrontendConfig` (§3.1.1) gains one optional field, `info_banner`
+(`InfoBanner`: `color` + `titles`/`messages` locale maps + `links: [{url,
+labels}]` + `auto_hide_seconds`), sourced from control-plane deployment
+config `platform.frontend.info_banner`. When set, the frontend renders one
+full-width, non-dismissable announcement banner (`InfoBanner`, mounted once
+at the app root) above the app content on **every** page, resolving texts
+from the active i18next locale with `en` fallback and pushing content down
+instead of overlaying it. Persistent by default; the optional
+`auto_hide_seconds` (integer > 0) makes the banner remove itself that many
+seconds after app load. `null`/omitted → nothing rendered — the shipped
+default: `values.yaml` (prod) and `configuration*.yaml` (dev) carry only
+commented-out example blocks.
+
+Boundary rationale (§3.1.1 vs §23): unlike `upload_warning` (post-auth
+surfaces only), the banner's whole point is to show on every page — the
+GCU-acceptance and root-bootstrap screens included, which render *before*
+the authenticated `/frontend/bootstrap` can succeed. So it follows the
+`gcu_version` precedent, not the `upload_warning` one: a pre-auth field on
+the public surface. It carries only deployer-authored announcement content
+— never secrets or per-user state — keeping §3.1.1's "no second bootstrap
+payload" rule intact. One deliberate scope note: on auth-enabled
+deployments the login page itself is Keycloak-hosted (`login-required`
+redirects away before the SPA renders), so the banner cannot cover the
+login screen — pre-auth here means "before the authenticated bootstrap",
+not "on the IdP's page".

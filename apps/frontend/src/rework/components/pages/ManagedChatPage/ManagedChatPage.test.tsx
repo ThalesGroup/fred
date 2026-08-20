@@ -53,6 +53,10 @@ vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
+  // #2387 — the composer's model label. Undefined here: this file covers the
+  // chat-input policy wiring, and the label's own behaviour is covered in
+  // ReasoningChip.test.tsx.
+  useEffectiveChatModelQuery: () => ({ data: undefined }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [

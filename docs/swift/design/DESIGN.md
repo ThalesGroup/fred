@@ -179,6 +179,12 @@ never happens.
 - **Display-fidelity masking** — values hidden by Excel number format, zeros
   hidden by `showZeros=False`, and error cells are all treated as empty, so
   extraction matches what a human sees on screen.
+- **Empty sheets are reported, not skipped** — a sheet holding no value
+  (blank, or carrying only styles/merges/column widths) short-circuits after
+  A2: phases A3–B5 are skipped and `output.md` names it
+  `## Sheet: <name>  (visible, empty)` with an explicit "No data" line, so a
+  reader can tell an empty sheet from one extraction lost. It contributes no
+  `tables.json` entry.
 - **Export** writes one Parquet per non-empty table + a `tables.json`
   sidecar (per table: `table_id`, `sheet`, `title`, `range`, `data_range`,
   `format`, `path`, `row_count`, `columns`, plus `object_key`/`query_alias`
@@ -186,7 +192,10 @@ never happens.
   metric per sheet). `tables.json` is the contract the output stage
   (`ExcelTableRegistrationProcessor`) promotes into `tabular_multi_v1` (§2).
   A missing sidecar is a warning (empty result); a malformed one is a hard
-  `TabularProcessingError`.
+  `TabularProcessingError`. Residual values are spreadsheet text injected into
+  a Markdown bullet: multi-line values are indented under their item with hard
+  line breaks and their leading block markers (`-`, `#`, `1.`, …) escaped, so
+  a cell never spawns bullets of its own.
 
 **Code map:** `core/processors/input/excel_processor/excel_extractor.py`
 (`ExcelExtractor`, phases), `excel_processor.py` (`ExcelProcessor`, I/O +

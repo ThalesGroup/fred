@@ -213,27 +213,45 @@ As of REASON-01 (#2166) the platform contributed its first non-capability contro
 **gone from the tune menu**: reasoning is now a **plain text button + chevron**
 (`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
 edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
-reference. The button leads with the MODEL IDENTITY (`params.model_id`, the
-single enabled reasoning model — read-only today, the model picker slot once
-multi-model ships, each model carrying its own reasoning mode): "Mistral
-Small · Élevé" when on, "Mistral Small · Désactivé" when off (bare
-"Raisonnement"/level labels when no unambiguous model is served); its menu
-opens above, right-aligned, with the effort/latency explainer as a muted
-header and two check-circle rows: Désactivé, and the ON row labeled with the
-level. The level is the model's own
-ops-authored `settings.reasoning_effort` (single source of truth, served on
-`params.effort`; generic "Activé" when absent) — deliberately NOT a
-low/medium/high picker: a same-day effort picker was withdrawn (providers 400
-on values they don't support — `RUNTIME-EXECUTION-CONTRACT.md` §8.48), so the
-wire stays the on/off tri-state and the pod always applies the live settings
-value.
-The chip renders in primary/selected colors whenever an effort level is active.
-Multi-model is deliberately NOT displayed yet — the model identity arrives as a
-plain profile-id prop so the menu can grow a model section when that feature ships.
-The gating is unchanged: the chip appears only when the agent's author turned
-Reasoning on in the form's Capabilities tab AND a platform admin enabled the model's
-reasoning — a closed upstream gate removes it entirely rather than disabling it
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
+reference. The button leads with the MODEL IDENTITY, followed by the reasoning
+MODE: "Mistral Small · Boost" when on, "Mistral Small · Rapide" when off (bare
+"Raisonnement"/mode labels when no model resolves at all); its menu opens
+above, right-aligned, with the effort/latency explainer as a muted header and
+the two modes as check-circle rows.
+
+**Two modes, not an on/off switch (#2387).** "Mistral Small · Désactivé" read
+as though the MODEL were disabled — the state word sat beside the model name
+with nothing tying it to reasoning. Naming both modes removes that reading:
+neither describes anything as off. EN uses Fast / Boost.
+
+`Boost` also wears the Chat button's spectrum (`.state[data-on]`), so the one
+"the AI is doing more" signal reads the same on the agent card and in the
+composer. Two departures from that border: linear rather than conic (a conic
+sweep across ~40px of text smears), and no white stops (white travels a border
+but is a hole in text, invisible on the light theme) — leaving cyan → violet →
+pink. A solid `--primary` sits underneath as the fallback for engines that
+ignore `background-clip: text`, and `forced-colors` drops the gradient for the
+system palette. The WORD carries the state either way, so colour is
+reinforcement, never the only signal.
+
+Deliberately NOT a low/medium/high picker — a same-day effort picker was
+withdrawn (providers 400 on values they don't support,
+`RUNTIME-EXECUTION-CONTRACT.md` §8.48) — and since #2387 not a level DISPLAY
+either. The level a reasoning turn runs with is the model's ops-authored
+`settings.reasoning_effort`, applied live by the pod; showing it implied a
+per-question choice that never existed, and it took two snapshot columns to
+reach the composer at all (§8.54). The wire stays the on/off tri-state.
+
+**Superseded in part by #2387 — see "Composer model label" below.** Until then
+the model identity came from `params.model_id` on this very control, i.e. the
+single model whose REASONING was enabled platform-wide, which is unrelated to
+routing; and the chip as a whole was gated on the reasoning control existing.
+Both changed: the identity now comes from
+`GET /teams/{team_id}/routing-policy/effective-chat-model`, the model shows even
+when no reasoning is offered, and the reasoning MENU additionally requires the
+routed model to be reasoning-enabled. The author/admin gates below still decide
+whether the control is emitted at all — a closed upstream gate removes it
+entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
 section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
 through the same `CapabilityCard` component every real capability uses (generalized
 to a plain `name`/`description`/`subForm` API for this) even though the reasoning
@@ -1263,6 +1281,22 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
 ---
 
+### `MarketplaceTeams` — what the discover section may list (#2398)
+
+**Location:** `src/rework/components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx`
+**Status:** `Functional`
+
+`GET /teams` is a general-purpose listing, not a marketplace feed: the page
+decides on its own what is discoverable, and drops from the "discover"
+(non-member) bucket every team that is a personal space (#2068) or whose
+`visibility` is `private` (#2398). The server already withholds the ReBAC
+`public` relation from a private team, but that filter is skipped entirely
+when authorization is disabled — so the page never relies on it. A team the
+caller *is* a member of stays listed under "your teams" whatever its
+visibility: members need it to navigate.
+
+---
+
 ### `TeamSettingsParameters` — visibility + joining-mode controls
 
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
@@ -1271,7 +1305,8 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 Two stacked rows (`.team-settings-toggle-row`, label left / control right)
 share one `form-section` (`.team-settings-toggles`, `flex-direction: column`,
 `gap: var(--spacing-s)`): **visibility** (`public`/`private`) on top,
-**joining mode** below it. Both are `ButtonGroup`s (`variant="radio"`,
+**joining mode** below it (a `ButtonGroup` only while the team is public —
+see the #2398 note below). Both are `ButtonGroup`s (`variant="radio"`,
 `size="small"`, plain group-level `color="secondary"` — no per-item color,
 same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
@@ -1291,15 +1326,28 @@ follows now.
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
 (`public`/`private`, default `public`) gating marketplace discoverability
 — see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
-mechanism. A `private` team can never be `open`: while
-`visibility === "private"`, every item in the joining-mode `ButtonGroup`
-below carries `disabled` (the whole group reads as inert, not just the
-`open` option) — enforced this way rather than only disabling `open`
-because the server may have just silently downgraded a stored `open` to
-`invite_only` the moment visibility flipped, and a half-disabled group
-would misrepresent that as still a live choice. No client-side write of
-`joining_mode` ever accompanies a visibility PATCH — the resulting
-`joining_mode`, if it changes, comes back from the server on refetch.
+mechanism. No client-side write of `joining_mode` ever accompanies a
+visibility PATCH — the resulting `joining_mode`, if it changes, comes back
+from the server on refetch.
+
+**Joining mode while private — one disabled button, no toggle (#2398,
+2026-08-20).** A `private` team can never be `open`, and the product has no
+invitation flow at all (there is no invite endpoint — a team admin adds
+members by hand from `TeamSettingsMembers`). So while
+`visibility === "private"` the joining-mode row renders no `ButtonGroup`:
+the control slot holds a single **disabled** `Button` (`secondary` /
+`outlined` / `small`, `lock` icon) reading "Manual only", and the row's
+support line switches to the `privateSupport` copy ("a private team is not
+listed on the marketplace: its members are added manually by a team
+admin"). One inert, locked control states the fact; the original 2026-07-26
+treatment kept the whole group mounted with every item `disabled`, and a
+greyed-out *two-state* toggle still reads as a live choice — while "Invite
+only" named a mechanism that does not exist. Plain muted text was tried
+first and read as too weak for the row (it also wrapped onto two lines),
+hence a real button shape. `.team-settings-toggle-action` carries the
+`flex-shrink: 0` + `white-space: nowrap` the row needs: the label column
+takes the free width and `.btn` clips its own overflow. The group returns
+unchanged the moment visibility goes back to `public`.
 
 **`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
 previously had no disabled styling at all — a `disabled` item was
@@ -1309,12 +1357,14 @@ identical to an enabled one. Added `&:disabled` with `pointer-events: none`
 `:hover`/`:active` rules individually) plus, scoped to
 `.stateLayer:not([data-selected="true"])` only, a transparent background
 and `on-surface-muted` label color. Scoping to the unselected sub-case
-matters: the joining-mode group's disabled-while-private state always has
-one selected item (`invite_only`, forced) and one not (`open`) — the
-selected item keeps its normal filled selected-color styling, only the
-unselected `open` option reads as muted/transparent. Generic addition to
-the shared atom (any future disabled+unselected item elsewhere gets the
-same treatment for free), not special-cased to this one call site.
+mattered for the original driving call site — the joining-mode group's
+disabled-while-private state, which always had one selected item
+(`invite_only`, forced) and one not (`open`): the selected item kept its
+normal filled selected-color styling, only the unselected `open` option
+read as muted/transparent. That call site is gone since #2398 (see above),
+but the rule was a generic addition to the shared atom, never special-cased
+to it — any disabled+unselected item elsewhere still gets the treatment for
+free.
 
 **`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
 optional `backgroundColor` prop (default `var(--surface-container)`,
@@ -3215,6 +3265,41 @@ clears the binding back to "Using pod default".
 
 ---
 
+## Global info banner (2026-08-19)
+
+### `InfoBanner`
+
+**Location:** `src/rework/components/shared/molecules/InfoBanner/`
+**Status:** `Functional`
+
+Full-width, non-dismissable announcement banner mounted once at
+the app root (`src/app/App.tsx`), above the GCU/bootstrap guards, so it shows
+on every page — pre-auth ones included — and pushes the app content down
+instead of overlaying it (the app shell is now a `100vh` flex column; routed
+pages size with `height: 100%`, never `100vh` — see
+`FRONTEND_CODING_GUIDELINES.md` §2.5). Entirely config-driven from
+`platform.frontend.info_banner` (public pre-auth `/frontend/config`): without
+the config block, nothing renders — there is no default banner. Persistent
+by default; the optional `auto_hide_seconds` removes it that many seconds
+after app load with a 300ms eased collapse (opacity + `grid-template-rows`
+1fr→0fr, so the content below slides up instead of jumping; snaps under
+`prefers-reduced-motion`, and the banner is aria-hidden as soon as the exit
+starts). Background
+color comes from configuration via the `--banner-bg` custom property
+(deliberate token exception, comment in the module CSS); title/message/link
+labels are locale maps resolved with `en` fallback; links open in a new tab,
+separated by a `·`, and only http(s)/relative URLs are rendered.
+`role="status"` + `aria-live="polite"`.
+
+#### Open UX issues
+
+- **Fixed dark text over a configured background.** `--banner-text: #00222c`
+  assumes the configured color stays light (like the documented `#00BBDD`
+  example); a dark configured color would fail contrast. Revisit only if a
+  deployment actually needs a dark banner.
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._
@@ -3245,3 +3330,46 @@ _Priority order for the next UX session. Update before each session._
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
 24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
+
+## Composer model label (#2387, 2026-08-17)
+
+### `ReasoningChip`
+
+**Location:** `src/rework/features/capabilities/ReasoningChip.tsx`
+**Status:** `Functional`
+
+The composer's right-edge chip. Two concerns, now independent:
+
+- **Model identity** — the model the next turn will actually route to, from
+  `GET /teams/{team_id}/routing-policy/effective-chat-model`. Read-only; the
+  choice lives in the team routing policy and the platform binding.
+- **Reasoning toggle** — still emitted only when the agent's author enabled
+  reasoning and a platform-enabled reasoning model exists (REASON-01 §8's
+  diagnosability rule: a control that can do nothing must be absent).
+
+Previously the model identity rode on the `reasoning_toggle` control's own
+`params`, i.e. the single model whose *reasoning* an admin had enabled
+platform-wide. That is unrelated to routing, so the chip contradicted any
+platform binding or team override in force. The name is kept (`ReasoningChip`)
+because the reasoning menu is still what makes it interactive.
+
+Three render states:
+
+| Condition | Renders |
+| --------- | ------- |
+| Reasoning control present **and** `reasoning_enabled` | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click. |
+| Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
+| No reasoning control at all, model resolved | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable. |
+| Neither | Nothing (`null`). An empty chip would be worse than none. |
+
+**Unavailable model.** When `enabled_for_team` is `false` the turn will fail
+with `ModelNotUsableError` before the LLM call. The model name takes
+`--error` + `line-through` via `.model[data-unavailable]`, an `error_outline`
+icon sits beside it, and the reason reaches the accessible name and `title` —
+colour alone would leave a colour-blind reader with no signal.
+
+**Label fallback**: `modelLabel(display_name, name, capability_id)` prefers the
+ops-authored `model_display_name`, then prettifies the real model `name`, then
+falls back to splitting the capability id. The `name` step matters because
+`model_capability_id` normalizes non-id-safe characters — derived from the id,
+`mistral:latest` would read "Mistral Latest".

@@ -401,13 +401,11 @@
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
-      "reasoningOff": "Off",
-      "reasoningOn": "On",
-      "reasoningLow": "Low",
-      "reasoningMedium": "Medium",
-      "reasoningHigh": "High",
-      "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
-      "selectLibraryFirst": "Select a library first."
+      "reasoningOff": "Fast",
+      "reasoningOn": "Boost",
+      "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
+      "selectLibraryFirst": "Select a library first.",
+      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
@@ -2075,7 +2073,9 @@
           "label": "Joining mode",
           "support": "Users can join your team freely or by invitation only.",
           "open": "Open",
-          "inviteOnly": "Invite only"
+          "inviteOnly": "Invite only",
+          "manual": "Manual only",
+          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
         },
         "visibility": {
           "label": "Team visibility",

@@ -37,10 +37,7 @@ from fred_runtime.model_routing.contracts import (
     ModelSelectionRequest,
     ModelSelectionSource,
 )
-from fred_runtime.model_routing.resolver import (
-    ModelRoutingResolver,
-    resolve_team_override,
-)
+from fred_runtime.model_routing.resolver import ModelRoutingResolver
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -221,51 +218,12 @@ class TestModelRoutingResolver:
 
 
 # ---------------------------------------------------------------------------
-# resolver — resolve_team_override (product-level team routing policy)
+# NOTE (#2387): `TestResolveTeamOverride` lived here. The function it covered
+# moved to `fred_sdk.contracts.context.resolve_effective_chat_profile` (one
+# implementation, shared with control-plane), so its unit tests moved with it
+# to `libs/fred-sdk/tests/test_context.py`. The provider-level wiring that
+# feeds it stays covered by `tests/test_model_routing_provider.py`.
 # ---------------------------------------------------------------------------
-
-
-class TestResolveTeamOverride:
-    def test_no_overrides_no_default_returns_none(self) -> None:
-        result = resolve_team_override(
-            agent_profile_overrides=None,
-            chat_default_profile_id=None,
-            agent_id="rico",
-        )
-        assert result is None
-
-    def test_falls_back_to_chat_default(self) -> None:
-        result = resolve_team_override(
-            agent_profile_overrides={},
-            chat_default_profile_id="team.default",
-            agent_id="rico",
-        )
-        assert result == "team.default"
-
-    def test_matching_agent_override_wins(self) -> None:
-        result = resolve_team_override(
-            agent_profile_overrides={"rico": "p1"},
-            chat_default_profile_id="team.default",
-            agent_id="rico",
-        )
-        assert result == "p1"
-
-    def test_non_matching_agent_falls_back_to_chat_default(self) -> None:
-        result = resolve_team_override(
-            agent_profile_overrides={"rico": "p1"},
-            chat_default_profile_id="team.default",
-            agent_id="other-agent",
-        )
-        assert result == "team.default"
-
-    def test_none_agent_id_never_matches_falls_back_to_chat_default(self) -> None:
-        result = resolve_team_override(
-            agent_profile_overrides={"rico": "p1"},
-            chat_default_profile_id="team.default",
-            agent_id=None,
-        )
-        assert result == "team.default"
-
 
 # ---------------------------------------------------------------------------
 # catalog — deep merge and to_policy()

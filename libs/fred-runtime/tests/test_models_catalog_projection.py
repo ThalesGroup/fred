@@ -24,7 +24,10 @@ TestClient harness).
 from __future__ import annotations
 
 from fred_core.common import ModelConfiguration
-from fred_runtime.app.agent_app import _project_model_catalog_entries
+from fred_runtime.app.agent_app import (
+    _project_model_catalog_entries,
+    _project_model_catalog_response,
+)
 from fred_runtime.model_routing.catalog import ModelCatalog
 from fred_runtime.model_routing.contracts import ModelCapability, ModelProfile
 
@@ -206,39 +209,16 @@ def test_thinking_profile_ids_never_leaks_across_models() -> None:
     }
 
 
-def test_reasoning_effort_is_derived_from_the_thinking_profile_settings() -> None:
-    # The settings key is the single source of truth (review 2026-08-12): the
-    # composer menu shows the level a reasoning turn actually runs with, so
-    # the projection carries it — from the thinking profile only, never from a
-    # non-thinking sibling.
-    catalog = _catalog(
-        (
-            _profile(
-                "chat.mistral.small",
-                provider="openai",
-                name="mistral-small-latest",
-                supports_thinking=True,
-                settings={"reasoning_effort": "high"},
-            ),
-            _profile(
-                "language.mistral.small",
-                capability=ModelCapability.LANGUAGE,
-                provider="openai",
-                name="mistral-small-latest",
-            ),
-        )
-    )
-
-    entries = _project_model_catalog_entries(catalog)
-
-    assert len(entries) == 1
-    assert entries[0].reasoning_effort == "high"
-
-
-def test_reasoning_effort_is_none_without_a_thinking_profile_effort() -> None:
-    catalog = _catalog((_profile("p1", supports_thinking=True),))
-
-    assert _project_model_catalog_entries(catalog)[0].reasoning_effort is None
+# NOTE (#2387): `test_reasoning_effort_is_derived_from_the_thinking_profile_settings`
+# and its `None` counterpart lived here. `_ModelCatalogEntry.reasoning_effort`
+# was a DISPLAY projection — it existed so control-plane could snapshot the
+# level and the composer could render "Élevé". The chip is a plain on/off now,
+# so the projection has no consumer and is gone.
+#
+# The setting itself is untouched and still governs behaviour: the pod applies
+# `settings.reasoning_effort` from `models_catalog.yaml` at model construction
+# (`model_routing/provider.py`, `REASONING_SETTING_KEYS`), which is covered by
+# tests/test_model_enforcement.py — not by this projection suite.
 
 
 # ---------------------------------------------------------------------------
@@ -335,3 +315,85 @@ def test_display_name_never_leaks_across_models() -> None:
         "mistral-small-latest": "Mistral Small",
         "gpt-4o": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# _project_model_catalog_response — the two pod-owned precedence levels
+# control-plane needs to predict the routed chat model (#2387)
+# ---------------------------------------------------------------------------
+
+
+def test_response_advertises_the_pod_chat_default() -> None:
+    catalog = _catalog((_profile("chat.a"), _profile("chat.b", name="gpt-4.1")))
+    response = _project_model_catalog_response(catalog)
+    assert response.default_chat_profile_id == "chat.a"
+
+
+def test_response_chat_default_is_none_when_catalog_declares_none() -> None:
+    """A legal pod with no chat default. Control-plane must see `None` rather
+    than a guess, so it reports "nothing routed" instead of naming a model."""
+
+    catalog = ModelCatalog(
+        default_profile_by_capability={}, profiles=(_profile("chat.a"),)
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.default_chat_profile_id is None
+
+
+def test_response_advertises_static_chat_agent_overrides() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(_profile("chat.a"), _profile("chat.b", name="gpt-4.1")),
+        agent_profile_overrides={"rico": "chat.b"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {"rico": "chat.b"}
+
+
+def test_response_drops_a_non_chat_static_override() -> None:
+    """Mirrors the runtime's own skip: a static override naming a profile of a
+    different capability can never route a chat turn, so advertising it would
+    make control-plane predict a model the pod would not use."""
+
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(
+            _profile("chat.a"),
+            _profile("embed.a", capability=ModelCapability.EMBEDDING, name="embed-3"),
+        ),
+        agent_profile_overrides={"rico": "embed.a"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {}
+
+
+def test_response_drops_a_static_override_naming_an_absent_profile() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(_profile("chat.a"),),
+        agent_profile_overrides={"rico": "ghost"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {}
+
+
+def test_response_keeps_only_the_chat_entries_of_a_mixed_override_map() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.a"},
+        profiles=(
+            _profile("chat.a"),
+            _profile("chat.b", name="gpt-4.1"),
+            _profile("embed.a", capability=ModelCapability.EMBEDDING, name="embed-3"),
+        ),
+        agent_profile_overrides={"rico": "chat.b", "vito": "embed.a", "nico": "ghost"},
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.agent_chat_profile_overrides == {"rico": "chat.b"}
+
+
+def test_response_models_match_the_entries_projection() -> None:
+    """The response must not re-derive the inventory — same list, same order."""
+
+    catalog = _catalog((_profile("chat.a"), _profile("chat.b", name="gpt-4.1")))
+    response = _project_model_catalog_response(catalog)
+    assert response.models == _project_model_catalog_entries(catalog)
