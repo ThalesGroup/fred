@@ -99,8 +99,9 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   // TEAM-10 (#2398): a PRIVATE team can never be OPEN, and there is no
   // invitation flow either — a team admin adds members by hand. So while
   // private, the joining-mode toggle is not a setting at all: it is replaced
-  // by a static "manual only" state rather than rendered as a two-state
-  // control that refuses every click.
+  // by a single disabled "manual only" button rather than a two-state control
+  // that refuses every click — one inert, locked state reads as the fact it
+  // is, where a greyed-out toggle still reads as a choice.
   const visibility = team.visibility ?? "public";
   const isPrivate = visibility === "private";
   const handleSelectVisibility = (index: number) => {
@@ -231,9 +232,16 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
             </span>
           </div>
           {isPrivate ? (
-            <span className={styles["team-settings-toggle-static"]}>
+            <Button
+              className={styles["team-settings-toggle-action"]}
+              color="secondary"
+              variant="outlined"
+              size="small"
+              icon={{ category: "outlined", type: "lock" }}
+              disabled
+            >
               {t("rework.teamSettings.parameters.joiningMode.manual")}
-            </span>
+            </Button>
           ) : (
             <ButtonGroup
               variant="radio"

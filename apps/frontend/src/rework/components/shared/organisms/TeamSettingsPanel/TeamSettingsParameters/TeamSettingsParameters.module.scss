@@ -104,11 +104,9 @@
   font: var(--font-body-small);
 }
 
-/* #2398: read-only stand-in for the joining-mode toggle while the team is
- * private — reads as a stated fact, not as a control that refuses clicks. */
-.team-settings-toggle-static {
+/* #2398: the label column takes the row's free width, so the private-team
+ * "manual only" button must not shrink or wrap (`.btn` clips overflow). */
+.team-settings-toggle-action {
   flex-shrink: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-large);
   white-space: nowrap;
 }

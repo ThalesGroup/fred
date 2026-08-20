@@ -1330,21 +1330,24 @@ mechanism. No client-side write of `joining_mode` ever accompanies a
 visibility PATCH — the resulting `joining_mode`, if it changes, comes back
 from the server on refetch.
 
-**Joining mode while private — static state, no toggle (#2398,
+**Joining mode while private — one disabled button, no toggle (#2398,
 2026-08-20).** A `private` team can never be `open`, and the product has no
 invitation flow at all (there is no invite endpoint — a team admin adds
 members by hand from `TeamSettingsMembers`). So while
 `visibility === "private"` the joining-mode row renders no `ButtonGroup`:
-the control slot holds one static, unstyled-as-interactive label
-(`.team-settings-toggle-static`, `on-surface-retreat` /
-`--font-label-large`) reading "Manual only", and the row's support line
-switches to the `privateSupport` copy ("a private team is not listed on the
-marketplace: its members are added manually by a team admin"). This
-replaced the original 2026-07-26 treatment, which kept the group mounted
-with every item `disabled` — a two-state toggle that refuses every click
-still reads as a setting, and "Invite only" named a mechanism that does not
-exist. The group returns unchanged the moment visibility goes back to
-`public`.
+the control slot holds a single **disabled** `Button` (`secondary` /
+`outlined` / `small`, `lock` icon) reading "Manual only", and the row's
+support line switches to the `privateSupport` copy ("a private team is not
+listed on the marketplace: its members are added manually by a team
+admin"). One inert, locked control states the fact; the original 2026-07-26
+treatment kept the whole group mounted with every item `disabled`, and a
+greyed-out *two-state* toggle still reads as a live choice — while "Invite
+only" named a mechanism that does not exist. Plain muted text was tried
+first and read as too weak for the row (it also wrapped onto two lines),
+hence a real button shape. `.team-settings-toggle-action` carries the
+`flex-shrink: 0` + `white-space: nowrap` the row needs: the label column
+takes the free width and `.btn` clips its own overflow. The group returns
+unchanged the moment visibility goes back to `public`.
 
 **`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
 previously had no disabled styling at all — a `disabled` item was
