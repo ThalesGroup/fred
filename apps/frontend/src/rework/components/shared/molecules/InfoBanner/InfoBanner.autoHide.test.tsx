@@ -59,6 +59,9 @@ afterEach(() => {
 
 const render = () => act(() => root.render(<InfoBanner />));
 const bannerElement = () => container.querySelector('[role="status"]');
+// The collapse wrapper is aria-hidden only while the eased exit plays (the
+// test banners configure no links, so no separator carries aria-hidden).
+const exitingWrapper = () => container.querySelector('[aria-hidden="true"]');
 
 describe("InfoBanner auto-hide", () => {
   it("stays visible when auto_hide_seconds is not set (persistent default)", () => {
@@ -71,7 +74,7 @@ describe("InfoBanner auto-hide", () => {
     expect(bannerElement()).not.toBeNull();
   });
 
-  it("hides itself once the configured number of seconds has elapsed", () => {
+  it("plays the eased collapse once the delay elapses, then unmounts", () => {
     mockGetInfoBanner.mockReturnValue({
       color: "#00BBDD",
       auto_hide_seconds: 30,
@@ -85,8 +88,16 @@ describe("InfoBanner auto-hide", () => {
 
     act(() => vi.advanceTimersByTime(29_999));
     expect(bannerElement()).not.toBeNull();
+    expect(exitingWrapper()).toBeNull();
 
+    // Delay elapsed: the banner starts its eased exit — still in the DOM for
+    // sighted users, already aria-hidden for screen readers.
     act(() => vi.advanceTimersByTime(1));
+    expect(bannerElement()).not.toBeNull();
+    expect(exitingWrapper()).not.toBeNull();
+
+    // Collapse transition over (HIDE_TRANSITION_MS): the node is removed.
+    act(() => vi.advanceTimersByTime(300));
     expect(bannerElement()).toBeNull();
   });
 });

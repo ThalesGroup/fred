@@ -7,11 +7,33 @@
    text assumes the configured color stays light, like the documented
    #00BBDD example. */
 
+/* Collapsible wrapper for the auto-hide exit: animating grid-template-rows
+   1fr → 0fr eases an auto height down to nothing, so the app content slides
+   up smoothly instead of jumping when the banner goes. Duration must match
+   HIDE_TRANSITION_MS in InfoBanner.tsx. */
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  flex-shrink: 0;
+  transition:
+    grid-template-rows 300ms ease,
+    opacity 300ms ease;
+}
+
+.collapsing {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.collapseInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .banner {
   --banner-text: #00222c;
 
   display: flex;
-  flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
@@ -64,5 +86,9 @@
 @media (prefers-reduced-motion: reduce) {
   .banner {
     animation: none;
+  }
+
+  .collapse {
+    transition: none;
   }
 }

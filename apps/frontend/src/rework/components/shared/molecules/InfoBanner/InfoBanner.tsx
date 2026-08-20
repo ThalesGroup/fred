@@ -43,11 +43,17 @@ const isSafeHref = (url: string): boolean => {
   }
 };
 
+// Must match the transition duration in InfoBanner.module.css (.collapse):
+// the DOM node is removed only after the eased collapse has finished.
+const HIDE_TRANSITION_MS = 300;
+
 export default function InfoBanner() {
   const { i18n } = useTranslation();
   const banner = getInfoBanner();
   const autoHideSeconds = banner?.auto_hide_seconds ?? null;
-  const [hidden, setHidden] = useState(false);
+  // visible → (auto_hide_seconds later) hiding: eased collapse plays
+  //         → (HIDE_TRANSITION_MS later)  hidden: unmounted from the DOM
+  const [phase, setPhase] = useState<"visible" | "hiding" | "hidden">("visible");
 
   // Persistent by default: the timer exists only when the deployer sets
   // `auto_hide_seconds`. The config is loaded once before React renders and
@@ -55,11 +61,20 @@ export default function InfoBanner() {
   // load, not per navigation.
   useEffect(() => {
     if (!autoHideSeconds) return;
-    const timer = window.setTimeout(() => setHidden(true), autoHideSeconds * 1000);
+    const timer = window.setTimeout(() => setPhase("hiding"), autoHideSeconds * 1000);
     return () => window.clearTimeout(timer);
   }, [autoHideSeconds]);
 
-  if (!banner || hidden) return null;
+  // Fixed-delay removal rather than a transitionend listener: under
+  // prefers-reduced-motion the transition never fires an end event (the
+  // collapse snaps), while the timeout removes the node either way.
+  useEffect(() => {
+    if (phase !== "hiding") return;
+    const timer = window.setTimeout(() => setPhase("hidden"), HIDE_TRANSITION_MS);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
+  if (!banner || phase === "hidden") return null;
 
   const title = resolveLocalizedText(banner.titles, i18n.language);
   const message = resolveLocalizedText(banner.messages, i18n.language);
@@ -69,32 +84,41 @@ export default function InfoBanner() {
 
   return (
     <div
-      className={styles.banner}
-      style={{ "--banner-bg": banner.color } as CSSProperties}
-      role="status"
-      aria-live="polite"
+      className={phase === "hiding" ? `${styles.collapse} ${styles.collapsing}` : styles.collapse}
+      // Screen readers drop the banner as soon as the exit starts; sighted
+      // users watch the eased collapse for HIDE_TRANSITION_MS more.
+      aria-hidden={phase === "hiding" || undefined}
     >
-      <p className={styles.message}>
-        {title && <strong>{title}</strong>}
-        {title && message && " "}
-        {message}
-      </p>
-      {links.length > 0 && (
-        <div className={styles.actions}>
-          {links.map((link, index) => (
-            <Fragment key={`${index}-${link.url}`}>
-              {index > 0 && (
-                <span className={styles.separator} aria-hidden="true">
-                  ·
-                </span>
-              )}
-              <a className={styles.link} href={link.url} target="_blank" rel="noopener noreferrer">
-                {resolveLocalizedText(link.labels, i18n.language) ?? link.url}
-              </a>
-            </Fragment>
-          ))}
+      <div className={styles.collapseInner}>
+        <div
+          className={styles.banner}
+          style={{ "--banner-bg": banner.color } as CSSProperties}
+          role="status"
+          aria-live="polite"
+        >
+          <p className={styles.message}>
+            {title && <strong>{title}</strong>}
+            {title && message && " "}
+            {message}
+          </p>
+          {links.length > 0 && (
+            <div className={styles.actions}>
+              {links.map((link, index) => (
+                <Fragment key={`${index}-${link.url}`}>
+                  {index > 0 && (
+                    <span className={styles.separator} aria-hidden="true">
+                      ·
+                    </span>
+                  )}
+                  <a className={styles.link} href={link.url} target="_blank" rel="noopener noreferrer">
+                    {resolveLocalizedText(link.labels, i18n.language) ?? link.url}
+                  </a>
+                </Fragment>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -3249,7 +3249,10 @@ pages size with `height: 100%`, never `100vh` — see
 `platform.frontend.info_banner` (public pre-auth `/frontend/config`): without
 the config block, nothing renders — there is no default banner. Persistent
 by default; the optional `auto_hide_seconds` removes it that many seconds
-after app load (content reflows up when it goes). Background
+after app load with a 300ms eased collapse (opacity + `grid-template-rows`
+1fr→0fr, so the content below slides up instead of jumping; snaps under
+`prefers-reduced-motion`, and the banner is aria-hidden as soon as the exit
+starts). Background
 color comes from configuration via the `--banner-bg` custom property
 (deliberate token exception, comment in the module CSS); title/message/link
 labels are locale maps resolved with `en` fallback; links open in a new tab,
