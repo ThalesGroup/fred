@@ -2073,7 +2073,9 @@
           "label": "Joining mode",
           "support": "Users can join your team freely or by invitation only.",
           "open": "Open",
-          "inviteOnly": "Invite only"
+          "inviteOnly": "Invite only",
+          "manual": "Manual only",
+          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
         },
         "visibility": {
           "label": "Team visibility",

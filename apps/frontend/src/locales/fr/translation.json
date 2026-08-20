@@ -2073,7 +2073,9 @@
           "label": "Mode d'adhésion",
           "support": "Les utilisateurs peuvent rejoindre votre équipe librement ou uniquement sur invitation.",
           "open": "Ouverte",
-          "inviteOnly": "Sur invitation"
+          "inviteOnly": "Sur invitation",
+          "manual": "Ajout manuel",
+          "privateSupport": "Une équipe privée n'apparaît pas sur la marketplace : ses membres sont ajoutés manuellement par un administrateur de l'équipe."
         },
         "visibility": {
           "label": "Visibilité de l'équipe",

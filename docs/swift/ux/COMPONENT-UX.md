@@ -1281,6 +1281,22 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
 ---
 
+### `MarketplaceTeams` — what the discover section may list (#2398)
+
+**Location:** `src/rework/components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx`
+**Status:** `Functional`
+
+`GET /teams` is a general-purpose listing, not a marketplace feed: the page
+decides on its own what is discoverable, and drops from the "discover"
+(non-member) bucket every team that is a personal space (#2068) or whose
+`visibility` is `private` (#2398). The server already withholds the ReBAC
+`public` relation from a private team, but that filter is skipped entirely
+when authorization is disabled — so the page never relies on it. A team the
+caller *is* a member of stays listed under "your teams" whatever its
+visibility: members need it to navigate.
+
+---
+
 ### `TeamSettingsParameters` — visibility + joining-mode controls
 
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
@@ -1289,7 +1305,8 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 Two stacked rows (`.team-settings-toggle-row`, label left / control right)
 share one `form-section` (`.team-settings-toggles`, `flex-direction: column`,
 `gap: var(--spacing-s)`): **visibility** (`public`/`private`) on top,
-**joining mode** below it. Both are `ButtonGroup`s (`variant="radio"`,
+**joining mode** below it (a `ButtonGroup` only while the team is public —
+see the #2398 note below). Both are `ButtonGroup`s (`variant="radio"`,
 `size="small"`, plain group-level `color="secondary"` — no per-item color,
 same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
@@ -1309,15 +1326,28 @@ follows now.
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
 (`public`/`private`, default `public`) gating marketplace discoverability
 — see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
-mechanism. A `private` team can never be `open`: while
-`visibility === "private"`, every item in the joining-mode `ButtonGroup`
-below carries `disabled` (the whole group reads as inert, not just the
-`open` option) — enforced this way rather than only disabling `open`
-because the server may have just silently downgraded a stored `open` to
-`invite_only` the moment visibility flipped, and a half-disabled group
-would misrepresent that as still a live choice. No client-side write of
-`joining_mode` ever accompanies a visibility PATCH — the resulting
-`joining_mode`, if it changes, comes back from the server on refetch.
+mechanism. No client-side write of `joining_mode` ever accompanies a
+visibility PATCH — the resulting `joining_mode`, if it changes, comes back
+from the server on refetch.
+
+**Joining mode while private — one disabled button, no toggle (#2398,
+2026-08-20).** A `private` team can never be `open`, and the product has no
+invitation flow at all (there is no invite endpoint — a team admin adds
+members by hand from `TeamSettingsMembers`). So while
+`visibility === "private"` the joining-mode row renders no `ButtonGroup`:
+the control slot holds a single **disabled** `Button` (`secondary` /
+`outlined` / `small`, `lock` icon) reading "Manual only", and the row's
+support line switches to the `privateSupport` copy ("a private team is not
+listed on the marketplace: its members are added manually by a team
+admin"). One inert, locked control states the fact; the original 2026-07-26
+treatment kept the whole group mounted with every item `disabled`, and a
+greyed-out *two-state* toggle still reads as a live choice — while "Invite
+only" named a mechanism that does not exist. Plain muted text was tried
+first and read as too weak for the row (it also wrapped onto two lines),
+hence a real button shape. `.team-settings-toggle-action` carries the
+`flex-shrink: 0` + `white-space: nowrap` the row needs: the label column
+takes the free width and `.btn` clips its own overflow. The group returns
+unchanged the moment visibility goes back to `public`.
 
 **`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
 previously had no disabled styling at all — a `disabled` item was
@@ -1327,12 +1357,14 @@ identical to an enabled one. Added `&:disabled` with `pointer-events: none`
 `:hover`/`:active` rules individually) plus, scoped to
 `.stateLayer:not([data-selected="true"])` only, a transparent background
 and `on-surface-muted` label color. Scoping to the unselected sub-case
-matters: the joining-mode group's disabled-while-private state always has
-one selected item (`invite_only`, forced) and one not (`open`) — the
-selected item keeps its normal filled selected-color styling, only the
-unselected `open` option reads as muted/transparent. Generic addition to
-the shared atom (any future disabled+unselected item elsewhere gets the
-same treatment for free), not special-cased to this one call site.
+mattered for the original driving call site — the joining-mode group's
+disabled-while-private state, which always had one selected item
+(`invite_only`, forced) and one not (`open`): the selected item kept its
+normal filled selected-color styling, only the unselected `open` option
+read as muted/transparent. That call site is gone since #2398 (see above),
+but the rule was a generic addition to the shared atom, never special-cased
+to it — any disabled+unselected item elsewhere still gets the treatment for
+free.
 
 **`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
 optional `backgroundColor` prop (default `var(--surface-container)`,
