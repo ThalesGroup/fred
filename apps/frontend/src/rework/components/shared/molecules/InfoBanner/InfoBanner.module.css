@@ -1,0 +1,68 @@
+/* Generic informative top banner, see InfoBanner.tsx */
+
+/* Deliberate hardcoded color (guidelines §2.2 exception, tracked as an open
+   UX issue in COMPONENT-UX.md): the background comes from configuration
+   (`--banner-bg`, set by InfoBanner.tsx from `info_banner.color`) and is
+   outside the theme, so no design token can pair with it. The fixed dark
+   text assumes the configured color stays light, like the documented
+   #00BBDD example. */
+
+.banner {
+  --banner-text: #00222c;
+
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+  animation: slide-in 200ms ease-out;
+  background-color: var(--banner-bg);
+  padding: var(--spacing-m) var(--spacing-xl);
+  color: var(--banner-text);
+}
+
+.message {
+  margin: 0;
+  color: var(--banner-text);
+  font: var(--font-body-medium);
+}
+
+.message strong {
+  font: var(--font-body-medium-emphasized);
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.link {
+  color: var(--banner-text);
+  font: var(--font-body-medium-emphasized);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.separator {
+  color: var(--banner-text);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner {
+    animation: none;
+  }
+}

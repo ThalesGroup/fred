@@ -178,6 +178,10 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
+  - `info_banner` — **added 2026-08-19** — optional deployer-configured
+    global announcement banner (`platform.frontend.info_banner`), rendered
+    full-width above the app on every page. Omitted/`null` → nothing
+    rendered. See §42 for why it is pre-auth.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -2701,3 +2705,31 @@ enablement by design (§40's ReBAC exemption).
 surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
+
+## 42. Contract Notes — global info banner (2026-08-19)
+
+`FrontendConfig` (§3.1.1) gains one optional field, `info_banner`
+(`InfoBanner`: `color` + `titles`/`messages` locale maps + `links: [{url,
+labels}]` + `auto_hide_seconds`), sourced from control-plane deployment
+config `platform.frontend.info_banner`. When set, the frontend renders one
+full-width, non-dismissable announcement banner (`InfoBanner`, mounted once
+at the app root) above the app content on **every** page, resolving texts
+from the active i18next locale with `en` fallback and pushing content down
+instead of overlaying it. Persistent by default; the optional
+`auto_hide_seconds` (integer > 0) makes the banner remove itself that many
+seconds after app load. `null`/omitted → nothing rendered — the shipped
+default: `values.yaml` (prod) and `configuration*.yaml` (dev) carry only
+commented-out example blocks.
+
+Boundary rationale (§3.1.1 vs §23): unlike `upload_warning` (post-auth
+surfaces only), the banner's whole point is to show on every page — the
+GCU-acceptance and root-bootstrap screens included, which render *before*
+the authenticated `/frontend/bootstrap` can succeed. So it follows the
+`gcu_version` precedent, not the `upload_warning` one: a pre-auth field on
+the public surface. It carries only deployer-authored announcement content
+— never secrets or per-user state — keeping §3.1.1's "no second bootstrap
+payload" rule intact. One deliberate scope note: on auth-enabled
+deployments the login page itself is Keycloak-hosted (`login-required`
+redirects away before the SPA renders), so the banner cannot cover the
+login screen — pre-auth here means "before the authenticated bootstrap",
+not "on the IdP's page".

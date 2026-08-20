@@ -367,22 +367,21 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         and deps.team_dependencies.rebac.enabled
         and not root_bootstrap_completed
     )
-    if user_security.enabled:
-        return FrontendConfig(
-            user_auth=FrontendUserAuthConfig(
-                enabled=True,
-                realm_url=str(user_security.realm_url),
-                client_id=user_security.client_id,
-            ),
-            gcu_version=gcu_version,
-            root_bootstrap_completed=root_bootstrap_completed,
-            root_bootstrap_required=root_bootstrap_required,
+    user_auth = (
+        FrontendUserAuthConfig(
+            enabled=True,
+            realm_url=str(user_security.realm_url),
+            client_id=user_security.client_id,
         )
+        if user_security.enabled
+        else FrontendUserAuthConfig(enabled=False)
+    )
     return FrontendConfig(
-        user_auth=FrontendUserAuthConfig(enabled=False),
+        user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
+        info_banner=deps.configuration.platform.frontend.info_banner,
     )
 
 

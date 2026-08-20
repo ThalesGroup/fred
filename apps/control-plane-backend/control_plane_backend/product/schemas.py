@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
+    InfoBanner,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     UploadWarning,
@@ -139,6 +140,20 @@ class FrontendConfig(BaseModel):
             "'not completed' alone as 'must show the bootstrap page'. The "
             "frontend must gate on this field, not re-derive the ReBAC/auth "
             "predicate itself."
+        ),
+    )
+    info_banner: InfoBanner | None = Field(
+        default=None,
+        description=(
+            "Deployer-configured global announcement banner, from "
+            "`platform.frontend.info_banner`. `None` "
+            "when the deployment configures none — the frontend then renders "
+            "nothing. Deliberately on this public pre-auth surface, not the "
+            "authenticated `FrontendBootstrap`: the banner shows on every "
+            "page, including the GCU-acceptance and root-bootstrap screens, "
+            "which render before `/frontend/bootstrap` can succeed. Carries "
+            "only deployer-authored announcement content — never anything "
+            "sensitive."
         ),
     )
 

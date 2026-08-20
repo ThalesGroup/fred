@@ -3233,6 +3233,38 @@ clears the binding back to "Using pod default".
 
 ---
 
+## Global info banner (2026-08-19)
+
+### `InfoBanner`
+
+**Location:** `src/rework/components/shared/molecules/InfoBanner/`
+**Status:** `Functional`
+
+Full-width, non-dismissable announcement banner mounted once at
+the app root (`src/app/App.tsx`), above the GCU/bootstrap guards, so it shows
+on every page — pre-auth ones included — and pushes the app content down
+instead of overlaying it (the app shell is now a `100vh` flex column; routed
+pages size with `height: 100%`, never `100vh` — see
+`FRONTEND_CODING_GUIDELINES.md` §2.5). Entirely config-driven from
+`platform.frontend.info_banner` (public pre-auth `/frontend/config`): without
+the config block, nothing renders — there is no default banner. Persistent
+by default; the optional `auto_hide_seconds` removes it that many seconds
+after app load (content reflows up when it goes). Background
+color comes from configuration via the `--banner-bg` custom property
+(deliberate token exception, comment in the module CSS); title/message/link
+labels are locale maps resolved with `en` fallback; links open in a new tab,
+separated by a `·`, and only http(s)/relative URLs are rendered.
+`role="status"` + `aria-live="polite"`.
+
+#### Open UX issues
+
+- **Fixed dark text over a configured background.** `--banner-text: #00222c`
+  assumes the configured color stays light (like the documented `#00BBDD`
+  example); a dark configured color would fail contrast. Revisit only if a
+  deployment actually needs a dark banner.
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._
