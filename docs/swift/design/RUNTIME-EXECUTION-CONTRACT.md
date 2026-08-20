@@ -3544,9 +3544,24 @@ reasoning — and reached the composer on the `reasoning_toggle` control's
 
 Both columns, both params, and the `ModelCatalogEntry.reasoning_effort` /
 `CapabilityCatalogEntry.model_reasoning_effort` projections that fed them are
-gone, along with their two migrations (`a7d2e9c41f38`, `c9e1f74b2a63`), deleted
-outright rather than reverted: neither had shipped in a tagged release or a
-deployed instance.
+gone. The columns are dropped at the head of the chain, by `d5c9a1b73e60`.
+
+**Correction (2026-08-20).** The two migrations that added them
+(`c9e1f74b2a63`, `a7d2e9c41f38`) were first deleted outright, on the stated
+premise that neither had shipped in a tagged release. That premise was wrong:
+`code/v2.1.35` shipped with `a7d2e9c41f38` as its control-plane head, so every
+instance on that release carries the id in `alembic_version_control_plane`.
+Deleting the file makes the id unresolvable and alembic refuses to start — it
+cannot place itself in the graph, so it cannot move forward either. Both
+migrations are restored and stay in the chain permanently; only the columns go,
+at the head, where every deployment reaches them by walking forward.
+
+The premise was checked with `git tag --contains` on the commit that introduced
+the migration, which returned nothing. On a repository that squash-merges, that
+proves nothing — the tag holds an equivalent commit with a different identity,
+so the original is never an ancestor. **Whether a migration has shipped is a
+question about the tag's tree, not its ancestry**: use `git ls-tree -r <tag> --
+<versions-dir>` and match on the revision id.
 
 Two independent reasons:
 
