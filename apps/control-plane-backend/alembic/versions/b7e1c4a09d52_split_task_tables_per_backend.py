@@ -1,7 +1,7 @@
 """split task tables per backend: task_run/task_event_log -> cp_task_run/cp_task_event_log
 
 Revision ID: b7e1c4a09d52
-Revises: f3790013f637
+Revises: a7d2e9c41f38
 Create Date: 2026-08-14 00:00:00.000000
 
 control-plane and knowledge-flow both migrate the same `fred` database, and both
@@ -44,7 +44,7 @@ from sqlalchemy.dialects import postgresql
 # revision identifiers, used by Alembic.
 revision: str = "b7e1c4a09d52"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "f3790013f637"  # pragma: allowlist secret
+    "a7d2e9c41f38"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
