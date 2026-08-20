@@ -1,3 +1,57 @@
+**v2.1.36** — 2026-08-20
+
+- **Summary**
+
+  Platform admins can now set one default chat model for everyone, with
+  per-agent overrides per team. Folder rows in Resources tell you what is
+  happening underneath them — still ingesting, how many documents failed, or
+  done. The chat composer finally names the model your question actually goes to.
+
+- **Features**
+
+  - Platform admins can set a single default chat model, and each team can
+    override it per agent using only models every runtime offers (#2365, #2380)
+  - Folder rows in Resources summarize their contents: still ingesting, how many
+    documents failed underneath — hover to see which and copy the list — or done (#2384)
+  - Deployments can show an announcement banner above every page, configured
+    centrally and optionally hiding itself after a set delay (#2400, #2395)
+  - Team role badges explain what each role grants on hover, and a Member badge
+    shows the baseline everyone holds (#2383, #2386)
+
+- **Improvements**
+
+  - Reasoning in the chat composer is now two named modes, instead of a state
+    that read as though the model itself were off (#2387, #2389)
+  - Error detail panels can be reached with the mouse to select and copy their
+    text, and no longer open past the edge of the screen (#2384)
+
+- **Security**
+
+  - Routine dependency update: sqlparse (Python) (#2390)
+
+- **Bug Fixes**
+
+  - The chat composer named the model an admin had enabled reasoning on rather
+    than the one answering; it now names the routed model and warns when your
+    team cannot use it (#2387, #2389)
+  - The Activity page listed every task twice (#2170, #2376)
+  - A workbook containing a single empty sheet failed to ingest entirely; empty
+    sheets are now reported and the rest of the workbook imports (#2392, #2393)
+  - Private teams no longer appear in the marketplace to people who are not
+    members (#2398, #2399)
+  - A team's model routing no longer reports "no models activated" when an
+    unrelated runtime is unreachable (#2380)
+  - An ingestion that failed before reaching a processing stage showed "Erreur"
+    with an empty details panel; the real message now shows (#2384)
+
+- **Deployment note**
+
+  Upgrade the agent runtime pods together with the platform: while a pod still
+  runs the previous release, team model-routing policies cannot be edited.
+  Stored routing policies are migrated in place — operation- and purpose-scoped
+  rules, which no deployment used, are dropped. The announcement banner is
+  optional and renders nothing unless configured.
+
 **v2.1.35** — 2026-08-13
 
 - **Summary**
