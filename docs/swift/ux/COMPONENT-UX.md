@@ -1224,6 +1224,29 @@ UUID-prefix fallback from the open issue above) — same shape as
 
 ---
 
+### `ChatList` meta line and nav panel width (2026-08-20)
+
+**Location:**
+`src/rework/components/shared/organisms/ChatList/ChatListItem/ChatListItem.tsx`,
+`src/rework/components/shared/organisms/ChatList/ChatList.module.scss`,
+`Sidebar/{TeamContentNavbar,HomeNavPanel,MarketplaceNavbar,AdminNavbar}` stylesheets
+**Status:** `Functional`
+
+The conversation row's second line (`<agent name> · DD/MM/YY - HH:mm`) wrapped
+onto a second line whenever the agent name was long, colliding with the next
+row and making the list unreadable. Two changes:
+
+- The meta line is now a nowrap flex row where **only the agent name flexes**
+  (`flex: 0 1 auto; min-width: 0; text-overflow: ellipsis`, full name in
+  `title`); the separator and the date are `flex: 0 0 auto`, so the date and
+  time always render whole. Same ellipsis treatment on `.groupHeader`, the
+  per-agent sub-list header shown when grouping is on.
+- All four nav panels went **240px → 272px**. They swap into the same sidebar
+  grid column, so the width must stay identical across them or the column
+  jumps when switching between Home / team / marketplace / admin.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`

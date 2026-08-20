@@ -35,13 +35,31 @@
   white-space: nowrap;
 }
 
-.date {
+/* One line, never two: the whole meta row is nowrap and the only flexible part
+ * is the agent name. `min-width: 0` lets it actually shrink below its content
+ * width so the ellipsis kicks in instead of the row overflowing. */
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-3xs);
+  min-width: 0;
   color: var(--on-surface-muted);
   font: var(--font-label-small);
+  white-space: nowrap;
 }
 
 .agentName {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--primary);
+  text-overflow: ellipsis;
+}
+
+/* Separator and date keep their intrinsic width — the name absorbs the squeeze. */
+.metaSeparator,
+.dateLabel {
+  flex: 0 0 auto;
 }
 
 .chatActions {

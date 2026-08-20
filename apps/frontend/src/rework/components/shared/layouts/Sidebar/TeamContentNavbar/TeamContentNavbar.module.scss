@@ -1,10 +1,16 @@
 /* The main nav panel — the second column that swaps content by mainNavBar
  * selection (team nav here, Home team list, marketplace, admin). Renamed from
- * `teamContentNavbarContainer` (#2298): it is no longer team-only. */
+ * `teamContentNavbarContainer` (#2298): it is no longer team-only.
+ *
+ * 272px (was 240px): the conversation list's meta line "<agent> · DD/MM/YY -
+ * HH:mm" is the widest content this column carries, and at 240px it left too
+ * little room for the agent name once the date is kept intact. All four panels
+ * share this width — they swap in the same grid column, so any mismatch shows
+ * up as the column jumping when switching modes. */
 .mainNavPanel {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: 272px;
   height: 100%;
   min-height: 0;
 }
