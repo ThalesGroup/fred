@@ -103,3 +103,10 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
+
+/* #2398: read-only stand-in for the joining-mode toggle while the team is
+ * private — reads as a stated fact, not as a control that refuses clicks. */
+.team-settings-toggle-static {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}

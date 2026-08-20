@@ -17,8 +17,9 @@
 // replaced by a 2-way joining_mode button group (open / invite_only).
 // TEAM-10 (2026-07-26): a sibling visibility (public/private) button group
 // was added just above it in the same form-section — a PRIVATE team can
-// never be OPEN, so the joining-mode group is entirely disabled while
-// visibility is private.
+// never be OPEN, and #2398 replaced the disabled joining-mode group with a
+// static "manual only" state while visibility is private (no invitation flow
+// exists: a team admin adds members by hand).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -138,14 +139,12 @@ describe("TeamSettingsParameters joining mode", () => {
     expect(h.updateTeam).not.toHaveBeenCalled();
   });
 
-  it("is entirely disabled while the team is private", () => {
+  it("renders no toggle at all while the team is private, only the manual state", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only", "private")} />);
 
-    const radios = joiningModeRadios();
-    expect(radios).toHaveLength(2);
-    for (const radio of radios) {
-      expect((radio as HTMLButtonElement).disabled).toBe(true);
-    }
+    expect(joiningModeRadios()).toHaveLength(0);
+    expect(container.textContent).toContain("rework.teamSettings.parameters.joiningMode.manual");
+    expect(container.textContent).toContain("rework.teamSettings.parameters.joiningMode.privateSupport");
   });
 
   it("is enabled while the team is public", () => {
@@ -154,6 +153,7 @@ describe("TeamSettingsParameters joining mode", () => {
     for (const radio of joiningModeRadios()) {
       expect((radio as HTMLButtonElement).disabled).toBe(false);
     }
+    expect(container.textContent).toContain("rework.teamSettings.parameters.joiningMode.support");
   });
 });
 

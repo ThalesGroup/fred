@@ -96,10 +96,11 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
 
-  // TEAM-10: a PRIVATE team can never be OPEN — disabling the whole group
-  // while private (rather than just the "Open" option) both prevents
-  // picking it and reflects that the server silently downgraded
-  // joining_mode to INVITE_ONLY the moment visibility turned private.
+  // TEAM-10 (#2398): a PRIVATE team can never be OPEN, and there is no
+  // invitation flow either — a team admin adds members by hand. So while
+  // private, the joining-mode toggle is not a setting at all: it is replaced
+  // by a static "manual only" state rather than rendered as a two-state
+  // control that refuses every click.
   const visibility = team.visibility ?? "public";
   const isPrivate = visibility === "private";
   const handleSelectVisibility = (index: number) => {
@@ -224,22 +225,30 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           <div className={styles["team-settings-toggle-label"]}>
             <span>{t("rework.teamSettings.parameters.joiningMode.label")}</span>
             <span className={styles["team-settings-toggle-support"]}>
-              {t("rework.teamSettings.parameters.joiningMode.support")}
+              {isPrivate
+                ? t("rework.teamSettings.parameters.joiningMode.privateSupport")
+                : t("rework.teamSettings.parameters.joiningMode.support")}
             </span>
           </div>
-          <ButtonGroup
-            variant="radio"
-            size="small"
-            color="secondary"
-            backgroundColor="var(--surface-container-lowest)"
-            aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
-            selectedIndex={JOINING_MODES.indexOf(joiningMode)}
-            onSelectedIndexChange={handleSelectJoiningMode}
-            items={[
-              { label: t("rework.teamSettings.parameters.joiningMode.open"), disabled: isPrivate },
-              { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly"), disabled: isPrivate },
-            ]}
-          />
+          {isPrivate ? (
+            <span className={styles["team-settings-toggle-static"]}>
+              {t("rework.teamSettings.parameters.joiningMode.manual")}
+            </span>
+          ) : (
+            <ButtonGroup
+              variant="radio"
+              size="small"
+              color="secondary"
+              backgroundColor="var(--surface-container-lowest)"
+              aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
+              selectedIndex={JOINING_MODES.indexOf(joiningMode)}
+              onSelectedIndexChange={handleSelectJoiningMode}
+              items={[
+                { label: t("rework.teamSettings.parameters.joiningMode.open") },
+                { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly") },
+              ]}
+            />
+          )}
         </div>
       </div>
       {/* Data & Retention (CTRLP-12 B6): lives here rather than a dedicated tab. */}
