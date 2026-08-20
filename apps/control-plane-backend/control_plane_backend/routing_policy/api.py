@@ -25,6 +25,7 @@ from control_plane_backend.product.dependencies import (
 )
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfileList,
+    EffectiveChatModel,
     PlatformModelBinding,
     ProfileNotUsableError,
     SetPlatformModelBindingRequest,
@@ -43,6 +44,9 @@ from control_plane_backend.routing_policy.service import (
 )
 from control_plane_backend.routing_policy.service import (
     list_available_model_profiles as list_available_model_profiles_from_service,
+)
+from control_plane_backend.routing_policy.service import (
+    resolve_effective_chat_model as resolve_effective_chat_model_from_service,
 )
 from control_plane_backend.routing_policy.service import (
     set_platform_model_binding as set_platform_model_binding_from_service,
@@ -97,6 +101,23 @@ async def get_available_model_profiles(
     user: KeycloakUser = Depends(get_current_user),
 ) -> AvailableModelProfileList:
     return await list_available_model_profiles_from_service(user, team_id, deps)
+
+
+@router.get(
+    "/teams/{team_id}/routing-policy/effective-chat-model",
+    response_model=EffectiveChatModel,
+    response_model_exclude_none=True,
+    summary="The model a chat turn with one agent instance will actually use (composer label, #2387)",
+)
+async def get_effective_chat_model(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: str,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> EffectiveChatModel:
+    return await resolve_effective_chat_model_from_service(
+        user, team_id, agent_instance_id, deps
+    )
 
 
 @router.patch(

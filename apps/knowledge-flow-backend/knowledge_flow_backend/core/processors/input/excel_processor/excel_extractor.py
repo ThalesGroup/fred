@@ -142,6 +142,10 @@ class SheetSummary:
     tables: list = field(default_factory=list)  # list[DetectedTable]
     residuals: list = field(default_factory=list)  # list[Residual]
     coverage: float = 0.0
+    # True when A2 found no value at all on the sheet (blank, or formatting
+    # only): phases A3->B5 are skipped and the sheet is reported as empty in
+    # the Markdown summary rather than silently printed with no table.
+    is_empty: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -388,6 +392,12 @@ class ExcelExtractor:
                 continue
             log.info('\n── sheet "%s" %s', summary.name, "(hidden)" if not summary.visible else "")
             grid, structure = self.a2_load_and_capture(summary.name)
+            if grid.size == 0:
+                # Empty sheet: no block to detect, no table to build. Flagged so
+                # the summary still NAMES it as empty instead of dropping it.
+                summary.is_empty = True
+                _step("A2", f'"{summary.name}" is empty -> reported as empty, phases A3-B5 skipped')
+                continue
             candidates, residuals = self.a3_detect_tables(summary.name, grid, structure)
             tables, split_residuals = self.a4_split_stacked_tables(candidates)
             self.a5_strip_leading_label_columns(tables)
@@ -461,6 +471,14 @@ class ExcelExtractor:
         # np.empty grid stays sized to the actual content. See _real_extent.
         nrows, ncols = _real_extent(ws)
         grid = np.empty((nrows, ncols), dtype=object)
+        # No value anywhere on the sheet (blank, or cells carrying only styles /
+        # merges / column widths). Stop here: `iter_rows` silently ignores a `0`
+        # bound (`max_row = max_row or self.max_row` in openpyxl) and falls back
+        # to the <dimension> tag, so it would yield cells to write into a 0x0
+        # grid -> IndexError. Nothing to detect either, so A3+ is skipped.
+        if grid.size == 0:
+            _step("A2", "sheet holds no value (blank, or formatting only) -> nothing to extract")
+            return grid, {"merges": [], "outline": {}, "errors": set(), "hidden_rows": set(), "hidden_cols": set()}
         if not self.apply_format_masking:
             # Fast path: raw values, without reading each cell's number_format.
             for r, row in enumerate(ws.iter_rows(min_row=1, max_row=nrows, max_col=ncols, values_only=True)):

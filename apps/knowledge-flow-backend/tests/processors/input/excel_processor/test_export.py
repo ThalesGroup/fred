@@ -138,6 +138,47 @@ def test_convert_writes_output_md(run_export):
     assert r.result["md_file"].endswith("output.md")
 
 
+def test_multiline_residual_stays_in_one_bullet(run_export):
+    # Un résidu multi-ligne dont une ligne commence par « - » ouvrait une puce
+    # supplémentaire dans output.md. Attendu : une seule puce par résidu, les
+    # retours à la ligne de la cellule conservés (saut de ligne dur Markdown).
+    r = run_export(
+        [
+            {
+                "name": "S",
+                "cells": {"A1": "h1", "B1": "h2", "A2": 1, "B2": 2, "A5": "Organizations\n- all –"},
+            }
+        ],
+        extract_format="csv",
+    )
+    content = (r.output_dir / "output.md").read_text(encoding="utf-8")
+    residual_block = content.split("Unextracted residuals (1):\n")[1]
+    assert residual_block.rstrip("\n") == '- range="A5:A5"  type=isolated_cell  value="  \n  Organizations  \n  \\- all –"'
+    # une seule puce dans tout le bloc résidus
+    assert [line for line in residual_block.splitlines() if line.startswith("- ")] == [residual_block.splitlines()[0]]
+
+
+def test_empty_sheet_is_named_as_empty_in_output_md(run_export):
+    # Une feuille vide (ou seulement décorée) ne doit ni faire échouer la
+    # conversion, ni disparaître du sommaire : elle est nommée et signalée vide.
+    r = run_export(
+        [
+            {"name": "Data", "cells": {"A1": "h", "B1": "g", "A2": 1, "B2": 2}},
+            {"name": "Feuil2"},
+            {"name": "Deco", "number_formats": {"C3": "0.00"}, "merges": ["A1:D1"]},
+        ],
+        extract_format="csv",
+    )
+    content = (r.output_dir / "output.md").read_text(encoding="utf-8")
+    for name in ("Feuil2", "Deco"):
+        assert f"## Sheet: {name}  (visible, empty)" in content
+    assert content.count("No data — sheet holds no value (blank, or formatting only).") == 2
+    # la feuille porteuse de données reste traitée normalement
+    assert "## Sheet: Data  (visible, coverage=100%)" in content
+    entries = json.loads((r.output_dir / "tables.json").read_text(encoding="utf-8"))
+    assert [e["sheet"] for e in entries] == ["Data"]
+
+
 def test_tables_json_matches_csv_files(run_export):
     r = run_export(
         [

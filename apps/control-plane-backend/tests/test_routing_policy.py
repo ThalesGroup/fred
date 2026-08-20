@@ -25,6 +25,7 @@ snapshot resolver.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -35,11 +36,13 @@ from control_plane_backend.routing_policy.schemas import (
     UnknownProfileError,
     UpdateTeamRoutingPolicyRequest,
 )
+from control_plane_backend.routing_policy.service import resolve_effective_chat_model
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from fred_core import AuthorizationError, KeycloakUser, TeamPermission
 from fred_core.common import PostgresStoreConfig, TeamId
 from fred_core.sql import create_async_engine_from_config
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
+from fred_sdk.contracts.context import ModelBinding
 
 
 def _user() -> KeycloakUser:
@@ -679,3 +682,508 @@ async def test_snapshot_resolves_stored_policy() -> None:
 
     assert default_id == "chat.openai.gpt5"
     assert overrides == {"rico": "chat.openai.gpt4o"}
+
+
+# ---------------------------------------------------------------------------
+# resolve_effective_chat_model (#2387) — the composer's model label.
+#
+# What these pin down is the thing the old composer got wrong: the model shown
+# must be the one the turn ROUTES to, at every precedence level, and must never
+# be the reasoning-enabled model that used to be displayed instead.
+# ---------------------------------------------------------------------------
+
+_POD = "runtime-a"
+_POD_URL = "http://pod-a"
+
+
+class _FakeInstanceForResolution:
+    def __init__(self, *, source_agent_id: str, source_runtime_id: str = _POD) -> None:
+        self.source_agent_id = source_agent_id
+        self.source_runtime_id = source_runtime_id
+
+
+class _FakeRebacUnscoped:
+    """ReBAC disabled: `usable_capability_ids` returns `None`, which means
+    "unrestricted" — deliberately NOT the same as "nothing usable", the
+    distinction `enabled_for_team` has to get right."""
+
+    async def has_permission(self, *args, **kwargs) -> bool:
+        return True
+
+    async def lookup_resources(self, *args, **kwargs):
+        from fred_core.security.rebac.rebac_engine import RebacDisabledResult
+
+        return RebacDisabledResult()
+
+
+class _FakeRebacNothingUsable:
+    """ReBAC enabled and this team is `can_use`-enabled for no capability."""
+
+    async def has_permission(self, *args, **kwargs) -> bool:
+        return False
+
+    async def lookup_resources(self, *args, **kwargs):
+        return []
+
+
+class _ResolutionDeps(_FakeDeps):
+    """`_FakeDeps` plus the two reads only the resolution performs: the pinned
+    agent instance, and the pod source list it maps `source_runtime_id` through."""
+
+    def __init__(
+        self,
+        *,
+        store: _FakeStore,
+        rebac: Any,
+        instance: _FakeInstanceForResolution | None,
+        sources: list[Any] | None = None,
+        reasoning_enabled_ids: set[str] | None = None,
+    ) -> None:
+        super().__init__(store=store, rebac=rebac)
+        self._instance = instance
+        self._reasoning_enabled_ids = reasoning_enabled_ids or set()
+        self.configuration = SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=sources
+                if sources is not None
+                else [SimpleNamespace(enabled=True, base_url=_POD_URL, runtime_id=_POD)]
+            )
+        )
+
+    def get_agent_instance_store(self):  # type: ignore[override]
+        """Only `get_for_team` is read by the resolution, so this deliberately
+        returns a narrower stand-in than `_FakeDeps`' list-oriented one."""
+
+        instance = self._instance
+
+        class _Store:
+            async def get_for_team(self, agent_instance_id, team_id):
+                # Mirrors the real store's two-column filter: an instance is
+                # only visible through its OWN team. A double that ignored
+                # team_id could not catch a cross-team regression.
+                if instance is None or team_id != TeamId("team-1"):
+                    return None
+                return instance
+
+        return _Store()
+
+    def get_model_reasoning_store(self):
+        """Only the enabled-model-id list is read by the resolution."""
+
+        ids = self._reasoning_enabled_ids
+
+        class _Store:
+            async def list_enabled_model_ids(self):
+                return set(ids)
+
+        return _Store()
+
+    def get_platform_model_binding_store(self):
+        """No platform binding configured — the common case on every deployment
+        that has not set one, and the precondition for the profile-valued
+        precedence below to be reachable at all."""
+
+        class _Store:
+            async def get(self, *, model_capability="chat"):
+                return None
+
+        return _Store()
+
+
+def _resolution_deps(
+    *,
+    stored_default: str | None = None,
+    stored_overrides: dict[str, str] | None = None,
+    rebac: Any = None,
+    instance: _FakeInstanceForResolution | None = None,
+    sources: list[Any] | None = None,
+    reasoning_enabled_ids: set[str] | None = None,
+) -> ProductServiceDependencies:
+    from control_plane_backend.routing_policy.store import StoredTeamRoutingPolicy
+
+    store = _FakeStore()
+    if stored_default is not None or stored_overrides:
+        store._stored = StoredTeamRoutingPolicy(
+            team_id=TeamId("team-1"),
+            version=1,
+            chat_default_profile_id=stored_default,
+            agent_profile_overrides=dict(stored_overrides or {}),
+            updated_by="someone",
+            updated_at=None,
+        )
+    return _ResolutionDeps(  # type: ignore[return-value]
+        store=store,
+        rebac=rebac if rebac is not None else _FakeRebacUnscoped(),
+        instance=instance
+        if instance is not None
+        else _FakeInstanceForResolution(source_agent_id="rico"),
+        sources=sources,
+        reasoning_enabled_ids=reasoning_enabled_ids,
+    )
+
+
+def _stub_pod_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    entries: list[CapabilityCatalogEntry],
+    default_chat_profile_id: str | None = None,
+    agent_chat_profile_overrides: dict[str, str] | None = None,
+    unreachable: bool = False,
+) -> None:
+    from control_plane_backend.product import service as product_service
+    from control_plane_backend.product.service import PodModelCatalog
+
+    async def _fake(base_url: str):
+        if unreachable:
+            return None
+        return PodModelCatalog(
+            entries=entries,
+            default_chat_profile_id=default_chat_profile_id,
+            agent_chat_profile_overrides=dict(agent_chat_profile_overrides or {}),
+        )
+
+    monkeypatch.setattr(product_service, "_model_capabilities_for_source", _fake)
+
+
+def _chat_entry(
+    capability_id: str,
+    profile_id: str,
+    *,
+    name: str = "gpt-4.1",
+    display_name: str | None = None,
+) -> CapabilityCatalogEntry:
+    entry = _model_entry(capability_id, [profile_id])
+    return entry.model_copy(
+        update={
+            # `name` IS the concrete model name for a kind="model" entry — the
+            # field the resolution reads.
+            "name": name,
+            "model_display_name": display_name,
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_effective_model_falls_back_to_the_pod_default(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """No team policy: the pod default is what actually answers, so it is what
+    the composer must name."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__gpt-5.1", "chat.pod", name="gpt-5.1")],
+        default_chat_profile_id="chat.pod",
+    )
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+    assert result.name == "gpt-5.1"
+    assert result.enabled_for_team is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_prefers_the_team_default_over_the_pod_default(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry("model__openai__gpt-5.1", "chat.pod", name="gpt-5.1"),
+            _chat_entry("model__openai__gpt-4.1", "chat.team", name="gpt-4.1"),
+        ],
+        default_chat_profile_id="chat.pod",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(stored_default="chat.team"),
+    )
+    assert result.name == "gpt-4.1"
+
+
+@pytest.mark.asyncio
+async def test_effective_model_prefers_the_team_agent_override(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """The exact case that looked broken in the UI: a per-agent override set,
+    and the composer must name IT, not the team default and not the pod's."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry("model__openai__gpt-5.1", "chat.pod", name="gpt-5.1"),
+            _chat_entry("model__openai__gpt-4.1", "chat.team", name="gpt-4.1"),
+            _chat_entry("model__openai__gpt-4o", "chat.rico", name="gpt-4o"),
+        ],
+        default_chat_profile_id="chat.pod",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_default="chat.team", stored_overrides={"rico": "chat.rico"}
+        ),
+    )
+    assert result.name == "gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_effective_model_lets_the_pod_static_override_win(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """The operator's local escape hatch outranks every team level (#2380's
+    documented precedence) — the composer must not promise the team's choice."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry("model__openai__gpt-4.1", "chat.team", name="gpt-4.1"),
+            _chat_entry("model__openai__gpt-4o", "chat.ops", name="gpt-4o"),
+        ],
+        default_chat_profile_id="chat.team",
+        agent_chat_profile_overrides={"rico": "chat.ops"},
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_default="chat.team", stored_overrides={"rico": "chat.team"}
+        ),
+    )
+    # Both team levels named chat.team/gpt-4.1; the pod's static override wins,
+    # so gpt-4o is what answers and what the composer must say.
+    assert result.name == "gpt-4o"
+    assert result.capability_id == "model__openai__gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_effective_model_reports_a_model_not_enabled_for_the_team(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """The turn will fail with ModelNotUsableError. The composer names the model
+    AND flags it, so the user learns why instead of hitting an opaque error."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__gpt-4.1", "chat.pod")],
+        default_chat_profile_id="chat.pod",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(rebac=_FakeRebacNothingUsable()),
+    )
+    assert result.name == "gpt-4.1"
+    assert result.enabled_for_team is False
+
+
+@pytest.mark.asyncio
+async def test_effective_model_is_empty_when_the_pod_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """A pod being down must not break the chat page."""
+
+    _stub_pod_catalog(monkeypatch, entries=[], unreachable=True)
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(stored_default="chat.team"),
+    )
+    assert result.name is None
+
+
+@pytest.mark.asyncio
+async def test_effective_model_is_empty_when_no_level_declares_anything(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch, entries=[_chat_entry("model__openai__gpt-4.1", "chat.pod")]
+    )
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+    assert result.name is None
+
+
+@pytest.mark.asyncio
+async def test_effective_model_is_empty_when_the_winning_profile_is_unknown_to_the_pod(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """Team-policy drift — the same condition that raises
+    TeamRoutingProfileDriftError at turn time. No model can be named, and
+    inventing one would be worse than showing none."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__gpt-4.1", "chat.pod")],
+        default_chat_profile_id="chat.pod",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(stored_default="chat.ghost"),
+    )
+    assert result.name is None
+
+
+@pytest.mark.asyncio
+async def test_effective_model_consults_only_the_instance_own_pod(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """An instance is pinned to one pod for its whole life, so another pod's
+    catalog has no say in what this agent will run."""
+
+    seen: list[str] = []
+    from control_plane_backend.product import service as product_service
+    from control_plane_backend.product.service import PodModelCatalog
+
+    async def _fake(base_url: str):
+        seen.append(base_url)
+        return PodModelCatalog(
+            entries=[_chat_entry("model__openai__gpt-4.1", "chat.pod")],
+            default_chat_profile_id="chat.pod",
+        )
+
+    monkeypatch.setattr(product_service, "_model_capabilities_for_source", _fake)
+    deps = _resolution_deps(
+        instance=_FakeInstanceForResolution(
+            source_agent_id="rico", source_runtime_id="runtime-b"
+        ),
+        sources=[
+            SimpleNamespace(enabled=True, base_url=_POD_URL, runtime_id=_POD),
+            SimpleNamespace(
+                enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+            ),
+        ],
+    )
+    await resolve_effective_chat_model(_user(), TeamId("team-1"), "inst-1", deps)
+    assert seen == ["http://pod-b"]
+
+
+@pytest.mark.asyncio
+async def test_effective_model_platform_binding_outranks_everything(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """An operator binding wins over every profile level, bypasses team
+    enablement by design, and needs no pod fetch at all."""
+
+    from control_plane_backend.routing_policy import service as rp_service
+
+    async def _binding(deps):
+        return ModelBinding(provider="anthropic", name="claude-sonnet-4-6")
+
+    monkeypatch.setattr(rp_service, "resolve_platform_chat_model_binding", _binding)
+
+    async def _must_not_fetch(base_url: str):
+        raise AssertionError("a platform binding must short-circuit the pod fetch")
+
+    from control_plane_backend.product import service as product_service
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _must_not_fetch
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(stored_default="chat.team", rebac=_FakeRebacNothingUsable()),
+    )
+    assert result.name == "claude-sonnet-4-6"
+    assert result.enabled_for_team is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_reports_reasoning_enabled_for_the_routed_model(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """The composer needs this to decide whether the reasoning toggle is worth
+    showing — the platform list alone says nothing about the ROUTED model."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__mistral-small", "chat.small")],
+        default_chat_profile_id="chat.small",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(reasoning_enabled_ids={"model__openai__mistral-small"}),
+    )
+    assert result.reasoning_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_reports_reasoning_off_for_a_non_reasoning_model(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """The production bug: reasoning enabled on a DIFFERENT model. Offering the
+    toggle here would be offering something `RoutedChatModelFactory` strips."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__mistral-medium", "chat.medium")],
+        default_chat_profile_id="chat.medium",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(reasoning_enabled_ids={"model__openai__mistral-small"}),
+    )
+    assert result.reasoning_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_effective_model_ignores_a_disabled_runtime_source(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """A disabled source is one prepare_execution refuses to prepare against, so
+    naming a model from its catalog would promise a turn that then fails."""
+
+    async def _must_not_fetch(base_url: str):
+        raise AssertionError("a disabled runtime source must not be contacted")
+
+    from control_plane_backend.product import service as product_service
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _must_not_fetch
+    )
+    deps = _resolution_deps(
+        sources=[SimpleNamespace(enabled=False, base_url=_POD_URL, runtime_id=_POD)]
+    )
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", deps
+    )
+    assert result.name is None
+
+
+@pytest.mark.asyncio
+async def test_effective_model_is_empty_for_an_instance_of_another_team(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """Cross-team read: the instance lookup filters on `(agent_instance_id,
+    team_id)`, so an id belonging to another team resolves to nothing — and
+    nothing downstream (binding, pod catalog, policy, enablement) is consulted.
+    """
+
+    async def _must_not_fetch(base_url: str):
+        raise AssertionError("a foreign instance must not reach the pod catalog")
+
+    from control_plane_backend.product import service as product_service
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _must_not_fetch
+    )
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-2"), "inst-of-team-1", _resolution_deps()
+    )
+    assert result.name is None
+    assert result.capability_id is None
