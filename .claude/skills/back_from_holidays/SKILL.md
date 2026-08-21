@@ -1,11 +1,11 @@
 ---
-name: back_from_holiday
+name: back_from_holidays
 description: Catch-up digest after time off — everything merged since a given departure date, grouped by features / bug fixes / maintenance, with a dev vs devops split and a short "needs your attention" list. Read-only.
 user-invocable: true
 argument-hint: "<departure date — 2026-07-28, \"3 weeks ago\", or \"2026-07-28..2026-08-13\">"
 ---
 
-# Back From Holiday Skill
+# Back From Holidays Skill
 
 You were away. This skill produces a **condensed** digest of what landed on the integration
 branch while you were gone — not a commit dump. One line per change, grouped by intent, so a
