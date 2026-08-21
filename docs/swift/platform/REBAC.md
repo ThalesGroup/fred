@@ -14,8 +14,12 @@ Fred supports relationship-aware authorization so users can keep resources priva
 > (`team_admin`/`team_editor`/`team_analyst`/`team_member`) is a stored OpenFGA
 > relation, granted through the root bootstrap endpoint (a one-time,
 > secret-gated `POST /bootstrap/platform-admin` — AUTHZ-07, RFC Part 8) or an
-> explicit in-product action — never derived from a Keycloak role, group, or
-> claim. A `platform_admin`
+> explicit in-product action — for platform roles, the platform-role
+> management endpoints (`GET/POST/DELETE …/users/{user_id}/platform-roles`,
+> CONTROL-PLANE-PRODUCT-CONTRACT.md §43, #2405): any `platform_admin` manages
+> `platform_observer`, while `platform_admin` itself is granted and revoked
+> by the bootstrap root only, and the root is unrevocable. Never derived from
+> a Keycloak role, group, or claim. A `platform_admin`
 > carries no team relation of any kind, ever, for any purpose — not even to
 > create a team's first admin, which goes through the one-shot bootstrap
 > endpoint below, not an implicit relation.
@@ -40,7 +44,7 @@ Concrete examples:
 ## Technical Summary In 90 Seconds
 
 1. **Identity source**: Keycloak manages user accounts (login, JWT, stable `sub`) — nothing about teams or platform roles.
-2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` are relations on `organization:fred`, stored tuples only, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, AUTHZ-07) or explicit admin action.
+2. **Platform roles (ReBAC)**: `platform_admin` / `platform_observer` are relations on `organization:fred`, stored tuples only, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, AUTHZ-07) or the platform-role endpoints (contract §43): observers managed by any `platform_admin`, admins by the bootstrap root only.
 3. **Team roles (ReBAC)**: `team_admin` / `team_editor` / `team_analyst` / `team_member` are relations on each `team:<id>`. A person may hold more than one simultaneously — each is granted/revoked as its own independent action, never a bulk replace.
 4. **Team registry**: a team is a `team_metadata` row (id, name) plus its OpenFGA relations — nothing about a team lives in Keycloak.
 5. **Bridge object**: Fred uses one organization object (`organization:fred`) for platform-wide context, without implicit team privilege escalation.
@@ -297,7 +301,7 @@ Fred uses a singleton organization node in ReBAC:
 
 How it works:
 
-1. Platform roles are explicit stored tuples on `organization:fred`, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, one-time and secret-gated — AUTHZ-07) or explicit admin action — never derived from the Keycloak token, and never declared as a `sub` in deployment config.
+1. Platform roles are explicit stored tuples on `organization:fred`, granted via the root bootstrap endpoint (`POST /bootstrap/platform-admin`, one-time and secret-gated — AUTHZ-07) or the platform-role management endpoints (CONTROL-PLANE-PRODUCT-CONTRACT.md §43 — `platform_admin` is root-managed, `platform_observer` delegated) — never derived from the Keycloak token, and never declared as a `sub` in deployment config.
 2. Team checks rely on persistent tuples linking teams to the organization:
    - `organization:fred#organization@team:<team_id>`
 3. Team permissions still require explicit team relations (`team_admin`/`team_editor`/`team_analyst`/`team_member`) for the target team.

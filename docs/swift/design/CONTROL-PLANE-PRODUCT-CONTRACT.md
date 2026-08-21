@@ -2733,3 +2733,31 @@ deployments the login page itself is Keycloak-hosted (`login-required`
 redirects away before the SPA renders), so the banner cannot cover the
 login screen — pre-auth here means "before the authenticated bootstrap",
 not "on the IdP's page".
+
+## 43. Contract Notes — platform-role management, root-protected (2026-08-21, issue #2405)
+
+Three routes give the product its first surface to grant/revoke the two
+org-level platform roles (until now written only by root bootstrap, the
+kea→swift migration, and the bundle importer):
+
+- `GET /users/platform-roles` — every `platform_admin` / `platform_observer`
+  holder, as `PlatformRolesResponse`: per-holder `UserSummary` + `relations`
+  + `is_bootstrap_root`, plus a top-level `caller_is_bootstrap_root` display
+  flag for the admin UI (the backend guards never rely on it).
+- `POST /users/{user_id}/platform-roles` — body
+  `{relation: platform_admin | platform_observer}`; 204, idempotent
+  (`add_relation` ignores duplicates).
+- `DELETE /users/{user_id}/platform-roles/{relation}` — 204; 404 if the
+  target does not hold the relation.
+
+All three gate on `can_administer_users`. The `platform_admin` relation
+carries two additional service-layer rules (PLATFORM-ADMIN-DELEGATION-RFC.md
+§3 — "root-managed admins, delegated observers"): granting **and** revoking
+it require the caller to be the bootstrap root (the uid in
+`platformbootstrap.completed_by`, the anchor §27's teardown already
+preserves) — 403 otherwise; and a DELETE may never target that uid — 403
+for every caller, the root itself included, because bootstrap never reopens.
+If bootstrap never ran (row absent), both `platform_admin` routes return 409
+— run `POST /bootstrap/platform-admin` first, which is still open in that
+state by definition. `platform_observer` carries none of these
+restrictions. No new ReBAC relation, no schema change, no DB migration.

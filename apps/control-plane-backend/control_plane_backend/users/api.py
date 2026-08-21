@@ -34,9 +34,27 @@ from control_plane_backend.users.dependencies import (
     UserServiceDependencies,
     get_user_service_dependencies,
 )
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.users.platform_roles import (
+    grant_platform_role as grant_platform_role_from_service,
+)
+from control_plane_backend.users.platform_roles import (
+    list_platform_roles as list_platform_roles_from_service,
+)
+from control_plane_backend.users.platform_roles import (
+    revoke_platform_role as revoke_platform_role_from_service,
+)
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
+    GrantPlatformRoleRequest,
     KeycloakM2MUserOperationDisabledError,
+    PlatformAdminRootOnlyError,
+    PlatformBootstrapNotCompletedError,
+    PlatformRoleNotHeldError,
+    PlatformRoleRelation,
+    PlatformRoleRootProtectedError,
+    PlatformRolesRebacDisabledError,
+    PlatformRolesResponse,
     UserAlreadyExistsError,
     UserNotFoundError,
     UserSummary,
@@ -72,6 +90,10 @@ TeamDependencies = Annotated[
 
 def _get_rebac_engine(request: Request) -> RebacEngine:
     return get_application_container(request).get_rebac_engine()
+
+
+def _get_platform_bootstrap_store(request: Request) -> PlatformBootstrapStore:
+    return get_application_container(request).get_platform_bootstrap_store()
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
@@ -118,6 +140,36 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(UserNotFoundError)
     async def user_not_found_handler(_request, exc: UserNotFoundError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(PlatformAdminRootOnlyError)
+    async def platform_admin_root_only_handler(
+        _request, exc: PlatformAdminRootOnlyError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(PlatformRoleRootProtectedError)
+    async def platform_role_root_protected_handler(
+        _request, exc: PlatformRoleRootProtectedError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(PlatformBootstrapNotCompletedError)
+    async def platform_bootstrap_not_completed_handler(
+        _request, exc: PlatformBootstrapNotCompletedError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(PlatformRoleNotHeldError)
+    async def platform_role_not_held_handler(
+        _request, exc: PlatformRoleNotHeldError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(PlatformRolesRebacDisabledError)
+    async def platform_roles_rebac_disabled_handler(
+        _request, exc: PlatformRolesRebacDisabledError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @router.get(
@@ -190,6 +242,71 @@ async def get_users_by_ids(
         seen.add(user_id)
         results.append(summaries.get(user_id) or UserSummary(id=user_id))
     return results
+
+
+@router.get(
+    "/users/platform-roles",
+    response_model=PlatformRolesResponse,
+    response_model_exclude_none=True,
+    summary="List platform_admin / platform_observer holders.",
+)
+async def list_platform_roles(
+    deps: UserDependencies,
+    rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+    bootstrap_store: Annotated[
+        PlatformBootstrapStore, Depends(_get_platform_bootstrap_store)
+    ],
+    user: KeycloakUser = Depends(get_current_user),
+) -> PlatformRolesResponse:
+    """PLATFORM-ADMIN-DELEGATION-RFC.md §3.1 (#2405): the admin UI's read
+    surface — every holder of an org-level platform role, with the bootstrap
+    root flagged so the UI can render its badge and hide forbidden actions."""
+    return await list_platform_roles_from_service(user, rebac, bootstrap_store, deps)
+
+
+@router.post(
+    "/users/{user_id}/platform-roles",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Grant one platform role to a user.",
+)
+async def grant_platform_role(
+    user_id: Annotated[str, Path(min_length=1)],
+    request: GrantPlatformRoleRequest,
+    rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+    bootstrap_store: Annotated[
+        PlatformBootstrapStore, Depends(_get_platform_bootstrap_store)
+    ],
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): `platform_observer` may be
+    granted by any `platform_admin`; `platform_admin` only by the bootstrap
+    root (403 otherwise, 409 if bootstrap never ran)."""
+    await grant_platform_role_from_service(
+        user, user_id, request.relation, rebac, bootstrap_store
+    )
+
+
+@router.delete(
+    "/users/{user_id}/platform-roles/{relation}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke one platform role from a user.",
+)
+async def revoke_platform_role(
+    user_id: Annotated[str, Path(min_length=1)],
+    relation: Annotated[PlatformRoleRelation, Path()],
+    rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+    bootstrap_store: Annotated[
+        PlatformBootstrapStore, Depends(_get_platform_bootstrap_store)
+    ],
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): `platform_observer` may be
+    revoked by any `platform_admin`; `platform_admin` only by the bootstrap
+    root, and never targeting the root itself — for any caller, root
+    included."""
+    await revoke_platform_role_from_service(
+        user, user_id, relation, rebac, bootstrap_store
+    )
 
 
 @router.post(

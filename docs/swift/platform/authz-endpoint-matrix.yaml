@@ -494,6 +494,25 @@ operations:
     path: /control-plane/v1/users/by-ids
     review_status: approved
     required_permission: authenticated_user
+  # Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
+  # can_administer_users gates all three; the platform_admin relation is
+  # additionally guarded service-side: grant/revoke root-only, root never
+  # revocable (platformbootstrap.completed_by).
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/users/platform-roles
+    review_status: approved
+    required_permission: can_administer_users
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/users/{user_id}/platform-roles
+    review_status: approved
+    required_permission: can_administer_users # + bootstrap-root-only for platform_admin
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/users/{user_id}/platform-roles/{relation}
+    review_status: approved
+    required_permission: can_administer_users # + bootstrap-root-only, root unrevocable, for platform_admin
   - service: control-plane
     method: POST
     path: /control-plane/v1/users
