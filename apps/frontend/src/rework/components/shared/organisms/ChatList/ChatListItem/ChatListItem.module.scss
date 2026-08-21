@@ -48,8 +48,11 @@
   white-space: nowrap;
 }
 
+/* Grows to fill the row so its box is the same width on every line: short
+ * names leave a gap, long names ellipsize, and the separator + date land at
+ * the same x everywhere — a fixed-width column without a hardcoded width. */
 .agentName {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--primary);
@@ -60,6 +63,12 @@
 .metaSeparator,
 .dateLabel {
   flex: 0 0 auto;
+}
+
+/* Uniform-width digits: "DD/MM/YY - HH:MM" always renders at the same width
+ * regardless of which digits it contains, so the date column stays aligned. */
+.dateLabel {
+  font-variant-numeric: tabular-nums;
 }
 
 .chatActions {

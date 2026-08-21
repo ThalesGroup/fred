@@ -1237,10 +1237,16 @@ onto a second line whenever the agent name was long, colliding with the next
 row and making the list unreadable. Two changes:
 
 - The meta line is now a nowrap flex row where **only the agent name flexes**
-  (`flex: 0 1 auto; min-width: 0; text-overflow: ellipsis`, full name in
+  (`flex: 1 1 auto; min-width: 0; text-overflow: ellipsis`, full name in
   `title`); the separator and the date are `flex: 0 0 auto`, so the date and
   time always render whole. Same ellipsis treatment on `.groupHeader`, the
   per-agent sub-list header shown when grouping is on.
+- Vertical column alignment (2026-08-21): the agent name **grows** to fill the
+  row, so its box is the same width on every line — short names leave a gap,
+  long names ellipsize — and the `·` separator and date start at the same x
+  everywhere. The date also uses `font-variant-numeric: tabular-nums`, so the
+  fixed `DD/MM/YY - HH:mm` format always renders at the same width regardless
+  of which digits it contains.
 - All four nav panels went **240px → 272px**. They swap into the same sidebar
   grid column, so the width must stay identical across them or the column
   jumps when switching between Home / team / marketplace / admin.
