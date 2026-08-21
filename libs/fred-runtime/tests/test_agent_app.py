@@ -2492,7 +2492,58 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     assert "selected_document_uids" not in context
     assert "search_policy" not in context
 
+def test_nested_invocation_preserves_actor_when_user_id_is_none(monkeypatch) -> None:
+    seen: dict[str, object] = {}
 
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        *,
+        access_token,
+        team_id,
+        registry,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        seen["context"] = dict(request.context or {})
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+    )
+
+    result = asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="marc",
+                    tenant="default",
+                    environment=PortableEnvironment.DEV,
+                    user_id=None,
+                ),
+            )
+        )
+    )
+
+    assert result.is_error is False
+    context = seen["context"]
+    assert isinstance(context, dict)
+    assert context["actor"] == "marc"
+    assert context["user_id"] is None
+    
 def test_local_registry_invoker_forwards_platform_binding_to_nested_iterate_call(
     monkeypatch,
 ) -> None:

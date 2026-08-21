@@ -3223,7 +3223,7 @@ async def _iterate_runtime_event_payloads(
     portable_context = PortableContext(
         request_id=request_id,
         correlation_id=correlation_id,
-        actor=ctx.get("user_id", "anonymous"),
+        actor=ctx.get("user_id") or ctx.get("actor") or "anonymous",
         tenant=ctx.get("tenant", "default"),
         environment=PortableEnvironment.DEV,
         trace_id=ctx.get("trace_id"),
