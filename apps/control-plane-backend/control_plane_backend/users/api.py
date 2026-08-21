@@ -20,6 +20,7 @@ from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
@@ -34,7 +35,6 @@ from control_plane_backend.users.dependencies import (
     UserServiceDependencies,
     get_user_service_dependencies,
 )
-from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.users.platform_roles import (
     grant_platform_role as grant_platform_role_from_service,
 )
