@@ -50,6 +50,78 @@ def restore_observability_globals() -> Iterator[None]:
         observability.set_metrics_provider(original_metrics)
 
 
+def test_no_tracer_captures_content_by_default() -> None:
+    """
+    The switch that makes the content exclusion of
+    `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §7 auditable: with every
+    built-in backend answering False, no stream can carry content whatever the
+    call sites do.
+    """
+
+    assert observability.Tracer().captures_content is False
+    assert observability.LoggingTracer().captures_content is False
+
+
+def test_logging_span_records_content_sizes_but_never_the_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    This logger feeds the generic app-log store, which carries no content.
+    A caller that ignores `captures_content` still must not leak into it.
+    """
+
+    logger = logging.getLogger("fred_core.tests.traces.io")
+    tracer = observability.LoggingTracer(logger=logger)
+
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        span = tracer.start_span("v2.react.model")
+        span.set_io(input="a secret question", output="a secret answer")
+        span.end()
+
+    attributes = cast(
+        dict[str, object],
+        cast(dict[str, object], caplog.records[-1].__dict__["span"])["attributes"],
+    )
+    assert attributes == {"input_chars": 17, "output_chars": 15}
+    assert "secret" not in caplog.text
+
+
+def test_logging_span_records_usage_in_full(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Token counts and cost are measurement, not content — safe to log whole."""
+
+    logger = logging.getLogger("fred_core.tests.traces.usage")
+    tracer = observability.LoggingTracer(logger=logger)
+
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        span = tracer.start_span("v2.react.model")
+        span.set_usage(
+            model="gpt-4o", usage={"input": 812, "output": 96}, cost={"total": 0.02}
+        )
+        span.end()
+
+    attributes = cast(
+        dict[str, object],
+        cast(dict[str, object], caplog.records[-1].__dict__["span"])["attributes"],
+    )
+    assert attributes == {
+        "model_name": "gpt-4o",
+        "usage_input": 812,
+        "usage_output": 96,
+        "cost_total": 0.02,
+    }
+
+
+def test_null_span_accepts_io_and_usage_without_effect() -> None:
+    """Every call site may call these unconditionally against any backend."""
+
+    span = observability.Tracer().start_span("agent.stream")
+    span.set_io(input="x", output="y")
+    span.set_usage(model="m", usage={"input": 1}, cost={"total": 1.0})
+    span.end()
+
+
 def test_logging_tracer_emits_parent_and_runtime_attributes(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

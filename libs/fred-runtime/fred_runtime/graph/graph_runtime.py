@@ -100,6 +100,11 @@ from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointWriter,
     checkpoint_namespace,
 )
+from fred_runtime.runtime_support.trace_payloads import (
+    serialize_messages,
+    serialize_model_output,
+    to_langfuse_usage,
+)
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -527,6 +532,20 @@ class _GraphNodeExecutionContext:
                 )
                 if span is not None:
                     span.set_attribute("status", "ok")
+                    span.set_usage(
+                        model=captured_model_name,
+                        usage=to_langfuse_usage(captured_token_usage),
+                    )
+                    tracer = self.services.tracer
+                    if tracer is not None and tracer.captures_content:
+                        span.set_io(
+                            input=serialize_messages(messages),
+                            output=serialize_model_output(
+                                [accumulated]
+                                if isinstance(accumulated, BaseMessage)
+                                else []
+                            ),
+                        )
                 return accumulated
             except Exception:
                 if span is not None:

@@ -79,6 +79,55 @@ class Span:
     def set_attribute(self, key: str, value: Any) -> None:
         """Record one key/value attribute on this span."""
 
+    def set_io(self, *, input: Any = None, output: Any = None) -> None:
+        """
+        Record the payload that entered and/or left this unit of work.
+
+        Why this exists:
+        - a trace of an agent turn is only readable end-to-end when each step
+          shows what it received and what it produced (the prompt sent to a
+          model, the arguments handed to a tool, the answer that came back)
+
+        **Content policy.** These payloads ARE content in the sense of
+        `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §7, which excludes
+        content from every observability stream. A backend must therefore treat
+        this as opt-in and drop it unless explicitly configured to capture it —
+        which is what `Tracer.captures_content` advertises. The base
+        implementation drops it, and `LoggingTracer` records only sizes, never
+        the payload itself.
+
+        How to use it:
+        - guard the (potentially expensive) serialization behind
+          `tracer.captures_content` so disabled backends cost nothing
+
+        Example:
+        - `if tracer.captures_content: span.set_io(input=messages, output=answer)`
+        """
+
+    def set_usage(
+        self,
+        *,
+        model: str | None = None,
+        usage: Mapping[str, int] | None = None,
+        cost: Mapping[str, float] | None = None,
+    ) -> None:
+        """
+        Attach model identity and token/cost accounting to a model-call span.
+
+        Why this exists:
+        - per-call token counts and cost are the metrics that make a tracing
+          backend useful for supervising spend; unlike `set_io` they are pure
+          technical measurements, so they carry no content-policy caveat
+
+        How to use it:
+        - call once on a model-call span, before `end()`
+        - `usage` keys are backend-defined (`input`, `output`, `total`, and
+          provider extras such as `cache_read_input_tokens`)
+
+        Example:
+        - `span.set_usage(model="gpt-4o", usage={"input": 812, "output": 96})`
+        """
+
     def end(self) -> None:
         """Mark this span as complete."""
 
@@ -95,6 +144,25 @@ class Tracer:
     The base class is a null tracer — override start_span() to add behaviour.
     Use LoggingTracer for structured log output or plug in a Langfuse adapter.
     """
+
+    @property
+    def captures_content(self) -> bool:
+        """
+        Whether this backend actually stores `Span.set_io` payloads.
+
+        Why this exists:
+        - serializing a full message transcript on every model call is real work
+          on the agent hot path; callers must be able to skip it entirely when
+          the backend would only discard the result
+        - it is also the single switch that makes the content exclusion of
+          `OBSERVABILITY-AND-AUDIT.md` §7 auditable: `False` everywhere means no
+          stream can carry content, whatever call sites do
+
+        How to use it:
+        - `if tracer.captures_content: span.set_io(input=..., output=...)`
+        """
+
+        return False
 
     def start_span(
         self,
@@ -176,6 +244,33 @@ class _LoggingSpan(Span):
 
     def set_attribute(self, key: str, value: Any) -> None:
         self._attrs[key] = value
+
+    def set_io(self, *, input: Any = None, output: Any = None) -> None:
+        # This logger feeds the generic app-log store, which carries no content
+        # (OBSERVABILITY-AND-AUDIT.md §7) — hence sizes only, never the payload.
+        # `LoggingTracer.captures_content` stays False so well-behaved callers
+        # never even build these payloads; recording lengths here just means a
+        # caller that ignores that hint still cannot leak content into the store.
+        if input is not None:
+            self._attrs["input_chars"] = len(str(input))
+        if output is not None:
+            self._attrs["output_chars"] = len(str(output))
+
+    def set_usage(
+        self,
+        *,
+        model: str | None = None,
+        usage: Mapping[str, int] | None = None,
+        cost: Mapping[str, float] | None = None,
+    ) -> None:
+        # Token counts and cost are technical measurements, not content — safe
+        # to log in full.
+        if model is not None:
+            self._attrs["model_name"] = model
+        for key, value in (usage or {}).items():
+            self._attrs[f"usage_{key}"] = value
+        for key, value in (cost or {}).items():
+            self._attrs[f"cost_{key}"] = value
 
     def end(self) -> None:
         self.logger.info(
