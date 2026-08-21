@@ -61,6 +61,31 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: build.query<
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse,
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/platform-roles` }),
+    }),
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: build.mutation<
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse,
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles`,
+        method: "POST",
+        body: queryArg.grantPlatformRoleRequest,
+      }),
+    }),
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: build.mutation<
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse,
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles/${queryArg.relation}`,
+        method: "DELETE",
+      }),
+    }),
     deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
       DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
       DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
@@ -1003,6 +1028,19 @@ export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse = /** status 200
 export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg = {
   ids: string[];
 };
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse =
+  /** status 200 Successful Response */ PlatformRolesResponse;
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg = void;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse = unknown;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg = {
+  userId: string;
+  grantPlatformRoleRequest: GrantPlatformRoleRequest;
+};
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse = unknown;
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg = {
+  userId: string;
+  relation: PlatformRoleRelation;
+};
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
@@ -1695,6 +1733,19 @@ export type CreateUserRequest = {
   first_name?: string | null;
   last_name?: string | null;
   enabled?: boolean;
+};
+export type PlatformRoleRelation = "platform_admin" | "platform_observer";
+export type PlatformRoleHolder = {
+  user: UserSummary;
+  relations: PlatformRoleRelation[];
+  is_bootstrap_root?: boolean;
+};
+export type PlatformRolesResponse = {
+  holders: PlatformRoleHolder[];
+  caller_is_bootstrap_root: boolean;
+};
+export type GrantPlatformRoleRequest = {
+  relation: PlatformRoleRelation;
 };
 export type GcuVersionsType = "v1";
 export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
@@ -2919,6 +2970,10 @@ export const {
   useCreateUserControlPlaneV1UsersPostMutation,
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
   useLazyGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useLazyListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
