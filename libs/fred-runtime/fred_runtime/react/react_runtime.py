@@ -81,6 +81,7 @@ from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
+from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
@@ -172,6 +173,30 @@ def _format_invocation_turns(turns: tuple[ConversationTurn, ...]) -> str:
             f"User: {turn.user_message}\nAssistant{speaker}: {turn.agent_response}"
         )
     return "\n\n".join(parts)
+
+
+def _trace_input_payload(input_model: ReActInput) -> object:
+    """
+    Render the turn's input for the trace-level `input` of a tracing backend.
+
+    A turn's transcript can be long, but what identifies the turn in a trace
+    list is the message that opened it — so a single trailing user message
+    collapses to its bare text, and anything else keeps the full role/content
+    list.
+
+    Only ever called behind `tracer.captures_content` — this is content in the
+    sense of `OBSERVABILITY-AND-AUDIT.md` §7.
+    """
+
+    messages = list(input_model.messages)
+    if not messages:
+        return ""
+    last = messages[-1]
+    if last.role == ReActMessageRole.USER:
+        return last.content
+    return [
+        {"role": message.role.value, "content": message.content} for message in messages
+    ]
 
 
 def _graph_input(
@@ -268,6 +293,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            if self._services.tracer.captures_content:
+                span.set_io(input=_trace_input_payload(input_model))
             span_token = active_agent_span.set(span)
         try:
             result = await self._compiled_agent.ainvoke(
@@ -289,6 +316,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 result["messages"],
                 sanitize_tool_name=_sanitize_tool_name,
             )
+            if span is not None and self._services.tracer is not None:
+                if self._services.tracer.captures_content:
+                    span.set_io(output=final_message.content)
             return ReActOutput(final_message=final_message, transcript=transcript)
         finally:
             if span_token is not None:
@@ -312,6 +342,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            # The turn's root span carries the trace-level input/output, which
+            # is what the Langfuse trace list shows for a conversation: the
+            # question that opened the turn and the answer that closed it.
+            if self._services.tracer.captures_content:
+                span.set_io(input=_trace_input_payload(input_model))
             span_token = active_agent_span.set(span)
 
         metrics = self._services.metrics
@@ -618,7 +653,23 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     token_usage=total_token_usage,
                     finish_reason=last_finish_reason,
                 )
+                if span is not None and self._services.tracer is not None:
+                    # Turn-level totals, summed across every model call of the
+                    # turn — the per-call breakdown already lives on the child
+                    # generation spans.
+                    span.set_usage(
+                        model=last_model_name,
+                        usage=to_langfuse_usage(total_token_usage),
+                    )
+                    if last_finish_reason is not None:
+                        span.set_attribute("finish_reason", str(last_finish_reason))
+                    if self._services.tracer.captures_content:
+                        span.set_io(output=final_content)
         except Exception:
+            # Mark the turn failed so the trace list shows it as an error
+            # instead of a turn that merely produced no answer.
+            if span is not None:
+                span.set_attribute("status", "error")
             # Close every pending tool call / thought pair so neither the
             # tool-call row nor the thought row spins forever in the frontend.
             for call_id, thought_id in active_thought_ids.items():
