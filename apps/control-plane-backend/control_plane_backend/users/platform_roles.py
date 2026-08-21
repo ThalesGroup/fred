@@ -91,7 +91,8 @@ async def _direct_holders(
         raise PlatformRolesRebacDisabledError()
 
     holders: dict[PlatformRoleRelation, set[str]] = {
-        role: set() for role in PlatformRoleRelation
+        PlatformRoleRelation.PLATFORM_ADMIN: set(),
+        PlatformRoleRelation.PLATFORM_OBSERVER: set(),
     }
     for relation in tuples:
         if relation.subject.type is not Resource.USER:
@@ -152,8 +153,8 @@ async def list_platform_roles(
     )
 
     relations_by_uid: dict[str, list[PlatformRoleRelation]] = {}
-    for role in PlatformRoleRelation:
-        for uid in holders_by_role[role]:
+    for role, uids in holders_by_role.items():
+        for uid in uids:
             relations_by_uid.setdefault(uid, []).append(role)
 
     summaries = await get_users_by_ids(relations_by_uid.keys(), user_deps)

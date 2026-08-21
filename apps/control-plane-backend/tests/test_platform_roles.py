@@ -322,12 +322,14 @@ async def test_grant_refuses_when_rebac_disabled():
 async def test_grant_refuses_a_target_keycloak_does_not_know(monkeypatch):
     """A typo'd or deleted uid must 404, not become a live org-level tuple for
     whoever ever authenticates with that sub."""
-    import control_plane_backend.users.platform_roles as module
 
     async def _not_found(user_id, deps):
         return False
 
-    monkeypatch.setattr(module, "user_exists_in_keycloak", _not_found)
+    monkeypatch.setattr(
+        "control_plane_backend.users.platform_roles.user_exists_in_keycloak",
+        _not_found,
+    )
     rebac = _FakeRebac()
     with pytest.raises(UserNotFoundError):
         await grant_platform_role(
