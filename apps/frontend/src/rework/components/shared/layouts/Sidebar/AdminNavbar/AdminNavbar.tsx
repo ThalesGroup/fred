@@ -39,6 +39,13 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.sidebar.admin.menu.platformRoles"),
+      icon: { category: "outlined", type: "admin_panel_settings", filled: false },
+      linkProps: { to: "/admin/platform-roles" },
+      visible: canAdmin,
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.tasks"),
       icon: { category: "outlined", type: "build", filled: false },
       linkProps: { to: "/admin/tasks" },

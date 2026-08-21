@@ -2733,3 +2733,49 @@ deployments the login page itself is Keycloak-hosted (`login-required`
 redirects away before the SPA renders), so the banner cannot cover the
 login screen — pre-auth here means "before the authenticated bootstrap",
 not "on the IdP's page".
+
+## 43. Contract Notes — platform-role management, root-protected (2026-08-21, issue #2405)
+
+Three routes give the product its first surface to grant/revoke the two
+org-level platform roles (until now written only by root bootstrap, the
+kea→swift migration, and the bundle importer):
+
+- `GET /users/platform-roles` — every `platform_admin` / `platform_observer`
+  holder, as `PlatformRolesResponse`: per-holder `UserSummary` + `relations`
+  + `is_bootstrap_root`, plus a top-level `caller_is_bootstrap_root` display
+  flag for the admin UI (the backend guards never rely on it).
+- `POST /users/{user_id}/platform-roles` — body
+  `{relation: platform_admin | platform_observer}`; 204, idempotent
+  (`add_relation` ignores duplicates); 404 when Keycloak affirmatively does
+  not know the target uid (a typo'd uid must not become a live tuple for
+  whoever ever authenticates with that sub — skipped when Keycloak M2M is
+  disabled, where existence cannot be verified).
+- `DELETE /users/{user_id}/platform-roles/{relation}` — 204; 404 if the
+  target does not hold the relation **as a direct tuple**.
+
+Direct tuples only: `schema.fga` defines `platform_observer: [user] or
+platform_admin`, so this surface reads via the direct-tuple primitives
+(`list_direct_relations` / `has_direct_relation`), never expanded reads
+(ListUsers) — an admin's computed observer membership is neither listed as a
+holder entry nor revocable (no tuple exists to delete; the expanded read
+would have 204'd a silent no-op). Revocations emit `authz.relation.revoked`
+to the audit stream with `actor_uid`, symmetric to `add_relation`'s
+`authz.relation.granted`.
+
+All three gate on `can_administer_users`. The `platform_admin` relation
+carries two additional service-layer rules (PLATFORM-ADMIN-DELEGATION-RFC.md
+§3 — "root-managed admins, delegated observers"): granting **and** revoking
+it require the caller to be the bootstrap root (the uid in
+`platformbootstrap.completed_by`, the anchor §27's teardown already
+preserves) — 403 otherwise; and a DELETE may never target that uid — 403
+for every caller, the root itself included, because bootstrap never reopens.
+If bootstrap never ran (row absent), both `platform_admin` routes return 409
+— run `POST /bootstrap/platform-admin` first, which is still open in that
+state by definition. `platform_observer` carries none of these
+restrictions. No new ReBAC relation, no schema change, no DB migration.
+
+Same-invariant guard on an existing route: `DELETE /users/{user_id}` now
+403s when the target uid is `platformbootstrap.completed_by` — deleting the
+root's Keycloak account would freeze the `platform_admin` population the
+same irreversible way (the uid could never authenticate again while
+bootstrap stays permanently closed).
