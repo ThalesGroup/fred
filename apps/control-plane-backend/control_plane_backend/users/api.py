@@ -272,6 +272,7 @@ async def list_platform_roles(
 async def grant_platform_role(
     user_id: Annotated[str, Path(min_length=1)],
     request: GrantPlatformRoleRequest,
+    deps: UserDependencies,
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     bootstrap_store: Annotated[
         PlatformBootstrapStore, Depends(_get_platform_bootstrap_store)
@@ -280,9 +281,10 @@ async def grant_platform_role(
 ) -> None:
     """PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): `platform_observer` may be
     granted by any `platform_admin`; `platform_admin` only by the bootstrap
-    root (403 otherwise, 409 if bootstrap never ran)."""
+    root (403 otherwise, 409 if bootstrap never ran). 404 when Keycloak does
+    not know the target uid (skipped when M2M is disabled)."""
     await grant_platform_role_from_service(
-        user, user_id, request.relation, rebac, bootstrap_store
+        user, user_id, request.relation, rebac, bootstrap_store, deps
     )
 
 
@@ -351,11 +353,21 @@ async def delete_user(
     user_id: Annotated[str, Path(min_length=1)],
     deps: UserDependencies,
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
+    bootstrap_store: Annotated[
+        PlatformBootstrapStore, Depends(_get_platform_bootstrap_store)
+    ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
     )
+    # PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): deleting the bootstrap
+    # root's Keycloak account would be a one-call bypass of the root's
+    # unrevocability — completed_by could never authenticate again while
+    # bootstrap stays permanently closed, freezing the platform_admin
+    # population with no in-product recovery.
+    if user_id == await bootstrap_store.get_completed_by():
+        raise PlatformRoleRootProtectedError()
     """
     Delete a Keycloak user for temporary bootstrap and testing flows.
 

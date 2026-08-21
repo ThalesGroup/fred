@@ -1949,6 +1949,8 @@
       "holders": {
         "title": "Current role holders",
         "empty": "No platform roles granted yet.",
+        "loading": "Loading platform roles…",
+        "error": "Platform roles could not be loaded.",
         "rootBadge": "Bootstrap root",
         "table": {
           "user": "User",

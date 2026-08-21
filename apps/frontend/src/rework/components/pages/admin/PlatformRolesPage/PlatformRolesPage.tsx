@@ -23,6 +23,7 @@ import Separator from "@shared/atoms/Separator/Separator.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
+import { userDisplayName } from "../../../../core/utils/userDisplayName";
 import {
   useGrantPlatformRoleMutation,
   useListUsersQuery,
@@ -35,6 +36,12 @@ import type {
   UserSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PlatformRolesPage.module.css";
+
+const displayName = (user: UserSummary) => userDisplayName(user.id, user);
+
+/** Search haystack from the fields that exist — never the literal "undefined". */
+const userHaystack = (user: UserSummary) =>
+  [user.first_name, user.last_name, user.username, user.email].filter(Boolean).join(" ").toLowerCase();
 
 // PLATFORM-ADMIN-DELEGATION-RFC.md §3.7 (#2405): root-managed admins,
 // delegated observers. The visibility rules below only mirror what the
@@ -51,17 +58,12 @@ export default function PlatformRolesPage() {
   const [userQuery, setUserQuery] = useState("");
   const [relation, setRelation] = useState<PlatformRoleRelation>("platform_observer");
 
-  const { data: platformRoles } = usePlatformRolesQuery();
+  const { data: platformRoles, isLoading: isLoadingRoles, isError: isRolesError } = usePlatformRolesQuery();
   const { data: allUsers } = useListUsersQuery();
   const [grantRole, { isLoading: isGranting }] = useGrantPlatformRoleMutation();
   const [revokeRole] = useRevokePlatformRoleMutation();
 
   const callerIsRoot = platformRoles?.caller_is_bootstrap_root ?? false;
-
-  const displayName = (user: UserSummary) => {
-    const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ");
-    return fullName || user.username || user.id;
-  };
 
   const canRevoke = (holder: PlatformRoleHolder, revoked: PlatformRoleRelation) => {
     if (revoked === "platform_observer") return true;
@@ -87,52 +89,50 @@ export default function PlatformRolesPage() {
     });
   };
 
-  const columns = useMemo(
-    (): DataTableColumn<PlatformRoleHolder>[] => [
-      {
-        label: t("rework.platformRoles.holders.table.user"),
-        size: "2fr",
-        cellRenderer: (holder) => (
-          <div className={styles.userCell}>
-            <span>{displayName(holder.user)}</span>
-            {holder.user.username && <span className={styles.username}>{holder.user.username}</span>}
-            {holder.is_bootstrap_root && (
-              <span className={styles.rootBadge}>{t("rework.platformRoles.holders.rootBadge")}</span>
-            )}
-          </div>
-        ),
-      },
-      {
-        label: t("rework.platformRoles.holders.table.roles"),
-        size: "2fr",
-        cellRenderer: (holder) => (
-          <div className={styles.rolesCell}>
-            {holder.relations.map((held) => (
-              <Chip
-                key={held}
-                label={t(`rework.platformRoles.roles.${held}`)}
-                onRemove={canRevoke(holder, held) ? () => handleRevoke(holder, held) : undefined}
-                removeAriaLabel={t("rework.platformRoles.revoke.ariaLabel", {
-                  role: t(`rework.platformRoles.roles.${held}`),
-                  user: displayName(holder.user),
-                })}
-              />
-            ))}
-          </div>
-        ),
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, callerIsRoot],
-  );
+  // No useMemo: DataTable is not memoized, so caching the (2-element) column
+  // array buys nothing and would force stale-closure deps management.
+  const columns: DataTableColumn<PlatformRoleHolder>[] = [
+    {
+      label: t("rework.platformRoles.holders.table.user"),
+      size: "2fr",
+      cellRenderer: (holder) => (
+        <div className={styles.userCell}>
+          <span>{displayName(holder.user)}</span>
+          {holder.user.username && <span className={styles.username}>{holder.user.username}</span>}
+          {holder.is_bootstrap_root && (
+            <span className={styles.rootBadge}>{t("rework.platformRoles.holders.rootBadge")}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      label: t("rework.platformRoles.holders.table.roles"),
+      size: "2fr",
+      cellRenderer: (holder) => (
+        <div className={styles.rolesCell}>
+          {holder.relations.map((held) => (
+            <Chip
+              key={held}
+              label={t(`rework.platformRoles.roles.${held}`)}
+              onRemove={canRevoke(holder, held) ? () => handleRevoke(holder, held) : undefined}
+              removeAriaLabel={t("rework.platformRoles.revoke.ariaLabel", {
+                role: t(`rework.platformRoles.roles.${held}`),
+                user: displayName(holder.user),
+              })}
+            />
+          ))}
+        </div>
+      ),
+    },
+  ];
 
   const suggestions = useMemo(() => {
     if (!allUsers) return [];
     const query = userQuery.toLowerCase().trim();
-    return allUsers.filter(
-      (user) => !query || `${user.first_name} ${user.last_name} ${user.username}`.toLowerCase().includes(query),
-    );
-  }, [allUsers, userQuery]);
+    return allUsers
+      .filter((user) => user.id !== selectedUser?.id)
+      .filter((user) => !query || userHaystack(user).includes(query));
+  }, [allUsers, userQuery, selectedUser]);
 
   const canSubmit = selectedUser !== null && !isGranting && (relation !== "platform_admin" || callerIsRoot);
 
@@ -152,7 +152,6 @@ export default function PlatformRolesPage() {
           }),
         });
         setSelectedUser(null);
-        setUserQuery("");
       },
       onError: (error) =>
         notifyApiError(error, {
@@ -166,16 +165,20 @@ export default function PlatformRolesPage() {
 
   const relationOptions: PlatformRoleRelation[] = ["platform_observer", "platform_admin"];
 
+  const holdersContent = () => {
+    if (isLoadingRoles) return <p className={styles.emptyMessage}>{t("rework.platformRoles.holders.loading")}</p>;
+    if (isRolesError) return <p className={styles.errorMessage}>{t("rework.platformRoles.holders.error")}</p>;
+    if (platformRoles && platformRoles.holders.length > 0)
+      return <DataTable columns={columns} data={platformRoles.holders} />;
+    return <p className={styles.emptyMessage}>{t("rework.platformRoles.holders.empty")}</p>;
+  };
+
   return (
     <div className={styles.platformRolesPage}>
       <PageHeader title={t("rework.platformRoles.title")} />
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>{t("rework.platformRoles.holders.title")}</h2>
-        {platformRoles && platformRoles.holders.length > 0 ? (
-          <DataTable columns={columns} data={platformRoles.holders} />
-        ) : (
-          <p className={styles.emptyMessage}>{t("rework.platformRoles.holders.empty")}</p>
-        )}
+        {holdersContent()}
       </section>
       <Separator />
       <section className={styles.section}>
@@ -187,9 +190,15 @@ export default function PlatformRolesPage() {
               placeholder: t("rework.platformRoles.grant.userPlaceholder"),
               icon: { category: "outlined", type: "search" },
             }}
-            onFieldValueChange={setUserQuery}
+            onFieldValueChange={(value) => {
+              setUserQuery(value);
+              // Typing a new search drops the previous pick so the submit can
+              // never target a user the visible text no longer names. The ""
+              // fired by Autocomplete on selection must not clear it.
+              if (value) setSelectedUser(null);
+            }}
             options={suggestions.map((user) => ({
-              label: `${displayName(user)} (${user.username})`,
+              label: user.username ? `${displayName(user)} (${user.username})` : displayName(user),
               value: user,
               key: user.id,
             }))}

@@ -21,7 +21,12 @@ The load-bearing guarantees these tests lock in:
 - the root itself is unrevocable, for every caller including itself;
 - `platform_observer` carries none of those restrictions;
 - with no bootstrap marker there is no root, so `platform_admin` management
-  refuses (409-mapped) instead of falling open.
+  refuses (409-mapped) instead of falling open;
+- every read is a *direct-tuple* read: schema.fga's `platform_observer:
+  [user] or platform_admin` union means an expanded read (`lookup_subjects`,
+  OpenFGA ListUsers) would report every admin as a phantom observer whose
+  revocation silently no-ops — the fake's `lookup_subjects` raises to make
+  any regression to expanded reads fail loudly.
 """
 
 from __future__ import annotations
@@ -41,9 +46,11 @@ from control_plane_backend.users.schemas import (
     PlatformRoleRelation,
     PlatformRoleRootProtectedError,
     PlatformRolesRebacDisabledError,
+    UserNotFoundError,
 )
 from fred_core import (
     ORGANIZATION_ID,
+    KeycloackDisabled,
     KeycloakUser,
     RebacDisabledResult,
     RebacReference,
@@ -59,7 +66,18 @@ OTHER_UID = "other-sub"
 _ORG_REF = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
 
 
+def _org_tuple(uid: str, relation: RelationType) -> Relation:
+    return Relation(
+        subject=RebacReference(Resource.USER, uid),
+        relation=relation,
+        resource=_ORG_REF,
+    )
+
+
 class _FakeRebac:
+    """Direct-tuple semantics only: `admins`/`observers` are the literally
+    persisted tuples, never the computed union the real schema adds on top."""
+
     def __init__(
         self,
         *,
@@ -79,14 +97,34 @@ class _FakeRebac:
     async def check_user_permission_or_raise(self, user, permission, resource_id):
         self.permission_checks.append((user.uid, permission))
 
-    async def lookup_subjects(self, resource, relation, subject_type, **kwargs):
+    async def lookup_subjects(self, *args, **kwargs):
+        raise AssertionError(
+            "platform-role code must never use expanded reads (ListUsers): "
+            "schema.fga's `platform_observer: [user] or platform_admin` union "
+            "would report every admin as a phantom observer"
+        )
+
+    async def list_direct_relations(self, resource, **kwargs):
         if self._disabled_reads:
             return RebacDisabledResult()
+        assert resource == _ORG_REF
+        return [
+            *(
+                _org_tuple(uid, RelationType.PLATFORM_ADMIN)
+                for uid in sorted(self._admins)
+            ),
+            *(
+                _org_tuple(uid, RelationType.PLATFORM_OBSERVER)
+                for uid in sorted(self._observers)
+            ),
+        ]
+
+    async def has_direct_relation(self, subject, relation, resource, **kwargs):
         assert resource == _ORG_REF
         holders = (
             self._admins if relation == RelationType.PLATFORM_ADMIN else self._observers
         )
-        return [RebacReference(Resource.USER, uid) for uid in sorted(holders)]
+        return subject.id in holders
 
     async def add_relation(self, relation: Relation, *, actor_uid=None):
         self.added.append((relation, actor_uid))
@@ -106,13 +144,12 @@ class _FakeBootstrapStore:
 
 
 class _FakeUserDeps:
-    """`list_platform_roles` resolves display identity through
-    `get_users_by_ids`, which degrades to `{}` when Keycloak M2M is disabled
-    — the exact behaviour this fake reproduces."""
+    """Keycloak M2M disabled: `get_users_by_ids` degrades to `{}` (id-only
+    holder summaries) and `user_exists_in_keycloak` returns None (existence
+    unverifiable, check skipped) — the dev-mode behaviour both helpers
+    document."""
 
     def create_keycloak_admin_client(self):
-        from fred_core import KeycloackDisabled
-
         return KeycloackDisabled()
 
 
@@ -124,6 +161,9 @@ def _args(rebac: _FakeRebac, store: _FakeBootstrapStore):
     return cast(Any, rebac), cast(Any, store)
 
 
+_USER_DEPS = cast(Any, _FakeUserDeps())
+
+
 # ---------------------------------------------------------------------------
 # list
 # ---------------------------------------------------------------------------
@@ -133,9 +173,7 @@ def _args(rebac: _FakeRebac, store: _FakeBootstrapStore):
 async def test_list_flags_the_bootstrap_root_and_the_calling_root():
     rebac = _FakeRebac(admins={ROOT_UID, ADMIN_UID}, observers={OTHER_UID})
     response = await list_platform_roles(
-        _user(ROOT_UID),
-        *_args(rebac, _FakeBootstrapStore()),
-        cast(Any, _FakeUserDeps()),
+        _user(ROOT_UID), *_args(rebac, _FakeBootstrapStore()), _USER_DEPS
     )
 
     assert response.caller_is_bootstrap_root is True
@@ -148,24 +186,35 @@ async def test_list_flags_the_bootstrap_root_and_the_calling_root():
 
 
 @pytest.mark.asyncio
+async def test_list_reports_direct_tuples_only_never_the_computed_union():
+    """The regression the first review caught: an admin with no direct
+    observer tuple must NOT be listed as an observer, even though the schema's
+    `platform_observer: [user] or platform_admin` union makes them one for
+    permission checks — a computed chip would offer a revoke that can never
+    delete anything."""
+    rebac = _FakeRebac(admins={ADMIN_UID}, observers=set())
+    response = await list_platform_roles(
+        _user(ROOT_UID), *_args(rebac, _FakeBootstrapStore()), _USER_DEPS
+    )
+    by_uid = {h.user.id: h for h in response.holders}
+    assert by_uid[ADMIN_UID].relations == [PlatformRoleRelation.PLATFORM_ADMIN]
+
+
+@pytest.mark.asyncio
 async def test_list_caller_flag_false_for_appointed_admin():
     rebac = _FakeRebac(admins={ROOT_UID, ADMIN_UID})
     response = await list_platform_roles(
-        _user(ADMIN_UID),
-        *_args(rebac, _FakeBootstrapStore()),
-        cast(Any, _FakeUserDeps()),
+        _user(ADMIN_UID), *_args(rebac, _FakeBootstrapStore()), _USER_DEPS
     )
     assert response.caller_is_bootstrap_root is False
 
 
 @pytest.mark.asyncio
 async def test_list_refuses_when_rebac_disabled():
-    rebac = _FakeRebac(disabled_reads=True)
+    rebac = _FakeRebac(enabled=False)
     with pytest.raises(PlatformRolesRebacDisabledError):
         await list_platform_roles(
-            _user(ROOT_UID),
-            *_args(rebac, _FakeBootstrapStore()),
-            cast(Any, _FakeUserDeps()),
+            _user(ROOT_UID), *_args(rebac, _FakeBootstrapStore()), _USER_DEPS
         )
 
 
@@ -182,6 +231,7 @@ async def test_any_admin_grants_platform_observer():
         OTHER_UID,
         PlatformRoleRelation.PLATFORM_OBSERVER,
         *_args(rebac, _FakeBootstrapStore()),
+        _USER_DEPS,
     )
 
     assert len(rebac.added) == 1
@@ -200,6 +250,7 @@ async def test_root_grants_platform_admin():
         OTHER_UID,
         PlatformRoleRelation.PLATFORM_ADMIN,
         *_args(rebac, _FakeBootstrapStore()),
+        _USER_DEPS,
     )
 
     assert len(rebac.added) == 1
@@ -218,6 +269,7 @@ async def test_appointed_admin_cannot_grant_platform_admin():
             OTHER_UID,
             PlatformRoleRelation.PLATFORM_ADMIN,
             *_args(rebac, _FakeBootstrapStore()),
+            _USER_DEPS,
         )
     assert rebac.added == []
 
@@ -233,6 +285,7 @@ async def test_grant_platform_admin_refuses_when_bootstrap_never_ran():
             OTHER_UID,
             PlatformRoleRelation.PLATFORM_ADMIN,
             *_args(rebac, _FakeBootstrapStore(completed_by=None)),
+            _USER_DEPS,
         )
     assert rebac.added == []
 
@@ -248,6 +301,29 @@ async def test_grant_refuses_when_rebac_disabled():
             OTHER_UID,
             PlatformRoleRelation.PLATFORM_OBSERVER,
             *_args(rebac, _FakeBootstrapStore()),
+            _USER_DEPS,
+        )
+    assert rebac.added == []
+
+
+@pytest.mark.asyncio
+async def test_grant_refuses_a_target_keycloak_does_not_know(monkeypatch):
+    """A typo'd or deleted uid must 404, not become a live org-level tuple for
+    whoever ever authenticates with that sub."""
+    import control_plane_backend.users.platform_roles as module
+
+    async def _not_found(user_id, deps):
+        return False
+
+    monkeypatch.setattr(module, "user_exists_in_keycloak", _not_found)
+    rebac = _FakeRebac()
+    with pytest.raises(UserNotFoundError):
+        await grant_platform_role(
+            _user(ADMIN_UID),
+            "no-such-uid",
+            PlatformRoleRelation.PLATFORM_OBSERVER,
+            *_args(rebac, _FakeBootstrapStore()),
+            _USER_DEPS,
         )
     assert rebac.added == []
 
@@ -333,8 +409,8 @@ async def test_revoke_platform_admin_refuses_when_bootstrap_never_ran():
 @pytest.mark.asyncio
 async def test_any_admin_revokes_platform_observer():
     """Observer tuples carry no root protection — even the root's own
-    observer role is revocable by any admin (RFC §3: the restriction set is
-    scoped to the `platform_admin` relation, nothing else)."""
+    *direct* observer tuple is revocable by any admin (RFC §3: the
+    restriction set is scoped to the `platform_admin` relation)."""
     rebac = _FakeRebac(observers={ROOT_UID})
     await revoke_platform_role(
         _user(ADMIN_UID),
@@ -347,6 +423,22 @@ async def test_any_admin_revokes_platform_observer():
 
 
 @pytest.mark.asyncio
+async def test_revoke_computed_only_observer_is_a_404():
+    """An admin holds `platform_observer` only through the schema union — no
+    direct tuple exists, so there is nothing to delete: 404, never a 204 that
+    silently changed nothing (`on_missing_deletes=IGNORE` in the engine)."""
+    rebac = _FakeRebac(admins={ADMIN_UID}, observers=set())
+    with pytest.raises(PlatformRoleNotHeldError):
+        await revoke_platform_role(
+            _user(ROOT_UID),
+            ADMIN_UID,
+            PlatformRoleRelation.PLATFORM_OBSERVER,
+            *_args(rebac, _FakeBootstrapStore()),
+        )
+    assert rebac.deleted == []
+
+
+@pytest.mark.asyncio
 async def test_revoke_unheld_role_is_a_404_shaped_error():
     rebac = _FakeRebac(observers=set())
     with pytest.raises(PlatformRoleNotHeldError):
@@ -355,5 +447,21 @@ async def test_revoke_unheld_role_is_a_404_shaped_error():
             OTHER_UID,
             PlatformRoleRelation.PLATFORM_OBSERVER,
             *_args(rebac, _FakeBootstrapStore()),
+        )
+    assert rebac.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_revoke_refuses_when_rebac_disabled_before_root_guards():
+    """Uniform 503 for a disabled deployment — never a root-guard 403/409 for
+    a feature that cannot work at all (the inconsistency the first review
+    caught between the grant and revoke paths)."""
+    rebac = _FakeRebac(enabled=False)
+    with pytest.raises(PlatformRolesRebacDisabledError):
+        await revoke_platform_role(
+            _user(ADMIN_UID),
+            OTHER_UID,
+            PlatformRoleRelation.PLATFORM_ADMIN,
+            *_args(rebac, _FakeBootstrapStore(completed_by=None)),
         )
     assert rebac.deleted == []

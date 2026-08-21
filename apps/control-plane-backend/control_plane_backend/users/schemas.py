@@ -41,15 +41,20 @@ class PlatformAdminRootOnlyError(Exception):
 
 
 class PlatformRoleRootProtectedError(Exception):
-    """Raised when a revocation targets the bootstrap root identity.
+    """Raised when an action targets the bootstrap root identity.
 
     PLATFORM-ADMIN-DELEGATION-RFC.md §3: the root is unrevocable for every
     caller, itself included — root self-demotion would be irreversible because
-    bootstrap never reopens.
+    bootstrap never reopens. Guards both the `platform_admin` revocation route
+    and `DELETE /users/{user_id}` (deleting the root's Keycloak account would
+    freeze the platform_admin population the same irreversible way).
     """
 
     def __init__(self) -> None:
-        super().__init__("The bootstrap root's platform_admin cannot be revoked.")
+        super().__init__(
+            "The bootstrap root identity is protected: its platform_admin "
+            "cannot be revoked and its account cannot be deleted."
+        )
 
 
 class PlatformBootstrapNotCompletedError(Exception):

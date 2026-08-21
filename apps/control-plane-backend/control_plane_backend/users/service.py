@@ -389,6 +389,39 @@ async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
     return out
 
 
+async def user_exists_in_keycloak(
+    user_id: str,
+    deps: UserServiceDependencies,
+) -> bool | None:
+    """Whether one Keycloak subject exists — `None` when it cannot be verified.
+
+    Why this function exists:
+    - the platform-role grant surface (#2405) writes org-level tuples for
+      caller-supplied uids; a typo'd or deleted uid must 404 instead of
+      becoming a live grant for whoever ever authenticates with that sub
+    - read-only, same admin client `get_users_by_ids` uses — deliberately not
+      that helper, whose 404 fallback (`UserSummary(id=...)`) makes "missing"
+      indistinguishable from "found"
+
+    How to use it:
+    - `False` means Keycloak affirmatively does not know the id; `None` means
+      Keycloak M2M is disabled (dev mode) and the caller should skip the check
+
+    Example:
+    - `if await user_exists_in_keycloak(uid, deps) is False: raise ...`
+    """
+    admin = _get_keycloak_admin(deps)
+    if isinstance(admin, KeycloackDisabled):
+        return None
+    try:
+        await admin.a_get_user(user_id)
+    except KeycloakGetError as exc:
+        if exc.response_code == 404:
+            return False
+        raise
+    return True
+
+
 async def find_user_details_by_id(
     user_id: UUID,
     user_store: BaseUserStore,

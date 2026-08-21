@@ -30,6 +30,12 @@
   font: var(--font-body-medium);
 }
 
+.errorMessage {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-medium);
+}
+
 .userCell {
   display: flex;
   align-items: center;

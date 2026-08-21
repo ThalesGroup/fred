@@ -1949,6 +1949,8 @@
       "holders": {
         "title": "Détenteurs actuels",
         "empty": "Aucun rôle plateforme attribué pour le moment.",
+        "loading": "Chargement des rôles plateforme…",
+        "error": "Impossible de charger les rôles plateforme.",
         "rootBadge": "Root bootstrap",
         "table": {
           "user": "Utilisateur",
