@@ -327,10 +327,14 @@
     },
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
-      "total_one": "Total : {{count}} token",
-      "total_other": "Total : {{count}} tokens",
-      "cached_one": "{{count}} token servi depuis le cache du fournisseur",
-      "cached_other": "{{count}} tokens servis depuis le cache du fournisseur"
+      "cached_one": "{{count, number}} token servi depuis le cache du fournisseur",
+      "cached_other": "{{count, number}} tokens servis depuis le cache du fournisseur",
+      "received_one": "{{count, number}} token reçu",
+      "received_other": "{{count, number}} tokens reçus",
+      "sent_one": "{{count, number}} token envoyé",
+      "sent_other": "{{count, number}} tokens envoyés",
+      "total_one": "Total : {{count, number}} token",
+      "total_other": "Total : {{count, number}} tokens"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {

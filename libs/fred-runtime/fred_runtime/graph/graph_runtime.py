@@ -231,10 +231,6 @@ class _GraphNodeExecutionContext:
     # being buffered in _events, so the caller receives tokens in real time.
     _live_emit: Callable[[RuntimeEvent], None] | None = None
     _last_model_name: str | None = None
-    # Usage of the single most recent model call in this node — used for
-    # per-step attribution (TRACE-01: attached to each ToolCallRuntimeEvent
-    # a node emits, so a step shows only the call that triggered it).
-    _last_token_usage: dict[str, int] | None = None
     # Summed across every model call this node makes — a node can call the
     # model more than once (e.g. planning then acting) before invoking a
     # tool, and the node's real total is their sum, not just the last one.
@@ -275,7 +271,6 @@ class _GraphNodeExecutionContext:
         if model_name:
             self._last_model_name = model_name
         if token_usage:
-            self._last_token_usage = token_usage
             self._total_token_usage = sum_token_usage(
                 self._total_token_usage, token_usage
             )
@@ -653,11 +648,6 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_ref,
                 call_id=call_id,
                 arguments=payload,
-                # Usage of the most recent model call recorded on this node
-                # (TRACE-01) — the same value `last_model_metadata` reads, not
-                # necessarily this specific call's own usage: a graph node can
-                # invoke several models before invoking a tool.
-                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -732,8 +722,6 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_name,
                 call_id=call_id,
                 arguments=arguments,
-                # See invoke_tool() above — same caveat applies.
-                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
