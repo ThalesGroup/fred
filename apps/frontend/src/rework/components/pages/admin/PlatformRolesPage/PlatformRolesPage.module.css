@@ -49,11 +49,10 @@
 }
 
 .rootBadge {
-  border: 1px solid var(--outline-variant);
   border-radius: var(--radius-s);
-  background: var(--surface-container-low);
+  background: var(--primary-container);
   padding: 0 var(--spacing-xs);
-  color: var(--on-surface-retreat);
+  color: var(--on-primary-container);
   font: var(--font-label-small);
   letter-spacing: 0.04em;
   text-transform: uppercase;

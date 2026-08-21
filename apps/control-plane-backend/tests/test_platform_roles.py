@@ -201,6 +201,18 @@ async def test_list_reports_direct_tuples_only_never_the_computed_union():
 
 
 @pytest.mark.asyncio
+async def test_list_pins_the_bootstrap_root_first():
+    """The root row anchors the whole model — pinned at the top regardless of
+    alphabetical order ('admin-sub' < 'root-sub' would otherwise lead)."""
+    rebac = _FakeRebac(admins={ROOT_UID, ADMIN_UID}, observers={OTHER_UID})
+    response = await list_platform_roles(
+        _user(ROOT_UID), *_args(rebac, _FakeBootstrapStore()), _USER_DEPS
+    )
+    assert response.holders[0].user.id == ROOT_UID
+    assert response.holders[0].is_bootstrap_root is True
+
+
+@pytest.mark.asyncio
 async def test_list_caller_flag_false_for_appointed_admin():
     rebac = _FakeRebac(admins={ROOT_UID, ADMIN_UID})
     response = await list_platform_roles(

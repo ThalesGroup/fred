@@ -3420,7 +3420,9 @@ uppercase section titles): a holders table then a grant form.
   follows the backend rules (PLATFORM-ADMIN-DELEGATION-RFC.md §3): observer
   chips are removable by any platform admin, admin chips only when
   `caller_is_bootstrap_root`, and never on the bootstrap root's own row. The
-  root row carries an uppercase "Bootstrap root" badge.
+  root row is **pinned first** (backend sort) and carries an uppercase
+  "Bootstrap root" badge in `--primary-container`/`--on-primary-container`
+  so the protected identity reads at a glance.
 - **Grant form** — `Autocomplete` over the admin user list, then a two-button
   segmented choice (observer/admin). The admin option renders **disabled**
   (not hidden) for non-root callers, with a persistent hint line explaining

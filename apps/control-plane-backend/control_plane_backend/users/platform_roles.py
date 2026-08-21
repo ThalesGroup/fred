@@ -165,7 +165,11 @@ async def list_platform_roles(
         )
         for uid, relations in relations_by_uid.items()
     ]
-    holders.sort(key=lambda h: (h.user.username or "", h.user.id))
+    # Root first, then alphabetical: the protected identity is the anchor of
+    # the whole model, so the admin UI shows it pinned at the top.
+    holders.sort(
+        key=lambda h: (not h.is_bootstrap_root, h.user.username or "", h.user.id)
+    )
 
     return PlatformRolesResponse(
         holders=holders,
