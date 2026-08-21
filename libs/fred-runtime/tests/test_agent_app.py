@@ -2399,6 +2399,80 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
     assert context["team_id"] == "fredlab"
     assert context["execution_action"] == "execute"
 
+def test_local_registry_invoker_drains_runtime_events_after_final(monkeypatch) -> None:
+    """
+    Ensure an in-process nested invocation lets the runtime generator finish.
+
+    The runtime generator owns cleanup in its ``finally`` block. Returning from
+    LocalRegistryAgentInvoker.invoke() as soon as the first FinalRuntimeEvent is
+    observed can close the async generator prematurely and run that cleanup from
+    a different asyncio context.
+    """
+
+    seen: dict[str, bool] = {
+        "continued_after_final": False,
+        "cleaned_up": False,
+    }
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        _ = (
+            definition,
+            request,
+            access_token,
+            team_id,
+            registry,
+            exchange_id,
+        )
+        try:
+            yield {"kind": "final", "sequence": 0, "content": "ok"}
+            seen["continued_after_final"] = True
+        finally:
+            seen["cleaned_up"] = True
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+    )
+
+    result = asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="alice",
+                    tenant="tenant-a",
+                    environment=PortableEnvironment.DEV,
+                    session_id="session-1",
+                    user_id="alice",
+                    team_id="fredlab",
+                ),
+            )
+        )
+    )
+
+    assert result.content == "ok"
+    assert result.is_error is False
+    assert seen["continued_after_final"] is True
+    assert seen["cleaned_up"] is True
 
 def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     """

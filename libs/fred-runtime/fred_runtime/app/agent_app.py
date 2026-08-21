@@ -654,6 +654,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             invocation_turns=request.prior_turns,
         )
 
+        final_result: AgentInvocationResult | None = None
         content_parts: list[str] = []
         async for payload in _iterate_runtime_event_payloads(
             definition,
@@ -669,11 +670,21 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         ):
             kind = payload.get("kind")
             if kind == "final":
-                return AgentInvocationResult(
+                final_result = AgentInvocationResult(
                     agent_id=request.agent_id,
-                    content=payload.get("content", ""),
+                    content=str(payload.get("content") or ""),
+                    structured=payload.get("structured"),
                     is_error=False,
                 )
+                continue
+            if kind == "execution_error":
+                final_result = AgentInvocationResult(
+                    agent_id=request.agent_id,
+                    content=str(payload.get("message") or ""),
+                    is_error=True,
+                )
+                continue
+
             if kind == "assistant_delta":
                 content_parts.append(payload.get("delta", ""))
             elif kind == "node_error":
@@ -682,12 +693,15 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                     content=payload.get("error_message", "Unknown error"),
                     is_error=True,
                 )
+        if final_result is not None:
+            return final_result
 
         return AgentInvocationResult(
             agent_id=request.agent_id,
             content="".join(content_parts),
             is_error=not content_parts,
         )
+
 
 
 def _build_runtime_services(
