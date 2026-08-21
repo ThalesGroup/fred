@@ -105,9 +105,14 @@
    themes.
 
    The WORD still carries the state on its own, so this is reinforcement and
-   never the only signal — a colour-blind reader reads "Boost" vs "Rapide". */
+   never the only signal — a colour-blind reader reads "Boost" vs "Rapide".
+
+   2026-08-21: stops saturated and moderately darkened (same hues) — the
+   original pastels were near-invisible on the light surface, and a fully
+   darkened pass sank into the dark one. These sit halfway between the two so
+   the single gradient reads on both themes. */
 .state[data-on] {
-  background: linear-gradient(90deg, #65e0f6, #9299ff, #d665b4);
+  background: linear-gradient(90deg, #37c9e4, #6f78fc, #db47ae);
   background-clip: text;
   -webkit-background-clip: text;
   /* Fallback first: any engine that ignores background-clip: text keeps a

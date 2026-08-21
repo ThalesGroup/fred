@@ -232,7 +232,11 @@ but is a hole in text, invisible on the light theme) — leaving cyan → violet
 pink. A solid `--primary` sits underneath as the fallback for engines that
 ignore `background-clip: text`, and `forced-colors` drops the gradient for the
 system palette. The WORD carries the state either way, so colour is
-reinforcement, never the only signal.
+reinforcement, never the only signal. 2026-08-21: the shared stops were
+saturated and moderately darkened (same hues) in both places — the original
+pastels were near-invisible on the light surface, a fully darkened pass sank
+into the dark one; the retained stops sit halfway between, so the single
+gradient reads on both themes.
 
 Deliberately NOT a low/medium/high picker — a same-day effort picker was
 withdrawn (providers 400 on values they don't support,
@@ -1274,7 +1278,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 #### Open UX issues
 
 - Not yet design-reviewed against a live stack. First functional pass only.
-- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#65e0f6`, `#9299ff`, `#e1c39c`, `#d665b4`). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is.
+- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is. Shared with the composer's `Boost` text (`ReasoningChip.module.css`), minus the white stops and peach.
 
 #### Resolved
 
