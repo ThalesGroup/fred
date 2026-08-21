@@ -13,10 +13,12 @@
  * limitations under the License.
  */
 
+/* 272px: kept in sync with the other nav panels (see TeamContentNavbar) — they
+ * swap in the same grid column, a mismatch makes the column jump. */
 .panel {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: 272px;
   height: 100%;
   min-height: 0;
 }

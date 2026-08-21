@@ -232,7 +232,11 @@ but is a hole in text, invisible on the light theme) — leaving cyan → violet
 pink. A solid `--primary` sits underneath as the fallback for engines that
 ignore `background-clip: text`, and `forced-colors` drops the gradient for the
 system palette. The WORD carries the state either way, so colour is
-reinforcement, never the only signal.
+reinforcement, never the only signal. 2026-08-21: the shared stops were
+saturated and moderately darkened (same hues) in both places — the original
+pastels were near-invisible on the light surface, a fully darkened pass sank
+into the dark one; the retained stops sit halfway between, so the single
+gradient reads on both themes.
 
 Deliberately NOT a low/medium/high picker — a same-day effort picker was
 withdrawn (providers 400 on values they don't support,
@@ -1224,6 +1228,35 @@ UUID-prefix fallback from the open issue above) — same shape as
 
 ---
 
+### `ChatList` meta line and nav panel width (2026-08-20)
+
+**Location:**
+`src/rework/components/shared/organisms/ChatList/ChatListItem/ChatListItem.tsx`,
+`src/rework/components/shared/organisms/ChatList/ChatList.module.scss`,
+`Sidebar/{TeamContentNavbar,HomeNavPanel,MarketplaceNavbar,AdminNavbar}` stylesheets
+**Status:** `Functional`
+
+The conversation row's second line (`<agent name> · DD/MM/YY - HH:mm`) wrapped
+onto a second line whenever the agent name was long, colliding with the next
+row and making the list unreadable. Two changes:
+
+- The meta line is now a nowrap flex row where **only the agent name flexes**
+  (`flex: 1 1 auto; min-width: 0; text-overflow: ellipsis`, full name in
+  `title`); the separator and the date are `flex: 0 0 auto`, so the date and
+  time always render whole. Same ellipsis treatment on `.groupHeader`, the
+  per-agent sub-list header shown when grouping is on.
+- Vertical column alignment (2026-08-21): the agent name **grows** to fill the
+  row, so its box is the same width on every line — short names leave a gap,
+  long names ellipsize — and the `·` separator and date start at the same x
+  everywhere. The date also uses `font-variant-numeric: tabular-nums`, so the
+  fixed `DD/MM/YY - HH:mm` format always renders at the same width regardless
+  of which digits it contains.
+- All four nav panels went **240px → 272px**. They swap into the same sidebar
+  grid column, so the width must stay identical across them or the column
+  jumps when switching between Home / team / marketplace / admin.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
@@ -1245,7 +1278,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 #### Open UX issues
 
 - Not yet design-reviewed against a live stack. First functional pass only.
-- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#65e0f6`, `#9299ff`, `#e1c39c`, `#d665b4`). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is.
+- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is. Shared with the composer's `Boost` text (`ReasoningChip.module.css`), minus the white stops and peach.
 
 #### Resolved
 
