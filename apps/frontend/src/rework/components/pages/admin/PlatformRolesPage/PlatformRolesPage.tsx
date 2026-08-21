@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
@@ -97,17 +98,25 @@ export default function PlatformRolesPage() {
       size: "2fr",
       cellRenderer: (holder) => (
         <div className={styles.userCell}>
+          {holder.is_bootstrap_root && (
+            <span
+              className={styles.rootCrown}
+              title={t("rework.platformRoles.holders.rootBadge")}
+              aria-label={t("rework.platformRoles.holders.rootBadge")}
+            >
+              <Icon category="outlined" type="crown" filled />
+            </span>
+          )}
           <span>{displayName(holder.user)}</span>
           {holder.user.username && <span className={styles.username}>{holder.user.username}</span>}
-          {holder.is_bootstrap_root && (
-            <span className={styles.rootBadge}>{t("rework.platformRoles.holders.rootBadge")}</span>
-          )}
         </div>
       ),
     },
     {
       label: t("rework.platformRoles.holders.table.roles"),
-      size: "2fr",
+      // Wider than the user column: a two-role holder keeps both full-label
+      // chips ("Admin plateforme" + "Observateur plateforme") on one line.
+      size: "3fr",
       cellRenderer: (holder) => (
         <div className={styles.rolesCell}>
           {holder.relations.map((held) => (

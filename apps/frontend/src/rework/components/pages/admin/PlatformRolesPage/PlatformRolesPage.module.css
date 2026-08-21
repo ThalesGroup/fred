@@ -6,6 +6,8 @@
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
+  /* Iso with the other admin pages; the roles column's 3fr share keeps a
+     two-role holder's full-label chips on a single line at this width. */
   max-width: 760px;
 }
 
@@ -48,20 +50,17 @@
   font: var(--font-body-small);
 }
 
-.rootBadge {
-  border-radius: var(--radius-s);
-  background: var(--primary-container);
-  padding: 0 var(--spacing-xs);
-  color: var(--on-primary-container);
-  font: var(--font-label-small);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
+.rootCrown {
+  display: inline-flex;
+  align-items: center;
+  color: var(--primary);
+  font-size: 1.125rem;
 }
 
 .rolesCell {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: var(--spacing-xs);
 }
 

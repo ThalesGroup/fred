@@ -3418,15 +3418,19 @@ root card above the table was tried on 2026-08-21 and removed the same day
 — the pinned first row with its badge is prominence enough.)
 
 - **Holders table** — one row per user holding `platform_admin` /
-  `platform_observer`; roles render as `Chip`s whose remove affordance
+  `platform_observer`; roles render as full-label `Chip`s kept on **one
+  line** (developer decision 2026-08-21: full labels, same line, page width
+  staying at the 760px admin default — the roles column takes `3fr` vs the
+  user column's `2fr` and the cell is `nowrap`, so a two-role holder never
+  stacks). The remove affordance
   follows the backend rules (PLATFORM-ADMIN-DELEGATION-RFC.md §3): observer
   chips are removable by any platform admin, admin chips only when
   `caller_is_bootstrap_root`, and never on the bootstrap root's own row. The
-  root row is **pinned first** (backend sort) and carries an uppercase
-  "Primary admin" ("Admin principal") badge in
-  `--primary-container`/`--on-primary-container` so the protected identity
-  reads at a glance — product wording is "primary admin"; "bootstrap root"
-  stays a backend/docs term.
+  root row is **pinned first** (backend sort) and carries a small filled
+  **crown icon** in `--primary` next to the name (tooltip + aria-label
+  "Admin principal"/"Primary admin" — a text badge was tried 2026-08-21 and
+  replaced by the crown the same day). Product wording is "primary admin";
+  "bootstrap root" stays a backend/docs term.
 - **Grant form** — `Autocomplete` over the admin user list, then a two-button
   segmented choice (observer/admin). The admin option renders **disabled**
   (not hidden) for non-root callers, with a persistent hint line explaining
