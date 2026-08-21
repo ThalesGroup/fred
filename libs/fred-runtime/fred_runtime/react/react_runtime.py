@@ -379,6 +379,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # per-call, not cumulative (TRACE-01 follow-up: the previous
         # last-write-wins variable silently undercounted any multi-call turn).
         total_token_usage: dict[str, int] | None = None
+        # Marginal context accounting (#2403), distinct from the billed total
+        # above: `context_tokens` trails the most recent model call's input
+        # size, so at the end of the turn it is the size of the context the
+        # turn leaves behind. The chat UI diffs it against the previous turn's
+        # to show what a message genuinely added, rather than the billed sum
+        # which re-counts the history once per model call.
+        context_tokens: int | None = None
         last_finish_reason: str | None = None
         # When a whole round of tool calls fails (every call errored, no
         # success anywhere in the batch), the error is surfaced directly as the
@@ -411,6 +418,23 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # closed before the first answer delta and before the run ends.
         model_native_thought_id: str | None = None
         model_native_thought_started_at: float | None = None
+
+        def observe_model_call(call_usage: dict[str, int] | None) -> None:
+            """
+            Track the context size across the turn's model calls (#2403).
+
+            Called once per model call, in stream order, so that when the turn
+            ends `context_tokens` holds the last call's input — the context the
+            turn leaves behind. A provider that reports no input count resets
+            it to None rather than leaving a stale value: the UI treats None as
+            "unknown" and falls back to the billed total, which is honest,
+            whereas a stale anchor would silently misreport the next turn.
+            """
+
+            nonlocal context_tokens
+
+            context_tokens = (call_usage or {}).get("input_tokens")
+
         phase_timer_ctx.__enter__()
         try:
             async for raw_event in self._compiled_agent.astream(
@@ -568,21 +592,18 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # response back to the LLM's synthesis.
                         round_had_tool_success = False
                         # The usage of the model call that decided to make these
-                        # tool calls — attached per-call to ToolCallRuntimeEvent
-                        # (TRACE-01) so the trace UI can show tokens per step,
-                        # AND folded into the turn's running total. When one
-                        # AIMessage requests several tools in parallel, every
-                        # one of them gets this same per-step total (it is the
-                        # cost of the one decision that produced them, not a
-                        # per-tool split — providers don't expose that
-                        # breakdown), but it is only added to the turn total
-                        # once, here, not once per parallel tool call.
+                        # tool calls, folded into the turn's billed total once
+                        # here — not once per parallel tool call. It is NOT
+                        # attached to the individual ToolCallRuntimeEvents any
+                        # more (#2403): showing a decision's whole prompt on a
+                        # tool row read as if the tool had consumed it.
                         _, tool_call_token_usage, _ = _runtime_metadata_from_message(
                             message
                         )
                         total_token_usage = _sum_token_usage(
                             total_token_usage, tool_call_token_usage
                         )
+                        observe_model_call(tool_call_token_usage)
                         for tool_call in message.tool_calls:
                             name = str(tool_call.get("name") or "")
                             call_id = str(tool_call.get("id") or "")
@@ -603,7 +624,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                                 arguments=cast(
                                     dict[str, object], tool_call.get("args") or {}
                                 ),
-                                token_usage=tool_call_token_usage,
                             )
                             sequence += 1
                         continue
@@ -617,6 +637,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         total_token_usage = _sum_token_usage(
                             total_token_usage, token_usage
                         )
+                        observe_model_call(token_usage)
                         if finish_reason is not None:
                             last_finish_reason = finish_reason
                         last_assistant_message = _from_langchain_message_adapter(
@@ -651,6 +672,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     ui_parts=collected_ui_parts,
                     model_name=last_model_name,
                     token_usage=total_token_usage,
+                    context_tokens=context_tokens,
                     finish_reason=last_finish_reason,
                 )
                 if span is not None and self._services.tracer is not None:
