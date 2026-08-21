@@ -165,8 +165,6 @@ export default function PlatformRolesPage() {
 
   const relationOptions: PlatformRoleRelation[] = ["platform_observer", "platform_admin"];
 
-  const rootHolder = platformRoles?.holders.find((holder) => holder.is_bootstrap_root);
-
   const holdersContent = () => {
     if (isLoadingRoles) return <p className={styles.emptyMessage}>{t("rework.platformRoles.holders.loading")}</p>;
     if (isRolesError) return <p className={styles.errorMessage}>{t("rework.platformRoles.holders.error")}</p>;
@@ -178,16 +176,6 @@ export default function PlatformRolesPage() {
   return (
     <div className={styles.platformRolesPage}>
       <PageHeader title={t("rework.platformRoles.title")} />
-      {rootHolder && (
-        <div className={styles.rootCard}>
-          <span className={styles.rootCardBadge}>{t("rework.platformRoles.holders.rootBadge")}</span>
-          <div className={styles.rootCardIdentity}>
-            <span className={styles.rootCardName}>{displayName(rootHolder.user)}</span>
-            {rootHolder.user.username && <span className={styles.rootCardUsername}>{rootHolder.user.username}</span>}
-          </div>
-          <p className={styles.rootCardHint}>{t("rework.platformRoles.rootCard.hint")}</p>
-        </div>
-      )}
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>{t("rework.platformRoles.holders.title")}</h2>
         {holdersContent()}

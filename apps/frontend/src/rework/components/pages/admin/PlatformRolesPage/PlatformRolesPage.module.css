@@ -16,42 +16,6 @@
   width: 100%;
 }
 
-.rootCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  border-radius: var(--radius-m);
-  background: var(--primary-container);
-  padding: var(--spacing-m);
-  color: var(--on-primary-container);
-}
-
-.rootCardBadge {
-  font: var(--font-label-small);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.rootCardIdentity {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-s);
-}
-
-.rootCardName {
-  font: var(--font-title-medium);
-}
-
-.rootCardUsername {
-  opacity: 0.8;
-  font: var(--font-body-small);
-}
-
-.rootCardHint {
-  margin: 0;
-  font: var(--font-body-small);
-}
-
 .sectionTitle {
   margin: 0;
   color: var(--on-surface-retreat);

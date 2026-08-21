@@ -3413,14 +3413,9 @@ falls back to splitting the capability id. The `name` step matters because
 
 Admin-sidebar entry "Platform roles" (`admin_panel_settings` icon), gated
 `Protected requires="admin"`. Layout mirrors `AdminTeamsPage` (760px column,
-uppercase section titles): a bootstrap-root card at the very top, then the
-holders table, then the grant form.
-
-- **Root card** — a full-width `--primary-container` block before everything
-  else: uppercase "Bootstrap root" label, the root's display name +
-  username, and a one-line hint ("the only account that can appoint and
-  revoke platform admins; cannot be revoked or deleted"). Rendered only when
-  the holders list carries an `is_bootstrap_root` entry.
+uppercase section titles): a holders table then a grant form. (A dedicated
+root card above the table was tried on 2026-08-21 and removed the same day
+— the pinned first row with its badge is prominence enough.)
 
 - **Holders table** — one row per user holding `platform_admin` /
   `platform_observer`; roles render as `Chip`s whose remove affordance
@@ -3428,8 +3423,10 @@ holders table, then the grant form.
   chips are removable by any platform admin, admin chips only when
   `caller_is_bootstrap_root`, and never on the bootstrap root's own row. The
   root row is **pinned first** (backend sort) and carries an uppercase
-  "Bootstrap root" badge in `--primary-container`/`--on-primary-container`
-  so the protected identity reads at a glance.
+  "Primary admin" ("Admin principal") badge in
+  `--primary-container`/`--on-primary-container` so the protected identity
+  reads at a glance — product wording is "primary admin"; "bootstrap root"
+  stays a backend/docs term.
 - **Grant form** — `Autocomplete` over the admin user list, then a two-button
   segmented choice (observer/admin). The admin option renders **disabled**
   (not hidden) for non-root callers, with a persistent hint line explaining

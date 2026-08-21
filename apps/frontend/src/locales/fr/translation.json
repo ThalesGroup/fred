@@ -1951,14 +1951,11 @@
         "empty": "Aucun rôle plateforme attribué pour le moment.",
         "loading": "Chargement des rôles plateforme…",
         "error": "Impossible de charger les rôles plateforme.",
-        "rootBadge": "Root bootstrap",
+        "rootBadge": "Admin principal",
         "table": {
           "user": "Utilisateur",
           "roles": "Rôles"
         }
-      },
-      "rootCard": {
-        "hint": "Seul compte pouvant nommer et révoquer les admins plateforme. Il ne peut être ni révoqué ni supprimé."
       },
       "roles": {
         "platform_admin": "Admin plateforme",
@@ -1970,13 +1967,13 @@
         "userPlaceholder": "Rechercher un utilisateur",
         "clearSelection": "Effacer la sélection",
         "roleLabel": "Rôle",
-        "rootOnlyHint": "Seul le root bootstrap peut nommer ou révoquer des admins plateforme.",
+        "rootOnlyHint": "Seul l'admin principal peut nommer ou révoquer des admins plateforme.",
         "submit": "Attribuer",
         "successSummary": "{{role}} attribué à {{user}}",
         "errors": {
           "summary": "Impossible d'attribuer le rôle",
           "fallbackDetail": "Une erreur inattendue est survenue lors de l'attribution du rôle.",
-          "forbiddenDetail": "Seul le root bootstrap peut gérer les admins plateforme.",
+          "forbiddenDetail": "Seul l'admin principal peut gérer les admins plateforme.",
           "conflictDetail": "Le bootstrap root n'a jamais été exécuté sur cette plateforme."
         }
       },
@@ -1986,7 +1983,7 @@
         "errors": {
           "summary": "Impossible de révoquer le rôle",
           "fallbackDetail": "Une erreur inattendue est survenue lors de la révocation du rôle.",
-          "forbiddenDetail": "Rôle protégé — seul le root bootstrap peut révoquer les admins plateforme, et le root lui-même est irrévocable."
+          "forbiddenDetail": "Rôle protégé — seul l'admin principal peut révoquer les admins plateforme, et l'admin principal lui-même est irrévocable."
         }
       }
     },
