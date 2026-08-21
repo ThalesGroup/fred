@@ -1,0 +1,88 @@
+.platformRolesPage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  width: 100%;
+  max-width: 760px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  width: 100%;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.emptyMessage {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.userCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.username {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.rootBadge {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: 0 var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rolesCell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.grantField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.grantLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.relationChoices {
+  display: flex;
+  gap: var(--spacing-s);
+}
+
+.rootOnlyHint {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}

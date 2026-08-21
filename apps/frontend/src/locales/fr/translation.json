@@ -1771,6 +1771,7 @@
           "capabilities": "Fonctionnalités",
           "corpusAudit": "Audit du corpus",
           "migration": "Données plateforme",
+          "platformRoles": "Rôles plateforme",
           "selftest": "Auto-test",
           "tasks": "Activité",
           "teams": "Equipes"
@@ -1941,6 +1942,47 @@
         "acknowledge": "Ignorer",
         "copyWarnings": "Copier les avertissements",
         "copied": "Copié !"
+      }
+    },
+    "platformRoles": {
+      "title": "Rôles plateforme",
+      "holders": {
+        "title": "Détenteurs actuels",
+        "empty": "Aucun rôle plateforme attribué pour le moment.",
+        "rootBadge": "Root bootstrap",
+        "table": {
+          "user": "Utilisateur",
+          "roles": "Rôles"
+        }
+      },
+      "roles": {
+        "platform_admin": "Admin plateforme",
+        "platform_observer": "Observateur plateforme"
+      },
+      "grant": {
+        "title": "Attribuer un rôle",
+        "userLabel": "Utilisateur",
+        "userPlaceholder": "Rechercher un utilisateur",
+        "clearSelection": "Effacer la sélection",
+        "roleLabel": "Rôle",
+        "rootOnlyHint": "Seul le root bootstrap peut nommer ou révoquer des admins plateforme.",
+        "submit": "Attribuer",
+        "successSummary": "{{role}} attribué à {{user}}",
+        "errors": {
+          "summary": "Impossible d'attribuer le rôle",
+          "fallbackDetail": "Une erreur inattendue est survenue lors de l'attribution du rôle.",
+          "forbiddenDetail": "Seul le root bootstrap peut gérer les admins plateforme.",
+          "conflictDetail": "Le bootstrap root n'a jamais été exécuté sur cette plateforme."
+        }
+      },
+      "revoke": {
+        "ariaLabel": "Révoquer {{role}} de {{user}}",
+        "successSummary": "{{role}} révoqué pour {{user}}",
+        "errors": {
+          "summary": "Impossible de révoquer le rôle",
+          "fallbackDetail": "Une erreur inattendue est survenue lors de la révocation du rôle.",
+          "forbiddenDetail": "Rôle protégé — seul le root bootstrap peut révoquer les admins plateforme, et le root lui-même est irrévocable."
+        }
       }
     },
     "adminTeams": {

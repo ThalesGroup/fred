@@ -16,6 +16,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
+    "ControlPlanePlatformRole",
   ],
   endpoints: {
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
@@ -91,6 +92,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     listUsersControlPlaneV1UsersGet: {
       providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],
+    },
+    // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405). The
+    // holders table is one aggregate, so a single LIST tag: every grant/revoke
+    // re-reads it — including the root badge and caller flag.
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: {
+      providesTags: [{ type: "ControlPlanePlatformRole" as const, id: "LIST" }],
+    },
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
+    },
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
     },
     listTeamsControlPlaneV1TeamsGet: {
       providesTags: (result) =>
@@ -321,6 +334,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 
 export const {
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
+  // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation: useRevokePlatformRoleMutation,
   // Batch uid → display-name resolution for audit fields (#1952).
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery: useUsersByIdsQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,

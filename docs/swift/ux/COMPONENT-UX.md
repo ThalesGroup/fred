@@ -3406,3 +3406,25 @@ ops-authored `model_display_name`, then prettifies the real model `name`, then
 falls back to splitting the capability id. The `name` step matters because
 `model_capability_id` normalizes non-id-safe characters — derived from the id,
 `mistral:latest` would read "Mistral Latest".
+
+### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
+
+**Status:** `Functional`
+
+Admin-sidebar entry "Platform roles" (`admin_panel_settings` icon), gated
+`Protected requires="admin"`. Layout mirrors `AdminTeamsPage` (760px column,
+uppercase section titles): a holders table then a grant form.
+
+- **Holders table** — one row per user holding `platform_admin` /
+  `platform_observer`; roles render as `Chip`s whose remove affordance
+  follows the backend rules (PLATFORM-ADMIN-DELEGATION-RFC.md §3): observer
+  chips are removable by any platform admin, admin chips only when
+  `caller_is_bootstrap_root`, and never on the bootstrap root's own row. The
+  root row carries an uppercase "Bootstrap root" badge.
+- **Grant form** — `Autocomplete` over the admin user list, then a two-button
+  segmented choice (observer/admin). The admin option renders **disabled**
+  (not hidden) for non-root callers, with a persistent hint line explaining
+  the root-only rule — the restriction stays discoverable instead of the
+  option silently missing.
+- All affordances are display-only mirrors; every action is re-checked
+  server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
