@@ -3413,7 +3413,14 @@ falls back to splitting the capability id. The `name` step matters because
 
 Admin-sidebar entry "Platform roles" (`admin_panel_settings` icon), gated
 `Protected requires="admin"`. Layout mirrors `AdminTeamsPage` (760px column,
-uppercase section titles): a holders table then a grant form.
+uppercase section titles): a bootstrap-root card at the very top, then the
+holders table, then the grant form.
+
+- **Root card** — a full-width `--primary-container` block before everything
+  else: uppercase "Bootstrap root" label, the root's display name +
+  username, and a one-line hint ("the only account that can appoint and
+  revoke platform admins; cannot be revoked or deleted"). Rendered only when
+  the holders list carries an `is_bootstrap_root` entry.
 
 - **Holders table** — one row per user holding `platform_admin` /
   `platform_observer`; roles render as `Chip`s whose remove affordance

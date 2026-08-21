@@ -1957,6 +1957,9 @@
           "roles": "Rôles"
         }
       },
+      "rootCard": {
+        "hint": "Seul compte pouvant nommer et révoquer les admins plateforme. Il ne peut être ni révoqué ni supprimé."
+      },
       "roles": {
         "platform_admin": "Admin plateforme",
         "platform_observer": "Observateur plateforme"

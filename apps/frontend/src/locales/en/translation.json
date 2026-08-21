@@ -1957,6 +1957,9 @@
           "roles": "Roles"
         }
       },
+      "rootCard": {
+        "hint": "The only account that can appoint and revoke platform admins. It cannot be revoked or deleted."
+      },
       "roles": {
         "platform_admin": "Platform admin",
         "platform_observer": "Platform observer"
