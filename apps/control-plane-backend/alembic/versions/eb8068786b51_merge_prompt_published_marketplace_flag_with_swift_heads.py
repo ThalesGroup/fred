@@ -8,7 +8,6 @@ Create Date: 2026-08-24 08:43:24.032090
 
 from typing import Sequence, Union
 
-
 # revision identifiers, used by Alembic.
 # codeql[py/unused-global-variable]
 revision: str = "eb8068786b51"
