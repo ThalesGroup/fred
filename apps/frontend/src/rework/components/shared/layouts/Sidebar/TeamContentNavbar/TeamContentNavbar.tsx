@@ -20,6 +20,8 @@ import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/N
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
+import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
+import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
@@ -99,6 +101,22 @@ export default function TeamContentNavbar() {
     return heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
   })();
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
+
+  // Team avatar (36×36, 4px): the custom image when set, else colour-tinted
+  // initials (same fallback as the Home team list). Square 4px on both, incl.
+  // the personal space.
+  const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
+  const teamAvatar = selectedTeam?.avatar_image_url ? (
+    <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
+  ) : (
+    <TeamInitials
+      className={styles.teamPanelAvatar}
+      name={teamDisplayName}
+      size="small"
+      shape="square"
+      color={teamColor(teamDisplayName)}
+    />
+  );
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -215,10 +233,15 @@ export default function TeamContentNavbar() {
           team, or the usage dashboard for the personal space. */}
       <div className={styles.teamPanelHeader}>
         <div className={styles.teamPanelHeaderText}>
-          {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.teamLabel")}</span>}
-          <span className={styles.teamPanelName}>
-            {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
-          </span>
+          <div className={styles.teamPanelIdentity}>
+            {teamAvatar}
+            <div className={styles.teamPanelTitle}>
+              {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.teamLabel")}</span>}
+              <span className={styles.teamPanelName}>
+                {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+              </span>
+            </div>
+          </div>
           {showRoleLabel && <span className={styles.teamPanelRoles}>{roleLabel}</span>}
         </div>
         {!isPersonalTeam && canOpenTeamSettings && !inSettings && (

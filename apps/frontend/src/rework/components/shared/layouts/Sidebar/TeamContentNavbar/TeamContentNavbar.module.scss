@@ -30,9 +30,35 @@
   color: var(--on-surface);
 }
 
-/* The three stacked labels (kicker / name / roles), gap 0. min-width: 0 lets
- * each label ellipsize instead of pushing the gear off the row. */
+/* Left column: the identity row (avatar + kicker/name) above the roles line.
+ * min-width: 0 lets the inner labels ellipsize instead of pushing the gear off
+ * the row. */
 .teamPanelHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+/* Avatar + title (kicker/name) on one row. */
+.teamPanelIdentity {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+/* Team avatar: custom image or initials tile, fixed 36×36, 4px corners. */
+.teamPanelAvatar {
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+}
+
+/* Stacked kicker / name, gap 0. */
+.teamPanelTitle {
   display: flex;
   flex-direction: column;
   gap: 0;
