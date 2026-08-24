@@ -38,7 +38,8 @@ export default function HomePage() {
   const user = bootstrap?.current_user;
   const firstName = user?.first_name || user?.username || undefined;
 
-  const [periodIndex, setPeriodIndex] = useState(0);
+  // Default to 30 days (index 1 in PERIODS) — a fuller picture than 7 on landing.
+  const [periodIndex, setPeriodIndex] = useState(1);
   const period = PERIODS[periodIndex];
 
   return (
