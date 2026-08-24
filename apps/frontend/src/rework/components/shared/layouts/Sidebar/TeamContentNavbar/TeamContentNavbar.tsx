@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useEffect } from "react";
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import { recordTeamVisit } from "@shared/utils/teamRecency.ts";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -49,6 +51,12 @@ export default function TeamContentNavbar() {
   const navigate = useNavigate();
 
   const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
+
+  // Record every entry into a team so the Home nav-panel switcher can offer a
+  // "recently viewed" sort. Client-only (localStorage), best-effort.
+  useEffect(() => {
+    if (teamId) recordTeamVisit(teamId);
+  }, [teamId]);
 
   // "Back" from a focused view (settings / usage) always returns to the team's
   // main content view — a fixed, predictable destination. `navigate(-1)` was

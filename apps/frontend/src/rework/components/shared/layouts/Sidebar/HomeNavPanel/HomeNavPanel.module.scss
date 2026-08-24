@@ -53,6 +53,11 @@
   padding: 0 var(--spacing-s) var(--spacing-xs);
 }
 
+/* Sort dropdown — same horizontal inset and width as the search field above. */
+.teamSort {
+  padding: 0 var(--spacing-s) var(--spacing-xs);
+}
+
 /* The team list fills the remaining height and scrolls on overflow.
  * `scrollbar-gutter: stable` reserves the (thin, global) scrollbar track so the
  * rows never reflow horizontally the moment the scrollbar appears — the width

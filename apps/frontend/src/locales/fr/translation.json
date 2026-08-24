@@ -1504,6 +1504,10 @@
       "searchPlaceholder": "Rechercher une équipe",
       "searchClear": "Effacer la recherche",
       "yourTeams": "Vos équipes",
+      "sort": {
+        "recent": "Récemment consultées",
+        "alpha": "Ordre alphabétique"
+      },
       "pageTitle": "Accueil",
       "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer.",
       "eyebrow": "Vue d'ensemble",

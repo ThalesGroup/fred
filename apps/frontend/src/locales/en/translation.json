@@ -1504,6 +1504,10 @@
       "searchPlaceholder": "Search a team",
       "searchClear": "Clear search",
       "yourTeams": "Your teams",
+      "sort": {
+        "recent": "Recently viewed",
+        "alpha": "Alphabetical"
+      },
       "pageTitle": "Home",
       "pageSubtitle": "Select a space in the left panel to get started.",
       "eyebrow": "Overview",

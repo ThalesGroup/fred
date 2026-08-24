@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
 import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
+import type { OptionModel } from "@models/Option.model.ts";
+import { getTeamRecency, getTeamSortMode, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
@@ -39,6 +42,15 @@ export default function HomeNavPanel() {
   const { defaultTeamAvatarFile } = useFrontendProperties();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<TeamSortMode>(getTeamSortMode);
+  // Read once on mount — recency only changes while the user is inside a team,
+  // and this panel remounts when they return to Home.
+  const recency = useMemo(() => getTeamRecency(), []);
+
+  const changeSortMode = (mode: TeamSortMode) => {
+    setSortMode(mode);
+    setTeamSortMode(mode);
+  };
 
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId && team.is_member);
@@ -46,6 +58,26 @@ export default function HomeNavPanel() {
   const visibleTeams = query
     ? collaborativeTeams.filter((team) => team.name.toLowerCase().includes(query))
     : collaborativeTeams;
+
+  const sortedTeams = useMemo(() => {
+    const list = [...visibleTeams];
+    if (sortMode === "alpha") {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      // Most recently visited first; never-visited teams fall to the bottom,
+      // tie-broken alphabetically.
+      list.sort((a, b) => {
+        const diff = (recency[b.id] ?? 0) - (recency[a.id] ?? 0);
+        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      });
+    }
+    return list;
+  }, [visibleTeams, sortMode, recency]);
+
+  const sortOptions: OptionModel<TeamSortMode>[] = [
+    { key: "recent", value: "recent", label: t("rework.home.sort.recent") },
+    { key: "alpha", value: "alpha", label: t("rework.home.sort.alpha") },
+  ];
 
   return (
     <div className={styles.panel}>
@@ -75,8 +107,11 @@ export default function HomeNavPanel() {
             clearAriaLabel={t("rework.home.searchClear")}
           />
         </div>
+        <div className={styles.teamSort}>
+          <Select<TeamSortMode> size="xs" options={sortOptions} value={sortMode} onChange={changeSortMode} />
+        </div>
         <div className={styles.scroll}>
-          {visibleTeams.map((team) => (
+          {sortedTeams.map((team) => (
             <TeamSelectionListItem
               key={team.id}
               redirection={`/team/${team.id}/agents`}
