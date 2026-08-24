@@ -300,7 +300,52 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlanePrompt", id: arg.promptId },
         { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        // A deleted prompt (published or not) must also leave the community list.
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
       ],
+    },
+    // Prompts marketplace (PROMPT-06). The community listing is a live view of
+    // published team rows, so it shares the ControlPlanePrompt tag family: the
+    // shared "MARKETPLACE" id refreshes it, while per-prompt ids keep the team
+    // library and composer picker consistent when a prompt is (un)published.
+    getMarketplacePromptsControlPlaneV1MarketplacePromptsGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: "MARKETPLACE" },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: "MARKETPLACE" }],
+    },
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
+    },
+    postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    postUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    // Recording a use bumps the shared counter; refresh the community list so
+    // its "most-used first" ordering and counters reflect the new value.
+    postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: {
+      invalidatesTags: () => [{ type: "ControlPlanePrompt", id: "MARKETPLACE" }],
+    },
+    // Import copies the prompt (by value) into each target team's library.
+    postMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPost: {
+      invalidatesTags: (_, __, arg) =>
+        arg.marketplaceImportRequest.target_team_ids.map((teamId) => ({
+          type: "ControlPlanePrompt" as const,
+          id: `LIST-${teamId}`,
+        })),
     },
     // Team routing policy (TEAM-05, #2118).
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {

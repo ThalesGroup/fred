@@ -71,6 +71,8 @@ from control_plane_backend.product.schemas import (
     FrontendUserAuthConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    MarketplacePromptDetail,
+    MarketplacePromptSummary,
     PermissionSummary,
     PromptCategorySummary,
     PromptDetail,
@@ -92,6 +94,7 @@ from control_plane_backend.prompts.category_store import (
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
+    PromptStore,
 )
 from control_plane_backend.routing_policy.service import (
     resolve_execution_routing_snapshot,
@@ -3430,6 +3433,7 @@ def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
         text_preview=preview or None,
         created_by=record.created_by,
         version=record.version,
+        published=record.published,
         import_count=record.import_count,
         session_count=record.session_count,
         score=record.score,
@@ -3466,6 +3470,7 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
         text=record.text,
         created_by=record.created_by,
         version=record.version,
+        published=record.published,
         import_count=record.import_count,
         session_count=record.session_count,
         score=record.score,
@@ -3726,6 +3731,192 @@ async def promote_prompt(
         raise PromptRequestError(
             f"Prompt name {source.name!r} already exists in team {request.target_team_id!r}. "
             "Rename the existing prompt or the source before promoting.",
+            http_status=409,
+        )
+    return _prompt_record_to_summary(created)
+
+
+# ---------------------------------------------------------------------------
+# Prompts marketplace (PROMPT-06) — publish / discover / use / import
+# ---------------------------------------------------------------------------
+
+
+async def set_prompt_published(
+    team_id: TeamId,
+    prompt_id: str,
+    published: bool,
+    deps: ProductServiceDependencies,
+) -> PromptSummary | None:
+    """Publish or unpublish one team prompt to the global marketplace.
+
+    Publishing is a live visibility flag on the team's own row (PROMPT-06): the
+    marketplace shows this same record, so later edits and the shared usage
+    counter propagate immediately. Only real team prompts are publishable —
+    personal-space prompts stay private. Returns `None` when the prompt does
+    not belong to `team_id`; raises `PromptRequestError(400)` when asked to
+    publish a personal-space prompt.
+    """
+
+    if published and is_personal_team_id(team_id):
+        raise PromptRequestError(
+            "Personal-space prompts cannot be published to the marketplace.",
+            http_status=400,
+        )
+    updated = await deps.get_prompt_store().set_published(prompt_id, team_id, published)
+    if updated is None:
+        return None
+    return _prompt_record_to_summary(updated)
+
+
+async def list_marketplace_prompts(
+    deps: ProductServiceDependencies,
+) -> list[MarketplacePromptSummary]:
+    """Return every published prompt across all teams, with the author team name.
+
+    Ordered by shared usage (most-used first). Carries only ``text_preview`` —
+    the full prompt text is fetched on demand via ``get_marketplace_prompt`` when
+    a card is opened, so the listing payload stays small however many prompts
+    are published. The author team's display name is resolved once for the whole
+    page (single batched lookup, no N+1) and used as both the card label and the
+    team filter chip; a missing team's raw id is used as a fallback so a prompt
+    is never dropped from the listing.
+    """
+
+    store = deps.get_prompt_store()
+    records = await store.list_published()
+    if not records:
+        return []
+
+    team_ids = list({r.team_id for r in records})
+    metadata = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
+
+    results: list[MarketplacePromptSummary] = []
+    for record in records:
+        summary = _prompt_record_to_summary(record)
+        meta = metadata.get(record.team_id)
+        team_name = meta.name if meta is not None else str(record.team_id)
+        results.append(
+            MarketplacePromptSummary(
+                **summary.model_dump(), team_id=record.team_id, team_name=team_name
+            )
+        )
+    return results
+
+
+async def get_marketplace_prompt(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> MarketplacePromptDetail | None:
+    """Return one published prompt with its full text and author team name.
+
+    Fetched on demand when a marketplace card is opened (the listing carries
+    only previews). Any authenticated user may read it — gated only on the
+    prompt being published. Returns ``None`` when the prompt is missing or not
+    published (the route maps this to 404).
+    """
+
+    record = await get_published_prompt(prompt_id, deps)
+    if record is None:
+        return None
+    detail = _prompt_record_to_detail(record)
+    meta = await deps.get_team_metadata_store().get_by_team_id(record.team_id)
+    team_name = meta.name if meta is not None else str(record.team_id)
+    return MarketplacePromptDetail(**detail.model_dump(), team_name=team_name)
+
+
+async def record_marketplace_prompt_use(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """Increment the shared usage counter for one published prompt.
+
+    Called when any authenticated user "uses" (copies to clipboard) a prompt
+    from the marketplace, regardless of team membership — the counter reflects
+    total, global usage. Only published prompts are counted; returns False when
+    the prompt is missing or not published (the route maps this to 404).
+    """
+
+    store = deps.get_prompt_store()
+    record = await store.get(prompt_id)
+    if record is None or not record.published:
+        return False
+    return await store.increment_session_count_global(prompt_id)
+
+
+async def get_published_prompt(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> PromptRecord | None:
+    """Return one published prompt by id, or `None` if missing/unpublished."""
+
+    record = await deps.get_prompt_store().get(prompt_id)
+    if record is None or not record.published:
+        return None
+    return record
+
+
+async def _next_imported_name(
+    store: PromptStore,
+    target_team_id: TeamId,
+    base_name: str,
+) -> str:
+    """Pick the first free ``{base}_imported-N`` name in the target team.
+
+    An imported prompt is always renamed (even on the first import) so it never
+    collides with an existing prompt: N starts at 1 and grows until the name is
+    free within the target team. The suffix is applied to a truncated base so
+    the result still fits the 255-char name limit.
+    """
+
+    existing = {r.name for r in await store.list_by_team(target_team_id, limit=1000)}
+    # Reserve room for the "_imported-N" suffix within the 255-char name column.
+    trimmed_base = base_name[:230]
+    n = 1
+    while f"{trimmed_base}_imported-{n}" in existing:
+        n += 1
+    return f"{trimmed_base}_imported-{n}"
+
+
+async def import_published_prompt_into_team(
+    user: KeycloakUser,
+    prompt_id: str,
+    target_team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> PromptSummary:
+    """Copy one published marketplace prompt (by value) into a target space.
+
+    The copy is a fresh, independent instance: new id, reset usage counter
+    (version 1, import_count 0, session_count 0, score null, unpublished) and a
+    ``_imported-N`` name so it never collides in the target team. Categories are
+    not carried over — they are team-scoped (see `promote_prompt`). Raises
+    `PromptRequestError(404)` when the prompt is missing or not published.
+    """
+
+    store = deps.get_prompt_store()
+    source = await get_published_prompt(prompt_id, deps)
+    if source is None:
+        raise PromptRequestError(
+            f"Published prompt {prompt_id!r} not found in the marketplace.",
+            http_status=404,
+        )
+    name = await _next_imported_name(store, target_team_id, source.name)
+    record = PromptRecord(
+        prompt_id=str(uuid4()),
+        team_id=target_team_id,
+        name=name,
+        description=source.description,
+        emoji=source.emoji,
+        tags=source.tags,
+        text=source.text,
+        created_by=user.uid,
+    )
+    try:
+        created = await store.create(record)
+    except PromptAlreadyExistsError:
+        # _next_imported_name already avoids collisions; a conflict here means a
+        # concurrent import raced us — surface it as a conflict rather than 500.
+        raise PromptRequestError(
+            f"Prompt name {name!r} already exists in team {target_team_id!r}.",
             http_status=409,
         )
     return _prompt_record_to_summary(created)

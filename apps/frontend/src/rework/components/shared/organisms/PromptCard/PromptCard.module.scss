@@ -5,9 +5,6 @@
   position: relative;
   flex-direction: column;
   gap: var(--spacing-xs);
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease;
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: var(--radius-m);
@@ -17,10 +14,6 @@
   &:hover {
     border-color: var(--outline-retreat);
     background: var(--state-on-surface-hover);
-
-    .editOverlay {
-      opacity: 1;
-    }
   }
 
   &:focus-visible {
@@ -29,14 +22,12 @@
   }
 }
 
-/* ── Edit overlay ────────────────────────────────────────────────────────────── */
+/* ── More menu ──────────────────────────────────────────────────────────────── */
 
-.editOverlay {
+.moreMenu {
   position: absolute;
-  top: var(--spacing-xs);
-  right: var(--spacing-xs);
-  opacity: 0;
-  transition: opacity 120ms ease;
+  top: var(--spacing-2xs);
+  right: var(--spacing-2xs);
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */
@@ -47,7 +38,6 @@
 }
 
 .category {
-  padding-bottom: 4px;
   overflow: hidden;
   color: var(--primary);
   font: var(--font-label-small);
@@ -98,15 +88,34 @@
   line-height: 1.45;
 }
 
-/* ── Footer: usage count ───────────────────────────────────────────────────── */
+/* ── Footer: usage count + published badge ─────────────────────────────────── */
 
 .footer {
   display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-xs);
   margin-top: var(--spacing-2xs);
 }
 
 .uses {
   color: var(--on-surface-muted);
   font: var(--font-label-medium);
+}
+
+.publishedChip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-radius: var(--radius-full);
+  background: var(--success-container);
+  padding: 2px var(--spacing-xs);
+  color: var(--on-success-container);
+  font: var(--font-label-small);
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
 }

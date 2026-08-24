@@ -1441,6 +1441,33 @@
         },
         "title": "Community teams",
         "yourTeams": "Your teams"
+      },
+      "prompts": {
+        "title": "Community prompts",
+        "searchPlaceholder": "Search a prompt...",
+        "clearSearch": "Clear search",
+        "loading": "Loading prompts...",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "emptySearch": "No prompt matches this search.",
+        "import": {
+          "title": "Copy this prompt to a team",
+          "subtitle": "Select the spaces to copy “{{name}}” into.",
+          "confirm": "Copy",
+          "personalSpace": "Personal space",
+          "searchPlaceholder": "Search a team",
+          "clearSearch": "Clear search",
+          "noTeams": "No team matches.",
+          "successToast": "Prompt copied ({{count}})",
+          "errorToast": "Copy failed ({{count}})",
+          "originTeam": "Origin team"
+        },
+        "unpublish": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "“{{name}}” will disappear from the marketplace and will no longer be available to other users.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        }
       }
     },
     "helpCenter": {
@@ -1740,7 +1767,9 @@
         "processStarted": "Processing started",
         "stopIngestionError": "Could not stop the ingestion",
         "stopIngestionRequested": "Ingestion stop requested"
-      }
+      },
+      "pageTitlePersonal": "Your personal resources",
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
     },
     "save": "Save",
     "serviceNotice": {
@@ -1793,7 +1822,8 @@
       },
       "marketplace": {
         "menu": {
-          "teams": "Teams"
+          "teams": "Teams",
+          "prompts": "Prompts"
         },
         "title": "Marketplace"
       },
@@ -2173,7 +2203,8 @@
           "all": "All",
           "aria": "Filter by pod"
         },
-        "title": "Chat with your {{agentsNicknamePlural}}"
+        "title": "Team agents",
+        "titlePersonal": "Your personal agents"
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
@@ -2294,10 +2325,20 @@
       },
       "prompts": {
         "card": {
-          "uses": "Uses: {{count}}"
+          "uses": "Uses: {{count}}",
+          "publishedChip": "Published",
+          "menu": {
+            "edit": "Edit",
+            "duplicate": "Duplicate",
+            "publish": "Publish to marketplace",
+            "unpublish": "Remove from marketplace",
+            "delete": "Delete",
+            "import": "Copy to...",
+            "removeFromMarketplace": "Remove from marketplace"
+          }
         },
         "clearSearch": "Clear search",
-        "create": "New prompt",
+        "create": "Create prompt",
         "emptySearch": "No prompts match this search.",
         "firstCreate": "Create prompt",
         "form": {
@@ -2310,12 +2351,40 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
-        "title": "Prompts",
+        "title": "Team prompts",
         "view": {
           "closeAria": "Close",
           "copiedToast": "Copied to clipboard",
           "copyAria": "Copy prompt"
-        }
+        },
+        "duplicateDialog": {
+          "title": "Duplicate this prompt",
+          "nameLabel": "New prompt name",
+          "cancel": "Cancel",
+          "confirm": "Duplicate",
+          "successToast": "Prompt duplicated",
+          "errorToast": "Failed to duplicate prompt"
+        },
+        "publishDialog": {
+          "title": "Publish this prompt to the marketplace?",
+          "message": "This prompt will become public to every user of the application. They will be able to use it and import it into their own spaces to edit it. The usage counter will also reflect uses outside your team, and any change you make will be immediately visible on the marketplace.",
+          "confirm": "Publish",
+          "successToast": "Prompt published to the marketplace",
+          "errorToast": "Failed to publish prompt"
+        },
+        "unpublishDialog": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "This prompt will disappear from the marketplace and will no longer be available to other users. Your team keeps its own copy.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        },
+        "editPublishedDialog": {
+          "title": "Save changes?",
+          "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
+          "confirm": "Save"
+        },
+        "titlePersonal": "Your personal prompts"
       }
     },
     "userSettings": {

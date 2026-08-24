@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import (
@@ -41,6 +42,11 @@ from control_plane_backend.product.schemas import (
     FrontendConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    MarketplaceImportRequest,
+    MarketplaceImportResponse,
+    MarketplaceImportResult,
+    MarketplacePromptDetail,
+    MarketplacePromptSummary,
     PromptCategorySummary,
     PromptDetail,
     PromptPromoteRequest,
@@ -72,12 +78,15 @@ from control_plane_backend.product.service import (
     delete_prompt_category,
     delete_session_attachment,
     enroll_agent_instance,
+    get_marketplace_prompt,
     get_prompt,
     get_runtime_binding_for_team,
     get_session,
+    import_published_prompt_into_team,
     list_agent_templates,
     list_context_prompts,
     list_managed_agent_instances,
+    list_marketplace_prompts,
     list_prompt_categories,
     list_prompts,
     list_session_attachments,
@@ -85,7 +94,9 @@ from control_plane_backend.product.service import (
     prepare_execution,
     prepare_runtime_agent_execution,
     promote_prompt,
+    record_marketplace_prompt_use,
     record_prompt_use,
+    set_prompt_published,
     unenroll_agent_instance,
     update_agent_instance,
     update_prompt,
@@ -888,6 +899,90 @@ async def post_promote_prompt(
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
 
+@router.post(
+    "/teams/{team_id}/prompts/{prompt_id}/publish",
+    response_model=PromptSummary,
+    response_model_exclude_none=True,
+    summary="Publish one team prompt to the global marketplace.",
+)
+async def post_publish_prompt(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptSummary:
+    """
+    Publish one team prompt to the "Prompts de la communauté" marketplace.
+
+    Publishing is a live visibility flag on the team's own row (PROMPT-06): the
+    marketplace shows this same record, so edits and the shared usage counter
+    propagate immediately. Only team editors of the author team may publish, and
+    only real team prompts are publishable (personal-space prompts stay private,
+    rejected with 400).
+
+    Example:
+    - ``POST /control-plane/v1/teams/bid-and-capture/prompts/abc-123/publish``
+    """
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
+    try:
+        result = await set_prompt_published(team_id, prompt_id, True, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+@router.post(
+    "/teams/{team_id}/prompts/{prompt_id}/unpublish",
+    response_model=PromptSummary,
+    response_model_exclude_none=True,
+    summary="Remove one team prompt from the global marketplace.",
+)
+async def post_unpublish_prompt(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptSummary:
+    """
+    Withdraw one team prompt from the marketplace.
+
+    Only team editors of the author team may unpublish. After this call the
+    prompt is no longer discoverable, usable, or importable by other users; the
+    team keeps its own private copy unchanged.
+
+    Example:
+    - ``POST /control-plane/v1/teams/bid-and-capture/prompts/abc-123/unpublish``
+    """
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
+    try:
+        result = await set_prompt_published(team_id, prompt_id, False, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
 @router.patch(
     "/teams/{team_id}/prompts/{prompt_id}",
     response_model=PromptSummary,
@@ -924,6 +1019,150 @@ async def patch_team_prompt(
             detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
         )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Prompts marketplace (PROMPT-06) — cross-team discovery / use / import
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/marketplace/prompts",
+    response_model=list[MarketplacePromptSummary],
+    response_model_exclude_none=True,
+    summary="List every published prompt in the global marketplace.",
+)
+async def get_marketplace_prompts(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[MarketplacePromptSummary]:
+    """
+    Return all published prompts ("Prompts de la communauté"), most-used first.
+
+    Not team-scoped: any authenticated user may browse the community marketplace
+    regardless of team membership. Each entry carries the author team's display
+    name, used as the card label and the team filter chip.
+
+    Example:
+    - ``GET /control-plane/v1/marketplace/prompts``
+    """
+
+    return await list_marketplace_prompts(deps)
+
+
+@router.get(
+    "/marketplace/prompts/{prompt_id}",
+    response_model=MarketplacePromptDetail,
+    response_model_exclude_none=True,
+    summary="Get one published marketplace prompt, with its full text.",
+)
+async def get_marketplace_prompt_detail(
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> MarketplacePromptDetail:
+    """
+    Return one published prompt's full text (the listing carries only previews).
+
+    Fetched on demand when a marketplace card is opened, so the "copy to
+    clipboard" action has the full text. Any authenticated user may read it,
+    gated only on the prompt being published; an unpublished/unknown id is 404.
+
+    Example:
+    - ``GET /control-plane/v1/marketplace/prompts/abc-123``
+    """
+
+    detail = await get_marketplace_prompt(prompt_id, deps)
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Published prompt {prompt_id!r} not found in the marketplace.",
+        )
+    return detail
+
+
+@router.post(
+    "/marketplace/prompts/{prompt_id}/use",
+    response_class=Response,
+    status_code=204,
+    summary="Record one use of a published marketplace prompt.",
+)
+async def post_marketplace_prompt_use(
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    """
+    Increment the shared usage counter when a user copies a marketplace prompt.
+
+    The counter reflects total, global usage across the whole application, so
+    any authenticated user's copy counts — team membership is not required.
+    Only published prompts are counted; an unpublished/unknown id is 404.
+
+    Example:
+    - ``POST /control-plane/v1/marketplace/prompts/abc-123/use``
+    """
+
+    recorded = await record_marketplace_prompt_use(prompt_id, deps)
+    if not recorded:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Published prompt {prompt_id!r} not found in the marketplace.",
+        )
+    return Response(status_code=204)
+
+
+@router.post(
+    "/marketplace/prompts/{prompt_id}/import",
+    response_model=MarketplaceImportResponse,
+    summary="Import a published prompt into one or more teams.",
+)
+async def post_marketplace_prompt_import(
+    prompt_id: Annotated[str, Path(min_length=1)],
+    body: MarketplaceImportRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> MarketplaceImportResponse:
+    """
+    Copy one published prompt (by value) into every selected target space.
+
+    Each target is authorized independently: the caller must be an editor of
+    the target space (personal space or a team where they hold `team_editor`).
+    A target the caller cannot edit, or an unknown team, yields a per-target
+    error rather than failing the whole request. Each successful copy is a fresh
+    instance with a reset counter and a ``_imported-N`` name.
+
+    Example:
+    - ``POST /control-plane/v1/marketplace/prompts/abc-123/import``
+      ``{ "target_team_ids": ["personal", "bid-and-capture"] }``
+    """
+
+    async def import_into(raw_team_id: str) -> MarketplaceImportResult:
+        try:
+            target_team_id = await require_team_access(
+                user,
+                TeamId(raw_team_id),
+                deps.team_dependencies,
+                required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+            )
+        except HTTPException as exc:
+            return MarketplaceImportResult(team_id=raw_team_id, error=str(exc.detail))
+        try:
+            summary = await import_published_prompt_into_team(
+                user, prompt_id, target_team_id, deps
+            )
+            return MarketplaceImportResult(team_id=str(target_team_id), prompt=summary)
+        except PromptRequestError as exc:
+            return MarketplaceImportResult(team_id=str(target_team_id), error=str(exc))
+
+    # Dedupe (preserving order) so two imports into the same team can't race on
+    # the `_imported-N` suffix; distinct targets have no ordering dependency, so
+    # run them concurrently.
+    unique_team_ids = list(dict.fromkeys(body.target_team_ids))
+    results = await asyncio.gather(
+        *(import_into(raw_team_id) for raw_team_id in unique_team_ids)
+    )
+    return MarketplaceImportResponse(results=list(results))
 
 
 @router.get(

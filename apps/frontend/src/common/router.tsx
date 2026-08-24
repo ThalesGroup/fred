@@ -30,6 +30,7 @@ import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
@@ -157,6 +158,10 @@ export const routes: RouteObject[] = [
       {
         path: "marketplace/teams",
         element: <MarketplaceTeams />,
+      },
+      {
+        path: "marketplace/prompts",
+        element: <MarketplacePrompts />,
       },
       {
         path: "admin",

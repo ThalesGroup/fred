@@ -622,13 +622,17 @@ Control-plane  (target state)
 Freeze prompt management as a first-class control-plane contract separate from
 managed agent instances:
 
-- `PromptSummary`
+- `PromptSummary` (includes `published: bool`, PROMPT-06)
 - `PromptDetail`
 - `CreatePromptRequest`
 - `UpdatePromptRequest`
 - `PromptCategorySummary`
 - `CreatePromptCategoryRequest`
 - `UpdatePromptCategoryRequest`
+- `MarketplacePromptSummary` (PROMPT-06 — `PromptSummary` + `team_id` +
+  author `team_name`; preview only, no full text)
+- `MarketplacePromptDetail` (PROMPT-06 — `PromptDetail` + `team_name`; full text)
+- `MarketplaceImportRequest` / `MarketplaceImportResponse` (PROMPT-06)
 
 Rules:
 
@@ -644,12 +648,22 @@ Rules:
   is no platform-wide category taxonomy and no platform default-prompt
   catalog; see §32 for the full contract change
 
-The global prompt marketplace is a follow-up control-plane surface:
+The global prompt marketplace shipped 2026-08-10 (PROMPT-06, #2317) as a
+**live visibility flag**, not a snapshot (this supersedes the earlier
+snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
 
-- publishing must create a separate published snapshot, not mutate team prompt
-  ownership in place
-- agent instances and team prompt records must not point at mutable global
-  marketplace rows
+- publishing sets `PromptRow.published` on the team's own row — the marketplace
+  shows that live record, so edits and the shared `session_count` usage counter
+  propagate immediately; publishing never changes team ownership
+- nothing persistently references the published row: *use* is a clipboard copy,
+  *import* is copy-by-value (a fresh row via `promote`, counter reset to 0), so
+  no agent instance or team prompt record ever points at a marketplace row
+- only real team prompts are publishable; personal-space prompts stay private
+- endpoints: `POST .../prompts/{id}/publish` and `.../unpublish`
+  (`can_update_resources` on the author team), `GET /marketplace/prompts`
+  (any authenticated user), `POST /marketplace/prompts/{id}/use` (open, published
+  only), `POST /marketplace/prompts/{id}/import` (per-target
+  `can_update_resources`, `_imported-N` naming)
 
 ### 3.7 Feedback
 
@@ -811,7 +825,8 @@ The following remain outside the first Phase 3a implementation slice:
 - managed runtime endpoint resolution payloads exposed to the frontend
 - runtime history migration details beyond linking to `fred-runtime`
 - frontend SSE transport migration
-- global prompt marketplace publication / moderation surface
+- prompt marketplace **moderation** surface (publication itself shipped
+  2026-08-10, PROMPT-06 — see §39; only moderation remains deferred)
 - removal of legacy `agentic-backend` code paths
 - feedback CRUD and full MCP server administration surface
 
@@ -2505,7 +2520,56 @@ The frontend uploads the image through an in-app square crop editor that
 exports a bounded 512×512 WebP, so avatars are small regardless of the source
 image (a backend image-resize safety net remains a follow-up).
 
-## 39. Contract Notes — runtime chat-input policy projection (2026-08-12, issue #2253)
+---
+
+## 39. Contract Notes — PROMPT-06, prompts marketplace (2026-08-10, #2317)
+
+The global prompts marketplace ("Prompts de la communauté") shipped as a **live
+visibility flag**, not a published snapshot. This is a deliberate change from
+the original PROMPT-06 sketch (which proposed a separate frozen snapshot); the
+snapshot machinery was unnecessary because nothing persistently references a
+published row. Durable design: `docs/swift/design/PROMPTS.md` §6.1.
+
+**Model.** New `PromptRow.published: bool` (default `false`; migration
+`0dd1e72106af`, `server_default false`), surfaced on `PromptSummary` /
+`PromptDetail`. Publishing shows the team's own live row on the marketplace:
+edits propagate immediately and `session_count` is shared between origin-team
+and external usage (total, global usage). Import resets the counter (copy-by-value).
+
+**New types.** `MarketplacePromptSummary` (= `PromptSummary` + `team_id` +
+`team_name`; preview only, no full text), `MarketplacePromptDetail`
+(= `PromptDetail` + `team_name`; full text), `MarketplaceImportRequest
+{ target_team_ids }`, `MarketplaceImportResponse { results: [{ team_id,
+prompt?, error? }] }`.
+
+**Endpoints.**
+
+- `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/publish` and
+  `.../unpublish` — flip the flag; `can_update_resources` on the author team.
+  Publishing a personal-space prompt is rejected (400).
+- `GET /control-plane/v1/marketplace/prompts` — every published prompt across
+  all teams, `session_count` DESC, each with `team_name`, **preview text only**
+  (the listing payload stays small however many prompts are published). Any
+  authenticated user; **not team-scoped** (the first prompt read that
+  intentionally bypasses team membership, gated only on the `published` flag).
+- `GET /control-plane/v1/marketplace/prompts/{prompt_id}` — one published
+  prompt's full text (`MarketplacePromptDetail`), fetched on demand when a card
+  is opened. Any authenticated user; published prompts only (else 404).
+- `POST /control-plane/v1/marketplace/prompts/{prompt_id}/use` — increment the
+  shared counter without team membership; published prompts only (else 404).
+- `POST /control-plane/v1/marketplace/prompts/{prompt_id}/import` — copy-by-value
+  into each `target_team_ids` the caller can edit. Targets are deduped and
+  imported **concurrently**; each is authorized independently
+  (`can_update_resources`), and an unauthorized/unknown target yields a
+  per-target `error` rather than failing the whole request. Name collisions in a
+  target team are avoided with an `_imported-N` suffix.
+
+**Deferred:** no moderation surface in v1. Unpublish is available to editors of
+the author team, including directly from the marketplace (UX convenience).
+
+---
+
+## 40. Contract Notes — runtime chat-input policy projection (2026-08-12, issue #2253)
 
 `ExecutionPreparation.max_chat_input_chars: int | null` is an optional,
 read-only projection of the selected runtime pod's deployment policy. Runtime

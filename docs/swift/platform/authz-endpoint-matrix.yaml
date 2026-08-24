@@ -413,6 +413,36 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/publish
+    review_status: pending_review
+    required_permission: can_update_resources (team_editor of the author team)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/unpublish
+    review_status: pending_review
+    required_permission: can_update_resources (team_editor of the author team)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/prompts
+    review_status: external_or_public
+    required_permission: authenticated (any user; lists only published prompts)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/prompts/{prompt_id}
+    review_status: external_or_public
+    required_permission: authenticated (any user; published prompts only)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/marketplace/prompts/{prompt_id}/use
+    review_status: external_or_public
+    required_permission: authenticated (any user; published prompts only)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/marketplace/prompts/{prompt_id}/import
+    review_status: pending_review
+    required_permission: can_update_resources (checked per target team)
+  - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/prompt-categories
     review_status: pending_review
