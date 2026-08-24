@@ -130,6 +130,9 @@ export default function TeamSortSelect<T extends string>({
           size="xs"
           value={selected?.label ?? ""}
           readOnly
+          // Drop the empty hint/counter row below the field — this trigger never
+          // shows one.
+          compact
           role="combobox"
           aria-haspopup="listbox"
           aria-expanded={open}
