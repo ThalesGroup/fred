@@ -104,18 +104,18 @@ class DeepAssistantDefinition(DeepAgentDefinition):
     """
 
     agent_id: str = "fred.github.deep_assistant"
-    role: str = "General-purpose deep assistant"
+    role: str = "Custom planning assistant"
     description: str = (
-        "Blank-slate planning assistant (LangGraph deep-agent runtime). "
-        "Plans multi-step tasks before executing them. Select the tools you "
-        "need at enrollment, write your own prompt."
+        "An assistant that plans before it acts: it breaks complex requests "
+        "into steps and checks its intermediate results. Choose the tools it "
+        "can use and describe its role in your own words."
     )
     description_by_lang: dict[str, str] | None = {
         "fr": (
-            "Assistant généraliste planificateur (moteur deep-agent LangGraph). "
-            "Planifie les tâches à plusieurs étapes avant de les exécuter. "
-            "Sélectionnez les outils dont vous avez besoin à l'enrôlement, "
-            "rédigez votre propre prompt."
+            "Un assistant qui planifie avant d'agir : il découpe les demandes "
+            "complexes en étapes et vérifie ses résultats intermédiaires. "
+            "Choisissez les outils qu'il peut utiliser et décrivez son rôle "
+            "avec vos propres mots."
         )
     }
     tags: tuple[str, ...] = ("general", "deep")

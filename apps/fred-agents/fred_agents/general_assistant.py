@@ -114,17 +114,18 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     """
 
     agent_id: str = "fred.github.assistant"
-    role: str = "General-purpose assistant"
+    role: str = "Custom assistant"
     description: str = (
-        "Blank-slate assistant with access to all pod MCP tools. "
-        "Select the tools you need at enrollment, write your own prompt, "
-        "and build the agent that fits your use case."
+        "Build your own assistant: choose the tools it can use — document "
+        "search, data analysis, and more — and describe its role in your own "
+        "words. The best starting point for most use cases."
     )
     description_by_lang: dict[str, str] | None = {
         "fr": (
-            "Assistant généraliste avec accès à tous les outils MCP du pod. "
-            "Sélectionnez les outils dont vous avez besoin à l'enrôlement, "
-            "rédigez votre propre prompt et créez l'assistant adapté à votre cas d'usage."
+            "Créez votre propre assistant : choisissez les outils qu'il peut "
+            "utiliser — recherche documentaire, analyse de données, etc. — et "
+            "décrivez son rôle avec vos propres mots. Le meilleur point de "
+            "départ pour la plupart des cas d'usage."
         )
     }
     tags: tuple[str, ...] = ("general", "react")
@@ -163,12 +164,12 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
             title="System prompt",
             description=(
                 "Instructions that define the assistant's role and focus. "
-                "Leave blank to use the default general-purpose prompt."
+                "Leave blank to use the built-in default prompt."
             ),
             description_by_lang={
                 "fr": (
                     "Instructions définissant le rôle et le périmètre de l'assistant. "
-                    "Laissez vide pour utiliser le prompt généraliste par défaut."
+                    "Laissez vide pour utiliser le prompt par défaut."
                 )
             },
             required=False,
