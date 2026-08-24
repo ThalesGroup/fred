@@ -1,10 +1,9 @@
 import pytest
-
-from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
-from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
-from fred_sdk.contracts.runtime import ExecutionConfig
 from fred_runtime.react.react_message_codec import to_runnable_config
+from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
+from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
+from fred_sdk.contracts.runtime import ExecutionConfig
 
 
 class _FakePortable:

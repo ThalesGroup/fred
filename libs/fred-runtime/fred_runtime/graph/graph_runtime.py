@@ -98,12 +98,12 @@ from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
+    checkpoint_namespace,
 )
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
 )
-from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
 
 logger = logging.getLogger(__name__)
 
