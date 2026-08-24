@@ -22,7 +22,7 @@ Every existing prompt backfills to `false` (unpublished), so the migration
 changes no prompt's visibility.
 
 Revision ID: 0dd1e72106af
-Revises: f3790013f637
+Revises: d5c9a1b73e60
 Create Date: 2026-08-10 17:23:08.650174
 
 """
@@ -35,7 +35,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "0dd1e72106af"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "f3790013f637"  # pragma: allowlist secret
+    "d5c9a1b73e60"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
