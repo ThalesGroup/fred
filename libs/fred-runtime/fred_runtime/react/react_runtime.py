@@ -272,7 +272,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         try:
             result = await self._compiled_agent.ainvoke(
                 _graph_input(input_model, config),
-                config=_to_runnable_config(config,checkpoint_ns=self._checkpoint_ns,),
+                config=_to_runnable_config(
+                    config,
+                    checkpoint_ns=self._checkpoint_ns,
+                ),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -377,7 +380,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         try:
             async for raw_event in self._compiled_agent.astream(
                 _graph_input(input_model, config),
-                config=_to_runnable_config(config,checkpoint_ns=self._checkpoint_ns,),
+                config=_to_runnable_config(
+                    config,
+                    checkpoint_ns=self._checkpoint_ns,
+                ),
                 stream_mode=["messages", "updates"],
             ):
                 mode, update = _split_stream_event_mode(raw_event)
@@ -799,7 +805,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             agent_instance_id=portable.baggage.get("agent_instance_id"),
             agent_id=self.definition.agent_id,
         )
-        
+
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
             binding=binding,

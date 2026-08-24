@@ -1768,7 +1768,12 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         if checkpointer is None:
             return None
         checkpoint_tuple = await self._get_checkpoint_tuple(
-            config={"configurable": {"thread_id": checkpoint_key, "checkpoint_ns": self._checkpoint_ns}}
+            config={
+                "configurable": {
+                    "thread_id": checkpoint_key,
+                    "checkpoint_ns": self._checkpoint_ns,
+                }
+            }
         )
         if checkpoint_tuple is None:
             return None

@@ -2400,7 +2400,6 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
     assert context["execution_action"] == "execute"
 
 
-
 def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     """
     RFC AGENT-INVOKE: a per-call ``InvocationScope`` narrows the callee's retrieval.

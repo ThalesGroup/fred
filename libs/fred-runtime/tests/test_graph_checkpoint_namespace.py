@@ -97,8 +97,11 @@ def _binding(*, agent_instance_id: str | None = None) -> BoundRuntimeContext:
         ),
     )
 
+
 @pytest.mark.asyncio
-async def test_graph_agents_with_same_session_do_not_share_completed_state(tmp_path) -> None:
+async def test_graph_agents_with_same_session_do_not_share_completed_state(
+    tmp_path,
+) -> None:
     db = tmp_path / "graph-memory.sqlite3"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db}")
 
@@ -116,6 +119,7 @@ async def test_graph_agents_with_same_session_do_not_share_completed_state(tmp_p
             _Input(message="from-a"),
             ExecutionConfig(session_id="shared-session"),
         )
+        assert isinstance(result_a, _Input)
         assert result_a.message == "from-a"
 
         agent_b = _GraphAgent(agent_id="test.graph.memory.b")
@@ -127,9 +131,11 @@ async def test_graph_agents_with_same_session_do_not_share_completed_state(tmp_p
             ExecutionConfig(session_id="shared-session"),
         )
 
+        assert isinstance(result_b, _Input)
         assert result_b.message == "from-b"
     finally:
         await engine.dispose()
+
 
 @pytest.mark.asyncio
 async def test_graph_managed_instances_with_same_agent_and_session_do_not_share_state(
@@ -154,6 +160,7 @@ async def test_graph_managed_instances_with_same_agent_and_session_do_not_share_
             _Input(message="from-instance-a"),
             ExecutionConfig(session_id="shared-session"),
         )
+        assert isinstance(result_a, _Input)
         assert result_a.message == "from-instance-a"
 
         runtime_b = GraphRuntime(definition=definition, services=services)
@@ -166,9 +173,11 @@ async def test_graph_managed_instances_with_same_agent_and_session_do_not_share_
             ExecutionConfig(session_id="shared-session"),
         )
 
+        assert isinstance(result_b, _Input)
         assert result_b.message == "from-instance-b"
     finally:
         await engine.dispose()
+
 
 @pytest.mark.asyncio
 async def test_graph_same_agent_and_session_preserves_its_own_completed_state(
@@ -191,6 +200,7 @@ async def test_graph_same_agent_and_session_preserves_its_own_completed_state(
             _Input(message="remember-me"),
             ExecutionConfig(session_id="shared-session"),
         )
+        assert isinstance(result_first, _Input)
         assert result_first.message == "remember-me"
 
         runtime_second = GraphRuntime(definition=definition, services=services)
@@ -201,6 +211,7 @@ async def test_graph_same_agent_and_session_preserves_its_own_completed_state(
             ExecutionConfig(session_id="shared-session"),
         )
 
+        assert isinstance(result_second, _Input)
         assert result_second.message == "remember-me"
     finally:
         await engine.dispose()
