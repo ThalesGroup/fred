@@ -11,7 +11,9 @@
 .chevron {
   display: flex;
   position: absolute;
-  top: 50%;
+  /* Centre on the 2rem field only — TextInput also renders an empty
+   * `.information` line below, so `top: 50%` would sit too low. */
+  top: 1rem;
   right: var(--spacing-xs);
   transform: translateY(-50%);
   pointer-events: none;

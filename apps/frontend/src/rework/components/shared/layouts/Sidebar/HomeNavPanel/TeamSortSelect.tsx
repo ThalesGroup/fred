@@ -136,9 +136,17 @@ export default function TeamSortSelect<T extends string>({
           aria-label={ariaLabel}
           onClick={() => setOpen((prev) => !prev)}
           onKeyDown={handleTriggerKeyDown}
-          // Inline to beat TextInput's own compound padding selector, and to
-          // reserve room for the chevron overlay.
-          style={{ cursor: "pointer", paddingRight: "calc(var(--spacing-xs) + 1.25rem)" }}
+          // Inline to beat TextInput's own compound padding selector, to reserve
+          // room for the chevron overlay, and to force the active (primary
+          // outline) look while the menu is open — the trigger isn't focused
+          // then, so its :focus style wouldn't apply.
+          style={{
+            cursor: "pointer",
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            paddingRight: "calc(var(--spacing-xs) + 1.25rem)",
+            ...(open ? { outline: "2px solid var(--primary)", borderColor: "transparent" } : {}),
+          }}
         />
         <span className={styles.chevron} aria-hidden="true">
           <Icon category="outlined" type={open ? "expand_less" : "expand_more"} />
@@ -162,6 +170,7 @@ export default function TeamSortSelect<T extends string>({
                     role="option"
                     label={option.label}
                     selected={isActive}
+                    accentSelected
                     trailingIcon={isActive ? "check_circle" : undefined}
                     tabIndex={index === focusedIndex ? 0 : -1}
                     onClick={() => selectOption(option.value)}
