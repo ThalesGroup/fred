@@ -210,6 +210,43 @@ async def test_adelete_thread_returns_checkpoint_row_count(checkpointer):
 
 
 @pytest.mark.asyncio
+async def test_adelete_thread_purges_all_checkpoint_namespaces(checkpointer):
+    """Deleting one thread must erase every agent namespace in that session."""
+    await _put(checkpointer, "thread-multi-ns", checkpoint_ns="agent-a")
+    await _put(checkpointer, "thread-multi-ns", checkpoint_ns="agent-b")
+
+    assert (
+        await checkpointer.aget_tuple(
+            _config("thread-multi-ns", checkpoint_ns="agent-a")
+        )
+        is not None
+    )
+    assert (
+        await checkpointer.aget_tuple(
+            _config("thread-multi-ns", checkpoint_ns="agent-b")
+        )
+        is not None
+    )
+
+    deleted = await checkpointer.adelete_thread("thread-multi-ns")
+
+    assert deleted == 2
+    assert (
+        await checkpointer.aget_tuple(
+            _config("thread-multi-ns", checkpoint_ns="agent-a")
+        )
+        is None
+    )
+    assert (
+        await checkpointer.aget_tuple(
+            _config("thread-multi-ns", checkpoint_ns="agent-b")
+        )
+        is None
+    )
+    assert await _owner_rows(checkpointer) == []
+
+
+@pytest.mark.asyncio
 async def test_adelete_thread_returns_zero_for_unknown_thread(checkpointer):
     assert await checkpointer.adelete_thread("no-such-thread") == 0
 

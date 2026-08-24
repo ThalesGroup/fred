@@ -142,7 +142,10 @@ from fred_runtime.capabilities.errors import (
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
-from fred_runtime.runtime_support.checkpoints import load_checkpoint
+from fred_runtime.runtime_support.checkpoints import (
+    checkpoint_namespace,
+    load_checkpoint,
+)
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
 from ..common.structures import AgentSettingsLike
@@ -701,7 +704,6 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             content="".join(content_parts),
             is_error=not content_parts,
         )
-
 
 
 def _build_runtime_services(
@@ -1972,10 +1974,16 @@ async def _validate_session_checkpoint_access(
     if checkpointer is None:
         return
 
+    checkpoint_ns = checkpoint_namespace(
+        agent_instance_id=request.agent_instance_id,
+        agent_id=request.agent_id or request.agent_instance_id or "",
+    )
+
     loaded = await load_checkpoint(
         checkpointer,
         thread_id=session_id,
         checkpoint_id=request.checkpoint_id,
+        checkpoint_ns=checkpoint_ns,
     )
     if (
         loaded is None
@@ -1992,7 +2000,11 @@ async def _validate_session_checkpoint_access(
         # recovery path (a clean "does not match pending" 409 instead of a
         # blunt "unknown checkpoint" one), preserving its exact prior
         # behavior.
-        loaded = await load_checkpoint(checkpointer, thread_id=session_id)
+        loaded = await load_checkpoint(
+            checkpointer,
+            thread_id=session_id,
+            checkpoint_ns=checkpoint_ns,
+        )
 
     if loaded is None:
         detail = (
@@ -3054,20 +3066,24 @@ class _HitlResumeClaim:
 
     _checkpointer: FredSqlCheckpointer
     _thread_id: str
+    _checkpoint_ns: str
     _interrupt_id: str
     _claim_token: str
 
     async def consume(self) -> None:
         await self._checkpointer.aconsume_hitl_resume(
             thread_id=self._thread_id,
-            checkpoint_ns="",
+            checkpoint_ns=self._checkpoint_ns,
             interrupt_id=self._interrupt_id,
             claim_token=self._claim_token,
         )
 
 
 async def _claim_hitl_resume_before_invocation(
-    *, session_id: str | None, interrupt_id: str
+    *,
+    session_id: str | None,
+    checkpoint_ns: str,
+    interrupt_id: str,
 ) -> _HitlResumeClaim | None:
     """
     Acquire and confirm the durable single-use HITL resume claim,
@@ -3126,14 +3142,14 @@ async def _claim_hitl_resume_before_invocation(
         )
         return None
     claim_token = await checkpointer.aclaim_hitl_resume(
-        thread_id=session_id, checkpoint_ns="", interrupt_id=interrupt_id
+        thread_id=session_id, checkpoint_ns=checkpoint_ns, interrupt_id=interrupt_id
     )
     if claim_token is None:
         raise RuntimeError("This HITL request is already being resumed.")
     try:
         started = await checkpointer.astart_hitl_resume(
             thread_id=session_id,
-            checkpoint_ns="",
+            checkpoint_ns=checkpoint_ns,
             interrupt_id=interrupt_id,
             claim_token=claim_token,
         )
@@ -3145,7 +3161,7 @@ async def _claim_hitl_resume_before_invocation(
         # longer matches). Either way, re-raise: this attempt still fails.
         await checkpointer.arelease_hitl_resume(
             thread_id=session_id,
-            checkpoint_ns="",
+            checkpoint_ns=checkpoint_ns,
             interrupt_id=interrupt_id,
             claim_token=claim_token,
         )
@@ -3158,7 +3174,7 @@ async def _claim_hitl_resume_before_invocation(
         # still-legitimate claim doesn't wait out the TTL either.
         await checkpointer.arelease_hitl_resume(
             thread_id=session_id,
-            checkpoint_ns="",
+            checkpoint_ns=checkpoint_ns,
             interrupt_id=interrupt_id,
             claim_token=claim_token,
         )
@@ -3169,6 +3185,7 @@ async def _claim_hitl_resume_before_invocation(
     return _HitlResumeClaim(
         _checkpointer=checkpointer,
         _thread_id=session_id,
+        _checkpoint_ns=checkpoint_ns,
         _interrupt_id=interrupt_id,
         _claim_token=claim_token,
     )
@@ -3471,9 +3488,14 @@ async def _iterate_runtime_event_payloads(
             # docstring for the full claimed → started lifecycle and the
             # guarantees it does and does not provide.
             hitl_claim: _HitlResumeClaim | None = None
+            hitl_checkpoint_ns = checkpoint_namespace(
+                agent_instance_id=portable_context.baggage.get("agent_instance_id"),
+                agent_id=definition.agent_id,
+            )
             if request.resume_payload is not None and request.interrupt_id:
                 hitl_claim = await _claim_hitl_resume_before_invocation(
                     session_id=ctx.get("session_id"),
+                    checkpoint_ns=hitl_checkpoint_ns,
                     interrupt_id=request.interrupt_id,
                 )
 
