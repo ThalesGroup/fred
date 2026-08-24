@@ -66,6 +66,20 @@ def checkpoint_config(
     return cast(RunnableConfig, {"configurable": configurable})
 
 
+def checkpoint_namespace(
+    *,
+    agent_instance_id: str | None,
+    agent_id: str,
+) -> str:
+    """
+    Return the LangGraph checkpoint namespace for one executing agent.
+
+    Managed agent instances are isolated by their concrete instance id.
+    SDK-defined agents fall back to their stable agent id.
+    """
+    return agent_instance_id or agent_id
+
+
 async def load_checkpoint(
     checkpointer: AsyncCheckpointReader | None,
     *,

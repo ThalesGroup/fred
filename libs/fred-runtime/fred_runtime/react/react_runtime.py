@@ -80,6 +80,7 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
@@ -244,10 +245,12 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         compiled_agent: _CompiledReActAgent,
         binding: BoundRuntimeContext,
         services: RuntimeServices,
+        checkpoint_ns: str = "",
     ) -> None:
         self._compiled_agent = compiled_agent
         self._binding = binding
         self._services = services
+        self._checkpoint_ns = checkpoint_ns
 
     async def invoke(
         self, input_model: ReActInput, config: ExecutionConfig
@@ -269,7 +272,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         try:
             result = await self._compiled_agent.ainvoke(
                 _graph_input(input_model, config),
-                config=_to_runnable_config(config),
+                config=_to_runnable_config(
+                    config,
+                    checkpoint_ns=self._checkpoint_ns,
+                ),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -374,7 +380,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         try:
             async for raw_event in self._compiled_agent.astream(
                 _graph_input(input_model, config),
-                config=_to_runnable_config(config),
+                config=_to_runnable_config(
+                    config,
+                    checkpoint_ns=self._checkpoint_ns,
+                ),
                 stream_mode=["messages", "updates"],
             ):
                 mode, update = _split_stream_event_mode(raw_event)
@@ -790,10 +799,18 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             max_tool_calls_per_turn=policy.tool_selection.max_tool_calls_per_turn,
             capability_block=self._capability_block,
         )
+
+        portable = binding.portable_context
+        react_checkpoint_ns = checkpoint_namespace(
+            agent_instance_id=portable.baggage.get("agent_instance_id"),
+            agent_id=self.definition.agent_id,
+        )
+
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
             binding=binding,
             services=self.services,
+            checkpoint_ns=react_checkpoint_ns,
         )
 
     async def on_dispose(self) -> None:

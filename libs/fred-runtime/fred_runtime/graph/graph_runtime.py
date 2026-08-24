@@ -98,6 +98,7 @@ from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
+    checkpoint_namespace,
 )
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
@@ -1029,6 +1030,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         model: BaseChatModel | None,
         runtime_tools: tuple[BaseTool, ...],
         pending_checkpoints: dict[str, _PendingGraphCheckpoint],
+        checkpoint_ns: str,
     ) -> None:
         self._definition = definition
         self._binding = binding
@@ -1055,6 +1057,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         self._total_token_usage: dict[str, int] | None = None
         self._last_finish_reason: str | None = None
         self._thought_records: list[ThoughtRecord] = []
+        self._checkpoint_ns = checkpoint_ns
 
     def _reset_model_metadata(self) -> None:
         """
@@ -1588,7 +1591,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             config={
                 "configurable": {
                     "thread_id": checkpoint_key,
-                    "checkpoint_ns": "",
+                    "checkpoint_ns": self._checkpoint_ns,
                     **(
                         {"checkpoint_id": config.checkpoint_id}
                         if config.checkpoint_id
@@ -1635,7 +1638,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             config={
                 "configurable": {
                     "thread_id": checkpoint_key,
-                    "checkpoint_ns": "",
+                    "checkpoint_ns": self._checkpoint_ns,
                 }
             }
         )
@@ -1745,7 +1748,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             config={
                 "configurable": {
                     "thread_id": checkpoint_key,
-                    "checkpoint_ns": "",
+                    "checkpoint_ns": self._checkpoint_ns,
                     **(
                         {"checkpoint_id": config.checkpoint_id}
                         if config.checkpoint_id
@@ -1765,7 +1768,12 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         if checkpointer is None:
             return None
         checkpoint_tuple = await self._get_checkpoint_tuple(
-            config={"configurable": {"thread_id": checkpoint_key, "checkpoint_ns": ""}}
+            config={
+                "configurable": {
+                    "thread_id": checkpoint_key,
+                    "checkpoint_ns": self._checkpoint_ns,
+                }
+            }
         )
         if checkpoint_tuple is None:
             return None
@@ -1903,6 +1911,11 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             self._capability_block,
             mcp_tool_names={tool.name for tool in mcp_tools},
         )
+        portable = binding.portable_context
+        graph_checkpoint_ns = checkpoint_namespace(
+            agent_instance_id=portable.baggage.get("agent_instance_id"),
+            agent_id=self.definition.agent_id,
+        )
         return _DeterministicGraphExecutor(
             definition=self.definition,
             binding=binding,
@@ -1910,6 +1923,7 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             model=self._model,
             runtime_tools=mcp_tools + capability_tools,
             pending_checkpoints=self._pending_checkpoints,
+            checkpoint_ns=graph_checkpoint_ns,
         )
 
     async def on_dispose(self) -> None:
