@@ -519,6 +519,24 @@ def test_kind_accepts_model() -> None:
     assert entry.kind == "model"
 
 
+def test_model_catalog_entry_preserves_explicit_chat_profile_subset() -> None:
+    entry = CapabilityCatalogEntry(
+        id="model__openai__gpt-5.1",
+        version="1",
+        name="gpt-5.1",
+        description="gpt-5.1",
+        icon="neurology",
+        kind="model",
+        model_profile_ids=("chat.gpt51", "embedding.gpt51"),
+        model_chat_profile_ids=("chat.gpt51",),
+    )
+
+    restored = CapabilityCatalogEntry.model_validate_json(entry.model_dump_json())
+
+    assert restored.model_profile_ids == ("chat.gpt51", "embedding.gpt51")
+    assert restored.model_chat_profile_ids == ("chat.gpt51",)
+
+
 def test_model_capability_id_is_namespaced_and_stable() -> None:
     from fred_sdk.contracts.capability.manifest import (
         MODEL_CAPABILITY_NAMESPACE_PREFIX,

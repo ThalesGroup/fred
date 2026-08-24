@@ -217,12 +217,18 @@ Symptom examples:
 
 - invalid DOCX zip
 - pandoc conversion error
+- `FileNotFoundError: [Errno 2] No such file or directory: 'pandoc'`
 - EMF image not converted
 
 Action:
 
 1. Validate file is a real DOCX archive.
-2. Ensure `pandoc` is installed.
+2. Ensure `pandoc` is on PATH. The processor shells out to it by name; in the
+   images it is apt-installed, and locally it comes from the `pypandoc-binary`
+   dependency as `.venv/bin/pandoc`. The project Makefile prepends `.venv/bin`
+   to PATH, so `make run-worker` / `make run` after `make dev` is enough — a
+   worker started outside `make` without activating the venv will raise the
+   `FileNotFoundError` above even though the binary is installed.
 3. Ensure `inkscape` is installed if EMF media is expected.
 
 ### Unexpected model/network calls in offline setup

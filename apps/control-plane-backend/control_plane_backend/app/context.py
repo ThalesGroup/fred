@@ -47,9 +47,13 @@ from control_plane_backend.config.models import (
     MinioContentStorageConfig,
 )
 from control_plane_backend.evaluations.store import EvaluationStore
+from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
-from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
+from control_plane_backend.routing_policy.store import (
+    PlatformModelBindingStore,
+    TeamRoutingPolicyStore,
+)
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
 )
@@ -80,6 +84,7 @@ class ApplicationContext:
         self._agent_instance_store: AgentInstanceStore | None = None
         self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
+        self._platform_model_binding_store: PlatformModelBindingStore | None = None
         self._model_reasoning_store: ModelReasoningStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
@@ -339,6 +344,13 @@ class ApplicationContext:
             )
         return self._team_routing_policy_store
 
+    def get_platform_model_binding_store(self) -> PlatformModelBindingStore:
+        if self._platform_model_binding_store is None:
+            self._platform_model_binding_store = PlatformModelBindingStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_model_binding_store
+
     def get_model_reasoning_store(self) -> ModelReasoningStore:
         if self._model_reasoning_store is None:
             self._model_reasoning_store = ModelReasoningStore(
@@ -382,6 +394,7 @@ class ApplicationContext:
             )
             self._task_service = TaskService.build(
                 engine=self.get_pg_async_engine(),
+                tables=TASK_TABLES,
                 backend=backend,
                 temporal_client_provider=temporal_provider,
                 postgres_dsn=self.configuration.storage.postgres.dsn()

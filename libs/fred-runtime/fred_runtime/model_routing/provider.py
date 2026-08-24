@@ -15,8 +15,9 @@
 """
 Provider-style adapters for routed chat-model selection.
 
-This module is intentionally not wired by default into Fred runtime creation.
-It is a safe integration seam to trial centralized model routing.
+`RoutedChatModelFactory` is wired by default at pod boot
+(`fred_runtime.app.context._build_chat_model_factory`) into
+`RuntimeContext.chat_model_factory`, reaching every `RuntimeServices`.
 """
 
 from __future__ import annotations
@@ -27,7 +28,11 @@ from typing import Protocol
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
 from fred_sdk.contracts.capability.manifest import model_capability_id
-from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    ChatProfileOrigin,
+    resolve_effective_chat_profile,
+)
 from fred_sdk.contracts.models import AgentDefinition
 from fred_sdk.contracts.runtime import ChatModelFactoryPort
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -41,17 +46,33 @@ from .contracts import (
     TeamRoutingProfileDriftError,
     without_reasoning_settings,
 )
-from .resolver import ModelRoutingResolver, resolve_team_override
+from .resolver import ModelRoutingResolver
 
 logger = logging.getLogger(__name__)
+
+# The `source` each precedence level reports. Kept as an explicit table rather
+# than derived from the origin name: `ModelSelectionSource` is the OBSERVABILITY
+# contract (it lands in the `[V2][MODEL_ROUTING]` log line operators grep and in
+# `RUNTIME-EXECUTION-CONTRACT.md` §8), while `ChatProfileOrigin` names the
+# precedence level. They are deliberately not one-to-one — both team levels
+# report `team_policy`, because an operator reading the log cares that the
+# team's policy decided, and the `profile=` field already says which of the two
+# it was. Collapsing them into one enum would leak a UI distinction into an
+# operator-facing signal, or force a log-format change on a frozen contract.
+_SOURCE_BY_CHAT_PROFILE_ORIGIN: dict[ChatProfileOrigin, ModelSelectionSource] = {
+    ChatProfileOrigin.POD_AGENT_OVERRIDE: ModelSelectionSource.AGENT_OVERRIDE,
+    ChatProfileOrigin.TEAM_AGENT_OVERRIDE: ModelSelectionSource.TEAM_POLICY,
+    ChatProfileOrigin.TEAM_DEFAULT: ModelSelectionSource.TEAM_POLICY,
+    ChatProfileOrigin.POD_DEFAULT: ModelSelectionSource.DEFAULT,
+}
 
 
 class ModelProvider(Protocol):
     """
     Generic model provider in genai-sdk style.
 
-    It is capability-aware (`chat`, `language`, `embedding`, `image`) so the
-    selection contract is not limited to chat models.
+    It is capability-aware so chat and embeddings can use distinct client
+    factories without inferring behavior from profile names.
     """
 
     def build_model(
@@ -66,7 +87,7 @@ class FredCoreModelProvider(ModelProvider):
 
     Current mapping:
     - `embedding` -> `fred_core.get_embeddings(...)`
-    - others (`chat`, `language`, `image`) -> `fred_core.get_model(...)`
+    - all other retained capabilities -> `fred_core.get_model(...)`
 
     Teams can replace this provider when image generation needs a dedicated
     non-chat client.
@@ -84,9 +105,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
     """
     Runtime adapter that delegates model choice to a centralized resolver.
 
-    Current scope:
-    - chat-model selection based on agent/team/user (+ optional purpose/operation)
-    - no runtime behavior change unless this factory is explicitly injected
+    Scope: chat-model selection based on agent/team, resolved once per turn.
     """
 
     def __init__(
@@ -94,11 +113,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         *,
         resolver: ModelRoutingResolver,
         provider: ModelProvider | None = None,
-        default_purpose: str = "chat",
     ) -> None:
         self._resolver = resolver
         self._provider = provider or FredCoreModelProvider()
-        self._default_purpose = default_purpose
 
     def build(  # type: ignore[override]
         self, definition: AgentDefinition, binding: BoundRuntimeContext
@@ -106,14 +123,11 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         """
         Why this function exists:
         - satisfy `ChatModelFactoryPort` contract expected by v2 runtimes
-        - provide a default routed chat selection entrypoint
+        - the single routed chat selection entrypoint, called once per turn
+          at runtime activation (ReAct/Deep/Graph all call this the same way)
 
         Who calls it:
         - v2 runtime wiring when a runtime needs one chat model factory result
-
-        When it is called:
-        - typically once while runtime/loop objects are being prepared
-        - not guaranteed for per-operation routing (use `build_for_chat`)
 
         Expected inputs / invariants:
         - `definition.agent_id` and `binding.portable_context` identify scope
@@ -129,34 +143,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         Observability signals to look at:
         - same signals as `build_for_chat` (`[V2][MODEL_ROUTING]` logs)
         """
-        model, _ = self.build_for_chat(
-            definition=definition,
-            binding=binding,
-            purpose=self._default_purpose,
-            operation=None,
-        )
-        return model
-
-    def build_for_operation(
-        self,
-        *,
-        definition: AgentDefinition,
-        binding: BoundRuntimeContext,
-        purpose: str,
-        operation: str | None,
-    ) -> BaseChatModel:
-        """
-        Implement ChatModelFactoryPort.build_for_operation for operation-aware routing.
-
-        Returns the resolved BaseChatModel for the given purpose and operation.
-        Runtimes call this to select different models for different turn phases.
-        """
-        model, _ = self.build_for_chat(
-            definition=definition,
-            binding=binding,
-            purpose=purpose,
-            operation=operation,
-        )
+        model, _ = self.build_for_chat(definition=definition, binding=binding)
         return model
 
     def build_for_chat(
@@ -164,48 +151,31 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         *,
         definition: AgentDefinition,
         binding: BoundRuntimeContext,
-        purpose: str,
-        operation: str | None,
     ) -> tuple[BaseChatModel, ModelSelection]:
         """
         Why this function exists:
-        - expose explicit chat-model routing with `purpose` + `operation`
-        - return both concrete model and routing decision metadata
+        - return both the concrete model and the routing decision metadata
 
         Who calls it:
-        - ReAct runtime middleware (phase-aware routing: routing/planning)
-        - HITL model resolver path
-        - generic `build(...)` wrapper
-
-        When it is called:
-        - each time runtime requests a model for one operation unless caller caches
-          the model instance (ReAct middleware/HITL currently do cache per operation)
-
-        Expected inputs / invariants:
-        - `purpose` must align with routing policy conventions (`chat` today)
-        - `operation` is free text but meaningful values are runtime-defined
-          (`routing`, `planning`, graph node names, etc.)
+        - `build(...)` — the only caller
 
         Return / side effects:
         - returns `(BaseChatModel, ModelSelection)`
-        - emits info/debug logs with routing source/profile/rule metadata
+        - emits info/debug logs with routing source/profile metadata
 
         Fallback / errors:
-        - resolver may fallback to policy default profile
+        - resolver may fall back to the policy default profile
         - raises `TypeError` if provider returns a non-chat model object
         - resolver/provider exceptions propagate
 
         Observability signals to look at:
-        - info log on rule hit: `[V2][MODEL_ROUTING] ... source=rule rule=...`
+        - info log on rule hit: `[V2][MODEL_ROUTING] ... source=rule ...`
         - debug log on default hit: `[V2][MODEL_ROUTING] ... source=default ...`
 
         Fail-closed enforcement (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7):
         raises `ModelNotUsableError` — never silently substitutes a different
         model — when `binding.usable_model_ids` is not `None` (ReBAC active)
-        and the resolved model isn't in it. `binding.usable_model_ids` is
-        computed ONCE per turn by the caller, never here — this method may
-        run several times per turn (once per distinct `operation`) and must
-        never itself trigger a ReBAC call.
+        and the resolved model isn't in it.
 
         Reasoning enforcement (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md`) —
         the SINGLE point where reasoning is turned off, for every level:
@@ -229,13 +199,14 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             definition=definition,
             binding=binding,
             capability=ModelCapability.CHAT,
-            purpose=purpose,
-            operation=operation,
         )
         capability_id = model_capability_id(
             selection.model.provider or "", selection.model.name or ""
         )
-        if binding.usable_model_ids is not None:
+        if (
+            selection.source != ModelSelectionSource.PLATFORM_BINDING
+            and binding.usable_model_ids is not None
+        ):
             if capability_id not in binding.usable_model_ids:
                 logger.warning(
                     "[V2][MODEL_ROUTING] denied: team=%s model=%s/%s (%s) not "
@@ -270,14 +241,13 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 "RoutedChatModelFactory expected a BaseChatModel for capability='chat'."
             )
         if selection.source in (
-            ModelSelectionSource.RULE,
+            ModelSelectionSource.AGENT_OVERRIDE,
             ModelSelectionSource.TEAM_POLICY,
         ):
             logger.info(
-                "[V2][MODEL_ROUTING] agent=%s source=%s rule=%s profile=%s model=%s/%s team=%s user=%s",
+                "[V2][MODEL_ROUTING] agent=%s source=%s profile=%s model=%s/%s team=%s user=%s",
                 definition.agent_id,
                 selection.source.value,
-                selection.rule_id,
                 selection.profile_id,
                 selection.model.provider,
                 selection.model.name,
@@ -301,78 +271,129 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         definition: AgentDefinition,
         binding: BoundRuntimeContext,
         capability: ModelCapability,
-        purpose: str,
-        operation: str | None,
     ) -> ModelSelection:
         """
         Why this function exists:
-        - convert runtime context (`agent/team/user/operation`) into a resolver
-          request object
+        - convert runtime context (`agent/team`) into a resolver request object
 
         Who calls it:
         - `build_for_chat(...)` today
         - can also be used directly by future non-chat routing adapters
 
         When it is called:
-        - once per model selection attempt
-
-        Expected inputs / invariants:
-        - capability and purpose are caller-driven routing dimensions
-        - binding contains portable user/team context
+        - once per turn
 
         Return / side effects:
         - returns immutable `ModelSelection` (selected profile + model config)
         - no side effects
 
         Fallback / errors:
-        - resolver fallback/default and errors are handled in `ModelRoutingResolver`
-        - when the static resolver falls through to the capability default, a
-          second, narrower pass applies the team's own routing policy if one
-          exists (`TEAM-ROUTING-POLICY-RFC.md` §7-§8) — see
-          `resolve_team_override`. A static `models_catalog.yaml` rule match
-          always wins over team policy; team policy only fills the gap a
-          static rule left open. Raises `TeamRoutingProfileDriftError` if the
-          team policy names a profile this deployment's catalog doesn't have.
+        - for `chat`, the four profile-valued precedence levels are decided by
+          `fred_sdk.contracts.context.resolve_effective_chat_profile` — the one
+          implementation of that rule, shared with control-plane so the composer
+          can name this same model on its own effective-chat-model read
+          (#2387). A static
+          `models_catalog.yaml` override always wins over team policy; team
+          policy only fills the gap a static override left open. Raises
+          `TeamRoutingProfileDriftError` if the team policy names a profile this
+          deployment's catalog doesn't have, or one declaring a non-chat
+          capability — never a silent fall-through to the pod default, because a
+          team's stored preference going stale has to be visible.
+        - for every other capability, resolution stays pod-local and is handled
+          by `ModelRoutingResolver.resolve` (no team layer exists for it: V1's
+          only other capability, `embedding`, has no production consumer yet).
 
         Observability signals to look at:
         - this function does not log directly
         - inspect caller logs (`build_for_chat`) for emitted routing signals
+
+        Platform binding precedence (unconditional): for the `chat`
+        capability, when `binding.platform_chat_model_binding` is set, it is
+        returned immediately, before the resolver (and therefore before the
+        static `agent_profile_overrides` / team-policy layers below) is even
+        consulted. A team-level override still only ever names a profile from
+        *some* pod's local menu — the exact limitation an operator-asserted
+        binding exists to route around — so if a stale team choice could
+        still win, the operator's fix for a broken deployment would be
+        silently defeatable.
+
+        `binding.platform_chat_model_binding` is a TRUSTED field: the runtime
+        resolves it itself, per turn, from control-plane's
+        `ManagedAgentRuntimeBinding` server-to-server lookup — it can never
+        be set by request-body content, so this precedence cannot be forged
+        by a caller. V1 only ever populates it for the `chat` capability
+        (checked explicitly below); other capabilities always fall through
+        to the resolver.
         """
-        request = ModelSelectionRequest(
-            capability=capability,
-            purpose=purpose,
-            agent_id=definition.agent_id,
-            team_id=binding.portable_context.team_id,
-            user_id=binding.portable_context.user_id,
-            operation=operation,
+        platform_binding = (
+            binding.platform_chat_model_binding
+            if capability == ModelCapability.CHAT
+            else None
         )
-        selection = self._resolver.resolve(request)
-        if (
-            selection.source != ModelSelectionSource.DEFAULT
-            or capability != ModelCapability.CHAT
-        ):
-            return selection
+        if platform_binding is not None:
+            return ModelSelection(
+                source=ModelSelectionSource.PLATFORM_BINDING,
+                capability=capability,
+                profile_id=f"platform-binding:{capability.value}",
+                model=ModelConfiguration(
+                    provider=platform_binding.provider,
+                    name=platform_binding.name,
+                    settings=platform_binding.settings.model_dump(
+                        mode="json", exclude_none=True
+                    ),
+                ),
+            )
+        if capability != ModelCapability.CHAT:
+            return self._resolver.resolve(
+                ModelSelectionRequest(
+                    capability=capability, agent_id=definition.agent_id
+                )
+            )
 
-        team_profile_id = resolve_team_override(
-            operation_route_rules=binding.runtime_context.operation_route_rules,
-            chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
-            operation=operation,
-            purpose=purpose,
+        resolution = resolve_effective_chat_profile(
             agent_id=definition.agent_id,
+            pod_agent_chat_profile_overrides=self._resolver.agent_overrides_for(
+                capability
+            ),
+            pod_default_chat_profile_id=self._resolver.default_profile_id_for(
+                capability
+            ),
+            team_agent_profile_overrides=binding.runtime_context.agent_profile_overrides,
+            team_chat_default_profile_id=binding.runtime_context.chat_default_profile_id,
         )
-        if team_profile_id is None:
-            return selection
+        if resolution is None:
+            # Same failure the resolver's own default lookup raised before: the
+            # catalog declares no chat default and no other level produced one.
+            raise ValueError(
+                f"No default profile configured for capability={capability.value!r}."
+            )
 
-        profile = self._resolver.profile_or_none(team_profile_id)
+        profile = self._resolver.profile_or_none(resolution.profile_id)
+        team_origin = resolution.origin in (
+            ChatProfileOrigin.TEAM_AGENT_OVERRIDE,
+            ChatProfileOrigin.TEAM_DEFAULT,
+        )
         if profile is None:
-            raise TeamRoutingProfileDriftError(profile_id=team_profile_id)
+            if team_origin:
+                raise TeamRoutingProfileDriftError(profile_id=resolution.profile_id)
+            # A pod-origin id that resolves to nothing means the catalog passed
+            # `ModelRoutingPolicy`'s own validation while naming a profile it
+            # does not contain — an invariant violation in this package, not a
+            # team's stale choice, so it must not be reported as team drift.
+            raise KeyError(resolution.profile_id)
+        if profile.capability != capability:
+            # Only reachable for a team-origin id: the pod maps handed to the
+            # resolver above are capability-filtered at construction.
+            raise TeamRoutingProfileDriftError(
+                profile_id=resolution.profile_id,
+                expected_capability=capability,
+                actual_capability=profile.capability,
+            )
         return ModelSelection(
-            source=ModelSelectionSource.TEAM_POLICY,
+            source=_SOURCE_BY_CHAT_PROFILE_ORIGIN[resolution.origin],
             capability=capability,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
-            rule_id=None,
-            matched_criteria=0,
         )
 
 

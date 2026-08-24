@@ -12,7 +12,7 @@ The two surfaces configure models differently.
 - **Agent pods** (`apps/fred-agents`, or your own pod)
   - Model routing comes from `apps/fred-agents/config/models_catalog.yaml`
   - The catalog can be overridden with the `FRED_MODELS_CATALOG_FILE` environment variable
-  - The catalog seeds the runtime defaults for `chat` and `language` capabilities
+  - The production routing surface currently publishes `chat` profiles only
 
 - **Knowledge Flow backend**
   - Models are configured directly in `knowledge-flow-backend/config/configuration*.yaml`
@@ -38,7 +38,7 @@ Agent pods use a catalog-first model routing file (`models_catalog.yaml`) with t
 - `common_model_settings_by_capability`
 - `default_profile_by_capability`
 - `profiles`
-- `rules`
+- `agent_profile_overrides`
 
 The strict loader lives in:
 
@@ -46,10 +46,11 @@ The strict loader lives in:
 
 Important behavior:
 
-- `default_profile_by_capability` selects the fallback profile for each capability
+- `default_profile_by_capability.chat` selects the pod's chat fallback
 - each `profile` contains one `ModelConfiguration`
 - `common_model_settings` are merged into profile settings
-- `rules` optionally override the selected profile by team, agent, purpose, operation, and other match fields
+- `agent_profile_overrides` optionally maps an `agent_id` to a chat profile
+- team policy is configured in control-plane, not in this file
 
 ### Minimal Catalog Example
 
@@ -62,7 +63,6 @@ common_model_settings:
 
 default_profile_by_capability:
   chat: default.chat.mistral
-  language: default.language.mistral
 
 profiles:
   - profile_id: default.chat.mistral
@@ -73,20 +73,14 @@ profiles:
       settings:
         base_url: https://api.mistral.ai/v1
 
-  - profile_id: default.language.mistral
-    capability: language
-    model:
-      provider: openai
-      name: mistral-medium-latest
-      settings:
-        base_url: https://api.mistral.ai/v1
-
-rules: []
+agent_profile_overrides:
+  my.expensive.agent: default.chat.mistral
 ```
 
-### Bootstrap Fields
-
-`ai.default_chat_model` and `ai.default_language_model` exist as legacy fallback inputs. Use `models_catalog.yaml` as the source of truth for all agent pod deployments.
+Profile ids are opaque identifiers: use readable names, but do not rely on a
+`chat.` prefix for behavior. The declared `capability: chat` is authoritative.
+Do not duplicate chat profiles as `language` profiles; `language` has no active
+first-party routing consumer.
 
 ## Knowledge Flow Backend
 
@@ -311,14 +305,14 @@ embedding_model:
 
 Provider support implemented in `fred-core/fred_core/model/factory.py`:
 
-| Provider                 | Chat/Language | Embeddings | Vision                    |
-| ------------------------ | ------------- | ---------- | ------------------------- |
-| `openai`                 | yes           | yes        | yes                       |
-| `azure-openai`           | yes           | yes        | yes                       |
-| `azure-apim`             | yes           | yes        | yes                       |
-| `ollama`                 | yes           | yes        | yes (if multimodal model) |
-| `vertex-ai`              | yes           | yes        | yes                       |
-| `vertex-ai-model-garden` | yes           | yes        | no                        |
+| Provider                 | Chat | Embeddings | Vision                    |
+| ------------------------ | ---- | ---------- | ------------------------- |
+| `openai`                 | yes  | yes        | yes                       |
+| `azure-openai`           | yes  | yes        | yes                       |
+| `azure-apim`             | yes  | yes        | yes                       |
+| `ollama`                 | yes  | yes        | yes (if multimodal model) |
+| `vertex-ai`              | yes  | yes        | yes                       |
+| `vertex-ai-model-garden` | yes  | yes        | no                        |
 
 ## Required Settings By Provider
 
@@ -372,6 +366,8 @@ Provider support implemented in `fred-core/fred_core/model/factory.py`:
 ## Notes
 
 - Keep secrets in `.env`, not in YAML.
-- For agent pods (`apps/fred-agents` or your own pod), use `models_catalog.yaml` as the source of truth. Avoid editing `ai.default_*` directly.
+- For agent pods (`apps/fred-agents` or your own pod), use `models_catalog.yaml` as the source of truth.
 - For `knowledge-flow-backend`, keep using `chat_model` / `embedding_model` / `vision_model` in the runtime config files.
+- Knowledge Flow's `embedding_model` is direct service configuration. It is
+  not selected by the current agent chat-routing policy.
 - Use environment-specific files only for active runtime values and deployment-specific overrides.

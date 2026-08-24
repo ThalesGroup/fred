@@ -1938,29 +1938,48 @@ model — see §C.9 and the note below.
 
 ### 8.32 ✅ `RuntimeContext` gains team routing policy fields (TEAM-05, #2118, 2026-07-27)
 
+**2026-08-16 — chat-only drift enforcement (#2365).** A team-selected profile
+whose declared capability is not `chat` now raises
+`TeamRoutingProfileDriftError`; it no longer falls through silently to the pod
+chat default. Control-plane prevents new incompatible writes through the
+pod-authored chat-profile projection, while this runtime check covers stored
+legacy state and deployment drift.
+
 **What changed.** `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`)
-carries two new fields threaded from control-plane at session-prep time, the
+carries two fields threaded from control-plane at session-prep time, the
 same three-hop channel `context_prompt_text` already uses:
 
 - `chat_default_profile_id: str | None` — the team's default chat model
   profile, or `None` to fall through to the runtime's own default.
-- `operation_route_rules: tuple[TeamOperationRouteRule, ...]` — zero or more
-  `(rule_id, operation, purpose | None, target_profile_id)` overrides.
+- `agent_profile_overrides: dict[str, str] | None` — `agent_id -> profile_id`,
+  a flat per-agent override map (no rule list, no operation/purpose
+  matching — a duplicate key simply cannot be represented in a `dict`, so
+  there is nothing to disambiguate).
 
 Both are a **session-prep snapshot, not a per-turn lookup** — resolved once
 by `routing_policy/service.py::resolve_execution_routing_snapshot` when
 `ExecutionPreparation` is built, not re-read from control-plane on every
-turn. `fred-runtime`'s `ModelRoutingResolver`
-(`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) consults these
-fields only when the pod's static YAML `rules:` (`models_catalog.yaml`) don't
-already match — the static rules stay the ops escape hatch and always win.
-A referenced `target_profile_id` unknown to the pod fails closed
-(`ModelNotUsableError`), matching the write-time `can_use` validation
-control-plane already performed — this is drift detection, not a second
-authorization gate.
+turn. `fred-runtime`'s `resolve_team_override`
+(`libs/fred-runtime/fred_runtime/model_routing/resolver.py`) is consulted by
+`RoutedChatModelFactory.select` only when the pod's static YAML
+`agent_profile_overrides` (`models_catalog.yaml`) has no entry for this
+agent — that static map stays the pod operator's escape hatch and always
+wins. It is a two-step fallback chain, not a
+specificity-scored matcher: `agent_profile_overrides.get(agent_id)` first,
+else `chat_default_profile_id`, else `None`. A resolved profile id unknown to
+the pod, or declaring a non-chat capability, fails closed
+(`TeamRoutingProfileDriftError`) rather than silently selecting the pod
+default. A resolved concrete model that is no longer team-enabled fails with
+`ModelNotUsableError`; this is runtime enforcement of the existing access
+decision, not profile substitution.
 
-Product/data/API contract (data model, resolution algorithm, authorization,
-frontend surface): `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37.
+Since #2365 (`RUNTIME-EXECUTION-CONTRACT.md` §8.55), a third, trusted field —
+`BoundRuntimeContext.platform_chat_model_binding` — sits above both of these
+in precedence and is resolved fresh every turn rather than snapshotted; see
+§8.55 for why it needs a different trust model than the two fields above.
+
+Product/data/API contract (data model, resolution, authorization, frontend
+surface): `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37.
 
 ---
 
@@ -2054,12 +2073,17 @@ round trip rather than a new one. `_iterate_runtime_event_payloads` now takes
 `reasoning_enabled_model_ids` as a parameter sourced from this resolved
 target instead of reading it off the caller-supplied context.
 
-**Left alone, on purpose:** `chat_default_profile_id`/`operation_route_rules`
+**Left alone, on purpose:** `chat_default_profile_id`/`agent_profile_overrides`
 keep riding the client-forwarded context unchanged. The per-turn model
 `can_use` check already stops a request from reaching a model the team isn't
 authorized for, whatever routing profile it names — narrowing that further
 was assessed and rejected as disproportionate for what is a cost/comfort
-lever, not an access boundary.
+lever, not an access boundary. `platform_chat_model_binding` (§8.55, added
+#2365) is the fourth field in this family and does **not** get the same
+pass: unlike a team's own routing choice, it is the platform operator's
+authority over what a deployment can even reach, so it gets the strictest
+treatment of any of the four — never client-forwarded at all, not just
+resolved fresh.
 
 ---
 
@@ -3492,32 +3516,131 @@ next "let users pick the effort" idea starts from the measured constraint.
 
 ---
 
-### 8.54 ✅ Ops name the model — `model_display_name` in `models_catalog.yaml` (2026-08-13)
+### 8.54 ✅ Ops name the model — `model_display_name` in `models_catalog.yaml` (2026-08-13, reduced 2026-08-18)
 
-The composer chip (§8.48) derived its model label by splitting the capability
-id on hyphens. That heuristic cannot tell a version separator from a variant
-one — `claude-sonnet-4-6` rendered "Claude Sonnet 4 6" — and only whoever
-pinned the model knows which it is.
+The composer chip derived its model label by splitting the capability id on
+hyphens. That heuristic cannot tell a version separator from a variant one —
+`claude-sonnet-4-6` rendered "Claude Sonnet 4 6" — and only whoever pinned the
+model knows which it is.
 
-**What changed.**
+**What survives.**
 
 - `ModelProfile.model_display_name` (optional, per profile) in
-  `models_catalog.yaml`. Display only: routing, enablement and the capability
-  id still key on `(provider, name)`.
-- `GET /agents/models-catalog` gains `ModelCatalogEntry.display_name`, taken
-  from the first profile in the `(provider, name)` group that declares one —
-  same first-seen rule as `description`. `CapabilityCatalogEntry` gains
-  `model_display_name`, carried verbatim; the multi-pod catalog union keeps a
-  name authored on one pod when another serves the model unnamed.
-- control-plane snapshots it into `model_reasoning.display_name` at toggle
-  time (migration `a7d2e9c41f38`), exactly like `default_effort` — the send
-  path still performs no catalog fetch — and serves it on the reasoning
-  control's `params.display_name`, only alongside an unambiguous `model_id`.
-- The frontend prefers that string verbatim and keeps the old heuristic as
-  the fallback, so a catalog that never adopts the key renders as before.
+  `models_catalog.yaml`. Display only: routing, enablement and the capability id
+  still key on `(provider, name)`.
+- `GET /agents/models-catalog` carries it as `ModelCatalogEntry.display_name`,
+  taken from the first profile in the `(provider, name)` group that declares one
+  — same first-seen rule as `description`. `CapabilityCatalogEntry` carries it
+  as `model_display_name`; the multi-pod union keeps a name authored on one pod
+  when another serves the model unnamed.
+- The frontend prefers that string verbatim, then prettifies the real model
+  `name`, then falls back to splitting the capability id.
 
-Staleness is deliberate and bounded: editing the catalog reaches the composer
-at the next admin re-toggle, not on open sessions.
+**What was removed (#2387, 2026-08-18).** The original delivery path went
+through two snapshot columns on `model_reasoning` — `display_name` and
+`default_effort`, copied from the catalog entry when an admin toggled a model's
+reasoning — and reached the composer on the `reasoning_toggle` control's
+`params.display_name` / `params.effort`.
+
+Both columns, both params, and the `ModelCatalogEntry.reasoning_effort` /
+`CapabilityCatalogEntry.model_reasoning_effort` projections that fed them are
+gone. The columns are dropped at the head of the chain, by `d5c9a1b73e60`.
+
+**Correction (2026-08-20).** The two migrations that added them
+(`c9e1f74b2a63`, `a7d2e9c41f38`) were first deleted outright, on the stated
+premise that neither had shipped in a tagged release. That premise was wrong:
+`code/v2.1.35` shipped with `a7d2e9c41f38` as its control-plane head, so every
+instance on that release carries the id in `alembic_version_control_plane`.
+Deleting the file makes the id unresolvable and alembic refuses to start — it
+cannot place itself in the graph, so it cannot move forward either. Both
+migrations are restored and stay in the chain permanently; only the columns go,
+at the head, where every deployment reaches them by walking forward.
+
+The premise was checked with `git tag --contains` on the commit that introduced
+the migration, which returned nothing. On a repository that squash-merges, that
+proves nothing — the tag holds an equivalent commit with a different identity,
+so the original is never an ancestor. **Whether a migration has shipped is a
+question about the tag's tree, not its ancestry**: use `git ls-tree -r <tag> --
+<versions-dir>` and match on the revision id.
+
+Two independent reasons:
+
+1. The label rode on the wrong object. `params.display_name` named the model
+   whose REASONING was enabled platform-wide, not the model a turn routes to, so
+   the composer contradicted every platform binding and team override (§8.56).
+   The label now comes from `EffectiveChatModel.display_name`, read live from
+   the pod catalog entry for the model that actually answers.
+2. The effort had no business being displayed. The composer's reasoning menu is
+   a plain on/off; the level a turn runs with is the pod's ops-authored
+   `settings.reasoning_effort`, applied live at model construction. Quoting it
+   back at the user implied a per-question choice that never existed — the same
+   confusion that got the effort *picker* withdrawn the same day it was built
+   (§8.48).
+
+`settings.reasoning_effort` in `models_catalog.yaml` is untouched and still
+governs behaviour — only its display projection is gone. The staleness caveat
+this section used to carry ("editing the catalog reaches the composer at the
+next admin re-toggle") no longer applies: there is no snapshot left to go stale.
+
+---
+
+### 8.55 ✅ Trusted platform-wide `chat` model binding, resolved fresh per turn — issue #2365 (2026-08-15)
+
+**What changed.** `BoundRuntimeContext.platform_chat_model_binding`
+(`libs/fred-sdk/fred_sdk/contracts/context.py`) lets a platform operator
+assert one authoritative `(provider, name, settings)` binding for the `chat`
+capability that overrides whatever every pod would otherwise resolve
+locally. Unlike `chat_default_profile_id`/`agent_profile_overrides` (§8.32),
+it is never carried on the client-forwarded `RuntimeContext` at all — there
+is no field for it there, by construction, so a forged or stale request body
+cannot influence chat model selection. The runtime resolves it itself, fresh
+on every managed turn (including HITL resume), on the same per-turn,
+server-to-server `GET /teams/{team_id}/agent-instances/{id}/runtime` lookup
+that already resolves `reasoning_enabled_model_ids` (§8.35) — one additional
+indexed single-row read inside the same `asyncio.gather`, not a new round
+trip.
+
+**Precedence (unconditional, `RoutedChatModelFactory.select`,
+`libs/fred-runtime/fred_runtime/model_routing/provider.py`).** For the
+`chat` capability, when the binding is set it is returned immediately,
+before the resolver — and therefore before the pod's static
+`models_catalog.yaml` agent override and the team-policy fields in §8.32 — is even
+consulted:
+
+    platform_chat_model_binding  >  pod static agent_profile_overrides  >  team agent_profile_overrides / chat_default_profile_id  >  pod chat default
+
+A team-level override only ever names a profile from *some* pod's local
+menu — the exact limitation an operator-asserted binding exists to route
+around — so a stale team choice can never silently defeat it.
+
+**ReBAC exemption.** The resulting `ModelSelectionSource.PLATFORM_BINDING`
+selection is exempt from the `usable_model_ids` `can_use` gate
+`build_for_chat` otherwise enforces: the platform operator is the authority
+on what is actually reachable/licensed in a deployment, so a team-level
+restriction cannot veto it — the same trust relationship that lets an
+org-admin already grant `can_use` for every team unconditionally, not a new
+authorization surface being bypassed.
+
+**Managed-only scope.** V1 populates this field only for managed
+agent-instance execution — direct (non-managed) `agent_id` execution never
+receives it and stays on pod-local routing. A managed turn that in turn
+invokes a nested agent (`context.invoke_agent`) inherits the same trusted
+binding through private runtime wiring (`LocalRegistryAgentInvoker`), never
+through `RuntimeContext`, `PortableContext`, or any other client-reachable
+channel.
+
+**Settings boundary.** `ModelBindingSettings` is a strict, typed allowlist
+(`extra="forbid"`) — no credential-designated field, no generic
+auth/header/cookie/client passthrough container, and no `timeout`/
+`http_client_limits` (removed deliberately: `fred_core.model.http_clients.
+get_shared_stack()` is a first-call-wins process singleton, so a later
+per-binding tuning request would be silently ignored, contradicting the
+"takes effect on the very next turn" promise this feature makes elsewhere).
+`provider` is restricted to `fred_core.model.models.ModelProvider`, and a
+provider with additional required settings (`azure-openai`, `azure-apim`,
+`vertex-ai`, `vertex-ai-model-garden`) is validated against those exact
+requirements before persistence. Full settings contract, persistence
+boundary, and admin API: `CONTROL-PLANE-PRODUCT-CONTRACT.md` §40.
 
 ---
 
@@ -3898,3 +4021,76 @@ implicit relaxation of the same-pod boundary.
 
 See [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)
 for the two open gaps (MEMORY-02, MEMORY-06).
+
+### 8.56 ✅ Pod advertises its own two precedence levels; one shared precedence implementation — issue #2387 (2026-08-17)
+
+**Problem.** The composer labelled itself with the single model whose
+*reasoning* a platform admin had enabled (§8.54's `model_display_name`, carried
+on the `reasoning_toggle` control) — a value unrelated to routing. With a
+platform binding (§8.55) or any override in force it therefore named a model
+that was not answering, which reads to anyone testing model routing as "routing
+is broken".
+
+Telling the composer the truth means resolving §8.55's precedence chain
+control-plane-side, and two of its four profile-valued levels live only in the
+pod's `models_catalog.yaml`.
+
+**`GET /agents/models-catalog` — two additive top-level fields.**
+
+| Field | Meaning |
+| ----- | ------- |
+| `default_chat_profile_id: str \| None` | This pod's `default_profile_by_capability.chat` — the LOWEST precedence level. `None` when the catalog declares no chat default. |
+| `agent_chat_profile_overrides: dict[str, str]` | This pod's ops-authored `agent_profile_overrides`, RESTRICTED to entries targeting a chat profile — the HIGHEST level below the platform binding. |
+
+Both are pod-level, not per-model, so they sit beside `models` rather than on
+each entry: `aggregate_capability_catalog` unions entries by id across pods, and
+a pod-level value riding on an entry would be overwritten or unioned
+nonsensically (the failure mode §8.7's `_union_profile_ids` guard already
+describes).
+
+The override map is filtered pod-side, mirroring the runtime's long-standing
+rule that a static override naming a profile of a different capability is
+skipped, not fatal. An entry naming a profile absent from the catalog is dropped
+for the same reason: neither can ever route a chat turn.
+
+**No new field for the concrete pair.** `CapabilityCatalogEntry.name` already
+carries the model name for a `kind="model"` entry, and `id` identifies the
+`(provider, name)` pair uniquely, so the composer needs nothing more. Worth
+recording for whoever ever needs the provider on its own:
+`model_capability_id` NORMALIZES characters outside the id charset to `-`, so
+`id` is **not reversible** into the real pair and a split will not recover
+it — it would need its own carried field.
+
+**One precedence implementation, shared.** `resolve_team_override`
+(`fred_runtime/model_routing/resolver.py`) is **deleted**, not renamed. The
+single implementation is now
+`fred_sdk.contracts.context.resolve_effective_chat_profile`, called by both
+`RoutedChatModelFactory.select` and control-plane. It returns a
+`ChatProfileResolution` (`profile_id` + `ChatProfileOrigin`), and the runtime
+maps origin → `ModelSelectionSource` through an explicit table so the
+`[V2][MODEL_ROUTING]` log line operators grep is unchanged: both team levels
+still report `team_policy`, with `profile=` distinguishing them.
+
+The precedence itself is unchanged from §8.55 — the pod static override remains
+the operator's local escape hatch above every team level. `ModelRoutingResolver`
+gains `agent_overrides_for(capability)` / `default_profile_id_for(capability)`,
+precomputed at construction (the policy is immutable for the pod's lifetime;
+`select` runs per turn).
+
+**Not in `ExecutionPreparation`, deliberately.** Resolving this needs the pod
+catalog, and prepare-execution runs on **every send** while being contractually
+free of pod-catalog fetches. The read lives on control-plane's
+`GET /teams/{team_id}/routing-policy/effective-chat-model` instead — per
+chat-page open, same cost profile as `available-models` beside it. See
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` for that endpoint.
+
+**Rolling upgrade.** A pod not yet advertising the two fields reads as
+"declares no chat default and no static override", so the composer shows no
+model rather than guessing one — the same fail-quiet direction
+`model_chat_profile_ids` takes.
+
+**`params.model_id` / `params.display_name` are removed from the
+`reasoning_toggle` control.** They carried the single reasoning-enabled model's
+identity, which the composer displayed as its model label — the root of this
+issue. The control now ships only what it is authoritative about (`default`,
+`effort`).

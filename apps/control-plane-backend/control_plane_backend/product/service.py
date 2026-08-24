@@ -52,7 +52,6 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
-from control_plane_backend.capabilities.reasoning_store import ModelReasoningDisplay
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -99,6 +98,7 @@ from control_plane_backend.prompts.store import (
 )
 from control_plane_backend.routing_policy.service import (
     resolve_execution_routing_snapshot,
+    resolve_platform_chat_model_binding,
 )
 from control_plane_backend.scheduler.policies.policy_models import (
     duration_to_seconds,
@@ -370,22 +370,21 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         and deps.team_dependencies.rebac.enabled
         and not root_bootstrap_completed
     )
-    if user_security.enabled:
-        return FrontendConfig(
-            user_auth=FrontendUserAuthConfig(
-                enabled=True,
-                realm_url=str(user_security.realm_url),
-                client_id=user_security.client_id,
-            ),
-            gcu_version=gcu_version,
-            root_bootstrap_completed=root_bootstrap_completed,
-            root_bootstrap_required=root_bootstrap_required,
+    user_auth = (
+        FrontendUserAuthConfig(
+            enabled=True,
+            realm_url=str(user_security.realm_url),
+            client_id=user_security.client_id,
         )
+        if user_security.enabled
+        else FrontendUserAuthConfig(enabled=False)
+    )
     return FrontendConfig(
-        user_auth=FrontendUserAuthConfig(enabled=False),
+        user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
+        info_banner=deps.configuration.platform.frontend.info_banner,
     )
 
 
@@ -395,7 +394,7 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
 # tool/agent/model fetches, `compute_capability_impact`'s
 # `_available_capability_ids_by_source`, and (since MDL-2)
 # `routing_policy.service`'s `aggregate_capability_catalog` +
-# `universally_available_model_profile_ids` pair — each fetch the SAME pod's
+# `universally_available_chat_model_profile_ids` pair — each fetch the SAME pod's
 # `/agents/templates` or `/agents/models-catalog` with the same arguments — a
 # real, uncached HTTP round-trip every time. A `ContextVar` per fetch kind
 # (not a parameter threaded through every function in the chain — that would
@@ -413,7 +412,7 @@ _template_fetch_cache_var: contextvars.ContextVar[
     "dict[tuple[str, bool], asyncio.Future[list[_RuntimeTemplatePayload]]] | None"
 ] = contextvars.ContextVar("_template_fetch_cache_var", default=None)
 _model_catalog_fetch_cache_var: contextvars.ContextVar[
-    "dict[str, asyncio.Future[list[CapabilityCatalogEntry] | None]] | None"
+    "dict[str, asyncio.Future[PodModelCatalog | None]] | None"
 ] = contextvars.ContextVar("_model_catalog_fetch_cache_var", default=None)
 
 
@@ -738,9 +737,31 @@ async def _agent_capabilities_for_source(
     ]
 
 
+@dataclass(frozen=True)
+class PodModelCatalog:
+    """One pod's `/agents/models-catalog` payload, projected.
+
+    Why this exists rather than the bare `list[CapabilityCatalogEntry]` this
+    fetch used to return (#2387): the payload carries two pod-level values that
+    are not per-model and were therefore being dropped on the floor —
+    `default_chat_profile_id` and `agent_chat_profile_overrides`, the two
+    precedence levels only the pod knows. Control-plane needs them to predict
+    which model a chat turn will route to.
+
+    Carrying them on the SAME object the request-scoped fetch cache already
+    holds (`_model_catalog_fetch_cache_var`) is the point: both consumers — the
+    capability-catalog aggregation and the effective-chat-model resolution —
+    now share one fetch per pod per request scope instead of one each.
+    """
+
+    entries: list[CapabilityCatalogEntry] = field(default_factory=list)
+    default_chat_profile_id: str | None = None
+    agent_chat_profile_overrides: dict[str, str] = field(default_factory=dict)
+
+
 async def _model_capabilities_for_source(
     base_url: str,
-) -> list[CapabilityCatalogEntry] | None:
+) -> PodModelCatalog | None:
     """De-duplicating wrapper around `_model_capabilities_for_source_uncached`
     (see `_pod_catalog_fetch_scope` above) — same cache-miss-fetches,
     cache-hit-awaits-the-same-future shape as `_fetch_runtime_templates`."""
@@ -759,7 +780,7 @@ async def _model_capabilities_for_source(
 
 async def _model_capabilities_for_source_uncached(
     base_url: str,
-) -> list[CapabilityCatalogEntry] | None:
+) -> PodModelCatalog | None:
     """
     Project one pod's routable models into `kind="model"` catalog entries
     (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
@@ -801,7 +822,7 @@ async def _model_capabilities_for_source_uncached(
             exc,
         )
         return None
-    return [
+    entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
             version="1",
@@ -811,16 +832,17 @@ async def _model_capabilities_for_source_uncached(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(entry.get("profile_ids") or ()),
+            # Team routing is chat-only. Preserve the pod-authored capability
+            # projection instead of deriving it from a profile-id naming
+            # convention. Missing on an older pod means no chat profile is
+            # certified there, which makes writes fail closed during rollout.
+            model_chat_profile_ids=tuple(entry.get("chat_profile_ids") or ()),
             # REASON-01 §5.3 — the pod derives this subset from each profile's
             # `supports_thinking`; control-plane carries it verbatim, exactly
             # like `profile_ids` above. Absent on a pre-REASON-01 pod, which
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
-            # Derived pod-side from the thinking profile's own
-            # `settings.reasoning_effort` — the single source of truth for the
-            # level a reasoning turn runs with (review 2026-08-12).
-            model_reasoning_effort=entry.get("reasoning_effort"),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -829,6 +851,27 @@ async def _model_capabilities_for_source_uncached(
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
     ]
+    raw_overrides = payload.get("agent_chat_profile_overrides")
+    return PodModelCatalog(
+        entries=entries,
+        # Both absent on a pre-#2387 pod, which reads as "this pod declares no
+        # chat default and no static override". During a rolling upgrade that
+        # makes the effective-model resolution report nothing for turns served
+        # by an old pod rather than guessing — the same fail-quiet direction
+        # `model_chat_profile_ids` already takes above.
+        default_chat_profile_id=(
+            raw_default
+            if isinstance(raw_default := payload.get("default_chat_profile_id"), str)
+            else None
+        ),
+        agent_chat_profile_overrides={
+            str(agent_id): str(profile_id)
+            for agent_id, profile_id in raw_overrides.items()
+            if isinstance(agent_id, str) and isinstance(profile_id, str)
+        }
+        if isinstance(raw_overrides, dict)
+        else {},
+    )
 
 
 async def _fetch_chat_controls(
@@ -975,7 +1018,6 @@ def _platform_reasoning_control(
     reasoning_enabled: bool,
     reasoning_default_on: bool,
     reasoning_enabled_model_ids: Sequence[str],
-    display_by_model: Mapping[str, ModelReasoningDisplay] | None = None,
 ) -> ChatControlDescriptor | None:
     """The composer's reasoning toggle, or `None` when a gate upstream is closed
     (`MODEL-REASONING-ENABLEMENT-RFC.md` §7/§8).
@@ -1007,10 +1049,20 @@ def _platform_reasoning_control(
     a stored enabled row can only ever name a reasoning-capable model. No catalog
     fetch is needed on this send path.
 
-    Deliberately NOT narrowed to the profile this turn will route to: routing
-    resolves per *operation* at runtime while chat controls are computed once per
-    session (RFC §12 q3). Under-hiding — showing a control a later operation
-    might not honour — beats over-hiding one that would have worked.
+    NOT narrowed to the model this turn routes to, and that is now a deliberate
+    division of labour rather than the compromise it used to be (#2387). The
+    reason recorded here before — "routing resolves per *operation* at runtime
+    while chat controls are computed once per session" — had become false twice
+    over: #2365 removed operations, and prepare-execution returns a fresh
+    `chat_controls` on every send.
+
+    Narrowing it here is still not possible, for a different and durable reason:
+    resolving the routed model needs the pod's `/agents/models-catalog`, and this
+    send path must stay free of pod-catalog fetches. So this function answers
+    only "did the platform enable reasoning anywhere, and does this agent offer
+    it" — the two gates it can answer cheaply — and the composer combines that
+    with `EffectiveChatModel.reasoning_enabled` from its own read to decide
+    whether the toggle is worth showing for the model actually answering.
     """
 
     if not reasoning_enabled:
@@ -1022,35 +1074,20 @@ def _platform_reasoning_control(
             _REASONING_TOGGLE_WIDGET,
         )
         return None
-    # The level a reasoning turn actually runs with — the model's own
-    # ops-authored settings.reasoning_effort, snapshotted at toggle time
-    # (display only; the pod applies the live settings value). Emitted when
-    # the enabled models agree on one distinct value; omitted otherwise, and
-    # the composer menu falls back to a generic On label. `params` is
-    # schema-free on the wire, so this needs no contract regeneration.
-    snapshots = display_by_model or {}
-    distinct_efforts = {
-        snapshot.effort
-        for snapshot in snapshots.values()
-        if snapshot.effort is not None
-    }
-    effort = distinct_efforts.pop() if len(distinct_efforts) == 1 else None
-    # The model identity the composer button displays next to the reasoning
-    # state ("Mistral Small · Élevé") — the enabled reasoning model's own
-    # capability id, emitted when it is unambiguous (exactly one enabled).
-    # Multi-model is coming (the button becomes a model picker, with a
-    # per-model reasoning mode); until then the frontend shows it read-only.
-    model_id = (
-        reasoning_enabled_model_ids[0]
-        if len(reasoning_enabled_model_ids) == 1
-        else None
-    )
-    # That model's ops-authored label. Emitted only alongside an unambiguous
-    # `model_id` — a name without the id it belongs to would let the button
-    # claim an identity the rest of the payload doesn't back. Omitted when
-    # unnamed, and the frontend falls back to splitting the id apart.
-    snapshot = snapshots.get(model_id) if model_id else None
-    display_name = snapshot.display_name if snapshot else None
+    # NOTE (#2387): this control used to carry three more params —
+    # `model_id`/`display_name` (the single reasoning-enabled model's identity,
+    # which the composer showed as its model label) and `effort` (that model's
+    # ops-authored `settings.reasoning_effort`, snapshotted at toggle time).
+    #
+    # All three are gone. The identity was simply wrong: it named the model
+    # whose REASONING was on, not the model a turn routes to, so the composer
+    # contradicted every platform binding and team override. The effort went
+    # with it because the menu is now a plain on/off — the level a turn runs
+    # with is the pod's business (it applies the live `settings.reasoning_effort`
+    # either way), not something the user picks or needs quoted back at them.
+    #
+    # What remains is the only thing this function is authoritative about:
+    # whether a reasoning toggle should exist at all, and where it starts.
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -1060,12 +1097,7 @@ def _platform_reasoning_control(
         # False remains the default because `AGENT-THINKING-API-RFC.md`
         # Amendment C measured reasoning re-issuing duplicate tool calls in
         # 10/10 turns on this stack. Starting ON is an author's opt-in.
-        params={
-            "default": reasoning_default_on,
-            **({"effort": effort} if effort else {}),
-            **({"model_id": model_id} if model_id else {}),
-            **({"display_name": display_name} if display_name else {}),
-        },
+        params={"default": reasoning_default_on},
     )
 
 
@@ -3239,19 +3271,30 @@ async def prepare_execution(
     # (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5), for the same
     # reason — the runtime must not do a live lookup per turn. Deliberately NOT
     # filtered against this team's usable models: reasoning is global, and the
-    # runtime keys on the model it actually resolves. Two independent reads, so
-    # gathered rather than chained — this is a user-facing send path.
+    # runtime keys on the model it actually resolves.
+    #
+    # The platform-operator chat model binding is deliberately NOT resolved
+    # here: unlike the two snapshots above, it must never be a client-forwarded,
+    # session-open value — it is resolved fresh on every turn by the runtime's
+    # own per-turn `ManagedAgentRuntimeBinding` lookup (`get_runtime_binding_for_team`
+    # below), the same trust boundary as `reasoning_enabled_model_ids` there.
+    # Two independent reads, so gathered rather than chained — this is a
+    # user-facing send path.
     (
-        (chat_default_profile_id, operation_route_rules),
-        reasoning_display_by_model,
+        (
+            chat_default_profile_id,
+            agent_profile_overrides,
+        ),
+        reasoning_enabled_ids,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
-        # Same single indexed read as the former list_enabled_model_ids, two
-        # extra columns: the toggle-time snapshot of each model's ops-authored
-        # effort and display name — still no catalog fetch on this send path.
-        deps.get_model_reasoning_store().list_enabled_display_snapshots(),
+        # One indexed read of the enabled ids, no catalog fetch on this send
+        # path. It used to pull two extra snapshot columns for the composer's
+        # effort and model labels; #2387 removed both, so the narrow read is
+        # back.
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
-    sorted_reasoning_model_ids = sorted(reasoning_display_by_model)
+    sorted_reasoning_model_ids = sorted(reasoning_enabled_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
@@ -3259,7 +3302,6 @@ async def prepare_execution(
         reasoning_enabled=instance.tuning.reasoning_enabled,
         reasoning_default_on=instance.tuning.reasoning_default_on,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
-        display_by_model=reasoning_display_by_model,
     )
     if reasoning_control is not None:
         chat_controls = [*chat_controls, reasoning_control]
@@ -3276,7 +3318,7 @@ async def prepare_execution(
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
         chat_default_profile_id=chat_default_profile_id,
-        operation_route_rules=operation_route_rules,
+        agent_profile_overrides=agent_profile_overrides,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
         max_chat_input_chars=max_chat_input_chars,
     )
@@ -3304,6 +3346,14 @@ async def get_runtime_binding_for_team(
       is the one place that can hand back a trustworthy reasoning toggle at no
       extra round-trip cost — see
       `ManagedAgentRuntimeBinding.reasoning_enabled_model_ids`.
+    - Same reasoning for the platform-operator `chat` model binding
+      (`ManagedAgentRuntimeBinding.platform_chat_model_binding`): it must be
+      resolved fresh, trusted, on every turn (including HITL resume) rather
+      than trusted from a client-forwarded, session-open snapshot — the
+      request-forgery and stale-session risk this endpoint's ReBAC-gated,
+      server-to-server nature exists to close. This call is already
+      per-turn, so adding it costs one more cheap, independent store read,
+      not a new round trip.
 
     How to use it:
     - call from the team-scoped resolution endpoint after a team ReBAC check
@@ -3317,12 +3367,17 @@ async def get_runtime_binding_for_team(
     # slices for the capabilities this instance actually selected (CAPAB-01 /
     # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
     selected = set(instance.tuning.selected_capability_ids or [])
-    # Independent reads (neither depends on the other's result) — run
-    # concurrently rather than stacking two sequential DB round trips on the
-    # per-turn runtime-binding path (2026-08-04, PR #2204 review).
-    all_team_settings, reasoning_enabled_model_ids = await asyncio.gather(
+    # Independent reads (none depends on another's result) — run concurrently
+    # rather than stacking sequential DB round trips on the per-turn
+    # runtime-binding path (2026-08-04, PR #2204 review).
+    (
+        all_team_settings,
+        reasoning_enabled_model_ids,
+        platform_chat_model_binding,
+    ) = await asyncio.gather(
         deps.get_team_capability_settings_store().list_for_team(team_id),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
+        resolve_platform_chat_model_binding(deps),
     )
     team_capability_settings = {
         cap_id: settings
@@ -3338,6 +3393,7 @@ async def get_runtime_binding_for_team(
         tuning=instance.tuning,
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
+        platform_chat_model_binding=platform_chat_model_binding,
     )
 
 

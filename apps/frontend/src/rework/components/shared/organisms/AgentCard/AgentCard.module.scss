@@ -254,8 +254,12 @@
   --btn-text-color: var(--on-surface);
   /* design-token exception: full-spectrum conic gradient (white→cyan→violet→peach→pink→white),
      matching the card's former hover treatment. No semantic token family covers this rainbow
-     sequence; discretising to 5 tokens would destroy the animation effect. */
+     sequence; discretising to 5 tokens would destroy the animation effect.
+     2026-08-21: colour stops saturated and moderately darkened (same hues,
+     shared with the composer's Boost text in ReasoningChip.module.css) — the
+     pastels washed out on the light theme, a fully darkened pass sank into
+     the dark one; these sit halfway between. One gradient, both themes. */
   background:
     linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
-    conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff) border-box;
+    conic-gradient(from var(--angle), #ffffff, #37c9e4, #6f78fc, #e4ae66, #db47ae, #ffffff) border-box;
 }

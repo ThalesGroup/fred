@@ -38,11 +38,14 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional
+from urllib.parse import urlsplit
 
+from fred_core.model.models import ModelProvider
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 # NOTE: This module is the canonical home for portable context + UI parts.
 # Keep Link/Geo parts and RuntimeContext here to avoid circular imports.
@@ -96,35 +99,305 @@ class GeoPart(BaseModel):
     # e.g. {"weight":2,"opacity":0.8,"fillOpacity":0.1}
 
 
-class TeamOperationRouteRule(BaseModel):
+class FrozenModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
+
+
+class ModelCapability(str, Enum):
     """
-    One team-authored model-routing override for a specific runtime operation
-    or agent (`TEAM-ROUTING-POLICY-RFC.md` §3/§8). Lives in `fred-sdk` — not
-    `fred-runtime` or `control-plane-backend` — because both of those already
-    depend on `fred_sdk.contracts` and this type is shared verbatim by both:
-    control-plane stores/validates it (`TeamRoutingPolicy`), fred-runtime
-    consumes it off `RuntimeContext.operation_route_rules` (§8.3).
+    Capability = technical model family.
+
+    `chat` is the active agent-routing capability. `embedding` is retained for
+    consumers that require an embeddings client and for a future dedicated
+    policy surface. `language` is a legacy value kept for public-contract
+    compatibility; first-party catalogs no longer publish it. `image` remains
+    reserved until a typed production consumer exists.
+
+    Canonical home for this enum (relocated from
+    `fred_runtime.model_routing.contracts`, which re-imports and re-exports it
+    unchanged): `fred_runtime`'s model-routing catalog/resolver classify
+    `kind="model"` capability entries by this enum across the deployment.
+    Control-plane's platform-model-binding admin surface (`ModelBinding`
+    below) does NOT use this enum — that API is chat-only and represents its
+    one capability as a route-local `Literal["chat"]` constant, not this
+    type.
     """
 
-    model_config = ConfigDict(frozen=True)
+    CHAT = "chat"
+    LANGUAGE = "language"
+    EMBEDDING = "embedding"
+    IMAGE = "image"
 
-    rule_id: str = Field(..., min_length=1)
-    # Optional operation scope: when set, the rule only applies to this operation.
-    # None = applies to every operation (wildcard). Resolved by `resolve_team_override`
-    # alongside purpose/agent_id.
-    operation: str | None = None
-    purpose: str | None = None
-    # Optional per-agent scope: when set, the rule only applies to this agent
-    # (matched against the request's `agent_id`). None = applies to every agent
-    # of the team (wildcard) — the historical behaviour, so existing rules are
-    # unchanged. Resolved by `resolve_team_override` alongside operation/purpose.
-    agent_id: str | None = None
-    target_profile_id: str = Field(..., min_length=1)
+
+def _validate_http_url_no_userinfo(value: str) -> str:
+    """Shared validator for every URL field a `ModelBinding` can carry.
+
+    Structural, not heuristic: only `http`/`https` schemes are accepted, and a
+    URL carrying `user:pass@host` userinfo is rejected outright — one of the
+    structural guarantees `ModelBindingSettings` makes (see `ModelBinding`
+    below for the exact boundary this does and does not close).
+    """
+    try:
+        parsed = urlsplit(value)
+    except ValueError as exc:
+        raise ValueError(f"Malformed URL: {value!r} ({exc})") from exc
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            f"URL must use http or https, got scheme {parsed.scheme!r}: {value!r}"
+        )
+    if not parsed.hostname:
+        raise ValueError(f"URL must have a host: {value!r}")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError(f"URL must not contain username/password userinfo: {value!r}")
+    return value
+
+
+HttpUrlNoUserinfo = Annotated[str, AfterValidator(_validate_http_url_no_userinfo)]
+
+
+def _validate_supported_chat_provider(value: str) -> str:
+    """AfterValidator restricting `ModelBinding.provider` to a provider
+    `fred_core.model.factory.get_model()` can actually construct a chat
+    client for — the canonical `fred_core.model.models.ModelProvider` enum,
+    not a hand-maintained duplicate allowlist. Kept as a `str` field (not
+    the enum type itself) so the wire/JSON shape is unchanged; this
+    validator is the only place the allowlist is enforced. An unsupported
+    value (e.g. a typo, or a stale/forged provider name) is rejected here,
+    before persistence — not left to fail at runtime model construction on
+    every subsequent managed turn.
+    """
+    supported = {p.value for p in list(ModelProvider)}
+    if value not in supported:
+        raise ValueError(
+            f"Unsupported provider {value!r}; must be one of {sorted(supported)}"
+        )
+    return value
+
+
+SupportedChatProvider = Annotated[
+    str, AfterValidator(_validate_supported_chat_provider)
+]
+
+# Shared numeric bounds for `ModelBindingSettings` — strict (no bool/str
+# coercion into int/float/bool):
+# - `max_tokens` has no meaningful non-positive value to forward to a chat
+#   completion call.
+# - `top_p` is the standard nucleus-sampling domain shared by every
+#   OpenAI-compatible provider `get_model()` supports.
+# - `max_retries` and `request_timeout` have no meaningful negative value.
+_StrictNonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
+_StrictPositiveInt = Annotated[int, Field(strict=True, gt=0)]
+_StrictFiniteFloat = Annotated[float, Field(strict=True, allow_inf_nan=False)]
+_StrictNonNegativeFiniteFloat = Annotated[
+    float, Field(strict=True, ge=0, allow_inf_nan=False)
+]
+_StrictUnitIntervalFloat = Annotated[
+    float, Field(strict=True, ge=0, le=1, allow_inf_nan=False)
+]
+
+
+class ModelBindingSettings(FrozenModel):
+    """
+    Strict settings a platform-operator `ModelBinding` may carry — every
+    field is a named, typed generation knob (see `ModelBinding`'s docstring
+    for the exact credential-shape guarantee this type does and does not
+    make).
+
+    Every field here is evidenced by `fred_core.model.factory.get_model()`:
+    either a key that function reads/pops explicitly for a supported chat
+    provider, or a generation knob (`temperature`/`max_tokens`/`top_p`) it
+    forwards unchanged to the underlying LangChain chat-model wrapper.
+    `extra="forbid"` (via `FrozenModel`) makes every other key — including a
+    credential-designated name like `api_key`, or a generic passthrough
+    container like `headers`/`cookies`/`auth`/`client` — a hard rejection at
+    construction time, not a heuristic warning: there is no field shaped to
+    receive one, so there is nothing for a word-list heuristic to police.
+    Numeric and boolean fields are strict (no `"4096"` -> `4096`, no `1` ->
+    `True`) and range-checked where a downstream consumer enforces a bound
+    (see the field groups below) — the type a caller sends is the type
+    persisted and returned, never silently rewritten.
+
+    `timeout` and `http_client_limits` are deliberately not fields here.
+    `fred_core.model.http_clients.get_shared_stack()` builds one process-wide
+    HTTP client stack on its first call and logs-and-ignores every later
+    tuning request from a subsequent call — an admin changing either value
+    through this binding would look accepted but never actually take effect
+    on an already-running pod, contradicting the "takes effect on the very
+    next turn" guarantee the rest of this binding makes. Process-wide
+    transport tuning stays pod-local, set once at pod boot through
+    `ModelConfiguration.settings` in `models_catalog.yaml`. `request_timeout`
+    stays here because `get_model()` applies it fresh at every model
+    construction, not through the shared singleton.
+
+    Field groups (by the provider(s) that read them in `get_model()`):
+    - OpenAI / Azure OpenAI / Ollama / Anthropic: `base_url`
+    - Azure OpenAI: `azure_endpoint`, `azure_openai_api_version`
+    - Azure APIM: `azure_ad_client_id`, `azure_ad_client_scope`,
+      `azure_apim_base_url`, `azure_apim_resource_path`, `azure_tenant_id`,
+      `azure_openai_api_version`
+    - Vertex AI / Vertex AI Model Garden: `project`, `location`
+    - Vertex AI Model Garden only: `model_family`
+    - Generation behavior (all OpenAI-compatible providers):
+      `temperature`, `max_tokens` (must be positive), `top_p` (0-1),
+      `max_retries` (>= 0), `streaming`, `stream_usage`, `request_timeout`
+      (>= 0), `reasoning_effort` (non-empty provider-native value)
+
+    A provider with additional required settings (`azure-openai`,
+    `azure-apim`, `vertex-ai`, `vertex-ai-model-garden`) is enforced by
+    `ModelBinding`'s own cross-field validator, not by making any field here
+    unconditionally required — most of these fields are only meaningful for
+    a subset of providers.
+    """
+
+    base_url: HttpUrlNoUserinfo | None = None
+    azure_endpoint: HttpUrlNoUserinfo | None = None
+    azure_openai_api_version: str | None = None
+    azure_ad_client_id: str | None = None
+    azure_ad_client_scope: str | None = None
+    azure_apim_base_url: HttpUrlNoUserinfo | None = None
+    azure_apim_resource_path: str | None = None
+    azure_tenant_id: str | None = None
+    project: str | None = None
+    location: str | None = None
+    model_family: Literal["mistral", "llama", "anthropic", "claude"] | None = None
+    temperature: _StrictFiniteFloat | None = None
+    max_tokens: _StrictPositiveInt | None = None
+    top_p: _StrictUnitIntervalFloat | None = None
+    max_retries: _StrictNonNegativeInt | None = None
+    streaming: bool | None = Field(default=None, strict=True)
+    stream_usage: bool | None = Field(default=None, strict=True)
+    request_timeout: _StrictNonNegativeFiniteFloat | None = None
+    reasoning_effort: str | None = Field(default=None, strict=True, min_length=1)
+
+
+# Extra settings `fred_core.model.factory.get_model()` requires per provider
+# beyond `provider` + a non-empty `name` — evidenced by that function's own
+# `_require_settings(...)` calls, one entry per provider that has any.
+# `openai`, `ollama`, and `anthropic` need nothing beyond `name` and are
+# absent from this mapping on purpose.
+_PROVIDER_REQUIRED_SETTINGS: dict[str, tuple[str, ...]] = {
+    ModelProvider.AZURE_OPENAI.value: ("azure_endpoint", "azure_openai_api_version"),
+    ModelProvider.AZURE_APIM.value: (
+        "azure_ad_client_id",
+        "azure_ad_client_scope",
+        "azure_apim_base_url",
+        "azure_apim_resource_path",
+        "azure_openai_api_version",
+        "azure_tenant_id",
+    ),
+    ModelProvider.VERTEX_AI.value: ("project", "location"),
+    ModelProvider.VERTEX_AI_MODEL_GARDEN.value: (
+        "project",
+        "location",
+        "model_family",
+    ),
+}
+
+
+def _is_blank(value: object) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _advertise_provider_enum(schema: dict[str, Any], model: type[BaseModel]) -> None:
+    """`model_config.json_schema_extra` hook: injects the canonical supported
+    providers into the generated `provider` property as a JSON Schema `enum`.
+    `provider` stays a plain `str` field (see `SupportedChatProvider` above)
+    so the wire shape and every existing consumer are unchanged; this only
+    makes the already-enforced restriction visible in OpenAPI/generated
+    TypeScript instead of advertising `provider: string`. Computed from
+    `list(ModelProvider)` on every schema generation, not a hand-maintained
+    copy, so it can never drift from the enum `SupportedChatProvider`
+    actually validates against.
+    """
+    schema.setdefault("properties", {}).setdefault("provider", {})["enum"] = [
+        p.value for p in list(ModelProvider)
+    ]
+
+
+class ModelBinding(FrozenModel):
+    """
+    A platform-operator-asserted concrete model binding for the `chat`
+    capability: a supported provider + name + a strict, typed settings
+    allowlist (`ModelBindingSettings`).
+
+    Deliberately NOT `ModelConfiguration` — it's a narrower sibling used only
+    for this binding. Unlike most per-turn context, it never transits the
+    browser: control-plane persists it, and the runtime pod fetches it
+    directly from control-plane on its existing per-turn, server-to-server
+    `ManagedAgentRuntimeBinding` lookup (see `BoundRuntimeContext.
+    platform_chat_model_binding` below) — the same trust boundary as
+    `reasoning_enabled_model_ids`, not the client-forwarded
+    `chat_default_profile_id` one. `ModelConfiguration.settings` is already
+    used in-tree to carry a literal `api_key` for pod-local, non-transiting
+    catalog entries (e.g. `apps/fred-agents/config/models_catalog.yaml`'s
+    mock provider profiles) — attaching this allowlist to `ModelConfiguration`
+    itself would break those at pod boot.
+
+    `provider` is restricted to `fred_core.model.models.ModelProvider` (the
+    same enum `get_model()` switches on), so an unsupported or misspelled
+    provider is rejected at write time instead of persisting a binding every
+    subsequent managed chat turn would then fail to construct against. A
+    provider with additional required settings (`azure-openai`,
+    `azure-apim`, `vertex-ai`, `vertex-ai-model-garden`) is validated the
+    same way: `_validate_provider_required_settings` below checks the exact
+    fields `get_model()`'s own `_require_settings(...)` calls for that
+    provider, so a binding missing one is rejected here too, before
+    persistence, instead of failing every subsequent managed turn at runtime
+    model construction. `model_config.json_schema_extra` publishes the
+    supported-provider list as a JSON Schema `enum` on the generated OpenAPI
+    and TypeScript client, computed from `list(ModelProvider)` so it can
+    never drift from the validator above.
+
+    What this type's settings boundary actually guarantees, precisely:
+    - `ModelBindingSettings` has no credential-designated field (`api_key`,
+      `token`, ...) and no generic auth/header/cookie/client passthrough
+      container — there is no field shaped to carry one.
+    - `extra="forbid"` rejects any key outside that named allowlist, and
+      every URL-typed field rejects non-`http(s)` schemes and userinfo
+      (`user:pass@host`).
+    - What it does NOT do: inspect whether an arbitrary *value* placed in an
+      allowed field (e.g. a string field like `azure_tenant_id`) is itself a
+      secret. Operators must never place a credential in an allowed value —
+      this type only closes the field-shape channel, not value content.
+
+    Real credentials stay pod-local, resolved via
+    `fred_core.model.factory._require_env(...)` from the pod's own process
+    environment — never part of this type, never sent over the wire.
+
+    Freshness: resolved fresh on every managed turn (including HITL resume)
+    by the runtime's per-turn control-plane lookup — never a session-open
+    snapshot. An admin changing or clearing the binding takes effect on the
+    very next turn.
+    """
+
+    model_config = ConfigDict(json_schema_extra=_advertise_provider_enum)
+
+    provider: SupportedChatProvider
+    name: str = Field(..., min_length=1)
+    settings: ModelBindingSettings = Field(default_factory=ModelBindingSettings)
 
     @model_validator(mode="after")
-    def validate_at_least_one_criterion(self) -> "TeamOperationRouteRule":
-        if self.operation is None and self.agent_id is None:
-            raise ValueError("Rule must specify at least one of: operation, agent_id")
+    def _validate_provider_required_settings(self) -> ModelBinding:
+        """Mirrors `fred_core.model.factory.get_model()`'s own
+        `_require_settings(...)` calls: a provider with additional required
+        settings must have every one of them present and non-blank, or the
+        binding is rejected here — before persistence — instead of
+        persisting a binding every subsequent managed chat turn would then
+        fail to construct against. No network call, no environment lookup,
+        no reachability check: purely structural, same as every other
+        `ModelBindingSettings` validator.
+        """
+        required = _PROVIDER_REQUIRED_SETTINGS.get(self.provider, ())
+        missing = [
+            field_name
+            for field_name in required
+            if _is_blank(getattr(self.settings, field_name))
+        ]
+        if missing:
+            raise ValueError(
+                f"Provider {self.provider!r} requires settings {missing} to "
+                "construct a chat model."
+            )
         return self
 
 
@@ -149,9 +422,11 @@ class RuntimeContext(BaseModel):
     - Group C (per-turn retrieval selections): selected_document_libraries_ids,
       selected_document_uids, context_prompt_text, search_policy, search_rag_scope,
       include_session_scope, include_corpus_scope, deep_search, selected_chat_context_ids,
-      chat_default_profile_id, operation_route_rules, reasoning_enabled_model_ids,
-      reasoning.
+      chat_default_profile_id, agent_profile_overrides,
+      reasoning_enabled_model_ids, reasoning.
       These are the core fields — set by the frontend per turn, read by retrieval logic.
+      The platform-operator chat model binding is NOT here — it is never
+      client-forwarded; see `BoundRuntimeContext.platform_chat_model_binding`.
     - Group D (content/preferences): language, attachments_markdown. Will
       migrate to session preferences / identity over time.
     """
@@ -186,23 +461,30 @@ class RuntimeContext(BaseModel):
     chat_default_profile_id: str | None = Field(
         default=None,
         description=(
-            "Team-chosen default chat model profile id (TEAM-ROUTING-POLICY-RFC.md "
-            "§3/§8), resolved by control-plane from the team's TeamRoutingPolicy at "
-            "prepare-execution and forwarded unchanged for the rest of the session — "
-            "same channel as context_prompt_text, not re-fetched per turn. Applied by "
-            "RoutedChatModelFactory only when no static models_catalog.yaml rule "
-            "matches (§8.3) — the static YAML rules remain an ops-level override this "
-            "can never beat."
+            "Team-chosen default chat model profile id, resolved by control-plane "
+            "from the team's TeamRoutingPolicy at prepare-execution and forwarded "
+            "unchanged for the rest of the session — same channel as "
+            "context_prompt_text, not re-fetched per turn. Applied by "
+            "RoutedChatModelFactory only when no static models_catalog.yaml "
+            "agent_profile_overrides entry matches — the static YAML override "
+            "remains an ops-level override this can never beat."
         ),
     )
-    operation_route_rules: list[TeamOperationRouteRule] | None = Field(
+    agent_profile_overrides: dict[str, str] | None = Field(
         default=None,
         description=(
-            "Team-authored per-operation model-routing overrides "
-            "(TEAM-ROUTING-POLICY-RFC.md §3/§8), same resolution/precedence notes as "
-            "chat_default_profile_id above. `None`, not `[]`, when unset — matches "
-            "every other Group C list field so `model_dump(exclude_none=True)` "
-            "(`to_legacy_context`) omits it for the common case of no team policy."
+            "Team-authored per-agent model-profile overrides (`agent_id -> "
+            "profile_id`), same resolution/precedence notes as "
+            "chat_default_profile_id above. `None`, not `{}`, when unset — matches "
+            "every other Group C field so `model_dump(exclude_none=True)` "
+            "(`to_legacy_context`) omits it for the common case of no team policy. "
+            "For the `chat` capability, a platform-operator binding "
+            "(`BoundRuntimeContext.platform_chat_model_binding`, resolved "
+            "trusted per turn — never on this client-forwarded context) wins "
+            "over this field unconditionally when set — that is the feature's "
+            "intended precedence, not a bug: the platform operator is the "
+            "authority on what is actually reachable/licensed in a given "
+            "deployment; a pod-local ops-authored override can never beat that."
         ),
     )
     reasoning_enabled_model_ids: list[str] | None = Field(
@@ -265,8 +547,110 @@ class RuntimeContext(BaseModel):
     attachments_markdown: Optional[str] = None
 
 
-class FrozenModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
+class ChatProfileOrigin(str, Enum):
+    """Which precedence level produced an effective chat profile id.
+
+    The four *profile-valued* levels only. The platform binding
+    (`BoundRuntimeContext.platform_chat_model_binding`) outranks all of them but
+    is not a profile — it names a concrete `(provider, name)` directly — so its
+    callers short-circuit before consulting `resolve_effective_chat_profile`
+    rather than being handed a fifth member here that could never carry a
+    profile id.
+    """
+
+    POD_AGENT_OVERRIDE = "pod_agent_override"
+    TEAM_AGENT_OVERRIDE = "team_agent_override"
+    TEAM_DEFAULT = "team_default"
+    POD_DEFAULT = "pod_default"
+
+
+class ChatProfileResolution(FrozenModel):
+    """One resolved chat profile id plus the level that produced it."""
+
+    profile_id: str
+    origin: ChatProfileOrigin
+
+
+def resolve_effective_chat_profile(
+    *,
+    agent_id: str | None,
+    pod_agent_chat_profile_overrides: Mapping[str, str] | None,
+    pod_default_chat_profile_id: str | None,
+    team_agent_profile_overrides: Mapping[str, str] | None,
+    team_chat_default_profile_id: str | None,
+) -> ChatProfileResolution | None:
+    """The single implementation of chat-profile precedence, shared by the pod
+    runtime and control-plane (`LLM_ROUTING_FRED.md` §Deterministic precedence).
+
+    Why this lives in the SDK rather than in fred-runtime, where the routing it
+    serves runs: two callers need the same answer at two different moments, and a
+    second implementation would drift.
+
+    - The pod resolves it per turn to build the actual chat client.
+    - Control-plane resolves it on its own
+      `GET /teams/{team_id}/routing-policy/effective-chat-model` read, to tell
+      the composer which model the next turn will use (#2387). NOT at
+      prepare-execution: that runs on every send and is contractually free of
+      pod-catalog fetches, which resolving the pod-owned levels requires.
+      Before this existed the composer named the single reasoning-enabled
+      model instead, which silently contradicted any platform binding or team
+      override in force.
+
+    Precedence, highest first — the platform binding sits above all four and is
+    the caller's job (see `ChatProfileOrigin`):
+
+    1. `pod_agent_chat_profile_overrides[agent_id]` — the ops-authored
+       `models_catalog.yaml` static override, the deployment's local escape
+       hatch. A team can never beat it.
+    2. `team_agent_profile_overrides[agent_id]` — the team's per-agent choice.
+    3. `team_chat_default_profile_id` — the team's default.
+    4. `pod_default_chat_profile_id` — `default_profile_by_capability.chat`.
+
+    `None` means no level produced anything: a pod whose catalog declares no
+    chat default, with no team policy. Callers treat that as "nothing to show /
+    nothing to route" rather than substituting a guess.
+
+    Capability filtering is deliberately NOT done here. Both override maps must
+    already be chat-only:
+
+    - the pod map is filtered where the catalog's per-profile capability is
+      known (`ModelRoutingResolver`, and the pod's `/agents/models-catalog`
+      projection), matching the runtime's long-standing rule that a static
+      override declaring the wrong capability is skipped, not fatal;
+    - a *team* profile that is unknown or non-chat is a drift error the caller
+      raises (`TeamRoutingProfileDriftError`) — it must never silently fall
+      through to the next level here, because a team's stored preference going
+      stale has to be visible, not papered over.
+
+    Pure: no I/O, no side effects, no ordering dependence on dict iteration.
+    """
+
+    if agent_id is not None:
+        if pod_agent_chat_profile_overrides:
+            profile_id = pod_agent_chat_profile_overrides.get(agent_id)
+            if profile_id is not None:
+                return ChatProfileResolution(
+                    profile_id=profile_id,
+                    origin=ChatProfileOrigin.POD_AGENT_OVERRIDE,
+                )
+        if team_agent_profile_overrides:
+            profile_id = team_agent_profile_overrides.get(agent_id)
+            if profile_id is not None:
+                return ChatProfileResolution(
+                    profile_id=profile_id,
+                    origin=ChatProfileOrigin.TEAM_AGENT_OVERRIDE,
+                )
+    if team_chat_default_profile_id is not None:
+        return ChatProfileResolution(
+            profile_id=team_chat_default_profile_id,
+            origin=ChatProfileOrigin.TEAM_DEFAULT,
+        )
+    if pod_default_chat_profile_id is not None:
+        return ChatProfileResolution(
+            profile_id=pod_default_chat_profile_id,
+            origin=ChatProfileOrigin.POD_DEFAULT,
+        )
+    return None
 
 
 class ConversationTurn(FrozenModel):
@@ -563,5 +947,30 @@ class BoundRuntimeContext(FrozenModel):
             "already applies. A non-None, possibly-empty tuple means ReBAC "
             "is active and this is exactly what is allowed; "
             "RoutedChatModelFactory fails closed against it."
+        ),
+    )
+    platform_chat_model_binding: ModelBinding | None = Field(
+        default=None,
+        description=(
+            "Platform-operator-asserted `chat` capability model binding, "
+            "trusted and resolved fresh on every managed turn (including HITL "
+            "resume) by the caller's per-turn control-plane "
+            "`ManagedAgentRuntimeBinding` lookup — the same trust boundary as "
+            "`reasoning_enabled_model_ids`, never a client-forwarded field. "
+            "Direct (non-managed) `agent_id` execution never populates this: "
+            "V1 platform binding applies to managed agent-instance execution "
+            "only, and direct execution stays pod-local routing.\n\n"
+            "When set, `RoutedChatModelFactory.select` returns it "
+            "unconditionally for the `chat` capability, before the resolver "
+            "(and therefore the static `agent_profile_overrides` / team-policy "
+            "layers) is even consulted, and the resulting "
+            "`ModelSelectionSource.PLATFORM_BINDING` selection is exempted "
+            "from the `usable_model_ids` ReBAC gate above — the platform "
+            "operator is the authority on what is actually "
+            "reachable/licensed, so a team-level `can_use` restriction cannot "
+            "veto it. `None` means no platform binding is set for `chat`, "
+            "which is every deployment before this feature — routing falls "
+            "through to `agent_profile_overrides`/team policy/pod default "
+            "exactly as before."
         ),
     )

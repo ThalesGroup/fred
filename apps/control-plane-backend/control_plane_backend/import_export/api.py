@@ -47,6 +47,7 @@ from fred_core.tasks.models import (
     TaskState,
     TaskTarget,
 )
+from fred_core.tasks.orm_models import single_active_migration_index_name
 from fred_core.tasks.service import TaskService
 from pydantic import BaseModel
 from sqlalchemy import delete
@@ -64,6 +65,7 @@ from control_plane_backend.import_export.stats import (
 )
 from control_plane_backend.import_export.teardown import run_teardown
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.task_models import TASK_RUN_TABLE
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
@@ -142,8 +144,8 @@ async def _reject_if_migration_task_active(task_service: TaskService) -> None:
     This is a fast-path optimization ONLY — it avoids doing upload/parsing work
     before failing, but it is a plain list-then-check and does not, by itself,
     prevent two concurrent callers from both passing it and both starting a
-    task. The actual correctness guarantee is `uq_task_run_single_active_migration`
-    (a DB-level partial unique index, `fred_core.tasks.orm_models.TaskRunRow`),
+    task. The actual correctness guarantee is the single-active-migration
+    partial unique index on `cp_task_run` (`fred_core.tasks.orm_models`),
     enforced by `_start_migration_task_or_409` below.
     """
     active = await task_service.list_tasks(kind="migration", exclude_terminal=True)
@@ -157,8 +159,8 @@ async def _reject_if_migration_task_active(task_service: TaskService) -> None:
         )
 
 
-# Must match the index name in `fred_core.tasks.orm_models.TaskRunRow.__table_args__`.
-_MIGRATION_EXCLUSION_INDEX_NAME = "uq_task_run_single_active_migration"
+# Derived from the same helper that names the index, so the two cannot drift.
+_MIGRATION_EXCLUSION_INDEX_NAME = single_active_migration_index_name(TASK_RUN_TABLE)
 
 
 def _is_concurrent_migration_violation(exc: IntegrityError) -> bool:
@@ -183,7 +185,7 @@ async def _start_migration_task_or_409(
     This — not `_reject_if_migration_task_active` above — is what actually
     guarantees at most one active migration task: two callers can both pass
     that pre-check and both reach here concurrently, but the partial unique
-    index on `task_run` (`kind='migration'` AND non-terminal state) lets only
+    index on `cp_task_run` (`kind='migration'` AND non-terminal state) lets only
     one insert succeed; the other's `IntegrityError` is translated here.
     """
     try:

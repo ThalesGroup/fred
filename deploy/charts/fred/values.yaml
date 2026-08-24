@@ -733,20 +733,11 @@ applications:
         temperature: 0.0
       default_profile_by_capability:
         chat: default.chat.openai.prod
-        language: default.language.openai.prod
       profiles:
         - profile_id: default.chat.openai.prod
           capability: chat
           model_display_name: "GPT-5.1"
           description: "Default balanced chat model for production conversations."
-          model:
-            provider: openai
-            name: gpt-5.1
-            settings: {}
-        - profile_id: default.language.openai.prod
-          capability: language
-          model_display_name: "GPT-5.1"
-          description: "Default balanced language model for structured text tasks."
           model:
             provider: openai
             name: gpt-5.1
@@ -762,29 +753,10 @@ applications:
               max_retries: 2
               request_timeout: 90
               temperature: 0.0
-        - profile_id: default.language.local
-          capability: language
-          model_display_name: "GPT-5.1"
-          description: "Local default language profile with retries and shorter timeout."
-          model:
-            provider: openai
-            name: gpt-5.1
-            settings:
-              max_retries: 2
-              request_timeout: 90
-              temperature: 0.0
         - profile_id: chat.openai.gpt52
           capability: chat
           model_display_name: "GPT-5.2"
           description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
-          model:
-            provider: openai
-            name: gpt-5.2
-            settings: {}
-        - profile_id: language.openai.gpt52
-          capability: language
-          model_display_name: "GPT-5.2"
-          description: "Highest-quality GPT-5.2 profile for demanding language workloads."
           model:
             provider: openai
             name: gpt-5.2
@@ -797,26 +769,10 @@ applications:
             provider: openai
             name: gpt-5
             settings: {}
-        - profile_id: language.openai.gpt5
-          capability: language
-          model_display_name: "GPT-5"
-          description: "General-purpose GPT-5 language profile with strong overall quality."
-          model:
-            provider: openai
-            name: gpt-5
-            settings: {}
         - profile_id: chat.openai.gpt5mini
           capability: chat
           model_display_name: "GPT-5 mini"
           description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
-          model:
-            provider: openai
-            name: gpt-5-mini
-            settings: {}
-        - profile_id: language.openai.gpt5mini
-          capability: language
-          model_display_name: "GPT-5 mini"
-          description: "Faster and lower-cost GPT-5 Mini profile for lightweight language tasks."
           model:
             provider: openai
             name: gpt-5-mini
@@ -829,14 +785,6 @@ applications:
             provider: openai
             name: gpt-5-nano
             settings: {}
-        - profile_id: language.openai.gpt5nano
-          capability: language
-          model_display_name: "GPT-5 nano"
-          description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple language tasks."
-          model:
-            provider: openai
-            name: gpt-5-nano
-            settings: {}
         - profile_id: chat.openai.gpt41
           capability: chat
           model_display_name: "GPT-4.1"
@@ -845,26 +793,10 @@ applications:
             provider: openai
             name: gpt-4.1
             settings: {}
-        - profile_id: language.openai.gpt41
-          capability: language
-          model_display_name: "GPT-4.1"
-          description: "Reliable GPT-4.1 language profile for stable text generation."
-          model:
-            provider: openai
-            name: gpt-4.1
-            settings: {}
         - profile_id: chat.openai.gpt41mini
           capability: chat
           model_display_name: "GPT-4.1 mini"
           description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
-          model:
-            provider: openai
-            name: gpt-4.1-mini
-            settings: {}
-        - profile_id: language.openai.gpt41mini
-          capability: language
-          model_display_name: "GPT-4.1 mini"
-          description: "Cost-efficient GPT-4.1 Mini profile for lightweight language work."
           model:
             provider: openai
             name: gpt-4.1-mini
@@ -892,16 +824,6 @@ applications:
             name: "mistral:latest"
             settings:
               base_url: "http://host.docker.internal:11434"
-        - profile_id: language.ollama.mistral
-          capability: language
-          model_display_name: "Mistral (Ollama)"
-          description: "Local Ollama Mistral profile for private/offline language tasks."
-          model:
-            provider: ollama
-            name: "mistral:latest"
-            settings:
-              base_url: "http://host.docker.internal:11434"
-      rules: []
 
     # ── mcp_catalog.yaml — MCP server endpoints ───────────────────────────────
     # URLs use Kubernetes service names. Override in your values file if needed.
@@ -1728,15 +1650,34 @@ applications:
       scheduler: *cp-scheduler
       storage:   *cp-storage
       platform:
-        # Optional deployer-configured banner shown on upload surfaces
-        # (document upload drawer, chat attachments). Message resolved from
-        # the user's locale, "en" fallback. Omit the block to show nothing.
+        # Optional deployer-configured frontend banners; each block is
+        # independent and can be omitted to show nothing. Texts resolved from
+        # the user's locale, "en" fallback.
+        # - upload_warning: banner shown on upload surfaces (document upload
+        #   drawer, chat attachments).
+        # - info_banner: full-width announcement banner shown above the app
+        #   content on every page (including pre-auth pages). Non-dismissable;
+        #   persistent by default, or auto-hidden after auto_hide_seconds.
         # frontend:
         #   upload_warning:
         #     severity: warning # info | warning | error | success
         #     messages:
         #       en: "Do not upload sensitive or classified documents."
         #       fr: "Ne téléversez pas de documents sensibles ou classifiés."
+        #   info_banner:
+        #     color: "#00BBDD"
+        #     auto_hide_seconds: 30 # omit for a persistent banner (the default)
+        #     titles:
+        #       en: "New version available"
+        #       fr: "Nouvelle version disponible"
+        #     messages:
+        #       en: "Access the Fred documentation & blog"
+        #       fr: "Accédez à la documentation et au blog de Fred."
+        #     links:
+        #       - url: "https://fredk8.dev"
+        #         labels:
+        #           en: "Go to the Fred blog"
+        #           fr: "Accéder au blog de Fred"
         knowledge_flow_base_url: *kf-url
         runtime_catalog_sources:
           - runtime_id: fred-agents

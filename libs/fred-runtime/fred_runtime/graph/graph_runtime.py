@@ -212,7 +212,6 @@ class _GraphNodeExecutionContext:
     binding: BoundRuntimeContext
     services: RuntimeServices
     model: BaseChatModel | None
-    model_resolver: Callable[[str], BaseChatModel | None] | None
     graph_agent_id: str
     node_id: str
     allowed_tool_refs: frozenset[str]
@@ -432,8 +431,6 @@ class _GraphNodeExecutionContext:
     async def invoke_model(
         self,
         messages: list[BaseMessage],
-        *,
-        operation: str = "default",
     ) -> BaseMessage:
         """
         Invoke the bound chat model and stream token deltas in real time.
@@ -454,11 +451,7 @@ class _GraphNodeExecutionContext:
         - the final accumulated chunk is cast to AIMessage so callers get a
           fully-populated BaseMessage with all metadata intact
         """
-        resolved_model = (
-            self.model_resolver(operation)
-            if self.model_resolver is not None
-            else self.model
-        )
+        resolved_model = self.model
         if resolved_model is None:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
@@ -470,7 +463,6 @@ class _GraphNodeExecutionContext:
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
             },
         )
@@ -479,10 +471,9 @@ class _GraphNodeExecutionContext:
             binding=self.binding,
             agent_id=self.graph_agent_id,
             phase="v2_graph_model",
-            agent_step=f"{self.node_id}:{operation}",
+            agent_step=self.node_id,
             extra_dims={
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
             },
         ):
@@ -548,8 +539,6 @@ class _GraphNodeExecutionContext:
         self,
         output_model: type[BaseModel],
         messages: list[BaseMessage],
-        *,
-        operation: str = "default",
     ) -> BaseModel:
         """
         Invoke one structured-output control step with the bound chat model.
@@ -558,11 +547,7 @@ class _GraphNodeExecutionContext:
         instead of plain assistant text.
         """
 
-        resolved_model = (
-            self.model_resolver(operation)
-            if self.model_resolver is not None
-            else self.model
-        )
+        resolved_model = self.model
         if resolved_model is None:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
@@ -574,7 +559,6 @@ class _GraphNodeExecutionContext:
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
                 "output_model": output_model.__name__,
             },
@@ -588,10 +572,9 @@ class _GraphNodeExecutionContext:
             binding=self.binding,
             agent_id=self.graph_agent_id,
             phase="v2_graph_structured_model",
-            agent_step=f"{self.node_id}:{operation}",
+            agent_step=self.node_id,
             extra_dims={
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
                 "output_model": output_model.__name__,
             },
@@ -1051,9 +1034,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         self._binding = binding
         self._services = services
         self._model = model
-        self._models_by_operation: dict[str, BaseChatModel] = {}
-        if model is not None:
-            self._models_by_operation["default"] = model
         self._runtime_tools = {tool.name: tool for tool in runtime_tools}
         self._graph = definition.build_graph()
         self._handlers = _validated_handlers(definition=definition, graph=self._graph)
@@ -1128,24 +1108,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             )
         if finish_reason:
             self._last_finish_reason = finish_reason
-
-    def _model_for_operation(self, operation: str) -> BaseChatModel | None:
-        cached = self._models_by_operation.get(operation)
-        if cached is not None:
-            return cached
-        factory = self._services.chat_model_factory
-        if factory is not None:
-            resolved = factory.build_for_operation(
-                definition=self._definition,
-                binding=self._binding,
-                purpose="chat",
-                operation=operation,
-            )
-            if resolved is not None:
-                if isinstance(resolved, BaseChatModel):
-                    self._models_by_operation[operation] = resolved
-                    return resolved
-        return self._model
 
     async def invoke(
         self, input_model: BaseModel, config: ExecutionConfig
@@ -1255,7 +1217,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 binding=self._binding,
                 services=self._services,
                 model=self._model,
-                model_resolver=self._model_for_operation,
                 graph_agent_id=self._definition.agent_id,
                 node_id=node_id,
                 allowed_tool_refs=self._allowed_tool_refs,
@@ -1467,7 +1428,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 binding=self._binding,
                 services=self._services,
                 model=self._model,
-                model_resolver=self._model_for_operation,
                 graph_agent_id=self._definition.agent_id,
                 node_id=member_id,
                 allowed_tool_refs=self._allowed_tool_refs,

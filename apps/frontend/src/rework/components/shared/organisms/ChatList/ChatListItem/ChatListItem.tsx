@@ -34,11 +34,19 @@ export function ChatListItem({ sessionId, href, label, agentName, dateLabel, onD
     <Link to={href} className={styles.chatItemContainer} data-selected={isSelected}>
       <div className={styles.chatDescription}>
         <div className={styles.title}>{label}</div>
+        {/* Meta line: the date is the fixed part and must stay whole ("18/08/26
+            - 09:42" split over two lines was unreadable), so only the agent
+            name gives way — it shrinks and ellipsizes, with the full name on
+            hover. */}
         {(agentName || dateLabel) && (
-          <div className={styles.date}>
-            {agentName && <span className={styles.agentName}>{agentName}</span>}
-            {agentName && dateLabel && " · "}
-            {dateLabel}
+          <div className={styles.meta}>
+            {agentName && (
+              <span className={styles.agentName} title={agentName}>
+                {agentName}
+              </span>
+            )}
+            {agentName && dateLabel && <span className={styles.metaSeparator}>·</span>}
+            {dateLabel && <span className={styles.dateLabel}>{dateLabel}</span>}
           </div>
         )}
       </div>

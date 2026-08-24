@@ -144,7 +144,9 @@ export default function ChatList({ teamId }: ChatListProps) {
         {groups
           ? groups.map(([agentName, groupSessions]) => (
               <div key={agentName}>
-                <div className={styles.groupHeader}>{agentName}</div>
+                <div className={styles.groupHeader} title={agentName}>
+                  {agentName}
+                </div>
                 {groupSessions.map((session) => renderItem(session, false))}
               </div>
             ))

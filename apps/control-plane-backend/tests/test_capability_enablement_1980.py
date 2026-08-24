@@ -47,6 +47,7 @@ from control_plane_backend.capabilities.enablement import (
 )
 from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
 from control_plane_backend.product import service as product_service
+from control_plane_backend.product.service import PodModelCatalog
 from fred_core import CapabilityPermission, RebacDisabledResult
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -941,7 +942,7 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
         return []
 
     async def _fake_fetch_models(base_url: str):
-        return []
+        return PodModelCatalog(entries=[])
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1008,17 +1009,19 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     async def _fake_fetch_models(base_url: str):
         # OBSERV-02 v3 (RFC §8.7): kind="model" is a THIRD separate fetch,
         # same union contract as kind="agent" above.
-        return [
-            CapabilityCatalogEntry(
-                id="model__openai__gpt-5.1",
-                version="1",
-                name="gpt-5.1",
-                description="gpt-5.1",
-                icon="neurology",
-                kind="model",
-                team_scope=TeamScopePolicy.ADMIN_GATED,
-            )
-        ]
+        return PodModelCatalog(
+            entries=[
+                CapabilityCatalogEntry(
+                    id="model__openai__gpt-5.1",
+                    version="1",
+                    name="gpt-5.1",
+                    description="gpt-5.1",
+                    icon="neurology",
+                    kind="model",
+                    team_scope=TeamScopePolicy.ADMIN_GATED,
+                )
+            ]
+        )
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1089,7 +1092,7 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
         ]
 
     async def _fake_fetch_models(base_url: str):
-        return []
+        return PodModelCatalog(entries=[])
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1144,17 +1147,19 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
         return []
 
     async def _fake_fetch_models(base_url: str):
-        return [
-            CapabilityCatalogEntry(
-                id=colliding_tool_id,
-                version="1",
-                name="gpt-5.1",
-                description="gpt-5.1",
-                icon="neurology",
-                kind="model",
-                team_scope=TeamScopePolicy.ADMIN_GATED,
-            )
-        ]
+        return PodModelCatalog(
+            entries=[
+                CapabilityCatalogEntry(
+                    id=colliding_tool_id,
+                    version="1",
+                    name="gpt-5.1",
+                    description="gpt-5.1",
+                    icon="neurology",
+                    kind="model",
+                    team_scope=TeamScopePolicy.ADMIN_GATED,
+                )
+            ]
+        )
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1210,6 +1215,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
             model_thinking_profile_ids=tuple(thinking_profile_ids),
         )
 
@@ -1221,8 +1227,10 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
 
     async def _fake_fetch_models(base_url: str):
         if base_url == "http://pod-a":
-            return [_model_entry(["chat.pod-a.gpt5"], ["chat.pod-a.gpt5"])]
-        return [_model_entry(["chat.pod-b.gpt5"])]
+            return PodModelCatalog(
+                entries=[_model_entry(["chat.pod-a.gpt5"], ["chat.pod-a.gpt5"])]
+            )
+        return PodModelCatalog(entries=[_model_entry(["chat.pod-b.gpt5"])])
 
     monkeypatch.setattr(
         product_service, "_available_capabilities_for_source", _fake_fetch
@@ -1254,26 +1262,30 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     # Both pods' profile ids survive — neither pod's registration wipes the
     # other's, unlike a plain last-registration-wins overwrite.
     assert set(entry.model_profile_ids) == {"chat.pod-a.gpt5", "chat.pod-b.gpt5"}
+    assert set(entry.model_chat_profile_ids) == {
+        "chat.pod-a.gpt5",
+        "chat.pod-b.gpt5",
+    }
     # pod-b never declared a thinking profile for this model; pod-a's must
     # still carry through rather than being wiped by pod-b's registration.
     assert entry.model_thinking_profile_ids == ("chat.pod-a.gpt5",)
 
 
 @pytest.mark.asyncio
-async def test_universally_available_model_profile_ids_intersects_across_pods(
+async def test_universally_available_chat_model_profile_ids_intersects_across_pods(
     monkeypatch,
 ) -> None:
     """MDL#2 (2026-08-02, follow-up to #2191): the union above is right for
     admission ("does at least one pod know this profile"), but a team routing
     policy needs the opposite question answered — a profile only some pods
     carry can drift-fail at runtime (`TeamRoutingProfileDriftError`) on
-    whichever pod lacks it. `universally_available_model_profile_ids` must
+    whichever pod lacks it. `universally_available_chat_model_profile_ids` must
     return only profile ids every pod agrees on."""
 
     from types import SimpleNamespace
 
     from control_plane_backend.capabilities.catalog import (
-        universally_available_model_profile_ids,
+        universally_available_chat_model_profile_ids,
     )
 
     def _model_entry(profile_ids):
@@ -1286,14 +1298,17 @@ async def test_universally_available_model_profile_ids_intersects_across_pods(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
         )
 
     async def _fake_fetch_models(base_url: str):
         # Both pods carry "chat.shared" — pod-a additionally carries a
         # profile pod-b doesn't (e.g. a rollout in progress).
         if base_url == "http://pod-a":
-            return [_model_entry(["chat.shared", "chat.pod-a-only"])]
-        return [_model_entry(["chat.shared"])]
+            return PodModelCatalog(
+                entries=[_model_entry(["chat.shared", "chat.pod-a-only"])]
+            )
+        return PodModelCatalog(entries=[_model_entry(["chat.shared"])])
 
     monkeypatch.setattr(
         product_service, "_model_capabilities_for_source", _fake_fetch_models
@@ -1313,26 +1328,85 @@ async def test_universally_available_model_profile_ids_intersects_across_pods(
         )
     )
 
-    universal = await universally_available_model_profile_ids(deps)
+    universal = await universally_available_chat_model_profile_ids(deps)
 
     assert universal == frozenset({"chat.shared"})
 
 
 @pytest.mark.asyncio
-async def test_universally_available_model_profile_ids_fails_closed_on_unreachable_pod(
+async def test_universal_chat_profile_requires_same_model_on_every_pod(
     monkeypatch,
 ) -> None:
-    """PR #2204 review: an enabled pod that is genuinely unreachable
-    (`_model_capabilities_for_source` returns `None`, not `[]`) must not be
-    silently excluded from the intersection the way a reachable-but-empty pod
-    is — that would let the *other* pods' common profiles look "universal"
-    while this one is down, reintroducing the write-now-drift-later gap this
-    function exists to close. The whole result must be empty instead."""
+    """A deployment-global profile id must keep the same concrete meaning.
+
+    Presence alone is insufficient: accepting the same id for two different
+    model capability ids would make the selected model depend on the pod that
+    receives the turn.
+    """
 
     from types import SimpleNamespace
 
     from control_plane_backend.capabilities.catalog import (
-        universally_available_model_profile_ids,
+        universally_available_chat_model_profile_ids,
+    )
+
+    def _model_entry(model_id: str) -> CapabilityCatalogEntry:
+        return CapabilityCatalogEntry(
+            id=model_id,
+            version="1",
+            name=model_id,
+            description=model_id,
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=("chat.shared",),
+            model_chat_profile_ids=("chat.shared",),
+        )
+
+    async def _fake_fetch_models(base_url: str):
+        if base_url == "http://pod-a":
+            return PodModelCatalog(entries=[_model_entry("model__openai__gpt-5")])
+        return PodModelCatalog(entries=[_model_entry("model__openai__gpt-4o")])
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+                    ),
+                ]
+            )
+        )
+    )
+
+    universal = await universally_available_chat_model_profile_ids(deps)
+
+    assert universal == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_universally_available_chat_model_profile_ids_skips_unreachable_pod(
+    monkeypatch,
+) -> None:
+    """An enabled pod that is genuinely unreachable
+    (`_model_capabilities_for_source` returns `None`, not `[]`) is skipped
+    (best-effort), not treated as zeroing the whole result: a pod being down
+    must not block every team's routing UI just because it is enabled
+    somewhere in the platform config. Genuine drift on a pod a team actually
+    uses is still caught at turn time by `RoutedChatModelFactory.select`
+    raising `TeamRoutingProfileDriftError`, not by this write-time check."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        universally_available_chat_model_profile_ids,
     )
 
     def _model_entry(profile_ids):
@@ -1345,11 +1419,12 @@ async def test_universally_available_model_profile_ids_fails_closed_on_unreachab
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
         )
 
     async def _fake_fetch_models(base_url: str):
         if base_url == "http://pod-a":
-            return [_model_entry(["chat.shared"])]
+            return PodModelCatalog(entries=[_model_entry(["chat.shared"])])
         return None  # pod-b is unreachable, distinct from "reachable, empty"
 
     monkeypatch.setattr(
@@ -1370,9 +1445,73 @@ async def test_universally_available_model_profile_ids_fails_closed_on_unreachab
         )
     )
 
-    universal = await universally_available_model_profile_ids(deps)
+    universal = await universally_available_chat_model_profile_ids(deps)
 
-    assert universal == frozenset()
+    assert universal == frozenset({"chat.shared"})
+
+
+@pytest.mark.asyncio
+async def test_universally_available_chat_model_profile_ids_scoped_to_team_pods(
+    monkeypatch,
+) -> None:
+    """`source_runtime_ids` scopes the intersection to the pods a team's own
+    agent instances actually run on — a pod the team has no instance on is
+    excluded from consideration even while it is unreachable, matching
+    `capabilities.impact.resolve_availability_for_team`'s precedent. This is
+    the regression for the bug where a team saw "no models activated" just
+    because an unrelated, unused pod happened to be down."""
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        universally_available_chat_model_profile_ids,
+    )
+
+    def _model_entry(profile_ids):
+        return CapabilityCatalogEntry(
+            id="model__openai__gpt-5.1",
+            version="1",
+            name="gpt-5.1",
+            description="gpt-5.1",
+            icon="neurology",
+            kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+            model_profile_ids=tuple(profile_ids),
+            model_chat_profile_ids=tuple(profile_ids),
+        )
+
+    async def _fake_fetch_models(base_url: str):
+        if base_url == "http://pod-a":
+            return PodModelCatalog(
+                entries=[_model_entry(["chat.shared", "chat.pod-a-only"])]
+            )
+        raise AssertionError(
+            "pod-b is out of scope for this team and must not be fetched"
+        )
+
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
+                    ),
+                ]
+            )
+        )
+    )
+
+    universal = await universally_available_chat_model_profile_ids(
+        deps, source_runtime_ids={"runtime-a"}
+    )
+
+    assert universal == frozenset({"chat.shared", "chat.pod-a-only"})
 
 
 # ---------------------------------------------------------------------------
@@ -2295,6 +2434,15 @@ class _FakeReasoningStore:
         return set(self._enabled_model_ids)
 
 
+class _FakeNoPlatformModelBindingStore:
+    """No `chat` binding set — `get_runtime_binding_for_team`
+    now reads this store on the same per-turn call as the reasoning
+    snapshot, so every deps bundle exercising that function needs one."""
+
+    async def get(self):
+        return None
+
+
 @pytest.mark.asyncio
 async def test_runtime_binding_carries_selected_team_settings() -> None:
     from types import SimpleNamespace
@@ -2324,6 +2472,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_agent_instance_store=lambda: instance_store,
         get_team_capability_settings_store=lambda: settings,
         get_model_reasoning_store=_FakeReasoningStore,
+        get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2352,6 +2501,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
         get_model_reasoning_store=lambda: _FakeReasoningStore(
             {"model__openai__gpt-5.1", "model__mistral__small"}
         ),
+        get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]

@@ -18,8 +18,8 @@ call, off `response_metadata` — deliberately dependency-free (no
 fred-runtime import): `model_name`/`model` are the same two keys any
 provider-agnostic caller would read, so this has no reason to depend on
 fred-runtime internals. Lives at the app root rather than inside a specific
-capability package (`routing_probe`, `test_assistant`, ...) since those are
-meant to stay independent of one another.
+capability package (`test_assistant`, `mindmap`, ...) since those are meant
+to stay independent of one another.
 """
 
 from __future__ import annotations

@@ -281,6 +281,11 @@ operations:
     required_permission: can_read_members+elevated_team_role # TEAM-05.1, #2167, CONTROL-PLANE-PRODUCT-CONTRACT.md §37 — same read gate as GET .../routing-policy (team_admin/team_editor/team_analyst); team-facing can_use-enabled model list backing the routing-policy picker
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/routing-policy/effective-chat-model
+    review_status: approved
+    required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/agent-instances
     review_status: pending_review
     required_permission: pending_review
@@ -519,6 +524,25 @@ operations:
     path: /control-plane/v1/users/by-ids
     review_status: approved
     required_permission: authenticated_user
+  # Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
+  # can_administer_users gates all three; the platform_admin relation is
+  # additionally guarded service-side: grant/revoke root-only, root never
+  # revocable (platformbootstrap.completed_by).
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/users/platform-roles
+    review_status: approved
+    required_permission: can_administer_users
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/users/{user_id}/platform-roles
+    review_status: approved
+    required_permission: can_administer_users # + bootstrap-root-only for platform_admin
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/users/{user_id}/platform-roles/{relation}
+    review_status: approved
+    required_permission: can_administer_users # + bootstrap-root-only, root unrevocable, for platform_admin
   - service: control-plane
     method: POST
     path: /control-plane/v1/users
@@ -569,6 +593,21 @@ operations:
     path: /control-plane/v1/admin/capabilities/{capability_id}/reasoning
     review_status: approved
     required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (platform_admin from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/model-bindings
+    review_status: approved
+    required_permission: can_manage_platform # platform-wide chat model binding (chat-only) — organization_authz.require_manage_any (organization#can_manage_platform), same shared gate as GET /admin/capabilities. binding=null when unset.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/model-bindings
+    review_status: approved
+    required_permission: can_manage_platform # organization_authz.require_manage_any. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/model-bindings
+    review_status: approved
+    required_permission: can_manage_platform # organization_authz.require_manage_any. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
 
   - service: knowledge-flow
     method: GET

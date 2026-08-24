@@ -18,8 +18,8 @@ Why this module exists:
 - keep `react_runtime.py` focused on Fred runtime orchestration
 - isolate the one place where the stock `create_agent` loop is assembled with
   the fixed platform middleware frame (`middleware/`): message hygiene,
-  model routing, dynamic prompting, tracing/KPI, human tool approval, and the
-  optional per-turn tool-call limit
+  dynamic prompting, tracing/KPI, human tool approval, and the optional
+  per-turn tool-call limit
 
 History note (#1972):
 - this module used to wire the hand-rolled 4-node StateGraph
@@ -30,12 +30,12 @@ History note (#1972):
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
-from fred_sdk.contracts.runtime import ChatModelFactoryPort, TracerPort
+from fred_sdk.contracts.runtime import TracerPort
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -91,10 +91,7 @@ def build_tool_loop_compiled_react_agent(
     binding: BoundRuntimeContext,
     approval_policy: ToolApprovalPolicy,
     checkpointer: Checkpointer,
-    chat_model_factory: ChatModelFactoryPort | None,
     definition: ReActAgentDefinition,
-    infer_operation_from_messages: Callable[[Sequence[object]], str],
-    default_operation: str,
     available_tool_names: set[str] | frozenset[str],
     tracer: TracerPort | None = None,
     kpi: BaseKPIWriter | None = None,
@@ -128,11 +125,7 @@ def build_tool_loop_compiled_react_agent(
 
     middleware = build_react_platform_middleware_frame(
         binding=binding,
-        definition=definition,
         approval_policy=approval_policy,
-        chat_model_factory=chat_model_factory,
-        infer_operation_from_messages=infer_operation_from_messages,
-        default_operation=default_operation,
         available_tool_names=available_tool_names,
         tracer=tracer,
         kpi=kpi,

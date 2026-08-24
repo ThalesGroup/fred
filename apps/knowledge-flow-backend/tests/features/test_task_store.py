@@ -20,21 +20,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from fred_core.models import Base as CoreBase
 from fred_core.tasks.models import IngestionTaskEvent, TaskState, TaskTarget
 from fred_core.tasks.store import TaskNotFoundError, TaskStore
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from knowledge_flow_backend.models.base import Base as KFBase
+from knowledge_flow_backend.models.task_models import TASK_TABLES
 
 _NOW = datetime(2026, 6, 4, tzinfo=timezone.utc)
 
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
-    import fred_core.tasks.orm_models  # noqa: F401 — registers ORM models with CoreBase
-
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
+        await conn.run_sync(KFBase.metadata.create_all)
     return engine
 
 
@@ -42,7 +42,7 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
 async def test_task_store_replay_preserves_target_and_owner(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_target.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="t1", kind="ingestion", created_by="user-42")
 
         event = IngestionTaskEvent(
@@ -70,7 +70,7 @@ async def test_task_store_replay_preserves_target_and_owner(tmp_path: Path) -> N
 async def test_task_store_replay_target_none_when_not_set(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_no_target.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(task_id="t2", kind="ingestion", created_by=None)
 
         event = IngestionTaskEvent(
@@ -96,7 +96,7 @@ async def test_task_store_create_persists_target_without_any_event(tmp_path: Pat
     (e.g. a document) alive across a reload when no worker is running."""
     engine = await _make_engine(tmp_path, "store_create_target.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         await store.create(
             task_id="t3",
             kind="ingestion",
@@ -120,7 +120,7 @@ async def test_task_store_create_persists_target_without_any_event(tmp_path: Pat
 async def test_task_store_record_event_raises_for_unknown_task(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_unknown.sqlite3")
     try:
-        store = TaskStore(engine)
+        store = TaskStore(engine, TASK_TABLES)
         event = IngestionTaskEvent(task_id="ghost", state=TaskState.running, seq=0, timestamp=_NOW)
         with pytest.raises(TaskNotFoundError):
             await store.record_event(event)

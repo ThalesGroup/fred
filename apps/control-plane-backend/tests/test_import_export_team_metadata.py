@@ -19,6 +19,7 @@ from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.exporter import run_export
 from control_plane_backend.import_export.importer import MigrationReport, run_import
 from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.models.task_models import TASK_TABLES
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import StartMigrationRequest
@@ -50,7 +51,6 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     # Import the ORM modules so every table is registered on the two metadatas
     # before create_all runs.
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import fred_core.tasks.orm_models  # noqa: F401
 
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
@@ -72,7 +72,9 @@ async def _seed_team(engine: AsyncEngine, row: TeamMetadataRow) -> None:
 async def _import(
     bundle_bytes: bytes, engine: AsyncEngine, *, rebac: Any | None = None
 ) -> MigrationReport:
-    task_service = TaskService.build(engine=engine, backend=SchedulerBackend.MEMORY)
+    task_service = TaskService.build(
+        engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
+    )
     start = await task_service.start(StartMigrationRequest(), created_by="tester")
     bundle = open_bundle(bundle_bytes)
     return await run_import(

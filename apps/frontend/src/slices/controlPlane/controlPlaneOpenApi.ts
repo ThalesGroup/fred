@@ -61,6 +61,31 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: build.query<
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse,
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/platform-roles` }),
+    }),
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: build.mutation<
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse,
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles`,
+        method: "POST",
+        body: queryArg.grantPlatformRoleRequest,
+      }),
+    }),
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: build.mutation<
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse,
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles/${queryArg.relation}`,
+        method: "DELETE",
+      }),
+    }),
     deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
       DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
       DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
@@ -635,6 +660,39 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
     }),
+    getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
+      GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/effective-chat-model`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+        },
+      }),
+    }),
+    getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: build.query<
+      GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse,
+      GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings` }),
+    }),
+    putPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPut: build.mutation<
+      PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiResponse,
+      PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/model-bindings`,
+        method: "PUT",
+        body: queryArg.setPlatformModelBindingRequest,
+      }),
+    }),
+    deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: build.mutation<
+      DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse,
+      DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings`, method: "DELETE" }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -1016,6 +1074,19 @@ export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse = /** status 200
 export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg = {
   ids: string[];
 };
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse =
+  /** status 200 Successful Response */ PlatformRolesResponse;
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg = void;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse = unknown;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg = {
+  userId: string;
+  grantPlatformRoleRequest: GrantPlatformRoleRequest;
+};
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse = unknown;
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg = {
+  userId: string;
+  relation: PlatformRoleRelation;
+};
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
@@ -1384,6 +1455,23 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
 };
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
+  /** status 200 Successful Response */ EffectiveChatModel;
+export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type GetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetApiArg = void;
+export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutApiArg = {
+  setPlatformModelBindingRequest: SetPlatformModelBindingRequest;
+};
+export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse =
+  /** status 200 Successful Response */ PlatformModelBinding;
+export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg = void;
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -1722,6 +1810,19 @@ export type CreateUserRequest = {
   last_name?: string | null;
   enabled?: boolean;
 };
+export type PlatformRoleRelation = "platform_admin" | "platform_observer";
+export type PlatformRoleHolder = {
+  user: UserSummary;
+  relations: PlatformRoleRelation[];
+  is_bootstrap_root?: boolean;
+};
+export type PlatformRolesResponse = {
+  holders: PlatformRoleHolder[];
+  caller_is_bootstrap_root: boolean;
+};
+export type GrantPlatformRoleRequest = {
+  relation: PlatformRoleRelation;
+};
 export type GcuVersionsType = "v1";
 export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -1863,6 +1964,30 @@ export type FrontendUserAuthConfig = {
   realm_url?: string | null;
   client_id?: string | null;
 };
+export type InfoBannerLink = {
+  /** Link target URL. */
+  url: string;
+  /** Locale → label map (e.g. {"en": "...", "fr": "..."}). */
+  labels?: {
+    [key: string]: string;
+  };
+};
+export type InfoBanner = {
+  /** Banner background CSS color. */
+  color?: string;
+  /** Seconds after which the banner hides itself, measured from app load. Omit for a persistent banner — the default. */
+  auto_hide_seconds?: number | null;
+  /** Locale → title map (e.g. {"en": "...", "fr": "..."}). */
+  titles?: {
+    [key: string]: string;
+  };
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+  /** Links rendered on the right side of the banner. */
+  links?: InfoBannerLink[];
+};
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
@@ -1870,6 +1995,8 @@ export type FrontendConfig = {
   root_bootstrap_completed: boolean;
   /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
   root_bootstrap_required: boolean;
+  /** Deployer-configured global announcement banner, from `platform.frontend.info_banner`. `None` when the deployment configures none — the frontend then renders nothing. Deliberately on this public pre-auth surface, not the authenticated `FrontendBootstrap`: the banner shows on every page, including the GCU-acceptance and root-bootstrap screens, which render before `/frontend/bootstrap` can succeed. Carries only deployer-authored announcement content — never anything sensitive. */
+  info_banner?: InfoBanner | null;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -1999,8 +2126,8 @@ export type CapabilityCatalogEntry = {
   route_base_url?: string | null;
   default_capability_ids?: string[];
   model_profile_ids?: string[];
+  model_chat_profile_ids?: string[];
   model_thinking_profile_ids?: string[];
-  model_reasoning_effort?: string | null;
   model_display_name?: string | null;
 };
 export type AgentTemplateSummary = {
@@ -2330,6 +2457,32 @@ export type ManagedAgentTuning = {
         };
   };
 };
+export type ModelBindingSettings = {
+  base_url?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_tenant_id?: string | null;
+  project?: string | null;
+  location?: string | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  max_retries?: number | null;
+  streaming?: boolean | null;
+  stream_usage?: boolean | null;
+  request_timeout?: number | null;
+  reasoning_effort?: string | null;
+};
+export type ModelBinding = {
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  name: string;
+  settings?: ModelBindingSettings;
+};
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
   template_agent_id: string;
@@ -2345,6 +2498,7 @@ export type ManagedAgentRuntimeBinding = {
     };
   };
   reasoning_enabled_model_ids?: string[];
+  platform_chat_model_binding?: ModelBinding | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -2404,13 +2558,6 @@ export type ChatControlDescriptor = {
     [key: string]: any;
   } | null;
 };
-export type TeamOperationRouteRule = {
-  rule_id: string;
-  operation?: string | null;
-  purpose?: string | null;
-  agent_id?: string | null;
-  target_profile_id: string;
-};
 export type ExecutionPreparation = {
   agent_instance_id: string;
   team_id: string;
@@ -2439,8 +2586,10 @@ export type ExecutionPreparation = {
   };
   /** Team's default chat model profile id, resolved from its stored TeamRoutingPolicy at session prep (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05, #2118). Null when the team has no routing policy — the runtime then uses its own deployment default. The frontend folds this onto RuntimeContext exactly like context_prompt_text (same three-hop channel, same 'resolved once per session, not re-fetched per turn' contract). */
   chat_default_profile_id?: string | null;
-  /** Team's per-operation model-routing overrides, same resolution notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2). */
-  operation_route_rules?: TeamOperationRouteRule[];
+  /** Team's per-agent model-profile overrides (agent_id -> profile_id), same resolution notes as chat_default_profile_id above. */
+  agent_profile_overrides?: {
+    [key: string]: string;
+  };
   /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
   reasoning_enabled_model_ids?: string[];
 };
@@ -2555,11 +2704,15 @@ export type TeamRoutingPolicy = {
   team_id: string;
   version: number;
   chat_default_profile_id?: string | null;
-  operation_rules?: TeamOperationRouteRule[];
+  agent_profile_overrides?: {
+    [key: string]: string;
+  };
 };
 export type UpdateTeamRoutingPolicyRequest = {
   chat_default_profile_id?: string | null;
-  operation_rules?: TeamOperationRouteRule[];
+  agent_profile_overrides?: {
+    [key: string]: string;
+  };
 };
 export type AvailableModelProfile = {
   profile_id: string;
@@ -2569,6 +2722,29 @@ export type AvailableModelProfile = {
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
+};
+export type EffectiveChatModel = {
+  /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
+  name?: string | null;
+  /** The ops-authored `model_display_name` for this model, when the pod catalog names one. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
+  display_name?: string | null;
+  /** The `(provider, name)`-keyed `kind="model"` capability id, so the caller can join this against team enablement and the models admin view. `None` for an unresolved model. */
+  capability_id?: string | null;
+  /** False when the resolved model is not `can_use`-enabled for this team, in which case the turn fails before the LLM call (`ModelNotUsableError`). Reported rather than hidden so the composer can say WHY a turn will fail instead of letting the user discover an opaque error — the same diagnosability rule REASON-01 §8 applies to the reasoning control. Always True for a platform binding, which bypasses team enablement by design: the operator is the authority on what is reachable. */
+  enabled_for_team?: boolean;
+  /** Whether reasoning actually runs on THIS model — i.e. whether a platform admin switched its reasoning on (REASON-01 §5). The composer must not offer the reasoning toggle when this is False: `RoutedChatModelFactory` STRIPS the reasoning settings for a model absent from `reasoning_enabled_model_ids` (§5.6.2), so the toggle would be inert and the turn would silently not reason.
+    
+    Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
+  reasoning_enabled?: boolean;
+};
+export type PlatformModelBinding = {
+  model_capability?: "chat";
+  binding?: ModelBinding | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetPlatformModelBindingRequest = {
+  binding: ModelBinding;
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -2926,6 +3102,10 @@ export const {
   useCreateUserControlPlaneV1UsersPostMutation,
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
   useLazyGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useLazyListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
@@ -3018,6 +3198,12 @@ export const {
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
+  useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
+  useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
+  usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
+  useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

@@ -20,11 +20,11 @@ kind="model" runtime enforcement (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7)
 - `usable_model_capability_ids` — the pod-side ReBAC query computed once per
   turn, mirroring control-plane's `usable_capability_ids`.
 
-Also covers the team-routing-policy fallback layer
-(`TEAM-ROUTING-POLICY-RFC.md` §7-§8): `RoutedChatModelFactory.select`
-applying `RuntimeContext.chat_default_profile_id`/`.operation_route_rules`
-only when the static `models_catalog.yaml` resolver falls through to its
-capability default, and the drift/fail-closed rules on top of it (§8.4).
+Also covers the team-routing-policy fallback layer:
+`RoutedChatModelFactory.select` applying
+`RuntimeContext.chat_default_profile_id`/`.agent_profile_overrides` only
+when the static `models_catalog.yaml` resolver falls through to its
+capability default, and the drift/fail-closed rules on top of it.
 """
 
 # pyright: reportArgumentType=false
@@ -45,7 +45,6 @@ from fred_runtime.model_routing.contracts import (
     ModelCapability,
     ModelNotUsableError,
     ModelProfile,
-    ModelRouteRule,
     ModelRoutingPolicy,
     ModelSelectionSource,
     TeamRoutingProfileDriftError,
@@ -58,7 +57,6 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
-    TeamOperationRouteRule,
 )
 
 # ---------------------------------------------------------------------------
@@ -73,7 +71,9 @@ class _FakeProvider(ModelProvider):
         return ToolFriendlyFakeChatModel(responses=[])
 
 
-def _factory(*, rules: tuple[ModelRouteRule, ...] = ()) -> RoutedChatModelFactory:
+def _factory(
+    *, agent_profile_overrides: dict[str, str] | None = None
+) -> RoutedChatModelFactory:
     policy = ModelRoutingPolicy(
         default_profile_by_capability={ModelCapability.CHAT: "p1"},
         profiles=(
@@ -92,8 +92,13 @@ def _factory(*, rules: tuple[ModelRouteRule, ...] = ()) -> RoutedChatModelFactor
                 capability=ModelCapability.CHAT,
                 model=ModelConfiguration(provider="openai", name="gpt-5.3"),
             ),
+            ModelProfile(
+                profile_id="team.language-only",
+                capability=ModelCapability.LANGUAGE,
+                model=ModelConfiguration(provider="openai", name="gpt-5.4"),
+            ),
         ),
-        rules=rules,
+        agent_profile_overrides=agent_profile_overrides or {},
     )
     return RoutedChatModelFactory(
         resolver=ModelRoutingResolver(policy), provider=_FakeProvider()
@@ -104,14 +109,14 @@ def _binding(
     usable_model_ids: tuple[str, ...] | None = None,
     *,
     chat_default_profile_id: str | None = None,
-    operation_route_rules: list[TeamOperationRouteRule] | None = None,
+    agent_profile_overrides: dict[str, str] | None = None,
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
             team_id="team-a",
             user_id="u1",
             chat_default_profile_id=chat_default_profile_id,
-            operation_route_rules=operation_route_rules,
+            agent_profile_overrides=agent_profile_overrides,
         ),
         portable_context=PortableContext(
             request_id="r1",
@@ -135,8 +140,6 @@ def test_usable_model_ids_none_means_no_restriction() -> None:
     model, selection = _factory().build_for_chat(
         definition=_DEFINITION,
         binding=_binding(None),
-        purpose="chat",
-        operation=None,
     )
     assert model is not None
     assert selection.model.provider == "openai"
@@ -147,8 +150,6 @@ def test_allowed_model_resolves_normally() -> None:
     model, _ = _factory().build_for_chat(
         definition=_DEFINITION,
         binding=_binding((allowed_id,)),
-        purpose="chat",
-        operation=None,
     )
     assert model is not None
 
@@ -159,8 +160,6 @@ def test_disallowed_model_fails_closed() -> None:
         _factory().build_for_chat(
             definition=_DEFINITION,
             binding=_binding(("model__azure__gpt-4o",)),
-            purpose="chat",
-            operation=None,
         )
     assert exc_info.value.capability_id == model_capability_id("openai", "gpt-5.1")
 
@@ -171,126 +170,71 @@ def test_empty_usable_set_denies_everything() -> None:
         _factory().build_for_chat(
             definition=_DEFINITION,
             binding=_binding(()),
-            purpose="chat",
-            operation=None,
         )
 
 
-def test_build_for_operation_also_enforces() -> None:
-    # build() and build_for_operation() both funnel through build_for_chat —
-    # confirming the gate isn't bypassable via the other entry point.
-    with pytest.raises(ModelNotUsableError):
-        _factory().build_for_operation(
-            definition=_DEFINITION,
-            binding=_binding(()),
-            purpose="chat",
-            operation="planning",
-        )
+def test_build_also_enforces_via_build_for_chat() -> None:
+    # build() funnels through build_for_chat — confirming the gate isn't
+    # bypassable via the public entry point runtimes actually call.
     with pytest.raises(ModelNotUsableError):
         _factory().build(definition=_DEFINITION, binding=_binding(()))
 
 
 # ---------------------------------------------------------------------------
 # 1b. RoutedChatModelFactory.select — team-routing-policy fallback layer
-#     (TEAM-ROUTING-POLICY-RFC.md §7-§8)
 # ---------------------------------------------------------------------------
 
 
-def test_team_default_applies_when_no_static_rule_matches() -> None:
+def test_team_default_applies_when_no_static_override_matches() -> None:
     _, selection = _factory().build_for_chat(
         definition=_DEFINITION,
         binding=_binding(chat_default_profile_id="team.preferred"),
-        purpose="chat",
-        operation=None,
     )
     assert selection.source == ModelSelectionSource.TEAM_POLICY
     assert selection.profile_id == "team.preferred"
 
 
-def test_static_rule_wins_over_team_default() -> None:
-    static_rule = ModelRouteRule(
-        rule_id="static-r1",
-        capability=ModelCapability.CHAT,
-        target_profile_id="p1",
-        operation="routing",
-        agent_id="test-agent",
-    )
-    _, selection = _factory(rules=(static_rule,)).build_for_chat(
+def test_static_override_wins_over_team_default() -> None:
+    _, selection = _factory(
+        agent_profile_overrides={"test-agent": "p1"}
+    ).build_for_chat(
         definition=_DEFINITION,
         binding=_binding(chat_default_profile_id="team.preferred"),
-        purpose="chat",
-        operation="routing",
     )
-    assert selection.source == ModelSelectionSource.RULE
+    assert selection.source == ModelSelectionSource.AGENT_OVERRIDE
     assert selection.profile_id == "p1"
 
 
-def test_operation_rule_matches_operation_and_purpose() -> None:
-    rule = TeamOperationRouteRule(
-        rule_id="tr1",
-        operation="planning",
-        purpose="chat",
-        target_profile_id="team.planning",
-    )
+def test_team_agent_override_applies_for_this_agent() -> None:
     _, selection = _factory().build_for_chat(
         definition=_DEFINITION,
-        binding=_binding(operation_route_rules=[rule]),
-        purpose="chat",
-        operation="planning",
+        binding=_binding(agent_profile_overrides={"test-agent": "team.planning"}),
     )
     assert selection.source == ModelSelectionSource.TEAM_POLICY
     assert selection.profile_id == "team.planning"
 
 
-def test_operation_rule_purpose_wildcard_matches_any_purpose() -> None:
-    rule = TeamOperationRouteRule(
-        rule_id="tr1",
-        operation="planning",
-        purpose=None,
-        target_profile_id="team.planning",
-    )
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(operation_route_rules=[rule]),
-        purpose="anything",
-        operation="planning",
-    )
-    assert selection.profile_id == "team.planning"
+def test_team_agent_override_with_wrong_capability_raises_drift_error() -> None:
+    with pytest.raises(TeamRoutingProfileDriftError) as exc_info:
+        _factory().build_for_chat(
+            definition=_DEFINITION,
+            binding=_binding(
+                agent_profile_overrides={"test-agent": "team.language-only"}
+            ),
+        )
+    assert exc_info.value.profile_id == "team.language-only"
+    assert exc_info.value.expected_capability == ModelCapability.CHAT
+    assert exc_info.value.actual_capability == ModelCapability.LANGUAGE
 
 
-def test_operation_specific_purpose_rule_wins_over_wildcard() -> None:
-    wildcard = TeamOperationRouteRule(
-        rule_id="tr-wild",
-        operation="planning",
-        purpose=None,
-        target_profile_id="team.planning",
-    )
-    specific = TeamOperationRouteRule(
-        rule_id="tr-specific",
-        operation="planning",
-        purpose="gap_analysis",
-        target_profile_id="team.preferred",
-    )
-    _, selection = _factory().build_for_chat(
-        definition=_DEFINITION,
-        binding=_binding(operation_route_rules=[wildcard, specific]),
-        purpose="gap_analysis",
-        operation="planning",
-    )
-    assert selection.profile_id == "team.preferred"
-
-
-def test_chat_default_used_when_no_operation_rule_matches() -> None:
-    rule = TeamOperationRouteRule(
-        rule_id="tr1", operation="planning", target_profile_id="team.planning"
-    )
+def test_chat_default_used_when_no_team_override_matches_this_agent() -> None:
     _, selection = _factory().build_for_chat(
         definition=_DEFINITION,
         binding=_binding(
-            chat_default_profile_id="team.preferred", operation_route_rules=[rule]
+            chat_default_profile_id="team.preferred",
+            # Override is scoped to a different agent — must not apply here.
+            agent_profile_overrides={"other-agent": "team.planning"},
         ),
-        purpose="chat",
-        operation=None,  # not "planning" — the operation rule must not apply
     )
     assert selection.profile_id == "team.preferred"
 
@@ -300,16 +244,14 @@ def test_unknown_team_profile_raises_drift_error() -> None:
         _factory().build_for_chat(
             definition=_DEFINITION,
             binding=_binding(chat_default_profile_id="ghost.profile"),
-            purpose="chat",
-            operation=None,
         )
     assert exc_info.value.profile_id == "ghost.profile"
 
 
 def test_team_policy_selection_still_enforces_usable_model_ids() -> None:
-    # Defense in depth (§8.4): a team policy that names a profile the team's
+    # Defense in depth: a team policy that names a profile the team's
     # capability enablement no longer allows must still fail closed, exactly
-    # like a static-rule or default selection would.
+    # like a static-override or default selection would.
     with pytest.raises(ModelNotUsableError):
         _factory().build_for_chat(
             definition=_DEFINITION,
@@ -317,8 +259,6 @@ def test_team_policy_selection_still_enforces_usable_model_ids() -> None:
                 usable_model_ids=("model__azure__gpt-4o",),
                 chat_default_profile_id="team.preferred",
             ),
-            purpose="chat",
-            operation=None,
         )
 
 
@@ -326,8 +266,6 @@ def test_no_team_policy_set_keeps_static_default() -> None:
     _, selection = _factory().build_for_chat(
         definition=_DEFINITION,
         binding=_binding(),
-        purpose="chat",
-        operation=None,
     )
     assert selection.source == ModelSelectionSource.DEFAULT
     assert selection.profile_id == "p1"

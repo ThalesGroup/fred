@@ -16,10 +16,9 @@
 Offline unit tests for fred_runtime.model_routing.
 
 Covers:
-- contracts.py  — Pydantic validators (match values, rule shape normalization,
-                  policy reference integrity, capability alignment)
-- resolver.py   — deterministic rule selection (default, single rule, specificity
-                  tie-breaking, multi-criteria, one-of tuples)
+- contracts.py  — Pydantic policy reference integrity, capability alignment
+- resolver.py   — deterministic selection (capability default,
+                  agent_profile_overrides match/no-match, capability mismatch)
 - catalog.py    — settings deep-merge and YAML loading
 
 No mocks, no network, no filesystem side effects beyond tmp_path.
@@ -34,17 +33,11 @@ from fred_runtime.model_routing.catalog import ModelCatalog, load_model_catalog
 from fred_runtime.model_routing.contracts import (
     ModelCapability,
     ModelProfile,
-    ModelRouteMatch,
-    ModelRouteRule,
     ModelRoutingPolicy,
     ModelSelectionRequest,
     ModelSelectionSource,
 )
-from fred_runtime.model_routing.resolver import (
-    ModelRoutingResolver,
-    resolve_team_override,
-)
-from fred_sdk.contracts.context import TeamOperationRouteRule
+from fred_runtime.model_routing.resolver import ModelRoutingResolver
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -71,161 +64,23 @@ def _profile(
 def _minimal_policy(
     *,
     profile_id: str = "default.chat",
-    rules: tuple[ModelRouteRule, ...] = (),
+    agent_profile_overrides: dict[str, str] | None = None,
 ) -> ModelRoutingPolicy:
     return ModelRoutingPolicy(
         default_profile_by_capability={ModelCapability.CHAT: profile_id},
         profiles=(_profile(profile_id),),
-        rules=rules,
-    )
-
-
-def _rule(
-    rule_id: str,
-    target: str,
-    *,
-    operation: str,
-    team_id: str | None = None,
-    agent_id: str | None = None,
-    user_id: str | None = None,
-    purpose: str | None = None,
-) -> ModelRouteRule:
-    return ModelRouteRule(
-        rule_id=rule_id,
-        capability=ModelCapability.CHAT,
-        target_profile_id=target,
-        operation=operation,
-        team_id=team_id,
-        agent_id=agent_id,
-        user_id=user_id,
-        purpose=purpose,
+        agent_profile_overrides=agent_profile_overrides or {},
     )
 
 
 def _request(
     *,
-    purpose: str = "chat",
-    operation: str | None = None,
-    team_id: str | None = None,
     agent_id: str | None = None,
-    user_id: str | None = None,
 ) -> ModelSelectionRequest:
     return ModelSelectionRequest(
         capability=ModelCapability.CHAT,
-        purpose=purpose,
-        operation=operation,
-        team_id=team_id,
         agent_id=agent_id,
-        user_id=user_id,
     )
-
-
-# ---------------------------------------------------------------------------
-# contracts — ModelRouteMatch validation
-# ---------------------------------------------------------------------------
-
-
-class TestModelRouteMatchValidation:
-    def test_all_none_is_valid(self) -> None:
-        m = ModelRouteMatch()
-        assert m.defined_criteria_count() == 0
-
-    def test_single_string_criterion(self) -> None:
-        m = ModelRouteMatch(operation="routing")
-        assert m.operation == "routing"
-        assert m.defined_criteria_count() == 1
-
-    def test_tuple_criterion(self) -> None:
-        m = ModelRouteMatch(team_id=("team-a", "team-b"))
-        assert m.team_id == ("team-a", "team-b")
-
-    def test_all_criteria_count(self) -> None:
-        m = ModelRouteMatch(
-            purpose="chat",
-            agent_id="myagent",
-            team_id="t1",
-            user_id="u1",
-            operation="routing",
-        )
-        assert m.defined_criteria_count() == 5
-
-    def test_empty_string_rejected(self) -> None:
-        with pytest.raises(Exception, match="non-empty string"):
-            ModelRouteMatch(operation="   ")
-
-    def test_empty_tuple_rejected(self) -> None:
-        with pytest.raises(Exception):
-            ModelRouteMatch(team_id=())
-
-    def test_tuple_with_blank_item_rejected(self) -> None:
-        with pytest.raises(Exception, match="non-empty strings"):
-            ModelRouteMatch(operation=("routing", "  "))
-
-
-# ---------------------------------------------------------------------------
-# contracts — ModelRouteRule shape normalization
-# ---------------------------------------------------------------------------
-
-
-class TestModelRouteRuleNormalization:
-    def test_flat_format_accepted(self) -> None:
-        rule = ModelRouteRule(
-            rule_id="r1",
-            capability=ModelCapability.CHAT,
-            target_profile_id="p1",
-            operation="routing",
-            team_id="team-a",
-        )
-        assert rule.match.operation == "routing"
-        assert rule.match.team_id == "team-a"
-
-    def test_legacy_match_block_accepted(self) -> None:
-        rule = ModelRouteRule(
-            rule_id="r1",
-            capability=ModelCapability.CHAT,
-            target_profile_id="p1",
-            match={"operation": "planning", "purpose": "chat"},  # type: ignore[arg-type]
-        )
-        assert rule.match.operation == "planning"
-        assert rule.match.purpose == "chat"
-
-    def test_flat_format_requires_operation(self) -> None:
-        with pytest.raises(Exception, match="requires 'operation'"):
-            ModelRouteRule(
-                rule_id="r1",
-                capability=ModelCapability.CHAT,
-                target_profile_id="p1",
-                team_id="team-a",
-            )
-
-    def test_empty_match_rejected(self) -> None:
-        with pytest.raises(Exception, match="no criteria"):
-            ModelRouteRule(
-                rule_id="r1",
-                capability=ModelCapability.CHAT,
-                target_profile_id="p1",
-            )
-
-    def test_conflicting_flat_and_match_block_rejected(self) -> None:
-        with pytest.raises(Exception, match="conflicting values"):
-            ModelRouteRule(
-                rule_id="r1",
-                capability=ModelCapability.CHAT,
-                target_profile_id="p1",
-                operation="routing",
-                match={"operation": "planning"},  # type: ignore[arg-type]
-            )
-
-    def test_consistent_flat_and_match_block_accepted(self) -> None:
-        rule = ModelRouteRule(
-            rule_id="r1",
-            capability=ModelCapability.CHAT,
-            target_profile_id="p1",
-            operation="routing",
-            match={"operation": "routing", "team_id": "team-a"},  # type: ignore[arg-type]
-        )
-        assert rule.match.operation == "routing"
-        assert rule.match.team_id == "team-a"
 
 
 # ---------------------------------------------------------------------------
@@ -260,56 +115,34 @@ class TestModelRoutingPolicyValidation:
                 profiles=(embed_profile,),
             )
 
-    def test_rule_targeting_unknown_profile_rejected(self) -> None:
-        rule = _rule("r1", "ghost.profile", operation="routing")
-        with pytest.raises(Exception, match="unknown profile_id"):
+    def test_override_targeting_unknown_profile_rejected(self) -> None:
+        with pytest.raises(Exception, match="unknown"):
             ModelRoutingPolicy(
                 default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
                 profiles=(_profile("default.chat"),),
-                rules=(rule,),
+                agent_profile_overrides={"rico": "ghost.profile"},
             )
 
-    def test_rule_capability_mismatch_rejected(self) -> None:
-        embed_profile = _profile("embed.model", capability=ModelCapability.EMBEDDING)
-        with pytest.raises(Exception):
+    def test_override_with_empty_agent_id_key_rejected(self) -> None:
+        with pytest.raises(Exception, match="non-empty agent ids"):
             ModelRoutingPolicy(
                 default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
-                profiles=(_profile("default.chat"), embed_profile),
-                rules=(
-                    ModelRouteRule(
-                        rule_id="r1",
-                        capability=ModelCapability.CHAT,
-                        target_profile_id="embed.model",
-                        operation="routing",
-                    ),
-                ),
-            )
-
-    def test_duplicate_rule_ids_rejected(self) -> None:
-        p_chat = _profile("default.chat")
-        r1 = _rule("same-id", "default.chat", operation="routing")
-        r2 = _rule("same-id", "default.chat", operation="planning")
-        with pytest.raises(Exception, match="unique rule_id"):
-            ModelRoutingPolicy(
-                default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
-                profiles=(p_chat,),
-                rules=(r1, r2),
+                profiles=(_profile("default.chat"),),
+                agent_profile_overrides={"": "default.chat"},
             )
 
 
 # ---------------------------------------------------------------------------
-# resolver — default fallback and rule matching
+# resolver — capability default and agent_profile_overrides matching
 # ---------------------------------------------------------------------------
 
 
 class TestModelRoutingResolver:
-    def test_returns_default_when_no_rules(self) -> None:
+    def test_returns_default_when_no_overrides(self) -> None:
         resolver = ModelRoutingResolver(_minimal_policy())
         result = resolver.resolve(_request())
         assert result.source == ModelSelectionSource.DEFAULT
         assert result.profile_id == "default.chat"
-        assert result.rule_id is None
-        assert result.matched_criteria == 0
 
     def test_raises_when_no_default_for_capability(self) -> None:
         policy = ModelRoutingPolicy(
@@ -320,36 +153,41 @@ class TestModelRoutingResolver:
         with pytest.raises(ValueError, match="No default profile"):
             resolver.resolve(_request())
 
-    def test_single_matching_rule_wins(self) -> None:
+    def test_matching_agent_override_wins(self) -> None:
         specific = _profile("specific.chat")
-        rule = _rule("r1", "specific.chat", operation="routing", team_id="team-a")
         policy = ModelRoutingPolicy(
             default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
             profiles=(_profile("default.chat"), specific),
-            rules=(rule,),
+            agent_profile_overrides={"rico": "specific.chat"},
         )
-        result = ModelRoutingResolver(policy).resolve(
-            _request(operation="routing", team_id="team-a")
-        )
-        assert result.source == ModelSelectionSource.RULE
+        result = ModelRoutingResolver(policy).resolve(_request(agent_id="rico"))
+        assert result.source == ModelSelectionSource.AGENT_OVERRIDE
         assert result.profile_id == "specific.chat"
-        assert result.rule_id == "r1"
-        assert result.matched_criteria == 2
 
-    def test_non_matching_rule_falls_through_to_default(self) -> None:
+    def test_non_matching_agent_falls_through_to_default(self) -> None:
         specific = _profile("specific.chat")
-        rule = _rule("r1", "specific.chat", operation="routing", team_id="team-a")
         policy = ModelRoutingPolicy(
             default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
             profiles=(_profile("default.chat"), specific),
-            rules=(rule,),
+            agent_profile_overrides={"rico": "specific.chat"},
         )
-        result = ModelRoutingResolver(policy).resolve(
-            _request(operation="planning", team_id="team-a")
-        )
+        result = ModelRoutingResolver(policy).resolve(_request(agent_id="other-agent"))
         assert result.source == ModelSelectionSource.DEFAULT
 
-    def test_capability_filter_prevents_wrong_rule(self) -> None:
+    def test_no_agent_id_on_request_falls_through_to_default(self) -> None:
+        policy = ModelRoutingPolicy(
+            default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
+            profiles=(_profile("default.chat"), _profile("specific.chat")),
+            agent_profile_overrides={"rico": "specific.chat"},
+        )
+        result = ModelRoutingResolver(policy).resolve(_request(agent_id=None))
+        assert result.source == ModelSelectionSource.DEFAULT
+
+    def test_override_profile_capability_mismatch_falls_through_to_default(
+        self,
+    ) -> None:
+        # The override maps to an EMBEDDING profile, but this request asks
+        # for CHAT — the override must not apply across capabilities.
         embed_profile = _profile("embed.p", capability=ModelCapability.EMBEDDING)
         policy = ModelRoutingPolicy(
             default_profile_by_capability={
@@ -357,91 +195,11 @@ class TestModelRoutingResolver:
                 ModelCapability.EMBEDDING: "embed.p",
             },
             profiles=(_profile("default.chat"), embed_profile),
-            rules=(
-                ModelRouteRule(
-                    rule_id="embed-rule",
-                    capability=ModelCapability.EMBEDDING,
-                    target_profile_id="embed.p",
-                    operation="routing",
-                ),
-            ),
+            agent_profile_overrides={"rico": "embed.p"},
         )
-        result = ModelRoutingResolver(policy).resolve(_request(operation="routing"))
+        result = ModelRoutingResolver(policy).resolve(_request(agent_id="rico"))
         assert result.source == ModelSelectionSource.DEFAULT
         assert result.profile_id == "default.chat"
-
-    def test_more_specific_rule_beats_less_specific(self) -> None:
-        broad = _profile("broad.chat")
-        narrow = _profile("narrow.chat")
-        rule_broad = _rule("r-broad", "broad.chat", operation="routing")
-        rule_narrow = _rule(
-            "r-narrow", "narrow.chat", operation="routing", team_id="team-a"
-        )
-        policy = ModelRoutingPolicy(
-            default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
-            profiles=(_profile("default.chat"), broad, narrow),
-            rules=(rule_broad, rule_narrow),
-        )
-        result = ModelRoutingResolver(policy).resolve(
-            _request(operation="routing", team_id="team-a")
-        )
-        assert result.profile_id == "narrow.chat"
-        assert result.matched_criteria == 2
-
-    def test_first_declared_wins_on_equal_specificity(self) -> None:
-        first = _profile("first.chat")
-        second = _profile("second.chat")
-        r1 = _rule("r1", "first.chat", operation="routing", team_id="team-a")
-        r2 = _rule("r2", "second.chat", operation="routing", team_id="team-a")
-        policy = ModelRoutingPolicy(
-            default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
-            profiles=(_profile("default.chat"), first, second),
-            rules=(r1, r2),
-        )
-        result = ModelRoutingResolver(policy).resolve(
-            _request(operation="routing", team_id="team-a")
-        )
-        assert result.profile_id == "first.chat"
-        assert result.rule_id == "r1"
-
-    def test_tuple_one_of_matches(self) -> None:
-        specific = _profile("specific.chat")
-        rule = ModelRouteRule(
-            rule_id="r1",
-            capability=ModelCapability.CHAT,
-            target_profile_id="specific.chat",
-            operation=("routing", "planning"),
-            team_id="team-a",
-        )
-        policy = ModelRoutingPolicy(
-            default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
-            profiles=(_profile("default.chat"), specific),
-            rules=(rule,),
-        )
-        resolver = ModelRoutingResolver(policy)
-        for op in ("routing", "planning"):
-            result = resolver.resolve(_request(operation=op, team_id="team-a"))
-            assert result.source == ModelSelectionSource.RULE
-            assert result.profile_id == "specific.chat"
-
-    def test_tuple_one_of_does_not_match_other_value(self) -> None:
-        specific = _profile("specific.chat")
-        rule = ModelRouteRule(
-            rule_id="r1",
-            capability=ModelCapability.CHAT,
-            target_profile_id="specific.chat",
-            operation=("routing", "planning"),
-            team_id="team-a",
-        )
-        policy = ModelRoutingPolicy(
-            default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
-            profiles=(_profile("default.chat"), specific),
-            rules=(rule,),
-        )
-        result = ModelRoutingResolver(policy).resolve(
-            _request(operation="json_validation_fc", team_id="team-a")
-        )
-        assert result.source == ModelSelectionSource.DEFAULT
 
     def test_policy_property_exposed(self) -> None:
         policy = _minimal_policy()
@@ -460,151 +218,12 @@ class TestModelRoutingResolver:
 
 
 # ---------------------------------------------------------------------------
-# resolver — resolve_team_override (TEAM-ROUTING-POLICY-RFC.md §7-§8)
+# NOTE (#2387): `TestResolveTeamOverride` lived here. The function it covered
+# moved to `fred_sdk.contracts.context.resolve_effective_chat_profile` (one
+# implementation, shared with control-plane), so its unit tests moved with it
+# to `libs/fred-sdk/tests/test_context.py`. The provider-level wiring that
+# feeds it stays covered by `tests/test_model_routing_provider.py`.
 # ---------------------------------------------------------------------------
-
-
-class TestResolveTeamOverride:
-    def test_no_rules_no_default_returns_none(self) -> None:
-        result = resolve_team_override(
-            operation_route_rules=[],
-            chat_default_profile_id=None,
-            operation="planning",
-            purpose="chat",
-        )
-        assert result is None
-
-    def test_falls_back_to_chat_default(self) -> None:
-        result = resolve_team_override(
-            operation_route_rules=[],
-            chat_default_profile_id="team.default",
-            operation="planning",
-            purpose="chat",
-        )
-        assert result == "team.default"
-
-    def test_operation_and_purpose_match_wins(self) -> None:
-        rule = TeamOperationRouteRule(
-            rule_id="r1", operation="planning", purpose="chat", target_profile_id="p1"
-        )
-        result = resolve_team_override(
-            operation_route_rules=[rule],
-            chat_default_profile_id="team.default",
-            operation="planning",
-            purpose="chat",
-        )
-        assert result == "p1"
-
-    def test_wildcard_purpose_matches_when_no_exact_purpose_rule(self) -> None:
-        rule = TeamOperationRouteRule(
-            rule_id="r1", operation="planning", purpose=None, target_profile_id="p1"
-        )
-        result = resolve_team_override(
-            operation_route_rules=[rule],
-            chat_default_profile_id="team.default",
-            operation="planning",
-            purpose="anything",
-        )
-        assert result == "p1"
-
-    def test_exact_purpose_match_wins_over_wildcard(self) -> None:
-        wildcard = TeamOperationRouteRule(
-            rule_id="r-wild",
-            operation="planning",
-            purpose=None,
-            target_profile_id="wild",
-        )
-        specific = TeamOperationRouteRule(
-            rule_id="r-specific",
-            operation="planning",
-            purpose="gap_analysis",
-            target_profile_id="specific",
-        )
-        result = resolve_team_override(
-            operation_route_rules=[wildcard, specific],
-            chat_default_profile_id=None,
-            operation="planning",
-            purpose="gap_analysis",
-        )
-        assert result == "specific"
-
-    def test_agent_specific_rule_matches_only_its_agent(self) -> None:
-        rule = TeamOperationRouteRule(
-            rule_id="r1",
-            operation="planning",
-            agent_id="rico",
-            target_profile_id="p1",
-        )
-        # matches when the request is for that agent
-        assert (
-            resolve_team_override(
-                operation_route_rules=[rule],
-                chat_default_profile_id="team.default",
-                operation="planning",
-                purpose="chat",
-                agent_id="rico",
-            )
-            == "p1"
-        )
-        # falls back for any other agent
-        assert (
-            resolve_team_override(
-                operation_route_rules=[rule],
-                chat_default_profile_id="team.default",
-                operation="planning",
-                purpose="chat",
-                agent_id="other",
-            )
-            == "team.default"
-        )
-
-    def test_agent_specific_rule_wins_over_agent_agnostic_rule(self) -> None:
-        agnostic = TeamOperationRouteRule(
-            rule_id="r-any", operation="planning", target_profile_id="any"
-        )
-        specific = TeamOperationRouteRule(
-            rule_id="r-rico",
-            operation="planning",
-            agent_id="rico",
-            target_profile_id="rico",
-        )
-        result = resolve_team_override(
-            operation_route_rules=[agnostic, specific],
-            chat_default_profile_id=None,
-            operation="planning",
-            purpose="chat",
-            agent_id="rico",
-        )
-        assert result == "rico"
-
-    def test_non_matching_operation_falls_back_to_chat_default(self) -> None:
-        rule = TeamOperationRouteRule(
-            rule_id="r1", operation="planning", target_profile_id="p1"
-        )
-        result = resolve_team_override(
-            operation_route_rules=[rule],
-            chat_default_profile_id="team.default",
-            operation="routing",
-            purpose="chat",
-        )
-        assert result == "team.default"
-
-    def test_none_operation_only_matches_rules_with_none_operation(self) -> None:
-        # A rule always names a concrete operation (min_length=1 on
-        # TeamOperationRouteRule.operation) — a request with operation=None
-        # (e.g. the plain `build()` entrypoint) can never match one, and
-        # falls straight through to chat_default_profile_id.
-        rule = TeamOperationRouteRule(
-            rule_id="r1", operation="planning", target_profile_id="p1"
-        )
-        result = resolve_team_override(
-            operation_route_rules=[rule],
-            chat_default_profile_id="team.default",
-            operation=None,
-            purpose="chat",
-        )
-        assert result == "team.default"
-
 
 # ---------------------------------------------------------------------------
 # catalog — deep merge and to_policy()
@@ -718,7 +337,7 @@ class TestLoadModelCatalog:
         with pytest.raises(ValueError, match="mapping"):
             load_model_catalog(path)
 
-    def test_rules_survive_yaml_round_trip(self, tmp_path) -> None:
+    def test_agent_profile_overrides_survive_yaml_round_trip(self, tmp_path) -> None:
         content = {
             "version": "v1",
             "default_profile_by_capability": {"chat": "default.chat"},
@@ -734,20 +353,10 @@ class TestLoadModelCatalog:
                     "model": {"provider": "openai", "name": "gpt-4o-mini"},
                 },
             ],
-            "rules": [
-                {
-                    "rule_id": "r1",
-                    "capability": "chat",
-                    "target_profile_id": "fast.chat",
-                    "operation": "routing",
-                    "team_id": "team-a",
-                }
-            ],
+            "agent_profile_overrides": {"rico": "fast.chat"},
         }
         path = tmp_path / "catalog.yaml"
         path.write_text(yaml.dump(content), encoding="utf-8")
         catalog = load_model_catalog(path)
         policy = catalog.to_policy()
-        assert len(policy.rules) == 1
-        assert policy.rules[0].rule_id == "r1"
-        assert policy.rules[0].match.team_id == "team-a"
+        assert policy.agent_profile_overrides == {"rico": "fast.chat"}

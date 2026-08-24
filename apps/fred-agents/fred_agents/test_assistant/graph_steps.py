@@ -129,28 +129,6 @@ def _active_tuning_lines(context: GraphNodeContext) -> list[str]:
     ]
 
 
-def _model_probe_operation(user_text: str) -> str:
-    """
-    Derive the model-routing operation label from the scenario keyword prefix.
-
-    Why this helper exists:
-    - the test assistant needs one deterministic way to exercise different
-      routing-policy operation labels without turning model selection into a
-      generic tuning field
-
-    How to use it:
-    - pass the lower-cased user text routed to the `model_probe` scenario
-    - returns one stable operation label such as `routing` or `planning`
-
-    Example:
-    - `operation = _model_probe_operation("model routing explain this")`
-    """
-
-    if user_text.startswith("model planning"):
-        return "planning"
-    return "routing"
-
-
 # ── Step: dispatch ─────────────────────────────────────────────────────────────
 
 
@@ -265,7 +243,7 @@ async def model_probe_step(
     context: GraphNodeContext,
 ) -> StepResult:
     """
-    Optionally invoke a model with an explicit operation label for routing tests.
+    Optionally invoke the pod's bound chat model to confirm one is reachable.
 
     SSE events exercised:
     - status
@@ -276,11 +254,7 @@ async def model_probe_step(
     it returns a deterministic explanatory message instead of failing the whole
     test assistant.
     """
-    operation = _model_probe_operation(state.latest_user_text.lower().strip())
-    context.emit_status(
-        "model_probe",
-        f"Preparing optional model probe for operation '{operation}'.",
-    )
+    context.emit_status("model_probe", "Preparing optional model probe.")
     if context.model is None:
         lines = [
             (
@@ -300,39 +274,34 @@ async def model_probe_step(
 
     delay = _delay_seconds(context)
     system_prompt = _as_text(context.tuning_values.get("prompts.system"))
-    phase_prompt_key = (
-        "prompts.planning" if operation == "planning" else "prompts.routing"
-    )
-    phase_prompt = _as_text(context.tuning_values.get(phase_prompt_key))
+    probe_prompt = _as_text(context.tuning_values.get("prompts.routing"))
     verbose = _as_bool(context.tuning_values.get("settings.verbose"))
 
     instruction_lines = [
-        "You are Fred's graph-agent model-routing probe.",
-        "Reply in one concise sentence.",
-        f"Confirm that the requested operation label is '{operation}'.",
+        "You are Fred's graph-agent model probe.",
+        "Reply in one concise sentence confirming you are reachable.",
     ]
     if system_prompt:
         instruction_lines.append(f"Global system prompt override: {system_prompt}")
-    if phase_prompt:
-        instruction_lines.append(f"Phase-specific prompt: {phase_prompt}")
+    if probe_prompt:
+        instruction_lines.append(f"Probe prompt override: {probe_prompt}")
 
     response = await context.invoke_model(
         messages=[
             SystemMessage(content="\n".join(instruction_lines)),
             HumanMessage(
                 content=(
-                    "This is a runtime routing validation turn. "
+                    "This is a model probe validation turn. "
                     f"Original user message: {state.latest_user_text}"
                 )
             ),
         ],
-        operation=operation,
     )
     response_text = (
         response.content if isinstance(response.content, str) else str(response.content)
     )
     lines = [
-        f"Model probe complete for operation **`{operation}`**.",
+        "Model probe complete.",
         f"Model resolved: **`{resolved_model_name(response) or '(unknown)'}`**.",
         "",
         response_text,
@@ -343,7 +312,7 @@ async def model_probe_step(
     return StepResult(
         state_update={
             "final_text": "\n".join(lines),
-            "done_reason": f"model_probe_{operation}",
+            "done_reason": "model_probe_done",
         }
     )
 

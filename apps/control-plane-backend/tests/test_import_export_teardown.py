@@ -4,9 +4,8 @@
 identity and the calling operator, (b) wipe every OpenFGA tuple touching a
 non-preserved user, a team, a tag, or a document while never touching
 Keycloak — no `tag#parent@tag` / `document#parent@tag` tuple survives its own
-Postgres row being wiped, (c) wipe the six Postgres tables `POST /reset`
-never touches on its own (`team_metadata`, `prompt`, `prompt_category`) plus
-the three it already did, and (d) be safe to call twice in a row (a retry
+Postgres row being wiped, (c) wipe all team-owned Postgres state, including
+`team_routing_policy`, and (d) be safe to call twice in a row (a retry
 after a partial prior run must not raise).
 """
 
@@ -27,6 +26,7 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.bootstrap_models import PlatformBootstrapRow
 from control_plane_backend.models.prompt_models import PromptCategoryRow, PromptRow
+from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import UserSummary
 from fred_core import KeycloakUser, RebacReference, Resource
@@ -76,8 +76,8 @@ def _user_deps() -> UserServiceDependencies:
 
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     # agent_instance_models (AgentInstanceRow) and prompt_models (PromptRow) are
-    # already imported above — only orm_models still needs a registration-only import.
-    import fred_core.tasks.orm_models  # noqa: F401
+    # already imported above — only the task models still need a registration-only import.
+    import control_plane_backend.models.task_models  # noqa: F401
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / name}")
     async with engine.begin() as conn:
@@ -111,6 +111,14 @@ async def _seed(engine: AsyncEngine, *, completed_by: str | None) -> None:
         session.add(DocumentMetadataRow(document_uid="doc-1"))
         session.add(TeamMetadataRow(id=TEAM_ID, name="fredlab"))
         session.add(
+            TeamRoutingPolicyRow(
+                team_id=TEAM_ID,
+                version=1,
+                chat_default_profile_id="chat.default",
+                agent_profile_overrides_json='{"agent-1":"chat.medium"}',
+            )
+        )
+        session.add(
             PromptCategoryRow(
                 category_id="cat-1",
                 team_id=TEAM_ID,
@@ -137,6 +145,7 @@ async def _row_counts(engine: AsyncEngine) -> dict[str, int]:
             ("tags", TagRow),
             ("documents", DocumentMetadataRow),
             ("teams", TeamMetadataRow),
+            ("routing_policies", TeamRoutingPolicyRow),
             ("prompts", PromptRow),
             ("prompt_categories", PromptCategoryRow),
         ):
@@ -254,10 +263,12 @@ async def test_run_teardown_preserves_identities_wipes_everything_else(
             "tags": 0,
             "documents": 0,
             "teams": 0,
+            "routing_policies": 0,
             "prompts": 0,
             "prompt_categories": 0,
         }
         assert report.prompt_categories_deleted == 1
+        assert report.routing_policies_deleted == 1
 
         # The bootstrap row itself is never touched by any teardown step.
         store = PlatformBootstrapStore(engine)

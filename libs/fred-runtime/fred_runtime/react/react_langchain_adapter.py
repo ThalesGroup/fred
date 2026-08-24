@@ -49,13 +49,10 @@ from .react_message_codec import (
     to_runnable_config,
 )
 from .react_model_adapter import (
-    REACT_MODEL_OPERATION_PLANNING,
-    REACT_MODEL_OPERATION_ROUTING,
     TRACE_MODEL_SPAN_NAME,
     CompiledReActAgent,
     extract_model_name_from_model_response,
     extract_model_name_from_object,
-    infer_react_model_operation_from_messages,
 )
 from .react_stream_adapter import (
     StreamChunkDecode,
@@ -75,8 +72,6 @@ from .react_stream_adapter import (
 
 __all__ = [
     "CompiledReActAgent",
-    "REACT_MODEL_OPERATION_PLANNING",
-    "REACT_MODEL_OPERATION_ROUTING",
     "StreamChunkDecode",
     "TRACE_MODEL_SPAN_NAME",
     "assistant_delta_from_stream_event",
@@ -88,7 +83,6 @@ __all__ = [
     "final_assistant_message",
     "from_langchain_message",
     "graph_input_from_react_input",
-    "infer_react_model_operation_from_messages",
     "merge_sources",
     "merge_ui_parts",
     "normalize_token_usage",

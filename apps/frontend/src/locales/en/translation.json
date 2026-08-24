@@ -401,13 +401,11 @@
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
-      "reasoningOff": "Off",
-      "reasoningOn": "On",
-      "reasoningLow": "Low",
-      "reasoningMedium": "Medium",
-      "reasoningHigh": "High",
-      "reasoningHint": "Higher effort gives a more thorough answer — and takes longer to produce.",
-      "selectLibraryFirst": "Select a library first."
+      "reasoningOff": "Fast",
+      "reasoningOn": "Boost",
+      "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
+      "selectLibraryFirst": "Select a library first.",
+      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
@@ -1119,6 +1117,33 @@
         "reasoningOnToast": "Reasoning enabled for this model.",
         "reasoningToggleError": "Could not change this model's reasoning setting."
       },
+      "platformModelBindings": {
+        "openButton": "Platform model binding",
+        "title": "Platform chat model binding",
+        "subtitle": "Assert one concrete (provider, name) chat model across every runtime pod — overrides each pod's own catalog default. Leave unset to keep today's per-pod behavior.",
+        "loading": "Loading the platform chat model binding…",
+        "loadError": "Could not load the platform chat model binding.",
+        "capability": {
+          "chat": "Chat"
+        },
+        "podDefault": "Using pod default",
+        "boundState": "{{provider}} / {{name}}",
+        "editAction": "Edit",
+        "deleteAction": "Reset to pod default",
+        "saveToast": "Platform chat model binding saved.",
+        "saveError": "Could not save the platform chat model binding.",
+        "deleteToast": "Platform chat model binding reset to pod default.",
+        "deleteError": "Could not reset the platform chat model binding.",
+        "form": {
+          "provider": "Provider",
+          "name": "Model name",
+          "settingsTitle": "Settings (JSON)",
+          "settingsHint": "A JSON object of provider settings, e.g. {\"temperature\": 0.2}. Unknown keys are rejected — there is no headers, cookies, or auth field here, so never put a credential in a value.",
+          "settingsInvalidJson": "Enter a valid JSON object.",
+          "save": "Save",
+          "cancel": "Cancel"
+        }
+      },
       "corpusAudit": {
         "title": "Corpus audit",
         "subtitle": "Compares each document's processing-stage record against what is actually present in the content store and vector store, and lets you clean up orphan data.",
@@ -1618,6 +1643,7 @@
         "stopIngestionTitle": "Stop ingestion"
       },
       "errorTooltip": {
+        "reported": "Reported by the pipeline",
         "stage": "Stage: {{stage}}"
       },
       "empty": {
@@ -1690,8 +1716,17 @@
         "prev": "Previous page"
       },
       "status": {
+        "copyDetail": "Copy detail",
+        "detailCopied": "Detail copied",
+        "detailTitle": "Detail: {{label}}",
         "excludedFromSearch": "Excluded from search",
         "failed": "Error",
+        "folderFailedMore_one": "and {{count}} more",
+        "folderFailedMore_other": "and {{count}} more",
+        "folderFailedTooltip_one": "{{count}} document failed to process:",
+        "folderFailedTooltip_other": "{{count}} documents failed to process:",
+        "folderFailed_one": "{{count}} error",
+        "folderFailed_other": "{{count}} errors",
         "justDone": "Done",
         "processing": "Processing...",
         "raw": "Pending",
@@ -1765,6 +1800,7 @@
           "capabilities": "Features",
           "corpusAudit": "Corpus audit",
           "migration": "Platform data",
+          "platformRoles": "Platform roles",
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams"
@@ -1938,6 +1974,49 @@
         "copied": "Copied!"
       }
     },
+    "platformRoles": {
+      "title": "Platform roles",
+      "holders": {
+        "title": "Current role holders",
+        "empty": "No platform roles granted yet.",
+        "loading": "Loading platform roles…",
+        "error": "Platform roles could not be loaded.",
+        "rootBadge": "Primary admin",
+        "table": {
+          "user": "User",
+          "roles": "Roles"
+        }
+      },
+      "roles": {
+        "platform_admin": "Platform admin",
+        "platform_observer": "Platform observer"
+      },
+      "grant": {
+        "title": "Grant a role",
+        "userLabel": "User",
+        "userPlaceholder": "Search for a user",
+        "clearSelection": "Clear selected user",
+        "roleLabel": "Role",
+        "rootOnlyHint": "Only the primary admin can appoint or revoke platform admins.",
+        "submit": "Grant role",
+        "successSummary": "{{role}} granted to {{user}}",
+        "errors": {
+          "summary": "Could not grant the role",
+          "fallbackDetail": "An unexpected error occurred while granting the role.",
+          "forbiddenDetail": "Only the primary admin can manage platform admins.",
+          "conflictDetail": "Root bootstrap has never run on this platform."
+        }
+      },
+      "revoke": {
+        "ariaLabel": "Revoke {{role}} from {{user}}",
+        "successSummary": "{{role}} revoked from {{user}}",
+        "errors": {
+          "summary": "Could not revoke the role",
+          "fallbackDetail": "An unexpected error occurred while revoking the role.",
+          "forbiddenDetail": "This role is protected — only the primary admin can revoke platform admins, and the primary admin itself is unrevocable."
+        }
+      }
+    },
     "adminTeams": {
       "title": "Teams",
       "existingTeams": {
@@ -1973,7 +2052,16 @@
       "team_admin": "Admin",
       "team_editor": "Editor",
       "team_analyst": "Analyst",
-      "team_member": "Member"
+      "team_member": "Member",
+      "descriptions": {
+        "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
+        "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
+        "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
+        "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
+      },
+      "warnings": {
+        "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
+      }
     },
     "teamSettings": {
       "members": {
@@ -2030,20 +2118,19 @@
         "title": "Model routing",
         "defaultProfile": {
           "title": "Default chat model",
-          "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
+          "explanation": "The model profile used for this team's managed chat agents when no agent override matches below. Leave empty to use the deployment default.",
           "label": "Default profile id",
           "useDeploymentDefault": "Use deployment default"
         },
-        "operationRules": {
-          "title": "Operation overrides",
-          "explanation": "Override the default model for a specific runtime operation (e.g. planning), optionally refined further by purpose.",
-          "operation": "Operation",
-          "purpose": "Purpose (optional)",
-          "agent": "Agent (optional)",
-          "agentAny": "All agents",
+        "agentOverrides": {
+          "title": "Agent overrides",
+          "explanation": "Override the default model for one specific agent.",
+          "agent": "Agent",
+          "agentPlaceholder": "Select an agent",
           "targetProfileId": "Profile id",
           "targetProfilePlaceholder": "Select a model",
-          "addRule": "Add rule"
+          "addRule": "Add override",
+          "incompleteRow": "Pick both an agent and a profile for every override row (or remove the row) before saving."
         },
         "profileUnavailable": "No longer enabled for this team",
         "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
@@ -2060,7 +2147,9 @@
           "label": "Joining mode",
           "support": "Users can join your team freely or by invitation only.",
           "open": "Open",
-          "inviteOnly": "Invite only"
+          "inviteOnly": "Invite only",
+          "manual": "Manual only",
+          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
         },
         "visibility": {
           "label": "Team visibility",

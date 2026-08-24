@@ -54,8 +54,9 @@ async def aggregate_capability_catalog(
     Best-effort: an unreachable pod is logged and skipped (its capabilities are
     simply absent this pass), never fatal. Later-registration wins on id
     collision, matching the aggregation the product catalog already performs —
-    with one exception: for `kind="model"` entries, `model_profile_ids` and
-    `model_thinking_profile_ids` are unioned across pods rather than
+    with one exception: for `kind="model"` entries, `model_profile_ids`,
+    `model_chat_profile_ids`, and `model_thinking_profile_ids` are unioned
+    across pods rather than
     overwritten (2026-08-01, GitHub #2191). A `(provider, name)` pair routed
     by more than one pod, each with its own `profile_id` namespace, would
     otherwise have the earlier pod's profile ids silently dropped —
@@ -100,9 +101,8 @@ async def aggregate_capability_catalog(
         # `kind="model"` projections (OBSERV-02 v3, RFC §8.7) — a third,
         # separate fetch, same best-effort contract as the agent fetch above:
         # `None` on an unreachable pod, treated as empty here.
-        entries = entries + (
-            await _model_capabilities_for_source(source.base_url) or []
-        )
+        pod_models = await _model_capabilities_for_source(source.base_url)
+        entries = entries + (pod_models.entries if pod_models is not None else [])
         for entry in entries:
             if not _CAPABILITY_ID_RE.fullmatch(entry.id):
                 # A pod on pre-#1988 code (or a third-party pod) can advertise
@@ -165,6 +165,10 @@ async def aggregate_capability_catalog(
                         "model_profile_ids": _union_profile_ids(
                             existing.model_profile_ids, entry.model_profile_ids
                         ),
+                        "model_chat_profile_ids": _union_profile_ids(
+                            existing.model_chat_profile_ids,
+                            entry.model_chat_profile_ids,
+                        ),
                         "model_thinking_profile_ids": _union_profile_ids(
                             existing.model_thinking_profile_ids,
                             entry.model_thinking_profile_ids,
@@ -183,58 +187,99 @@ async def aggregate_capability_catalog(
     return catalog
 
 
-async def universally_available_model_profile_ids(
+async def universally_available_chat_model_profile_ids(
     deps: ProductServiceDependencies,
+    *,
+    source_runtime_ids: set[str] | None = None,
 ) -> frozenset[str]:
-    """`model_profile_ids` present on every enabled, model-capable pod — the
-    intersection dual of `aggregate_capability_catalog`'s union above
-    (2026-08-02, `TEAM-ROUTING-POLICY-RFC.md` §7.2/§9).
+    """Chat profile ids resolvable on every pod relevant to one team.
+
+    This is the intersection dual of `aggregate_capability_catalog`'s union
+    above (2026-08-02, `TEAM-ROUTING-POLICY-RFC.md` §7.2/§9). It deliberately
+    consumes `model_chat_profile_ids`, not every model profile: the current
+    team policy can select chat models only.
+
+    "Available" also means semantically identical: a shared profile id must
+    map to the same `(provider, name)` capability id on every pod. Otherwise
+    the chosen model would depend on which pod serves the turn.
 
     `aggregate_capability_catalog`'s union answers "does at least one pod
     know this profile" — the right question for admission/enablement, where
     a capability just needs to exist somewhere to be toggled on. A team
     routing policy asks a different question: whichever pod ends up serving
-    a given turn must be able to resolve the chosen profile, or
-    `RoutedChatModelFactory.select` (fred-runtime) fails closed with
-    `TeamRoutingProfileDriftError`. Validating a routing-policy write against
-    this intersection instead of the union means a write that succeeds can
-    never drift-fail at runtime on some other pod.
+    a given turn must be able to resolve the chosen profile. Validating a
+    routing-policy write against this intersection instead of the union
+    means a write is checked against the pods that can actually serve it.
 
-    Fails closed, unlike `aggregate_capability_catalog`'s best-effort skip: an
-    enabled pod that is genuinely unreachable (`_model_capabilities_for_source`
-    returns `None`) makes the whole result `frozenset()` rather than being
-    silently excluded — excluding it would let the *other* pods' common
-    profiles look "universal" while this one is down, which is exactly the
-    write-now-drift-later gap this function exists to close (2026-08-04,
-    PR #2204 review). A pod that answered but genuinely registers no model
-    (`[]`, e.g. a non-agent pod) is not the same thing and is excluded as
-    before — it never was model-capable, so it has no opinion to poison the
-    intersection with.
+    `source_runtime_ids` scopes the intersection to the pods that matter for
+    one team — pass the `source_runtime_id`s of that team's own
+    `AgentInstanceRecord`s (same input `capabilities.impact
+    .resolve_availability_for_team` takes). Each `AgentInstance` is pinned to
+    exactly one pod for its whole life (`source_runtime_id` is set once at
+    enrollment and a turn is always prepared against that same pod), so a
+    pod this team has no instance on has no opinion on what "available"
+    means for this team. `None` or an empty set (a team with no agent
+    instances yet, so no pod can be ruled out as irrelevant) falls back to
+    every enabled source.
+
+    Best-effort per relevant pod, not fail-closed platform-wide as an earlier
+    revision did (PR #2204 review): an unreachable pod outside
+    `source_runtime_ids` used to still zero the result for every team on the
+    deployment, which is disproportionate — a pod a team does not use going
+    down must not block that team's routing UI. A currently-unreachable pod
+    the team DOES use is simply skipped here too; the write-time check only
+    needs to catch a KNOWN mismatch on a pod it can currently see. Genuine
+    drift — a pod resolving a turn for a profile it turns out not to carry —
+    is still caught at the moment it would matter by
+    `RoutedChatModelFactory.select` (fred-runtime) raising
+    `TeamRoutingProfileDriftError`; that per-turn check is what has to stay
+    airtight, not this one. A pod that answered but genuinely registers no
+    model (`[]`, e.g. a non-agent pod) is excluded the same way — it never
+    was model-capable, so it has no opinion to poison the intersection with.
     """
 
     # Lazy import for the same reason as `aggregate_capability_catalog` above
     # — breaks the product.service <-> capabilities import cycle.
     from control_plane_backend.product.service import _model_capabilities_for_source
 
-    per_pod_profile_ids: list[set[str]] = []
+    per_pod_profiles: list[dict[str, str]] = []
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
             continue
-        entries = await _model_capabilities_for_source(source.base_url)
-        if entries is None:
-            logger.warning(
-                "[capability-catalog] %s unreachable while computing universally "
-                "available model profiles — failing closed (no profile is "
-                "certified available this pass) rather than risk approving a "
-                "routing-policy write this pod cannot actually serve",
-                source.base_url,
-            )
-            return frozenset()
-        if not entries:
+        if source_runtime_ids and source.runtime_id not in source_runtime_ids:
             continue
-        per_pod_profile_ids.append(
-            {profile_id for entry in entries for profile_id in entry.model_profile_ids}
-        )
-    if not per_pod_profile_ids:
+        pod_models = await _model_capabilities_for_source(source.base_url)
+        if pod_models is None:
+            logger.warning(
+                "[capability-catalog] %s unreachable while computing available "
+                "chat model profiles (source_runtime_ids=%s) — skipping this "
+                "pod (best-effort) rather than failing closed for the whole "
+                "result",
+                source.base_url,
+                source_runtime_ids,
+            )
+            continue
+        if not pod_models.entries:
+            continue
+        profile_models: dict[str, str] = {}
+        conflicting_profile_ids: set[str] = set()
+        for entry in pod_models.entries:
+            for profile_id in entry.model_chat_profile_ids:
+                existing_model_id = profile_models.get(profile_id)
+                if existing_model_id is not None and existing_model_id != entry.id:
+                    conflicting_profile_ids.add(profile_id)
+                    continue
+                profile_models[profile_id] = entry.id
+        for profile_id in conflicting_profile_ids:
+            profile_models.pop(profile_id, None)
+        per_pod_profiles.append(profile_models)
+    if not per_pod_profiles:
         return frozenset()
-    return frozenset(set.intersection(*per_pod_profile_ids))
+    shared_profile_ids = set.intersection(
+        *(set(profiles) for profiles in per_pod_profiles)
+    )
+    return frozenset(
+        profile_id
+        for profile_id in shared_profile_ids
+        if len({profiles[profile_id] for profiles in per_pod_profiles}) == 1
+    )

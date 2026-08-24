@@ -5,13 +5,14 @@ from typing import Any, Literal
 
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability import CapabilityCatalogEntry, ChatControlDescriptor
-from fred_sdk.contracts.context import TeamOperationRouteRule
+from fred_sdk.contracts.context import ModelBinding
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
+    InfoBanner,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     UploadWarning,
@@ -139,6 +140,20 @@ class FrontendConfig(BaseModel):
             "'not completed' alone as 'must show the bootstrap page'. The "
             "frontend must gate on this field, not re-derive the ReBAC/auth "
             "predicate itself."
+        ),
+    )
+    info_banner: InfoBanner | None = Field(
+        default=None,
+        description=(
+            "Deployer-configured global announcement banner, from "
+            "`platform.frontend.info_banner`. `None` "
+            "when the deployment configures none — the frontend then renders "
+            "nothing. Deliberately on this public pre-auth surface, not the "
+            "authenticated `FrontendBootstrap`: the banner shows on every "
+            "page, including the GCU-acceptance and root-bootstrap screens, "
+            "which render before `/frontend/bootstrap` can succeed. Carries "
+            "only deployer-authored announcement content — never anything "
+            "sensitive."
         ),
     )
 
@@ -397,11 +412,11 @@ class ExecutionPreparation(BaseModel):
             "contract)."
         ),
     )
-    operation_route_rules: list[TeamOperationRouteRule] = Field(
-        default_factory=list,
+    agent_profile_overrides: dict[str, str] = Field(
+        default_factory=dict,
         description=(
-            "Team's per-operation model-routing overrides, same resolution "
-            "notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2)."
+            "Team's per-agent model-profile overrides (agent_id -> profile_id), "
+            "same resolution notes as chat_default_profile_id above."
         ),
     )
     reasoning_enabled_model_ids: list[str] = Field(
@@ -856,3 +871,11 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # above, so adding this list costs one extra cheap store read, not a new
     # round trip.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Platform-operator `chat` model binding, resolved fresh on this same
+    # per-turn call — same trust boundary and same reasoning as
+    # reasoning_enabled_model_ids immediately above: a stale or
+    # client-forwarded copy could keep routing to a binding an admin already
+    # cleared. `None` means no platform chat binding is set (every
+    # deployment before this feature). V1 is chat-only — no
+    # language/embedding/image sibling field exists here.
+    platform_chat_model_binding: ModelBinding | None = None

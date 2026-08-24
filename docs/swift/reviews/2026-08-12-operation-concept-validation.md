@@ -8,6 +8,17 @@
 
 **Tracking:** blocks the model-routing simplification (`capability + operation -> model profile`); no GitHub issue filed for the simplification itself yet
 
+**Superseded (2026-08-15, branch `llm-routing-simplify`):** this brief's verdict
+(§1, keep and redefine `operation`/`TeamOperationRouteRule`) was not the path
+taken. `TeamRoutingPolicy.operation_rules`/`TeamOperationRouteRule` were
+removed entirely and replaced with a flat `agent_profile_overrides: dict[str,
+str]` (`agent_id -> profile_id`, no `operation`/`purpose` criteria at all) —
+see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §37 and
+`RUNTIME-EXECUTION-CONTRACT.md` §8.32 for the current, authoritative shape.
+Kept below as the historical investigation record; do not read §1's verdict
+or any `TeamOperationRouteRule`/`operation_route_rules` reference below as
+current.
+
 ---
 
 ## 1. Verdict

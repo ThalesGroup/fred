@@ -1,3 +1,5 @@
+/* 272px: kept in sync with the other nav panels (see TeamContentNavbar) — they
+ * swap in the same grid column, a mismatch makes the column jump. */
 .marketplace-navbar-container {
-  width: 240px;
+  width: 272px;
 }

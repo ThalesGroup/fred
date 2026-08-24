@@ -393,19 +393,16 @@ export type ConversationTurn = {
   agent_response: string;
   user_message: string;
 };
-export type TeamOperationRouteRule = {
-  agent_id?: string | null;
-  operation?: string | null;
-  purpose?: string | null;
-  rule_id: string;
-  target_profile_id: string;
-};
 export type RuntimeContext = {
   access_token?: string | null;
   access_token_expires_at?: number | null;
   agent_instance_id?: string | null;
+  /** Team-authored per-agent model-profile overrides (`agent_id -> profile_id`), same resolution/precedence notes as chat_default_profile_id above. `None`, not `{}`, when unset — matches every other Group C field so `model_dump(exclude_none=True)` (`to_legacy_context`) omits it for the common case of no team policy. For the `chat` capability, a platform-operator binding (`BoundRuntimeContext.platform_chat_model_binding`, resolved trusted per turn — never on this client-forwarded context) wins over this field unconditionally when set — that is the feature's intended precedence, not a bug: the platform operator is the authority on what is actually reachable/licensed in a given deployment; a pod-local ops-authored override can never beat that. */
+  agent_profile_overrides?: {
+    [key: string]: string;
+  } | null;
   attachments_markdown?: string | null;
-  /** Team-chosen default chat model profile id (TEAM-ROUTING-POLICY-RFC.md §3/§8), resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml rule matches (§8.3) — the static YAML rules remain an ops-level override this can never beat. */
+  /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
   checkpoint_id?: string | null;
   context_prompt_text?: string | null;
@@ -416,8 +413,6 @@ export type RuntimeContext = {
   include_corpus_scope?: boolean | null;
   include_session_scope?: boolean | null;
   language?: string | null;
-  /** Team-authored per-operation model-routing overrides (TEAM-ROUTING-POLICY-RFC.md §3/§8), same resolution/precedence notes as chat_default_profile_id above. `None`, not `[]`, when unset — matches every other Group C list field so `model_dump(exclude_none=True)` (`to_legacy_context`) omits it for the common case of no team policy. */
-  operation_route_rules?: TeamOperationRouteRule[] | null;
   /** The user's per-question reasoning choice (REASON-01 level 4, `MODEL-REASONING-ENABLEMENT-RFC.md` §7), set by the composer toggle. Travels per turn on this context exactly like `search_policy`/`search_rag_scope` — reasoning is a property of the model call, not a tool, so it is a platform chat option and NOT a capability's `turn_options` slice.
     
     TRI-STATE, and the distinction matters:
@@ -716,16 +711,20 @@ export type McpCatalogResponse = {
   servers: McpCatalogEntry[];
 };
 export type ModelCatalogEntry = {
+  chat_profile_ids?: string[];
   description?: string | null;
   display_name?: string | null;
   id: string;
   name: string;
   profile_ids?: string[];
   provider: string;
-  reasoning_effort?: string | null;
   thinking_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
+  agent_chat_profile_overrides?: {
+    [key: string]: string;
+  };
+  default_chat_profile_id?: string | null;
   models: ModelCatalogEntry[];
 };
 export type Channel =
@@ -931,9 +930,9 @@ export type CapabilityCatalogEntry = {
   icon: string;
   id: string;
   kind?: "tool" | "agent" | "model";
+  model_chat_profile_ids?: string[];
   model_display_name?: string | null;
   model_profile_ids?: string[];
-  model_reasoning_effort?: string | null;
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;

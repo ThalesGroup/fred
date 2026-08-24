@@ -42,10 +42,6 @@ from fred_runtime.capabilities import (
     build_capability_context,
 )
 from fred_runtime.capabilities.demo import DemoEchoCapability, DemoEchoConfig
-from fred_runtime.react.react_model_adapter import (
-    REACT_MODEL_OPERATION_ROUTING,
-    infer_react_model_operation_from_messages,
-)
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -197,10 +193,7 @@ def _build_capability_agent(
             always_require_tools=tuple(always_require_tools or ()),
         ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
-        chat_model_factory=None,
         definition=_definition(),
-        infer_operation_from_messages=infer_react_model_operation_from_messages,
-        default_operation=REACT_MODEL_OPERATION_ROUTING,
         available_tool_names={"demo_echo", "demo_gadget"},
         capability_middleware=block.middleware,
         capability_hitl=block.hitl,

@@ -82,14 +82,12 @@ class _FakeContext:
             f"Unexpected tool invocation in this test: {tool_ref} {payload}"
         )
 
-    async def invoke_model(self, messages, *, operation: str = "default"):
-        raise AssertionError(f"Unexpected model invocation in this test: {operation}")
+    async def invoke_model(self, messages):
+        raise AssertionError("Unexpected model invocation in this test")
 
-    async def invoke_structured_model(
-        self, output_model, messages, *, operation: str = "default"
-    ):
+    async def invoke_structured_model(self, output_model, messages):
         raise AssertionError(
-            f"Unexpected structured model invocation in this test: {output_model} {operation}"
+            f"Unexpected structured model invocation in this test: {output_model}"
         )
 
 

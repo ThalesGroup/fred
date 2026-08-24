@@ -178,6 +178,10 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
+  - `info_banner` — **added 2026-08-19** — optional deployer-configured
+    global announcement banner (`platform.frontend.info_banner`), rendered
+    full-width above the app on every page. Omitted/`null` → nothing
+    rendered. See §42 for why it is pre-auth.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -942,10 +946,49 @@ task kinds that support cooperative cancellation.
 
 ### Persistence
 
-Two new tables in `fred_swift` (Alembic-managed, both mandatory):
+**One pair of tables per task-producing backend, prefixed by its owner** (settled
+2026-08-14, issue #2170 — supersedes the "dedicated database per backend" design
+in `TASK-EVENT-STREAM-RFC.md` rev. 4 §2.9, which was confirmed but never built):
 
-- `task_run` — current-state summary (one row per task, updated in place)
-- `task_event_log` — append-only event journal (one row per `TaskEvent`, source of truth for SSE replay)
+| Owner           | Tables                              | Alembic tree           |
+| --------------- | ----------------------------------- | ---------------------- |
+| control-plane   | `cp_task_run`, `cp_task_event_log`  | `alembic_version_control_plane` |
+| knowledge-flow  | `kf_task_run`, `kf_task_event_log`  | `alembic_version_knowledge_flow` |
+| evaluation      | `task_run`, `task_event_log`        | its own database (provisioned 2026-07-07) |
+
+- `<prefix>task_run` — current-state summary (one row per task, updated in place)
+- `<prefix>task_event_log` — append-only event journal (one row per `TaskEvent`, source of truth for SSE replay)
+
+Column definitions live once, in `fred_core.tasks.orm_models`, as declarative
+mixins (`TaskRunColumns` / `TaskEventLogColumns`); each backend declares the
+concrete pair on **its own** `Base` and hands the pair to `TaskStore` /
+`TaskService.build` as a `TaskTables`. fred-core maps nothing itself.
+
+**Why prefixes rather than a database per backend.** control-plane and
+knowledge-flow share the `fred` database, and both mapped the *same* `task_run`
+on the shared `CoreBase`. Nothing scoped either backend's `GET /tasks` to the
+rows it created, so each returned the other's and the Activity page — which
+queries every backend and merges client-side, by design — listed every task
+twice. Distinct names per owner fix that at the schema layer with no new
+infrastructure, no second engine, and no `RemoteTaskClient`-style coupling. They
+also take these two tables out of the shared-`CoreBase` ownership ambiguity of
+issue #2314: each pair now appears in exactly one backend's metadata, which is
+what `make_alembic_env`'s `include_name` filter reads to decide what a tree owns.
+
+Postgres scopes index names per schema, so **every** index and constraint name
+embeds its table name (`ix_cp_task_run_kind`, `uq_kf_task_event_log_task_seq`, …)
+— built by `task_run_table_args` / `task_event_log_table_args`, never hand-written.
+`import_export/api.py` derives the single-active-migration index name it matches
+in an `IntegrityError` from `single_active_migration_index_name` for the same reason.
+
+Task rows are progress bookkeeping, so the split ships with **no backfill**. It
+also does **not drop** the old shared `task_run`/`task_event_log`: they are left
+orphaned for a later release. The two Temporal workers have no `migration:` block
+in `deploy/charts/fred/values.yaml`, so they get no scale-down hook and keep
+running old code — which writes the shared table through an unguarded activity
+that is the first step of every push-file ingestion. Dropping it mid-deploy would
+fail those workflows outright and lose the document, not just its task row.
+Expand now, contract in a later release.
 
 ### Ownership boundary
 
@@ -1325,9 +1368,9 @@ kind-agnostic).
 
 **Catalog projection, cross-pod.** `fred-runtime` exposes
 `GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
-per distinct `(provider, name)` pair — not per `profile_id` (a model used by
-both the `chat` and `language` capability is one enablement decision, the
-unit an admin actually reasons about) — and deriving the id itself
+per distinct `(provider, name)` pair — not per `profile_id` (a concrete model
+has one enablement decision even if different typed consumers eventually use
+it) — and deriving the id itself
 (`model_capability_id(provider, name)`, fred-sdk). Control-plane
 (`product/service.py::_model_capabilities_for_source`) fetches that endpoint
 per runtime source as a third catalog fetch alongside the existing tool and
@@ -1341,14 +1384,18 @@ last-registration-wins shape silently dropped profiles from whichever pod
 lost the race).
 
 **`CapabilityCatalogEntry` is not a uniform shape across kinds — it is a
-tagged union in practice.** `model_profile_ids: tuple[str, ...]` and
+tagged union in practice.** `model_profile_ids: tuple[str, ...]`,
+`model_chat_profile_ids: tuple[str, ...]`, and
 `model_thinking_profile_ids: tuple[str, ...]` (REASON-01, §33) are real
 fields carried **only** for `kind="model"` — empty for `tool`/`agent`, never
 the reverse. `config_fields`, `team_settings_fields`, `assets`, and
 `default_capability_ids` are conversely always empty for `kind="model"`.
 Treat `kind` as the discriminator when reading this type; a per-kind field
 being present or empty is the contract, not an implementation detail to
-paper over.
+paper over. `model_profile_ids` preserves every profile for model enablement;
+`model_chat_profile_ids` is its explicitly typed chat subset and is the only
+subset the V1 team-routing picker/write path consumes. Capability is never
+inferred from a profile-id prefix.
 
 **Runtime enforcement is fail-closed and differs by kind, deliberately.**
 `kind="tool"`/`kind="agent"` enforce at **write time** — `can_use_capability`
@@ -2056,11 +2103,13 @@ that stayed open past an admin's platform-wide toggle would keep reasoning
 active for the rest of that session: the enforced value is now current as of
 the next turn, not the next session.
 
-`chat_default_profile_id`/`operation_route_rules` are unaffected by this
+`chat_default_profile_id`/`agent_profile_overrides` are unaffected by this
 change and remain resolved once at session prep and forwarded by the frontend
 unchanged — routing-profile choice is a cost/comfort lever already bounded by
 the per-turn model authorization check, not an admin control, so the same
-freshness requirement does not apply to it.
+freshness requirement does not apply to it. The platform-wide `chat` model
+binding (§40, issue #2365) is a fourth, unrelated field that *does* get the
+freshness treatment — see `RUNTIME-EXECUTION-CONTRACT.md` §8.55.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 
@@ -2359,55 +2408,61 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 `/team/:teamId/settings/activity`) remain the canonical, ack-capable place
 for this data; no replacement preset was added.
 
-## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118)
+## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
+
+**2026-08-16 — chat profile typing (#2365).** The pod catalog now projects
+`model_chat_profile_ids` explicitly alongside the complete
+`model_profile_ids` inventory. Team picker, universal multi-pod intersection,
+and write validation consume the chat subset only. This closes the case where
+a known non-chat profile could be saved into `chat_default_profile_id` and
+then ignored by the runtime; profile-id naming remains non-semantic.
 
 A team (or personal space) chooses which of the models already available to
-it (`can_use`-enabled, see above) is the default for
-managed execution, and may override that default for specific operations
-(e.g. `planning`). This feature never grants new model access — it only lets
-the holder of existing access express a preference among it. Runtime-side
-merge/fail-closed rules are `RUNTIME-EXECUTION-CONTRACT.md` §8.32; this
-section is the product/data/API contract.
+it (`can_use`-enabled, see above) is the default for managed execution, and
+may override that default for specific agents. This feature never grants new
+model access — it only lets the holder of existing access express a
+preference among it. Runtime-side merge/fail-closed rules are
+`RUNTIME-EXECUTION-CONTRACT.md` §8.32; this section is the product/data/API
+contract.
 
 **Data model** (`TeamRoutingPolicy`): `team_id`, `version`,
-`chat_default_profile_id: str | None`, `operation_rules:
-list[TeamOperationRouteRule]` (`rule_id`, `operation: str | None`, `purpose:
-str | None`, `agent_id: str | None` — per-agent override, 2026-08-09,
-issue #2267 — `target_profile_id`). `rule_id` unique per team policy;
-`(operation, purpose, agent_id)` unique per team policy. `operation`,
-`purpose`, and `agent_id` are each optional (`null` = wildcard, matches every
-value). `null` `chat_default_profile_id` means "use the runtime catalog
-default."
+`chat_default_profile_id: str | None`, `agent_profile_overrides: dict[str,
+str]` — a flat `agent_id -> profile_id` map, one profile per agent. `null`
+`chat_default_profile_id` means "use the runtime catalog default." There is
+no separate rule/operation/purpose concept: a `dict` key is structurally
+unique, so there is nothing to disambiguate at write time and nothing that
+can collide.
 
-**Resolution (deterministic — most-specific match wins, ambiguity rejected at
-write time, never at resolve time):** among the rules whose non-null criteria
-all match the request, the one defining the most criteria (highest
-specificity: 0-3, counting `operation`/`purpose`/`agent_id`) wins; else
-`chat_default_profile_id` if set; else the runtime catalog default for
-capability `chat`. Write-time validation (below) guarantees the winner is
-always unambiguous — two rules that could both match one request with equal
-specificity can never coexist in a stored policy, so "most specific wins" has
-exactly one answer for every possible request. `resolve_team_override`
-(fred-runtime) additionally breaks a tie by declaration order as a defensive
-fallback; this should be unreachable given the write-time guarantee and exists
-only so a resolve call never raises.
+**Resolution (deterministic two-step fallback, no specificity scoring):**
+`agent_profile_overrides.get(agent_id)` if the agent has an override, else
+`chat_default_profile_id` if set, else the runtime catalog default for
+capability `chat`. `resolve_team_override` (fred-runtime) is exactly this
+lookup — there is no tie to break, since a dict key maps to exactly one
+value.
 
-**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects:
-any referenced profile whose derived capability id
+**Write-time validation** (`PATCH /teams/{team_id}/routing-policy`) rejects
+any referenced profile (from `chat_default_profile_id` or any
+`agent_profile_overrides` value) whose derived capability id
 (`model_capability_id(provider, name)` — coarser-grained than a profile id,
 since two profiles can share one `(provider, name)`) is not currently
-`can_use`-enabled for the team; any profile not present on **every** enabled,
-model-capable pod (`capabilities/catalog.py::universally_available_model_profile_ids`,
+`can_use`-enabled for the team, or not present on **every pod the team's own
+agent instances actually run on**
+(`capabilities/catalog.py::universally_available_chat_model_profile_ids`,
 intersection — not the union this section's admission catalog uses, since
-whichever pod serves a turn must resolve the chosen profile or fail closed at
-runtime); a duplicate `rule_id`; two rules sharing an exact `(operation,
-purpose, agent_id)` triplet; and two rules that could both match one request
-with equal specificity but pin different criteria to get there (e.g. one rule
-keying on `operation`+`agent_id`, another on `purpose`+`agent_id`, for the
-same `agent_id`) — the resolver has no defined winner for that case, so the
-write is rejected rather than leaving an outcome that depends on storage
-order. The `available-models` picker (§ below) applies the same intersection
-filter, so it never offers what the write would reject.
+whichever of the team's own pods serves a turn must resolve the chosen
+profile). Each `AgentInstance` is pinned to one pod for its life, so a pod
+this team has no instance on is out of scope; a team with no instances yet
+falls back to every enabled pod. The check is best-effort per relevant pod —
+an unreachable pod is skipped, not treated as failing every team's write —
+since genuine drift is still caught at the moment it would matter by
+`RoutedChatModelFactory.select` (fred-runtime) failing closed with
+`TeamRoutingProfileDriftError`. The same profile id must also map to the same
+model capability id (`provider`, `name`) on every pod in scope; equal names
+with different concrete meanings are excluded. Only ids in each pod's
+explicit `model_chat_profile_ids` subset are eligible; a known
+language/embedding/image profile is invalid for this chat-only policy. The
+`available-models` picker (§ below) applies the same intersection filter, so
+it never offers what the write would reject.
 
 **Authorization:** read — `team_admin`, `team_editor`, `team_analyst` (a
 plain `team_member` is denied); write — `team_editor` only.
@@ -2425,22 +2480,21 @@ read endpoint distinct from the platform-admin-only
 read gate and the same catalog-aggregation + `usable_capability_ids`
 building blocks the write path validates against.
 
-**Frontend:** one panel (team settings "Routing" entry, gated on
-`canUpdateResources`/`team_editor`, reused unconditionally for personal
-spaces), a picker for `chat_default_profile_id` scoped to enabled+universally-
-available profiles, and zero-or-more operation-rule rows with the same
-constraint per row. A profile referenced by a stored policy that has since
-become unavailable still renders as a selectable option, flagged rather than
-silently dropped. `team_admin` sees the same panel with inputs disabled
-(read-only), not a second component. Hidden entirely when the team has no
-enabled models beyond the deployment default.
+**Frontend:** `TeamSettingsRouting` — one panel (team settings "Routing"
+entry, gated on `canUpdateResources`/`team_editor`, reused unconditionally
+for personal spaces), a picker for `chat_default_profile_id` plus
+zero-or-more per-agent override rows, both scoped to
+enabled+universally-available profiles. A profile referenced by a stored
+policy that has since become unavailable still renders as a selectable
+option, flagged rather than silently dropped. `team_admin` sees the same
+panel with every input disabled (read-only), not a second component.
 
 **Explicit non-goals (V1):** per-user routing inside a shared multi-member
 team (distinct from personal-space support, which is just a team routing
 policy scoped to a one-member team), model temperature/timeout tuning, a
 per-message composer picker, direct `models_catalog.yaml` editing from the
-product. Per-agent routing rules (2026-08-09, issue #2267) are no longer a
-non-goal — see the data model and resolution notes above.
+product. Per-agent routing (`agent_profile_overrides`) is in scope, not a
+non-goal.
 
 ## 38. Contract Notes — team image renamed banner → avatar (2026-08-08, #2300)
 
@@ -2529,3 +2583,263 @@ When absent, control-plane omits it from the serialized preparation and managed
 chat omits its counter; the runtime backend remains the enforcement boundary.
 Control-plane does not interpret, override, or persist the value and does not
 apply a second chat-message validator.
+
+## 40. Contract Notes — platform-wide chat model binding (2026-08-15, issue #2365)
+
+An org-admin can assert one authoritative `(provider, name, settings)`
+binding for the `chat` capability that overrides whatever every runtime pod
+would otherwise resolve locally — the concrete lever for a deployment where
+the operator knows what's actually reachable/licensed and no pod's shipped
+catalog does. Runtime-side precedence, ReBAC exemption, and the trusted
+per-turn resolution channel are `RUNTIME-EXECUTION-CONTRACT.md` §8.55; this
+section is the product/data/API/persistence contract.
+
+**Chat-only in V1.** `PlatformModelBinding.model_capability` is a
+route-local `Literal["chat"]` constant, not the global `ModelCapability`
+enum — `language`/`embedding`/`image` have no production consumer and are
+not representable through this API. At most one row ever exists, enforced
+by a database `CHECK (model_capability = 'chat')` constraint (not just
+application code), so the store/service path structurally cannot insert a
+`language`/`embedding`/`image` row. An absent row means unset — there is no
+natural "off" value for a `(provider, name)` pair, so "clear this binding"
+is row deletion, not a stored `false`.
+
+**Settings boundary** (`ModelBindingSettings`, `fred-sdk`). A strict, typed
+allowlist (`extra="forbid"`) — every field is a named generation knob
+evidenced by `fred_core.model.factory.get_model()`, never an open
+`dict[str, Any]`. Guarantees, precisely: no credential-designated field
+(`api_key`, `token`, ...) and no generic auth/header/cookie/client
+passthrough container exist to receive one; any key outside the named
+allowlist is rejected, and every URL-typed field rejects non-`http(s)`
+schemes and userinfo (`user:pass@host`); numeric/boolean fields are strict
+(no `"4096"` → `4096`, no `1` → `True`) and range-checked, never silently
+coerced. What it does **not** do: inspect whether an arbitrary *value*
+placed in an allowed field is itself a secret — operators must never place
+a credential in an allowed value, this only closes the field-shape channel.
+`provider` is restricted to `fred_core.model.models.ModelProvider` (closed
+JSON Schema `enum`, published on the generated OpenAPI/TypeScript client —
+never a hand-maintained duplicate list), and a provider with additional
+required settings (`azure-openai`, `azure-apim`, `vertex-ai`,
+`vertex-ai-model-garden`) is validated against those exact requirements
+before persistence — a binding a provider could never actually construct
+against is rejected at write time, not left to fail at runtime model
+construction on every subsequent managed turn. `timeout`/`http_client_limits`
+are deliberately absent (see §8.55); `request_timeout` is present and
+applied fresh per model construction.
+
+**Persistence** (`platform_model_binding` table,
+`PlatformModelBindingStore`). Every read re-validates the row through
+`ModelBinding` — a row that bypassed the store's own writer (or predates a
+contract tightening) fails closed on `get()`, not just at write time. `set()`
+retries once on the concurrent first-insert race (two admins, or a client
+retry, both observing no row and both attempting an insert on the single-row
+primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
+
+**Authorization:** `organization_authz.require_manage_any`
+(`organization#can_manage_platform`), the same shared gate as
+`GET /admin/capabilities` — org-admin only, no team dimension (this is a
+platform-wide routing assertion, not a per-team permission, same reasoning
+as `model_reasoning`).
+
+**API:** `GET`/`PUT`/`DELETE /control-plane/v1/admin/platform/model-bindings`
+— no `{model_capability}` path segment (chat-only, nothing to select
+between). `GET`/`PUT`/`DELETE` all return `PlatformModelBinding`
+(`binding: ModelBinding | None`, `updated_by`, `updated_at`);
+`response_model_exclude_none=True` omits an unset `binding` rather than
+serializing `null`. `PUT`'s body is `SetPlatformModelBindingRequest{binding:
+ModelBinding}` — `ModelBinding`'s own validators (provider enum,
+provider-required-settings, `ModelBindingSettings`) fire at request-parsing
+time, before this route's authz even runs, so a 422 on a bad binding never
+reaches the store.
+
+**Frontend:** `PlatformModelBindingsPanel` — an `InlineDrawer` opened from
+`CapabilitiesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
+Renders exactly one row (chat), never a 4-capability list. Settings are
+edited as raw JSON text (not a key/value rows editor, since
+`ModelBindingSettings` is a strict typed shape a rows editor storing
+`string` per row cannot represent without lossy coercion) — the editor
+parses explicitly, reports invalid JSON inline, and only submits a parsed
+JSON object; the server's strict settings contract remains the actual
+security boundary, the editor does not re-implement a client-side
+credential-key check. Component UX detail: `COMPONENT-UX.md`.
+
+**Explicit non-goals (V1):** `language`/`embedding`/`image` capability
+bindings, process-wide transport tuning through this binding (stays
+pod-local in `models_catalog.yaml`), dynamic shared-client pool
+replacement, a browser-forwarded or session-snapshot resolution channel —
+the binding is trusted and resolved fresh per turn, server-to-server, by
+design (§8.55), never forwarded through the client the way
+`chat_default_profile_id`/`agent_profile_overrides` are.
+
+## 41. Contract Notes — the composer's effective chat model (2026-08-17, issue #2387)
+
+**Problem.** The composer named the model whose *reasoning* was enabled
+platform-wide (§40 / REASON-01 §7), not the one the turn routes to. With a
+platform binding or any override in force, it displayed a model that was not
+answering.
+
+The justification recorded in `_platform_reasoning_control`'s docstring rested
+on two premises, both of which had become false: that routing "resolves per
+*operation* at runtime" (operations were removed by #2365) and that "chat
+controls are computed once per session" (prepare-execution returns a fresh
+`chat_controls` on every send).
+
+**New endpoint.**
+
+    GET /control-plane/v1/teams/{team_id}/routing-policy/effective-chat-model
+        ?agent_instance_id={id}
+    → EffectiveChatModel
+
+| Field | Meaning |
+| ----- | ------- |
+| `name` | The concrete model name. All model fields are `None` together, meaning nothing resolved. |
+| `display_name` | Ops-authored label; `None` leaves the frontend on its name/id prettifying fallback. |
+| `capability_id` | The `kind="model"` capability id, for joining against team enablement. |
+| `enabled_for_team` | `false` when the resolved model is not `can_use`-enabled for this team, so the turn will fail with `ModelNotUsableError` before the LLM call. |
+| `reasoning_enabled` | Whether reasoning actually runs on **this** model. The composer must not offer the reasoning toggle when `false`. |
+
+**Scoped to what the composer renders.** It deliberately does not report which
+precedence level won, or the winning profile id. That is POLICY detail, readable
+only by an elevated team role (§37 / #2167), and no surface displays it —
+returning it would mean either leaking the policy to a plain member or gating a
+field nobody reads. `[V2][MODEL_ROUTING]` in the pod log remains where the
+deciding level is visible.
+
+**Authorization — plain membership (`can_read_members`), deliberately NOT the
+elevated-role gate** §37's policy reads use. Anyone entitled to hold a
+conversation with an agent is entitled to know which model answers them, and
+that is safe precisely because the response carries no policy detail (above).
+Editing the policy stays `team_editor`-only.
+
+**`reasoning_enabled` and the reasoning toggle.** The `reasoning_toggle` control
+on `ExecutionPreparation` answers "the platform enabled reasoning on *some*
+model and this agent offers it" — it cannot answer "the model this turn routes
+to is one of them", because that needs the pod catalog and the send path must
+stay free of catalog fetches. So the composer combines the two: the control
+decides whether a toggle could exist, `reasoning_enabled` decides whether it
+would do anything. `RoutedChatModelFactory` STRIPS reasoning settings for a model
+absent from `reasoning_enabled_model_ids` (§8.55 / REASON-01 §5.6.2), so
+offering the toggle without this check meant offering an inert control — observed
+in production with reasoning on `mistral-small-latest` and a team override
+routing to `mistral-medium-latest`.
+
+**Why its own read, not an `ExecutionPreparation` field.** Resolving the two
+pod-owned precedence levels requires the pod's `/agents/models-catalog`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.56). Prepare-execution runs on **every
+send** and is contractually free of pod-catalog fetches, and
+`aggregate_capability_catalog` is uncached — putting this there would fan out to
+every pod per message. This endpoint is called per chat-page open instead, the
+same cost profile as `available-models` beside it, and it is tagged under the
+same `ControlPlaneRoutingPolicy`/`teamId` RTK entity as the policy read/write so
+saving a policy refetches the label instead of leaving a stale model on screen.
+
+**One deliberate widening, recorded.** When a platform binding is in force, this
+endpoint reveals the bound model's `name` (and its derived `capability_id`) to
+any team member, where §40's admin CRUD surface is org-admin only. No contract
+made that identity confidential, and naming the model that answers is the whole
+point of the feature — but it is a real change in who can observe it, so it is
+written down rather than left implicit. `ModelBinding.settings` (base URLs,
+Azure endpoints) is never returned; only the two identity scalars are.
+
+Symmetrically, the read is scoped to a pod, not to the deployment-wide
+intersection §37's picker uses. That is not a contradiction: the intersection
+governs what a team may *select* (and is enforced at write time so a saved
+choice means the same thing everywhere), while this answers what one pinned
+instance will actually *run*. If a pod's catalog drifts after a write, the
+per-pod answer is the truthful one.
+
+**Pod scoping.** The pod consulted is the instance's own `source_runtime_id`,
+never an aggregate: an `AgentInstance` is pinned to one pod for its whole life
+and a turn is always prepared against that same pod, so another pod's catalog
+has no say in what this agent will run.
+
+**Degradation.** An unreachable pod, an unknown instance, a pod source that is
+missing from the platform catalog **or disabled in it**, or team-policy drift (a stored profile the pod does
+not advertise — the condition `TeamRoutingProfileDriftError` raises at turn time)
+all return an all-`None` result rather than raising. A pod being down must not
+break the chat page, and inventing a model would be worse than showing none.
+
+**`enabled_for_team` is reported, not hidden.** The composer names the model and
+flags it, so a user learns *why* a turn will fail instead of meeting an opaque
+error — the same diagnosability rule REASON-01 §8 applies to the reasoning
+control. Always `true` when a platform binding decided, which bypasses team
+enablement by design (§40's ReBAC exemption).
+
+**Explicit non-goals:** making the chip a model *picker* (it stays read-only),
+surfacing the deciding precedence level in the UI, per-turn re-resolution, and
+any non-chat capability — `embedding` has no
+production consumer.
+
+## 42. Contract Notes — global info banner (2026-08-19)
+
+`FrontendConfig` (§3.1.1) gains one optional field, `info_banner`
+(`InfoBanner`: `color` + `titles`/`messages` locale maps + `links: [{url,
+labels}]` + `auto_hide_seconds`), sourced from control-plane deployment
+config `platform.frontend.info_banner`. When set, the frontend renders one
+full-width, non-dismissable announcement banner (`InfoBanner`, mounted once
+at the app root) above the app content on **every** page, resolving texts
+from the active i18next locale with `en` fallback and pushing content down
+instead of overlaying it. Persistent by default; the optional
+`auto_hide_seconds` (integer > 0) makes the banner remove itself that many
+seconds after app load. `null`/omitted → nothing rendered — the shipped
+default: `values.yaml` (prod) and `configuration*.yaml` (dev) carry only
+commented-out example blocks.
+
+Boundary rationale (§3.1.1 vs §23): unlike `upload_warning` (post-auth
+surfaces only), the banner's whole point is to show on every page — the
+GCU-acceptance and root-bootstrap screens included, which render *before*
+the authenticated `/frontend/bootstrap` can succeed. So it follows the
+`gcu_version` precedent, not the `upload_warning` one: a pre-auth field on
+the public surface. It carries only deployer-authored announcement content
+— never secrets or per-user state — keeping §3.1.1's "no second bootstrap
+payload" rule intact. One deliberate scope note: on auth-enabled
+deployments the login page itself is Keycloak-hosted (`login-required`
+redirects away before the SPA renders), so the banner cannot cover the
+login screen — pre-auth here means "before the authenticated bootstrap",
+not "on the IdP's page".
+
+## 43. Contract Notes — platform-role management, root-protected (2026-08-21, issue #2405)
+
+Three routes give the product its first surface to grant/revoke the two
+org-level platform roles (until now written only by root bootstrap, the
+kea→swift migration, and the bundle importer):
+
+- `GET /users/platform-roles` — every `platform_admin` / `platform_observer`
+  holder, as `PlatformRolesResponse`: per-holder `UserSummary` + `relations`
+  + `is_bootstrap_root`, plus a top-level `caller_is_bootstrap_root` display
+  flag for the admin UI (the backend guards never rely on it).
+- `POST /users/{user_id}/platform-roles` — body
+  `{relation: platform_admin | platform_observer}`; 204, idempotent
+  (`add_relation` ignores duplicates); 404 when Keycloak affirmatively does
+  not know the target uid (a typo'd uid must not become a live tuple for
+  whoever ever authenticates with that sub — skipped when Keycloak M2M is
+  disabled, where existence cannot be verified).
+- `DELETE /users/{user_id}/platform-roles/{relation}` — 204; 404 if the
+  target does not hold the relation **as a direct tuple**.
+
+Direct tuples only: `schema.fga` defines `platform_observer: [user] or
+platform_admin`, so this surface reads via the direct-tuple primitives
+(`list_direct_relations` / `has_direct_relation`), never expanded reads
+(ListUsers) — an admin's computed observer membership is neither listed as a
+holder entry nor revocable (no tuple exists to delete; the expanded read
+would have 204'd a silent no-op). Revocations emit `authz.relation.revoked`
+to the audit stream with `actor_uid`, symmetric to `add_relation`'s
+`authz.relation.granted`.
+
+All three gate on `can_administer_users`. The `platform_admin` relation
+carries two additional service-layer rules (PLATFORM-ADMIN-DELEGATION-RFC.md
+§3 — "root-managed admins, delegated observers"): granting **and** revoking
+it require the caller to be the bootstrap root (the uid in
+`platformbootstrap.completed_by`, the anchor §27's teardown already
+preserves) — 403 otherwise; and a DELETE may never target that uid — 403
+for every caller, the root itself included, because bootstrap never reopens.
+If bootstrap never ran (row absent), both `platform_admin` routes return 409
+— run `POST /bootstrap/platform-admin` first, which is still open in that
+state by definition. `platform_observer` carries none of these
+restrictions. No new ReBAC relation, no schema change, no DB migration.
+
+Same-invariant guard on an existing route: `DELETE /users/{user_id}` now
+403s when the target uid is `platformbootstrap.completed_by` — deleting the
+root's Keycloak account would freeze the `platform_admin` population the
+same irreversible way (the uid could never authenticate again while
+bootstrap stays permanently closed).

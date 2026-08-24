@@ -58,7 +58,6 @@ def _node_context(runtime_tools: dict) -> _GraphNodeExecutionContext:
         binding=_binding(),
         services=RuntimeServices(),
         model=None,
-        model_resolver=None,
         graph_agent_id="graph-agent",
         node_id="node-1",
         allowed_tool_refs=frozenset(),
