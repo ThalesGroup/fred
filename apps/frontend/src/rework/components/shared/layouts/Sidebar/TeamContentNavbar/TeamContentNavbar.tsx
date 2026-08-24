@@ -102,7 +102,7 @@ export default function TeamContentNavbar() {
   })();
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 
-  // Team avatar (36×36, 4px): the custom image when set, else colour-tinted
+  // Team avatar (28×28, 4px): the custom image when set, else colour-tinted
   // initials (same fallback as the Home team list). Square 4px on both, incl.
   // the personal space.
   const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");

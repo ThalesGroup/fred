@@ -36,7 +36,7 @@
 .teamPanelHeaderText {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3xs);
+  gap: var(--spacing-2xs);
   min-width: 0;
 }
 
@@ -48,12 +48,12 @@
   min-width: 0;
 }
 
-/* Team avatar: custom image or initials tile, fixed 36×36, 4px corners. */
+/* Team avatar: custom image or initials tile, fixed 28×28, 4px corners. */
 .teamPanelAvatar {
   flex-shrink: 0;
   border-radius: var(--radius-xs);
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   object-fit: cover;
 }
 
