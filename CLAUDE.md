@@ -301,6 +301,23 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 
 ---
 
+## Alembic migrations - keep history linear
+
+One head per backend, always. When a feature branch's new migration has
+fallen behind the base branch (`swift`) because migrations kept landing
+there, **re-parent it**: point its `down_revision` (and the `Revises:`
+docstring line) at the current base head, delete any merge revision the
+branch may have accumulated, and verify with `alembic heads` (exactly one
+head) plus a real `alembic upgrade head` before pushing. Do **not** create
+an Alembic merge revision (`alembic merge`) to reconcile heads inside a PR -
+a merge revision is a last resort, acceptable only when both divergent
+migrations are already deployed somewhere and can no longer be re-parented.
+(2026-08-24, PROMPT-06: the marketplace migration was re-parented onto the
+swift head and its empty merge revision deleted - the PR then added a single
+linear migration.)
+
+---
+
 ## Backend ↔ frontend contract — generated API client (mandatory)
 
 The frontend RTK Query client and all backend-derived TypeScript types are
