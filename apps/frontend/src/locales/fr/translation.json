@@ -1505,6 +1505,7 @@
       "searchClear": "Effacer la recherche",
       "yourTeams": "Vos équipes",
       "sort": {
+        "aria": "Trier les équipes",
         "recent": "Récemment consultées",
         "alpha": "Ordre alphabétique"
       },

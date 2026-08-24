@@ -17,10 +17,9 @@ import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
 import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
-import type { OptionModel } from "@models/Option.model.ts";
+import TeamSortSelect, { type TeamSortOption } from "./TeamSortSelect.tsx";
 import { getTeamRecency, getTeamSortMode, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
@@ -74,9 +73,9 @@ export default function HomeNavPanel() {
     return list;
   }, [visibleTeams, sortMode, recency]);
 
-  const sortOptions: OptionModel<TeamSortMode>[] = [
-    { key: "recent", value: "recent", label: t("rework.home.sort.recent") },
-    { key: "alpha", value: "alpha", label: t("rework.home.sort.alpha") },
+  const sortOptions: TeamSortOption<TeamSortMode>[] = [
+    { value: "recent", label: t("rework.home.sort.recent") },
+    { value: "alpha", label: t("rework.home.sort.alpha") },
   ];
 
   return (
@@ -108,7 +107,12 @@ export default function HomeNavPanel() {
           />
         </div>
         <div className={styles.teamSort}>
-          <Select<TeamSortMode> size="xs" options={sortOptions} value={sortMode} onChange={changeSortMode} />
+          <TeamSortSelect<TeamSortMode>
+            value={sortMode}
+            options={sortOptions}
+            onChange={changeSortMode}
+            ariaLabel={t("rework.home.sort.aria")}
+          />
         </div>
         <div className={styles.scroll}>
           {sortedTeams.map((team) => (
