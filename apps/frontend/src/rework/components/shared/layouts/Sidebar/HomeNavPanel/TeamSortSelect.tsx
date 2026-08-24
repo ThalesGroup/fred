@@ -23,7 +23,6 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
-import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import styles from "./TeamSortSelect.module.scss";
 
 export interface TeamSortOption<T extends string> {
@@ -172,20 +171,22 @@ export default function TeamSortSelect<T extends string>({
               options.map((option, index) => {
                 const isActive = option.value === value;
                 return (
-                  <MenuPopoverItem
+                  <button
                     key={option.value}
                     ref={(el) => {
                       optionRefs.current[index] = el;
                     }}
+                    type="button"
                     role="option"
-                    label={option.label}
-                    selected={isActive}
-                    accentSelected
-                    trailingIcon={isActive ? "check_circle" : undefined}
+                    aria-selected={isActive}
+                    data-selected={isActive}
+                    className={styles.option}
                     tabIndex={index === focusedIndex ? 0 : -1}
                     onClick={() => selectOption(option.value)}
                     onKeyDown={(event) => handleOptionKeyDown(event, index)}
-                  />
+                  >
+                    {option.label}
+                  </button>
                 );
               }),
             ]}

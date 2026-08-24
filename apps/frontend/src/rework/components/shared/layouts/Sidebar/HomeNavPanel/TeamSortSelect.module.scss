@@ -32,3 +32,33 @@
   left: 0;
   z-index: 20;
 }
+
+/* Option row — mirrors MenuPopover's `.item` metrics, but with this select's own
+ * colour treatment: default rows are muted (on-surface-retreat), the picked row
+ * is full-strength (on-surface) over the neutral selected layer, and no trailing
+ * check. */
+.option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--state-on-surface-hover);
+  }
+
+  &[data-selected="true"] {
+    background: var(--state-on-surface-selected);
+    color: var(--on-surface);
+  }
+}
