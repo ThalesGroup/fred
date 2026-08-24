@@ -58,7 +58,8 @@
   }
 
   &[data-selected="true"] {
-    background: var(--state-on-surface-selected);
+    /* Primary-tinted 16% selected layer; text stays on-surface. */
+    background: var(--state-primary-selected);
     color: var(--on-surface);
   }
 }
