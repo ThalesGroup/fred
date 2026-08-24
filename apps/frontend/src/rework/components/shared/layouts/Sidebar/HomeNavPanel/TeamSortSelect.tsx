@@ -136,6 +136,10 @@ export default function TeamSortSelect<T extends string>({
           aria-expanded={open}
           aria-label={ariaLabel}
           onClick={() => setOpen((prev) => !prev)}
+          // `user-select: none` is ignored on form controls, so block the mouse
+          // from starting a selection / placing the caret at the source. The
+          // click still toggles, and keyboard focus is unaffected.
+          onMouseDown={(event) => event.preventDefault()}
           onKeyDown={handleTriggerKeyDown}
           onFocus={() => setTriggerFocused(true)}
           onBlur={() => setTriggerFocused(false)}
