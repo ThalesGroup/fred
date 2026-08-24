@@ -45,6 +45,7 @@ export default function TeamSortSelect<T extends string>({
   ariaLabel,
 }: TeamSortSelectProps<T>) {
   const [open, setOpen] = useState(false);
+  const [triggerFocused, setTriggerFocused] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -136,16 +137,21 @@ export default function TeamSortSelect<T extends string>({
           aria-label={ariaLabel}
           onClick={() => setOpen((prev) => !prev)}
           onKeyDown={handleTriggerKeyDown}
-          // Inline to beat TextInput's own compound padding selector, to reserve
-          // room for the chevron overlay, and to force the active (primary
-          // outline) look while the menu is open — the trigger isn't focused
-          // then, so its :focus style wouldn't apply.
+          onFocus={() => setTriggerFocused(true)}
+          onBlur={() => setTriggerFocused(false)}
+          // Inline (beats TextInput's own compound selectors) to: reserve room
+          // for the chevron; kill the caret + text selection; and drive the
+          // active look ourselves. The primary outline is 1px here (not the
+          // component-wide 2px focus ring) and shows while open OR focused — the
+          // trigger loses focus to the listbox while open, so a plain :focus
+          // style wouldn't cover the open state.
           style={{
             cursor: "pointer",
+            caretColor: "transparent",
             userSelect: "none",
             WebkitUserSelect: "none",
             paddingRight: "calc(var(--spacing-xs) + 1.25rem)",
-            ...(open ? { outline: "2px solid var(--primary)", borderColor: "transparent" } : {}),
+            ...(open || triggerFocused ? { outline: "1px solid var(--primary)", borderColor: "transparent" } : {}),
           }}
         />
         <span className={styles.chevron} aria-hidden="true">
