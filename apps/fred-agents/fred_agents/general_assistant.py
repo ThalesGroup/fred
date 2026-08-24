@@ -116,14 +116,14 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     agent_id: str = "fred.github.assistant"
     role: str = "Custom assistant"
     description: str = (
-        "Build your own assistant: choose the tools it can use — document "
-        "search, data analysis, and more — and describe its role in your own "
+        "Build your own assistant: choose the tools it can use - document "
+        "search, data analysis, and more - and describe its role in your own "
         "words. The best starting point for most use cases."
     )
     description_by_lang: dict[str, str] | None = {
         "fr": (
             "Créez votre propre assistant : choisissez les outils qu'il peut "
-            "utiliser — recherche documentaire, analyse de données, etc. — et "
+            "utiliser - recherche documentaire, analyse de données, etc. - et "
             "décrivez son rôle avec vos propres mots. Le meilleur point de "
             "départ pour la plupart des cas d'usage."
         )
