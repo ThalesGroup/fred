@@ -121,11 +121,14 @@ DistributionResponse(
 )
 ```
 
-Build it with `distribution_utils.distribution_from_terms_agg(resp, agg_name=…)`,
-which reduces a single-level `terms` agg (one bucket per entity, `doc_count` =
-that entity's count) into the shared 5-bucket histogram (`1`, `2-5`, `6-10`,
-`11-20`, `21+`) plus the median. Do not re-implement the bucketing — see
-`conversations_per_user.py` / `conversation_depth.py`.
+Build the query with `distribution_utils.distribution_body(metric_name=…,
+group_by=…, since=…, until=…, team_id=…)` and reduce the response with
+`distribution_from_terms_agg(resp, since=…, until=…)`, which turns one bucket
+per entity (`doc_count` = that entity's count) into the shared 5-bucket
+histogram (`1`, `2-5`, `6-10`, `11-20`, `21+`) plus the median. Pass
+`require_group_by=True` when only some rows carry the grouping dim. Do not
+re-implement the filters or the bucketing — see `conversations_per_user.py` /
+`conversation_depth.py`, both ~10 lines because of this.
 
 The frontend `HistogramChart` molecule consumes `rows` directly, `median` feeds a
 `KpiStatCard` beside it.

@@ -63,6 +63,9 @@ vi.mock("@shared/molecules/PieChart/PieChart", () => ({
 vi.mock("@shared/molecules/BarChart/BarChart", () => ({
   default: ({ title }: { title: string }) => <div>{title}</div>,
 }));
+vi.mock("@shared/molecules/HistogramChart/HistogramChart", () => ({
+  default: ({ title }: { title: string }) => <div>{title}</div>,
+}));
 vi.mock("@shared/molecules/KpiStatCard/KpiStatCard", () => ({
   default: ({ label }: { label: string }) => <div>{label}</div>,
 }));
@@ -76,6 +79,8 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSessionsOverTimeQuery: h.neutralQuery,
   useMessagesOverTimeQuery: h.neutralQuery,
   useSessionsByScopeQuery: h.neutralQuery,
+  useConversationsPerUserQuery: h.neutralQuery,
+  useConversationDepthQuery: h.neutralQuery,
   useTopTeamsBySessionsQuery: h.neutralQuery,
   useAgentsTotalQuery: h.neutralQuery,
   useDocumentsTotalQuery: h.neutralQuery,
@@ -112,5 +117,17 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
     const html = render();
     expect(html).toContain("rework.analytics.sections.overview");
     expect(html).toContain("rework.analytics.sections.tokenUsage");
+  });
+
+  // #2426: the engagement section is not admin-gated — it sits behind the same
+  // can_observe_platform every non-admin section here requires.
+  it("renders the engagement section for a plain platform_observer", () => {
+    h.capabilities = { ...h.capabilities, canAdmin: false };
+    const html = render();
+    expect(html).toContain("rework.analytics.sections.engagement");
+    expect(html).toContain("rework.analytics.engagement.conversationsPerUser.title");
+    expect(html).toContain("rework.analytics.engagement.conversationDepth.title");
+    expect(html).toContain("rework.analytics.engagement.conversationsPerUser.medianLabel");
+    expect(html).toContain("rework.analytics.engagement.conversationDepth.medianLabel");
   });
 });

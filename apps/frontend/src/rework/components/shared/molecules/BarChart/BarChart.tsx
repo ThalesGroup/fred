@@ -50,9 +50,11 @@ interface BarChartProps {
    *  there isn't room for them at this size — so `valueLabel`/tooltip carries the
    *  meaning instead. */
   compact?: boolean;
-  /** Gap between bars, forwarded verbatim to Recharts (`"12%"`, `4`, …). Left
-   *  unset here so Recharts keeps its own default — only `HistogramChart` passes
-   *  it, to make adjacent buckets read as one contiguous distribution. */
+  /** Gap between bars, as a percentage of the band or a pixel count, forwarded
+   *  verbatim to Recharts. A LARGER value means a wider gap and therefore
+   *  narrower bars (`ChartUtils.getBarPosition`). Left unset here so Recharts
+   *  applies its own `'10%'` default — only `HistogramChart` passes it, to make
+   *  adjacent buckets read as one contiguous distribution. */
   barCategoryGap?: string | number;
 }
 
@@ -90,12 +92,6 @@ export default function BarChart({
   // Compact: fits a 120px card (12px padding + a small title leave ~76px for the chart itself).
   const chartHeight = compact ? 76 : isVertical ? 220 : Math.max(180, displayRows.length * barHeight + 40);
 
-  // Only pass `barCategoryGap` when the caller set it — for the same reason the
-  // XAxis `height` below is spread rather than passed as `present-but-undefined`:
-  // Recharts declares its own default via defaultProps, which React does not
-  // substitute for an explicit `undefined`.
-  const gapProp = barCategoryGap === undefined ? {} : { barCategoryGap };
-
   return (
     <section ref={sectionRef} className={styles.section} data-compact={compact || undefined}>
       <div className={styles.header}>
@@ -116,7 +112,7 @@ export default function BarChart({
                 data={displayRows}
                 layout="horizontal"
                 margin={compact ? { top: 2, right: 2, left: 2, bottom: 2 } : { top: 8, right: 8, left: 8, bottom: 40 }}
-                {...gapProp}
+                barCategoryGap={barCategoryGap}
               >
                 {!compact && <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} vertical={false} />}
                 <XAxis
@@ -170,7 +166,7 @@ export default function BarChart({
                 data={displayRows}
                 layout="vertical"
                 margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
-                {...gapProp}
+                barCategoryGap={barCategoryGap}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
                 <XAxis

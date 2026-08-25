@@ -86,18 +86,64 @@ def median_of(counts: Sequence[int]) -> float | None:
     return (ordered[middle - 1] + ordered[middle]) / 2
 
 
+AGG_NAME = "by_entity"
+
+
+def distribution_body(
+    *,
+    metric_name: str,
+    group_by: str,
+    since: datetime,
+    until: datetime,
+    team_id: str | None,
+    require_group_by: bool = False,
+) -> dict[str, Any]:
+    """Build the OpenSearch body for a "count per entity" distribution.
+
+    Both engagement presets ask the same question of different fields — count
+    `metric_name` rows in the window, grouped by `group_by` — so the body is
+    built once here. In particular the team filter is written in one place: the
+    `kpi/README.md` warning about a preset silently returning unfiltered data
+    for a team_id it doesn't honour applies to every copy of that clause.
+
+    `require_group_by` adds an `exists` filter, for a dim that only some rows
+    carry.
+    """
+    filters: list[dict[str, Any]] = [
+        {
+            "range": {
+                "@timestamp": {
+                    "gte": since.isoformat(),
+                    "lte": until.isoformat(),
+                }
+            }
+        },
+        {"term": {"metric.name": metric_name}},
+    ]
+    if require_group_by:
+        filters.append({"exists": {"field": group_by}})
+    if team_id is not None:
+        filters.append({"term": {"dims.team_id": team_id}})
+
+    return {
+        "size": 0,
+        "query": {"bool": {"filter": filters}},
+        # One bucket per entity; its doc_count is that entity's count.
+        "aggs": {AGG_NAME: {"terms": {"field": group_by, "size": TERMS_SIZE}}},
+    }
+
+
 def distribution_from_terms_agg(
     response: dict[str, Any],
     *,
-    agg_name: str,
     since: datetime,
     until: datetime,
+    agg_name: str = AGG_NAME,
 ) -> DistributionResponse:
-    """Reduce a single-level `terms` aggregation to a `DistributionResponse`.
+    """Reduce a `distribution_body` response to a `DistributionResponse`.
 
-    One bucket per entity, its `doc_count` being that entity's count — the
-    shape both engagement presets query for. Kept here so the two presets share
-    one reduction instead of two copies that can drift.
+    One bucket per entity, its `doc_count` being that entity's count. Kept here
+    so the two presets share one reduction instead of two copies that can drift.
     """
     counts = [
         int(bucket["doc_count"])

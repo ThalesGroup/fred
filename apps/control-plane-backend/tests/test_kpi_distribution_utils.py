@@ -24,8 +24,11 @@ from datetime import datetime, timezone
 
 import pytest
 from control_plane_backend.kpi.presets.distribution_utils import (
+    AGG_NAME,
     BUCKETS,
+    TERMS_SIZE,
     bucket_counts,
+    distribution_body,
     distribution_from_terms_agg,
     median_of,
 )
@@ -112,7 +115,7 @@ def test_distribution_from_terms_agg_reduces_doc_counts() -> None:
     until = datetime(2026, 8, 25, tzinfo=timezone.utc)
     response = {
         "aggregations": {
-            "by_user": {
+            AGG_NAME: {
                 "buckets": [
                     {"key": "alice", "doc_count": 1},
                     {"key": "bob", "doc_count": 7},
@@ -122,9 +125,7 @@ def test_distribution_from_terms_agg_reduces_doc_counts() -> None:
         }
     }
 
-    result = distribution_from_terms_agg(
-        response, agg_name="by_user", since=since, until=until
-    )
+    result = distribution_from_terms_agg(response, since=since, until=until)
 
     assert {row.label: row.value for row in result.rows} == {
         "1": 1,
@@ -142,9 +143,65 @@ def test_distribution_from_terms_agg_handles_a_missing_aggregation() -> None:
     since = datetime(2026, 8, 1, tzinfo=timezone.utc)
     until = datetime(2026, 8, 25, tzinfo=timezone.utc)
 
-    result = distribution_from_terms_agg(
-        {}, agg_name="by_session", since=since, until=until
-    )
+    result = distribution_from_terms_agg({}, since=since, until=until)
 
     assert [row.value for row in result.rows] == [0, 0, 0, 0, 0]
     assert result.median is None
+
+
+def _body(**overrides) -> dict:
+    kwargs = {
+        "metric_name": "session.created_total",
+        "group_by": "dims.user_id",
+        "since": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        "until": datetime(2026, 8, 25, tzinfo=timezone.utc),
+        "team_id": None,
+    }
+    kwargs.update(overrides)
+    return distribution_body(**kwargs)
+
+
+def test_distribution_body_aggregates_under_the_shared_agg_name() -> None:
+    # The reducer defaults to AGG_NAME; a body that named its agg anything else
+    # would silently reduce to an empty distribution.
+    body = _body()
+    assert body["size"] == 0
+    assert body["aggs"][AGG_NAME]["terms"] == {
+        "field": "dims.user_id",
+        "size": TERMS_SIZE,
+    }
+
+
+def test_distribution_body_filters_the_window_and_the_metric() -> None:
+    filters = _body()["query"]["bool"]["filter"]
+    assert {"term": {"metric.name": "session.created_total"}} in filters
+    assert filters[0]["range"]["@timestamp"] == {
+        "gte": "2026-08-01T00:00:00+00:00",
+        "lte": "2026-08-25T00:00:00+00:00",
+    }
+
+
+def test_distribution_body_omits_the_team_filter_when_platform_wide() -> None:
+    filters = _body(team_id=None)["query"]["bool"]["filter"]
+    assert not any("dims.team_id" in f.get("term", {}) for f in filters)
+
+
+def test_distribution_body_scopes_to_a_team_when_given_one() -> None:
+    filters = _body(team_id="fredlab")["query"]["bool"]["filter"]
+    assert {"term": {"dims.team_id": "fredlab"}} in filters
+
+
+def test_distribution_body_excludes_rows_without_the_group_by_dim() -> None:
+    # Pre-#2426 agent.turn_completed rows carry no dims.session_id and must not
+    # be counted; without this filter they would be silently skipped instead.
+    filters = _body(
+        metric_name="agent.turn_completed",
+        group_by="dims.session_id",
+        require_group_by=True,
+    )["query"]["bool"]["filter"]
+    assert {"exists": {"field": "dims.session_id"}} in filters
+
+
+def test_distribution_body_has_no_exists_filter_by_default() -> None:
+    filters = _body()["query"]["bool"]["filter"]
+    assert not any("exists" in f for f in filters)

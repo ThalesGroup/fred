@@ -35,7 +35,9 @@ interface HistogramChartProps {
  *   destroy the distribution.
  * - `orientation="vertical"` — buckets read left-to-right along the x axis.
  * - near-contiguous bars — a histogram's bars are adjacent, unlike the gapped
- *   bars of a categorical comparison.
+ *   bars of a categorical comparison. `barCategoryGap` is the GAP, so this has
+ *   to be below Recharts' `'10%'` default, not above it: a larger value would
+ *   spread the buckets further apart, the opposite of what a histogram wants.
  *
  * Bucket labels come from the backend already display-ready (numeric ranges such
  * as "2-5"), so they are rendered verbatim and need no translation.
@@ -64,7 +66,7 @@ export default function HistogramChart({
       isError={isError}
       sortOrder="none"
       orientation="vertical"
-      barCategoryGap="12%"
+      barCategoryGap="2%"
     />
   );
 }

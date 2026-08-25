@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
 
 from fastapi import Request
 from fred_core import KeycloakUser
@@ -26,7 +25,7 @@ from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import DistributionResponse
 from control_plane_backend.kpi.presets.distribution_utils import (
-    TERMS_SIZE,
+    distribution_body,
     distribution_from_terms_agg,
 )
 
@@ -46,42 +45,31 @@ async def query_conversation_depth(
     # this handler only ever reads `team_id` to decide the query filter.
     del user, request
 
-    filters: list[dict[str, Any]] = [
-        {
-            "range": {
-                "@timestamp": {
-                    "gte": since.isoformat(),
-                    "lte": until.isoformat(),
-                }
-            }
-        },
-        {"term": {"metric.name": "agent.turn_completed"}},
-        # agent.turn_completed only started carrying dims.session_id with issue
-        # #2426 (RUNTIME-EXECUTION-CONTRACT.md §8.57). Older rows have no
-        # conversation key at all, so they must be excluded — without this
-        # filter the terms agg would drop them silently while they still
-        # skewed nothing, but an `exists` makes the exclusion explicit and
-        # guards against a future null-valued dim collapsing into one giant
-        # bucket.
-        {"exists": {"field": "dims.session_id"}},
-    ]
-    if team_id is not None:
-        filters.append({"term": {"dims.team_id": str(team_id)}})
-
-    body: dict[str, Any] = {
-        "size": 0,
-        "query": {"bool": {"filter": filters}},
-        "aggs": {
-            # One bucket per conversation; doc_count is that conversation's
-            # completed-turn count, i.e. its message depth.
-            "by_session": {"terms": {"field": "dims.session_id", "size": TERMS_SIZE}},
-        },
-    }
+    # One bucket per conversation; doc_count is that conversation's
+    # completed-turn count. The dashboard calls a turn a "message", following
+    # `messages_over_time` ("Agent turn completions (messages)") and the Overview
+    # tile above this section — one turn is one user message plus its answer, so
+    # the two labels must not diverge inside the same page.
+    #
+    # `require_group_by` matters here: agent.turn_completed only started carrying
+    # dims.session_id with issue #2426 (RUNTIME-EXECUTION-CONTRACT.md §8.57), so
+    # this metric is forward-only — rows written before that deployment have no
+    # conversation key and cannot be attributed to one. Excluding them explicitly
+    # states that intent rather than leaving the terms agg to skip them as a side
+    # effect. Rows whose session_id was nulled by
+    # `OpenSearchKPIStore.anonymise_for_session` (RGPD erasure) drop out here too,
+    # which is correct — an erased conversation must not reappear as a data point.
+    body = distribution_body(
+        metric_name="agent.turn_completed",
+        group_by="dims.session_id",
+        since=since,
+        until=until,
+        team_id=None if team_id is None else str(team_id),
+        require_group_by=True,
+    )
 
     resp = store.client.search(index=store.index, body=body)
-    return distribution_from_terms_agg(
-        resp, agg_name="by_session", since=since, until=until
-    )
+    return distribution_from_terms_agg(resp, since=since, until=until)
 
 
 CONVERSATION_DEPTH_PRESET = PresetDef(
