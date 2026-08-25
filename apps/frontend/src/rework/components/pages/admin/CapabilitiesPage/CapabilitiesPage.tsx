@@ -43,11 +43,13 @@ import styles from "./CapabilitiesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
+import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import {
   enabledTeamCount,
   hasReasoningControl,
   isCapabilityUnused as isUnused,
   personalSpaceCount,
+  requiresTeamSettings,
 } from "./capabilityEnablement";
 
 // "tool" (MCP servers, etc.) vs "agent" (a control-plane-side projection of
@@ -154,8 +156,17 @@ export default function CapabilitiesPage() {
       if (result.reasoning_disabled) {
         showWarn({ summary: t("rework.admin.capabilities.defaultOffReasoningToast") });
       }
-    } catch {
-      showError({ summary: t("rework.admin.capabilities.defaultToggleError") });
+    } catch (error) {
+      // The one reachable 409 here is DefaultOnNotAllowed: a capability with a
+      // required team setting can never be on by default (#2408). The switch is
+      // already disabled for that case, so reaching this branch means a stale
+      // client — explain it rather than showing "could not change" (the
+      // backend's own sentence is the fallback for anything else).
+      const normalized = normalizeApiError(error);
+      showError({
+        summary: t("rework.admin.capabilities.defaultToggleError"),
+        detail: normalized.kind === "conflict" ? t("rework.admin.capabilities.defaultOnConflict") : normalized.detail,
+      });
     } finally {
       inFlightDefaultOnIdRef.current = null;
       setTogglingCapabilityId(null);
@@ -178,8 +189,11 @@ export default function CapabilitiesPage() {
           nextValue ? "rework.admin.capabilities.reasoningOnToast" : "rework.admin.capabilities.reasoningOffToast",
         ),
       });
-    } catch {
-      showError({ summary: t("rework.admin.capabilities.reasoningToggleError") });
+    } catch (error) {
+      showError({
+        summary: t("rework.admin.capabilities.reasoningToggleError"),
+        detail: normalizeApiError(error).detail,
+      });
     } finally {
       inFlightReasoningIdRef.current = null;
       setTogglingReasoningId(null);
@@ -261,16 +275,40 @@ export default function CapabilitiesPage() {
     {
       label: t("rework.admin.capabilities.col.defaultOn"),
       size: "1fr",
-      cellRenderer: (cap) => (
-        <div className={styles.centered}>
+      cellRenderer: (cap) => {
+        // §8.2: a capability with a REQUIRED team setting can never be on by
+        // default — nobody has filled the settings for the teams that would
+        // inherit it, so the write 409s (`DefaultOnNotAllowed`). Turning it
+        // OFF stays possible, hence the `!cap.default_on` guard: a row that is
+        // already default-on (settings added after the fact) must not be
+        // trapped in that state.
+        //
+        // This flips only when `default_on` itself does, i.e. on the
+        // turn-OFF path — which runs through the confirmation dialog, so the
+        // Switch does not hold focus when the cell re-renders (the dialog
+        // restores focus to nothing on close). That is why the swap between
+        // the wrapped and bare control cannot reintroduce the Chromium
+        // focus-yank bug documented above; it is not because `blockedOn` is
+        // constant, which it isn't.
+        const blockedOn = !cap.default_on && requiresTeamSettings(cap);
+        const control = (
           <Switch
             checked={cap.default_on}
-            disabled={isTogglingDefault && togglingCapabilityId !== cap.id}
+            disabled={blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
             onChange={() => onToggleDefault(cap)}
             aria-label={t("rework.admin.capabilities.col.defaultOn")}
           />
-        </div>
-      ),
+        );
+        return (
+          <div className={styles.centered}>
+            {blockedOn ? (
+              <Tooltip text={t("rework.admin.capabilities.defaultOnRequiresSettingsHint")}>{control}</Tooltip>
+            ) : (
+              control
+            )}
+          </div>
+        );
+      },
     },
     {
       label: t("rework.admin.capabilities.col.capability"),
@@ -488,6 +526,9 @@ export default function CapabilitiesPage() {
 
       <CapabilityTeamMatrixDrawer
         capability={matrixCapability}
+        // The FULL catalog, not the kind-filtered `capabilities`: an agent's
+        // dependencies are tool rows the Agents tab has filtered out (#2408).
+        allCapabilities={allCapabilities}
         teams={teams}
         teamsLoading={isTeamsLoading}
         teamsError={isTeamsError}
