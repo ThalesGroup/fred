@@ -25,7 +25,6 @@ never DROP or report drift for a foreign table that is present.
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from fred_core.sql.alembic_env import autogenerate_diffs
 
 

@@ -24,6 +24,10 @@ control-plane's autogenerate propose creating knowledge-flow's tables.
 
 from __future__ import annotations
 
+import fred_core.session.stores.session_models  # noqa: F401 — registers session with CoreBase
+import fred_core.teams.team_metatada_models  # noqa: F401 — registers teammetadata with CoreBase
+import fred_core.users.user_models  # noqa: F401 — registers users with CoreBase
+
 # Explicit registration imports: OWNED_TABLES derives its app half from
 # Base.metadata and claims three CoreBase tables by name, so every module
 # registering one of those tables must be imported HERE — never rely on
@@ -41,9 +45,6 @@ import control_plane_backend.models.routing_policy_models  # noqa: F401
 import control_plane_backend.models.session_attachment_models  # noqa: F401
 import control_plane_backend.models.session_metadata_models  # noqa: F401
 import control_plane_backend.models.task_models  # noqa: F401 — registers cp_task_run / cp_task_event_log with Base
-import fred_core.session.stores.session_models  # noqa: F401 — registers session with CoreBase
-import fred_core.teams.team_metatada_models  # noqa: F401 — registers teammetadata with CoreBase
-import fred_core.users.user_models  # noqa: F401 — registers users with CoreBase
 from control_plane_backend.models.base import Base
 
 # CoreBase tables whose migrations this tree owns — explicit names, never

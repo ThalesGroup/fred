@@ -46,6 +46,7 @@ from __future__ import annotations
 # make lazy.
 import fred_core.documents.document_models  # noqa: F401 — registers metadata + tag with CoreBase
 import fred_core.documents.label_models  # noqa: F401 — registers document_labels with CoreBase
+
 import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401 — registers resource with Base
 import knowledge_flow_backend.models.task_models  # noqa: F401 — registers kf_task_run / kf_task_event_log with Base
 from knowledge_flow_backend.models.base import Base
