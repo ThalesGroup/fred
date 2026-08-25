@@ -406,7 +406,9 @@ export default function AnalyticsPage() {
           />
         </div>
 
-        <div className={styles.chartGrid}>
+        {/* Exactly two histograms — split the row 50/50 instead of leaving the
+            third bento column empty. */}
+        <div className={styles.chartGridHalves}>
           <HistogramChart
             title={t("rework.analytics.engagement.conversationsPerUser.title")}
             rows={conversationsPerUserData?.rows ?? []}

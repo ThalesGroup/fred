@@ -15,20 +15,32 @@
 /* Disclosure's content wrapper is a plain block container, so these two grids
    would otherwise sit flush — the KPI tiles touching the chart cards below.
    Space them on the chart grid's own rhythm rather than the tighter tile gap. */
-.kpiRow + .chartGrid {
+.kpiRow + .chartGrid,
+.kpiRow + .chartGridHalves {
   margin-top: var(--spacing-m);
 }
 
 /* Bento grid: 3 base columns. Most charts take one cell; the busy multi-series
    gets two (.cellWide) and the prompt-length distribution the full width
    (.cellFull) — "space for the ones that need it". */
-.chartGrid {
+.chartGrid,
+.chartGridHalves {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--spacing-m);
 }
 
-.chartGrid > * {
+.chartGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Variant for a row of exactly two charts (Engagement histograms): split the
+   full width 50/50 instead of leaving the third bento column empty. */
+.chartGridHalves {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.chartGrid > *,
+.chartGridHalves > * {
   min-width: 0;
 }
 
@@ -53,7 +65,10 @@
 }
 
 @media (max-width: 700px) {
-  .chartGrid {
+  /* .chartGridHalves already matches the ≤1100px two-column layout, so it only
+     needs the single-column collapse here. */
+  .chartGrid,
+  .chartGridHalves {
     grid-template-columns: 1fr;
   }
   .cellWide,
