@@ -227,6 +227,13 @@ def build_tool_failure_recovery_suffix() -> str:
     )
 
 
+_SPREADSHEET_ATTACHMENT_RE = re.compile(r"\.(?:csv|xlsx?)\b", re.IGNORECASE)
+_SPREADSHEET_ATTACHMENT_NOTE = (
+    " (markdown text, NOT a SQL dataset - use the conversation search tool, "
+    "never the tabular/SQL tools)"
+)
+
+
 def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
     """
     Render current conversation attachments as a per-turn system-prompt suffix.
@@ -243,6 +250,17 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         line
         for line in attachments_markdown.splitlines()
         if not line.lstrip().startswith("data:")
+    ]
+    # #2418 follow-up: the paragraph-level "not SQL-queryable" rule alone was
+    # ignored in live testing (the model still fed an attachment uid to the
+    # tabular tools). Models weigh an annotation glued to the data far more
+    # than a distant instruction, so repeat it on each spreadsheet line, right
+    # next to the uid the model would otherwise pass to those tools.
+    safe_attachment_lines = [
+        f"{line}{_SPREADSHEET_ATTACHMENT_NOTE}"
+        if line.lstrip().startswith("-") and _SPREADSHEET_ATTACHMENT_RE.search(line)
+        else line
+        for line in safe_attachment_lines
     ]
     safe_attachments_markdown = "\n".join(safe_attachment_lines).strip()
     if not safe_attachments_markdown:

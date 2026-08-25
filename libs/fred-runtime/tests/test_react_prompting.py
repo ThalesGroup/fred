@@ -200,7 +200,7 @@ def test_attachment_context_suffix_marks_spreadsheets_as_text_not_tabular() -> N
     suffix = build_attachment_context_suffix(
         _binding(
             "## Attached files\n"
-            "- sales.csv: conversation document [2b6a1cfdbffe4847a4d2f087741f2835]"
+            "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
         )
     )
 
@@ -212,6 +212,40 @@ def test_attachment_context_suffix_marks_spreadsheets_as_text_not_tabular() -> N
     assert "treated as text documents" in suffix
     assert "NOT loaded as SQL-queryable tables" in suffix
     assert "never pass an attachment's uid to the tabular/SQL tools" in suffix
+
+
+def test_attachment_context_suffix_annotates_each_spreadsheet_line_inline() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document\n"
+            "- Plan_2026.XLSX [77aa1cfdbffe4847a4d2f087741f2899]: conversation document\n"
+            "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document"
+        )
+    )
+
+    # #2418 follow-up: the paragraph-level rule alone was ignored in live
+    # testing, so each spreadsheet line carries the warning inline, next to
+    # the uid the model would otherwise feed to the tabular/SQL tools.
+    assert (
+        "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document "
+        "(markdown text, NOT a SQL dataset - use the conversation search tool, "
+        "never the tabular/SQL tools)" in suffix
+    )
+    # Case-insensitive extension match (.XLSX) is annotated too.
+    assert (
+        "- Plan_2026.XLSX [77aa1cfdbffe4847a4d2f087741f2899]: conversation document "
+        "(markdown text, NOT a SQL dataset" in suffix
+    )
+    # Non-spreadsheet attachments keep their line untouched.
+    assert (
+        "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document\n"
+        in suffix
+        or suffix.endswith(
+            "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document"
+        )
+    )
+    assert suffix.count("NOT a SQL dataset") == 2
 
 
 def test_context_prompt_suffix_injects_selected_prompt_text() -> None:
