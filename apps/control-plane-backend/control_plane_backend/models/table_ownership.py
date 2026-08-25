@@ -62,3 +62,7 @@ _EVALUATION_TABLES: frozenset[str] = frozenset(
 OWNED_TABLES: frozenset[str] = (
     frozenset(Base.metadata.tables) - _EVALUATION_TABLES
 ) | SHARED_CORE_TABLES
+
+# Consumed by alembic/env.py — declared so CodeQL's module-local
+# unused-global query sees the export.
+__all__ = ["OWNED_TABLES", "SHARED_CORE_TABLES"]

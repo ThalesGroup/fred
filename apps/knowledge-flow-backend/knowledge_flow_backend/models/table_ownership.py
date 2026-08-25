@@ -63,3 +63,7 @@ OWNED_TABLES: frozenset[str] = frozenset(Base.metadata.tables) | SHARED_CORE_TAB
 # to control-plane's tree — listing them here only makes the startup guard
 # honest about what this component needs to serve traffic.
 REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata"})
+
+# Consumed by alembic/env.py, main.py and main_worker.py — declared so
+# CodeQL's module-local unused-global query sees the export.
+__all__ = ["OWNED_TABLES", "REQUIRED_TABLES", "SHARED_CORE_TABLES"]
