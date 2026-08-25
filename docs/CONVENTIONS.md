@@ -109,6 +109,16 @@ below are what to follow while writing the code, not just at review time.
   unrelated change.
 - **Never hand-edit generated files.** `openapi.json` — regenerate from source and
   document the regeneration command when you run it.
+- **Alembic table ownership is declared, never derived.** A backend whose
+  Alembic metadata includes the shared CoreBase (knowledge-flow,
+  control-plane) passes an explicit `owned_tables` set (exported by its
+  `models/table_ownership.py`) to `make_alembic_env`; fred-runtime reaches the
+  same scoping with a dedicated `MetaData`. No startup path runs
+  `create_all` — DDL belongs to the owning Alembic tree alone, and a process
+  that queries tables (knowledge-flow API and worker, fred-runtime) fails
+  boot on a missing schema via `fred_core.sql.require_tables`. Who owns what
+  and why: `docs/swift/ops/DATABASE_MIGRATIONS.md` §"Table ownership across
+  trees" (#2314).
 - **Wrap bare `for x in SomeEnum:` in `list(...)`.** `EnumMeta.__iter__` makes an
   `Enum` class itself iterable, but CodeQL's Python analysis doesn't model that and
   flags `for x in SomeEnum:` as "non-iterable used in for loop" — a false positive,
