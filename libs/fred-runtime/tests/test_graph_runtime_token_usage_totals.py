@@ -17,9 +17,12 @@ follow-up) — the same bug as react_runtime.py's, at the node level: a node
 that calls the model more than once before invoking a tool must report the
 *sum* of those calls as its contribution to the turn total, not just the
 last one. `last_model_metadata` (what the executor folds into the turn
-total) must carry that sum, while the per-step attribution used by
-`ToolCallRuntimeEvent` (TRACE-01) must keep showing only the most recent
-individual call, not a running total.
+total) must carry that sum.
+
+Graph nodes carry no per-step token figure at all (#2403): the marginal
+measurement the ReAct runtime uses relies on one context growing across
+consecutive calls, which a graph's independent nodes do not share. Reporting
+an unmeasurable number there would be worse than reporting none.
 """
 
 from __future__ import annotations
@@ -101,13 +104,11 @@ def test_last_model_metadata_sums_every_call_the_node_made() -> None:
     assert finish_reason == "stop"
 
 
-def test_tool_call_event_keeps_only_the_most_recent_call_not_the_running_total() -> (
-    None
-):
+def test_graph_tool_call_event_carries_no_token_figure() -> None:
     """
-    TRACE-01 per-step display must not regress into showing a node-level
-    running total: a tool call right after the node's *second* model call
-    should show only that call's usage, not the sum of both.
+    A graph node's tool row must not resurrect the old per-step display
+    (#2403). The node's model calls still feed the turn's billed total —
+    that is asserted above — but nothing per-step is claimed.
     """
 
     ctx = _node_context({"noop_probe": _noop_probe})
@@ -117,17 +118,16 @@ def test_tool_call_event_keeps_only_the_most_recent_call_not_the_running_total()
         token_usage={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
         finish_reason=None,
     )
-    ctx.record_model_metadata(
-        model_name="gpt-4o",
-        token_usage={"input_tokens": 5, "output_tokens": 1, "total_tokens": 6},
-        finish_reason=None,
-    )
 
     asyncio.run(ctx.invoke_runtime_tool("noop_probe", {"x": "y"}))
 
     (event,) = [e for e in ctx.events if isinstance(e, ToolCallRuntimeEvent)]
-    assert event.token_usage == {
-        "input_tokens": 5,
-        "output_tokens": 1,
-        "total_tokens": 6,
+    assert not hasattr(event, "token_usage")
+    # The node still contributes its usage to the turn total.
+    assert ctx.last_model_metadata[1] == {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "total_tokens": 120,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
     }

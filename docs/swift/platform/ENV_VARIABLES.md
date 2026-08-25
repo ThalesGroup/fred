@@ -68,8 +68,10 @@ Note:
 | --------------------- | ------------ | ----------------------------------------------------------------- |
 | `LANGFUSE_PUBLIC_KEY` | agentic      | Langfuse public key.                                              |
 | `LANGFUSE_SECRET_KEY` | agentic      | Langfuse secret key.                                              |
-| `LANGFUSE_HOST`       | agentic      | Langfuse host URL used by current runtime code.                   |
+| `LANGFUSE_HOST`       | agentic      | Langfuse host URL used by current runtime code. Read by the Langfuse SDK itself — when unset the SDK silently defaults to Langfuse Cloud, so a local server receives nothing. |
 | `LANGFUSE_BASE_URL`   | agentic      | Legacy naming in template; current runtime reads `LANGFUSE_HOST`. |
+| `LANGFUSE_CAPTURE_CONTENT` | agentic | **Local debugging only.** Exports prompts, model answers, and tool payloads to Langfuse, overriding `observability.langfuse.capture_content`. Breaks the content exclusion of `OBSERVABILITY-AND-AUDIT.md` §7 — never set on a shared or production deployment. Default off. |
+| `LANGFUSE_MAX_CONTENT_CHARS` | agentic | Total characters exported per payload when content capture is on (default 100000), overriding `observability.langfuse.max_content_chars`. Raise it when traces show `…[truncated N chars]`. Only knob that works when `tracer` is not `langfuse` but credentials are present, since `build_default_tracer` never reads configuration.yaml. |
 
 ## 2) Startup Configuration and Feature-Switch Variables
 

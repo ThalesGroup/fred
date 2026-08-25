@@ -382,6 +382,14 @@ class ChatMetadata(BaseModel):
 
     model: Optional[str] = None
     token_usage: Optional[ChatTokenUsage] = None
+    # Assistant-final rows: size of the context at the end of the turn, i.e.
+    # the input_tokens of the turn's last model call (#2403). Persisted so a
+    # reloaded conversation can recompute each turn's MARGINAL cost the same
+    # way the live stream does — `token_usage` alone only says what was
+    # billed, which re-counts the whole history once per model call.
+    # Absent on runtimes where context growth is not measurable (Graph
+    # agents, whose nodes do not share one growing context).
+    context_tokens: Optional[int] = None
     agent_id: Optional[str] = None
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
@@ -457,12 +465,14 @@ def make_assistant_final(
     usage: Optional[ChatTokenUsage] = None,
     sources: Optional[List[VectorSearchHit]] = None,
     finish_reason: Optional[str] = None,
+    context_tokens: Optional[int] = None,
 ) -> ChatMessage:
     """
     Build the terminal assistant message for a turn.
 
     How to use it:
     - call after accumulating all assistant delta tokens into ``text``
+    - ``context_tokens``: context size at turn end, see ``ChatMetadata``
     """
     return ChatMessage(
         session_id=session_id,
@@ -475,6 +485,7 @@ def make_assistant_final(
         metadata=ChatMetadata(
             model=model,
             token_usage=usage,
+            context_tokens=context_tokens,
             finish_reason=coerce_finish_reason(finish_reason),
             sources=sources or [],
         ),
@@ -488,16 +499,15 @@ def make_tool_call(
     call_id: str,
     name: str,
     args: Dict[str, Any],
-    *,
-    token_usage: Optional[Dict[str, int]] = None,
 ) -> ChatMessage:
     """
     Build a tool-call record message.
 
     How to use it:
     - call when a ``ToolCallRuntimeEvent`` is received
-    - ``token_usage``: the model call that decided to make this tool call
-      (TRACE-01), same shape as ``ToolCallRuntimeEvent.token_usage``
+    - carries no token figure (#2403): a tool call costs nothing by itself,
+      and the former ``token_usage`` argument carried the deciding model
+      call's whole prompt, making a free tool call look like a 17k one.
     """
     return ChatMessage(
         session_id=session_id,
@@ -507,9 +517,7 @@ def make_tool_call(
         role=Role.assistant,
         channel=Channel.tool_call,
         parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
-        metadata=ChatMetadata(token_usage=ChatTokenUsage(**token_usage))
-        if token_usage
-        else ChatMetadata(),
+        metadata=ChatMetadata(),
     )
 
 

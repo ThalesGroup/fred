@@ -493,6 +493,7 @@ export function useChatSse(
                     cache_read_tokens: event.token_usage["cache_read_tokens"],
                   }
                 : null,
+              context_tokens: event.context_tokens ?? null,
               extras: {},
             },
           });
@@ -516,16 +517,8 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
-            metadata: event.token_usage
-              ? {
-                  token_usage: {
-                    input_tokens: event.token_usage["input_tokens"] ?? 0,
-                    output_tokens: event.token_usage["output_tokens"] ?? 0,
-                    total_tokens: event.token_usage["total_tokens"] ?? 0,
-                    cache_read_tokens: event.token_usage["cache_read_tokens"],
-                  },
-                }
-              : undefined,
+            // No token figure here (#2403): a tool call costs nothing by
+            // itself, and the row deliberately shows latency only.
           });
           break;
         }
