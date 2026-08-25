@@ -612,6 +612,7 @@ def _claude_terminal_command(wt: Path) -> list[str] | None:
     if terminal_env:
         candidates.append((terminal_env, [terminal_env, "-e", "claude"]))
     candidates += [
+        ("terminator", ["terminator", f"--working-directory={wt}", "-x", "claude"]),
         ("gnome-terminal", ["gnome-terminal", f"--working-directory={wt}", "--", "claude"]),
         ("konsole", ["konsole", "--workdir", str(wt), "-e", "claude"]),
         ("xfce4-terminal", ["xfce4-terminal", f"--working-directory={wt}", "-x", "claude"]),
