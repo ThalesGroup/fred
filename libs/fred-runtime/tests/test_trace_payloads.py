@@ -24,7 +24,6 @@ from fred_runtime.runtime_support.trace_payloads import (
 )
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-
 # ---------------------------------------------------------------------------
 # Token usage
 # ---------------------------------------------------------------------------
