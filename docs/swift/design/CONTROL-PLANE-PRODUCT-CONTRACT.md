@@ -1991,8 +1991,26 @@ synthèse", "Stratégie et idéation", "Communication") and one prompt per
 category. From that point on the starter kit is normal team content — any
 `team_editor` can rename, edit, or delete every part of it, including the
 categories themselves. Seeding is **best-effort**: unlike the ReBAC relation
-writes, a seeding failure logs a warning and does not fail team creation. The
-personal prompt space is **not** seeded.
+writes, a seeding failure logs a warning and does not fail team creation.
+
+**Personal spaces are seeded lazily, on first read (2026-08-25, #2410).**
+Personal teams are virtual - `teams/system.py::build_personal_team` synthesizes
+`personal-<uid>` on the fly, so they never go through `create_team` and own no
+`teammetadata` row; the creation hook above and the backfill migration below
+both missed them, and a new user's personal library started empty. The three
+personal-reachable read surfaces (`GET /teams/{team_id}/prompts`, the chat
+context picker, `GET /teams/{team_id}/prompt-categories`) now call
+`_ensure_personal_starter_kit` first. It seeds only a **pristine** personal
+library (zero prompts *and* zero categories), so a curated space is never
+given content back; it is **convergent** (create-or-reuse by `(team_id,
+name)`), so concurrent first reads cannot duplicate rows; and it is
+**best-effort**, so a store failure degrades to an empty library rather than
+failing the listing. There is deliberately **no migration**: personal teams
+cannot be enumerated, so seed-on-first-read *is* the backfill. A virtual team
+has no marker row, so "library is empty" is the only available proxy for
+"never seeded" - which means a user who deletes every prompt *and* every
+category is re-seeded on the next visit, and a run that fails halfway is not
+retried (the space is no longer pristine).
 
 **Migration (`8ca7cafc292f`)** backfills the same starter kit into every
 *existing* team that had zero prompt rows at migration time (teams that

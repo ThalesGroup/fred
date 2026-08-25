@@ -57,6 +57,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.product.prompt_starter_kit import seed_starter_kit
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ContextPromptSummary,
@@ -3524,6 +3525,56 @@ async def create_prompt(
     return _prompt_record_to_summary(created)
 
 
+async def _ensure_personal_starter_kit(
+    team_id: TeamId, deps: ProductServiceDependencies
+) -> None:
+    """Give a personal space the same starter prompt kit collaborative teams get (#2410).
+
+    Why this function exists:
+    - personal teams are *virtual* (`teams/system.py::build_personal_team`
+      synthesizes `personal-<uid>` on the fly): they never go through
+      `create_team` and own no `teammetadata` row, so neither PROMPT-09's
+      creation-time seeding nor its backfill migration could ever reach them
+      and a new user's personal prompt library started empty
+    - seeding on first read *is* the backfill: there is no reliable way to
+      enumerate the personal teams that already exist, so there is no
+      migration - each pristine personal space heals itself on next visit
+
+    Only a **pristine** library is seeded (zero prompts *and* zero
+    categories), so a user who curated their own personal space is never
+    given content they did not ask for. Best-effort: a failure here must
+    never break the listing surface it is called from.
+
+    Two consequences of using "library is empty" as the proxy for "never
+    seeded" (no marker row exists for a virtual team), both accepted
+    knowingly rather than overlooked:
+    - a user who deletes *every* prompt **and** every category gets the kit
+      back on the next visit
+    - a seeding run that fails halfway leaves the space non-pristine, so it
+      is not retried; the user keeps whatever landed and can edit from there
+    """
+
+    if not is_personal_team_id(team_id):
+        return
+    try:
+        prompt_store = deps.get_prompt_store()
+        if await prompt_store.list_by_team(team_id, limit=1):
+            return
+        category_store = deps.get_prompt_category_store()
+        if await category_store.list_by_team(team_id):
+            return
+        await seed_starter_kit(
+            team_id, prompt_store=prompt_store, category_store=category_store
+        )
+    except Exception:
+        logger.warning(
+            "Failed to seed the starter prompt kit for personal space %s - "
+            "continuing with an empty prompt library.",
+            team_id,
+            exc_info=True,
+        )
+
+
 async def list_prompts(
     team_id: TeamId,
     deps: ProductServiceDependencies,
@@ -3547,6 +3598,7 @@ async def list_prompts(
     - `prompts = await list_prompts(team_id, deps)`
     """
 
+    await _ensure_personal_starter_kit(team_id, deps)
     store = deps.get_prompt_store()
     records = await store.list_by_team(team_id, limit=limit)
     return sorted(
@@ -3677,6 +3729,7 @@ async def list_context_prompts(
     session_count DESC (most-used first).
     """
 
+    await _ensure_personal_starter_kit(team_id, deps)
     store = deps.get_prompt_store()
     records = await store.list_context_prompts(personal_team_id(user.uid), team_id)
     return [
@@ -3961,6 +4014,7 @@ async def list_prompt_categories(
 ) -> list[PromptCategorySummary]:
     """List one team's prompt categories, alphabetically."""
 
+    await _ensure_personal_starter_kit(team_id, deps)
     records = await deps.get_prompt_category_store().list_by_team(team_id)
     return [_category_record_to_summary(r) for r in records]
 

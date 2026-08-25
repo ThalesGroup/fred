@@ -94,7 +94,10 @@ The main API surface is:
 real row in the `prompt` table, owned and fully editable by its team. New teams
 are seeded with a 4-category / 4-prompt starter kit at creation time
 (`_seed_starter_kit`, best-effort — a seeding failure never fails team
-creation); from that point on the starter kit is ordinary team content.
+creation); personal spaces, being virtual, are seeded lazily on first access
+instead (`_ensure_personal_starter_kit`, #2410 — only a library with zero
+prompts *and* zero categories). From that point on the starter kit is ordinary
+team content.
 
 ### 3.1 Prompt categories
 

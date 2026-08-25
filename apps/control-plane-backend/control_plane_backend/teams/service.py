@@ -35,12 +35,7 @@ from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from sqlalchemy.exc import IntegrityError
 
-from control_plane_backend.product.prompt_starter_kit import (
-    STARTER_CATEGORY_NAMES,
-    STARTER_PROMPTS,
-)
-from control_plane_backend.prompts.category_store import PromptCategoryRecord
-from control_plane_backend.prompts.store import PromptRecord
+from control_plane_backend.product.prompt_starter_kit import seed_starter_kit
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
 )
@@ -427,42 +422,10 @@ async def _seed_starter_kit(team_id: TeamId, deps: TeamServiceDependencies) -> N
     """
 
     try:
-        category_store = deps.get_prompt_category_store()
-        # Each category is independent of its siblings — only the prompt
-        # phase below depends on this one having finished (it needs every
-        # category_id to link prompts to their category).
-        created_categories = await asyncio.gather(
-            *(
-                category_store.create(
-                    PromptCategoryRecord(
-                        category_id=str(uuid4()), team_id=team_id, name=name
-                    )
-                )
-                for name in STARTER_CATEGORY_NAMES
-            )
-        )
-        category_id_by_name = {
-            record.name: record.category_id for record in created_categories
-        }
-
-        prompt_store = deps.get_prompt_store()
-        # Independent of each other too — each prompt only needs its own
-        # (already-resolved) category id, not any sibling prompt.
-        await asyncio.gather(
-            *(
-                prompt_store.create(
-                    PromptRecord(
-                        prompt_id=str(uuid4()),
-                        team_id=team_id,
-                        name=spec.name,
-                        description=spec.description,
-                        category_id=category_id_by_name.get(spec.category_name),
-                        text=spec.text,
-                        created_by=None,
-                    )
-                )
-                for spec in STARTER_PROMPTS
-            )
+        await seed_starter_kit(
+            team_id,
+            prompt_store=deps.get_prompt_store(),
+            category_store=deps.get_prompt_category_store(),
         )
     except Exception:
         logger.warning(
