@@ -100,14 +100,14 @@ from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointWriter,
     checkpoint_namespace,
 )
+from fred_runtime.runtime_support.model_metadata import (
+    runtime_metadata_from_message,
+    sum_token_usage,
+)
 from fred_runtime.runtime_support.trace_payloads import (
     serialize_messages,
     serialize_model_output,
     to_langfuse_usage,
-)
-from fred_runtime.runtime_support.model_metadata import (
-    runtime_metadata_from_message,
-    sum_token_usage,
 )
 
 logger = logging.getLogger(__name__)
