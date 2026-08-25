@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
 import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
@@ -41,6 +42,10 @@ export default function HomeNavPanel() {
   const { defaultTeamAvatarFile } = useFrontendProperties();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const [search, setSearch] = useState("");
+  // The search field is hidden behind a magnifier button and only mounts (as an
+  // overlay over the list header) once opened; it collapses again when it loses
+  // focus, but only while empty — a live filter keeps it open (chosen #2298).
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sortMode, setSortMode] = useState<TeamSortMode>(getTeamSortMode);
   // Read once on mount — recency only changes while the user is inside a team,
   // and this panel remounts when they return to Home.
@@ -95,16 +100,31 @@ export default function HomeNavPanel() {
       <div className={styles.teamList}>
         <div className={styles.teamListHeader}>
           <span className={styles.teamListHeaderLabel}>{t("rework.home.yourTeams")}</span>
-        </div>
-        <div className={styles.teamSearch}>
-          <SearchInput
-            size="xs"
-            value={search}
-            onChange={setSearch}
-            placeholder={t("rework.home.searchPlaceholder")}
-            ariaLabel={t("rework.home.searchPlaceholder")}
-            clearAriaLabel={t("rework.home.searchClear")}
+          <IconButton
+            size="small"
+            variant="icon"
+            icon={{ category: "outlined", type: "search" }}
+            aria-label={t("rework.home.searchPlaceholder")}
+            onClick={() => setSearchOpen(true)}
           />
+          {searchOpen && (
+            <div className={styles.searchOverlay}>
+              <SearchInput
+                size="xs"
+                value={search}
+                onChange={setSearch}
+                autoFocus
+                // Collapse when focus leaves, but only if the field is empty —
+                // an active filter stays open so the list keeps its context.
+                onBlur={() => {
+                  if (!search.trim()) setSearchOpen(false);
+                }}
+                placeholder={t("rework.home.searchPlaceholder")}
+                ariaLabel={t("rework.home.searchPlaceholder")}
+                clearAriaLabel={t("rework.home.searchClear")}
+              />
+            </div>
+          )}
         </div>
         <div className={styles.teamSort}>
           <TeamSortSelect<TeamSortMode>
