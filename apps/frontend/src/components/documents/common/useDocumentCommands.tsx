@@ -18,7 +18,6 @@ import {
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   TagWithItemsId,
   DocumentMetadata,
-  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useMutateDocumentLabelsMutation,
@@ -41,7 +40,6 @@ export interface DocumentPreviewTarget {
 export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefreshers = {}) {
   const { t } = useTranslation();
   const { showSuccess, showError, showInfo } = useToast();
-  const [] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
   const [updateRetrievable] =
@@ -239,14 +237,18 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   // index and the content-store filename lookup. Supersedes the earlier
   // cosmetic title-only rename (identity.title, browser-display only) for
   // the Corpus "Renommer" action.
+  // `tagId` is the folder currently being viewed: callers must pass it (like
+  // removeFromLibrary does) so `refresh` reloads that folder's page and the
+  // renamed row shows its new name. Without it refetchDocs is a no-op and the
+  // rename succeeds server-side while the UI keeps showing the old name.
   const renameDocument = useCallback(
-    async (doc: DocumentMetadata, newName: string) => {
+    async (doc: DocumentMetadata, newName: string, tagId?: string) => {
       try {
         await renameDocumentMutation({
           documentUid: doc.identity.document_uid,
           bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: { name: newName },
         }).unwrap();
-        await refresh();
+        await refresh(tagId);
       } catch (e: any) {
         showError?.({
           summary: t("validation.error"),
