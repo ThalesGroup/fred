@@ -1555,6 +1555,9 @@
         "d30": "Last 30 days",
         "d90": "Last 90 days"
       },
+      "recentAgents": {
+        "title": "Recently used agents"
+      },
       "topAgents": {
         "title": "Your most-used agents",
         "unit": "conv.",

@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import ActivityKpis from "./ActivityKpis/ActivityKpis.tsx";
+import RecentAgents from "./RecentAgents/RecentAgents.tsx";
 import ResponsibleAiSection from "./ResponsibleAiSection/ResponsibleAiSection.tsx";
 import TopAgents from "./TopAgents/TopAgents.tsx";
 import TopTeams from "./TopTeams/TopTeams.tsx";
@@ -66,6 +67,7 @@ export default function HomePage() {
         />
       </header>
 
+      <RecentAgents />
       <ActivityKpis period={period} />
       <ResponsibleAiSection period={period} />
 
