@@ -4095,7 +4095,108 @@ identity, which the composer displayed as its model label — the root of this
 issue. The control now ships only what it is authoritative about (`default`,
 `effort`).
 
-### 8.57 ✅ `agent.turn_completed` carries `session_id` — issue #2426 (2026-08-25)
+### 8.57 ✅ Per-tool and per-message token badges report marginal cost, not billed totals — issue #2403 (2026-08-21)
+
+**A tool row claimed a tool had consumed 17 559 tokens when it had consumed
+none.** `ToolCallRuntimeEvent.token_usage` carried the usage of the model call
+that *decided* the tool call, and the trace UI rendered it on the tool's row
+(`toolCallTokenUsage` in `traceUtils.ts`). A tool call costs nothing by itself;
+what the row was actually displaying was the whole prompt of the deciding call.
+The final-answer badge had the mirror problem: it showed the turn total summed
+across every model call, which the conversation header already sums again —
+so the per-message figure repeated the header while being an order of magnitude
+larger than what the turn had added.
+
+Field trace of one 2-tool turn, before the fix:
+
+| model call | input | output | rendered as |
+| --- | --- | --- | --- |
+| 1 (decides tool 1) | 17 550 | 9 | tool row 1: "17 559 tokens" |
+| 2 (decides tool 2) | 19 709 (17 520 cached) | 83 | tool row 2: "19 792 tokens" |
+| 3 (final answer) | 19 942 | 64 | — |
+| turn total | 57 201 | 156 | answer badge: "57 357 tokens" |
+
+**The measurement.** Within a turn the context only grows, so the input size of
+the LAST model call is the context the turn leaves behind — no estimation, no
+tokenizer. `FinalRuntimeEvent` gains one field:
+
+| Field | Meaning |
+| --- | --- |
+| `context_tokens: int \| None` | `input_tokens` of the turn's LAST model call — the context size at turn end |
+
+`ToolCallRuntimeEvent.token_usage` is **removed**, and tool rows now carry no
+token figure at all: a tool call costs nothing by itself, so the row shows
+latency only. (An intermediate version of this work added a
+`tool_context_cost` map attributing each round's context growth per `call_id`;
+it served its diagnostic purpose — proving the tools cost ~2 300 tokens, not
+~17 500 — and was then removed along with its display as UI weight. The
+measurement is recoverable from this issue's history if a per-tool figure is
+ever wanted again.) `token_usage` on `FinalRuntimeEvent` is unchanged and still
+carries the billed total.
+
+**The conversation header sums what the messages display, not the invoice.**
+Summing billed usage there put `72 595` above two messages badged `16 871` and
+`3 136` — the same parts-versus-whole mismatch as the tool rows, one level up.
+`conversationTokenTotals` (`toThreadMessages.ts`) now adds the per-message
+figures, so the thread reconciles with its header; because each turn
+contributes `contextTokens(T) − contextTokens(T−1)`, that sum telescopes to
+`contextTokens(last) + every output` — the tokens the conversation actually
+holds. The billed total is still computed and surfaced, in the header tooltip.
+
+The per-message figure is derived, not transported:
+`new_input(T) = context_tokens(T) − context_tokens(T−1)`.
+`ChatMetadata` gains `context_tokens` (assistant-final rows) so a reloaded
+conversation recomputes identically.
+
+**The anchor is the previous `context_tokens` alone, deliberately not
+`+ output_tokens(T−1)`.** Adding the previous turn's output assumes all of it
+returns in the next prompt, and it does not: reasoning tokens are counted in
+`output_tokens` but dropped from replay (`CheckpointHygieneMiddleware` —
+"reasoning from closed turns is dropped"). That over-subtracted by however much
+the model had reasoned. Observed live: a turn whose two tool rows read `+2254`
+and `+332` displayed `2534` new input tokens — the parts exceeded the whole,
+and the implied question length was −52. Anchoring on `context_tokens` alone is
+fully observed and monotonic. The consequence is that the previous answer
+counts as output when produced and as input when re-sent; both are real costs
+at different rates, so this is not double counting.
+
+**Graph agents do not set it.** The measurement assumes one context growing
+across consecutive calls, which a graph's independent nodes do not share. Their
+badges fall back to the billed total rather than showing a number that does not
+mean what it says.
+
+**What the UI ends up showing.** Header: `Total: <sum of the message badges>`.
+Message: `↑<new input> · ↓<output>`, each arrow titled "N tokens sent" /
+"N tokens received" on hover. Tool row: label, latency, nothing else. No
+tooltip explains the accounting model — how the figure is derived is an
+implementation detail, and an earlier version that spelled it out in three
+tooltips was rejected as noise.
+
+**Consequence worth knowing:** a conversation's FIRST message still shows its
+full prompt as new, because on turn 1 the system prompt and tool schemas
+genuinely are. That makes the fixed base cost a single legible line item
+instead of noise repeated on every turn — relevant while the baseline itself
+stays large (see below).
+
+**Out of scope, measured but deliberately not changed.** The ~16 700-token
+baseline on a bare "Hello" is not history — it is the tool definitions, sent
+twice per model call:
+
+1. Every `FastApiMCP` server in `knowledge-flow-backend/main.py` sets
+   `describe_all_responses=True, describe_full_response_schema=True`, which
+   embeds each route's full JSON response schema in its tool description.
+   Measured: Tabular's 5 tools go 25 505 → 10 323 chars with the flags off,
+   Vector Search's 4 go 22 892 → 9 368; the handwritten docstrings survive
+   intact, only the generated schema dump is dropped.
+2. `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`) then re-emits
+   every tool's description into the system prompt, on top of the `tools` API
+   parameter that already carries it.
+
+Both are real reductions and neither was taken here — this change is display
+and accounting only, kept separate per the consolidation rule against bundling
+a reduction with an unrelated fix.
+
+### 8.58 ✅ `agent.turn_completed` carries `session_id` — issue #2426 (2026-08-25)
 
 **Problem.** Conversation depth (how many messages a conversation actually
 gets) is not derivable from any existing KPI row. `agent.turn_completed` is the

@@ -2309,7 +2309,7 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
     turn_completed = [e for e in emitted if e.get("name") == "agent.turn_completed"]
     assert len(turn_completed) == 1
     assert turn_completed[0]["dims"]["session_id"] == "session-depth"
-    # Deliberately NOT carried — see RUNTIME-EXECUTION-CONTRACT.md §8.57.
+    # Deliberately NOT carried — see RUNTIME-EXECUTION-CONTRACT.md §8.58.
     assert "exchange_id" not in turn_completed[0]["dims"]
     assert "user_id" not in turn_completed[0]["dims"]
 

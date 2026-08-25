@@ -23,10 +23,18 @@ from typing import cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.runtime import TracerPort
+from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+
+from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
+from fred_runtime.runtime_support.trace_payloads import (
+    final_assistant_message,
+    serialize_messages,
+    serialize_model_output,
+    to_langfuse_usage,
+)
 
 from ..react_model_adapter import (
     TRACE_MODEL_SPAN_NAME,
@@ -88,6 +96,15 @@ class TracingKpiMiddleware(AgentMiddleware):
                 attributes=cast(dict[str, str | int | float | bool | None], attributes),
                 parent=active_agent_span.get(),
             )
+            # Serializing a full transcript is real work on the per-turn hot
+            # path, so it happens only when a backend will actually store it.
+            if self._tracer.captures_content:
+                span.set_io(
+                    input=serialize_messages(
+                        list(request.messages),
+                        system_prompt=request.system_prompt,
+                    )
+                )
 
         kpi_dims: dict[str, str | None] = {
             "agent_id": self._binding.portable_context.agent_name
@@ -116,6 +133,9 @@ class TracingKpiMiddleware(AgentMiddleware):
                     )
                     if response_model_name is not None:
                         span.set_attribute("model_name", response_model_name)
+                    self._record_model_response(
+                        span, response, model_name=response_model_name or model_name
+                    )
                 self._log_model_response(response)
                 return response
             except Exception:
@@ -125,6 +145,46 @@ class TracingKpiMiddleware(AgentMiddleware):
             finally:
                 if span is not None:
                     span.end()
+
+    def _record_model_response(
+        self,
+        span: SpanPort,
+        response: ModelResponse,
+        *,
+        model_name: str | None,
+    ) -> None:
+        """
+        Attach the answer and the token accounting to the model-call span.
+
+        Why this exists:
+        - token counts and cost per call are the whole point of tracing an LLM
+          call; without `set_usage` a tracing backend can only show latency
+        - usage is technical measurement, so it is always recorded; the answer
+          text is content and follows `captures_content` (§7)
+
+        How to use:
+        - called once per successful model call, before the span ends
+        """
+
+        messages = [
+            message for message in response.result if isinstance(message, BaseMessage)
+        ]
+        if not messages:
+            return
+
+        assistant_message = final_assistant_message(messages)
+        if assistant_message is not None:
+            _, token_usage, finish_reason = runtime_metadata_from_message(
+                assistant_message
+            )
+            usage = to_langfuse_usage(token_usage)
+            if usage is not None or model_name is not None:
+                span.set_usage(model=model_name, usage=usage)
+            if finish_reason is not None:
+                span.set_attribute("finish_reason", str(finish_reason))
+
+        if self._tracer is not None and self._tracer.captures_content:
+            span.set_io(output=serialize_model_output(messages))
 
     @staticmethod
     def _log_model_call(request: ModelRequest) -> None:

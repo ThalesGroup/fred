@@ -52,7 +52,7 @@ async def query_conversation_depth(
     # the two labels must not diverge inside the same page.
     #
     # `require_group_by` matters here: agent.turn_completed only started carrying
-    # dims.session_id with issue #2426 (RUNTIME-EXECUTION-CONTRACT.md §8.57), so
+    # dims.session_id with issue #2426 (RUNTIME-EXECUTION-CONTRACT.md §8.58), so
     # this metric is forward-only — rows written before that deployment have no
     # conversation key and cannot be attributed to one. Excluding them explicitly
     # states that intent rather than leaving the terms agg to skip them as a side

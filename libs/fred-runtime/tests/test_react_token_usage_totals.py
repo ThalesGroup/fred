@@ -23,9 +23,11 @@ Why this exists:
   (spotted live: summing the trace's per-step token figures gave a larger
   total than the chat top-bar badge, which sums FinalRuntimeEvent.token_usage
   per exchange)
-- ToolCallRuntimeEvent.token_usage (TRACE-01 per-step display) must NOT
-  become a running total in the same fix — each step should keep showing
-  only the usage of the model call that decided that specific step
+- tool rows carry no token figure at all (#2403): a tool call costs nothing by
+  itself, and the deciding call's whole prompt on a tool row read as if a free
+  call had consumed 17k tokens
+- `context_tokens` is the size of the context the turn leaves behind, which the
+  chat UI diffs against the previous turn to show what a message really added
 """
 
 from __future__ import annotations
@@ -177,52 +179,110 @@ async def test_final_token_usage_carries_cache_detail_through_the_pipeline() -> 
     }
 
 
-@pytest.mark.asyncio
-async def test_tool_call_event_keeps_only_its_own_triggering_call_usage() -> None:
-    """
-    The turn-total fix must not turn the per-step (TRACE-01) figure into a
-    running total: each ToolCallRuntimeEvent should show only the usage of
-    the model call that decided that one step, even once a later step's
-    usage has been folded into the turn total.
-    """
+def _tool_call(call_id: str, input_tokens: int, output_tokens: int = 1) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[{"id": call_id, "name": "read_query", "args": {}}],
+        usage_metadata={
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        },
+    )
 
-    first_call = AIMessage(
-        content="",
-        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
-        usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
-    )
-    first_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
-    second_call = AIMessage(
-        content="",
-        tool_calls=[{"id": "call-2", "name": "read_query", "args": {}}],
-        usage_metadata={"input_tokens": 5, "output_tokens": 1, "total_tokens": 6},
-    )
-    second_result = ToolMessage(content="ok", tool_call_id="call-2", name="read_query")
-    final_message = AIMessage(content="done")
+
+@pytest.mark.asyncio
+async def test_tool_call_event_no_longer_carries_the_deciding_calls_prompt() -> None:
+    """
+    The misleading field is gone from the contract, not merely unused: a tool
+    row must have no way to render the deciding call's whole prompt again.
+    """
 
     events = [
-        ("updates", {"agent": {"messages": [first_call]}}),
-        ("updates", {"tools": {"messages": [first_result]}}),
-        ("updates", {"agent": {"messages": [second_call]}}),
-        ("updates", {"tools": {"messages": [second_result]}}),
-        ("updates", {"agent": {"messages": [final_message]}}),
+        ("updates", {"agent": {"messages": [_tool_call("call-1", 17550)]}}),
+        (
+            "updates",
+            {"tools": {"messages": [ToolMessage(content="ok", tool_call_id="call-1")]}},
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="done")]}}),
     ]
 
-    collected = await _run_stream(events)
+    (tool_call,) = [
+        e for e in await _run_stream(events) if isinstance(e, ToolCallRuntimeEvent)
+    ]
+    assert not hasattr(tool_call, "token_usage")
 
-    tool_calls = [e for e in collected if isinstance(e, ToolCallRuntimeEvent)]
-    assert len(tool_calls) == 2
-    assert tool_calls[0].token_usage == {
-        "input_tokens": 100,
-        "output_tokens": 20,
-        "total_tokens": 120,
-        "cache_read_tokens": 0,
-        "cache_creation_tokens": 0,
-    }
-    assert tool_calls[1].token_usage == {
-        "input_tokens": 5,
-        "output_tokens": 1,
-        "total_tokens": 6,
-        "cache_read_tokens": 0,
-        "cache_creation_tokens": 0,
-    }
+
+@pytest.mark.asyncio
+async def test_context_tokens_is_the_last_calls_input_even_after_trimming() -> None:
+    """
+    History trimming (`CheckpointHygieneMiddleware`) can shrink the context
+    between two calls. `context_tokens` must still report what the LAST call
+    actually sent, so the UI diffs against reality rather than a high-water
+    mark it can never reach again.
+    """
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_call("call-1", 90_000)]}}),
+        (
+            "updates",
+            {"tools": {"messages": [ToolMessage(content="ok", tool_call_id="call-1")]}},
+        ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        AIMessage(
+                            content="done",
+                            usage_metadata={
+                                "input_tokens": 40_000,
+                                "output_tokens": 10,
+                                "total_tokens": 40_010,
+                            },
+                        )
+                    ]
+                }
+            },
+        ),
+    ]
+
+    (final,) = [
+        e for e in await _run_stream(events) if isinstance(e, FinalRuntimeEvent)
+    ]
+
+    assert final.context_tokens == 40_000
+
+
+@pytest.mark.asyncio
+async def test_a_turn_cut_short_by_a_tool_error_still_reports_its_context() -> None:
+    """
+    When a whole round of tool calls fails, the error is surfaced directly as
+    the final response and the LLM is never called again. The turn still
+    reports the context of the one call it did make.
+    """
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_call("call-1", 500)]}}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content="Tool error:\nboom",
+                            tool_call_id="call-1",
+                            name="t",
+                            artifact={"tool_ref": "t", "is_error": True},
+                        )
+                    ]
+                }
+            },
+        ),
+    ]
+
+    (final,) = [
+        e for e in await _run_stream(events) if isinstance(e, FinalRuntimeEvent)
+    ]
+
+    assert final.context_tokens == 500
