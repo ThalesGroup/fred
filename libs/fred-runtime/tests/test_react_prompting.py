@@ -196,6 +196,24 @@ def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
     assert "do not claim you cannot see or analyze an attachment" in suffix
 
 
+def test_attachment_context_suffix_marks_spreadsheets_as_text_not_tabular() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- sales.csv: conversation document [2b6a1cfdbffe4847a4d2f087741f2835]"
+        )
+    )
+
+    # Regression for #2418: fast ingest converts CSV/Excel attachments to
+    # markdown text (no tabular artifact, no ReBAC tuple), so the prompt must
+    # steer agents away from the tabular/SQL tools, whose fail-closed ReBAC
+    # check turns "unknown dataset" into a misleading 403.
+    assert "Spreadsheet-like attachments (CSV, XLS, XLSX)" in suffix
+    assert "treated as text documents" in suffix
+    assert "NOT loaded as SQL-queryable tables" in suffix
+    assert "never pass an attachment's uid to the tabular/SQL tools" in suffix
+
+
 def test_context_prompt_suffix_injects_selected_prompt_text() -> None:
     # #1915: the control plane resolves a session's selected prompts into
     # runtime_context.context_prompt_text; the runtime must fold that into the
