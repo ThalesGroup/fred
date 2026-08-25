@@ -30,10 +30,6 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from fastapi import Request
-from fred_core import KeycloakUser
-from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
-
 from control_plane_backend.kpi.presets.user_activity import (
     USER_AGENTS_USED_TOTAL_PRESET,
     USER_MESSAGES_TOTAL_PRESET,
@@ -42,6 +38,9 @@ from control_plane_backend.kpi.presets.user_activity import (
     query_user_messages_total,
     query_user_sessions_total,
 )
+from fastapi import Request
+from fred_core import KeycloakUser
+from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 _PRESETS = [
     USER_SESSIONS_TOTAL_PRESET,

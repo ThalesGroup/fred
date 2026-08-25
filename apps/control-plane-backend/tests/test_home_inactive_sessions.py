@@ -29,15 +29,14 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, cast
 
-from fred_core import KeycloakUser
-from fred_core.common import TeamId
-
 from control_plane_backend.product import service
 from control_plane_backend.product.schemas import (
     BulkDeleteSessionRef,
     SessionListItem,
 )
 from control_plane_backend.product.service import ProductServiceDependencies
+from fred_core import KeycloakUser
+from fred_core.common import TeamId
 
 
 class _FakeUser:

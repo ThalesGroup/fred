@@ -27,16 +27,15 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from fastapi import Request
-from fred_core import KeycloakUser
-from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
-
 from control_plane_backend.kpi.presets.user_top import (
     USER_TOP_AGENTS_PRESET,
     USER_TOP_TEAMS_PRESET,
     query_user_top_agents,
     query_user_top_teams,
 )
+from fastapi import Request
+from fred_core import KeycloakUser
+from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 _PRESETS = [USER_TOP_AGENTS_PRESET, USER_TOP_TEAMS_PRESET]
 
