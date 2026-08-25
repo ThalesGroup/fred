@@ -64,7 +64,7 @@ async def query_conversation_depth(
         group_by="dims.session_id",
         since=since,
         until=until,
-        team_id=None if team_id is None else str(team_id),
+        team_id=team_id,
         require_group_by=True,
     )
 

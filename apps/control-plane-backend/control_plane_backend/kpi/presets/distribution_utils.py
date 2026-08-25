@@ -26,6 +26,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Sequence
 
+from fred_core.common import TeamId
+
 from control_plane_backend.kpi.presets.common import (
     DistributionResponse,
     LabelValuePoint,
@@ -34,7 +36,9 @@ from control_plane_backend.kpi.presets.common import (
 # `terms` size cap shared by both engagement presets. Same large-size precedent
 # as `agent_prompt_length_distribution`: a platform with more than this many
 # distinct users (or conversations) in one window silently loses the tail of the
-# distribution. Acceptable for a dashboard histogram, and cheaper than a
+# distribution — and not uniformly: `terms` keeps the highest doc_counts, so
+# what drops is the *low*-count tail, undercounting the "1" bucket and biasing
+# the median upward. Acceptable for a dashboard histogram, and cheaper than a
 # composite-agg pagination loop — revisit if a deployment ever gets close.
 TERMS_SIZE = 10000
 
@@ -95,7 +99,7 @@ def distribution_body(
     group_by: str,
     since: datetime,
     until: datetime,
-    team_id: str | None,
+    team_id: TeamId | None,
     require_group_by: bool = False,
 ) -> dict[str, Any]:
     """Build the OpenSearch body for a "count per entity" distribution.
@@ -123,7 +127,7 @@ def distribution_body(
     if require_group_by:
         filters.append({"exists": {"field": group_by}})
     if team_id is not None:
-        filters.append({"term": {"dims.team_id": team_id}})
+        filters.append({"term": {"dims.team_id": str(team_id)}})
 
     return {
         "size": 0,

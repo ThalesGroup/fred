@@ -2238,7 +2238,7 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
     - control-plane's `conversation_depth` preset groups turns by
       `dims.session_id`; without the dim the whole preset returns nothing, and
       nothing else in this suite asserts the dim reaches the KPI writer
-    - the ring-buffer record sources `session_id` from the same `prom_dims`
+    - the ring-buffer record sources `session_id` from the same `turn_dims`
       dict, and `KpiTurnRecord` requires that key while the surrounding `cast`
       hides its loss from the type checker — so it needs a runtime assertion
 

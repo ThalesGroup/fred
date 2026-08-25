@@ -52,7 +52,7 @@ async def query_conversations_per_user(
         group_by="dims.user_id",
         since=since,
         until=until,
-        team_id=None if team_id is None else str(team_id),
+        team_id=team_id,
     )
 
     resp = store.client.search(index=store.index, body=body)

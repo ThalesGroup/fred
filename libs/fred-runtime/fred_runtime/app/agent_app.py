@@ -2572,7 +2572,7 @@ def _emit_turn_completed(
         # (`fred_runtime/react/middleware/shared.py`).
         # exchange_id and user_id stay out: nothing queries them here, and
         # per-turn tracing already has them in history rows and SSE logs.
-        prom_dims: dict[str, str | None] = {
+        turn_dims: dict[str, str | None] = {
             "session_id": session_id,
             "team_id": team_id,
             "template_agent_id": template_agent_id,
@@ -2588,7 +2588,7 @@ def _emit_turn_completed(
             type="timer",
             value=outcome.total_ms,
             unit="ms",
-            dims=prom_dims,
+            dims=turn_dims,
             quantities={
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
@@ -2603,7 +2603,7 @@ def _emit_turn_completed(
                 name="agent.turn_error_total",
                 type="counter",
                 value=1,
-                dims=prom_dims,
+                dims=turn_dims,
                 actor=KPIActor(type="human", user_id=user_id),
             )
 
@@ -2618,7 +2618,7 @@ def _emit_turn_completed(
                 "is_error": outcome.is_error,
                 # `session_id` (a required KpiTurnRecord key) and the agent /
                 # model identity keys all come from this spread.
-                **prom_dims,
+                **turn_dims,
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
