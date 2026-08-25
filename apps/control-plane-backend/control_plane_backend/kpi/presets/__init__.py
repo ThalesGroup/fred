@@ -22,6 +22,12 @@ from control_plane_backend.kpi.presets.agent_prompt_length_distribution import (
 )
 from control_plane_backend.kpi.presets.agents_total import AGENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.base import PresetDef
+from control_plane_backend.kpi.presets.conversation_depth import (
+    CONVERSATION_DEPTH_PRESET,
+)
+from control_plane_backend.kpi.presets.conversations_per_user import (
+    CONVERSATIONS_PER_USER_PRESET,
+)
 from control_plane_backend.kpi.presets.documents_total import DOCUMENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.messages_over_time import (
     MESSAGES_OVER_TIME_PRESET,
@@ -67,6 +73,8 @@ PRESETS: list[PresetDef] = [
     SESSIONS_OVER_TIME_PRESET,
     MESSAGES_OVER_TIME_PRESET,
     SESSIONS_BY_SCOPE_PRESET,
+    CONVERSATIONS_PER_USER_PRESET,
+    CONVERSATION_DEPTH_PRESET,
     TOP_TEAMS_BY_SESSIONS_PRESET,
     AGENTS_TOTAL_PRESET,
     AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,

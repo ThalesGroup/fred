@@ -109,3 +109,23 @@ ScalarResponse(
 ```
 
 The frontend `KpiStatCard` molecule consumes this shape directly.
+
+**`DistributionResponse`** (`common.py`) — use for a "how many X per Y" histogram:
+
+```python
+DistributionResponse(
+    rows=[LabelValuePoint(label="2-5", value=12), …],  # every bucket, 0 when empty
+    median=3.0,    # None when the range holds no entity at all
+    since=since,
+    until=until,
+)
+```
+
+Build it with `distribution_utils.distribution_from_terms_agg(resp, agg_name=…)`,
+which reduces a single-level `terms` agg (one bucket per entity, `doc_count` =
+that entity's count) into the shared 5-bucket histogram (`1`, `2-5`, `6-10`,
+`11-20`, `21+`) plus the median. Do not re-implement the bucketing — see
+`conversations_per_user.py` / `conversation_depth.py`.
+
+The frontend `HistogramChart` molecule consumes `rows` directly, `median` feeds a
+`KpiStatCard` beside it.

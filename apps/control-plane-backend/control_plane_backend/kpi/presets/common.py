@@ -73,6 +73,20 @@ class LabelValueResponse(BaseModel):
     until: AwareDatetime
 
 
+class DistributionResponse(BaseModel):
+    """Histogram of a per-entity count, plus the median of the raw counts.
+
+    `rows` always holds every bucket (value 0 when empty) so the chart has no
+    gaps. `median` is None when the range contains no entity at all — an empty
+    distribution, not a zero one.
+    """
+
+    rows: list[LabelValuePoint]
+    median: float | None = None
+    since: AwareDatetime
+    until: AwareDatetime
+
+
 class MultiSeriesPoint(BaseModel):
     date: str
     values: dict[str, float]
