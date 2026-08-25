@@ -1577,8 +1577,8 @@
         "conversations": "Nouvelles conversations",
         "messages": "Messages envoyés",
         "agents": "Agents utilisés",
-        "deltaUp": "▲ {{count}} % ({{abs}})",
-        "deltaDown": "▼ {{count}} % ({{abs}})",
+        "deltaUp": "▲ {{pct}} % ({{abs}})",
+        "deltaDown": "▼ {{pct}} % ({{abs}})",
         "deltaFlat": "stable",
         "vsPrevious": "vs période précédente",
         "periodCaption": "sur les {{count}} derniers jours"

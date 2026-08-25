@@ -29,12 +29,18 @@ const numberFmt = new Intl.NumberFormat("fr-FR");
 type KpiKey = "conversations" | "messages" | "agents";
 type Direction = "up" | "down" | "flat" | "new";
 
+// Above this, a percentage stops being informative (a tiny prior baseline makes
+// the ratio explode) — we clamp and mark it so the chip reads ">500%".
+const PCT_CAP = 500;
+
 interface KpiView {
   key: KpiKey;
   value: string;
   dir: Direction;
-  /** Absolute percentage magnitude, capped, for the up/down chips only. */
+  /** Absolute percentage magnitude, capped at PCT_CAP, for the up/down chips. */
   magnitude: number;
+  /** Whether `magnitude` hit the cap — drives the ">" prefix on the chip. */
+  capped: boolean;
   /** Signed absolute change vs the previous window, shown alongside the % (and
    * used as the "+N" jump when there's no baseline). */
   delta: number;
@@ -57,14 +63,15 @@ type KpiQuery = {
 };
 
 function buildKpi(key: KpiKey, q: KpiQuery): KpiView {
-  if (q.isLoading) return { key, value: "…", dir: "flat", magnitude: 0, delta: 0 };
+  if (q.isLoading) return { key, value: "…", dir: "flat", magnitude: 0, capped: false, delta: 0 };
   const value = q.data?.value;
-  if (q.isError || value == null) return { key, value: "—", dir: "flat", magnitude: 0, delta: 0 };
+  if (q.isError || value == null) return { key, value: "—", dir: "flat", magnitude: 0, capped: false, delta: 0 };
 
   const delta = q.data?.delta ?? 0;
   const prev = value - delta;
   let dir: Direction = "flat";
   let magnitude = 0;
+  let capped = false;
   if (prev <= 0) {
     // No baseline to compare against — carry the absolute count so the chip can
     // read "+244" rather than an undefined percentage.
@@ -76,13 +83,14 @@ function buildKpi(key: KpiKey, q: KpiQuery): KpiView {
     const pct = Math.round((delta / prev) * 100);
     if (pct > 0) {
       dir = "up";
-      magnitude = Math.min(pct, 999);
+      magnitude = Math.min(pct, PCT_CAP);
     } else if (pct < 0) {
       dir = "down";
-      magnitude = Math.min(Math.abs(pct), 999);
+      magnitude = Math.min(Math.abs(pct), PCT_CAP);
     }
+    capped = Math.abs(pct) > PCT_CAP;
   }
-  return { key, value: numberFmt.format(value), dir, magnitude, delta };
+  return { key, value: numberFmt.format(value), dir, magnitude, capped, delta };
 }
 
 /** Signed absolute change, e.g. "+244" / "-133". */
@@ -126,13 +134,16 @@ export default function ActivityKpis({ period }: ActivityKpisProps) {
         {kpis.map((kpi) => {
           // Every chip shares the neutral secondary styling; "new" reuses one.
           const styleClass = kpi.dir === "new" ? styles.up : styles[kpi.dir];
+          // ">" prefix when the % hit the cap — signals a lower bound, not an
+          // exact figure (a near-empty prior window makes the true ratio huge).
+          const countLabel = kpi.capped ? `>${kpi.magnitude}` : `${kpi.magnitude}`;
           const deltaText =
             kpi.dir === "flat"
               ? t("rework.home.activity.deltaFlat")
               : kpi.dir === "new"
                 ? formatSignedDelta(kpi.delta)
                 : t(`rework.home.activity.delta${kpi.dir === "up" ? "Up" : "Down"}`, {
-                    count: kpi.magnitude,
+                    pct: countLabel,
                     abs: formatSignedDelta(kpi.delta),
                   });
           return (
