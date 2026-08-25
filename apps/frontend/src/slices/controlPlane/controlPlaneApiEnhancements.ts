@@ -433,6 +433,11 @@ export const {
   // Home dashboard leaderboard — top agents / top teams (#2298).
   useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery: useUserTopAgentsQuery,
   useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery: useUserTopTeamsQuery,
+  // Home dashboard — most recently used agents, newest first (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery: useUserRecentAgentsQuery,
+  // Lazy agent-instances fetch — the recent-agents preset returns only ids, so
+  // the Home tiles resolve each to its full instance across its (variable) team.
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: useLazyTeamAgentInstancesQuery,
   // Home cleanup tool — inactive conversations across spaces + bulk delete (#2298).
   useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery: useMyInactiveSessionsQuery,
   usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation: useBulkDeleteMySessionsMutation,

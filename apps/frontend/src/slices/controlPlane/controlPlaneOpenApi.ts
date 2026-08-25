@@ -947,6 +947,19 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsUserRecentAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_recent_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGet: build.query<
       HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse,
       HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg
@@ -1749,6 +1762,16 @@ export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
 export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserRecentAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -3100,6 +3123,17 @@ export type UserTopAgentsResponse = {
   since: string;
   until: string;
 };
+export type UserRecentAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  last_used: string;
+};
+export type UserRecentAgentsResponse = {
+  rows: UserRecentAgentRow[];
+  since: string;
+  until: string;
+};
 export type TeamStorageRow = {
   team_id: string;
   label: string;
@@ -3422,6 +3456,8 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
