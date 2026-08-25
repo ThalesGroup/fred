@@ -1259,6 +1259,20 @@
         "deltaLabel": "Change over period",
         "total": "Uploaded documents"
       },
+      "engagement": {
+        "conversationDepth": {
+          "empty": "No conversations in this period.",
+          "medianLabel": "Median messages per conversation",
+          "title": "Conversation depth",
+          "valueLabel": "Conversations"
+        },
+        "conversationsPerUser": {
+          "empty": "No user activity in this period.",
+          "medianLabel": "Median conversations per user",
+          "title": "Conversations per user",
+          "valueLabel": "Users"
+        }
+      },
       "error": "Failed to load data.",
       "loading": "Loading...",
       "messages": {
@@ -1283,6 +1297,7 @@
         "administration": "Platform administration",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Usage overview",
         "resources": "Resources",
         "tokenUsage": "Token usage",

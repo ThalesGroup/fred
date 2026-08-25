@@ -1259,6 +1259,20 @@
         "deltaLabel": "Variation sur la période",
         "total": "Documents téléversés"
       },
+      "engagement": {
+        "conversationDepth": {
+          "empty": "Aucune conversation sur cette période.",
+          "medianLabel": "Médiane de messages par conversation",
+          "title": "Profondeur des conversations",
+          "valueLabel": "Conversations"
+        },
+        "conversationsPerUser": {
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "medianLabel": "Médiane de conversations par utilisateur",
+          "title": "Conversations par utilisateur",
+          "valueLabel": "Utilisateurs"
+        }
+      },
       "error": "Impossible de charger les données.",
       "loading": "Chargement...",
       "messages": {
@@ -1283,6 +1297,7 @@
         "administration": "Administration de la plateforme",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Vue d'ensemble",
         "resources": "Ressources",
         "tokenUsage": "Consommation de tokens",

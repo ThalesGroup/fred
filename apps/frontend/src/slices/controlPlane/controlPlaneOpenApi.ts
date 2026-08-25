@@ -796,6 +796,32 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsConversationsPerUserGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversations_per_user`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationDepthGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversation_depth`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
       HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
       HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
@@ -1553,6 +1579,26 @@ export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
 export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -2902,6 +2948,12 @@ export type LabelValueResponse = {
   since: string;
   until: string;
 };
+export type DistributionResponse = {
+  rows: LabelValuePoint[];
+  median?: number | null;
+  since: string;
+  until: string;
+};
 export type ScalarWithDeltaResponse = {
   value?: number | null;
   delta?: number | null;
@@ -3221,6 +3273,10 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
   useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
