@@ -48,6 +48,10 @@ export default function TeamSortSelect<T extends string>({
   const [focusedIndex, setFocusedIndex] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Whether the pending open was keyboard-driven — only then do we pull DOM
+  // focus onto the selected option (so arrow keys work). A mouse open leaves
+  // the list unfocused, so no option shows a focus ring on first click.
+  const focusOptionOnOpenRef = useRef(false);
   const selected = options.find((option) => option.value === value) ?? options[0];
 
   const focusTrigger = () => wrapRef.current?.querySelector("input")?.focus();
@@ -62,7 +66,9 @@ export default function TeamSortSelect<T extends string>({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Move focus into the listbox (onto the selected option) when it opens.
+  // Track the selected option as the arrow-key anchor when the list opens, and
+  // — only for a keyboard open — pull DOM focus onto it. A mouse open leaves the
+  // list unfocused so nothing shows a focus ring until the user arrows into it.
   useEffect(() => {
     if (!open) return;
     const initial = Math.max(
@@ -70,7 +76,7 @@ export default function TeamSortSelect<T extends string>({
       options.findIndex((option) => option.value === value),
     );
     setFocusedIndex(initial);
-    optionRefs.current[initial]?.focus();
+    if (focusOptionOnOpenRef.current) optionRefs.current[initial]?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -89,6 +95,7 @@ export default function TeamSortSelect<T extends string>({
   const handleTriggerKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
       event.preventDefault();
+      focusOptionOnOpenRef.current = true;
       setOpen(true);
     } else if (event.key === "Escape") {
       setOpen(false);
@@ -137,7 +144,13 @@ export default function TeamSortSelect<T extends string>({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={ariaLabel}
-          onClick={() => setOpen((prev) => !prev)}
+          onClick={() =>
+            setOpen((prev) => {
+              // Mouse open: don't steal focus into the list.
+              if (!prev) focusOptionOnOpenRef.current = false;
+              return !prev;
+            })
+          }
           // `user-select: none` is ignored on form controls, so block the mouse
           // from starting a selection / placing the caret at the source. The
           // click still toggles, and keyboard focus is unaffected.
