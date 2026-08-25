@@ -20,6 +20,7 @@ import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAudit
 // weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
 import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
+import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
@@ -29,6 +30,7 @@ import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
@@ -158,6 +160,10 @@ export const routes: RouteObject[] = [
         element: <MarketplaceTeams />,
       },
       {
+        path: "marketplace/prompts",
+        element: <MarketplacePrompts />,
+      },
+      {
         path: "admin",
         element: <AdminIndexRoute />,
       },
@@ -166,6 +172,18 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <AdminTeamsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform roles (PLATFORM-ADMIN-DELEGATION-RFC.md §3.7, #2405). Gated
+        // on the admin role like the backend's `can_administer_users`; the
+        // stricter bootstrap-root-only rules on the platform_admin relation
+        // are enforced server-side and only mirrored in the page's UI.
+        path: "admin/platform-roles",
+        element: (
+          <Protected requires="admin">
+            <PlatformRolesPage />
           </Protected>
         ),
       },

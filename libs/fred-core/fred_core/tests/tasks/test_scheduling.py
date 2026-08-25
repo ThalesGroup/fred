@@ -29,7 +29,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fred_core.common import PostgresStoreConfig
-from fred_core.models.base import Base
 from fred_core.sql import create_async_engine_from_config
 from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import (
@@ -43,6 +42,7 @@ from fred_core.tasks.models import (
 from fred_core.tasks.service import TaskService
 from fred_core.tasks.store import TaskStore
 from fred_core.tasks.workflow_control import NoopWorkflowControl
+from fred_core.tests.tasks.task_tables import TASK_TABLES, Base
 
 
 async def _service(tmp_path) -> TaskService:
@@ -52,7 +52,9 @@ async def _service(tmp_path) -> TaskService:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     return TaskService(
-        store=TaskStore(engine), bus=MemoryEventBus(), control=NoopWorkflowControl()
+        store=TaskStore(engine, TASK_TABLES),
+        bus=MemoryEventBus(),
+        control=NoopWorkflowControl(),
     )
 
 

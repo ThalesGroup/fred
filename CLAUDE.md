@@ -18,6 +18,45 @@ safe change aligned with the documented architecture.
 
 ---
 
+## Current phase — consolidation (in effect until further notice)
+
+Production is now stable on the Alembic front: every table's migration head is
+controlled and up to date. That closes the stabilization push this repo has
+been in — the team is now prioritizing **regaining control of the codebase**
+over shipping breadth: smaller, single-purpose issues and PRs, more deletion
+than addition, and trimming RFCs and docs that grew past what they need to
+say. This is the standing default, not a sprint with an end date — keep
+applying it until a developer says otherwise.
+
+1. **Bias toward deletion.** When a task offers a real choice between adding
+   new code/abstraction and simplifying or deleting existing code to reach
+   the same outcome, take the deletion path, even if it costs a bit more
+   effort than an additive patch. This sharpens the Prime Directive above —
+   it is not a new, separate rule.
+2. **Proactive RFC pruning.** Step 3 of the reuse audit below already says to
+   check whether an RFC's content is settled before amending it. Do that
+   check every time you read an RFC, not only when a task happens to close
+   it out — if its open questions are closed, say so and offer to trim or
+   archive it on the spot per "RFC vs. doc" below, instead of leaving it to
+   accrete until someone happens to touch it.
+3. **Doc pruning candidates.** An intermediate or status doc is a deletion
+   candidate when: the migration/step it describes is complete and
+   superseded by a compact doc, its content duplicates something already
+   current elsewhere, or it exists only to record a status GitHub now
+   tracks. It is *not* a candidate when it is an intentionally frozen
+   historical record (`BACKLOG.md`, `WORKPLAN.md`) — those stay frozen, not
+   deleted, unless the developer says otherwise.
+4. **Scope discipline.** Do not bundle a cleanup/deletion with an unrelated
+   feature or fix in the same issue or PR. A reduction change stays its own
+   commit and, where practical, its own PR — mixing the two makes the
+   reduction hard to review and easy to revert by accident.
+5. **Tracking.** Link consolidation work to whatever milestone is currently
+   active for general development (check `gh issue list --milestone <name>`
+   or ask the developer) — do not hardcode a milestone name here, it will go
+   stale the moment that milestone closes.
+
+---
+
 ## Before you write anything — reuse and convergence audit
 
 Run this audit before any implementation, spec, or doc change.
@@ -26,8 +65,10 @@ Run this audit before any implementation, spec, or doc change.
 `docs/swift/WORKPLAN.md` are frozen (2026-07-16) and no longer track active
 work. `docs/swift/PMO-BOARD.md` and `docs/swift/data/sprint.yaml` were removed
 (2026-07-21) — they duplicated GitHub without ever being kept current. **GitHub
-Issues + Milestones (`swift-golive`, `swift ga`) are the single source of
-truth for sprints, issues, and milestones.** Before starting anything, check
+Issues + Milestones are the single source of
+truth for sprints, issues, and milestones** (run `gh api "repos/:owner/:repo/milestones?state=open"`
+to see which ones are current — do not hardcode milestone names in this file,
+they close and get replaced). Before starting anything, check
 `gh issue list` (by title keyword or milestone) for an existing issue covering
 the task — do not create a duplicate. For status/planning questions, query
 GitHub directly (`gh issue list`, `gh issue view`) rather than looking for a
@@ -54,7 +95,9 @@ while being subtly wrong (an RFC read as "decided" is not the same as
 design against the actual code and the frozen contract docs before treating it
 as current; if they diverge, the code and contract docs win — flag the
 divergence rather than implementing what the RFC says over what's actually
-decided.
+decided. During the consolidation phase above (and afterward — that rule is
+permanent), do this check on every RFC you read, not only the one you're
+closing out.
 
 **4. Convergence check (before close-out)** — does the code match the GitHub
 issue's intent, and (if one exists) the RFC's? Fix divergence before closing.
@@ -99,7 +142,7 @@ Decision tree for every piece of new content:
       → write/update the compact doc directly (design/contract doc, or the
         relevant component doc). No RFC needed — note why in the close-out.
     New feature, endpoint, or component?
-      → check for an existing GitHub issue (swift-golive / swift ga milestone).
+      → check for an existing GitHub issue (see `gh api "repos/:owner/:repo/milestones?state=open"`).
         Stop until developer confirms.
     Code style, typing, or testing rule?
       → docs/CONVENTIONS.md
@@ -129,7 +172,8 @@ touched, which tests added, which docs updated. **Do not begin until confirmed.*
 One sentence of approval is enough.
 
 **Step 3.5 — GitHub issue (execution handoff).** Most work starts from an
-existing GitHub issue (`swift-golive` / `swift ga` milestone) — that's the
+existing GitHub issue (check `gh api "repos/:owner/:repo/milestones?state=open"` for the
+current milestone) — that's the
 normal case, use it. If none exists for the task, offer to create one before
 implementing. If Step 1 produced an RFC, link it in the issue. Do not
 implement authorless, untracked work.
@@ -150,6 +194,20 @@ agent execution loop, an LLM or tool call site, KPI/log emission, a shared
 client/cache, or anything else that runs per-turn or per-request under
 concurrent load, also run the `fred-performance-reviewer` skill before
 reporting done.
+
+**Self-review is not enough for non-trivial logic changes.** Before reporting
+done, run `/code-review` on your own diff — default effort at minimum, higher
+for anything touching correctness-sensitive shared code. Tests you write from
+the same reasoning pass that wrote the code confirm your own assumptions
+instead of falsifying them; an agent checking its own work shares whatever
+blind spot produced the bug in the first place. (2026-08-13: a same-day
+ReAct size-budget fix — issue #2350, PR #2352 — passed its own tests,
+`make code-quality`, and a `fred-performance-reviewer` pass, then shipped
+with three P1 correctness bugs that an independent reviewer bot caught on
+first read of the cold diff — each one a case not covered by the tests
+written alongside the code they were breaking.) Do not skip this under time
+pressure — that is exactly when a design's blind spots survive to
+production instead of being caught same-session.
 
 **Step 6 — Doc update checklist.**
 
@@ -202,12 +260,11 @@ own `**Status:**` line (if any) tracks the design.
 
 ## Operational queries — status and team
 
-For team activity, current focus, and where the real work lives: read
-`docs/swift/STATUS.md` first — it is intentionally thin and points to GitHub.
-For the actual list of active/open work, query GitHub directly:
-`gh issue list --milestone "swift-golive"` (due 2026-07-31) or
-`--milestone "swift ga"` (due 2026-09-30). Do not expect `STATUS.md` to mirror
-issue content — it won't, by design.
+For team activity, current focus, and the actual list of active/open work,
+query GitHub directly:
+`gh api "repos/:owner/:repo/milestones?state=open"` for the current milestones, then
+`gh issue list --milestone "<name>"`. Do not create or maintain a status/PMO
+mirror in the repository.
 
 `docs/swift/backlog/BACKLOG.md` and `docs/swift/WORKPLAN.md` are frozen
 (2026-07-16) — historical record of the runtime migration only, not live
@@ -241,6 +298,23 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 - Never skip hooks (`--no-verify`). If a hook fails, fix the root cause.
 - Never hand-edit generated files (`openapi.json`, `runtimeOpenApi.ts`,
   `controlPlaneOpenApi.ts`). Regenerate from source and document the command used.
+
+---
+
+## Alembic migrations - keep history linear
+
+One head per backend, always. When a feature branch's new migration has
+fallen behind the base branch (`swift`) because migrations kept landing
+there, **re-parent it**: point its `down_revision` (and the `Revises:`
+docstring line) at the current base head, delete any merge revision the
+branch may have accumulated, and verify with `alembic heads` (exactly one
+head) plus a real `alembic upgrade head` before pushing. Do **not** create
+an Alembic merge revision (`alembic merge`) to reconcile heads inside a PR -
+a merge revision is a last resort, acceptable only when both divergent
+migrations are already deployed somewhere and can no longer be re-parented.
+(2026-08-24, PROMPT-06: the marketplace migration was re-parented onto the
+swift head and its empty merge revision deleted - the PR then added a single
+linear migration.)
 
 ---
 
@@ -299,8 +373,7 @@ Do not silently expand scope. Do not silently delete content.
 | AI operational rules (Claude Code)       | `CLAUDE.md` (this file)                               |
 | OpenAI/Codex agent instructions          | `AGENT.md`, `AGENTS.md`                               |
 | Gemini agent instructions                | `GEMINI.md`                                           |
-| Team activity, current focus (thin — points to GitHub) | `docs/swift/STATUS.md`                  |
-| Active work, milestones (`swift-golive`, `swift ga`)   | GitHub Issues/Milestones (`gh issue list`) |
+| Active work, milestones (check `gh api "repos/:owner/:repo/milestones?state=open"`) | GitHub Issues/Milestones (`gh issue list`) |
 | Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
@@ -310,5 +383,5 @@ Do not silently expand scope. Do not silently delete content.
 | Coding style, typing, testing rules      | `docs/CONVENTIONS.md`                                 |
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |
 | Track manifests                          | `docs/swift/tracks/`                                  |
-| Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md`, `docs/PMO.md` |
-| Sprints, issues, milestones (only source of truth) | GitHub Issues/Milestones (`gh issue list`) — `PMO-BOARD.md`/`sprint.yaml` removed 2026-07-21, `id-legend.yaml` removed 2026-07-27, never recreate them |
+| Frozen — historical only, do not write to | `docs/swift/backlog/BACKLOG.md`, `WORKPLAN.md` |
+| Sprints, issues, milestones (only source of truth) | GitHub Issues/Milestones (`gh issue list`) — `STATUS.md`, `docs/PMO.md`, `PMO-BOARD.md`, `sprint.yaml`, and `id-legend.yaml` were removed; never recreate them |

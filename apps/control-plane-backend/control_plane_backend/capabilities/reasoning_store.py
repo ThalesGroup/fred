@@ -51,6 +51,11 @@ class ModelReasoningStore:
         updated_by: str | None,
         session: AsyncSession | None = None,
     ) -> bool:
+        # NOTE (#2387): `default_effort` and `display_name` display snapshots
+        # were taken here so the send path could label the composer without a
+        # catalog fetch. Both are gone: the chip names the ROUTED model from
+        # its own read, and the reasoning menu is a plain on/off — no level to
+        # display, so no snapshot to keep in sync.
         async with use_session(self._sessions, session) as s:
             existing = (
                 await s.execute(

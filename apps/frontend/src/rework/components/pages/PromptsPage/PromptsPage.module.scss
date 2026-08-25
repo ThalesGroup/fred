@@ -9,29 +9,37 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
-  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-s);
+  padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
   color: var(--on-surface);
   font: var(--font-title-large);
 }
 
-/* ── Search + tag filter bar ────────────────────────────────────────────────── */
-
-.filterBar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  padding: 16px var(--spacing-l) var(--spacing-l);
+/* Title text pushes the create button and the search/category actions to the
+   right edge of the toolbar. */
+.pageTitleText {
+  margin-right: auto;
 }
 
-.searchRow {
+/* Search field + category-management button, grouped at the far right of the
+   title row. */
+.titleActions {
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
 }
 
+/* ── Category filter chips ──────────────────────────────────────────────────── */
+
+.filterBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-l) var(--spacing-m);
+}
+
 .searchBar {
   width: 100%;
-  max-width: 360px;
+  max-width: 320px;
 }
 
 /* ── Prompt grid ────────────────────────────────────────────────────────────── */

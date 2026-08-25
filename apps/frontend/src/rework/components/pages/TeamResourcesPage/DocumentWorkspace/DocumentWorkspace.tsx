@@ -26,6 +26,12 @@ import type { OptionModel } from "@models/Option.model.ts";
 import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
 import {
+  MAX_FOLDER_DEPTH,
+  exceedsMaxFolderDepth,
+  folderPathDepth,
+  relativeDirSegments,
+} from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
+import {
   DocumentViewer,
   DocumentViewerModeToggle,
   type ViewMode,
@@ -37,14 +43,24 @@ import {
   type OwnerFilter,
   type TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
+  useCreateTagKnowledgeFlowV1TagsPostMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListTasksKnowledgeFlowV1TasksGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { buildTree, collectDescendantTagIds, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
-import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
-import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
+import {
+  buildTree,
+  collectDescendantTagIds,
+  findNode,
+  fullPath,
+  type TagNode,
+} from "../../../../../shared/utils/tagTree.ts";
+import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
+import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { downloadManyAsZip } from "../../../../../utils/downloadUtils.tsx";
@@ -56,12 +72,19 @@ import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
 import { isPdfFile } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
+import ManageLabelsModal from "../ManageLabelsModal/ManageLabelsModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
 import { StatusChip } from "../StatusChip/StatusChip.tsx";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
 import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
+import {
+  buildFolderRollups,
+  collectFailedDocsByTag,
+  indexFoldersByDocUid,
+  resolveDocOutcomes,
+} from "./folderRollups.ts";
 import styles from "./DocumentWorkspace.module.css";
 
 // Hidden 2026-07-30, developer request: undecided whether "Traiter"/"Retraiter"
@@ -76,6 +99,12 @@ const DEFAULT_PAGE_SIZE = 50;
 // processing, its folder page is reloaded on this cadence so the badge flips
 // to Ready/Failed without a manual refresh.
 const DOC_STATUS_POLL_MS = 3000;
+// Separator for the memo keys the folder rollup below tracks its live inputs
+// by. NUL can never appear inside a tag id or a document uid, so two different
+// id sets can never join to the same string — unlike a comma, which a
+// scheduler-pull uid (`pull-{source_tag}-{hash}`, from a configurable tag)
+// could carry. Keys are compared, never split back apart.
+const KEY_SEP = "\u0000";
 // How long a just-reprocessed row stays pinned to "processing" when the
 // backend never re-stamps its stages (dead worker, dropped workflow).
 const REPROCESS_OVERRIDE_TTL_MS = 90_000;
@@ -102,9 +131,14 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
 
+type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion" | "labels";
+
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
 }
+
+/** An OS file drag (not a text/element drag) — shared by every drop surface. */
+const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
 
 // identity.document_name is always "Original file name incl. extension" —
 // the source of truth for both display and extension, unlike identity.title
@@ -151,7 +185,7 @@ function rowLabel(row: Row): string {
  */
 function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarn } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
@@ -195,10 +229,19 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // here like any other navigation, so this stack alone can't answer that.
   const [, setNavigationHistory] = useState<(string | null)[]>([]);
   const [perTag, setPerTag] = useState<Record<string, PageState>>({});
+  // Latest page offsets, for the status-poll interval below: it reads them when
+  // it fires, and must not resubscribe every time a page loads.
+  const perTagRef = useRef(perTag);
+  perTagRef.current = perTag;
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
   const [renameTarget, setRenameTarget] = useState<
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
   >(null);
+  // Document whose per-stage ingestion errors are being shown (#2315).
+  // The vocabulary query itself lives inside ManageLabelsModal — it only
+  // needs to be fetched while that dialog is open, which is exactly this
+  // component's own mount lifetime (see the conditional render below).
+  const [labelsTarget, setLabelsTarget] = useState<DocumentMetadata | null>(null);
   // "Just reprocessed" rows pinned to "processing" (#1903-era gap): the
   // reprocess route (`POST /process-documents`) returns only the Temporal
   // workflow id — unlike uploads it creates no TaskService task the SSE task
@@ -209,12 +252,77 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [reprocessOverrides, setReprocessOverrides] = useState<Record<string, { snapshot: string; deadline: number }>>(
     {},
   );
+  // The live ingestion task backing each row, keyed by document uid (#2315).
+  // The browse snapshot's `processing.stages` lags the worker — a stage is
+  // stamped `in_progress` only once the activity starts, and nothing refetches
+  // the row before the task finishes — so deriving the badge from the snapshot
+  // alone reads "raw" for the whole run (and a short run never shows
+  // "processing" at all). The SSE task feed already carries the live state
+  // with `target.id = document_uid`; the same map also resolves which task the
+  // row's stop-ingestion action must cancel.
+  const activeDocTaskByUid = useMemo(() => {
+    const byUid = new Map<string, TaskViewModel>();
+    for (const task of activeTasks) {
+      if (task.target?.type === "document" && task.target.id) byUid.set(task.target.id, task);
+    }
+    return byUid;
+  }, [activeTasks]);
+  // Terminal ingestion history, so the rollup below survives a page reload: the
+  // Redux task store is memory-only, and at the Corpus root no child page is
+  // loaded either, which used to leave a tree full of failures looking clean
+  // until the user opened the folder.
+  //
+  // ONE unfiltered call. `exclude_terminal` only defaults to "hide them" on the
+  // `scope=user` branch (authz.py); a team-scoped query returns every state, so
+  // filtering by state would cost a second round-trip AND drop two things worth
+  // having: `cancelled` tasks (needed to clear a failure whose retry the user
+  // stopped) and a teammate's in-flight run.
+  //
+  // A personal space cannot use team scope: personal uploads deliberately leave
+  // the task's `team_id` NULL (ingestion_controller.py, "Ambiguous ... or
+  // personal-space uploads deliberately leave it None"), so the query would come
+  // back empty. `scope=user` is filtered by creator, not by space — a caveat
+  // that only bites if the same file was ingested into a team and a personal
+  // space, since uids are content-derived.
+  const { data: taskHistory } = useListTasksKnowledgeFlowV1TasksGetQuery(
+    isPersonalTeam ? { scope: "user", kind: "ingestion" } : { scope: "team", teamId, kind: "ingestion" },
+  );
+  const allTasks = useSelector(selectAllTasks);
+  // Keyed on the session's terminal outcomes, not on `allTasks` itself: the task
+  // store is a fresh array on EVERY SSE progress event, and re-ranking the
+  // team's whole history on each one is precisely what the poll interval's
+  // `pendingTagKey` goes to such lengths to avoid.
+  const liveOutcomeKey = allTasks
+    .filter((task) => TERMINAL_STATES.has(task.state) && task.target?.type === "document")
+    .map((task) => `${task.target?.id}:${task.state}`)
+    .sort()
+    .join(KEY_SEP);
+  const docOutcomes = useMemo(
+    () => resolveDocOutcomes(taskHistory?.tasks ?? [], allTasks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see liveOutcomeKey
+    [taskHistory, liveOutcomeKey],
+  );
+
+  // Documents that finished during THIS browser session. Read from the Redux
+  // store ALONE, deliberately — the history exists only to rank outcomes, and
+  // folding it in here would mark every document the team ever ingested as
+  // "just finished", turning a transient "your upload landed" cue into a
+  // permanent green tick on every ready row (#2315).
+  const justCompletedDocUids = useMemo(() => {
+    const uids = new Set<string>();
+    for (const task of allTasks) {
+      if (task.state === "succeeded" && task.target?.type === "document" && task.target.id) uids.add(task.target.id);
+    }
+    return uids;
+  }, [allTasks]);
   // A just-reprocessed doc must read as "processing" even though its stale
   // `processing.stages` snapshot hasn't caught up yet — see reprocessOverrides
   // above. Centralized here since every status-driven cell (menu label,
   // StatusChip, excluded-from-search gating) needs the same override applied.
   const getDocStatus = (doc: DocumentMetadata): DocStatus =>
-    reprocessOverrides[doc.identity.document_uid] ? "processing" : deriveDocStatus(doc).status;
+    reprocessOverrides[doc.identity.document_uid]
+      ? "processing"
+      : deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
@@ -225,6 +333,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // without changing navigation. Cleared alongside droppedFiles on close.
   const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  // OS-file drag hovering anywhere over the opened folder's page (not a
+  // specific folder row) — drives the full-page "drop here" overlay.
+  const [pageDragOver, setPageDragOver] = useState(false);
+  // Folder tags created (or resolved) while the CURRENT upload drawer is open,
+  // keyed by full path — sibling subdirectories of one dropped folder share
+  // parent chains through it instead of racing duplicate POST /tags. Cleared
+  // when the drawer closes: a folder deleted later must not resurrect its id.
+  const pendingFolderTagIds = useRef(new Map<string, string>());
   const [createOpen, setCreateOpen] = useState(false);
   // Client-side filter over the current folder's already-loaded rows — not
   // the deferred server-side search from RFC §13.4 (POST .../browse's
@@ -239,6 +355,8 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
+  const [cancelTask] = useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation();
+  const [createTag] = useCreateTagKnowledgeFlowV1TagsPostMutation();
 
   const currentNode = currentFolderFull ? findNode(tree, currentFolderFull) : tree;
   const currentTag = currentNode.tagsHere[0] ?? null;
@@ -290,12 +408,25 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     });
   }, []);
 
-  // Load the current folder's document page on entry (and once when its tag
-  // first resolves) — mirrors the old "load on expand" behavior, now scoped
-  // to whichever single folder is being viewed.
+  // Load the current folder's document page on EVERY entry, not just the first:
+  // a folder opened while its files were still uploading (or their fresh ReBAC
+  // tuples still propagating server-side) would otherwise stay frozen on that
+  // first empty snapshot forever — none of the other refresh paths retries a
+  // page that doesn't yet SHOW the document (the 3s poll needs a visible
+  // processing row, useRefetchOnTaskSettled needs the doc already in the page,
+  // useNotifyOnNewTaskTarget fires before this page exists). loadTagPage keeps
+  // the previous rows while reloading, so re-entering an already-loaded folder
+  // refreshes without a flash of empty.
+  const currentTagId = currentTag?.id ?? null;
   useEffect(() => {
-    if (currentTag && !perTag[currentTag.id]) void loadTagPage(currentTag.id, 0);
-  }, [currentTag, perTag, loadTagPage]);
+    if (currentTagId) void loadTagPage(currentTagId, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
+    // folder identity alone: one load per ENTRY is the contract, so nothing
+    // else may retrigger it. loadTagPage is deliberately not a dep — its
+    // identity tracks rowsPerPage (whose change already reloads explicitly
+    // via handleRowsPerPageChange), and any harness that rebuilds the browse
+    // trigger per render would otherwise refire this into a reload loop.
+  }, [currentTagId]);
 
   // Drop an override once the backend visibly re-stamped the document (its
   // fresh stages no longer match the click-time snapshot — the real derived
@@ -324,16 +455,37 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // Port of main's DocumentLibraryList polling loop: while any loaded row is
   // (or is pinned) "processing", reload the folder pages showing it so the
   // badge flips to Ready/Failed without a manual refresh.
+  const pendingTagIds = useMemo(
+    () =>
+      Object.entries(perTag)
+        .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
+        .map(([tagId]) => tagId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getDocStatus is
+    // rebuilt every render; its inputs (perTag, the overrides and the live task
+    // map) are the real dependencies.
+    [perTag, reprocessOverrides, activeDocTaskByUid],
+  );
+  // While any ingestion is live, poll the folder being viewed too, even if its
+  // loaded page shows no processing row yet: a subfolder entered before its
+  // files' uploads (or their fresh ReBAC tuples) landed keeps an empty
+  // snapshot that no other refresh path retries — this loop picks the rows up
+  // as they become visible, with their live "processing" badge.
+  const pollTagIds =
+    activeDocTaskByUid.size > 0 && currentTagId && !pendingTagIds.includes(currentTagId)
+      ? [...pendingTagIds, currentTagId]
+      : pendingTagIds;
+  // Keyed on the ids themselves, not the array identity: the live task map is a
+  // new object on every SSE event, and depending on it directly tore down and
+  // restarted the interval on each one — so during a bulk ingestion, when this
+  // refresh matters most, the 3s never elapsed and the folder never reloaded.
+  const pendingTagKey = pollTagIds.join(",");
   useEffect(() => {
-    const pendingTagIds = Object.entries(perTag)
-      .filter(([, page]) => page.docs.some((doc) => getDocStatus(doc) === "processing"))
-      .map(([tagId]) => tagId);
-    if (pendingTagIds.length === 0) return;
+    if (!pendingTagKey) return;
     const interval = setInterval(() => {
-      for (const tagId of pendingTagIds) void loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
+      for (const tagId of pendingTagKey.split(",")) void loadTagPage(tagId, perTagRef.current[tagId]?.offset ?? 0);
     }, DOC_STATUS_POLL_MS);
     return () => clearInterval(interval);
-  }, [perTag, reprocessOverrides, loadTagPage]);
+  }, [pendingTagKey, loadTagPage, perTagRef]);
 
   const commands = useDocumentCommands({
     refetchTags,
@@ -350,10 +502,21 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     setPreviewView("file");
   }, [commands.previewTarget?.documentUid]);
 
-  // When an ingestion task finishes, the browse snapshot that backs its row is
+  // When an ingestion task settles, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
   // just the loaded folder page(s) showing that document so its status goes live.
-  useRefetchOnTaskSuccess("document", (documentUid) => {
+  // Also the moment the storage quota moves, in both directions:
+  //   - success: ingestion saves the metadata (and its file size) at the end of
+  //     the workflow, so the earlier refetchTags() at task registration ran
+  //     while the document still weighed nothing;
+  //   - cancel: the backend erases the half-built document and gives its quota
+  //     back (`delete_cancelled_document`), seconds after the cancel request
+  //     returned — far too late for confirmStopIngestion to refetch anything
+  //     itself, which is why it deliberately does not try.
+  // Without this notification the quota meter stays behind by exactly the
+  // document that just landed, or the one that was just erased.
+  useRefetchOnTaskSettled("document", (documentUid) => {
+    onDocumentsChanged?.();
     for (const [tagId, page] of Object.entries(perTag)) {
       if (page.docs.some((doc) => doc.identity.document_uid === documentUid)) {
         void loadTagPage(tagId, page.offset);
@@ -362,7 +525,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   });
 
   // A brand-new document (just registered by the upload drawer) has no row
-  // anywhere yet, so `useRefetchOnTaskSuccess` above can never trigger its first
+  // anywhere yet, so `useRefetchOnTaskSettled` above can never trigger its first
   // refetch — its check requires the document to already be in a loaded page.
   // Fire on first sighting of the task instead (any state, not just succeeded).
   useNotifyOnNewTaskTarget("document", () => {
@@ -411,17 +574,44 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // deletes their documents (TagPermission.DELETE, tag_service.py), so this is
   // safe to offer for both empty and populated folders — the confirmation
   // message just makes the blast radius explicit before it happens.
+  //
+  // That number is counted at click time over the folder AND its sub-folders,
+  // never read from the tag list's `item_ids`, which was wrong in both
+  // directions. Too high: `item_ids` only refreshes when this workspace itself
+  // mutates something, so a document the backend removed on its own — a
+  // cancelled ingestion erasing its half-built document (#2315), the OPS-04
+  // sweeper — stayed counted, and the dialog announced 4 documents for a folder
+  // showing 1. Too low: it covers the folder's own documents only, while
+  // `delete_tag` recurses into every sub-tag — under-announcing what is about
+  // to be destroyed, which is the direction that actually costs data.
   const confirmDeleteFolder = useCallback(
-    (node: TagNode) => {
+    async (node: TagNode) => {
       const tag = node.tagsHere[0];
       if (!tag) return;
-      const docCount = tag.item_ids?.length ?? 0;
+      // One `total` per tag in the subtree, `limit: 1` so the response carries a
+      // count and not a page of documents. Summing across the subtree cannot
+      // double-count: a document is tagged into exactly one folder, the same
+      // invariant the folder-size column relies on.
+      let docCount: number | null = null;
+      try {
+        const pages = await Promise.all(
+          collectDescendantTagIds(node).map((tagId) =>
+            browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
+          ),
+        );
+        docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
+      } catch {
+        // Counting failed — still offer the deletion, but promise no number
+        // rather than a number that might be wrong.
+      }
       showConfirmationDialog({
         title: t("rework.resources.confirm.deleteFolderTitle"),
         message:
-          docCount > 0
-            ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
-            : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
+          docCount === null || (docCount === 0 && node.children.size > 0)
+            ? t("rework.resources.confirm.deleteFolderMessageUnknownCount", { name: node.name })
+            : docCount > 0
+              ? t("rework.resources.confirm.deleteFolderMessageWithDocs", { name: node.name, count: docCount })
+              : t("rework.resources.confirm.deleteFolderMessageEmpty", { name: node.name }),
         onConfirm: () =>
           void deleteTag({ tagId: tag.id })
             .unwrap()
@@ -440,17 +630,53 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             }),
       });
     },
-    [deleteTag, showConfirmationDialog, showSuccess, showError, t, refetchTags, currentFolderFull, navigateTo],
+    [
+      browseDocumentsByTag,
+      deleteTag,
+      showConfirmationDialog,
+      showSuccess,
+      showError,
+      t,
+      refetchTags,
+      currentFolderFull,
+      navigateTo,
+    ],
   );
 
+  // Cooperative cancel of the live ingestion task backing this row (#2315) —
+  // the task id comes from the same SSE map the status badge reads. The cancel
+  // is a request, not the outcome: the row keeps reading "processing" until the
+  // executor's verdict lands (the OPS-04 sweeper flips the task to `cancelled`
+  // and fails the document's stuck stages via `on_reconciled_terminal`,
+  // document_failure.py), so the toast is the only immediate acknowledgement.
+  const confirmStopIngestion = useCallback(
+    (doc: DocumentMetadata) => {
+      const task = activeDocTaskByUid.get(doc.identity.document_uid);
+      if (!task) return;
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.stopIngestionTitle"),
+        message: t("rework.resources.confirm.stopIngestionMessage", { name: documentDisplayName(doc) }),
+        onConfirm: () =>
+          void cancelTask({ taskId: task.taskId })
+            .unwrap()
+            .then(() => showSuccess?.({ summary: t("rework.resources.toast.stopIngestionRequested") }))
+            .catch((e: unknown) => {
+              showError?.({
+                summary: t("validation.error"),
+                detail:
+                  (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.stopIngestionError"),
+              });
+            }),
+      });
+    },
+    [activeDocTaskByUid, cancelTask, showConfirmationDialog, showSuccess, showError, t],
+  );
+
+  // Derived from the same map the badge and the row menu read, so "this row has
+  // a live ingestion" has one definition in this page instead of three.
   const runningDocIds = useMemo(
-    () =>
-      new Set(
-        activeTasks
-          .filter((task) => task.target?.type === "document" && task.state !== "failed")
-          .map((task) => task.target?.id),
-      ),
-    [activeTasks],
+    () => new Set([...activeDocTaskByUid].filter(([, task]) => task.state !== "failed").map(([uid]) => uid)),
+    [activeDocTaskByUid],
   );
 
   const prevRunningDocIdsRef = useMemo(() => ({ current: new Set<string | undefined>() }), []);
@@ -460,12 +686,67 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     for (const { tagId, offset } of pages) void loadTagPage(tagId, offset);
   }, [runningDocIds, perTag, loadTagPage, prevRunningDocIdsRef]);
 
+  /** Seed the ingestion drawer with an OS-file drop, targeting `node`.
+   * `requireDir` (the corpus root, where a file can only live inside a
+   * library): keep only files that came out of a dropped folder — their
+   * chain becomes the library — and reject loose ones, with a toast. */
+  const openDrawerWithDroppedFiles = (event: React.DragEvent, node: TagNode, requireDir = false) => {
+    event.preventDefault();
+    // fromEvent must start synchronously: the DataTransfer entries needed to
+    // walk a dropped directory are dead once the drop handler has returned.
+    void fromEvent(event.nativeEvent).then((items) => {
+      let dropped = items.filter((item): item is File => item instanceof File);
+      if (requireDir) {
+        const foldered = dropped.filter((file) => relativeDirSegments(file).length > 0);
+        if (foldered.length === 0) {
+          if (dropped.length > 0)
+            showError?.({
+              summary: t("rework.resources.rootDrop.rejectedTitle"),
+              detail: t("rework.resources.rootDrop.rejectedDetail"),
+            });
+          return;
+        }
+        if (foldered.length < dropped.length)
+          showWarn?.({
+            summary: t("rework.resources.rootDrop.rejectedTitle"),
+            detail: t("rework.resources.rootDrop.skippedDetail", { count: dropped.length - foldered.length }),
+          });
+        dropped = foldered;
+      }
+      // Depth guardrail (#2355): a file may not end up nested deeper than
+      // MAX_FOLDER_DEPTH levels, destination included — the mirrored tag
+      // chain is bounded the same way server-side (422 past the cap).
+      const destinationDepth = folderPathDepth(node.full);
+      const shallow = dropped.filter((file) => !exceedsMaxFolderDepth(file, destinationDepth));
+      if (shallow.length < dropped.length) {
+        if (shallow.length === 0) {
+          showError?.({
+            summary: t("documentLibrary.tooDeepTitle"),
+            detail: t("documentLibrary.tooDeepRejected", { max: MAX_FOLDER_DEPTH }),
+          });
+          return;
+        }
+        showWarn?.({
+          summary: t("documentLibrary.tooDeepTitle"),
+          detail: t("documentLibrary.tooDeepSkipped", {
+            count: dropped.length - shallow.length,
+            max: MAX_FOLDER_DEPTH,
+          }),
+        });
+        dropped = shallow;
+      }
+      if (dropped.length === 0) return;
+      setDropTargetNode(node);
+      setDroppedFiles(dropped);
+      setUploadOpen(true);
+    });
+  };
+
   /** OS-file drag-and-drop onto a folder row: pre-select that folder and open the
    * ingestion drawer seeded with the dropped files. Same gating as the row's
    * upload action. */
   const folderDropProps = (node: TagNode, droppable: boolean) => {
     if (!droppable) return {};
-    const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
     return {
       "data-drag-over": dragOverFolder === node.full || undefined,
       onDragOver: (event: React.DragEvent) => {
@@ -482,17 +763,11 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         setDragOverFolder((prev) => (prev === node.full ? null : prev));
       },
       onDrop: (event: React.DragEvent) => {
-        event.preventDefault();
+        // The whole page is a drop surface for the opened folder — a drop that
+        // landed on this row must not bubble up and hit that target too.
+        event.stopPropagation();
         setDragOverFolder(null);
-        // fromEvent must start synchronously: the DataTransfer entries needed to
-        // walk a dropped directory are dead once the drop handler has returned.
-        void fromEvent(event.nativeEvent).then((items) => {
-          const dropped = items.filter((item): item is File => item instanceof File);
-          if (dropped.length === 0) return;
-          setDropTargetNode(node);
-          setDroppedFiles(dropped);
-          setUploadOpen(true);
-        });
+        openDrawerWithDroppedFiles(event, node);
       },
     };
   };
@@ -545,6 +820,79 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     // in this same render anyway.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folderTagIdsKey, fetchTagSizes]);
+
+  // #2384 — a folder row summarizes the ingestion state of everything under it
+  // (its own documents + every sub-folder's, at any depth): still processing,
+  // some failed, or all finished during this session. Without it, the only way
+  // to tell whether a bulk upload has landed is to walk into each sub-folder
+  // and read the rows one by one.
+  //
+  // Every input is already in memory — no new endpoint, no new backend status.
+  // Two families of source, unioned per state because neither subsumes the
+  // other:
+  //  - the ALREADY-LOADED pages (`perTag`), read per tag id. Survives a page
+  //    reload, and is the only source that sees what the browse snapshot knows
+  //    and the task feed cannot: a teammate's ingestion, or a document a dead
+  //    worker left `in_progress`/failed (#2279). Limited to folders visited
+  //    this session — but without it a folder could read "settled" while a row
+  //    inside it visibly spins, the exact confusion this feature removes.
+  //  - the SSE task feed, matched against the tag tree's `item_ids`. Reaches
+  //    folders that were never opened, but carries only the current user's
+  //    tasks (`GET /tasks?scope=user`, useTaskRehydration) and — since that
+  //    route hides terminal tasks — only for this browser session.
+  //
+  // Hence the deliberate asymmetry between the two rolled-up terminal states:
+  // "all done" is session-only (it is a transient "your upload landed", and
+  // the memory-only task store expires it for free on refresh), while a
+  // failure stays visible for every folder the snapshot covers, because it
+  // still needs someone to act on it.
+  const failedDocsByTagId = useMemo(() => collectFailedDocsByTag(perTag, documentDisplayName), [perTag]);
+  const folderByDocUid = useMemo(() => indexFoldersByDocUid(childFolders), [childFolders]);
+
+  // Stable keys for the live inputs: the task store is a fresh object on EVERY
+  // SSE progress event, so depending on those identities would recompute on each
+  // one — the same trap `pendingTagKey` avoids for the poll interval above.
+  // Joined on NUL rather than a comma because a document uid is not always a
+  // plain uuid (scheduler pulls build `pull-{source_tag}-{hash}` from a
+  // configurable tag), and two different sets must not collide onto the same
+  // key. These are memo keys only — never split back apart. The failure key
+  // carries the NAMES too: `taskEventReceived` rewrites `target` on any event
+  // that carries one, so a label refined after the failure was first recorded
+  // must still reach the tooltip.
+  const pendingTagIdsKey = [...pendingTagIds].sort().join(KEY_SEP);
+  const activeDocUidKey = [...activeDocTaskByUid.keys()].sort().join(KEY_SEP);
+  const failedDocKey = [...docOutcomes.failed]
+    .map(([uid, doc]) => `${uid}${KEY_SEP}${doc.name}${KEY_SEP}${doc.error ?? ""}`)
+    .sort()
+    .join(KEY_SEP);
+  const justCompletedKey = [...justCompletedDocUids].sort().join(KEY_SEP);
+
+  const folderRollups = useMemo(
+    () =>
+      buildFolderRollups({
+        childFolders,
+        tagIdsByFolder: folderDescendantTagIds,
+        folderByDocUid,
+        pendingTagIds,
+        failedDocsByTagId,
+        activeDocUids: activeDocTaskByUid.keys(),
+        outcomes: docOutcomes,
+        justCompletedDocUids,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see the key block
+    // above: the live inputs are read from their sources, tracked by key.
+    [
+      childFolders,
+      folderDescendantTagIds,
+      folderByDocUid,
+      failedDocsByTagId,
+      docOutcomes,
+      pendingTagIdsKey,
+      activeDocUidKey,
+      failedDocKey,
+      justCompletedKey,
+    ],
+  );
 
   const rows: Row[] = useMemo(
     () => [
@@ -639,6 +987,22 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     if (next !== undefined) patchDocRetrievable(doc.identity.document_uid, next);
   };
 
+  // Same rationale as patchDocRetrievable above: a label add/remove never
+  // changes tag membership or counts, so patch every loaded page holding this
+  // doc instead of a list-wide refetch.
+  const patchDocLabels = (documentUid: string, labels: string[]) => {
+    setPerTag((prev) => {
+      const next: typeof prev = {};
+      for (const [tagId, page] of Object.entries(prev)) {
+        next[tagId] = {
+          ...page,
+          docs: page.docs.map((d) => (d.identity.document_uid === documentUid ? { ...d, labels } : d)),
+        };
+      }
+      return next;
+    });
+  };
+
   const bulkToggleSearchable = async () => {
     // searchToggleMode being defined guarantees the toggle-relevant subset of
     // the selection is uniform (all searchable or all excluded), so toggling
@@ -692,14 +1056,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     ];
   };
 
-  const moreOptionsForDoc = (
-    doc: DocumentMetadata,
-  ): OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] => {
+  const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<DocMenuAction>[] => {
     // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
     // document that already succeeded, not a first ingestion. Any other status
     // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
     const status = getDocStatus(doc);
-    const options: OptionModel<"rename" | "download" | "searchable" | "process" | "delete">[] = [];
+    const activeTask = activeDocTaskByUid.get(doc.identity.document_uid);
+    const options: OptionModel<DocMenuAction>[] = [];
+    // No "error detail" entry here: the per-stage messages ride the "failed"
+    // StatusChip itself, on hover (#2315).
     if (canCreateFolder) {
       options.push({
         value: "rename",
@@ -717,6 +1082,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       icon: { category: "outlined", type: "download" },
     });
     if (canCreateFolder) {
+      // Labels are descriptive metadata, not resource management — only
+      // checks the document's own UPDATE access server-side, same gate as
+      // rename, so it's offered under this same condition.
+      options.push({
+        value: "labels",
+        key: "labels",
+        label: t("rework.resources.action.manageLabels"),
+        icon: { category: "outlined", type: "category" },
+      });
       const excludedFromSearch = doc.source.retrievable === false;
       // A tabular-only dataset's `retrievable` is always false without being a
       // real exclusion (see isTabularOnlyDoc) — it stays queryable via the
@@ -750,12 +1124,32 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               },
             ]
           : []),
+        // Only while the backing task is genuinely stoppable — `cancelling`
+        // means a stop was already requested, offering a second one is noise.
+        ...(activeTask && (activeTask.state === "pending" || activeTask.state === "running")
+          ? [
+              {
+                value: "stopIngestion" as const,
+                key: "stopIngestion",
+                label: t("rework.resources.action.stopIngestion"),
+                icon: { category: "outlined" as const, type: "stop" as const },
+                destructive: true,
+              },
+            ]
+          : []),
         {
           value: "delete",
           key: "delete",
           label: t("rework.resources.action.delete"),
           icon: { category: "outlined", type: "delete" },
           destructive: true,
+          // #2315: while an ingestion is live, "stop" is the only exit — it
+          // cancels the workflow AND deletes the half-built document. A plain
+          // delete here would race the still-running workflow, which can
+          // re-write metadata/vectors right after the delete lands. Greyed
+          // with a hover tooltip explaining why, per developer request.
+          disabled: !!activeTask,
+          ...(activeTask ? { tooltip: t("rework.resources.action.deleteDisabledWhileProcessing") } : {}),
         },
       );
     }
@@ -860,11 +1254,39 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       },
     },
     {
+      // Fixed for the same header/body dual-grid reason as the actions column
+      // below. Sized for the widest chip — FR "Traitement..." with its spinner
+      // (~100px) — which 6rem clipped; the shorter Erreur/En attente chips
+      // masked that until the live-task wiring (#2315) made "processing"
+      // actually render here.
       label: "",
-      size: "6rem",
+      size: "8rem",
       cellRenderer: (row) => {
-        if (row.kind !== "document") return null;
-        return <StatusChip status={getDocStatus(row.doc)} />;
+        // Folder rollup (#2384). Precedence is processing > failures > done:
+        // while anything is still running the folder is not settled yet, and
+        // once it is, an unresolved failure is more actionable than a "your
+        // upload landed" marker. `raw` is never rolled up — a folder holding
+        // never-processed documents is a normal steady state, not news.
+        if (row.kind === "folder") {
+          const rollup = folderRollups.get(row.node.full);
+          if (rollup?.processing) return <StatusChip status="processing" />;
+          if (rollup?.failed.length) return <StatusChip status="warning" failedDocuments={rollup.failed} />;
+          return rollup?.justDone ? <StatusChip status="ready" justCompleted /> : null;
+        }
+        return (
+          <StatusChip
+            status={getDocStatus(row.doc)}
+            errors={row.doc.processing?.errors}
+            // The failure a Temporal child job reported: for a run that died
+            // before any stage started, this is the ONLY account of it —
+            // `processing.errors` is keyed by stage and stays empty. Already in
+            // hand from the task feed, so the Resources tab stops being the one
+            // surface that shows "Erreur" with nothing behind it (#2315 put the
+            // message on the task; it only ever reached the task popover).
+            taskError={docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
+            justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
+          />
+        );
       },
     },
     {
@@ -912,7 +1334,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                 />
               </Tooltip>
             )}
-            <IconButtonMenu<"rename" | "download" | "delete" | "searchable" | "process">
+            <IconButtonMenu<DocMenuAction>
               iconButton={{
                 color: "on-surface-retreat",
                 variant: "icon",
@@ -924,12 +1346,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               onSelect={(value) => {
                 if (row.kind === "folder") {
                   if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
-                  if (value === "delete") confirmDeleteFolder(row.node);
+                  if (value === "delete") void confirmDeleteFolder(row.node);
                 } else {
                   if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                   if (value === "download") void commands.download(row.doc);
+                  if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
+                  if (value === "stopIngestion") confirmStopIngestion(row.doc);
                   if (value === "delete" && currentTag) {
                     showConfirmationDialog({
                       title: t("rework.resources.confirm.deleteTitle"),
@@ -977,8 +1401,89 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const uploadTargetNode = dropTargetNode ?? currentNode;
   const uploadTargetTag = uploadTargetNode.tagsHere[0] ?? null;
 
+  // Walks/creates the tag chain for one dropped subdirectory under the upload
+  // target, returning the leaf's tag id — how a dropped folder keeps its
+  // on-disk structure as nested tags (the drawer calls this once per distinct
+  // subdirectory before uploading). Existing levels are resolved from the
+  // loaded tree or the pendingFolderTagIds cache; missing ones are created
+  // like CreateFolderModal would (same TagCreate shape). A 409 means the tag
+  // exists server-side but not in the loaded tree (stale list, concurrent
+  // creation elsewhere) — refetch and read its id from the fresh list.
+  const ensureFolderPath = useCallback(
+    async (segments: string[]): Promise<string | null> => {
+      let parentFull = uploadTargetNode.full;
+      let parentNode: TagNode | null = uploadTargetNode;
+      let tagId: string | null = uploadTargetNode.tagsHere[0]?.id ?? null;
+      for (const segment of segments) {
+        const full = parentFull ? `${parentFull}/${segment}` : segment;
+        const node: TagNode | null = parentNode?.children.get(segment) ?? null;
+        let id = pendingFolderTagIds.current.get(full) ?? node?.tagsHere[0]?.id ?? null;
+        if (!id) {
+          try {
+            const created = await createTag({
+              tagCreate: {
+                name: segment,
+                path: parentFull || null,
+                type: "document",
+                team_id: isPersonalTeam ? null : teamId,
+              },
+            }).unwrap();
+            id = created.id;
+          } catch (err) {
+            if ((err as { status?: number | string })?.status === 409) {
+              const fresh = await refetchTags().unwrap();
+              id = (fresh ?? []).find((tag) => tag.type === "document" && fullPath(tag) === full)?.id ?? null;
+            }
+            if (!id) {
+              const detail = (err as { data?: { detail?: string } })?.data?.detail;
+              throw new Error(detail ?? t("rework.resources.folderModal.error"));
+            }
+          }
+        }
+        pendingFolderTagIds.current.set(full, id);
+        parentFull = full;
+        parentNode = node;
+        tagId = id;
+      }
+      return tagId;
+    },
+    [uploadTargetNode, createTag, isPersonalTeam, teamId, refetchTags, t],
+  );
+
+  // The full page is a drop surface for the folder being viewed — the drill-down
+  // model shows one folder at a time, so "drop anywhere" reads as "add to this
+  // folder". Folder rows keep their own (more specific) drop target above this
+  // one. Same CAN_UPDATE_RESOURCES gate as the toolbar upload action. At the
+  // corpus root there is no tag to attach plain files to, so only dropped
+  // FOLDERS are accepted there — each one becomes a library mirroring its
+  // structure (openDrawerWithDroppedFiles filters loose files out).
+  const atRoot = !currentFolderFull;
+  const pageDroppable = canCreateFolder && (!!currentTag || atRoot);
+  const pageDropProps = pageDroppable
+    ? {
+        onDragOver: (event: React.DragEvent) => {
+          if (!isFileDrag(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        },
+        onDragEnter: (event: React.DragEvent) => {
+          if (!isFileDrag(event)) return;
+          setPageDragOver(true);
+        },
+        onDragLeave: (event: React.DragEvent) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setPageDragOver(false);
+        },
+        onDrop: (event: React.DragEvent) => {
+          setPageDragOver(false);
+          openDrawerWithDroppedFiles(event, currentNode, atRoot);
+        },
+      }
+    : {};
+  const pageDragActive = pageDroppable && pageDragOver && !dragOverFolder;
+
   return (
-    <div className={styles.workspace}>
+    <div className={styles.workspace} data-page-drag-over={pageDragActive || undefined} {...pageDropProps}>
       <ResourceExplorer<Row>
         breadcrumb={{
           segments: breadcrumbSegments,
@@ -1057,6 +1562,17 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         }
       />
 
+      {pageDragActive && (
+        <div className={styles.pageDropOverlay} aria-hidden>
+          <Icon category="outlined" type="upload" />
+          <span>
+            {atRoot
+              ? t("rework.resources.dropAtRoot")
+              : t("rework.resources.dropInFolder", { folder: currentNode.name })}
+          </span>
+        </div>
+      )}
+
       <InlineDrawer
         open={!!commands.previewTarget}
         onClose={commands.closePreview}
@@ -1083,11 +1599,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           setUploadOpen(false);
           setDroppedFiles(undefined);
           setDropTargetNode(null);
+          pendingFolderTagIds.current.clear();
         }}
         initialFiles={droppedFiles}
         teamId={teamId}
         destinationPath={uploadTargetNode.full || undefined}
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
+        ensureFolderPath={canCreateFolder ? ensureFolderPath : undefined}
+        requireFolderPerFile={!uploadTargetTag}
         onUploadComplete={() => {
           if (uploadTargetTag) void loadTagPage(uploadTargetTag.id, perTag[uploadTargetTag.id]?.offset ?? 0);
           void refetchTags();
@@ -1113,6 +1632,18 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             } else {
               await commands.renameDocument(renameTarget.doc, newName);
             }
+          }}
+        />
+      )}
+      {labelsTarget && (
+        <ManageLabelsModal
+          open={!!labelsTarget}
+          onClose={() => setLabelsTarget(null)}
+          doc={labelsTarget}
+          onMutate={async (patch) => {
+            const next = await commands.mutateLabels(labelsTarget, patch);
+            if (next) patchDocLabels(labelsTarget.identity.document_uid, next);
+            return next;
           }}
         />
       )}

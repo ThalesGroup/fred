@@ -60,4 +60,29 @@ and enforce them consistently in ReAct, Deep, and Graph.
 
 ## Resolution evidence
 
-Not resolved.
+**Partially resolved.** Split into per-runtime issues under
+[#2343](https://github.com/ThalesGroup/fred/issues/2343) rather than one
+combined fix, to keep each change single-purpose and reviewable:
+
+- **ReAct model-input size budget:** fixed 2026-08-13
+  ([#2350](https://github.com/ThalesGroup/fred/issues/2350)) — see
+  `RUNTIME-EXECUTION-CONTRACT.md` §8.52 for the full account. The
+  message-count window (`_V2_MAX_HISTORY_MESSAGES`) now has a size-based
+  companion (`_V2_MAX_HISTORY_CHARS`) so a handful of large tool outputs
+  cannot blow a provider's context window while staying under the message
+  cap; a turn whose own content alone still exceeds the budget fails
+  cleanly instead of crashing on a raw provider error.
+- **Tool-call cap:** already shipped for ReAct independently of this
+  finding — `apps/fred-agents/tool_pacing.py` (2026-08-01) sets
+  `max_tool_calls_per_turn=12` on the five agents that use tools, closing
+  the "no shipped agent sets one" gap this finding originally noted.
+
+**Still open, tracked under #2343:**
+
+- Deep and Graph runtimes have neither a message/size budget nor a
+  tool-call cap — Deep in fact refuses to start if a policy sets
+  `max_tool_calls_per_turn` at all.
+- Persisted checkpoint growth is still untrimmed (only the outgoing model
+  request is trimmed, by design).
+- `allow_parallel_calls` is still declared and rendered but not consumed by
+  any runtime.

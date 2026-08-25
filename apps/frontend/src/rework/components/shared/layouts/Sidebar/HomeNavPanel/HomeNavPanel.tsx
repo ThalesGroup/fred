@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
+import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
@@ -48,19 +49,7 @@ export default function HomeNavPanel() {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.header}>
-        <div className={styles.titleContainer}>
-          <span className={styles.title}>{t("rework.home.title")}</span>
-        </div>
-        <SearchInput
-          size="xs"
-          value={search}
-          onChange={setSearch}
-          placeholder={t("rework.home.searchPlaceholder")}
-          ariaLabel={t("rework.home.searchPlaceholder")}
-          clearAriaLabel={t("rework.home.searchClear")}
-        />
-      </div>
+      <NavPanelHeader title={t("rework.home.title")} />
 
       <div className={styles.personalSpace}>
         <TeamSelectionListItem
@@ -75,6 +64,16 @@ export default function HomeNavPanel() {
       <div className={styles.teamList}>
         <div className={styles.teamListHeader}>
           <span className={styles.teamListHeaderLabel}>{t("rework.home.yourTeams")}</span>
+        </div>
+        <div className={styles.teamSearch}>
+          <SearchInput
+            size="xs"
+            value={search}
+            onChange={setSearch}
+            placeholder={t("rework.home.searchPlaceholder")}
+            ariaLabel={t("rework.home.searchPlaceholder")}
+            clearAriaLabel={t("rework.home.searchClear")}
+          />
         </div>
         <div className={styles.scroll}>
           {visibleTeams.map((team) => (

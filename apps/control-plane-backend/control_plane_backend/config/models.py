@@ -93,6 +93,52 @@ class UploadWarning(BaseModel):
     )
 
 
+class InfoBannerLink(BaseModel):
+    """One link rendered on the right side of the info banner."""
+
+    url: str = Field(description="Link target URL.")
+    labels: dict[str, str] = Field(
+        default_factory=dict,
+        description='Locale → label map (e.g. {"en": "...", "fr": "..."}).',
+    )
+
+
+class InfoBanner(BaseModel):
+    """Deployer-configured global announcement banner.
+
+    Full-width and non-dismissable, shown above the app content on every page
+    — including the pre-auth GCU-acceptance and root-bootstrap screens.
+    Persistent by default; set `auto_hide_seconds` to make it disappear on
+    its own. Texts are resolved from the user's locale with "en" fallback.
+    Omit the whole block to show nothing.
+    """
+
+    color: str = Field(
+        default="#00BBDD",
+        description="Banner background CSS color.",
+    )
+    auto_hide_seconds: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Seconds after which the banner hides itself, measured from app "
+            "load. Omit for a persistent banner — the default."
+        ),
+    )
+    titles: dict[str, str] = Field(
+        default_factory=dict,
+        description='Locale → title map (e.g. {"en": "...", "fr": "..."}).',
+    )
+    messages: dict[str, str] = Field(
+        default_factory=dict,
+        description='Locale → message map (e.g. {"en": "...", "fr": "..."}).',
+    )
+    links: list[InfoBannerLink] = Field(
+        default_factory=list,
+        description="Links rendered on the right side of the banner.",
+    )
+
+
 class FrontendBootstrapConfig(BaseModel):
     """Static frontend bootstrap configuration served by control-plane."""
 
@@ -102,6 +148,13 @@ class FrontendBootstrapConfig(BaseModel):
         description=(
             "Optional banner shown on upload surfaces (document upload drawer, "
             "chat attachments). Omit to show nothing."
+        ),
+    )
+    info_banner: InfoBanner | None = Field(
+        default=None,
+        description=(
+            "Optional informative banner shown above the app content on every "
+            "page. Omit to show nothing."
         ),
     )
 

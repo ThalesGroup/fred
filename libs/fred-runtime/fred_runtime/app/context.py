@@ -52,6 +52,12 @@ _CONTROL_PLANE_CLIENT_LIMITS = httpx.Limits(
 # attempt hang well past what a readiness-driven operator expects.
 _SQL_BOOT_PING_TIMEOUT_S = 5.0
 
+# Schema ownership: fred-runtime's Alembic tree creates `session_history` and
+# stamps `alembic_version_runtime`; no store creates tables at runtime (#2290).
+# This is the exact command the Helm migration hook and `make db-upgrade` run.
+_MIGRATE_COMMAND = "python -m fred_runtime migrate"
+_RUNTIME_VERSION_TABLE = "alembic_version_runtime"
+
 
 # ---------------------------------------------------------------------------
 # TypedDicts for ring buffer entries
@@ -151,13 +157,15 @@ class PodApplicationContext:
         Durable storage is mandatory for every fred-runtime pod — dev uses a
         local SQLite file (`sqlite_path`), production uses Postgres, but both
         are "durable", never "no storage". Any failure here (bad config,
-        unreachable/misconfigured Postgres) must abort pod startup so the
-        FastAPI lifespan never completes and Kubernetes never routes traffic
-        to this replica — see RUNTIME-EXECUTION-CONTRACT.md §8 (dated entry)
-        for the incident this closes.
+        unreachable/misconfigured Postgres, unmigrated schema) must abort pod
+        startup so the FastAPI lifespan never completes and Kubernetes never
+        routes traffic to this replica — see RUNTIME-EXECUTION-CONTRACT.md §8
+        (dated entries) for the incidents this closes.
         """
+        from fred_core.history.history_models import SessionHistoryRow
         from fred_core.history.postgres_history_store import PostgresHistoryStore
         from fred_core.sql.base_sql import create_async_engine_from_config
+        from fred_core.sql.schema_guard import require_tables
         from fred_core.users.store.postgres_user_store import init_user_store
         from sqlalchemy import text
 
@@ -191,6 +199,23 @@ class PodApplicationContext:
             # agent_app.py's lifespan, has no retry and the process exits on
             # this raise) but becomes a real leak the moment any retry/backoff
             # wrapper is added around initialize_sql() or the lifespan.
+            await engine.dispose()
+            raise
+
+        try:
+            # Startup-only (never on a read/write path): the history store no
+            # longer creates its own tables — Alembic owns that DDL (#2290) —
+            # so an install that skipped its migration job must be caught here,
+            # not hours later as an UndefinedTableError mid-turn (#2137).
+            await require_tables(
+                engine,
+                [SessionHistoryRow.__tablename__],
+                component="fred-runtime",
+                migrate_command=_MIGRATE_COMMAND,
+                version_table=_RUNTIME_VERSION_TABLE,
+            )
+        except Exception:
+            # Same leak-on-failure reasoning as the ping path above.
             await engine.dispose()
             raise
 

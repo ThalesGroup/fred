@@ -24,6 +24,33 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage
 
 
+def migrate_test_config(config: AgentPodConfig) -> AgentPodConfig:
+    """
+    Create the Alembic-owned runtime schema on a test config's SQLite file and
+    return the config unchanged (so builders can `return migrate_test_config(...)`).
+
+    Why this exists:
+    - since #2290 no store creates its own tables: `session_history` DDL lives
+      only in fred-runtime's Alembic tree, and `initialize_sql()` refuses to
+      finish startup when the table is missing
+    - a test that boots the pod therefore must do what a deployment's migration
+      job (`python -m fred_runtime migrate`) does first
+
+    It runs the real Alembic tree (`fred_runtime.migrations.upgrade_sqlite_database`,
+    also used by the fred-agents suite), not hand-rolled DDL: a second definition
+    of the schema in test code is the duplication #2290 just removed from
+    production, and running the tree proves the migrations actually produce a
+    bootable schema.
+    """
+    from fred_runtime.migrations import upgrade_sqlite_database
+
+    sqlite_path = config.storage.postgres.sqlite_path
+    if not sqlite_path:  # a Postgres-backed config needs the real migration job
+        return config
+    upgrade_sqlite_database(sqlite_path)
+    return config
+
+
 @pytest.fixture(autouse=True)
 def _restore_base_ui_part_union() -> Iterator[None]:
     """
@@ -56,16 +83,6 @@ class StaticChatModelFactory:
         self._model = model
 
     def build(self, definition: object, binding: object) -> ToolFriendlyFakeChatModel:
-        return self._model
-
-    def build_for_operation(
-        self,
-        *,
-        definition: object,
-        binding: object,
-        purpose: object,
-        operation: object = None,
-    ) -> ToolFriendlyFakeChatModel:
         return self._model
 
 

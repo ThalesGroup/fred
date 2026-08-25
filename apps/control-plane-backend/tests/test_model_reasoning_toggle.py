@@ -119,7 +119,10 @@ async def test_a_stored_false_is_indistinguishable_from_no_row(tmp_path) -> None
 
 
 def _model_entry(
-    capability_id: str, *, thinking_profile_ids: tuple[str, ...] = ()
+    capability_id: str,
+    *,
+    thinking_profile_ids: tuple[str, ...] = (),
+    display_name: str | None = None,
 ) -> CapabilityCatalogEntry:
     return CapabilityCatalogEntry(
         id=capability_id,
@@ -130,6 +133,7 @@ def _model_entry(
         kind="model",
         model_profile_ids=("chat.some.profile",),
         model_thinking_profile_ids=thinking_profile_ids,
+        model_display_name=display_name,
     )
 
 
@@ -179,7 +183,9 @@ def _stub_gate_and_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
 
     catalog = {
         THINKING_MODEL: _model_entry(
-            THINKING_MODEL, thinking_profile_ids=("chat.mistral.small",)
+            THINKING_MODEL,
+            thinking_profile_ids=("chat.mistral.small",),
+            display_name="Mistral Small",
         ),
         PLAIN_MODEL: _model_entry(PLAIN_MODEL),
         "doc_access": CapabilityCatalogEntry(
@@ -213,6 +219,7 @@ async def test_enabling_reasoning_on_a_thinking_model_stores_the_row() -> None:
 
     assert result.reasoning_enabled is True
     assert store.writes == [(THINKING_MODEL, True)]
+    # Nothing else is captured: no display snapshot is taken any more (#2387).
 
 
 @pytest.mark.asyncio
@@ -428,8 +435,42 @@ def test_control_is_emitted_when_every_gate_is_open() -> None:
     # Default OFF is a safety decision, not a style one: Amendment C measured
     # reasoning re-issuing duplicate tool calls in 10/10 turns on this stack.
     # Author-settable since Amendment B, but this stays the value an author
-    # who does nothing gets.
+    # who does nothing gets. No model identity rides along any more (#2387) —
+    # see test_params_never_carry_a_model_identity below.
     assert control.params == {"default": False}
+
+
+def test_params_carry_only_the_starting_value() -> None:
+    """#2387 — the control is a plain on/off switch and says nothing more.
+
+    It used to ship `model_id`/`display_name` (the single reasoning-enabled
+    model's identity, which the composer rendered as its model label) and
+    `effort` (that model's ops-authored `settings.reasoning_effort`). The
+    identity was wrong — it named the model whose REASONING was on, not the one
+    a turn routes to — and the effort went with it when the menu became a plain
+    on/off. The level a turn runs with stays the pod's business: it applies the
+    live settings value either way.
+    """
+
+    from control_plane_backend.product.service import _platform_reasoning_control
+
+    control = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL],
+    )
+    assert control is not None
+    assert control.params == {"default": False}
+
+    # Several enabled models change nothing — there is no per-model value left
+    # to disagree about, which is the point of removing them.
+    two = _platform_reasoning_control(
+        reasoning_enabled=True,
+        reasoning_default_on=False,
+        reasoning_enabled_model_ids=[THINKING_MODEL, PLAIN_MODEL],
+    )
+    assert two is not None
+    assert two.params == {"default": False}
 
 
 # ---------------------------------------------------------------------------

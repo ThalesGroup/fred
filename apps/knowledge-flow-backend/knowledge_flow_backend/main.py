@@ -59,6 +59,7 @@ from knowledge_flow_backend.features.audio.audio_transcription_controller import
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
+from knowledge_flow_backend.features.corpus_tree.controller import CorpusTreeController
 from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
@@ -76,7 +77,6 @@ from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tabular.execution import register_tabular_exception_handlers
 from knowledge_flow_backend.features.tag.tag_controller import TagController
 from knowledge_flow_backend.features.tasks.controller import TasksController
-from knowledge_flow_backend.features.tree.controller import TreeController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
@@ -133,9 +133,15 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        import fred_core.tasks.orm_models  # noqa: F401 — registers ORM models with CoreBase
         from fred_core.models.base import Base as CoreBase
 
+        # #2170: the task tables are no longer among these. They are
+        # `kf_task_run`/`kf_task_event_log` on knowledge-flow's own `Base`, created
+        # by Alembic (`c8f2d5b13ea6`) and by nothing else — so the registration
+        # import that used to sit here would now be a no-op.
+        # This unfiltered `create_all` over the *shared* CoreBase is itself the
+        # defect tracked in #2313, consolidated into #2314; removing it is that
+        # issue's acceptance criterion, deliberately not bundled here.
         async with application_context.get_pg_async_engine().begin() as conn:
             await conn.run_sync(CoreBase.metadata.create_all)
 
@@ -244,7 +250,7 @@ def create_app() -> FastAPI:
     IngestionController(router)
     TagController(app, router)
     VectorSearchController(router)
-    TreeController(router)
+    CorpusTreeController(router)
     SummarizeController(app, router)
     ExtractController(app, router)
     ResourceController(router)

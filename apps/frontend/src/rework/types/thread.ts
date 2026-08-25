@@ -16,7 +16,7 @@
 // Carries raw API types (ChatMessage, VectorSearchHit) because the rendering
 // layer (AssistantTurn, HitlPrompt) consumes them directly.
 
-import type { ChatMessage, VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 import type { TokenUsage } from "./conversation";
 import type { RawUiPart } from "./parts";
 
@@ -34,7 +34,20 @@ export interface ThreadMessage {
    * renderer are skipped visually but stay present here.
    */
   uiParts: RawUiPart[];
+  /** Billed usage for the turn — every model call summed, which is what the
+   *  provider charges and what the conversation header totals. A ReAct turn
+   *  re-sends the whole context per call, so this legitimately counts the
+   *  same history several times. */
   tokenUsage?: TokenUsage | null;
+  /** Context size at the end of the turn (#2403) — the anchor the next turn
+   *  subtracts from to work out what it genuinely added. */
+  contextTokens?: number | null;
+  /** What this turn actually ADDED: the new user message, the growth from its
+   *  tool rounds, and the tokens it produced (#2403). This is what the
+   *  per-message badge shows; null when the chain of `contextTokens` is
+   *  broken (Graph agents, pre-#2403 history), where the badge falls back to
+   *  `tokenUsage`. */
+  marginalTokenUsage?: TokenUsage | null;
   hitlChoices?: Array<{ id: string; label: string }>;
   hitlTitle?: string | null;
 }

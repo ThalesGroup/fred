@@ -26,6 +26,8 @@ from control_plane_backend.agent_instances.store import (
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.models import (
+    InfoBanner,
+    InfoBannerLink,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
@@ -1066,6 +1068,48 @@ async def test_frontend_config_disabled_omits_oidc_client() -> None:
     assert "client_id" not in payload["user_auth"]
     # `response_model_exclude_none=True` omits the key entirely when gating is off.
     assert payload.get("gcu_version") is None
+    # No `platform.frontend.info_banner` configured → the key is omitted and
+    # the frontend renders no banner.
+    assert "info_banner" not in payload
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_exposes_configured_info_banner() -> None:
+    """The public pre-auth config carries `platform.frontend.info_banner` so
+    the global banner can render on every page — including the GCU-acceptance
+    and root-bootstrap screens, which render before the authenticated
+    `/frontend/bootstrap` can succeed."""
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.platform.frontend.info_banner = InfoBanner(
+        color="#00BBDD",
+        auto_hide_seconds=30,
+        titles={"en": "New version available"},
+        messages={
+            "en": "Access the Fred documentation & blog",
+            "fr": "Accédez à la doc",
+        },
+        links=[
+            InfoBannerLink(
+                url="https://fredk8.dev", labels={"en": "Go to the Fred blog"}
+            )
+        ],
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/config")
+
+    assert resp.status_code == 200
+    banner = resp.json()["info_banner"]
+    assert banner["color"] == "#00BBDD"
+    assert banner["auto_hide_seconds"] == 30
+    assert banner["titles"] == {"en": "New version available"}
+    assert banner["messages"]["fr"] == "Accédez à la doc"
+    assert banner["links"] == [
+        {"url": "https://fredk8.dev", "labels": {"en": "Go to the Fred blog"}}
+    ]
 
 
 @pytest.mark.asyncio
@@ -1597,6 +1641,104 @@ async def test_prepare_execution_returns_ingress_relative_urls(
         assert payload[url_field].startswith("/")
     # #1979: no capabilities selected on this instance → empty map.
     assert payload["capability_base_urls"] == {}
+
+
+def test_runtime_template_payload_accepts_new_and_legacy_chat_input_metadata() -> None:
+    """Rolling upgrades accept template responses with or without the policy."""
+
+    base = {
+        "template_agent_id": "rags.sample.echo",
+        "title": "Echo",
+        "description": "Echo agent",
+        "kind": "assistant",
+    }
+
+    assert _RuntimeTemplatePayload.model_validate(base).max_chat_input_chars is None
+    assert (
+        _RuntimeTemplatePayload.model_validate(
+            {**base, "max_chat_input_chars": 321}
+        ).max_chat_input_chars
+        == 321
+    )
+    for malformed in (True, False, "321", 0, -1):
+        assert (
+            _RuntimeTemplatePayload.model_validate(
+                {**base, "max_chat_input_chars": malformed}
+            ).max_chat_input_chars
+            is None
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("published_limit", [321, None])
+async def test_prepare_execution_propagates_optional_runtime_chat_input_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    published_limit: int | None,
+) -> None:
+    """Preparation reuses one template fetch and tolerates an older runtime."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-limit",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+            )
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+    fetch_calls = 0
+
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ) -> list[_RuntimeTemplatePayload]:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        assert include_non_public is True
+        return [
+            _RuntimeTemplatePayload(
+                template_agent_id="rags.sample.echo",
+                title="Echo",
+                description="Echo agent",
+                kind="assistant",
+                max_chat_input_chars=published_limit,
+            )
+        ]
+
+    monkeypatch.setattr(
+        product_service,
+        "_fetch_runtime_templates",
+        _fake_fetch_runtime_templates,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-limit/prepare-execution"
+        )
+
+    assert response.status_code == 200
+    assert fetch_calls == 1
+    if published_limit is None:
+        assert "max_chat_input_chars" not in response.json()
+    else:
+        assert response.json()["max_chat_input_chars"] == published_limit
 
 
 @pytest.mark.asyncio
@@ -3019,6 +3161,7 @@ def _build_erasure_deps(
         get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
@@ -8759,6 +8902,8 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     """CTRLP-12: a deferred delete creates a future-dated `erasure` task, so a
     platform/team admin sees the scheduled erasure — with its due date, target and
     team — immediately via GET /tasks, before any worker runs."""
+    from control_plane_backend.models.base import Base as CPBase
+    from control_plane_backend.models.task_models import TASK_TABLES
     from control_plane_backend.product.service import delete_or_defer_session
     from fred_core.common import PostgresStoreConfig
     from fred_core.models.base import Base as CoreBase
@@ -8773,8 +8918,11 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     )
     async with engine.begin() as conn:
         await conn.run_sync(CoreBase.metadata.create_all)
+        await conn.run_sync(CPBase.metadata.create_all)
     task_service = TaskService(
-        store=TaskStore(engine), bus=MemoryEventBus(), control=NoopWorkflowControl()
+        store=TaskStore(engine, TASK_TABLES),
+        bus=MemoryEventBus(),
+        control=NoopWorkflowControl(),
     )
 
     session_store = _FakeSessionMetadataStore(

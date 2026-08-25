@@ -1,3 +1,172 @@
+**v2.1.36** — 2026-08-20
+
+- **Summary**
+
+  Platform admins can now set one default chat model for everyone, with
+  per-agent overrides per team. Folder rows in Resources tell you what is
+  happening underneath them — still ingesting, how many documents failed, or
+  done. The chat composer finally names the model your question actually goes to.
+
+- **Features**
+
+  - Platform admins can set a single default chat model, and each team can
+    override it per agent using only models every runtime offers (#2365, #2380)
+  - Folder rows in Resources summarize their contents: still ingesting, how many
+    documents failed underneath — hover to see which and copy the list — or done (#2384)
+  - Deployments can show an announcement banner above every page, configured
+    centrally and optionally hiding itself after a set delay (#2400, #2395)
+  - Team role badges explain what each role grants on hover, and a Member badge
+    shows the baseline everyone holds (#2383, #2386)
+
+- **Improvements**
+
+  - Reasoning in the chat composer is now two named modes, instead of a state
+    that read as though the model itself were off (#2387, #2389)
+  - Error detail panels can be reached with the mouse to select and copy their
+    text, and no longer open past the edge of the screen (#2384)
+
+- **Security**
+
+  - Routine dependency update: sqlparse (Python) (#2390)
+
+- **Bug Fixes**
+
+  - The chat composer named the model an admin had enabled reasoning on rather
+    than the one answering; it now names the routed model and warns when your
+    team cannot use it (#2387, #2389)
+  - The Activity page listed every task twice (#2170, #2376)
+  - A workbook containing a single empty sheet failed to ingest entirely; empty
+    sheets are now reported and the rest of the workbook imports (#2392, #2393)
+  - Private teams no longer appear in the marketplace to people who are not
+    members (#2398, #2399)
+  - A team's model routing no longer reports "no models activated" when an
+    unrelated runtime is unreachable (#2380)
+  - An ingestion that failed before reaching a processing stage showed "Erreur"
+    with an empty details panel; the real message now shows (#2384)
+
+- **Deployment note**
+
+  Upgrade the agent runtime pods together with the platform: while a pod still
+  runs the previous release, team model-routing policies cannot be edited.
+  Stored routing policies are migrated in place — operation- and purpose-scoped
+  rules, which no deployment used, are dropped. The announcement banner is
+  optional and renders nothing unless configured.
+
+**v2.1.35** — 2026-08-13
+
+- **Summary**
+
+  Drop a folder of any shape into Resources, and an upload that would exceed
+  your storage quota is now refused before a single file crosses the network.
+  Excel CSV exports ingest on the first try, very large tool results no longer
+  take a turn down, and models with reasoning in the Chat UI can carry a proper display name from the
+  catalog.
+
+- **Features**
+
+  - Models can carry a display name from the catalog, so the chat shows
+    "Claude Sonnet 4.6" with the reasoning effort right next to it instead of a name guessed from its id (#2354)
+
+- **Improvements**
+
+  - Uploads are checked against your storage quota before anything is sent: an
+    over-quota batch is refused with the real figures, and the meter refreshes
+    itself after every upload, delete or cancelled ingestion (#2360, #2363)
+  - Dropping a folder into Resources caps nesting at 15 levels, whether the
+    structure is dropped or built by hand (#2355, #2357)
+  - The chat character counter now appears only when you go over the limit,
+    instead of sitting under every draft (#2358, #2362)
+  - Copying your own message now looks and behaves exactly like copying an
+    assistant reply (#2359)
+
+- **Bug Fixes**
+
+  - Reasoning turned on in a new conversation no longer switches itself
+    back off when you send the first question (#2369)
+  - A CSV exported from Excel with quoted multi-line fields could fail to
+    ingest; it now imports on the first try (#2366, #2368)
+  - A large PDF no longer freezes or crashes the tab: pages load as you
+    scroll, and very large files open behind a confirmation (#2273, #2278)
+  - Adding a label to a document failed on PostgreSQL deployments, and
+    renaming a document left the old name on its indexed content
+  - A task's error message could run off the bottom of the screen with no
+    way to scroll or copy it, and "Ignorer" did nothing on a chat
+    attachment error (#2366, #2368)
+
+- **Deployment note**
+
+  Personal and per-team storage limits are now present in the shipped
+  production configuration — deployments relying on it had no quota enforced
+  at all and will start enforcing them, so review the values before
+  upgrading. The new `model_display_name` catalog key is optional; a catalog
+  without it renders as before.
+
+**v2.1.34** — 2026-08-13
+
+- **Summary**
+
+  You can now pick a reasoning effort and model identity from a new chat
+  selector, and chat messages have a maximum length with a live counter so
+  you never lose a draft to a silent rejection. Resources gains full-page
+  folder drag-and-drop that mirrors your folder structure as nested tags,
+  and corpus images now get AI-written descriptions. Several ingestion,
+  upload, and session-handling bugs are fixed, including stuck "processing"
+  documents, incorrect delete-confirmation counts, and intermittent freezes
+  during session token refresh.
+
+- **Features**
+
+  - New reasoning selector: choose model identity and toggle reasoning
+    effort on/off, with improved chat selection and copy behavior (#2339)
+  - Chat input now enforces a maximum message length, with a live character
+    counter and your draft preserved if a submission is rejected (#2253)
+  - Resources: drop a folder anywhere on the page to upload into the folder
+    you're viewing, or at the root to create a new library — the folder
+    structure is mirrored as nested tags (#2341)
+  - Corpus documents: images are now described by AI when a vision model is
+    configured, matching the existing chat-attachment behavior (#2311)
+  - Admins can grant an agent a capability to search documents by label
+    across the whole corpus, opt-in and separate from standard document
+    access (#2329)
+
+- **Improvements**
+
+  - Prompt-cache token usage is now visible and billed at a reduced rate in
+    cost estimates (#2312)
+  - The assistant message copy button is now always visible, and copying a
+    message keeps clean formatting instead of leaking background colors
+    when pasted into email clients (#2336, #2342)
+  - Navigation panel styling made consistent between the Home and
+    Marketplace panels (#2316)
+
+- **Bug Fixes**
+
+  - Very large tool results (a generated document, a large search hit)
+    could silently overflow the model's context; the turn now fails with a
+    clear error instead of crashing (#2350, #2352)
+  - Fixed attachment upload progress showing "1000%" and upload errors
+    displaying as "[object Object]" (#2344, #2345)
+  - Stopping an in-progress ingestion now fully erases the half-uploaded
+    document instead of leaving it stuck; Delete is disabled with an
+    explanation while ingestion is running, and finished documents show a
+    brief "Terminé" success badge (#2315, #2322)
+  - The delete-folder confirmation now always shows the correct number of
+    documents about to be deleted, including from subfolders (#2315)
+  - A document stuck showing "processing" after a backend timeout now
+    correctly shows as failed (#2279, #2287)
+  - A corpus folder with many small subfolders could appear completely
+    empty even when it wasn't; fixed (#2329)
+  - Fixed intermittent freezes and stalled turns caused by session-token
+    refresh; signing out now immediately stops using cached credentials
+    (#2125, #2309)
+
+- **Deployment note**
+
+  Database migrations for chat session history are now enforced at
+  startup — a deployment that skipped its migration step will fail fast
+  with a clear message instead of silently drifting out of sync.
+  Already-migrated deployments need no action.
+
 **v2.1.33** — 2026-08-09
 
 - **Summary**

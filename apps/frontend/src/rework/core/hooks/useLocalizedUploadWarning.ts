@@ -23,6 +23,22 @@ type LocalizedUploadWarning = {
 };
 
 /**
+ * Resolve one deployer-configured locale map ({locale → text}) for an i18next
+ * language tag ("fr-FR" → "fr"), falling back to "en", then to nothing.
+ *
+ * The single home of the config locale-fallback contract: `upload_warning`
+ * and `info_banner` both resolve their texts through this — do not
+ * duplicate the chain at a call site.
+ */
+export function resolveLocalizedText(
+  map: { [locale: string]: string } | undefined | null,
+  language: string | undefined,
+): string | null {
+  if (!map) return null;
+  return map[language?.split("-")[0] ?? "en"] ?? map["en"] ?? null;
+}
+
+/**
  * Resolve the warning message for an i18next language tag ("fr-FR" → "fr"),
  * falling back to "en", then to nothing (banner hidden).
  *
@@ -33,8 +49,7 @@ export function resolveUploadWarningMessage(
   uploadWarning: UploadWarning | null,
   language: string | undefined,
 ): string | null {
-  if (!uploadWarning?.messages) return null;
-  return uploadWarning.messages[language?.split("-")[0] ?? "en"] ?? uploadWarning.messages["en"] ?? null;
+  return resolveLocalizedText(uploadWarning?.messages, language);
 }
 
 /**

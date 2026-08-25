@@ -49,8 +49,8 @@ from collections.abc import AsyncIterator, Mapping
 from typing import Any, Callable
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse, StreamingResponse
 from fred_core import AuthorizationError, KeycloakUser, TeamPermission
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_sdk.contracts.openai_compat import (
@@ -67,6 +67,7 @@ from .agent_app import (
     _iterate_runtime_event_payloads,
     _resolve_agent_instance,
 )
+from .chat_input_limit import validate_chat_text
 from .dependencies import get_pod_container_from_app
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ logger = logging.getLogger(__name__)
 def create_openai_compat_router(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     security_enabled: bool,
+    max_chat_input_chars: int,
     authenticated_user_dep: Callable[..., Any] | None = None,
 ) -> APIRouter:
     """
@@ -141,7 +143,7 @@ def create_openai_compat_router(
         request: OpenAIChatRequest,
         http_request: Request,
         authenticated_user: KeycloakUser | None = Depends(user_dep),
-    ) -> StreamingResponse:
+    ) -> Response:
         """
         Execute one agent turn over the OpenAI chat completions SSE protocol.
 
@@ -164,6 +166,20 @@ def create_openai_compat_router(
         - `fred.node_error`: graph node error message (finish_reason="stop")
         - `fred.token_usage`: input/output token counts (on the final chunk)
         """
+        user_messages = [m for m in request.messages if m.role == "user"]
+        if not user_messages:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Request must contain at least one user message.",
+            )
+        message = user_messages[-1].content
+        violation = validate_chat_text(message, max_chat_input_chars)
+        if violation is not None:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"error": violation.openai_error()},
+            )
+
         if request.model not in registry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -172,14 +188,6 @@ def create_openai_compat_router(
                     f"Known: {list(registry.keys())}"
                 ),
             )
-
-        user_messages = [m for m in request.messages if m.role == "user"]
-        if not user_messages:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Request must contain at least one user message.",
-            )
-        message = user_messages[-1].content
 
         session_id = http_request.headers.get("X-Fred-Session-Id") or uuid4().hex
         team_id = http_request.headers.get("X-Fred-Team-Id")

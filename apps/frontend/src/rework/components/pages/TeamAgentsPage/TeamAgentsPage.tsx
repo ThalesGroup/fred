@@ -398,7 +398,9 @@ export default function TeamAgentsPage() {
     <div className={styles.teamAgentContainer}>
       {hasAgents && !templatesUnavailable && (
         <div className={styles.title}>
-          <span>{t("rework.teams.agents.title", { agentsNicknamePlural })}</span>
+          <span className={styles.titleText}>
+            {isPersonalTeam ? t("rework.teams.agents.titlePersonal") : t("rework.teams.agents.title")}
+          </span>
           {canManageAgents && (
             <Button
               color={"primary"}

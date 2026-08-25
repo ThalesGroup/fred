@@ -138,13 +138,43 @@ Renders a toggle button ("Pick from library"). When open, shows all available `C
 items (personal + team scope pooled by `GetContextPromptsEarly`) reusing the exact same `PromptCard`
 organism and `FilterChips` category filter bar as the team prompt library page (`PromptsPage`), for
 visual consistency between the two prompt-browsing surfaces (PROMPT-09 follow-up). `canManage` is
-always `false` here (no hover-edit pencil — picking, not managing) and the card's click handler is
+always `false` here (no more-menu — picking, not managing) and the card's click handler is
 rewired to `onSelect(id)` instead of opening the read-only view dialog. Categories come from
 `GetTeamPromptCategories` scoped to the current team; a pooled prompt whose `category_id` doesn't
 match any of those (e.g. a personal-scope prompt's own category) falls into the "Sans catégorie"
 bucket rather than crashing or mismatching. The scope badge ("personal"/"team") the old plain-grid
 version showed per card is gone — `PromptCard` doesn't render one, and reusing "the exact same card"
 was the explicit ask.
+
+---
+
+### `PromptCard` variants + `MarketplacePrompts` (PROMPT-06, #2317)
+
+**Location:** `src/rework/components/shared/organisms/PromptCard/PromptCard.tsx`,
+`src/rework/components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx`
+**Status:** `Functional`
+
+`PromptCard` gained a `variant` prop (`"team"` | `"marketplace"`). The former
+hover-edit pencil is now an always-visible **more-menu** (`IconButtonMenu`,
+`more_vert`), mirroring `AgentCard`:
+
+- **team** variant (team library): Edit / Duplicate / Publish|Unpublish / Delete,
+  and a bottom-right `storefront` "Published" chip (success-container tokens)
+  when the prompt is on the marketplace. Publish, unpublish, and saving an edit
+  to a published prompt each go through a confirmation dialog (the spec's
+  warnings). Duplicate reuses a prompt-flavoured fork of `DuplicateAgentDialog`.
+- **marketplace** variant: the header shows the **author team name** in place of
+  the category (each team has its own categories); the more-menu is Import
+  (+ Remove from marketplace for editors of the author team). Clicking the card
+  opens the read-only view whose only action is copy-to-clipboard — which records
+  a marketplace "use" toward the shared counter.
+
+`MarketplacePrompts` ("Prompts de la communauté") reuses the `MarketplaceTeams`
+header pattern (`h1` + `SearchInput`) and `FilterChips` (one chip per author
+team). Reached from a nav item under the teams marketplace (`MarketplaceNavbar`,
+`description` icon) at `/marketplace/prompts`. Import opens `ImportPromptDialog`:
+a multi-select of the personal space + every editable team, with an `xs`
+`SearchInput` filter.
 
 #### Open UX issues
 
@@ -208,19 +238,58 @@ Uppercase section labels are gone (sentence case: "Recherche", "Portée"). Searc
 only owns its box width and the anchored sub-menus; the surface and row grammar come from the
 shared molecule.
 
-As of REASON-01 (#2166) the same row grammar carries a **boolean** row for the first
-time: the `Reasoning` toggle (`stockKit/ReasoningControl.tsx`) shows On/Off inline in
-muted text like the value rows, but its trailing affordance is a checkbox glyph rather
-than a chevron, and clicking it flips the value in place instead of opening a
-sub-menu. The popover deliberately stays open so a user can flip it and keep
-composing. It is also the first row contributed by the **platform** rather than by a
-capability. It appears only when the agent's author turned Reasoning on in the form's
-Capabilities tab AND a platform admin enabled the model's reasoning — a closed upstream
-gate removes the row entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
-§33). The offer itself lived in the General section until Amendment C (2026-08-02) moved
-it into the Capabilities tab, rendered through the same `CapabilityCard` component every
-real capability uses (generalized to a plain `name`/`description`/`subForm` API for this)
-even though the reasoning offer still isn't a capability underneath.
+As of REASON-01 (#2166) the platform contributed its first non-capability control: a
+`Reasoning` On/Off row (`stockKit/ReasoningControl.tsx`). As of 2026-08-12 that row is
+**gone from the tune menu**: reasoning is now a **plain text button + chevron**
+(`features/capabilities/ReasoningChip.tsx`) pinned at the composer's **right
+edge** before the mic — the designer's Composer.html mockup (2026-08-12) is the
+reference. The button leads with the MODEL IDENTITY, followed by the reasoning
+MODE: "Mistral Small · Boost" when on, "Mistral Small · Rapide" when off (bare
+"Raisonnement"/mode labels when no model resolves at all); its menu opens
+above, right-aligned, with the effort/latency explainer as a muted header and
+the two modes as check-circle rows.
+
+**Two modes, not an on/off switch (#2387).** "Mistral Small · Désactivé" read
+as though the MODEL were disabled — the state word sat beside the model name
+with nothing tying it to reasoning. Naming both modes removes that reading:
+neither describes anything as off. EN uses Fast / Boost.
+
+`Boost` also wears the Chat button's spectrum (`.state[data-on]`), so the one
+"the AI is doing more" signal reads the same on the agent card and in the
+composer. Two departures from that border: linear rather than conic (a conic
+sweep across ~40px of text smears), and no white stops (white travels a border
+but is a hole in text, invisible on the light theme) — leaving cyan → violet →
+pink. A solid `--primary` sits underneath as the fallback for engines that
+ignore `background-clip: text`, and `forced-colors` drops the gradient for the
+system palette. The WORD carries the state either way, so colour is
+reinforcement, never the only signal. 2026-08-21: the shared stops were
+saturated and moderately darkened (same hues) in both places — the original
+pastels were near-invisible on the light surface, a fully darkened pass sank
+into the dark one; the retained stops sit halfway between, so the single
+gradient reads on both themes.
+
+Deliberately NOT a low/medium/high picker — a same-day effort picker was
+withdrawn (providers 400 on values they don't support,
+`RUNTIME-EXECUTION-CONTRACT.md` §8.48) — and since #2387 not a level DISPLAY
+either. The level a reasoning turn runs with is the model's ops-authored
+`settings.reasoning_effort`, applied live by the pod; showing it implied a
+per-question choice that never existed, and it took two snapshot columns to
+reach the composer at all (§8.54). The wire stays the on/off tri-state.
+
+**Superseded in part by #2387 — see "Composer model label" below.** Until then
+the model identity came from `params.model_id` on this very control, i.e. the
+single model whose REASONING was enabled platform-wide, which is unrelated to
+routing; and the chip as a whole was gated on the reasoning control existing.
+Both changed: the identity now comes from
+`GET /teams/{team_id}/routing-policy/effective-chat-model`, the model shows even
+when no reasoning is offered, and the reasoning MENU additionally requires the
+routed model to be reasoning-enabled. The author/admin gates below still decide
+whether the control is emitted at all — a closed upstream gate removes it
+entirely rather than disabling it (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33). The offer itself lived in the General
+section until Amendment C (2026-08-02) moved it into the Capabilities tab, rendered
+through the same `CapabilityCard` component every real capability uses (generalized
+to a plain `name`/`description`/`subForm` API for this) even though the reasoning
+offer still isn't a capability underneath.
 
 As of Amendment B (#2175) that row's **starting** value is the agent author's, not a
 constant: the reasoning card grows a second switch nested under `Reasoning` in its own
@@ -233,9 +302,9 @@ agents) so the decision is informed at the point it is made.
 
 #### Open UX issues
 
-- **Boolean-row affordance (REASON-01)** — the checkbox glyph reads correctly but is the
-  only non-chevron trailing icon in the menu. Decide whether boolean rows should instead
-  use a small switch, and whether the On/Off value text is redundant next to it.
+- ~~**Boolean-row affordance (REASON-01)**~~ — resolved 2026-08-12 by removal: the
+  reasoning row left the tune menu for the right-edge on/off picker chip, so the menu
+  carries no boolean row anymore.
 - **Desktop anchor space** — sub-menus open to the right of the row. Validate the behaviour
   close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
 - **Prompts row (PROMPT-05)** — the harmonized menu is shaped to accept a `Prompts` sub-row
@@ -570,6 +639,12 @@ _(none — streaming indicator resolved 2026-05-18)_
 - **Blockquote style** — left-border only, no background. Confirm whether a subtle background tint
   (`--surface-container`) would better distinguish blockquotes from regular text.
 
+- **`sanitizeSchema` drops `<ol start>` and GFM task-list `checked` (#2347)** — `rehype-sanitize`'s
+  `defaultSchema` (extended here) whitelists neither `start` on `<ol>` nor `checked` on
+  `<input type="checkbox">`, so both are stripped before the DOM exists — a renumbered ordered list
+  always renders from 1, and a GFM checklist (`- [x] done`) loses its checked/unchecked state on
+  screen. Not a rendering bug introduced elsewhere; the fix is whitelisting both in this schema.
+
 #### Resolved
 
 - **Streaming previews for open fences (2026-05-28)** — `CodeBlock` now has a streaming mode used
@@ -672,6 +747,44 @@ library:
 - **Page surface** — the chat page background (`ManagedChatPage` `.page`/`.mainColumn`/`.topBar`
   and the composer's fade-to-page gradient) moved from `--surface-container-lowest` to
   `--surface-main`.
+
+---
+
+### Chat input length states (`RichInputField`, `HitlPrompt`, 2026-08-12, updated 2026-08-13)
+
+**Location:** `src/rework/components/shared/atoms/CharacterLimitNotice/`,
+`src/rework/components/shared/molecules/RichInputField/`,
+`src/rework/components/shared/molecules/HitlPrompt/`,
+`src/rework/components/pages/ManagedChatPage/`
+
+**Status:** `Functional`
+
+The managed-chat composer and active HITL free-text prompt enforce the optional
+runtime-published character policy from execution preparation. Both count Unicode code points;
+ordinary chat counts the trimmed value that will be submitted, while HITL counts the exact free
+text. Both render the shared `CharacterLimitNotice`, which owns the states below — the field
+itself owns only `aria-invalid` and its send gating.
+
+- At or below the limit, nothing is visible — no counter, no error colour — and send stays
+  available. An ordinary message sits far below a limit measured in thousands of code points
+  (5,000 in the default template, but it is per-template and admin-configurable), so a
+  permanently visible counter would report a non-problem for the whole life of the draft
+  (2026-08-13, issue #2358).
+- Above the limit, the error copy and the counter appear together as one error-coloured region,
+  the input is marked `aria-invalid`, and only the corresponding free-text send action is
+  disabled. Fixed HITL choices remain available because selecting one submits the identifier
+  without the oversized free-text draft; the runtime still validates any submitted `choice_id`,
+  `answer`, and `text` fields.
+- The notice stays mounted whenever a limit is published, empty and out of flow while the draft is
+  within it: an `aria-live` region inserted into the DOM at the same time as its text is not
+  announced, and a permanently mounted node also keeps the field's `aria-describedby` from
+  pointing at a removed id as the draft crosses back and forth. The count sits outside the live
+  region — inside, it would re-announce on every keystroke.
+- Text remains fully editable: neither component sets native `maxLength`, truncates pasted or
+  dictated content, nor clears an oversized draft. A backend length rejection restores the
+  ordinary draft or pending HITL prompt safely.
+- During a rolling upgrade, an older runtime may omit the policy. In that state no counter is
+  shown and the runtime remains the authoritative enforcement boundary.
 
 ---
 
@@ -883,6 +996,11 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 - **`max-width: 75%`** on `AssistantTurn` — validates alignment with the `MessageBubble` assistant
   variant. Confirm both are visually consistent across viewport widths.
 
+- **Multi-turn selection copy (#2346)** — a manual selection contained inside one reply gets the
+  clean clipboard serialisation described below; one that spans multiple assistant replies (or
+  includes chrome between them — `ActionBar`, source cards, `ThoughtTrace`) falls back to the
+  browser's native copy, which reintroduces the theme-background leak this feature exists to fix.
+
 #### Resolved
 
 - **Props changed (2026-04-27)** — `finalMessages: ChatMessage[]` replaced by `text: string`.
@@ -890,6 +1008,30 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 
 - **Artifact download links (2026-06-22, FILES-04)** — `AssistantTurn` now renders `ArtifactLinks`
   below the reply when the agent emits `LinkPart` ui_parts.
+
+- **Copy response — always visible, email-safe clipboard (2026-08-12, #2336)** — the per-message
+  copy action (`ActionBar`, `alwaysVisible`) was hover-only and easy to miss; it's now shown
+  permanently and gives a transient "Copied" confirmation. Both the button and a manual text
+  selection inside a reply write clipboard content built by `rework/utils/clipboardUtils.ts`
+  instead of relying on the browser's default copy, which inlined the message surface's computed
+  `background-color` into the pasted `text/html` — a pink or near-black highlight depending on
+  theme. The serialiser emits email-safe HTML (inline `pt`-sized styles, no color/background/font
+  overrides, so pasted text inherits the destination document's own typography — targets Outlook's
+  Word rendering engine) alongside plain text. Mermaid/MindMap diagrams and KaTeX formulas degrade
+  to a `[diagram: <label>]` / `[formula]` placeholder rather than leaking rendering chrome (button
+  labels, breadcrumbs) or garbled glyph text — KaTeX runs with `output: "html"` here, so no
+  TeX-source annotation exists in the DOM to recover the original formula from. Fixing that would
+  mean switching to `output: "htmlAndMathml"` and whitelisting MathML in `sanitizeSchema` below —
+  not yet tracked as its own issue. Known limitation: see multi-turn selection above (#2346).
+
+- **Copy confirmation is now the shared one (2026-08-13, #2359)** — `UserTurn` had shipped a
+  parallel copy affordance the same week; both turns now use the same `ActionBar` action,
+  the same `content_copy` → `check` flip and the same 2s revert, and the labels are
+  translated on both sides (they were hardcoded English here). The 2s revert timer is also
+  now cancelled before re-arming and on unmount: clicking copy twice inside the window used
+  to have the first click's timer cut the second confirmation short after ~0.1s. The
+  clipboard *payload* stays asymmetric on purpose: assistant replies go through
+  `clipboardUtils`, user messages are plain text and use `writeText`. See `UserTurn` below.
 
 ---
 
@@ -980,13 +1122,35 @@ opened document. When the extraction is missing (endpoint 404s, or empty body), 
 renders a `preview.markdownUnavailable` notice instead of the former literal
 "Error loading document." string, which read as document content.
 
+**Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
+previously mounted one live `<canvas>` per page of the document the moment it
+loaded; at ~3.5 MB of bitmap per page that allocated gigabytes on a large PDF and
+crashed the browser tab. The viewer now renders one cheap, correctly-sized
+placeholder slot per page — so the scrollbar still reflects the document's real
+length — and mounts a real `<Page>` only for slots inside a 600 px band around
+the viewport, tracked by a single `IntersectionObserver`. Placeholders are sized
+from page 1's own geometry (A4 portrait as fallback), so the scroll extent is
+right for landscape and slide-shaped documents too. pdf.js is additionally given
+`disableAutoFetch: true` so it fetches byte ranges on demand against the
+`Accept-Ranges: bytes` support `/raw_content/stream/{uid}` already provides,
+instead of buffering the whole file up front.
+
+**Large-document guard (2026-08-07, #2273).** Past 500 pages the viewer shows an
+opt-in panel (`preview.pdf.largeTitle` / `largeBody` / `largeConfirm`) reporting
+the page count, with an "afficher quand même" action, instead of rendering
+immediately. Virtualization bounds the canvases, but one placeholder plus one
+observer entry per page is not free and pdf.js still walks the whole page tree —
+so the pathological shape stays behind an explicit choice. The state resets on
+every newly opened document.
+
 #### Open UX issues
 
 - **Assistant side panel** — FRONT-13's other half (collapsible "ask the assistant"
   panel next to the viewer) is not built yet, blocked on an agent-selection product
   decision — see `FRONTEND-BACKLOG.md` §19.
 - **PDF toolbar** — no page count, zoom, or page-jump controls; pages render as one
-  continuous scroll at a fixed 0.8 scale. Revisit if users report needing them.
+  continuous scroll at the container's full width (`PDF_SCALE = 1.0`). Revisit if
+  users report needing them.
 - **Chunk highlighting** — `#chunk=...` fragment handling remains deferred (CHAT-08),
   unaffected by this component.
 
@@ -1094,6 +1258,35 @@ UUID-prefix fallback from the open issue above) — same shape as
 
 ---
 
+### `ChatList` meta line and nav panel width (2026-08-20)
+
+**Location:**
+`src/rework/components/shared/organisms/ChatList/ChatListItem/ChatListItem.tsx`,
+`src/rework/components/shared/organisms/ChatList/ChatList.module.scss`,
+`Sidebar/{TeamContentNavbar,HomeNavPanel,MarketplaceNavbar,AdminNavbar}` stylesheets
+**Status:** `Functional`
+
+The conversation row's second line (`<agent name> · DD/MM/YY - HH:mm`) wrapped
+onto a second line whenever the agent name was long, colliding with the next
+row and making the list unreadable. Two changes:
+
+- The meta line is now a nowrap flex row where **only the agent name flexes**
+  (`flex: 1 1 auto; min-width: 0; text-overflow: ellipsis`, full name in
+  `title`); the separator and the date are `flex: 0 0 auto`, so the date and
+  time always render whole. Same ellipsis treatment on `.groupHeader`, the
+  per-agent sub-list header shown when grouping is on.
+- Vertical column alignment (2026-08-21): the agent name **grows** to fill the
+  row, so its box is the same width on every line — short names leave a gap,
+  long names ellipsize — and the `·` separator and date start at the same x
+  everywhere. The date also uses `font-variant-numeric: tabular-nums`, so the
+  fixed `DD/MM/YY - HH:mm` format always renders at the same width regardless
+  of which digits it contains.
+- All four nav panels went **240px → 272px**. They swap into the same sidebar
+  grid column, so the width must stay identical across them or the column
+  jumps when switching between Home / team / marketplace / admin.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
@@ -1115,7 +1308,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 #### Open UX issues
 
 - Not yet design-reviewed against a live stack. First functional pass only.
-- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#65e0f6`, `#9299ff`, `#e1c39c`, `#d665b4`). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is.
+- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is. Shared with the composer's `Boost` text (`ReasoningChip.module.css`), minus the white stops and peach.
 
 #### Resolved
 
@@ -1151,6 +1344,22 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
 ---
 
+### `MarketplaceTeams` — what the discover section may list (#2398)
+
+**Location:** `src/rework/components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx`
+**Status:** `Functional`
+
+`GET /teams` is a general-purpose listing, not a marketplace feed: the page
+decides on its own what is discoverable, and drops from the "discover"
+(non-member) bucket every team that is a personal space (#2068) or whose
+`visibility` is `private` (#2398). The server already withholds the ReBAC
+`public` relation from a private team, but that filter is skipped entirely
+when authorization is disabled — so the page never relies on it. A team the
+caller *is* a member of stays listed under "your teams" whatever its
+visibility: members need it to navigate.
+
+---
+
 ### `TeamSettingsParameters` — visibility + joining-mode controls
 
 **Location:** `src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx`
@@ -1159,7 +1368,8 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 Two stacked rows (`.team-settings-toggle-row`, label left / control right)
 share one `form-section` (`.team-settings-toggles`, `flex-direction: column`,
 `gap: var(--spacing-s)`): **visibility** (`public`/`private`) on top,
-**joining mode** below it. Both are `ButtonGroup`s (`variant="radio"`,
+**joining mode** below it (a `ButtonGroup` only while the team is public —
+see the #2398 note below). Both are `ButtonGroup`s (`variant="radio"`,
 `size="small"`, plain group-level `color="secondary"` — no per-item color,
 same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
@@ -1179,15 +1389,28 @@ follows now.
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
 (`public`/`private`, default `public`) gating marketplace discoverability
 — see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
-mechanism. A `private` team can never be `open`: while
-`visibility === "private"`, every item in the joining-mode `ButtonGroup`
-below carries `disabled` (the whole group reads as inert, not just the
-`open` option) — enforced this way rather than only disabling `open`
-because the server may have just silently downgraded a stored `open` to
-`invite_only` the moment visibility flipped, and a half-disabled group
-would misrepresent that as still a live choice. No client-side write of
-`joining_mode` ever accompanies a visibility PATCH — the resulting
-`joining_mode`, if it changes, comes back from the server on refetch.
+mechanism. No client-side write of `joining_mode` ever accompanies a
+visibility PATCH — the resulting `joining_mode`, if it changes, comes back
+from the server on refetch.
+
+**Joining mode while private — one disabled button, no toggle (#2398,
+2026-08-20).** A `private` team can never be `open`, and the product has no
+invitation flow at all (there is no invite endpoint — a team admin adds
+members by hand from `TeamSettingsMembers`). So while
+`visibility === "private"` the joining-mode row renders no `ButtonGroup`:
+the control slot holds a single **disabled** `Button` (`secondary` /
+`outlined` / `small`, `lock` icon) reading "Manual only", and the row's
+support line switches to the `privateSupport` copy ("a private team is not
+listed on the marketplace: its members are added manually by a team
+admin"). One inert, locked control states the fact; the original 2026-07-26
+treatment kept the whole group mounted with every item `disabled`, and a
+greyed-out *two-state* toggle still reads as a live choice — while "Invite
+only" named a mechanism that does not exist. Plain muted text was tried
+first and read as too weak for the row (it also wrapped onto two lines),
+hence a real button shape. `.team-settings-toggle-action` carries the
+`flex-shrink: 0` + `white-space: nowrap` the row needs: the label column
+takes the free width and `.btn` clips its own overflow. The group returns
+unchanged the moment visibility goes back to `public`.
 
 **`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
 previously had no disabled styling at all — a `disabled` item was
@@ -1197,12 +1420,14 @@ identical to an enabled one. Added `&:disabled` with `pointer-events: none`
 `:hover`/`:active` rules individually) plus, scoped to
 `.stateLayer:not([data-selected="true"])` only, a transparent background
 and `on-surface-muted` label color. Scoping to the unselected sub-case
-matters: the joining-mode group's disabled-while-private state always has
-one selected item (`invite_only`, forced) and one not (`open`) — the
-selected item keeps its normal filled selected-color styling, only the
-unselected `open` option reads as muted/transparent. Generic addition to
-the shared atom (any future disabled+unselected item elsewhere gets the
-same treatment for free), not special-cased to this one call site.
+mattered for the original driving call site — the joining-mode group's
+disabled-while-private state, which always had one selected item
+(`invite_only`, forced) and one not (`open`): the selected item kept its
+normal filled selected-color styling, only the unselected `open` option
+read as muted/transparent. That call site is gone since #2398 (see above),
+but the rule was a generic addition to the shared atom, never special-cased
+to it — any disabled+unselected item elsewhere still gets the treatment for
+free.
 
 **`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
 optional `backgroundColor` prop (default `var(--surface-container)`,
@@ -1552,7 +1777,43 @@ closure of the same logic. Sizing: height `2rem` (`32px`), `label-medium`
 text, default (inactive) border `1px solid outline` — was `0.5px
 outline-variant`, a size/color pair that didn't match any other chip-style
 control in the app. Chip padding-left/right `spacing-s` (`12px`, was
-`spacing-xs`/`8px`).
+`spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
+`@extend`ed by both the toggles and the baseline badge below, so the two
+cannot drift apart in the same row.
+
+**`TeamRoleChips`: a static `Member` badge and a description tooltip on
+every badge** (2026-08-17, #2383). Two complaints from team admins, one
+fix. (1) A member holding no elevated role rendered as three *inactive*
+pills — visually indistinguishable from a row that hadn't loaded. A
+non-interactive `Member` badge now closes the row, after the three toggles,
+always visible. It shares the toggles' pill geometry (a `%pill` placeholder
+both `@extend`, so height/padding cannot desync mid-row) but carries its own
+fill: tonal `secondary-container` / `on-secondary-container`, with a
+transparent 1px border to keep the geometry identical. Deliberately *not*
+the toggles' `--primary` fill — in this row `--primary` reads as "someone
+granted this and someone can revoke it", whereas `team_member` is neither
+granted nor revocable, just always true. The same tonal pairing already
+marks non-interactive identity in `UserAvatar`, `MessageBubble`, and the
+agent-card icon. What the badge lacks is affordance, not presence: `cursor:
+default`, `role="note"`, no hover state, no `aria-pressed`, no click
+handler. It is deliberately not a fourth toggle —
+`team_member` is the implicit baseline (automatic for anyone holding an
+elevated role, granted directly to anyone holding none) and the API refuses
+to revoke a member's last relation, so a toggle would promise an action
+that cannot happen. (2) The role names carried no meaning on the page: all
+four badges now open a rich `Tooltip` (title + one-line description), copy
+condensed from the help centre's `features/roles.md` tables so the two
+surfaces agree. The Analyst panel alone carries a `--warning` footer row —
+it grants evaluation-campaign execution *and* the limited conversation
+slices those datasets are built from, which a flat pill row hinted at
+nowhere.
+
+A chip the actor may not administer switched from `disabled` to
+`aria-disabled` + a guard in the click handler. The visual state is
+unchanged (`[aria-disabled="true"]` replaces `:disabled` in the SCSS), but
+a `disabled` button leaves the tab order and fires no pointer events, so it
+would have been the one badge unable to explain itself — to exactly the
+reader who cannot act on the role and most needs to know what it is.
 
 **Members table: role chips are a live, single-click toggle in both
 directions.** `TeamRoleChips` renders identically here and in the
@@ -2205,14 +2466,52 @@ admin diagnostics.
 
 `UserMessage` + `ActionBar` (copy, optional edit). `.turn` has `position: relative`; hover shows actions. Edit action passes `onEdit` prop through to the action bar.
 
+Copy is the same affordance as `AssistantTurn`'s (#2336): `content_copy` flips to `check` for
+2s, no toast, no colour change. A second click inside that window restarts it rather than being
+cut short by the first click's timer, and the pending revert is dropped on unmount. The payload
+is `writeText` of the raw message: user messages are plain text, so none of the assistant side's
+email-safe HTML serialisation applies.
+
+A failed clipboard write is deliberately silent — the icon not flipping *is* the feedback, and
+the API only fails in degraded contexts a toast would not fix (a denied permission rejects; a
+non-secure origin has no `navigator.clipboard` at all, so the property access throws
+synchronously and never reaches a `.catch`). Both turns get this from
+`clipboardUtils.writeRichClipboard`, which wraps every path in `try` — `UserTurn` calls it with
+no HTML, which is the same call `AssistantTurn` makes when it has no rendered node to serialise,
+and writes `text/plain` only.
+
+The `copied` flag and its 2s revert live in `core/hooks/useCopyConfirmation.ts`, shared by both
+turns. It knows nothing about the clipboard on purpose: its predecessor bundled the write with
+the flag, which hardcoded `writeText` and made it unusable by the assistant side — see Resolved
+below.
+
+Unlike `AssistantTurn`, the bar is **not** `alwaysVisible`. The assistant's is a footer toolbar
+under the reply, where hover-only made it easy to miss (#2336); these sit beside a right-aligned
+bubble and include Edit, so pinning them visible on every user message in a thread is a louder
+change — deliberately left as its own call (see Hover zone below).
+
 #### Open UX issues
 
 - **Edit action** — `onEdit` prop exists but is not wired in `ConversationThread` yet. When wired, confirm that editing a message and re-sending correctly creates a new branch in the message tree.
-- **Hover zone** — the hover area is the full `.turn` div. On mobile, confirm touch events correctly show/hide the action bar.
+- **Hover zone** — the hover area is the full `.turn` div. On mobile, confirm touch events correctly show/hide the action bar. Decide at the same time whether this bar should follow `AssistantTurn` and become `alwaysVisible`.
 
 #### Resolved
 
-_(none yet)_
+- **Converged onto the shared copy affordance (2026-08-13, #2359)** — the copy button shipped
+  here (#2339) and on `AssistantTurn` (#2336) in the same week, as two separate implementations:
+  a hand-rolled `IconButton`/`Tooltip` row driven by a bespoke `useCopyToClipboard` hook, with a
+  `success`-coloured check, a `copy-pop` scale keyframe and a 1.5s revert — against the
+  assistant's `ActionBar`, plain check, 2s revert. Same interaction, two visual languages,
+  depending on who wrote the message. This section already described `ActionBar`, so the code
+  was also diverging from its own doc. `UserTurn` now renders `ActionBar`, and the keyframe is
+  deleted.
+
+  `useCopyToClipboard` is deleted too, replaced by `useCopyConfirmation`. The distinction is
+  the point: the old hook bundled the clipboard *write* with the confirmation flag, which
+  forced it to hardcode `writeText` — unusable by the assistant side, which writes email-safe
+  HTML. Unshareable by construction, so it was reimplemented per turn and the copies drifted.
+  The new hook holds only the flag and its timer, so both turns really do share it, and the
+  write goes through `writeRichClipboard` on both sides.
 
 ---
 
@@ -2386,6 +2685,37 @@ _(none yet)_
 
 ---
 
+### `TaskCard` / `TaskDetailPopover`
+
+**Location:** `src/rework/components/shared/molecules/TaskCard/TaskCard.tsx`,
+`src/rework/components/shared/molecules/TaskDetailPopover/TaskDetailPopover.tsx`
+**Status:** `Functional`
+
+The personal-tray task surface (`TaskTray`, `MigrationPage`'s active/terminal grids) —
+`TaskCard` renders one row per task with the ack/dismiss affordance referenced above; clicking
+its status indicator opens `TaskDetailPopover`, a floating detail panel showing state,
+progress %, step, elapsed time, and the raw `task.error` on failure.
+
+#### Open UX issues
+
+_(none yet)_
+
+#### Resolved
+
+- **Error text unreachable/uncopyable on failure, "Ignorer" a no-op for attachment tasks
+  (2026-08-13, #2366)** — three gaps found live-testing a real ingest failure. The popover
+  positioned itself purely from the anchor's rect with no vertical bound, so a long raw
+  backend error (e.g. a DuckDB sniffer dump) could render past the bottom of the viewport with
+  no way to reach the rest — now capped at `min(400px, 100vh - 16px)` with internal scroll, and
+  the vertical position clamps against that same cap. The error text had no copy affordance
+  short of a screenshot — added, reusing the existing `IconButton` + `useCopyConfirmation` +
+  `writeRichClipboard` pattern. And "Ignorer" silently did nothing for a chat-attachment task:
+  `fast/ingest` is synchronous and never creates a server-side task record, so the task is a
+  client-only Redux entry and acknowledging it always 404'd — it now acknowledges locally for
+  these `localOnly` tasks instead of calling an endpoint that never heard of them.
+
+---
+
 ### `WritableDocumentPane` (writable_document capability)
 
 **Location:** `src/rework/features/capabilities/writable_document/WritableDocumentPane.tsx`
@@ -2552,23 +2882,242 @@ server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
 
-### `DocumentWorkspace` — drag-and-drop onto folder rows
+### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
-Dropping OS files anywhere on a corpus folder's subtree — its row or, when
-expanded, its document rows/hints — opens the ingestion drawer
-(`DocumentUploadDrawer`) pre-seeded with the dropped files and targeting that
-folder (innermost tagged folder wins when subtrees nest), so the user only
-picks mode/profile (fast/medium/rich) and saves. A dropped directory is
-expanded into all its files, recursively and flat — same `file-selector`
-traversal as the drawer's own dropzone, which already accepted folders.
-Folder-originated files upload under their leaf name: browsers put the
-relative path in the multipart filename (this surfaced as one opaque
-"Upload failed: 404" per file, found live 2026-07-23), now pinned frontend-side
-and sanitized backend-side (`upload_basename`). The
-targeted row shows the drawer dropzone's affordance (dashed `--primary`
-outline + 6% tint) while hovered with files. Same `canUpdateResources` gate as
-the row's explicit upload action; rows without a tag (pure path prefixes) are
-not drop targets.
+Three drop surfaces, all behind the same `canUpdateResources` gate as the
+explicit upload action, all opening the ingestion drawer
+(`DocumentUploadDrawer`) pre-seeded with the dropped files so the user only
+picks mode/profile (fast/medium/rich) and saves:
+
+- **Folder row** (since 2026-07-23): targets that folder; the row shows the
+  drawer dropzone's affordance (dashed `--primary` outline + 6% tint) while
+  hovered with files, and its drop wins over the page surface below
+  (`stopPropagation`).
+- **Full page of an open folder**: the drill-down model shows one folder at a
+  time, so dropping anywhere on the page reads as "add to this folder" — an
+  overlay names the destination while a file drag hovers.
+- **Corpus root**: only dropped FOLDERS are accepted — each becomes a library
+  mirroring its structure (see below). Loose files are rejected with an error
+  toast (they have no tag to land in and would upload invisible); a mixed
+  drop keeps the folders' content and warns about the skipped loose files.
+
+A dropped directory keeps its on-disk structure: each subdirectory becomes a
+nested document tag (created exactly like `CreateFolderModal` would, existing
+levels reused), and every file uploads under its own subdirectory's tag
+instead of being flattened into the drop target. The drawer lists files under
+their relative path and announces how many subfolders the save will create; a
+failed/forbidden tag creation aborts the save before any upload starts.
+Depth guardrail (#2355, 2026-08-13): the resulting folder path — destination
+folder included, so a deep destination doesn't sidestep it — is capped at 15
+levels (`MAX_FOLDER_DEPTH`, mirrored server-side by `MAX_TAG_PATH_DEPTH` on
+tag creation; the value is bounded by OpenFGA's parent-chain permission
+resolution, see structure.py). Files that would land deeper are skipped with
+a warn toast naming the count; a drop with nothing shallow enough is
+rejected with an error toast. Manual creation (`CreateFolderModal`) enforces
+the same cap inline — Create disabled with an explanation instead of a 422
+toast — and rejects "/" in a folder name on both sides (a slashed name would
+smuggle several levels past the cap in one call; found live 2026-08-13).
+The fs `mkdir` variant of the modal keeps the slash rule but not the depth
+cap (not tag-backed, so the ReBAC-chain constraint doesn't apply).
+Folder-originated files still upload under their leaf name: browsers put the
+relative path in the multipart filename (one opaque "Upload failed: 404" per
+file, found live 2026-07-23), pinned frontend-side and sanitized backend-side
+(`upload_basename`).
+
+Status refresh: a folder's document page reloads on every entry (not just the
+first), and while any ingestion is live the 3s status poll also covers the
+folder being viewed — a subfolder opened before its files' uploads (or fresh
+ReBAC tuples) landed used to freeze forever on its first empty snapshot,
+hiding the live "processing" rows (found live 2026-08-12).
+
+Quota (#2360, 2026-08-13): Save first asks the server's `/quota/precheck`
+with the batch's declared total, so a whole over-quota batch is rejected in
+one round-trip — before any tag creation or upload, and covering the
+personal quota the client can't see. A denial keeps the drawer open with the
+server's numbers in the existing warning panel (usage / limit / batch /
+excess) and disables Save until the file list changes. This replaced the
+client-side team-only quota math; the check is advisory (upload endpoints
+still re-check received sizes), so a precheck transport error falls through
+to the save rather than blocking it.
+
+### `DocumentWorkspace` — folder rows roll up their subtree's ingestion state (#2384, 2026-08-17)
+
+A folder row now summarizes everything under it — its own documents and every
+sub-folder's, at any depth — in the status column that used to be blank on
+folder rows. Three states, in strict precedence:
+
+| State | Chip | Lifetime |
+| --- | --- | --- |
+| something still ingesting | `StatusChip status="processing"` | until the last child settles |
+| some documents failed | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent |
+| something under it finished this session | `status="ready" justCompleted` ("Done") | session-only |
+
+`raw` is never rolled up: a folder of stored-but-unprocessed documents is a
+steady state, not news. Precedence is processing > failures > done — while
+anything runs the folder is not settled, and once it is, an unresolved failure
+outranks a "your upload landed" marker.
+
+"Done" means *something* under the folder finished this session and nothing
+under it is still running or failed — not that every document it holds has been
+processed. The stricter reading would never fire on a folder of long-stored
+documents, and the mark exists to answer "did what I just started land?". It is
+therefore normal for a folder holding fifty old documents to read "Done" after
+one upload into it, until the next refresh.
+
+Only the LAST terminal task per document counts. A document uid is derived from
+its content, so re-uploading a file that failed produces a second task for the
+same uid, and nothing removes the first (see the eviction note below) — reading
+every task equally left a folder flagged with a failure the user had already
+fixed, for the rest of the session, with no way to clear it. `cancelled` counts
+as neither outcome: stopping an ingestion on purpose is not an error to chase.
+
+Why the folder chip and not the document rows alone: from the top of the tree
+the only way to tell whether a bulk upload had landed was to walk into each
+sub-folder and read the rows one by one. That is also why failures are **named**
+rather than only counted — hovering answers "which files do I go and look at?",
+which a count cannot. The names cost nothing: `TaskTarget.label` for a session
+failure (so a never-opened sub-folder is still nameable) and
+`identity.document_name` for anything a loaded page covers.
+
+The `warning` status is `StatusChip`'s alone, never `DocStatus`'s — no document
+is ever "warning", and widening the shared type would push a meaningless case
+onto every `DocStatusBadge` consumer. It uses the warning palette, not the error
+one: the folder itself is not broken, and a red folder standing over a subtree
+reads as a bigger problem than it is. It shares those colors with `pending`, so
+the static warning triangle (against pending's breathing `sync`) is the
+differentiator.
+
+No new endpoint, no new backend status, no persisted field — two in-memory
+source families are unioned, because neither subsumes the other:
+
+- the **already-loaded pages** (`perTag`), read per tag id. Survives a page
+  reload, and is the only source that sees what the browse snapshot knows and
+  the task feed cannot: a teammate's ingestion, or a document a dead worker left
+  `in_progress`/failed (#2279). Only reaches folders visited this session — but
+  without it a folder could read "settled" while a row inside it visibly spins,
+  the exact confusion the feature removes.
+- the **SSE task feed** the document badge already reads (#2315), matched
+  against the tag tree's `item_ids` via `collectDescendantDocUids`. Reaches
+  folders that were never opened, live over SSE, but is memory-only and
+  `scope=user`.
+- the **team's ingestion history**, ONE unfiltered
+  `GET /tasks?scope=team&kind=ingestion`. The Redux store is memory-only, and at
+  the Corpus root no child page is loaded either, so without this the whole tree
+  went blank on every reload and only lit up once the user opened a folder.
+  `exclude_terminal` only defaults to hiding terminal tasks on the `scope=user`
+  branch (authz.py); a team-scoped query returns every state, so **filtering by
+  state would cost extra round-trips and drop data** — `cancelled` tasks, needed
+  to clear a failure whose retry the user stopped, and teammates' in-flight runs.
+  Team scope also surfaces a **teammate's** failure, which a user-scoped feed can
+  never see. `can_read_members` is granted to `team_member`, which every team
+  role inherits, so this is not admin-only: a member who cannot ingest at all
+  sees the failures other people's uploads produced, and for them it is the only
+  feed that ever reports anything.
+
+A personal space cannot use team scope — personal uploads deliberately leave the
+task's `team_id` NULL (`ingestion_controller.py`), so the query would come back
+empty. It asks `scope=user` instead, which filters by creator rather than by
+space; the caveat only bites if the same file was ingested into both a team and
+a personal space, since uids are content-derived.
+
+Only the LAST terminal outcome per document counts (`resolveDocOutcomes`), and
+it governs **both** failure sources — a `succeeded` or `cancelled` outcome
+clears a failure the loaded-page snapshot still reports, not just one the task
+feed reported. Ranking is per clock domain and the two are never compared: the
+history carries the server's `updated_at`, the Redux store the browser's
+`Date.now()`, and a laptop minutes behind the server would otherwise leave a
+just-repaired document flagged. A live entry wins outright, which is correct by
+construction since it was observed after the page and its history loaded. An
+unrankable timestamp sorts last rather than pinning whichever entry arrived
+first.
+
+The history feeds that ranking **only**. It is deliberately kept out of
+`justCompletedDocUids`: folding it in would count every document the team has
+ever ingested, turning the transient "your upload landed" cue into a permanent
+green tick on every ready row and every folder. Completion therefore stays read
+from the Redux store alone — session-only, expiring for free on refresh — while
+a failure persists, because it still needs someone to act on it.
+
+The derivation itself is pure and lives in `folderRollups.ts` beside
+`deriveDocStatus.ts`, not inline in the workspace: it is directly unit-testable
+(clock skew, unrankable timestamps, cross-source dedup) without rendering
+anything, and reusable by any other tag-tree view. `deriveDocStatus` stays the
+single owner of the "which stages mean failed" rule — the rollup calls it rather
+than re-deriving stages, so a folder chip can never disagree with the rows it
+summarizes.
+
+The rollup is an inverted index, not a walk: `folderByDocUid` maps every
+document uid to the visible child folder it sits under, built once per tag tree
+(subtrees are disjoint — a document is tagged into exactly one folder), and each
+rollup is then O(tasks in flight) lookups against it. Walking each subtree per
+recompute instead would re-read the team's whole corpus at the Corpus root,
+every page load and every 3s poll tick during an ingestion.
+
+The live inputs are read through stable sorted string keys, never their own
+identities: the task store is a fresh object on every SSE progress event, and
+depending on it directly recomputes on each one — the same trap `pendingTagKey`
+avoids for the 3s poll. Keys join on NUL (`KEY_SEP`), not a comma, so two
+different id sets cannot collide onto one key: a document uid is not always a
+uuid (scheduler pulls build `pull-{source_tag}-{hash}` from a configurable tag).
+They are compared, never split back apart. The failure key carries the names
+too, not just the uids — `taskEventReceived` rewrites `target` on any event that
+carries one, so a label refined after the failure was first recorded must still
+reach the tooltip.
+
+Known scope, all of it inherent to deriving this client-side rather than from a
+server-side per-tag counter:
+
+- the history query carries no server-side LIMIT, so it returns the team's whole
+  ingestion history (narrowed to `kind=ingestion`), and this API slice is
+  configured `keepUnusedDataFor: 0` + `refetchOnMountOrArgChange: true`, so it is
+  re-fetched on every mount of the workspace rather than cached across them.
+  Bounding it server-side is a small follow-up if a large team feels it;
+- the snapshot half of the failure count only sees the loaded page
+  (`rowsPerPage`, 50 by default), so a visited folder holding 200 documents of
+  which 60 failed can report fewer than 60, and the number moves as the user
+  pages. The session half is uncapped, so the case this feature was built for —
+  "I just uploaded, what broke?" — is counted in full;
+- a document stuck `in_progress` (dead worker, #2279) pins its folder to
+  "processing" for as long as the snapshot says so, and because processing wins
+  the precedence, real failures under that folder stay hidden behind the
+  spinner. That is the same stuck state the document's own row shows; fixing it
+  belongs to #2279, not here;
+- `item_ids` is a snapshot refreshed on tag refetch, so on the very first file
+  of a batch the chip can appear a beat late, then self-corrects.
+
+The chip is advisory throughout — not a count the user acts on directly, unlike
+the folder-deletion count which had to move to live totals (#2173).
+
+Both failure panels — the folder rollup's file list and a document's per-stage
+errors — are **interactive** hover panels: the pointer can move into them,
+select the text, and hit a copy button. That is `Tooltip`'s new `interactive`
+mode rather than a bespoke popover, so every other hover panel in the app can
+opt into the same affordance. The clipboard write goes through
+`writeRichClipboard` and the receipt through `useCopyConfirmation`, the two
+mechanisms every copy site already shares (#2366, #2359).
+
+The rendered list names the first 10 failures and summarizes the rest ("and 12
+more"), but **copy always writes the full list** — copying is exactly when the
+whole thing is wanted.
+
+A document's panel also carries the message the ingestion **task** reported,
+under "Signalé par le traitement", alongside the per-stage `processing.errors`.
+A run killed before any pipeline stage started (worker saturation, a Temporal
+`TIMED_OUT` verdict) stamps nothing per stage, so the tab used to show "Erreur"
+with an empty panel while the message sat on the task — visible only in the task
+popover, which is not mounted for most users. The parent workflow already pulls
+it out of the Temporal child job (`_wf_file_terminal_event_args`, #2315) and the
+rollup already fetches it with the task history, so this is a wiring change, not
+a new source. It is skipped when a stage message already says the same thing.
+
+One coupling worth knowing: terminal tasks are never evicted today because
+`taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
+from the app. If the tray is remounted, `EVICTION_DELAY_MS` (5 min) starts
+applying and both the session "done" mark and any task-sourced failure would
+begin disappearing on that timer. The snapshot-sourced half is unaffected.
+
+`countUniqueDocs` was deleted in the same change: it had lost its last caller in
+#2173 and its DFS is now `collectDescendantDocUids`.
 
 ### `DocumentWorkspace` — embedded-title hint on the Name column
 
@@ -2584,6 +3133,37 @@ or its stem), a small `info` icon next to the name surfaces it via the
 its own flex-row cell wraps the Tooltip's wrapper span in a `flex-shrink: 0`
 guard so a narrow column with a long filename can't crush the icon down to
 nothing. (Found live 2026-08-09.)
+
+### `DocumentWorkspace` / `ManageLabelsModal` — descriptive label management (2026-08-11)
+
+**Status:** `Functional` — pending manual visual review
+
+A document row's "more" menu offers "Manage labels": a compact dialog
+listing the document's current `DocumentMetadata.labels` as removable
+chips, plus an add field (explicit accessible name, focused on open) with
+suggestions from `listDocumentLabels`. Every add/remove applies immediately
+(no Save/Cancel) through a single canonical mutation
+(`useMutateDocumentLabelsMutation`, `PATCH /documents/{uid}/labels` with a
+JSON body) — `CorpusTreeService` and `CorpusVirtualFilesystem` stay
+read-only consumers, untouched.
+
+No character restriction on a new label: the JSON body transport carries
+any Unicode text, including `/`, `#`, `?`, `%`, and spaces, which the
+original URL-path-segment routes could not (see FILESYSTEM.md "Business
+labels"). **Open product question, still not settled:** whether labels are
+meant to be bounded technical tokens (e.g. `DAT`) or free descriptive text;
+this UI takes no position on it — see FILESYSTEM.md.
+
+**Open UX issue — shared `Dialog` duplication.** `ManageLabelsModal`
+hand-rolls the same Portal/overlay/dialog shell as the pre-existing
+`RenameModal` (same directory) instead of the shared `Dialog` molecule:
+`Dialog` is built around a confirm/cancel action pair, but every action
+here already applies immediately — there is no "confirm" step, only a
+single "Close". Reusing `Dialog` as-is would mean either a redundant second
+button or modifying `Dialog` to support a single-action mode, both out of
+scope for this increment. Revisit if a third "auto-applies, single close
+action" dialog appears — three is when a shared "no-confirm" `Dialog`
+variant pays for itself.
 
 ### `CategoryPicker` / prompt category surfaces (PROMPT-09)
 
@@ -2715,6 +3295,74 @@ lands on the exact section.
 
 ---
 
+## Platform model binding admin UI (#2365, 2026-08-15)
+
+### `PlatformModelBindingsPanel`
+
+**Location:** `src/rework/components/pages/admin/CapabilitiesPage/PlatformModelBindingsPanel/`
+**Status:** `Functional`
+
+`InlineDrawer` opened from `CapabilitiesPage`'s Models tab, sibling to
+`CapabilityTeamMatrixDrawer`. Renders exactly one row — chat — never a
+4-capability list; V1 has no `language`/`embedding`/`image` binding to show.
+Row states: bound (`{{provider}} / {{name}}`), unset ("Using pod default"),
+loading, and load-error, each with its own translation key. Edit opens a
+form with two `TextInput`s (`provider`, `name`) and a `TextArea` JSON
+settings editor. `provider` is deliberately a free-text input, not a
+generated-enum picker — the server's `ModelBinding` validator (provider
+restricted to `fred_core.model.models.ModelProvider`) is the actual
+authority and 422s an unsupported value; the generated client only supplies
+a closed TypeScript union for the request payload's type, not a picker
+widget. The settings editor parses JSON explicitly, reports invalid JSON
+inline, and disables Save while invalid — it does not re-implement the
+server's typed/credential-shape validation client-side, since
+`ModelBindingSettings` is the real security boundary. Reset ("delete")
+clears the binding back to "Using pod default".
+
+#### Open UX issues
+
+- **Not yet design-reviewed.** Functional and covered by tests, but no
+  designer pass yet on the drawer layout, the raw-JSON settings editor (vs.
+  a structured form), or the provider free-text input's error affordance
+  when a 422 comes back.
+
+---
+
+## Global info banner (2026-08-19)
+
+### `InfoBanner`
+
+**Location:** `src/rework/components/shared/molecules/InfoBanner/`
+**Status:** `Functional`
+
+Full-width, non-dismissable announcement banner mounted once at
+the app root (`src/app/App.tsx`), above the GCU/bootstrap guards, so it shows
+on every page — pre-auth ones included — and pushes the app content down
+instead of overlaying it (the app shell is now a `100vh` flex column; routed
+pages size with `height: 100%`, never `100vh` — see
+`FRONTEND_CODING_GUIDELINES.md` §2.5). Entirely config-driven from
+`platform.frontend.info_banner` (public pre-auth `/frontend/config`): without
+the config block, nothing renders — there is no default banner. Persistent
+by default; the optional `auto_hide_seconds` removes it that many seconds
+after app load with a 300ms eased collapse (opacity + `grid-template-rows`
+1fr→0fr, so the content below slides up instead of jumping; snaps under
+`prefers-reduced-motion`, and the banner is aria-hidden as soon as the exit
+starts). Background
+color comes from configuration via the `--banner-bg` custom property
+(deliberate token exception, comment in the module CSS); title/message/link
+labels are locale maps resolved with `en` fallback; links open in a new tab,
+separated by a `·`, and only http(s)/relative URLs are rendered.
+`role="status"` + `aria-live="polite"`.
+
+#### Open UX issues
+
+- **Fixed dark text over a configured background.** `--banner-text: #00222c`
+  assumes the configured color stays light (like the documented `#00BBDD`
+  example); a dark configured color would fail contrast. Revisit only if a
+  deployment actually needs a dark banner.
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._
@@ -2745,3 +3393,78 @@ _Priority order for the next UX session. Update before each session._
 22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
 23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
 24. **HitlPrompt — focus management** — focus should move to the first actionable element when the prompt appears (interaction design; may require Figma update). Elevation/containment resolved 2026-08-05 (see component section).
+
+## Composer model label (#2387, 2026-08-17)
+
+### `ReasoningChip`
+
+**Location:** `src/rework/features/capabilities/ReasoningChip.tsx`
+**Status:** `Functional`
+
+The composer's right-edge chip. Two concerns, now independent:
+
+- **Model identity** — the model the next turn will actually route to, from
+  `GET /teams/{team_id}/routing-policy/effective-chat-model`. Read-only; the
+  choice lives in the team routing policy and the platform binding.
+- **Reasoning toggle** — still emitted only when the agent's author enabled
+  reasoning and a platform-enabled reasoning model exists (REASON-01 §8's
+  diagnosability rule: a control that can do nothing must be absent).
+
+Previously the model identity rode on the `reasoning_toggle` control's own
+`params`, i.e. the single model whose *reasoning* an admin had enabled
+platform-wide. That is unrelated to routing, so the chip contradicted any
+platform binding or team override in force. The name is kept (`ReasoningChip`)
+because the reasoning menu is still what makes it interactive.
+
+Three render states:
+
+| Condition | Renders |
+| --------- | ------- |
+| Reasoning control present **and** `reasoning_enabled` | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click. |
+| Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
+| No reasoning control at all, model resolved | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable. |
+| Neither | Nothing (`null`). An empty chip would be worse than none. |
+
+**Unavailable model.** When `enabled_for_team` is `false` the turn will fail
+with `ModelNotUsableError` before the LLM call. The model name takes
+`--error` + `line-through` via `.model[data-unavailable]`, an `error_outline`
+icon sits beside it, and the reason reaches the accessible name and `title` —
+colour alone would leave a colour-blind reader with no signal.
+
+**Label fallback**: `modelLabel(display_name, name, capability_id)` prefers the
+ops-authored `model_display_name`, then prettifies the real model `name`, then
+falls back to splitting the capability id. The `name` step matters because
+`model_capability_id` normalizes non-id-safe characters — derived from the id,
+`mistral:latest` would read "Mistral Latest".
+
+### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
+
+**Status:** `Functional`
+
+Admin-sidebar entry "Platform roles" (`admin_panel_settings` icon), gated
+`Protected requires="admin"`. Layout mirrors `AdminTeamsPage` (760px column,
+uppercase section titles): a holders table then a grant form. (A dedicated
+root card above the table was tried on 2026-08-21 and removed the same day
+— the pinned first row with its badge is prominence enough.)
+
+- **Holders table** — one row per user holding `platform_admin` /
+  `platform_observer`; roles render as full-label `Chip`s kept on **one
+  line** (developer decision 2026-08-21: full labels, same line, page width
+  staying at the 760px admin default — the roles column takes `3fr` vs the
+  user column's `2fr` and the cell is `nowrap`, so a two-role holder never
+  stacks). The remove affordance
+  follows the backend rules (PLATFORM-ADMIN-DELEGATION-RFC.md §3): observer
+  chips are removable by any platform admin, admin chips only when
+  `caller_is_bootstrap_root`, and never on the bootstrap root's own row. The
+  root row is **pinned first** (backend sort) and carries a small filled
+  **crown icon** in `--primary` next to the name (tooltip + aria-label
+  "Admin principal"/"Primary admin" — a text badge was tried 2026-08-21 and
+  replaced by the crown the same day). Product wording is "primary admin";
+  "bootstrap root" stays a backend/docs term.
+- **Grant form** — `Autocomplete` over the admin user list, then a two-button
+  segmented choice (observer/admin). The admin option renders **disabled**
+  (not hidden) for non-root callers, with a persistent hint line explaining
+  the root-only rule — the restriction stays discoverable instead of the
+  option silently missing.
+- All affordances are display-only mirrors; every action is re-checked
+  server-side (403/404/409 mapped to toasts via `useApiErrorToast`).

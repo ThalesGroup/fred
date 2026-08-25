@@ -15,11 +15,23 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any, List, Optional, cast
 
 from pydantic import ValidationError
-from sqlalchemy import BigInteger, CursorResult, bindparam, delete, func, select, text
+from sqlalchemy import (
+    BigInteger,
+    CursorResult,
+    bindparam,
+    delete,
+    func,
+    select,
+    text,
+    update,
+)
 from sqlalchemy import cast as sql_cast
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -33,6 +45,7 @@ from fred_core.documents.document_structures import (
     ProcessingStage,
     ProcessingStatus,
 )
+from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
 
@@ -55,7 +68,12 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
 
     @staticmethod
     def _to_dict(md: DocumentMetadata) -> dict[str, Any]:
-        return md.model_dump(mode="json")
+        # `labels` is excluded on every write: `document_labels` is the sole
+        # persisted source of truth for label assignments (see
+        # BaseDocumentMetadataStore's label methods). Dumping it here would
+        # let a generic save (rename, retrievable toggle, ingestion, ...)
+        # silently reintroduce a second, divergeable copy in the JSONB blob.
+        return md.model_dump(mode="json", exclude={"labels"})
 
     @staticmethod
     def _from_row(row: DocumentMetadataRow) -> DocumentMetadata:
@@ -72,6 +90,35 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         if not uid:
             raise ValueError("Metadata must contain a 'document_uid'")
         return uid
+
+    @staticmethod
+    async def _hydrate_labels(
+        docs: List[DocumentMetadata], session: AsyncSession
+    ) -> List[DocumentMetadata]:
+        """Populate `.labels` on every doc from `document_labels` — the N+1
+        guard every multi-document read path below relies on. Chunked into
+        bounded `WHERE ... IN (...)` statements (`_BULK_UPDATE_CHUNK_SIZE`,
+        same constant `bulk_mark_vector_done` uses) so a call with an
+        exceptionally large doc set stays well clear of practical
+        statement-parameter limits, instead of one unbounded query."""
+        if not docs:
+            return docs
+        uids = [d.identity.document_uid for d in docs]
+        labels_by_uid: dict[str, list[str]] = {}
+        for i in range(0, len(uids), _BULK_UPDATE_CHUNK_SIZE):
+            chunk = uids[i : i + _BULK_UPDATE_CHUNK_SIZE]
+            rows = (
+                await session.execute(
+                    select(DocumentLabelRow.document_uid, DocumentLabelRow.label).where(
+                        DocumentLabelRow.document_uid.in_(chunk)
+                    )
+                )
+            ).all()
+            for uid, label in rows:
+                labels_by_uid.setdefault(uid, []).append(label)
+        for d in docs:
+            d.labels = sorted(labels_by_uid.get(d.identity.document_uid, []))
+        return docs
 
     # ---------- reads ----------
 
@@ -134,35 +181,47 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     ) -> Optional[DocumentMetadata]:
         async with use_session(self._sessions, session) as s:
             row = await s.get(DocumentMetadataRow, document_uid)
-        return self._from_row(row) if row else None
+            if row is None:
+                return None
+            doc = self._from_row(row)
+            await self._hydrate_labels([doc], s)
+        return doc
 
     async def get_metadata_by_uids(
         self, document_uids: list[str], session: AsyncSession | None = None
     ) -> list[DocumentMetadata]:
-        """Return metadata for a targeted uid list with one SQL query."""
+        """Return metadata for a targeted uid list, chunked into bounded
+        `WHERE ... IN (...)` statements (`_BULK_UPDATE_CHUNK_SIZE`) so an
+        exceptionally large uid collection (e.g. a wide corpus tree, or a
+        label match spanning many documents) stays well clear of practical
+        statement-parameter limits instead of one unbounded query."""
         unique_uids = list(dict.fromkeys(document_uids))
         if not unique_uids:
             return []
 
         async with use_session(self._sessions, session) as s:
-            rows = (
-                (
-                    await s.execute(
-                        select(DocumentMetadataRow).where(
-                            DocumentMetadataRow.document_uid.in_(unique_uids)
+            row_by_uid: dict[str, DocumentMetadataRow] = {}
+            for i in range(0, len(unique_uids), _BULK_UPDATE_CHUNK_SIZE):
+                chunk = unique_uids[i : i + _BULK_UPDATE_CHUNK_SIZE]
+                rows = (
+                    (
+                        await s.execute(
+                            select(DocumentMetadataRow).where(
+                                DocumentMetadataRow.document_uid.in_(chunk)
+                            )
                         )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-
-        row_by_uid = {row.document_uid: row for row in rows}
-        return [
-            self._from_row(row_by_uid[document_uid])
-            for document_uid in unique_uids
-            if document_uid in row_by_uid
-        ]
+                row_by_uid.update({row.document_uid: row for row in rows})
+            docs = [
+                self._from_row(row_by_uid[document_uid])
+                for document_uid in unique_uids
+                if document_uid in row_by_uid
+            ]
+            await self._hydrate_labels(docs, s)
+        return docs
 
     async def list_by_source_tag(
         self, source_tag: str, session: AsyncSession | None = None
@@ -179,7 +238,9 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 .scalars()
                 .all()
             )
-        return [self._from_row(row) for row in rows]
+            docs = [self._from_row(row) for row in rows]
+            await self._hydrate_labels(docs, s)
+        return docs
 
     async def get_metadata_in_tag(
         self, tag_id: str, session: AsyncSession | None = None
@@ -194,9 +255,11 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                     .scalars()
                     .all()
                 )
-            return [self._from_row(row) for row in rows]
+                docs = [self._from_row(row) for row in rows]
+                await self._hydrate_labels(docs, s)
+            return docs
 
-        # SQLite: load all and filter in Python
+        # SQLite: load all and filter in Python (get_all_metadata already hydrates)
         docs = await self.get_all_metadata(filters={}, session=session)
         return [md for md in docs if tag_id in (md.tags.tag_ids or [])]
 
@@ -228,9 +291,11 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                     .scalars()
                     .all()
                 )
-            return [self._from_row(row) for row in rows], int(total)
+                docs = [self._from_row(row) for row in rows]
+                await self._hydrate_labels(docs, s)
+            return docs, int(total)
 
-        # SQLite: filter in Python
+        # SQLite: filter in Python (get_all_metadata already hydrates)
         docs = await self.get_all_metadata(filters={}, session=session)
         filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
         return filtered[offset : offset + limit], len(filtered)
@@ -277,7 +342,8 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     ) -> List[DocumentMetadata]:
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(DocumentMetadataRow))).scalars().all()
-        docs = [self._from_row(row) for row in rows]
+            docs = [self._from_row(row) for row in rows]
+            await self._hydrate_labels(docs, s)
         return [
             md for md in docs if self._match_nested(md.model_dump(mode="json"), filters)
         ]
@@ -293,10 +359,44 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             if row is None:
                 row = DocumentMetadataRow(document_uid=uid)
                 s.add(row)
-            row.source_tag = metadata.source.source_tag
-            row.date_added_to_kb = metadata.source.date_added_to_kb
-            row.tag_ids = list(metadata.tags.tag_ids or [])
-            row.doc = self._to_dict(metadata)
+            self._apply(row, metadata)
+
+    async def update_metadata(
+        self, metadata: DocumentMetadata, session: AsyncSession | None = None
+    ) -> bool:
+        """Update one metadata row, reporting whether the document still existed.
+
+        A single conditional UPDATE rather than `get` + save: a writer that
+        outlived the document's deletion (see the base-class contract) must not
+        be able to re-create it, and a read-then-write only narrows that window
+        instead of closing it.
+        """
+        uid = self._require_uid(metadata)
+        async with use_session(self._sessions, session) as s:
+            # cast: AsyncSession.execute is typed as returning Result, but a DML
+            # statement always yields a CursorResult, which is what carries rowcount.
+            result = cast(
+                CursorResult[Any],
+                await s.execute(
+                    update(DocumentMetadataRow)
+                    .where(DocumentMetadataRow.document_uid == uid)
+                    .values(
+                        source_tag=metadata.source.source_tag,
+                        date_added_to_kb=metadata.source.date_added_to_kb,
+                        tag_ids=list(metadata.tags.tag_ids or []),
+                        doc=self._to_dict(metadata),
+                    )
+                ),
+            )
+            return result.rowcount > 0
+
+    def _apply(self, row: DocumentMetadataRow, metadata: DocumentMetadata) -> None:
+        """Copy a metadata payload onto a row — the column list `update_metadata`
+        must stay in sync with."""
+        row.source_tag = metadata.source.source_tag
+        row.date_added_to_kb = metadata.source.date_added_to_kb
+        row.tag_ids = list(metadata.tags.tag_ids or [])
+        row.doc = self._to_dict(metadata)
 
     async def bulk_mark_vector_done(
         self,
@@ -483,6 +583,211 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     async def clear(self, session: AsyncSession | None = None) -> None:
         async with use_session(self._sessions, session) as s:
             await s.execute(delete(DocumentMetadataRow))
+
+    # ---------- descriptive business labels ----------
+
+    async def add_label(
+        self, document_uid: str, label: str, session: AsyncSession | None = None
+    ) -> None:
+        insert_fn = pg_insert if self._is_postgres else sqlite_insert
+        stmt = insert_fn(DocumentLabelRow).values(
+            document_uid=document_uid, label=label
+        )
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=[DocumentLabelRow.document_uid, DocumentLabelRow.label]
+        )
+        async with use_session(self._sessions, session) as s:
+            await s.execute(stmt)
+
+    async def remove_label(
+        self, document_uid: str, label: str, session: AsyncSession | None = None
+    ) -> None:
+        async with use_session(self._sessions, session) as s:
+            await s.execute(
+                delete(DocumentLabelRow).where(
+                    DocumentLabelRow.document_uid == document_uid,
+                    DocumentLabelRow.label == label,
+                )
+            )
+
+    async def get_labels_for_document(
+        self, document_uid: str, session: AsyncSession | None = None
+    ) -> List[str]:
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(DocumentLabelRow.label)
+                        .where(DocumentLabelRow.document_uid == document_uid)
+                        .order_by(DocumentLabelRow.label)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return list(rows)
+
+    async def get_labels_for_documents(
+        self, document_uids: list[str], session: AsyncSession | None = None
+    ) -> dict[str, List[str]]:
+        unique_uids = list(dict.fromkeys(document_uids))
+        if not unique_uids:
+            return {}
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(DocumentLabelRow.document_uid, DocumentLabelRow.label).where(
+                        DocumentLabelRow.document_uid.in_(unique_uids)
+                    )
+                )
+            ).all()
+        result: dict[str, List[str]] = {}
+        for uid, label in rows:
+            result.setdefault(uid, []).append(label)
+        for labels in result.values():
+            labels.sort()
+        return result
+
+    async def get_document_uids_with_label(
+        self,
+        label: str,
+        document_uids: set[str] | None = None,
+        session: AsyncSession | None = None,
+    ) -> List[str]:
+        stmt = select(DocumentLabelRow.document_uid).where(
+            DocumentLabelRow.label == label
+        )
+        if document_uids is not None:
+            if not document_uids:
+                return []
+            stmt = stmt.where(DocumentLabelRow.document_uid.in_(document_uids))
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(stmt)).scalars().all()
+        return list(rows)
+
+    async def get_document_uids_with_any_label(
+        self,
+        labels: set[str],
+        document_uids: set[str] | None = None,
+        session: AsyncSession | None = None,
+    ) -> List[str]:
+        if not labels:
+            return []
+        stmt = (
+            select(DocumentLabelRow.document_uid)
+            .distinct()
+            .where(DocumentLabelRow.label.in_(labels))
+        )
+        if document_uids is not None:
+            if not document_uids:
+                return []
+            stmt = stmt.where(DocumentLabelRow.document_uid.in_(document_uids))
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(stmt)).scalars().all()
+        return list(rows)
+
+    async def get_document_uids_with_any_label_page(
+        self,
+        labels: set[str],
+        document_uids: set[str] | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        session: AsyncSession | None = None,
+    ) -> tuple[List[str], int]:
+        """Ordered, bounded sibling of `get_document_uids_with_any_label`: a
+        real `ORDER BY ... OFFSET ... LIMIT ...` query plus a matching
+        `COUNT(*)`, instead of fetching every matching uid and slicing in
+        Python — enumerating many pages does not re-fetch the whole match set
+        on each call."""
+        if not labels:
+            return [], 0
+        base = (
+            select(DocumentLabelRow.document_uid)
+            .distinct()
+            .where(DocumentLabelRow.label.in_(labels))
+        )
+        if document_uids is not None:
+            if not document_uids:
+                return [], 0
+            base = base.where(DocumentLabelRow.document_uid.in_(document_uids))
+        count_stmt = select(func.count()).select_from(base.subquery())
+        page_stmt = (
+            base.order_by(DocumentLabelRow.document_uid.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        async with use_session(self._sessions, session) as s:
+            total = (await s.execute(count_stmt)).scalar_one()
+            rows = (await s.execute(page_stmt)).scalars().all()
+        return list(rows), total
+
+    async def get_distinct_labels(
+        self,
+        document_uids: set[str] | None = None,
+        session: AsyncSession | None = None,
+    ) -> List[str]:
+        stmt = (
+            select(DocumentLabelRow.label).distinct().order_by(DocumentLabelRow.label)
+        )
+        if document_uids is not None:
+            if not document_uids:
+                return []
+            stmt = stmt.where(DocumentLabelRow.document_uid.in_(document_uids))
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(stmt)).scalars().all()
+        return list(rows)
+
+    async def touch_label_mutation_audit_fields(
+        self,
+        document_uid: str,
+        *,
+        modified: datetime,
+        modified_by: str,
+        session: AsyncSession | None = None,
+    ) -> None:
+        async with use_session(self._sessions, session) as s:
+            if self._is_postgres:
+                # `jsonb_build_object` is variadic "any": PostgreSQL has no
+                # context to infer a placeholder's type from, and asyncpg's
+                # prepare step fails with "could not determine data type of
+                # parameter $1". The explicit casts are what make it typable --
+                # and they have to be spelled `CAST(:x AS text)`, not
+                # `:x::text`: SQLAlchemy's `text()` bind-parameter regex skips
+                # any `:name` followed by `:`, so the `::` form is left in the
+                # SQL verbatim and never bound at all.
+                await s.execute(
+                    text(
+                        """
+                        UPDATE metadata
+                        SET doc = doc || jsonb_build_object(
+                            'identity',
+                            COALESCE(doc->'identity', '{}'::jsonb)
+                            || jsonb_build_object(
+                                'modified', CAST(:modified AS text),
+                                'last_modified_by', CAST(:modified_by AS text)
+                            )
+                        )
+                        WHERE document_uid = :document_uid
+                        """
+                    ),
+                    {
+                        "document_uid": document_uid,
+                        "modified": modified.isoformat(),
+                        "modified_by": modified_by,
+                    },
+                )
+                return
+
+            # SQLite (tests): no jsonb `||` operator -- read/modify/write the
+            # row directly, same fallback shape as bulk_mark_vector_done's.
+            row = await s.get(DocumentMetadataRow, document_uid)
+            if row is None or row.doc is None:
+                return
+            identity = dict(row.doc.get("identity") or {})
+            identity["modified"] = modified.isoformat()
+            identity["last_modified_by"] = modified_by
+            row.doc = {**row.doc, "identity": identity}
 
     # ---------- nested filter helper ----------
 

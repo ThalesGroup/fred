@@ -29,15 +29,18 @@ import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/t
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
-import { COMPOSER_CHIP_WIDGETS, ComposerOptionChips } from "../../../features/capabilities/ComposerOptionChips";
+import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
+import { conversationTokenTotals } from "./toThreadMessages";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
-import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useEffectiveChatModelQuery,
+  useGetTeamQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
@@ -128,6 +131,13 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+  // The model this agent's next turn will actually route to (#2387) — the
+  // composer's label. Its own read rather than part of prepare-execution:
+  // prepare runs on every send and is contractually free of pod-catalog
+  // fetches, while resolving the pod-owned precedence levels needs one.
+  // Tagged ControlPlaneRoutingPolicy/teamId, so saving a routing policy
+  // refetches this instead of leaving a stale model name on screen.
+  const { data: effectiveChatModel } = useEffectiveChatModelQuery({ teamId, agentInstanceId });
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
@@ -136,21 +146,7 @@ export default function ManagedChatPage() {
 
   const attachmentsCount = chat.persistedAttachments.length;
 
-  const conversationTokenUsage = useMemo(
-    () =>
-      chat.threadMessages.reduce(
-        (acc, m) => {
-          if (m.tokenUsage) {
-            acc.input_tokens += m.tokenUsage.input_tokens;
-            acc.output_tokens += m.tokenUsage.output_tokens;
-            acc.total_tokens += m.tokenUsage.total_tokens;
-          }
-          return acc;
-        },
-        { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-      ),
-    [chat.threadMessages],
-  );
+  const conversationTokens = useMemo(() => conversationTokenTotals(chat.threadMessages), [chat.threadMessages]);
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
@@ -277,9 +273,9 @@ export default function ManagedChatPage() {
   // The "tune" button only appears when the agent exposes tool controls the
   // tune popover actually renders — i.e. any chat control that isn't the
   // attach action (lives in the "add" menu) and isn't one of
-  // COMPOSER_CHIP_WIDGETS (promoted to always-visible ComposerOptionChips
-  // chips instead, see below) — otherwise an agent exposing only those two
-  // would show a "tune" button that opens onto an empty popover.
+  // COMPOSER_CHIP_WIDGETS (promoted to the always-visible right-edge
+  // ReasoningChip instead, see below) — otherwise an agent exposing only
+  // those two would show a "tune" button that opens onto an empty popover.
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
@@ -292,7 +288,9 @@ export default function ManagedChatPage() {
       onSend={chat.handleSend}
       onInterrupt={chat.handleAbort}
       disabled={chat.waitResponse || chat.isLoadingHistory}
-      sendDisabled={chat.attachmentsUploading}
+      sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
+      characterCount={chat.inputCharacterCount}
+      characterLimit={chat.maxChatInputChars}
       enableVoiceInput
       onTranscribeAudio={handleTranscribeAudio}
       voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
@@ -304,7 +302,14 @@ export default function ManagedChatPage() {
           <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
         ) : undefined
       }
-      topSlot={<ComposerOptionChips chatControls={chat.chatControls} composer={composerState} />}
+      rightExtraSlot={
+        <ReasoningChip
+          chatControls={chat.chatControls}
+          composer={composerState}
+          disabled={composerControlsDisabled}
+          effectiveModel={effectiveChatModel}
+        />
+      }
       leftSlot={
         <>
           <ComposerActionsMenu disabled={composerControlsDisabled}>
@@ -388,8 +393,10 @@ export default function ManagedChatPage() {
               <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
             </div>
             <div className={styles.topBarRight}>
-              {conversationTokenUsage.total_tokens > 0 && (
-                <TokenUsageBadge usage={conversationTokenUsage} variant="stacked" />
+              {conversationTokens.total_tokens > 0 && (
+                <span className={styles.conversationTokens}>
+                  {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
+                </span>
               )}
               <div className={styles.topBarActions}>
                 {attachmentsCount > 0 && (
@@ -452,6 +459,9 @@ export default function ManagedChatPage() {
                   isStreaming={chat.waitResponse}
                   scrollContainerRef={scrollContainerRef}
                   onHitlAnswer={chat.handleHitlAnswer}
+                  maxChatInputChars={chat.maxChatInputChars}
+                  hitlFreeText={chat.hitlFreeText}
+                  onHitlFreeTextChange={chat.setHitlFreeText}
                 />
               )}
             </div>

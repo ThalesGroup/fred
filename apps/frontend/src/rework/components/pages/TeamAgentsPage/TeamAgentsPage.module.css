@@ -9,9 +9,15 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
-  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-l);
+  padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
   color: var(--on-surface);
   font: var(--font-title-large);
+}
+
+/* Title text pushes the create button to the right edge of the toolbar
+   (matches the team prompts page header). */
+.titleText {
+  margin-right: auto;
 }
 
 .bannerNotice {

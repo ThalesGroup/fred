@@ -71,6 +71,8 @@ from control_plane_backend.product.schemas import (
     FrontendUserAuthConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    MarketplacePromptDetail,
+    MarketplacePromptSummary,
     PermissionSummary,
     PromptCategorySummary,
     PromptDetail,
@@ -92,9 +94,11 @@ from control_plane_backend.prompts.category_store import (
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
+    PromptStore,
 )
 from control_plane_backend.routing_policy.service import (
     resolve_execution_routing_snapshot,
+    resolve_platform_chat_model_binding,
 )
 from control_plane_backend.scheduler.policies.policy_models import (
     duration_to_seconds,
@@ -177,6 +181,7 @@ class _RuntimeTemplatePayload:
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
         default_capability_ids: list[str] | None = None,
+        max_chat_input_chars: int | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
@@ -195,6 +200,7 @@ class _RuntimeTemplatePayload:
         # so `_apply_capability_selection` can ReBAC-check the None case instead of
         # skipping it.
         self.default_capability_ids = default_capability_ids or []
+        self.max_chat_input_chars = max_chat_input_chars
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
@@ -223,6 +229,14 @@ class _RuntimeTemplatePayload:
                 "description": data["description"],
             }
         )
+        raw_max_chat_input_chars = data.get("max_chat_input_chars")
+        max_chat_input_chars = (
+            raw_max_chat_input_chars
+            if isinstance(raw_max_chat_input_chars, int)
+            and not isinstance(raw_max_chat_input_chars, bool)
+            and raw_max_chat_input_chars > 0
+            else None
+        )
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -247,6 +261,9 @@ class _RuntimeTemplatePayload:
                 for cid in data.get("default_capability_ids", [])
                 if isinstance(cid, str) and cid
             ],
+            # Optional during rolling upgrades: older runtime pods do not
+            # advertise this deployment policy yet.
+            max_chat_input_chars=max_chat_input_chars,
         )
 
 
@@ -353,22 +370,21 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         and deps.team_dependencies.rebac.enabled
         and not root_bootstrap_completed
     )
-    if user_security.enabled:
-        return FrontendConfig(
-            user_auth=FrontendUserAuthConfig(
-                enabled=True,
-                realm_url=str(user_security.realm_url),
-                client_id=user_security.client_id,
-            ),
-            gcu_version=gcu_version,
-            root_bootstrap_completed=root_bootstrap_completed,
-            root_bootstrap_required=root_bootstrap_required,
+    user_auth = (
+        FrontendUserAuthConfig(
+            enabled=True,
+            realm_url=str(user_security.realm_url),
+            client_id=user_security.client_id,
         )
+        if user_security.enabled
+        else FrontendUserAuthConfig(enabled=False)
+    )
     return FrontendConfig(
-        user_auth=FrontendUserAuthConfig(enabled=False),
+        user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
+        info_banner=deps.configuration.platform.frontend.info_banner,
     )
 
 
@@ -378,7 +394,7 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
 # tool/agent/model fetches, `compute_capability_impact`'s
 # `_available_capability_ids_by_source`, and (since MDL-2)
 # `routing_policy.service`'s `aggregate_capability_catalog` +
-# `universally_available_model_profile_ids` pair — each fetch the SAME pod's
+# `universally_available_chat_model_profile_ids` pair — each fetch the SAME pod's
 # `/agents/templates` or `/agents/models-catalog` with the same arguments — a
 # real, uncached HTTP round-trip every time. A `ContextVar` per fetch kind
 # (not a parameter threaded through every function in the chain — that would
@@ -396,7 +412,7 @@ _template_fetch_cache_var: contextvars.ContextVar[
     "dict[tuple[str, bool], asyncio.Future[list[_RuntimeTemplatePayload]]] | None"
 ] = contextvars.ContextVar("_template_fetch_cache_var", default=None)
 _model_catalog_fetch_cache_var: contextvars.ContextVar[
-    "dict[str, asyncio.Future[list[CapabilityCatalogEntry] | None]] | None"
+    "dict[str, asyncio.Future[PodModelCatalog | None]] | None"
 ] = contextvars.ContextVar("_model_catalog_fetch_cache_var", default=None)
 
 
@@ -570,18 +586,39 @@ async def _available_capabilities_for_source(
     unreachable pod yields an empty list (no chat controls this prep).
     """
 
+    available_capabilities, _ = await _runtime_execution_metadata_for_source(base_url)
+    return available_capabilities
+
+
+async def _runtime_execution_metadata_for_source(
+    base_url: str,
+) -> tuple[list[CapabilityCatalogEntry], int | None]:
+    """Fetch pod-scoped metadata needed by one execution preparation.
+
+    Capability descriptors and the chat-input policy live on the same runtime
+    template response. Reading them together preserves the existing single
+    request per preparation and keeps older runtimes compatible.
+    """
+
     try:
         templates = await _fetch_runtime_templates(base_url, include_non_public=True)
     except Exception as exc:
-        # Best-effort (see docstring): an unreachable pod is expected/handled, not
-        # a fault worth WARNING-level attention on every poll cycle it recurs.
-        logger.debug("Failed to fetch capability catalog from %s: %s", base_url, exc)
-        return []
+        # Best-effort: an unreachable or older pod must not make preparation fail.
+        logger.debug("Failed to fetch runtime metadata from %s: %s", base_url, exc)
+        return [], None
     merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
         for entry in template.available_capabilities:
             merged.setdefault(entry.id, entry)
-    return list(merged.values())
+    max_chat_input_chars = next(
+        (
+            template.max_chat_input_chars
+            for template in templates
+            if template.max_chat_input_chars is not None
+        ),
+        None,
+    )
+    return list(merged.values()), max_chat_input_chars
 
 
 AGENT_CAPABILITY_NAMESPACE_PREFIX = "agent__"
@@ -700,9 +737,31 @@ async def _agent_capabilities_for_source(
     ]
 
 
+@dataclass(frozen=True)
+class PodModelCatalog:
+    """One pod's `/agents/models-catalog` payload, projected.
+
+    Why this exists rather than the bare `list[CapabilityCatalogEntry]` this
+    fetch used to return (#2387): the payload carries two pod-level values that
+    are not per-model and were therefore being dropped on the floor —
+    `default_chat_profile_id` and `agent_chat_profile_overrides`, the two
+    precedence levels only the pod knows. Control-plane needs them to predict
+    which model a chat turn will route to.
+
+    Carrying them on the SAME object the request-scoped fetch cache already
+    holds (`_model_catalog_fetch_cache_var`) is the point: both consumers — the
+    capability-catalog aggregation and the effective-chat-model resolution —
+    now share one fetch per pod per request scope instead of one each.
+    """
+
+    entries: list[CapabilityCatalogEntry] = field(default_factory=list)
+    default_chat_profile_id: str | None = None
+    agent_chat_profile_overrides: dict[str, str] = field(default_factory=dict)
+
+
 async def _model_capabilities_for_source(
     base_url: str,
-) -> list[CapabilityCatalogEntry] | None:
+) -> PodModelCatalog | None:
     """De-duplicating wrapper around `_model_capabilities_for_source_uncached`
     (see `_pod_catalog_fetch_scope` above) — same cache-miss-fetches,
     cache-hit-awaits-the-same-future shape as `_fetch_runtime_templates`."""
@@ -721,7 +780,7 @@ async def _model_capabilities_for_source(
 
 async def _model_capabilities_for_source_uncached(
     base_url: str,
-) -> list[CapabilityCatalogEntry] | None:
+) -> PodModelCatalog | None:
     """
     Project one pod's routable models into `kind="model"` catalog entries
     (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
@@ -763,7 +822,7 @@ async def _model_capabilities_for_source_uncached(
             exc,
         )
         return None
-    return [
+    entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
             version="1",
@@ -773,16 +832,46 @@ async def _model_capabilities_for_source_uncached(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
             model_profile_ids=tuple(entry.get("profile_ids") or ()),
+            # Team routing is chat-only. Preserve the pod-authored capability
+            # projection instead of deriving it from a profile-id naming
+            # convention. Missing on an older pod means no chat profile is
+            # certified there, which makes writes fail closed during rollout.
+            model_chat_profile_ids=tuple(entry.get("chat_profile_ids") or ()),
             # REASON-01 §5.3 — the pod derives this subset from each profile's
             # `supports_thinking`; control-plane carries it verbatim, exactly
             # like `profile_ids` above. Absent on a pre-REASON-01 pod, which
             # then reads as "no reasoning-capable profile" and shows no
             # reasoning control — the safe direction (§5.6).
             model_thinking_profile_ids=tuple(entry.get("thinking_profile_ids") or ()),
+            # Ops-authored display label, carried verbatim. Absent on an older
+            # pod, which reads as unnamed and leaves the frontend on its
+            # id-splitting heuristic — the previous behaviour exactly.
+            model_display_name=entry.get("display_name"),
         )
         for entry in payload.get("models", [])
         if isinstance(entry, dict) and "id" in entry and "name" in entry
     ]
+    raw_overrides = payload.get("agent_chat_profile_overrides")
+    return PodModelCatalog(
+        entries=entries,
+        # Both absent on a pre-#2387 pod, which reads as "this pod declares no
+        # chat default and no static override". During a rolling upgrade that
+        # makes the effective-model resolution report nothing for turns served
+        # by an old pod rather than guessing — the same fail-quiet direction
+        # `model_chat_profile_ids` already takes above.
+        default_chat_profile_id=(
+            raw_default
+            if isinstance(raw_default := payload.get("default_chat_profile_id"), str)
+            else None
+        ),
+        agent_chat_profile_overrides={
+            str(agent_id): str(profile_id)
+            for agent_id, profile_id in raw_overrides.items()
+            if isinstance(agent_id, str) and isinstance(profile_id, str)
+        }
+        if isinstance(raw_overrides, dict)
+        else {},
+    )
 
 
 async def _fetch_chat_controls(
@@ -960,10 +1049,20 @@ def _platform_reasoning_control(
     a stored enabled row can only ever name a reasoning-capable model. No catalog
     fetch is needed on this send path.
 
-    Deliberately NOT narrowed to the profile this turn will route to: routing
-    resolves per *operation* at runtime while chat controls are computed once per
-    session (RFC §12 q3). Under-hiding — showing a control a later operation
-    might not honour — beats over-hiding one that would have worked.
+    NOT narrowed to the model this turn routes to, and that is now a deliberate
+    division of labour rather than the compromise it used to be (#2387). The
+    reason recorded here before — "routing resolves per *operation* at runtime
+    while chat controls are computed once per session" — had become false twice
+    over: #2365 removed operations, and prepare-execution returns a fresh
+    `chat_controls` on every send.
+
+    Narrowing it here is still not possible, for a different and durable reason:
+    resolving the routed model needs the pod's `/agents/models-catalog`, and this
+    send path must stay free of pod-catalog fetches. So this function answers
+    only "did the platform enable reasoning anywhere, and does this agent offer
+    it" — the two gates it can answer cheaply — and the composer combines that
+    with `EffectiveChatModel.reasoning_enabled` from its own read to decide
+    whether the toggle is worth showing for the model actually answering.
     """
 
     if not reasoning_enabled:
@@ -975,6 +1074,20 @@ def _platform_reasoning_control(
             _REASONING_TOGGLE_WIDGET,
         )
         return None
+    # NOTE (#2387): this control used to carry three more params —
+    # `model_id`/`display_name` (the single reasoning-enabled model's identity,
+    # which the composer showed as its model label) and `effort` (that model's
+    # ops-authored `settings.reasoning_effort`, snapshotted at toggle time).
+    #
+    # All three are gone. The identity was simply wrong: it named the model
+    # whose REASONING was on, not the model a turn routes to, so the composer
+    # contradicted every platform binding and team override. The effort went
+    # with it because the menu is now a plain on/off — the level a turn runs
+    # with is the pod's business (it applies the live `settings.reasoning_effort`
+    # either way), not something the user picks or needs quoted back at them.
+    #
+    # What remains is the only thing this function is authoritative about:
+    # whether a reasoning toggle should exist at all, and where it starts.
     return ChatControlDescriptor(
         capability_id=PLATFORM_CHAT_CONTROL_OWNER,
         widget=_REASONING_TOGGLE_WIDGET,
@@ -3137,7 +3250,10 @@ async def prepare_execution(
     # Descriptors ship on ExecutionPreparation — the slot the retired
     # `effective_chat_options` occupied. Best-effort: an unreachable pod yields
     # no controls this prep (logged), never a failed prep.
-    available_capabilities = await _available_capabilities_for_source(source.base_url)
+    (
+        available_capabilities,
+        max_chat_input_chars,
+    ) = await _runtime_execution_metadata_for_source(source.base_url)
     chat_controls = await _resolve_chat_controls(
         instance.tuning,
         available_capabilities,
@@ -3155,16 +3271,30 @@ async def prepare_execution(
     # (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5), for the same
     # reason — the runtime must not do a live lookup per turn. Deliberately NOT
     # filtered against this team's usable models: reasoning is global, and the
-    # runtime keys on the model it actually resolves. Two independent reads, so
-    # gathered rather than chained — this is a user-facing send path.
+    # runtime keys on the model it actually resolves.
+    #
+    # The platform-operator chat model binding is deliberately NOT resolved
+    # here: unlike the two snapshots above, it must never be a client-forwarded,
+    # session-open value — it is resolved fresh on every turn by the runtime's
+    # own per-turn `ManagedAgentRuntimeBinding` lookup (`get_runtime_binding_for_team`
+    # below), the same trust boundary as `reasoning_enabled_model_ids` there.
+    # Two independent reads, so gathered rather than chained — this is a
+    # user-facing send path.
     (
-        (chat_default_profile_id, operation_route_rules),
-        reasoning_enabled_model_ids,
+        (
+            chat_default_profile_id,
+            agent_profile_overrides,
+        ),
+        reasoning_enabled_ids,
     ) = await asyncio.gather(
         resolve_execution_routing_snapshot(team_id, deps),
+        # One indexed read of the enabled ids, no catalog fetch on this send
+        # path. It used to pull two extra snapshot columns for the composer's
+        # effort and model labels; #2387 removed both, so the narrow read is
+        # back.
         deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
-    sorted_reasoning_model_ids = sorted(reasoning_enabled_model_ids)
+    sorted_reasoning_model_ids = sorted(reasoning_enabled_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
     # the composer menu, and omitted entirely when a gate upstream is closed (§8).
@@ -3188,8 +3318,9 @@ async def prepare_execution(
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
         chat_default_profile_id=chat_default_profile_id,
-        operation_route_rules=operation_route_rules,
+        agent_profile_overrides=agent_profile_overrides,
         reasoning_enabled_model_ids=sorted_reasoning_model_ids,
+        max_chat_input_chars=max_chat_input_chars,
     )
 
 
@@ -3215,6 +3346,14 @@ async def get_runtime_binding_for_team(
       is the one place that can hand back a trustworthy reasoning toggle at no
       extra round-trip cost — see
       `ManagedAgentRuntimeBinding.reasoning_enabled_model_ids`.
+    - Same reasoning for the platform-operator `chat` model binding
+      (`ManagedAgentRuntimeBinding.platform_chat_model_binding`): it must be
+      resolved fresh, trusted, on every turn (including HITL resume) rather
+      than trusted from a client-forwarded, session-open snapshot — the
+      request-forgery and stale-session risk this endpoint's ReBAC-gated,
+      server-to-server nature exists to close. This call is already
+      per-turn, so adding it costs one more cheap, independent store read,
+      not a new round trip.
 
     How to use it:
     - call from the team-scoped resolution endpoint after a team ReBAC check
@@ -3228,12 +3367,17 @@ async def get_runtime_binding_for_team(
     # slices for the capabilities this instance actually selected (CAPAB-01 /
     # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
     selected = set(instance.tuning.selected_capability_ids or [])
-    # Independent reads (neither depends on the other's result) — run
-    # concurrently rather than stacking two sequential DB round trips on the
-    # per-turn runtime-binding path (2026-08-04, PR #2204 review).
-    all_team_settings, reasoning_enabled_model_ids = await asyncio.gather(
+    # Independent reads (none depends on another's result) — run concurrently
+    # rather than stacking sequential DB round trips on the per-turn
+    # runtime-binding path (2026-08-04, PR #2204 review).
+    (
+        all_team_settings,
+        reasoning_enabled_model_ids,
+        platform_chat_model_binding,
+    ) = await asyncio.gather(
         deps.get_team_capability_settings_store().list_for_team(team_id),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
+        resolve_platform_chat_model_binding(deps),
     )
     team_capability_settings = {
         cap_id: settings
@@ -3249,6 +3393,7 @@ async def get_runtime_binding_for_team(
         tuning=instance.tuning,
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
+        platform_chat_model_binding=platform_chat_model_binding,
     )
 
 
@@ -3288,6 +3433,7 @@ def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
         text_preview=preview or None,
         created_by=record.created_by,
         version=record.version,
+        published=record.published,
         import_count=record.import_count,
         session_count=record.session_count,
         score=record.score,
@@ -3324,6 +3470,7 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
         text=record.text,
         created_by=record.created_by,
         version=record.version,
+        published=record.published,
         import_count=record.import_count,
         session_count=record.session_count,
         score=record.score,
@@ -3584,6 +3731,192 @@ async def promote_prompt(
         raise PromptRequestError(
             f"Prompt name {source.name!r} already exists in team {request.target_team_id!r}. "
             "Rename the existing prompt or the source before promoting.",
+            http_status=409,
+        )
+    return _prompt_record_to_summary(created)
+
+
+# ---------------------------------------------------------------------------
+# Prompts marketplace (PROMPT-06) — publish / discover / use / import
+# ---------------------------------------------------------------------------
+
+
+async def set_prompt_published(
+    team_id: TeamId,
+    prompt_id: str,
+    published: bool,
+    deps: ProductServiceDependencies,
+) -> PromptSummary | None:
+    """Publish or unpublish one team prompt to the global marketplace.
+
+    Publishing is a live visibility flag on the team's own row (PROMPT-06): the
+    marketplace shows this same record, so later edits and the shared usage
+    counter propagate immediately. Only real team prompts are publishable —
+    personal-space prompts stay private. Returns `None` when the prompt does
+    not belong to `team_id`; raises `PromptRequestError(400)` when asked to
+    publish a personal-space prompt.
+    """
+
+    if published and is_personal_team_id(team_id):
+        raise PromptRequestError(
+            "Personal-space prompts cannot be published to the marketplace.",
+            http_status=400,
+        )
+    updated = await deps.get_prompt_store().set_published(prompt_id, team_id, published)
+    if updated is None:
+        return None
+    return _prompt_record_to_summary(updated)
+
+
+async def list_marketplace_prompts(
+    deps: ProductServiceDependencies,
+) -> list[MarketplacePromptSummary]:
+    """Return every published prompt across all teams, with the author team name.
+
+    Ordered by shared usage (most-used first). Carries only ``text_preview`` —
+    the full prompt text is fetched on demand via ``get_marketplace_prompt`` when
+    a card is opened, so the listing payload stays small however many prompts
+    are published. The author team's display name is resolved once for the whole
+    page (single batched lookup, no N+1) and used as both the card label and the
+    team filter chip; a missing team's raw id is used as a fallback so a prompt
+    is never dropped from the listing.
+    """
+
+    store = deps.get_prompt_store()
+    records = await store.list_published()
+    if not records:
+        return []
+
+    team_ids = list({r.team_id for r in records})
+    metadata = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
+
+    results: list[MarketplacePromptSummary] = []
+    for record in records:
+        summary = _prompt_record_to_summary(record)
+        meta = metadata.get(record.team_id)
+        team_name = meta.name if meta is not None else str(record.team_id)
+        results.append(
+            MarketplacePromptSummary(
+                **summary.model_dump(), team_id=record.team_id, team_name=team_name
+            )
+        )
+    return results
+
+
+async def get_marketplace_prompt(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> MarketplacePromptDetail | None:
+    """Return one published prompt with its full text and author team name.
+
+    Fetched on demand when a marketplace card is opened (the listing carries
+    only previews). Any authenticated user may read it — gated only on the
+    prompt being published. Returns ``None`` when the prompt is missing or not
+    published (the route maps this to 404).
+    """
+
+    record = await get_published_prompt(prompt_id, deps)
+    if record is None:
+        return None
+    detail = _prompt_record_to_detail(record)
+    meta = await deps.get_team_metadata_store().get_by_team_id(record.team_id)
+    team_name = meta.name if meta is not None else str(record.team_id)
+    return MarketplacePromptDetail(**detail.model_dump(), team_name=team_name)
+
+
+async def record_marketplace_prompt_use(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """Increment the shared usage counter for one published prompt.
+
+    Called when any authenticated user "uses" (copies to clipboard) a prompt
+    from the marketplace, regardless of team membership — the counter reflects
+    total, global usage. Only published prompts are counted; returns False when
+    the prompt is missing or not published (the route maps this to 404).
+    """
+
+    store = deps.get_prompt_store()
+    record = await store.get(prompt_id)
+    if record is None or not record.published:
+        return False
+    return await store.increment_session_count_global(prompt_id)
+
+
+async def get_published_prompt(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> PromptRecord | None:
+    """Return one published prompt by id, or `None` if missing/unpublished."""
+
+    record = await deps.get_prompt_store().get(prompt_id)
+    if record is None or not record.published:
+        return None
+    return record
+
+
+async def _next_imported_name(
+    store: PromptStore,
+    target_team_id: TeamId,
+    base_name: str,
+) -> str:
+    """Pick the first free ``{base}_imported-N`` name in the target team.
+
+    An imported prompt is always renamed (even on the first import) so it never
+    collides with an existing prompt: N starts at 1 and grows until the name is
+    free within the target team. The suffix is applied to a truncated base so
+    the result still fits the 255-char name limit.
+    """
+
+    existing = {r.name for r in await store.list_by_team(target_team_id, limit=1000)}
+    # Reserve room for the "_imported-N" suffix within the 255-char name column.
+    trimmed_base = base_name[:230]
+    n = 1
+    while f"{trimmed_base}_imported-{n}" in existing:
+        n += 1
+    return f"{trimmed_base}_imported-{n}"
+
+
+async def import_published_prompt_into_team(
+    user: KeycloakUser,
+    prompt_id: str,
+    target_team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> PromptSummary:
+    """Copy one published marketplace prompt (by value) into a target space.
+
+    The copy is a fresh, independent instance: new id, reset usage counter
+    (version 1, import_count 0, session_count 0, score null, unpublished) and a
+    ``_imported-N`` name so it never collides in the target team. Categories are
+    not carried over — they are team-scoped (see `promote_prompt`). Raises
+    `PromptRequestError(404)` when the prompt is missing or not published.
+    """
+
+    store = deps.get_prompt_store()
+    source = await get_published_prompt(prompt_id, deps)
+    if source is None:
+        raise PromptRequestError(
+            f"Published prompt {prompt_id!r} not found in the marketplace.",
+            http_status=404,
+        )
+    name = await _next_imported_name(store, target_team_id, source.name)
+    record = PromptRecord(
+        prompt_id=str(uuid4()),
+        team_id=target_team_id,
+        name=name,
+        description=source.description,
+        emoji=source.emoji,
+        tags=source.tags,
+        text=source.text,
+        created_by=user.uid,
+    )
+    try:
+        created = await store.create(record)
+    except PromptAlreadyExistsError:
+        # _next_imported_name already avoids collisions; a conflict here means a
+        # concurrent import raced us — surface it as a conflict rather than 500.
+        raise PromptRequestError(
+            f"Prompt name {name!r} already exists in team {target_team_id!r}.",
             http_status=409,
         )
     return _prompt_record_to_summary(created)

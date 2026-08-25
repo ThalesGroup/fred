@@ -106,6 +106,40 @@ describe("MarketplaceTeams personal-space exclusion", () => {
   });
 });
 
+describe("MarketplaceTeams private-team exclusion", () => {
+  beforeEach(() => {
+    h.bootstrap = {
+      activeTeam: { id: "personal-me" } as TeamWithPermissions,
+      availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
+      bootstrap: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+  });
+
+  // #2398: the server withholds the ReBAC `public` relation from a private
+  // team, but that filter is skipped when authorization is disabled — the
+  // page must not depend on it to keep a private team out of "discover".
+  it("never renders a private team the caller is not a member of", () => {
+    h.teams = {
+      data: [
+        { id: "acme", name: "acme", is_member: false, visibility: "private" } as Team,
+        { id: "globex", name: "globex", is_member: false, visibility: "public" } as Team,
+      ],
+    };
+    const html = render();
+    expect(html).not.toContain("team-card-acme");
+    expect(html).toContain("team-card-globex");
+  });
+
+  it("still renders a private team the caller is a member of", () => {
+    h.teams = {
+      data: [{ id: "fredlab", name: "fredlab", is_member: true, visibility: "private" } as Team],
+    };
+    expect(render()).toContain("team-card-fredlab");
+  });
+});
+
 describe("MarketplaceTeams card navigability", () => {
   beforeEach(() => {
     h.bootstrap = {

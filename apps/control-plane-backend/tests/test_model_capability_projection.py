@@ -58,9 +58,10 @@ async def test_parses_a_well_formed_models_catalog_response(
 
     monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
-    entries = await _model_capabilities_for_source("http://pod")
+    pod_models = await _model_capabilities_for_source("http://pod")
 
-    assert entries is not None
+    assert pod_models is not None
+    entries = pod_models.entries
     assert [e.id for e in entries] == [
         "model__openai__gpt-5.1",
         "model__ollama__mistral-latest",
@@ -89,6 +90,7 @@ async def test_carries_thinking_profile_ids_through_the_projection(
                 "provider": "openai",
                 "name": "mistral-small-latest",
                 "profile_ids": ["chat.mistral.small", "language.mistral.small"],
+                "chat_profile_ids": ["chat.mistral.small"],
                 "thinking_profile_ids": ["chat.mistral.small"],
             },
             {
@@ -106,18 +108,66 @@ async def test_carries_thinking_profile_ids_through_the_projection(
 
     monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
-    entries = await _model_capabilities_for_source("http://pod")
+    pod_models = await _model_capabilities_for_source("http://pod")
 
-    assert entries is not None
+    assert pod_models is not None
+    entries = pod_models.entries
     assert entries[0].model_profile_ids == (
         "chat.mistral.small",
         "language.mistral.small",
     )
+    assert entries[0].model_chat_profile_ids == ("chat.mistral.small",)
     assert entries[0].model_thinking_profile_ids == ("chat.mistral.small",)
     # A pod that advertises no thinking profiles for a model (or a pre-REASON-01
     # pod that never sends the key) reads as "cannot reason" — no toggle, which
     # is the safe direction (§5.6).
     assert entries[1].model_thinking_profile_ids == ()
+    assert entries[1].model_chat_profile_ids == ()
+
+
+@pytest.mark.asyncio
+async def test_carries_the_ops_authored_display_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The label ops authored reaches control-plane verbatim.
+
+    Verbatim matters more here than for the derived fields: the string is
+    shown to users as-is, so normalizing it would be a second opinion about a
+    name ops already settled. A pod that sends none reads as None, leaving
+    the frontend on its id-splitting heuristic — the previous behaviour.
+    """
+
+    payload = {
+        "models": [
+            {
+                "id": "model__anthropic__claude-sonnet-4-6",
+                "provider": "anthropic",
+                "name": "claude-sonnet-4-6",
+                "display_name": "Claude Sonnet 4.6",
+            },
+            {
+                "id": "model__openai__gpt-4o",
+                "provider": "openai",
+                "name": "gpt-4o",
+            },
+        ]
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    pod_models = await _model_capabilities_for_source("http://pod")
+
+    assert pod_models is not None
+    entries = pod_models.entries
+    assert entries[0].model_display_name == "Claude Sonnet 4.6"
+    assert entries[1].model_display_name is None
+    # The technical name is untouched — routing, the capability id and the
+    # admin table all still key on it.
+    assert entries[0].name == "claude-sonnet-4-6"
 
 
 @pytest.mark.asyncio
@@ -138,9 +188,10 @@ async def test_ignores_malformed_entries_without_crashing(
 
     monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
-    entries = await _model_capabilities_for_source("http://pod")
+    pod_models = await _model_capabilities_for_source("http://pod")
 
-    assert entries is not None
+    assert pod_models is not None
+    entries = pod_models.entries
     assert [e.id for e in entries] == ["model__openai__gpt-5.1"]
 
 
@@ -155,9 +206,9 @@ async def test_unreachable_pod_returns_none_not_raises(
 
     monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
-    entries = await _model_capabilities_for_source("http://pod")
+    pod_models = await _model_capabilities_for_source("http://pod")
 
-    assert entries is None
+    assert pod_models is None
 
 
 @pytest.mark.asyncio
@@ -177,9 +228,9 @@ async def test_unreachable_pod_logs_at_warning_not_debug(
     monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
     with caplog.at_level("WARNING", logger="control_plane_backend.product.service"):
-        entries = await _model_capabilities_for_source("http://pod")
+        pod_models = await _model_capabilities_for_source("http://pod")
 
-    assert entries is None
+    assert pod_models is None
     assert any(
         record.levelname == "WARNING" and "models catalog" in record.message
         for record in caplog.records
@@ -199,6 +250,158 @@ async def test_pod_on_pre_2110_code_without_the_route_returns_none(
 
     monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
 
-    entries = await _model_capabilities_for_source("http://pod")
+    pod_models = await _model_capabilities_for_source("http://pod")
 
-    assert entries is None
+    assert pod_models is None
+
+
+@pytest.mark.asyncio
+async def test_carries_the_pod_level_precedence_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2387 — the two pod-owned precedence levels reach control-plane.
+
+    Without them the effective-chat-model resolution cannot see the bottom and
+    top of the profile-valued precedence, so it could only ever report a team
+    choice and would stay silent (or wrong) for every deployment relying on the
+    pod default — which is most of them.
+    """
+
+    payload = {
+        "models": [
+            {
+                "id": "model__openai__gpt-4.1",
+                "provider": "openai",
+                "name": "gpt-4.1",
+                "chat_profile_ids": ["chat.openai.gpt41"],
+            }
+        ],
+        "default_chat_profile_id": "chat.openai.gpt41",
+        "agent_chat_profile_overrides": {"rico": "chat.openai.gpt41"},
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    pod_models = await _model_capabilities_for_source("http://pod")
+
+    assert pod_models is not None
+    assert pod_models.default_chat_profile_id == "chat.openai.gpt41"
+    assert pod_models.agent_chat_profile_overrides == {"rico": "chat.openai.gpt41"}
+
+
+@pytest.mark.asyncio
+async def test_carries_the_concrete_model_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`model_capability_id` normalizes non-id-safe characters, so `id` is not
+    reversible — a consumer needing the real pair must read these fields."""
+
+    payload = {
+        "models": [
+            {
+                "id": "model__ollama__mistral-latest",
+                "provider": "ollama",
+                "name": "mistral:latest",
+            }
+        ]
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    pod_models = await _model_capabilities_for_source("http://pod")
+
+    assert pod_models is not None
+    entry = pod_models.entries[0]
+    # The colon survives on `name` but not in the id — the id is NOT reversible
+    # into the real (provider, name), which is why consumers read `name`.
+    assert entry.name == "mistral:latest"
+    assert entry.id == "model__ollama__mistral-latest"
+
+
+@pytest.mark.asyncio
+async def test_pre_2387_pod_reads_as_no_pod_level_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rolling upgrade: a pod not yet advertising the fields must read as
+    "declares nothing" so the composer shows no model rather than a guess."""
+
+    payload = {
+        "models": [
+            {"id": "model__openai__gpt-5.1", "provider": "openai", "name": "gpt-5.1"}
+        ]
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    pod_models = await _model_capabilities_for_source("http://pod")
+
+    assert pod_models is not None
+    assert pod_models.default_chat_profile_id is None
+    assert pod_models.agent_chat_profile_overrides == {}
+
+
+@pytest.mark.asyncio
+async def test_malformed_pod_level_overrides_are_dropped_not_fatal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same best-effort contract the per-model entries already have: a hostile
+    or buggy pod payload must not take down the chat page."""
+
+    payload = {
+        "models": [
+            {"id": "model__openai__gpt-5.1", "provider": "openai", "name": "gpt-5.1"}
+        ],
+        "default_chat_profile_id": "chat.openai.gpt51",
+        "agent_chat_profile_overrides": ["not", "a", "mapping"],
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    pod_models = await _model_capabilities_for_source("http://pod")
+
+    assert pod_models is not None
+    assert pod_models.agent_chat_profile_overrides == {}
+    assert pod_models.default_chat_profile_id == "chat.openai.gpt51"
+
+
+@pytest.mark.asyncio
+async def test_malformed_pod_level_default_is_dropped_not_fatal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-string default from a hostile or buggy pod must read as "declares
+    nothing", not blow up the resolution downstream — same guard the override
+    map beside it already has."""
+
+    payload = {
+        "models": [
+            {"id": "model__openai__gpt-5.1", "provider": "openai", "name": "gpt-5.1"}
+        ],
+        "default_chat_profile_id": {"not": "a string"},
+    }
+
+    async def _fake_get(self, url, *args, **kwargs):  # noqa: ANN001
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json=payload, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _fake_get)
+
+    pod_models = await _model_capabilities_for_source("http://pod")
+
+    assert pod_models is not None
+    assert pod_models.default_chat_profile_id is None

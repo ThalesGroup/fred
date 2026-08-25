@@ -166,7 +166,7 @@ def test_strip_returns_the_same_object_when_there_is_nothing_to_remove() -> None
 
 
 def test_strip_handles_a_profile_with_no_settings_at_all() -> None:
-    model = ModelConfiguration(provider="anthropic", name="claude-sonnet-4-6")
+    model = ModelConfiguration(provider="openai", name="gpt-5.1", settings=None)
 
     assert without_reasoning_settings(model) is model
 
@@ -233,9 +233,10 @@ def _build(
 ) -> dict[str, Any]:
     model, selection = _factory().build_for_chat(
         definition=SimpleNamespace(agent_id="agent-1"),
-        binding=_binding(reasoning_enabled_model_ids, reasoning=reasoning),
-        purpose="chat",
-        operation=None,
+        binding=_binding(
+            reasoning_enabled_model_ids,
+            reasoning=reasoning,
+        ),
     )
     assert selection.profile_id == "chat.mistral.small"
     return _outbound_params(model)

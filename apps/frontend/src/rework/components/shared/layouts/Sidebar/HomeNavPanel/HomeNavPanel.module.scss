@@ -13,29 +13,14 @@
  * limitations under the License.
  */
 
+/* 272px: kept in sync with the other nav panels (see TeamContentNavbar) — they
+ * swap in the same grid column, a mismatch makes the column jump. */
 .panel {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: 272px;
   height: 100%;
   min-height: 0;
-}
-
-.header {
-  display: flex;
-  flex-direction: column;
-  padding: 0 var(--spacing-s) var(--spacing-xs);
-}
-
-.titleContainer {
-  display: flex;
-  align-items: center;
-  height: 48px;
-}
-
-.title {
-  color: var(--on-surface-retreat);
-  font: var(--font-title-medium);
 }
 
 /* Dividers above and below frame the personal space apart from the team list. */
@@ -62,6 +47,10 @@
 .teamListHeaderLabel {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+}
+
+.teamSearch {
+  padding: 0 var(--spacing-s) var(--spacing-xs);
 }
 
 /* The team list fills the remaining height and scrolls on overflow.

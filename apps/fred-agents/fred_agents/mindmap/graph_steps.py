@@ -1042,7 +1042,6 @@ async def _summarize_document_page(
         summary = await context.invoke_structured_model(
             DocumentSegmentSummary,
             messages,
-            operation="mindmap_summarize_document_page",
         )
         return DocumentSegmentSummary.model_validate(summary)
     except Exception:
@@ -1160,7 +1159,6 @@ async def analyze_request_step(
         system_prompt = f"{system_prompt}\n\nAdditional instructions:\n{override}"
     analysis = await structured_model_step(
         context,
-        operation="mindmap_analyze_request",
         output_model=RequestAnalysis,
         system_prompt=system_prompt,
         user_prompt=state.latest_user_text,
@@ -1400,7 +1398,6 @@ async def build_document_digest_step(
             system_prompt = f"{system_prompt}\n\nAdditional instructions:\n{override}"
         digest = await model_text_step(
             context,
-            operation="mindmap_build_fallback_digest",
             system_prompt=system_prompt,
             user_prompt=(
                 f"Output language: {state.output_language}\n\n"
@@ -1440,7 +1437,6 @@ async def build_document_digest_step(
         system_prompt = f"{system_prompt}\n\nAdditional instructions:\n{override}"
     digest = await model_text_step(
         context,
-        operation="mindmap_build_document_digest",
         system_prompt=system_prompt,
         user_prompt=(
             f"Output language: {state.output_language}\n\n"
@@ -1492,7 +1488,6 @@ async def extract_mindmap_step(
         system_prompt = f"{system_prompt}\n\nAdditional instructions:\n{override}"
     payload = await structured_model_step(
         context,
-        operation="mindmap_extract_mindmap",
         output_model=MindMapPayload,
         system_prompt=system_prompt,
         user_prompt=(
@@ -1566,7 +1561,6 @@ async def refine_mindmap_step(
         system_prompt = f"{system_prompt}\n\nAdditional instructions:\n{override}"
     refined = await structured_model_step(
         context,
-        operation="mindmap_refine_mindmap",
         output_model=MindMapPayload,
         system_prompt=system_prompt,
         user_prompt=(

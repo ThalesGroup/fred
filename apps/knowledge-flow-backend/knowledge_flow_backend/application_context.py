@@ -880,12 +880,14 @@ class ApplicationContext:
         from fred_core.tasks.service import TaskService
 
         from knowledge_flow_backend.features.scheduler.document_failure import on_reconciled_terminal
+        from knowledge_flow_backend.models.task_models import TASK_TABLES
 
         backend = self.get_scheduler_backend()
         config = self.get_config()
         temporal_provider = TemporalClientProvider(config.scheduler.temporal) if backend == SchedulerBackend.TEMPORAL else None
         self._task_service_instance = TaskService.build(
             engine=self.get_pg_async_engine(),
+            tables=TASK_TABLES,
             backend=backend,
             temporal_client_provider=temporal_provider,
             postgres_dsn=config.storage.postgres.dsn() if backend == SchedulerBackend.TEMPORAL else None,

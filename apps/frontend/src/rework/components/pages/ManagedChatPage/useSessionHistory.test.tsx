@@ -28,7 +28,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import {
   clearSessionHistoryCache,
   dropInMemorySessionHistoryForTests,
@@ -273,20 +273,29 @@ describe("sessionHistoryCache — per-tab persistence across a page refresh", ()
   });
 
   it("a blocked or full sessionStorage degrades to in-memory only, without throwing", () => {
-    // Patch the instance, not Storage.prototype — happy-dom's sessionStorage
-    // does not route calls through the prototype.
-    const originalSetItem = sessionStorage.setItem.bind(sessionStorage);
-    Object.defineProperty(sessionStorage, "setItem", {
-      configurable: true,
-      value: () => {
+    // Replace the WHOLE global with a delegating fake. Patching the instance
+    // (Object.defineProperty) or Storage.prototype no longer intercepts:
+    // vitest's happy-dom serves sessionStorage through a proxy whose method
+    // lookup ignores outside-defined own properties — defineProperty reports
+    // success, the real setItem still runs, and this test silently asserted
+    // nothing (the entry WAS persisted).
+    const real = sessionStorage;
+    vi.stubGlobal("sessionStorage", {
+      getItem: (k: string) => real.getItem(k),
+      setItem: () => {
         throw new Error("QuotaExceededError");
+      },
+      removeItem: (k: string) => real.removeItem(k),
+      key: (i: number) => real.key(i),
+      get length() {
+        return real.length;
       },
     });
     try {
       setCachedSessionHistory("session-a", [msg("m1")]); // must not throw
       expect(getCachedSessionHistory("session-a")).toEqual([msg("m1")]); // memory still serves it
     } finally {
-      Object.defineProperty(sessionStorage, "setItem", { configurable: true, value: originalSetItem });
+      vi.unstubAllGlobals();
     }
 
     dropInMemorySessionHistoryForTests();

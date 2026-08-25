@@ -16,6 +16,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -24,44 +25,80 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptViewDialog.module.scss";
 
-interface PromptViewDialogProps {
-  open: boolean;
-  teamId: string;
-  promptId: string | null;
-  categories: PromptCategorySummary[];
-  onClose: () => void;
+/** Minimal prompt shape the read-only view can render without a team fetch. */
+export interface PromptViewDetail {
+  id: string;
+  name: string;
+  description?: string | null;
+  text: string;
+  category_id?: string | null;
 }
 
-/** Read-only view of one prompt, reached by clicking a `PromptCard` — editing
- * stays reachable only through the card's hover-edit icon (PROMPT-09 follow-up). */
-export default function PromptViewDialog({ open, teamId, promptId, categories, onClose }: PromptViewDialogProps) {
+interface PromptViewDialogProps {
+  open: boolean;
+  onClose: () => void;
+  /** team variant: fetches the prompt detail for this team. */
+  teamId?: string;
+  promptId?: string | null;
+  categories?: PromptCategorySummary[];
+  /**
+   * Marketplace variant: the prompt is already loaded (the caller may not be a
+   * member of the author team, so the team fetch would 403). When set, the
+   * dialog renders this directly and skips the query.
+   */
+  preloadedDetail?: PromptViewDetail | null;
+  /** Overrides the chip label (e.g. the author team name on the marketplace). */
+  chipLabel?: string | null;
+  /** Fired after a successful clipboard copy, so the caller can record a use. */
+  onCopied?: () => void;
+}
+
+/** Read-only view of one prompt, reached by clicking a `PromptCard`. Editing
+ * stays reachable only through the card's more-menu (team library); on the
+ * marketplace the only action is copy-to-clipboard. */
+export default function PromptViewDialog({
+  open,
+  teamId,
+  promptId,
+  categories = [],
+  preloadedDetail,
+  chipLabel,
+  onCopied,
+  onClose,
+}: PromptViewDialogProps) {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
   const [copied, setCopied] = useState(false);
 
   const { data: rawDetail } = useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
-    { teamId, promptId: promptId || "" },
-    { skip: !open || !promptId },
+    { teamId: teamId || "", promptId: promptId || "" },
+    { skip: !open || !promptId || !teamId || !!preloadedDetail },
   );
   // RTK Query's `data` keeps returning the *previous* successful result (same
   // object reference) for a moment after `promptId` changes, before the new
   // fetch resolves — same root cause as issue #1996 in the edit form. Without
   // this guard, opening prompt B right after prompt A briefly (or, on a slow
   // network, not-so-briefly) renders A's name/category/text under B's dialog.
-  const detail = rawDetail && rawDetail.id === promptId ? rawDetail : undefined;
+  const fetched = rawDetail && rawDetail.id === promptId ? rawDetail : undefined;
+  const detail: PromptViewDetail | undefined = preloadedDetail ?? fetched;
 
   useEffect(() => {
     setCopied(false);
-  }, [open, promptId]);
+  }, [open, promptId, preloadedDetail?.id]);
 
   const category = categories.find((c) => c.id === detail?.category_id);
+  const resolvedChipLabel =
+    chipLabel !== undefined ? chipLabel : (category?.name ?? t("rework.promptCategories.noCategory"));
 
   const handleCopy = () => {
     if (!detail) return;
-    navigator.clipboard.writeText(detail.text).then(() => {
-      setCopied(true);
-      showSuccess({ summary: t("rework.teams.prompts.view.copiedToast"), duration: 2000 });
-      setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", detail.text).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        showSuccess({ summary: t("rework.teams.prompts.view.copiedToast"), duration: 2000 });
+        setTimeout(() => setCopied(false), 2000);
+        onCopied?.();
+      }
     });
   };
 
@@ -91,9 +128,7 @@ export default function PromptViewDialog({ open, teamId, promptId, categories, o
 
             {detail.description && <p className={styles.description}>{detail.description}</p>}
 
-            <span className={styles.categoryChip}>
-              {category ? category.name : t("rework.promptCategories.noCategory")}
-            </span>
+            {resolvedChipLabel && <span className={styles.categoryChip}>{resolvedChipLabel}</span>}
 
             <div className={styles.textSection}>
               <div className={styles.textHeader}>

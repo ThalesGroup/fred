@@ -11,9 +11,22 @@ order. The current position is tracked in an `alembic_version` table in the data
 The `--autogenerate` flag compares the current ORM models against the live database and
 drafts the `upgrade()`/`downgrade()` functions automatically.
 
-Each backend that owns database tables has its own Alembic setup under `<backend>/alembic/`.
-ORM models are registered in each backend's `alembic/env.py` so that autogenerate can
-detect differences between the code and the live database.
+Each component that owns database tables has its own tree, its own version table, and its
+own single head — never rebased against another's. ORM models are registered in each tree's
+`env.py` so that autogenerate can detect differences between the code and the live database.
+
+| Tree | Location | Version table |
+| --- | --- | --- |
+| control-plane | `apps/control-plane-backend/alembic/` | `alembic_version_control_plane` |
+| knowledge-flow | `apps/knowledge-flow-backend/alembic/` | `alembic_version_knowledge_flow` |
+| fred-runtime | `libs/fred-runtime/alembic/` | `alembic_version_runtime` |
+| writable-document capability | `libs/fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/` | `cap_writable_document_alembic_version` |
+
+A capability's tree sits inside its package rather than under `alembic/`, because
+`python -m fred_runtime migrate` discovers it by entry point (`fred.capabilities`) and runs
+it after fred-runtime's own. Every tree resolves its `script_location` from a
+`[tool.alembic]` block in the owning package's `pyproject.toml`, which is also what lets the
+`alembic` CLI and the CI checks below reach it.
 
 ## Configuration
 
@@ -106,6 +119,69 @@ added since the stamp point:
 make db-upgrade
 ```
 
+## Who creates tables: Alembic only
+
+No runtime store creates its own tables. `PostgresHistoryStore` used to run
+`metadata.create_all` lazily on every read and write path; that produced
+databases with the right tables and an *unstamped* version table, which no
+later `alembic upgrade head` could ever be applied to (issue #2290). Since
+then:
+
+- `session_history` DDL lives only in `libs/fred-runtime/alembic/versions/`;
+- a fred-runtime pod verifies at startup that `session_history` exists and
+  refuses to finish booting when it does not — the log names the table and the
+  command to run, instead of surfacing an `UndefinedTableError` mid-request
+  hours later;
+- migrations are applied by `python -m fred_runtime migrate` (what the Helm
+  migration hook and `make db-upgrade` in `apps/fred-agents` both run);
+- tests apply the same migrations to their throwaway SQLite databases through
+  `fred_runtime.migrations.upgrade_sqlite_database` (~30ms each), so the suite
+  also proves the tree produces a schema a pod can boot against. Only fred-core's
+  own unit tests use `fred_core.history.create_history_schema` — that package
+  sits below the one owning the tree and cannot import upwards to run it.
+
+`SqlCheckpointer` still self-creates its own (non-Alembic) tables — tracked
+separately.
+
+### Recovering a database whose `session_history` was self-created
+
+Symptom: the platform works, but `alembic upgrade head` fails with
+`DuplicateTable: relation "session_history" already exists`, because
+`alembic_version_runtime` was never written. A pod boot also logs:
+
+```
+[SCHEMA] fred-runtime: tables exist but 'alembic_version_runtime' is not stamped
+```
+
+Fix: stamp the revision that matches the table you actually have, then upgrade.
+Which revision depends on the columns present — check first:
+
+```bash
+psql "$DSN" -c '\d session_history'
+```
+
+| Columns present                                            | Stamp this revision |
+| ---------------------------------------------------------- | ------------------- |
+| no `exchange_id`                                            | `a1e2f3c4d5b6`      |
+| `exchange_id`, but no `team_id` / `agent_instance_id`       | `b2f3a4e5c6d7`      |
+| `exchange_id`, `team_id`, `agent_instance_id` (recent code) | `c3d4b5a6f7e8`      |
+
+```bash
+cd libs/fred-runtime
+CONFIG_FILE=<your config> uv run alembic stamp <revision from the table above>
+```
+
+Then apply everything after that point — from `apps/fred-agents`, so installed
+capability trees are upgraded in the same pass:
+
+```bash
+cd apps/fred-agents && make db-upgrade      # python -m fred_runtime migrate
+```
+
+Stamping writes into `alembic_version_runtime` (fred-runtime's own version
+table — every backend and every capability has its own; see
+`libs/fred-runtime/alembic/env.py`).
+
 ## SQLite compatibility
 
 Migrations must work on both PostgreSQL and SQLite (CI validates both).
@@ -173,6 +249,19 @@ make db-check-postgres       # PostgreSQL checks only (assumes container is runn
 make db-check-postgres-down  # stop the PostgreSQL container
 make db-check-postgres-full  # start container, run checks, stop container
 ```
+
+The targets above cover one tree — the one in the directory you run them from. From the
+repo root, the `db-check-combined-*` targets run every tree in the table above against a
+single shared database, which is what `Check-migrations.yml` invokes:
+
+```bash
+make db-check-combined-heads     # one head per tree
+make db-check-combined-sqlite    # all trees: upgrade, check, downgrade
+make db-check-combined-postgres  # same, against a PostgreSQL container
+```
+
+These aggregators are hardcoded lists, not discovery: **a new tree is exercised by nothing
+until it is added to all three by hand** (and given its `uv sync` step in the workflow).
 
 ## How to stamp DB created before Alembic
 

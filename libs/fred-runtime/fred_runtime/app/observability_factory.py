@@ -131,9 +131,18 @@ def _build_langfuse_tracer(config: PodObservabilityConfig) -> Tracer:
         )
         return LoggingTracer()
     try:
-        from fred_runtime.integrations.v2_runtime.adapters import build_langfuse_tracer
+        from fred_runtime.integrations.v2_runtime.adapters import (
+            build_langfuse_tracer,
+            langfuse_content_capture_enabled,
+        )
 
-        tracer = build_langfuse_tracer()
+        capture_content = langfuse_content_capture_enabled(
+            config.langfuse.capture_content
+        )
+        tracer = build_langfuse_tracer(
+            capture_content=capture_content,
+            max_content_chars=config.langfuse.max_content_chars,
+        )
         if tracer is None:
             logger.warning(
                 "[fred-runtime] Langfuse tracer could not be built — falling back to logging"
@@ -142,6 +151,19 @@ def _build_langfuse_tracer(config: PodObservabilityConfig) -> Tracer:
         logger.info(
             "[fred-runtime] Langfuse tracer initialized (host=%s)", config.langfuse.host
         )
+        if capture_content:
+            # Loud on purpose. This is the one setting that puts user prompts,
+            # model answers, and tool payloads into an external system, against
+            # the content exclusion in OBSERVABILITY-AND-AUDIT.md §7. An
+            # operator who did not mean to enable it must see it at startup.
+            logger.warning(
+                "[fred-runtime] Langfuse CONTENT CAPTURE IS ON — prompts, model"
+                " answers, and tool payloads are exported to %s. This is for local"
+                " debugging only; it violates the content exclusion of"
+                " OBSERVABILITY-AND-AUDIT.md §7 and must never be enabled on a"
+                " shared or production deployment.",
+                config.langfuse.host,
+            )
         return tracer
     except Exception:
         logger.exception(

@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fred_core.common import OwnerFilter
 
 from fred_runtime.common.kf_base_client import (
     KfBaseClient,
     KnowledgeFlowAgentContext,
+    TokenRefreshCallback,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ class KfTagClient(KfBaseClient):
         *,
         agent: Optional[KnowledgeFlowAgentContext] = None,
         access_token: Optional[str] = None,
-        refresh_user_access_token: Optional[Callable[[], str]] = None,
+        refresh_user_access_token: Optional[TokenRefreshCallback] = None,
     ):
         super().__init__(
             allowed_methods=frozenset({"GET", "POST"}),

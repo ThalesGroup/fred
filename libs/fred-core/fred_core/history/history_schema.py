@@ -92,6 +92,67 @@ class Channel(str, Enum):
     hitl_response = "hitl_response"
 
 
+class FinishReason(str, Enum):
+    """
+    Why a model call ended, normalized across providers.
+
+    Why this exists:
+    - LangChain providers report this under different keys and vocabularies
+      (OpenAI: response_metadata["finish_reason"] = "stop"/"length"/"tool_calls";
+      Gemini/Vertex: "STOP"/"MAX_TOKENS", or "UNKNOWN_<n>" for an enum value the
+      installed SDK doesn't recognize yet; Anthropic: response_metadata["stop_reason"]
+      = "end_turn"/"max_tokens"/"tool_use") — the raw value is provider- and even
+      SDK-version-dependent, so it can never be fully enumerated
+    - a small, Fred-owned vocabulary with a deliberate ``other`` catch-all keeps
+      this typed end-to-end (live SSE event and persisted history) without ever
+      rejecting a value this build doesn't recognize
+    """
+
+    stop = "stop"
+    length = "length"
+    content_filter = "content_filter"
+    tool_calls = "tool_calls"
+    error = "error"
+    other = "other"
+
+
+# Raw provider values (lower-cased) known to map onto the Fred vocabulary above.
+# Anything absent from this table — a new provider, a new SDK enum value, a typo —
+# normalizes to FinishReason.other rather than failing validation.
+_FINISH_REASON_ALIASES: Dict[str, FinishReason] = {
+    "stop": FinishReason.stop,
+    "end_turn": FinishReason.stop,  # Anthropic
+    "stop_sequence": FinishReason.stop,  # Anthropic
+    "length": FinishReason.length,
+    "max_tokens": FinishReason.length,  # Anthropic, Gemini/Vertex
+    "content_filter": FinishReason.content_filter,
+    "safety": FinishReason.content_filter,  # Gemini/Vertex
+    "recitation": FinishReason.content_filter,  # Gemini/Vertex
+    "tool_calls": FinishReason.tool_calls,
+    "tool_use": FinishReason.tool_calls,  # Anthropic
+    "function_call": FinishReason.tool_calls,  # OpenAI legacy
+    "error": FinishReason.error,  # Fred's own synthetic value (agent_app.py)
+}
+
+
+def coerce_finish_reason(raw: object) -> Optional[FinishReason]:
+    """
+    Normalize any raw finish-reason value (provider string, legacy DB value, or
+    already-canonical) to a `FinishReason`, `None`, or `other`.
+
+    Why this exists:
+    - shared by `ChatMetadata`'s validator (write AND read, so a row persisted
+      before this normalization existed still loads without error) and by
+      `fred-runtime`'s `model_metadata.py` (so the live SSE event and the
+      persisted history agree on the same value for the same turn)
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, FinishReason):
+        return raw
+    return _FINISH_REASON_ALIASES.get(str(raw).strip().lower(), FinishReason.other)
+
+
 # ---------------------------------------------------------------------------
 # Message parts
 # ---------------------------------------------------------------------------
@@ -302,6 +363,8 @@ class ChatTokenUsage(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
 
 
 class ChatMetadata(BaseModel):
@@ -319,10 +382,23 @@ class ChatMetadata(BaseModel):
 
     model: Optional[str] = None
     token_usage: Optional[ChatTokenUsage] = None
+    # Assistant-final rows: size of the context at the end of the turn, i.e.
+    # the input_tokens of the turn's last model call (#2403). Persisted so a
+    # reloaded conversation can recompute each turn's MARGINAL cost the same
+    # way the live stream does — `token_usage` alone only says what was
+    # billed, which re-counts the whole history once per model call.
+    # Absent on runtimes where context growth is not measurable (Graph
+    # agents, whose nodes do not share one growing context).
+    context_tokens: Optional[int] = None
     agent_id: Optional[str] = None
     latency_ms: Optional[int] = None
-    finish_reason: Optional[str] = None
+    finish_reason: Optional[FinishReason] = None
     sources: List[VectorSearchHit] = Field(default_factory=list)
+
+    @field_validator("finish_reason", mode="before")
+    @classmethod
+    def _normalize_finish_reason(cls, v: Any) -> Optional[FinishReason]:
+        return coerce_finish_reason(v)
 
 
 # ---------------------------------------------------------------------------
@@ -389,12 +465,14 @@ def make_assistant_final(
     usage: Optional[ChatTokenUsage] = None,
     sources: Optional[List[VectorSearchHit]] = None,
     finish_reason: Optional[str] = None,
+    context_tokens: Optional[int] = None,
 ) -> ChatMessage:
     """
     Build the terminal assistant message for a turn.
 
     How to use it:
     - call after accumulating all assistant delta tokens into ``text``
+    - ``context_tokens``: context size at turn end, see ``ChatMetadata``
     """
     return ChatMessage(
         session_id=session_id,
@@ -407,7 +485,8 @@ def make_assistant_final(
         metadata=ChatMetadata(
             model=model,
             token_usage=usage,
-            finish_reason=finish_reason,
+            context_tokens=context_tokens,
+            finish_reason=coerce_finish_reason(finish_reason),
             sources=sources or [],
         ),
     )
@@ -420,16 +499,15 @@ def make_tool_call(
     call_id: str,
     name: str,
     args: Dict[str, Any],
-    *,
-    token_usage: Optional[Dict[str, int]] = None,
 ) -> ChatMessage:
     """
     Build a tool-call record message.
 
     How to use it:
     - call when a ``ToolCallRuntimeEvent`` is received
-    - ``token_usage``: the model call that decided to make this tool call
-      (TRACE-01), same shape as ``ToolCallRuntimeEvent.token_usage``
+    - carries no token figure (#2403): a tool call costs nothing by itself,
+      and the former ``token_usage`` argument carried the deciding model
+      call's whole prompt, making a free tool call look like a 17k one.
     """
     return ChatMessage(
         session_id=session_id,
@@ -439,9 +517,7 @@ def make_tool_call(
         role=Role.assistant,
         channel=Channel.tool_call,
         parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
-        metadata=ChatMetadata(token_usage=ChatTokenUsage(**token_usage))
-        if token_usage
-        else ChatMetadata(),
+        metadata=ChatMetadata(),
     )
 
 

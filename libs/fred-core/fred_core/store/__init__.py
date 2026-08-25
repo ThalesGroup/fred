@@ -24,6 +24,7 @@ from fred_core.store.minio_content_store import MinioContentStore
 from fred_core.store.object_proxy_router import ObjectReader, build_object_proxy_router
 from fred_core.store.opensearch_mapping_validator import (
     MappingValidationError,
+    ensure_index_mapping,
     validate_index_mapping,
 )
 from fred_core.store.signed_token import (
@@ -48,6 +49,7 @@ __all__ = [
     "ObjectReader",
     "VectorSearchHit",
     "build_object_proxy_router",
+    "ensure_index_mapping",
     "make_signed_token",
     "read_signing_secret",
     "validate_index_mapping",

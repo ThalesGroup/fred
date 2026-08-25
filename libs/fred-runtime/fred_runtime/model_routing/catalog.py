@@ -32,7 +32,6 @@ from .contracts import (
     FrozenModel,
     ModelCapability,
     ModelProfile,
-    ModelRouteRule,
     ModelRoutingPolicy,
 )
 
@@ -62,7 +61,7 @@ class ModelCatalog(FrozenModel):
     )
     default_profile_by_capability: dict[ModelCapability, str]
     profiles: tuple[ModelProfile, ...]
-    rules: tuple[ModelRouteRule, ...] = ()
+    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
 
     def to_policy(self) -> ModelRoutingPolicy:
         resolved_profiles: list[ModelProfile] = []
@@ -84,7 +83,7 @@ class ModelCatalog(FrozenModel):
         return ModelRoutingPolicy(
             default_profile_by_capability=dict(self.default_profile_by_capability),
             profiles=tuple(resolved_profiles),
-            rules=self.rules,
+            agent_profile_overrides=dict(self.agent_profile_overrides),
         )
 
 

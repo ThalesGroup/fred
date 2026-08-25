@@ -6,13 +6,14 @@ import control_plane_backend.models.agent_instance_models  # noqa: F401
 import control_plane_backend.models.bootstrap_models  # noqa: F401 — registers platformbootstrap with Base
 import control_plane_backend.models.capability_settings_models  # noqa: F401
 import control_plane_backend.models.model_reasoning_models  # noqa: F401
+import control_plane_backend.models.platform_model_binding_models  # noqa: F401 — registers platform_model_binding with Base
 import control_plane_backend.models.prompt_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
 import control_plane_backend.models.routing_policy_models  # noqa: F401
 import control_plane_backend.models.session_attachment_models  # noqa: F401
 import control_plane_backend.models.session_metadata_models  # noqa: F401
+import control_plane_backend.models.task_models  # noqa: F401 — registers cp_task_run / cp_task_event_log with Base
 import fred_core.documents.document_models  # noqa: F401 — registers metadata table with CoreBase
-import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
 import fred_core.teams.team_metatada_models  # noqa: F401
 from alembic import context
 from control_plane_backend.config.loader import load_configuration
@@ -33,7 +34,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    # Both metadata objects so autogenerate sees CPB tables and shared task tables.
+    # Both metadata objects so autogenerate sees CPB tables (incl. its own
+    # cp_task_* pair, #2170) and the shared fred-core tables.
     target_metadata=[Base.metadata, CoreBase.metadata],
     get_postgres_config=lambda: load_configuration().storage.postgres,
     version_table="alembic_version_control_plane",

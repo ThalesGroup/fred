@@ -31,7 +31,11 @@ import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from conftest import (
+    StaticChatModelFactory,
+    ToolFriendlyFakeChatModel,
+    migrate_test_config,
+)
 from fastapi.testclient import TestClient
 from fred_core.history.history_schema import (
     Channel,
@@ -75,7 +79,7 @@ class _PingAgent(ReActAgent):
 
 def _build_config(tmp_path) -> AgentPodConfig:
     """Build a minimal offline pod config backed by SQLite."""
-    return AgentPodConfig.model_validate(
+    config = AgentPodConfig.model_validate(
         {
             "app": {
                 "name": "Test Pod",
@@ -108,6 +112,9 @@ def _build_config(tmp_path) -> AgentPodConfig:
             "platform": {"control_plane_url": None},
         }
     )
+    # The pod refuses to start against an unmigrated database (#2290) —
+    # create the Alembic-owned schema first, as the deploy migration job does.
+    return migrate_test_config(config)
 
 
 def _make_app(monkeypatch, tmp_path):
@@ -163,7 +170,6 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "call_id": "c1",
             "tool_name": "demo.echo",
             "arguments": {"text": "hi"},
-            "token_usage": {"input_tokens": 20, "output_tokens": 3, "total_tokens": 23},
         },
         {
             "kind": "tool_result",
@@ -176,6 +182,7 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "content": "Done.",
             "model_name": "gpt-4o",
             "token_usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            "context_tokens": 9,
             "finish_reason": "stop",
         },
     ]
@@ -206,12 +213,10 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[1].channel == Channel.tool_call
     assert messages[1].parts[0].name == "demo.echo"
     assert messages[1].rank == 1
-    # TRACE-01: usage of the model call that decided this tool call must
-    # survive into the persisted record, not just the live SSE payload —
-    # otherwise the chat trace loses its per-step token figure on reload.
-    assert messages[1].metadata.token_usage.input_tokens == 20
-    assert messages[1].metadata.token_usage.output_tokens == 3
-    assert messages[1].metadata.token_usage.total_tokens == 23
+    # #2403: a tool-call row carries no token figure at all. The former
+    # `token_usage` here was the deciding model call's whole prompt, which the
+    # trace rendered as if the tool had consumed it.
+    assert messages[1].metadata.token_usage is None
 
     # Row 2 — tool result record
     assert messages[2].role == Role.tool
@@ -225,6 +230,9 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[3].parts[0].text == "Done."
     assert messages[3].metadata.model == "gpt-4o"
     assert messages[3].rank == 3
+    # The anchor a reloaded conversation needs to recompute each turn's
+    # marginal cost the same way the live stream did (#2403).
+    assert messages[3].metadata.context_tokens == 9
 
 
 def test_write_turn_history_skips_save_when_no_content() -> None:
@@ -815,16 +823,23 @@ def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> Non
     )
 
 
-def test_fresh_sqlite_startup_initializes_history_table(monkeypatch, tmp_path) -> None:
+def test_migrated_sqlite_startup_reads_and_writes_history(
+    monkeypatch, tmp_path
+) -> None:
     """
-    A fresh SQLite-backed pod startup must initialize the history table before
-    the first history query or write.
+    A migrated SQLite-backed pod must serve the first history query and write
+    against the Alembic-owned ``session_history`` table.
 
     Why this test exists:
-    - local runtime startup can create the SQLite file before any runtime
-      Alembic command has been run
-    - the first history operation is often ``next_rank()``, which previously
-      failed with ``no such table: session_history``
+    - the store no longer creates that table itself (#2290 — lazy ``create_all``
+      left production databases with an unstamped ``alembic_version`` that no
+      later ``alembic upgrade head`` could be applied to); the schema now comes
+      from `python -m fred_runtime migrate`, stood in for here by
+      ``migrate_test_config``
+    - the first history operation is often ``next_rank()``: this asserts the
+      full read/write path works on a freshly migrated database
+    - the unmigrated case is covered by ``test_context.py``, which asserts
+      startup aborts rather than failing mid-request
     """
     app = _make_app(monkeypatch, tmp_path)
 

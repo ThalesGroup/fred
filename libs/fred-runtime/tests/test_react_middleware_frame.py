@@ -42,14 +42,9 @@ from fred_runtime.react.middleware import (
     CheckpointHygieneMiddleware,
     DynamicPromptMiddleware,
     FredHitlMiddleware,
-    ModelRoutingMiddleware,
     ToolObservabilityMiddleware,
     TracingKpiMiddleware,
     build_react_platform_middleware_frame,
-)
-from fred_runtime.react.react_model_adapter import (
-    REACT_MODEL_OPERATION_ROUTING,
-    infer_react_model_operation_from_messages,
 )
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_runtime.support.thinking import RECALLED_REASONING_PREFIX
@@ -159,10 +154,7 @@ def _build_agent(
             enabled=approval_enabled, always_require_tools=always_require_tools
         ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
-        chat_model_factory=None,
         definition=_definition(),
-        infer_operation_from_messages=infer_react_model_operation_from_messages,
-        default_operation=REACT_MODEL_OPERATION_ROUTING,
         available_tool_names={"send_email", "get_weather"},
         max_tool_calls_per_turn=max_tool_calls_per_turn,
     )
@@ -371,11 +363,7 @@ class _DummyCapabilityMiddleware(AgentMiddleware):
 def _frame(**overrides: Any) -> list[AgentMiddleware]:
     kwargs: dict[str, Any] = dict(
         binding=_binding(),
-        definition=_definition(),
         approval_policy=ToolApprovalPolicy(enabled=True),
-        chat_model_factory=None,
-        infer_operation_from_messages=infer_react_model_operation_from_messages,
-        default_operation=REACT_MODEL_OPERATION_ROUTING,
         available_tool_names={"send_email"},
         tracer=None,
         kpi=None,
@@ -389,7 +377,6 @@ def test_frame_order_is_fixed() -> None:
     frame = _frame()
     assert [type(m) for m in frame] == [
         CheckpointHygieneMiddleware,
-        ModelRoutingMiddleware,
         DynamicPromptMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
@@ -405,7 +392,6 @@ def test_frame_reserves_the_capability_slot() -> None:
     frame = _frame(capability_middleware=[capability])
     assert [type(m) for m in frame] == [
         CheckpointHygieneMiddleware,
-        ModelRoutingMiddleware,
         DynamicPromptMiddleware,
         _DummyCapabilityMiddleware,
         TracingKpiMiddleware,

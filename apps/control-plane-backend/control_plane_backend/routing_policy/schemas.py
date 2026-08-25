@@ -14,38 +14,42 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
+
 from fred_core.common import TeamId
-from fred_sdk.contracts.context import TeamOperationRouteRule
+from fred_sdk.contracts.context import ModelBinding
 from pydantic import BaseModel, Field
 
 
 class TeamRoutingPolicy(BaseModel):
-    """One team's resolved routing policy (`TEAM-ROUTING-POLICY-RFC.md` §3).
+    """One team's resolved routing policy.
 
     `GET` always returns this shape — an empty policy (`version=0`, both
     fields empty/None) when the team has never written one, resolving to
-    runtime defaults, never a 404 (RFC §10 "GET returns the stored policy or
-    an empty policy that resolves to runtime defaults").
+    runtime defaults, never a 404 ("GET returns the stored policy or an empty
+    policy that resolves to runtime defaults").
     """
 
     team_id: TeamId
     version: int
     chat_default_profile_id: str | None = None
-    operation_rules: list[TeamOperationRouteRule] = Field(default_factory=list)
+    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class UpdateTeamRoutingPolicyRequest(BaseModel):
-    """`PATCH` body — a full typed replacement, no per-field patch semantics
-    (RFC §10)."""
+    """`PATCH` body — a full typed replacement, no per-field patch semantics."""
 
     chat_default_profile_id: str | None = None
-    operation_rules: list[TeamOperationRouteRule] = Field(default_factory=list)
+    agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class AvailableModelProfile(BaseModel):
-    """One `can_use`-enabled model profile this team may reference from its
-    routing policy — the option set for the `chat_default_profile_id` /
-    `target_profile_id` picker (`TEAM-ROUTING-POLICY-RFC.md` §13, #2167)."""
+    """One chat profile this team may reference from its routing policy.
+
+    It is `can_use`-enabled and advertised by every model-capable pod; the
+    server derives this set from declared capability, never the profile id.
+    """
 
     profile_id: str
     capability_id: str
@@ -54,6 +58,91 @@ class AvailableModelProfile(BaseModel):
 
 class AvailableModelProfileList(BaseModel):
     profiles: list[AvailableModelProfile] = Field(default_factory=list)
+
+
+class EffectiveChatModel(BaseModel):
+    """The concrete model a chat turn with one agent instance will actually use
+    (#2387), resolved for one team.
+
+    Why this exists as its own read: the composer used to label itself with the
+    single model whose *reasoning* an admin had enabled platform-wide, which is
+    unrelated to routing — so it contradicted any platform binding or override
+    in force and read as "model routing is broken". This is the answer to the
+    question the composer actually needs to ask.
+
+    Deliberately NOT part of `ExecutionPreparation`: that runs on every send and
+    is contractually free of pod-catalog fetches, while resolving the two
+    pod-owned precedence levels requires the pod's `/agents/models-catalog`.
+    This read is per chat-page open instead, the same cost profile as
+    `available-models` next to it.
+
+    Scoped to what the composer renders. It deliberately does NOT report which
+    precedence level won or which profile id it came from: that describes the
+    POLICY, which only an elevated team role may read (#2167), and no surface
+    displays it. Adding it would mean either leaking the policy to a plain
+    member or gating a field nobody reads. `[V2][MODEL_ROUTING]` in the pod log
+    remains the place to see the deciding level.
+
+    Every model field is `None` together, meaning nothing resolved at all — a
+    pod declaring no chat default with no team policy, or (during a rolling
+    upgrade) a pod not yet advertising its defaults. The composer shows no model
+    rather than guessing one.
+    """
+
+    name: str | None = Field(
+        default=None,
+        description=(
+            "The concrete model name. `capability_id` below identifies the "
+            "`(provider, name)` pair uniquely for a caller that needs to join "
+            "against team enablement or the models admin view."
+        ),
+    )
+    display_name: str | None = Field(
+        default=None,
+        description=(
+            "The ops-authored `model_display_name` for this model, when the pod "
+            "catalog names one. `None` leaves the frontend on its name/id "
+            "prettifying fallback — the same fallback the composer already had."
+        ),
+    )
+    capability_id: str | None = Field(
+        default=None,
+        description=(
+            'The `(provider, name)`-keyed `kind="model"` capability id, so the '
+            "caller can join this against team enablement and the models admin "
+            "view. `None` for an unresolved model."
+        ),
+    )
+    enabled_for_team: bool = Field(
+        default=True,
+        description=(
+            "False when the resolved model is not `can_use`-enabled for this "
+            "team, in which case the turn fails before the LLM call "
+            "(`ModelNotUsableError`). Reported rather than hidden so the "
+            "composer can say WHY a turn will fail instead of letting the user "
+            "discover an opaque error — the same diagnosability rule REASON-01 "
+            "§8 applies to the reasoning control. Always True for a platform "
+            "binding, which bypasses team enablement by design: the operator is "
+            "the authority on what is reachable."
+        ),
+    )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether reasoning actually runs on THIS model — i.e. whether a "
+            "platform admin switched its reasoning on (REASON-01 §5). The "
+            "composer must not offer the reasoning toggle when this is False: "
+            "`RoutedChatModelFactory` STRIPS the reasoning settings for a model "
+            "absent from `reasoning_enabled_model_ids` (§5.6.2), so the toggle "
+            "would be inert and the turn would silently not reason.\n\n"
+            "Needed because the reasoning control is emitted from the PLATFORM "
+            "list — 'some model has reasoning on' — while routing may land on a "
+            "different model entirely. With reasoning enabled on Mistral Small "
+            "and a team override routing to Mistral Medium, the composer used to "
+            "render 'Mistral Medium · Élevé' and offer the toggle while the pod "
+            "ran no reasoning at all."
+        ),
+    )
 
 
 class ProfileNotUsableError(Exception):
@@ -72,59 +161,40 @@ class ProfileNotUsableError(Exception):
 
 
 class UnknownProfileError(Exception):
-    """A routing-policy write references a `target_profile_id` this
-    deployment does not serve uniformly: either no pod has ever advertised
-    it (typo), or only some pods have — a profile must be present on every
-    enabled, model-capable pod to be deployment-global (RFC §9), or it can
-    drift-fail at runtime on whichever pod actually lacks it
-    (2026-08-02, MDL#2)."""
+    """A routing-policy write references an invalid chat profile.
+
+    The id is unknown, non-chat, or absent from at least one enabled
+    model-capable pod. These cases share one client contract: the profile is
+    not selectable by the deployment-wide chat policy.
+    """
 
     def __init__(self, *, profile_ids: list[str]) -> None:
         self.profile_ids = profile_ids
         super().__init__(f"Unknown profile id(s): {profile_ids!r}.")
 
 
-class DuplicateOperationRuleError(Exception):
-    """Two rules in the same write share an (operation, purpose, agent_id) triplet
-    (RFC §3.2 invariant) — the resolver has no defined tie-break for that, so
-    reject rather than silently pick one."""
+class PlatformModelBinding(BaseModel):
+    """The platform-wide `chat` model-binding admin state — chat-only;
+    `language`/`embedding`/`image` have no production consumer and are not
+    representable through this API.
 
-    def __init__(
-        self, *, operation: str | None, purpose: str | None, agent_id: str | None = None
-    ) -> None:
-        self.operation = operation
-        self.purpose = purpose
-        self.agent_id = agent_id
-        super().__init__(
-            f"Duplicate rule for (operation={operation!r}, purpose={purpose!r}, agent_id={agent_id!r})."
-        )
+    `GET/PUT/DELETE /admin/platform/model-bindings` always return this shape
+    — `binding=None` means chat has no platform override and every pod
+    resolves it locally as it always has. `model_capability` is a
+    route-local constant, not the global `ModelCapability` enum: this API
+    surface can only ever describe `chat`, so there is no vocabulary to
+    reuse or duplicate.
+    """
 
-
-class DuplicateRuleIdError(Exception):
-    """Two rules in the same write share a `rule_id` — always a client bug
-    (rule_id is a client-generated stable key, never user-authored), never a
-    legitimate routing intent. Reported separately from
-    `DuplicateOperationRuleError` so the message names the actual offending
-    id instead of a misleading (None, None, None) triplet."""
-
-    def __init__(self, *, rule_id: str) -> None:
-        self.rule_id = rule_id
-        super().__init__(f"Duplicate rule_id {rule_id!r} in the same write.")
+    model_capability: Literal["chat"] = "chat"
+    binding: ModelBinding | None = None
+    updated_by: str | None = None
+    updated_at: datetime | None = None
 
 
-class AmbiguousOperationRuleError(Exception):
-    """Two rules in the same write could both match the same request with
-    equal specificity (RFC §3.2 resolution is "fixed, deterministic, no
-    scoring") — e.g. one rule pinning (operation, agent_id) and another
-    pinning (purpose, agent_id) for the same agent_id. The resolver breaks
-    such ties by declaration order, which this UI never surfaces to an
-    admin, so reject the write instead of leaving an outcome that depends on
-    storage order."""
+class SetPlatformModelBindingRequest(BaseModel):
+    """`PUT` body — wraps `ModelBinding` (its own strict `settings` contract,
+    `ModelBindingSettings`, rejects any credential-shaped or unknown key at
+    request-parsing time, before the service layer even runs)."""
 
-    def __init__(self, *, rule_id_a: str, rule_id_b: str) -> None:
-        self.rule_id_a = rule_id_a
-        self.rule_id_b = rule_id_b
-        super().__init__(
-            f"Rules {rule_id_a!r} and {rule_id_b!r} can both match the same request "
-            "with equal specificity — remove or narrow one so resolution stays deterministic."
-        )
+    binding: ModelBinding

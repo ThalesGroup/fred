@@ -8,6 +8,8 @@ app:
   # Optional hard ceiling on concurrent HTTP/WebSocket connections accepted by
   # Uvicorn. Set to null to disable the limit.
   limit_concurrency: null
+  # Maximum Unicode code points accepted in one submitted chat message.
+  max_chat_input_chars: 5000
   openai_compat: true
 
 security:
@@ -44,6 +46,14 @@ observability:
   langfuse:
     host: "http://localhost:3001"
     # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env
+    # capture_content exports prompts, model answers and tool payloads to
+    # Langfuse. It breaks the content exclusion of
+    # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7 and is for a local
+    # Langfuse only — never a shared or production deployment.
+    # Override per-run with LANGFUSE_CAPTURE_CONTENT=true.
+    capture_content: false
+    # Total characters per exported payload; LANGFUSE_MAX_CONTENT_CHARS overrides.
+    max_content_chars: 100000
 
 storage:
   postgres:

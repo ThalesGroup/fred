@@ -332,7 +332,6 @@ def _make_member_step(spec: AgentSpec) -> GraphStepHandler:
       ``_build_dynamic_workflow``; not intended for direct use
     """
     node_name = _node_id(spec.name)
-    operation = f"team_member_{node_name}"
 
     @typed_node(TeamState)
     async def _step(state: TeamState, context: GraphNodeContext) -> StepResult:
@@ -353,7 +352,6 @@ def _make_member_step(spec: AgentSpec) -> GraphStepHandler:
 
         output = await model_text_step(
             context,
-            operation=operation,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             fallback_text=f"[{spec.name} produced no output]",
@@ -482,7 +480,6 @@ def _make_route_coordinator_step(
         user_prompt += "\n\nWhich specialist should handle this?"
         decision = await structured_model_step(
             context,
-            operation="team_route_coordinator",
             output_model=_CoordinatorDecision,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -660,7 +657,6 @@ def _make_coordinator_step(
 
         decision = await structured_model_step(
             context,
-            operation="team_coordinator",
             output_model=_CoordinatorDecision,
             system_prompt=system_prompt,
             user_prompt=user_prompt,

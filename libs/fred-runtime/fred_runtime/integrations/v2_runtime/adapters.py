@@ -37,9 +37,10 @@ import inspect
 import json
 import logging
 import os
+import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast
 
 import httpx
 from fred_core.common import OwnerFilter
@@ -70,6 +71,8 @@ from fred_sdk.contracts.runtime import (
     DocumentExtractionPort,
     DocumentExtractionResult,
     DocumentFolderPort,
+    DocumentLabelPageResult,
+    DocumentLabelReference,
     DocumentMarkdownPort,
     DocumentMarkdownResult,
     DocumentPortCallError,
@@ -123,19 +126,170 @@ _TRACE_AWAIT_HUMAN_SPAN_NAMES = frozenset({"v2.graph.await_human"})
 _TRACE_TOOL_SPAN_NAMES = frozenset(
     {"v2.graph.tool", "v2.graph.runtime_tool", "tool.invoke"}
 )
+_TRACE_AGENT_SPAN_NAMES = frozenset({"agent.invoke", "agent.stream"})
+# Tool-shaped spans that are not the generic tool invoker.
+_TRACE_EXTRA_TOOL_SPAN_NAMES = frozenset({"artifact.publish", "resource.fetch"})
+
+# Langfuse renders an observation according to its declared type: only a
+# `generation` shows model/tokens/cost columns, only `tool` and `agent` get
+# their dedicated icons and the agent-graph view. Fred's runtime tracing
+# contract is backend-agnostic and knows nothing about those types, so the
+# mapping lives here, keyed by the span names the runtime already emits —
+# the same names `_extract_interesting_spans` reads back when summarizing a
+# conversation.
+_LANGFUSE_OBSERVATION_TYPE_BY_SPAN_NAME: dict[str, str] = {
+    **{name: "generation" for name in _TRACE_MODEL_SPAN_NAMES},
+    **{name: "tool" for name in _TRACE_TOOL_SPAN_NAMES},
+    **{name: "tool" for name in _TRACE_EXTRA_TOOL_SPAN_NAMES},
+    **{name: "agent" for name in _TRACE_AGENT_SPAN_NAMES},
+}
+
+# Observation types on which Langfuse keeps model/usage/cost. Mirrors
+# `langfuse._client.constants.ObservationTypeGenerationLike`; every other type
+# discards those fields without warning (see `LangfuseSpanAdapter.end`).
+_LANGFUSE_GENERATION_LIKE_TYPES = frozenset({"generation", "embedding"})
+
+# Total characters exported per payload when content capture is on. Generous
+# on purpose: content capture is a laptop-only debugging affordance, and one
+# agent's tool schemas alone can run past 20k characters — a budget that cuts
+# them defeats the reason the developer turned it on. Its job is to stop a
+# pathological multi-MB payload, not to be stingy.
+DEFAULT_MAX_CONTENT_CHARS = 100_000
+
+# OpenTelemetry attribute names Langfuse promotes to trace-level fields.
+# `propagate_attributes()` — the SDK's public helper — ultimately just sets
+# these on every span in its context (see langfuse/_client/propagation.py).
+# Fred cannot use that helper: it is a context manager backed by contextvars,
+# and Fred's spans are started and ended explicitly across await boundaries,
+# so the enter/exit pair would not bracket a span's real lifetime. Setting the
+# attributes directly on each span is the same operation without that
+# constraint, and it keeps every span of a turn attributable, which is what
+# Langfuse's per-session and per-user aggregations require.
+_OTEL_TRACE_SESSION_ID = "session.id"
+_OTEL_TRACE_USER_ID = "user.id"
+_OTEL_TRACE_NAME = "langfuse.trace.name"
+_OTEL_TRACE_TAGS = "langfuse.trace.tags"
+_OTEL_TRACE_INPUT = "langfuse.trace.input"
+_OTEL_TRACE_OUTPUT = "langfuse.trace.output"
+
+
+# Strings at or below this length are never truncated — see `_truncate_payload`.
+# Sized to hold the structural fields of a trace payload (roles, tool names,
+# tool-call ids) plus a short answer, without being large enough for a handful
+# of them to matter against the budget.
+_MIN_TRUNCATABLE_CHARS = 64
+
+
+def _truncate_payload(value: object, limit: int) -> object:
+    """
+    Bound a trace payload to `limit` characters **in total**, not per string.
+
+    Why the total matters, not just each string:
+    - a ReAct turn's transcript grows with every tool round, and every model
+      call of that turn re-exports the whole transcript. Capping each string
+      alone leaves the payload unbounded in the number of strings: twenty tool
+      results just under the cap is still hundreds of KB per model call, walked
+      and JSON-serialized on the event loop each time
+    - truncating the serialized JSON instead would produce invalid JSON, so the
+      structure is preserved and the budget is spent string by string
+
+    Once the budget is exhausted the remaining strings collapse to a marker
+    rather than being dropped, so a reader can see the payload was cut and
+    never mistakes it for a complete one.
+
+    **Lists spend the budget from the end backwards** (output order is
+    unchanged). A message list starts with the system prompt, which in an agent
+    with several tools carries every tool's JSON schema and can run to tens of
+    thousands of characters. Spending front-to-back let that boilerplate eat the
+    whole budget and blank out the actual question and answer — the two things
+    anyone opening a trace is looking for. Recency wins instead.
+    """
+
+    remaining = max(limit, 0)
+
+    def _walk(value: object) -> object:
+        nonlocal remaining
+        if isinstance(value, str):
+            if not value:
+                return value
+            # Short strings are emitted verbatim even past the budget. They are
+            # the payload's structure — roles, tool names, ids, call ids — and
+            # replacing one with a ~24-character marker makes the payload BIGGER
+            # while destroying the field's meaning (`"system"` became
+            # `"sys…[truncated 3 chars]"`). Truncation only ever applies where it
+            # actually saves space. They still consume budget, so the bound holds.
+            if len(value) <= _MIN_TRUNCATABLE_CHARS:
+                remaining = max(remaining - len(value), 0)
+                return value
+            if remaining <= 0:
+                return f"…[truncated {len(value)} chars]"
+            if len(value) <= remaining:
+                remaining -= len(value)
+                return value
+            kept, cut = value[:remaining], len(value) - remaining
+            remaining = 0
+            return f"{kept}…[truncated {cut} chars]"
+        if isinstance(value, dict):
+            return {key: _walk(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            items = list(value)
+            walked: list[object] = [None] * len(items)
+            for index in range(len(items) - 1, -1, -1):
+                walked[index] = _walk(items[index])
+            return walked
+        return value
+
+    return _walk(value)
+
+
+def _serialize_trace_attribute(value: object) -> str:
+    """
+    Render a payload as the JSON string an OTel attribute can carry.
+
+    OpenTelemetry attributes accept only scalars and sequences of scalars, so
+    trace-level input/output must be serialized before being set. `default=str`
+    keeps a stray non-JSON value (a datetime, a Pydantic model) from raising on
+    the tracing path.
+    """
+
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 class LangfuseSpanAdapter(SpanPort):
     """
     Thin `SpanPort` adapter over a Langfuse span.
 
-    Attributes are buffered and flushed as metadata updates to keep the runtime
-    tracing contract generic and side-effect free.
+    Everything a caller records is buffered and flushed in a single `update()`
+    at `end()`. One flush per span keeps the runtime tracing contract generic
+    and side-effect free, and costs one SDK call per span instead of one per
+    attribute on the agent hot path.
     """
 
-    def __init__(self, span: "_LangfuseSpanLike"):
+    def __init__(
+        self,
+        span: "_LangfuseSpanLike",
+        *,
+        capture_content: bool = False,
+        max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS,
+        is_root: bool = False,
+        observation_type: str = "span",
+    ):
         self._span = span
         self._metadata: dict[str, object] = {}
+        self._capture_content = capture_content
+        self._max_content_chars = max_content_chars
+        self._is_root = is_root
+        self._observation_type = observation_type
+        self._input: object | None = None
+        self._output: object | None = None
+        self._model: str | None = None
+        self._usage: dict[str, int] | None = None
+        self._cost: dict[str, float] | None = None
         self._ended = False
 
     @property
@@ -147,24 +301,161 @@ class LangfuseSpanAdapter(SpanPort):
             return
         self._metadata[key] = value
 
+    def set_io(self, *, input: object = None, output: object = None) -> None:
+        # Dropped unless the pod explicitly opted into content capture
+        # (OBSERVABILITY-AND-AUDIT.md §7). Callers are expected to check
+        # `tracer.captures_content` first and skip building the payload at all;
+        # this second check makes the guarantee hold even if one does not.
+        if self._ended or not self._capture_content:
+            return
+        if input is not None:
+            self._input = _truncate_payload(input, self._max_content_chars)
+        if output is not None:
+            self._output = _truncate_payload(output, self._max_content_chars)
+
+    @property
+    def _is_generation_like(self) -> bool:
+        """
+        Whether Langfuse will keep model/usage/cost on this observation.
+
+        Only `generation` and `embedding` are generation-like
+        (`langfuse._client.constants.ObservationTypeGenerationLike`); every
+        other type silently discards those fields on `update()`.
+        """
+
+        return self._observation_type in _LANGFUSE_GENERATION_LIKE_TYPES
+
+    def set_usage(
+        self,
+        *,
+        model: str | None = None,
+        usage: Mapping[str, int] | None = None,
+        cost: Mapping[str, float] | None = None,
+    ) -> None:
+        if self._ended:
+            return
+        if model is not None:
+            self._model = model
+        if usage:
+            self._usage = dict(usage)
+        if cost:
+            self._cost = dict(cost)
+
     def end(self) -> None:
         if self._ended:
             return
+        # The two steps are guarded separately and `end()` runs in a `finally`:
+        # if flushing the payload fails — a Langfuse outage, a payload the
+        # exporter rejects, an SDK signature change — the span must still be
+        # closed. Sharing one try block would leave it open forever, which
+        # renders as a turn that never finished and skews every duration in the
+        # trace. Tracing degrades the trace, never the agent turn.
         try:
-            if self._metadata:
-                self._span.update(metadata=dict(self._metadata))
-            self._span.end()
+            update: dict[str, object] = {}
+            metadata = dict(self._metadata)
+            # Langfuse keeps `model`/`usage_details`/`cost_details` ONLY on
+            # generation-like observations; on a span-like one (`agent`, `tool`,
+            # `span`) `update()` routes through `create_span_attributes` and
+            # drops them without a warning. A turn total recorded on the
+            # `agent.stream` root therefore vanished silently. Rather than let
+            # `set_usage` be a no-op on those spans, fall back to metadata so
+            # the numbers stay readable. Langfuse still computes the trace's own
+            # token and cost totals by aggregating the child generations, which
+            # is where the authoritative per-call usage lives.
+            if self._is_generation_like:
+                if self._model is not None:
+                    update["model"] = self._model
+                if self._usage is not None:
+                    update["usage_details"] = self._usage
+                if self._cost is not None:
+                    update["cost_details"] = self._cost
+            else:
+                if self._model is not None:
+                    metadata.setdefault("model_name", self._model)
+                for key, value in (self._usage or {}).items():
+                    metadata[f"usage_{key}"] = value
+                for key, value in (self._cost or {}).items():
+                    metadata[f"cost_{key}"] = value
+            if metadata:
+                update["metadata"] = metadata
+            if self._input is not None:
+                update["input"] = self._input
+            if self._output is not None:
+                update["output"] = self._output
+            # Surface failures as Langfuse's own error level so a broken turn is
+            # visible in the trace list without opening every span. The runtime
+            # records status as a plain attribute; only this adapter knows what
+            # the backend does with it.
+            if self._metadata.get("status") == "error":
+                update["level"] = "ERROR"
+            if update:
+                self._span.update(**update)
+            # The trace row in Langfuse's list view shows the trace-level
+            # input/output, not the root span's. Mirroring them here is what
+            # makes a conversation scannable: question in, answer out, without
+            # drilling into the span tree.
+            if self._is_root and (self._input is not None or self._output is not None):
+                self._set_trace_io()
+        except Exception:
+            logger.warning(
+                "[V2][TRACING] Failed to flush Langfuse span payload.", exc_info=True
+            )
         finally:
+            try:
+                self._span.end()
+            except Exception:
+                logger.warning(
+                    "[V2][TRACING] Failed to end Langfuse span.", exc_info=True
+                )
             self._ended = True
+
+    def _set_trace_io(self) -> None:
+        otel_span = getattr(self._span, "_otel_span", None)
+        if otel_span is None:
+            return
+        attributes: dict[str, str] = {}
+        if self._input is not None:
+            attributes[_OTEL_TRACE_INPUT] = _serialize_trace_attribute(self._input)
+        if self._output is not None:
+            attributes[_OTEL_TRACE_OUTPUT] = _serialize_trace_attribute(self._output)
+        if attributes:
+            otel_span.set_attributes(attributes)
 
 
 class LangfuseTracerAdapter(TracerPort):
     """
     Langfuse-backed implementation of the v2 runtime tracing port.
+
+    Trace shape produced here:
+    - **one trace per turn**, seeded on `exchange_id` so every span of one
+      user message shares it, and so a HITL resume rejoins the trace of the
+      exchange it resumes instead of starting an orphan
+    - **grouped into a session** through Langfuse's native `session.id`, which
+      is what makes its Sessions view show a conversation as a whole rather
+      than a pile of unrelated traces
+    - **attributed to a user** through the native `user.id`, enabling per-user
+      cost and latency aggregation
+    - **typed observations**: model calls become `generation` (model, tokens,
+      cost), tool calls become `tool`, the turn's root becomes `agent`
+
+    Identity metadata stays on every span as before, so the read-back path in
+    `_summarize_langfuse_conversation` keeps working unchanged.
     """
 
-    def __init__(self, client: Langfuse):
+    def __init__(
+        self,
+        client: Langfuse,
+        *,
+        capture_content: bool = False,
+        max_content_chars: int = 20000,
+    ):
         self._client = client
+        self._capture_content = capture_content
+        self._max_content_chars = max_content_chars
+
+    @property
+    def captures_content(self) -> bool:
+        return self._capture_content
 
     @property
     def propagator(self):  # type: ignore[override]
@@ -217,8 +508,17 @@ class LangfuseTracerAdapter(TracerPort):
                 environment=PortableEnvironment.DEV,
             )
         )
+        # `exchange_id` comes first so one trace covers one user turn end to
+        # end. It is the only seed that survives a HITL resume: the resume is a
+        # new request with a fresh `request_id` but the same exchange, and
+        # seeding on `request_id` (the previous first choice after `trace_id`)
+        # split it into a second, parentless trace. Seeding on `session_id`
+        # would go too far the other way and collapse a whole conversation into
+        # a single unreadable trace — sessions are grouped by `session.id`
+        # below, which is what Langfuse's Sessions view is built on.
         trace_seed = (
             portable_context.trace_id
+            or portable_context.baggage.get("exchange_id")
             or portable_context.request_id
             or portable_context.correlation_id
             or portable_context.session_id
@@ -255,16 +555,80 @@ class LangfuseTracerAdapter(TracerPort):
         parent_span_id = parent.span_id if parent is not None else None
         if parent_span_id is not None:
             trace_context["parent_span_id"] = parent_span_id
+        observation_type = _LANGFUSE_OBSERVATION_TYPE_BY_SPAN_NAME.get(name, "span")
         span = cast(
             "_LangfuseSpanLike",
             self._client.start_observation(
                 name=name,
-                as_type="span",
+                as_type=cast(Any, observation_type),
                 trace_context=trace_context,
                 metadata=metadata,
             ),
         )
-        return LangfuseSpanAdapter(span)
+        self._apply_trace_attributes(
+            span, portable_context=portable_context, span_name=name
+        )
+        return LangfuseSpanAdapter(
+            span,
+            capture_content=self._capture_content,
+            max_content_chars=self._max_content_chars,
+            is_root=parent_span_id is None,
+            observation_type=observation_type,
+        )
+
+    def _apply_trace_attributes(
+        self,
+        span: "_LangfuseSpanLike",
+        *,
+        portable_context: PortableContext,
+        span_name: str,
+    ) -> None:
+        """
+        Promote Fred's session/user identity to Langfuse's native trace fields.
+
+        Without this, `session_id` and `user_id` reach Langfuse only as
+        free-form metadata: the Sessions and Users views stay empty and a
+        conversation cannot be reassembled from its individual turns. These are
+        opaque platform identifiers, not content — the category
+        `OBSERVABILITY-AND-AUDIT.md` §7 explicitly allows in an identity-bearing
+        stream — so they are set unconditionally, independently of
+        `capture_content`.
+        """
+
+        otel_span = getattr(span, "_otel_span", None)
+        if otel_span is None:
+            return
+        attributes: dict[str, object] = {}
+        if portable_context.session_id:
+            attributes[_OTEL_TRACE_SESSION_ID] = portable_context.session_id
+        if portable_context.user_id:
+            attributes[_OTEL_TRACE_USER_ID] = portable_context.user_id
+        # Name the trace after the agent rather than after whichever span
+        # happened to open it, so the Langfuse trace list reads as a list of
+        # agent turns.
+        agent_label = portable_context.agent_name or portable_context.agent_id
+        if agent_label and span_name in _TRACE_AGENT_SPAN_NAMES:
+            attributes[_OTEL_TRACE_NAME] = agent_label
+            tags = [
+                tag
+                for tag in (
+                    portable_context.team_id,
+                    portable_context.baggage.get("execution_action"),
+                    portable_context.environment.value,
+                )
+                if tag
+            ]
+            if tags:
+                attributes[_OTEL_TRACE_TAGS] = tags
+        if not attributes:
+            return
+        try:
+            otel_span.set_attributes(attributes)
+        except Exception:
+            # Never let a tracing detail break a turn.
+            logger.debug(
+                "[V2][TRACING] Could not set Langfuse trace attributes.", exc_info=True
+            )
 
 
 _LANGFUSE_TRACER: TracerPort | None | bool = False
@@ -273,18 +637,82 @@ _LANGFUSE_TRACER: TracerPort | None | bool = False
 class _LangfuseSpanLike(Protocol):
     id: str
 
-    def update(
-        self, *, metadata: Mapping[str, object] | None = None, **kwargs
-    ) -> object:
+    # Kept fully open (`**kwargs`) because the adapter flushes a span in one
+    # call whose keys depend on what the caller recorded — metadata, input,
+    # output, model, usage_details, cost_details, level. Naming a subset here
+    # only forces a cast at the single call site without adding safety.
+    def update(self, **kwargs: Any) -> object:
         pass
 
     def end(self, *, end_time: int | None = None) -> object:
         pass
 
 
-def build_langfuse_tracer() -> TracerPort | None:
+def langfuse_content_capture_enabled(default: bool = False) -> bool:
+    """
+    Resolve whether prompts and answers may be exported to Langfuse.
+
+    `LANGFUSE_CAPTURE_CONTENT` overrides the configuration.yaml value so a
+    developer can flip content capture for one local run without editing
+    committed config — the only setting where enabling it is legitimate (see
+    `LangfuseObservabilityConfig.capture_content`).
+    """
+
+    raw = os.getenv("LANGFUSE_CAPTURE_CONTENT")
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def langfuse_max_content_chars(default: int = DEFAULT_MAX_CONTENT_CHARS) -> int:
+    """
+    Resolve the per-payload export budget, with an env override.
+
+    Why the env var matters more than it looks: `build_default_tracer` builds
+    the Langfuse tracer whenever credentials exist, even when
+    `observability.tracer` is not `langfuse` — and that path never sees
+    configuration.yaml. On a pod configured with `tracer: logging` plus Langfuse
+    keys in `.env` (the common local setup), the env var is the ONLY way to
+    change this budget.
+
+    A non-numeric or non-positive value falls back to the default rather than
+    disabling truncation, so a typo cannot turn a debugging knob into an
+    unbounded export.
+    """
+
+    raw = os.getenv("LANGFUSE_MAX_CONTENT_CHARS")
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw.strip())
+    except ValueError:
+        logger.warning(
+            "[V2][TRACING] LANGFUSE_MAX_CONTENT_CHARS=%r is not an integer — using %d.",
+            raw,
+            default,
+        )
+        return default
+    if parsed <= 0:
+        logger.warning(
+            "[V2][TRACING] LANGFUSE_MAX_CONTENT_CHARS must be positive — using %d.",
+            default,
+        )
+        return default
+    return parsed
+
+
+def build_langfuse_tracer(
+    *,
+    capture_content: bool = False,
+    max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS,
+) -> TracerPort | None:
     """
     Return a shared Langfuse tracer when credentials are configured.
+
+    The instance is memoized: `bootstrap_observability` builds it first, with
+    the pod's configuration, so later argument-less calls from
+    `build_default_tracer` reuse that configured tracer rather than silently
+    rebuilding a default-configured one.
     """
 
     global _LANGFUSE_TRACER
@@ -295,7 +723,11 @@ def build_langfuse_tracer() -> TracerPort | None:
     has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
     if has_public and has_secret:
         try:
-            _LANGFUSE_TRACER = LangfuseTracerAdapter(Langfuse())
+            _LANGFUSE_TRACER = LangfuseTracerAdapter(
+                Langfuse(),
+                capture_content=langfuse_content_capture_enabled(capture_content),
+                max_content_chars=langfuse_max_content_chars(max_content_chars),
+            )
         except Exception:
             logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
             _LANGFUSE_TRACER = None
@@ -826,18 +1258,26 @@ class DocumentSearchAdapter(DocumentSearchPort):
             # documents (attached files) only, never the corpus.
             include_session_scope, include_corpus_scope = True, False
 
-        hits = await self._search_client.search(
-            question=query,
-            top_k=top_k,
-            document_library_tags_ids=effective_libs,
-            document_uids=effective_uids,
-            search_policy=policy,
-            owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
-            team_id=team_id if scoped_team else None,
-            session_id=runtime_context.session_id,
-            include_session_scope=include_session_scope,
-            include_corpus_scope=include_corpus_scope,
-        )
+        try:
+            hits = await self._search_client.search(
+                question=query,
+                top_k=top_k,
+                document_library_tags_ids=effective_libs,
+                document_uids=effective_uids,
+                search_policy=policy,
+                owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
+                team_id=team_id if scoped_team else None,
+                session_id=runtime_context.session_id,
+                include_session_scope=include_session_scope,
+                include_corpus_scope=include_corpus_scope,
+            )
+        except Exception as exc:
+            # Same SDK-typed mapping the tree/summarize adapters already apply:
+            # without it a raw httpx error reaches the capability, which reads
+            # `status_code`/`timed_out` off the exception to build its message —
+            # so a 401 degraded to "the service call failed" instead of naming
+            # the status. The capability never imports the HTTP stack itself.
+            raise _wrap_document_port_error(exc) from exc
         return DocumentSearchResult(hits=tuple(hits))
 
 
@@ -969,6 +1409,28 @@ class DocumentFolderAdapter(DocumentFolderPort):
         )
 
 
+_URL_IN_TEXT = re.compile(r"https?://\S+")
+_REDACTED_URL = "[redacted url]"
+
+
+def _redact_urls(text: str) -> str:
+    """Strip absolute URLs from text destined for the model or chat history.
+
+    Why it exists:
+    - downstream error strings name internal service hosts, ports and routes.
+      They travel further than a log line: `_document_tool_failure` renders them
+      into the tool result the LLM reads and the trace block that is persisted.
+
+    The placeholder is not angle-bracketed: the chat renderer treats
+    `<redacted-url>` as an unknown HTML tag and drops it, leaving what looks
+    like a truncated error.
+
+    How to use it:
+    - `detail = _redact_urls(str(exc))`
+    """
+    return _URL_IN_TEXT.sub(_REDACTED_URL, text).strip()
+
+
 def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     """
     Map an httpx transport failure onto the SDK-typed `DocumentPortCallError`
@@ -980,7 +1442,14 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     status_code = (
         exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
     )
-    detail = str(exc).strip() or type(exc).__name__
+    # `str(exc)` on an httpx error embeds the full request URL — for
+    # HTTPStatusError, "Client error '401 Unauthorized' for url
+    # 'http://knowledge-flow:8111/knowledge-flow/v1/vector/search'". This detail
+    # is rendered into the model-facing tool message AND persisted in chat
+    # history, so the internal service host, port and route would reach the LLM
+    # context and the trace of every user who triggers a downstream failure.
+    # Status and exception type carry the diagnosis without the topology.
+    detail = _redact_urls(str(exc).strip()) or type(exc).__name__
     return DocumentPortCallError(detail, timed_out=timed_out, status_code=status_code)
 
 
@@ -1034,6 +1503,34 @@ class DocumentTreeAdapter(DocumentTreePort):
         except httpx.HTTPError as exc:
             raise _wrap_document_port_error(exc) from exc
         return DocumentTreeResult(tree=result.tree, truncated=result.truncated)
+
+    async def list_by_label(
+        self,
+        *,
+        label: str,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> DocumentLabelPageResult:
+        try:
+            result = await self._client.list_by_label(
+                label=label, offset=offset, limit=limit
+            )
+        except httpx.HTTPError as exc:
+            raise _wrap_document_port_error(exc) from exc
+        return DocumentLabelPageResult(
+            label=result.label,
+            documents=tuple(
+                DocumentLabelReference(
+                    document_uid=d.document_uid, document_name=d.document_name
+                )
+                for d in result.documents
+            ),
+            total=result.total,
+            offset=result.offset,
+            limit=result.limit,
+            next_offset=result.next_offset,
+            has_more=result.has_more,
+        )
 
 
 class DocumentSummarizeAdapter(DocumentSummarizePort):
@@ -1309,8 +1806,8 @@ class FredWorkspaceFs(WorkspaceFsPort):
             )
         return str(aid)
 
-    def _token(self) -> str:
-        return _workspace_access_token(self._binding.runtime_context)
+    async def _token(self) -> str:
+        return await _workspace_access_token(self._binding.runtime_context)
 
     # ---- path relativization (§7.1 security rule) ----
     def _resolve(self, path: str, *, allow_root: bool = False) -> str:
@@ -1390,7 +1887,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
     async def _download(self, resolved: str, original: str) -> bytes:
         try:
             blob = await self._workspace_client.fs_download_blob(
-                resolved, self._token()
+                resolved, await self._token()
             )
         except WorkspaceRetrievalError as e:
             if e.status_code == 404:
@@ -1435,7 +1932,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
 
     async def ls(self, path: str = "") -> list[FsEntry]:
         entries = await self._workspace_client.fs_list(
-            self._resolve(path, allow_root=True), self._token()
+            self._resolve(path, allow_root=True), await self._token()
         )
         return [
             FsEntry(path=entry.path, size=entry.size, is_dir=entry.is_directory())
@@ -1443,11 +1940,13 @@ class FredWorkspaceFs(WorkspaceFsPort):
         ]
 
     async def delete(self, path: str) -> None:
-        await self._workspace_client.fs_delete(self._resolve_owned(path), self._token())
+        await self._workspace_client.fs_delete(
+            self._resolve_owned(path), await self._token()
+        )
 
     async def link_for(self, path: str) -> PublishedArtifact:
         resolved = self._resolve(path)
-        link = await self._workspace_client.fs_share(resolved, self._token())
+        link = await self._workspace_client.fs_share(resolved, await self._token())
         file_name = link.file_name or resolved.rsplit("/", 1)[-1]
         return PublishedArtifact(
             key=resolved,
@@ -1475,8 +1974,8 @@ class _VectorSearchAgentShim:
         self.runtime_context = binding.runtime_context
         self.agent_settings = settings
 
-    def refresh_user_access_token(self) -> str:
-        return _refresh_runtime_context_access_token(self.runtime_context)
+    async def refresh_user_access_token(self) -> str:
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
 class _McpRuntimeAgentShim:
@@ -1496,8 +1995,8 @@ class _McpRuntimeAgentShim:
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self.runtime_context = binding.runtime_context
 
-    def refresh_user_access_token(self) -> str:
-        return _refresh_runtime_context_access_token(self.runtime_context)
+    async def refresh_user_access_token(self) -> str:
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
 class _WorkspaceAgentShim:
@@ -1518,18 +2017,18 @@ class _WorkspaceAgentShim:
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self.runtime_context = binding.runtime_context
 
-    def refresh_user_access_token(self) -> str:
-        return _refresh_runtime_context_access_token(self.runtime_context)
+    async def refresh_user_access_token(self) -> str:
+        return await _refresh_runtime_context_access_token(self.runtime_context)
 
 
-def _workspace_access_token(runtime_context: RuntimeContext) -> str:
+async def _workspace_access_token(runtime_context: RuntimeContext) -> str:
     current = runtime_context.access_token
     if isinstance(current, str) and current:
         return current
-    return _refresh_runtime_context_access_token(runtime_context)
+    return await _refresh_runtime_context_access_token(runtime_context)
 
 
-def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> str:
+async def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> str:
     refresh_token = runtime_context.refresh_token
     if not refresh_token:
         raise RuntimeError(
@@ -1543,7 +2042,7 @@ def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> st
     if not client_id:
         raise RuntimeError("User security client_id is not configured for Keycloak.")
 
-    payload = refresh_user_access_token_from_keycloak(
+    payload = await refresh_user_access_token_from_keycloak(
         keycloak_url=keycloak_url,
         client_id=client_id,
         refresh_token=refresh_token,
@@ -1554,6 +2053,9 @@ def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> st
     new_refresh_token: str = (
         raw_refresh if isinstance(raw_refresh, str) and raw_refresh else refresh_token
     )
+    # Defence in depth only — `_validated_token_payload` inside the refresher
+    # already guarantees a non-empty string `access_token`, so this cannot fire
+    # today; it exists for a future caller that bypasses that validation.
     if not isinstance(new_access_token, str) or not new_access_token:
         raise RuntimeError(
             "Keycloak refresh response did not include a valid access_token."

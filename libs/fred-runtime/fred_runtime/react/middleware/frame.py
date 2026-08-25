@@ -22,19 +22,18 @@ just assembles that order.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
-from fred_sdk.contracts.runtime import ChatModelFactoryPort, TracerPort
+from fred_sdk.contracts.models import ToolApprovalPolicy
+from fred_sdk.contracts.runtime import TracerPort
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .hitl import CapabilityHitlBinding, FredHitlMiddleware
-from .model_routing import ModelRoutingMiddleware
 from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
@@ -42,15 +41,12 @@ from .tracing_kpi import TracingKpiMiddleware
 def build_react_platform_middleware_frame(
     *,
     binding: BoundRuntimeContext,
-    definition: ReActAgentDefinition,
     approval_policy: ToolApprovalPolicy,
-    chat_model_factory: ChatModelFactoryPort | None,
-    infer_operation_from_messages: Callable[[Sequence[object]], str],
-    default_operation: str,
     available_tool_names: set[str] | frozenset[str],
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     max_history_messages: int | None,
+    max_history_chars: int | None = None,
     max_tool_calls_per_turn: int | None = None,
     capability_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
@@ -76,13 +72,11 @@ def build_react_platform_middleware_frame(
     """
 
     frame: list[AgentMiddleware] = [
-        CheckpointHygieneMiddleware(max_history_messages=max_history_messages),
-        ModelRoutingMiddleware(
-            chat_model_factory=chat_model_factory,
-            definition=definition,
+        CheckpointHygieneMiddleware(
+            max_history_messages=max_history_messages,
+            max_history_chars=max_history_chars,
             binding=binding,
-            infer_operation_from_messages=infer_operation_from_messages,
-            default_operation=default_operation,
+            kpi=kpi,
         ),
         DynamicPromptMiddleware(available_tool_names=available_tool_names),
         # --- CAPABILITY BLOCK INSERTION SLOT (#1973, RFC §5.3) ---
@@ -91,8 +85,6 @@ def build_react_platform_middleware_frame(
             tracer=tracer,
             kpi=kpi,
             binding=binding,
-            infer_operation_from_messages=infer_operation_from_messages,
-            default_operation=default_operation,
         ),
         # ToolObservabilityMiddleware sits right next to TracingKpiMiddleware
         # on purpose: same cross-cutting job (KPI timer + audit trail), just

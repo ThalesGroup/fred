@@ -49,6 +49,7 @@ class PromptRecord:
         text: str,
         created_by: str | None,
         version: int = 1,
+        published: bool = False,
         import_count: int = 0,
         session_count: int = 0,
         score: float | None = None,
@@ -67,6 +68,7 @@ class PromptRecord:
         self.text = text
         self.created_by = created_by
         self.version = version
+        self.published = published
         self.import_count = import_count
         self.session_count = session_count
         self.score = score
@@ -113,6 +115,7 @@ def _row_to_record(row: PromptRow) -> PromptRecord:
         text=row.text,
         created_by=row.created_by,
         version=row.version,
+        published=row.published,
         import_count=row.import_count,
         session_count=row.session_count,
         score=row.score,
@@ -161,6 +164,7 @@ class PromptStore:
             text=record.text,
             created_by=record.created_by,
             version=record.version,
+            published=record.published,
             import_count=record.import_count,
             session_count=record.session_count,
             score=record.score,
@@ -303,6 +307,81 @@ class PromptStore:
                     PromptRow.prompt_id == prompt_id,
                     PromptRow.team_id == str(team_id),
                 )
+            )
+        return result.rowcount > 0
+
+    async def set_published(
+        self,
+        prompt_id: str,
+        team_id: TeamId,
+        published: bool,
+        session: AsyncSession | None = None,
+    ) -> PromptRecord | None:
+        """Flip the marketplace `published` flag for one team-scoped prompt.
+
+        Publishing is a live visibility flag on the team's own row (PROMPT-06):
+        the marketplace shows this same record, so later edits and the shared
+        usage counter propagate immediately. Returns `None` when the prompt does
+        not belong to `team_id`.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                update(PromptRow)
+                .where(
+                    PromptRow.prompt_id == prompt_id,
+                    PromptRow.team_id == str(team_id),
+                )
+                .values(published=published)
+            )
+            if result.rowcount == 0:
+                return None
+        return await self.get(prompt_id, session)
+
+    async def list_published(
+        self,
+        *,
+        limit: int = 500,
+        session: AsyncSession | None = None,
+    ) -> list[PromptRecord]:
+        """Return every published prompt across all teams (marketplace listing).
+
+        Ordered by shared usage (`session_count` DESC) then name, mirroring the
+        team-library "most used first" ordering. Author team names are resolved
+        by the service layer, not here.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(PromptRow)
+                        .where(PromptRow.published.is_(True))
+                        .order_by(PromptRow.session_count.desc(), PromptRow.name.asc())
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return [_row_to_record(row) for row in rows]
+
+    async def increment_session_count_global(
+        self,
+        prompt_id: str,
+        session: AsyncSession | None = None,
+    ) -> bool:
+        """Increment session_count by prompt id alone, regardless of owning team.
+
+        Used to record a marketplace "use" (clipboard copy) by a caller who is
+        not a member of the author team. Returns True when a row was updated.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                update(PromptRow)
+                .where(PromptRow.prompt_id == prompt_id)
+                .values(session_count=PromptRow.session_count + 1)
             )
         return result.rowcount > 0
 

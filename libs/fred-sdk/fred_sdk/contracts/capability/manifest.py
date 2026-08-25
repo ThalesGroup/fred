@@ -65,8 +65,8 @@ def model_capability_id(provider: str, name: str) -> str:
     """Stable, namespaced capability id for one (provider, model name) pair.
 
     One entry per distinct (provider, name), not per `models_catalog.yaml`
-    profile — a model used for both the `chat` and `language` routing
-    capability is one enablement decision, not two. Non-id-safe characters
+    profile — administrative model enablement is independent from the typed
+    consumer (`chat` today, potentially `embedding` later). Non-id-safe characters
     (anything outside `CAPABILITY_ID_PATTERN`'s charset) are normalized to
     `-` so a provider/model name containing e.g. `:` or `/` never produces
     an id OpenFGA would reject.
@@ -375,12 +375,16 @@ class CapabilityCatalogEntry(BaseModel):
     # Every `models_catalog.yaml` profile_id sharing this entry's (provider,
     # name) — TEAM-ROUTING-POLICY-RFC.md §7.1: a team routing policy picks by
     # profile_id, finer-grained than this entry's (provider, name)-keyed
-    # capability id, so control-plane needs the mapping back from profile_id
-    # to capability id (write-time enablement validation) and the
-    # team-settings picker needs the reverse (which profile_ids an enabled
-    # capability actually offers). Always empty for kind="tool"/"agent"
-    # entries — only `kind="model"` populates it.
+    # capability id. This complete inventory supports model enablement; typed
+    # policy consumers use the explicit subset below. Always empty for
+    # kind="tool"/"agent" entries — only `kind="model"` populates it.
     model_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # The chat-capable subset of `model_profile_ids`. Team routing is a
+    # chat-only contract, so its picker and write validation consume this
+    # explicit projection instead of guessing from profile-id conventions.
+    # A future embedding policy will expose its own typed subset when it has
+    # a production consumer. Always empty for kind="tool"/"agent" entries.
+    model_chat_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
     # The subset of `model_profile_ids` declaring `supports_thinking`
     # (`MODEL-REASONING-ENABLEMENT-RFC.md` §5.3, REASON-01). Aptitude is
     # declared per profile, where the behaviour actually differs; the admin
@@ -391,6 +395,11 @@ class CapabilityCatalogEntry(BaseModel):
     # so the admin row shows no reasoning control at all (an administrator
     # cannot make a model reason). Always empty for kind="tool"/"agent".
     model_thinking_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # The ops-authored `model_display_name` from `models_catalog.yaml` — the
+    # label the composer shows for this model. None = unnamed, and the
+    # frontend derives one from the capability id. Display only; nothing
+    # routes or authorizes on it. Only `kind="model"` entries populate it.
+    model_display_name: str | None = None
 
     @classmethod
     def from_manifest(

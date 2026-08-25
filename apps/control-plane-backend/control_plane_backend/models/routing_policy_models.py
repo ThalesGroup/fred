@@ -38,11 +38,11 @@ class TeamRoutingPolicyRow(Base):
     team_id: Mapped[str] = mapped_column(String, primary_key=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     chat_default_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    operation_rules_json: Mapped[str] = mapped_column(
+    agent_profile_overrides_json: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        default="[]",
-        comment="JSON-serialized list of TeamOperationRouteRule (fred_sdk.contracts.context).",
+        default="{}",
+        comment="JSON-serialized {agent_id: target_profile_id} dict.",
     )
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

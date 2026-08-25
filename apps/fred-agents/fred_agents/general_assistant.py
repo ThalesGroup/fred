@@ -43,7 +43,6 @@ Example:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-    MCP_SERVER_KNOWLEDGE_FLOW_FS,
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
@@ -115,17 +114,18 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     """
 
     agent_id: str = "fred.github.assistant"
-    role: str = "General-purpose assistant"
+    role: str = "Custom assistant"
     description: str = (
-        "Blank-slate assistant with access to all pod MCP tools. "
-        "Select the tools you need at enrollment, write your own prompt, "
-        "and build the agent that fits your use case."
+        "Build your own assistant: choose the tools it can use, like document "
+        "search or data analysis, and describe its role in your own words. "
+        "The best starting point for most use cases."
     )
     description_by_lang: dict[str, str] | None = {
         "fr": (
-            "Assistant généraliste avec accès à tous les outils MCP du pod. "
-            "Sélectionnez les outils dont vous avez besoin à l'enrôlement, "
-            "rédigez votre propre prompt et créez l'assistant adapté à votre cas d'usage."
+            "Créez votre propre assistant : choisissez les outils qu'il peut "
+            "utiliser, comme la recherche documentaire ou l'analyse de "
+            "données, et décrivez son rôle avec vos propres mots. Le meilleur "
+            "point de départ pour la plupart des cas d'usage."
         )
     }
     tags: tuple[str, ...] = ("general", "react")
@@ -144,10 +144,13 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     # legacy capability on purpose as the comparison baseline. Do not select
     # both on one instance (duplicate vector-search tool, see
     # `document_access/capability.py`'s module docstring).
+    #
+    # Filesystem (`mcp-knowledge-flow-fs`) is deliberately excluded: the /fs
+    # boundary is not agent/team-scoped yet (AGENT-FILESYSTEM-HARDENING-RFC F1,
+    # #2334) — same stance as `deep_assistant`. Do not re-add until that lands.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id="document_access"),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
@@ -161,12 +164,12 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
             title="System prompt",
             description=(
                 "Instructions that define the assistant's role and focus. "
-                "Leave blank to use the default general-purpose prompt."
+                "Leave blank to use the built-in default prompt."
             ),
             description_by_lang={
                 "fr": (
                     "Instructions définissant le rôle et le périmètre de l'assistant. "
-                    "Laissez vide pour utiliser le prompt généraliste par défaut."
+                    "Laissez vide pour utiliser le prompt par défaut."
                 )
             },
             required=False,

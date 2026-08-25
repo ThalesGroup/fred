@@ -111,6 +111,16 @@
           "default": "http://localhost:3001",
           "title": "Host",
           "type": "string"
+        },
+        "capture_content": {
+          "default": false,
+          "title": "Capture Content",
+          "type": "boolean"
+        },
+        "max_content_chars": {
+          "default": 100000,
+          "title": "Max Content Chars",
+          "type": "integer"
         }
       },
       "title": "LangfuseObservabilityConfig",
@@ -381,6 +391,13 @@
           "default": null,
           "description": "Optional maximum number of concurrent HTTP or WebSocket connections accepted by Uvicorn. Leave unset to disable the limit.",
           "title": "Limit Concurrency"
+        },
+        "max_chat_input_chars": {
+          "default": 5000,
+          "description": "Maximum number of Unicode code points accepted in one submitted chat message, including supported HITL resume text fields.",
+          "minimum": 1,
+          "title": "Max Chat Input Chars",
+          "type": "integer"
         },
         "gcu_version": {
           "anyOf": [

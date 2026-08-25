@@ -15,7 +15,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID
 
 from fred_core import (
@@ -44,7 +44,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels, with_label_added, with_label_removed
+from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
+from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     TABULAR_MULTI_EXTENSION_KEY,
@@ -143,6 +144,22 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+    async def get_documents_by_uids(self, user: KeycloakUser, document_uids: list[str]) -> list[DocumentMetadata]:
+        """Targeted, ReBAC-filtered metadata fetch for an already-known uid
+        set — the indexed sibling of `get_documents_metadata`: a single
+        `document_uid IN (...)` store query (`get_metadata_by_uids`) instead
+        of `get_all_metadata`'s full-table scan filtered in Python. Use this
+        whenever the caller already has the uids (e.g. an authorized folder's
+        item_ids, or a label resolution) and only needs their metadata."""
+        if not document_uids:
+            return []
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        docs = await self.metadata_store.get_metadata_by_uids(document_uids)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return docs
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
 
     async def get_document_metadata_in_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
         """
@@ -429,7 +446,7 @@ class MetadataService:
                         logger.warning(f"Could not delete vector of'{metadata.document_name}': {e}")
 
                 if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
-                    await self._delete_tabular_artifacts(metadata)
+                    await self._delete_tabular_artifacts(metadata.document_uid, metadata=metadata)
 
                 # Promote an alternate version (version=1) to base if present
                 if getattr(metadata.identity, "version", 0) == 0:
@@ -500,7 +517,7 @@ class MetadataService:
             logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
             raise MetadataUpdateError(f"Failed to remove tag: {e}")
 
-    async def _delete_tabular_artifacts(self, metadata: DocumentMetadata) -> None:
+    async def _delete_tabular_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None) -> None:
         """
         Delete dataset-centric tabular artifacts linked to one document.
 
@@ -510,25 +527,31 @@ class MetadataService:
 
         How to use:
         - Call during destructive metadata cleanup paths only.
+        - `metadata` is an optimization, not a requirement: with it, a document
+          carrying no tabular payload skips the listing entirely. Without it
+          (the row is already gone) the prefix is derived from the uid alone
+          and listed unconditionally — an empty prefix simply deletes nothing.
         """
 
-        artifact = read_tabular_artifact(metadata)
-        multi_artifact = read_tabular_multi_artifact(metadata)
-        if artifact is None and multi_artifact is None:
-            logger.info("[TABULAR] No %s/%s payload found for '%s'", TABULAR_EXTENSION_KEY, TABULAR_MULTI_EXTENSION_KEY, metadata.document_name)
-            return
+        if metadata is not None:
+            artifact = read_tabular_artifact(metadata)
+            multi_artifact = read_tabular_multi_artifact(metadata)
+            if artifact is None and multi_artifact is None:
+                logger.info("[TABULAR] No %s/%s payload found for '%s'", TABULAR_EXTENSION_KEY, TABULAR_MULTI_EXTENSION_KEY, metadata.document_name)
+                return
 
+        label = metadata.document_name if metadata else document_uid
         prefix = document_artifact_prefix(
             artifacts_prefix=self.config.storage.tabular_store.artifacts_prefix,
-            document_uid=metadata.document_uid,
+            document_uid=document_uid,
         )
 
         try:
             for stored_object in self.content_store.list_objects(prefix):
                 self.content_store.delete_object(stored_object.key)
-            logger.info("[TABULAR] Deleted tabular artifacts linked to '%s'", metadata.document_name)
+            logger.info("[TABULAR] Deleted tabular artifacts linked to '%s'", label)
         except Exception as e:
-            logger.warning("Could not delete tabular artifacts for '%s': %s", metadata.document_name, e)
+            logger.warning("Could not delete tabular artifacts for '%s': %s", label, e)
 
     async def delete_document_and_artifacts(
         self,
@@ -554,47 +577,100 @@ class MetadataService:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+        await self._delete_document_and_artifacts(actor_uid=user.uid, document_uid=document_uid)
 
+    async def delete_document_and_artifacts_trusted(self, actor_uid: str, document_uid: str) -> None:
+        """Same as `delete_document_and_artifacts`, but skips the per-document
+        `DocumentPermission.DELETE` check — same trust convention as
+        `save_document_metadata_trusted`.
+
+        Why this exists: the cancel-an-ingestion cleanup
+        (`features/scheduler/document_failure.py`) is a system obligation, not a
+        user action. Authorization already happened at the cancel endpoint
+        (`authorize_task_mutation`), and by the time the cleanup runs the
+        uploader's ReBAC state may have moved on — they left the team, the
+        tuple went with them — which must not strand a half-built document plus
+        its content and vectors on disk.
+
+        `actor_uid` is the real uploader, so the storage quota is released from
+        the account it was charged to; it is an attribution, not a permission.
+        Never call this from a router or any other user-facing service.
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+        await self._delete_document_and_artifacts(actor_uid=actor_uid, document_uid=document_uid)
+
+    async def purge_document_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None) -> None:
+        """Delete everything a document produced outside its metadata row.
+
+        Vectors, tabular Parquet revisions and stored content — the one
+        definition of "the document's artifacts", so a new artifact kind is
+        added here and every caller gets it.
+
+        Addressed by uid, and callable when the metadata row is already gone:
+        that is the case of a writer compensating for a document deleted under
+        it (its thread could not be stopped, see
+        `IngestionService.persist_progress`). Pass `metadata` when it is known
+        so each delete can be skipped for a stage the document never reached;
+        without it every store is asked, which is the safe default.
+
+        Best-effort per store and never raises: a document whose row is already
+        gone must not be blocked from having its bytes reclaimed because one
+        store is briefly unavailable.
+        """
+        stages = metadata.processing.stages if metadata else {}
+        label = metadata.document_name if metadata else document_uid
+
+        if not metadata or ProcessingStage.VECTORIZED in stages:
+            try:
+                await asyncio.to_thread(self._vector_store().delete_vectors_for_document, document_uid=document_uid)
+                logger.info("[METADATA] Deleted vectors for document '%s'", label)
+            except Exception as exc:
+                logger.warning("Could not delete vectors for '%s': %s", label, exc)
+
+        if not metadata or ProcessingStage.SQL_INDEXED in stages:
+            await self._delete_tabular_artifacts(document_uid, metadata=metadata)
+
+        try:
+            await asyncio.to_thread(self.content_store.delete_content, document_uid)
+            logger.info("[CONTENT] Deleted content for document '%s'", label)
+        except Exception as exc:
+            logger.warning("[CONTENT] Could not delete content for '%s': %s", label, exc)
+
+    def _vector_store(self) -> BaseVectorStore:
+        """Resolve the vector store in whichever process is running.
+
+        `get_vector_store` only returns an already-built instance and raises
+        otherwise — true in a worker that has not vectorized anything yet, which
+        is exactly where cancelled-ingestion cleanup runs. Fall back to the
+        build-on-demand accessor every scheduler activity uses, or the delete
+        would be skipped and the vectors silently orphaned.
+        """
+        context = ApplicationContext.get_instance()
+        if self.vector_store is None:
+            try:
+                self.vector_store = context.get_vector_store()
+            except ValueError:
+                self.vector_store = context.get_create_vector_store(context.get_embedder())
+        return self.vector_store
+
+    async def _delete_document_and_artifacts(self, *, actor_uid: str, document_uid: str) -> None:
         try:
             metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
             if metadata is None:
                 raise MetadataNotFound(f"No document found with UID {document_uid}")
 
-            if ProcessingStage.VECTORIZED in metadata.processing.stages:
-                if self.vector_store is None:
-                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                try:
-                    self.vector_store.delete_vectors_for_document(document_uid=metadata.document_uid)
-                    logger.info(
-                        "[METADATA] Deleted vectors for document '%s'",
-                        metadata.document_name,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Could not delete vectors for '%s': %s",
-                        metadata.document_name,
-                        exc,
-                    )
-
-            if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
-                await self._delete_tabular_artifacts(metadata)
-
-            if self.content_store is not None:
-                try:
-                    self.content_store.delete_content(metadata.document_uid)
-                    logger.info(
-                        "[CONTENT] Deleted content for document '%s'",
-                        metadata.document_name,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "[CONTENT] Could not delete content for '%s': %s",
-                        metadata.document_name,
-                        exc,
-                    )
-
             deleted_tag_ids = set(metadata.tags.tag_ids or []) if metadata.tags else set()
-            await self._delete_and_release(metadata, tag_ids=deleted_tag_ids, user_id=user.uid)
+            # The row goes first, and that ordering is load-bearing: it is the
+            # fence a writer racing this deletion tests against. Purging
+            # artifacts first would leave the row alive for the seconds that
+            # takes, so a late `update_metadata` would report success, the
+            # writer would believe it won, and the bytes it wrote after the
+            # purge would survive with no row pointing at them (#2315). With the
+            # row gone first, every later writer is guaranteed to see "deleted"
+            # and discard its own output.
+            await self._delete_and_release(metadata, tag_ids=deleted_tag_ids, user_id=actor_uid)
+            await self.purge_document_artifacts(document_uid, metadata=metadata)
 
             for tag_id in deleted_tag_ids:
                 await self._remove_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
@@ -758,48 +834,152 @@ class MetadataService:
             logger.error(f"Error updating title for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update title: {e}")
 
-    # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ====================
+    # === Business labels (descriptive) =========================================
     # Labels carry NO scope/permission meaning, so there is no ReBAC check on the
     # label itself; only the DOCUMENT's update/read access is enforced (you may
-    # label documents you can already edit, and resolve over documents you can read).
+    # label documents you can already edit, and resolve over documents you can
+    # read). `document_labels` is the sole persisted source of truth (see
+    # PostgresDocumentMetadataStore) — this is the ONLY method that mutates it;
+    # every route (old path-segment and new PATCH body) calls through here.
 
-    async def _mutate_document_labels(self, user: KeycloakUser, document_uid: str, transform: Callable[[list[str]], list[str]], modified_by: str) -> list[str]:
-        """Fetch a document, apply ``transform`` to its labels, persist, and return them."""
+    async def mutate_document_labels(
+        self,
+        user: KeycloakUser,
+        document_uid: str,
+        *,
+        add: list[str] | None = None,
+        remove: list[str] | None = None,
+        modified_by: str,
+    ) -> list[str]:
+        """Add and/or remove descriptive labels on one document in a single
+        transaction. Returns the canonical stored set (never client-computed).
+
+        A value present in both `add` and `remove` ends up absent: `remove`
+        wins on conflict. Normalization (trim, drop empty, dedupe) is the same
+        `normalize_labels` contract used everywhere else. An empty request
+        (nothing to add or remove, after normalization) is a no-op that still
+        returns the current stored set — idempotent, not an error.
+        """
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
 
-        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
-        if not metadata:
-            raise MetadataNotFound(f"Document '{document_uid}' not found.")
+        to_remove = set(normalize_labels(remove or []))
+        to_add = set(normalize_labels(add or [])) - to_remove
 
-        metadata.labels = transform(metadata.labels)
-        metadata.identity.modified = datetime.now(timezone.utc)
-        metadata.identity.last_modified_by = modified_by
-        await self.metadata_store.save_metadata(metadata)
-        logger.info(f"[METADATA] Labels {metadata.labels} on document '{document_uid}' by '{modified_by}'")
-        return metadata.labels
+        engine = ApplicationContext.get_instance().get_pg_async_engine()
+        sessions = make_session_factory(engine)
+        async with sessions() as s:
+            async with s.begin():
+                exists = await self.metadata_store.get_metadata_by_uid(document_uid, session=s)
+                if exists is None:
+                    raise MetadataNotFound(f"Document '{document_uid}' not found.")
+                for label in to_add:
+                    await self.metadata_store.add_label(document_uid, label, session=s)
+                for label in to_remove:
+                    await self.metadata_store.remove_label(document_uid, label, session=s)
+                # A genuinely empty request (nothing to add/remove after
+                # normalization) is a no-op that must not touch the audit
+                # trail; a requested add/remove does, even when it turns out
+                # to be idempotent (label already present/absent) — matching
+                # the pre-relational-table behavior on `identity.modified`/
+                # `last_modified_by`.
+                if to_add or to_remove:
+                    await self.metadata_store.touch_label_mutation_audit_fields(
+                        document_uid,
+                        modified=datetime.now(timezone.utc),
+                        modified_by=modified_by,
+                        session=s,
+                    )
+                labels = await self.metadata_store.get_labels_for_document(document_uid, session=s)
+
+        if to_add or to_remove:
+            logger.info(f"[METADATA] Labels add={sorted(to_add)} remove={sorted(to_remove)} on document '{document_uid}' by '{modified_by}'")
+        return labels
 
     async def add_label_to_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
-        """Add a descriptive label to a document (idempotent). Returns the stored set."""
-        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_added(labels, label), modified_by)
+        """Legacy single-label adapter (`POST /documents/{uid}/labels/{label}`).
+        Returns the stored set."""
+        return await self.mutate_document_labels(user, document_uid, add=[label], modified_by=modified_by)
 
     async def remove_label_from_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
-        """Remove a descriptive label from a document. Returns the stored set."""
-        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_removed(labels, label), modified_by)
+        """Legacy single-label adapter (`DELETE /documents/{uid}/labels/{label}`).
+        Returns the stored set."""
+        return await self.mutate_document_labels(user, document_uid, remove=[label], modified_by=modified_by)
 
     async def get_documents_with_label(self, user: KeycloakUser, label: str) -> list[DocumentMetadata]:
-        """Resolve a label to the readable documents carrying it (search resolve-then-target)."""
-        target = (label or "").strip()
-        if not target:
+        """Resolve a label to the readable documents carrying it — an indexed
+        lookup narrowed to the caller's authorized documents, not a full-corpus
+        scan filtered in Python."""
+        uids = await self.get_document_uids_with_any_label(user, [label])
+        if not uids:
             return []
-        docs = await self.get_documents_metadata(user, {})
-        return [doc for doc in docs if target in (doc.labels or [])]
+        return await self.metadata_store.get_metadata_by_uids(list(uids))
+
+    async def get_documents_with_label_page(self, user: KeycloakUser, label: str, *, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        """Paginated resolution of one label to its readable documents — the
+        flat, deterministic sibling of `get_documents_with_label`, for a
+        caller that needs an exhaustive, page-by-page result rather than
+        everything in one response (e.g. an agent tool answering "give me
+        every document with label X"). Ordered by document_uid for a stable
+        page boundary; hydrates ONLY the requested page's documents.
+
+        Pushes `offset`/`limit` into the store query
+        (`get_document_uids_with_any_label_page`) rather than fetching every
+        matching uid and slicing in Python — enumerating many pages does not
+        repeat a full, unbounded label scan on each call. The one thing that
+        IS still per-call is the ReBAC `lookup_user_resources` resolution
+        (same cost every other authorized/paginated listing in this service
+        pays per call; there is no cross-call authorization cache here).
+        """
+        targets = set(normalize_labels([label]))
+        if not targets:
+            return [], 0
+
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, offset=offset, limit=limit)
+        else:
+            authorized_ids = {d.id for d in authorized_doc_ref}
+            if not authorized_ids:
+                return [], 0
+            page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, document_uids=authorized_ids, offset=offset, limit=limit)
+        docs = await self.metadata_store.get_metadata_by_uids(page_uids) if page_uids else []
+        return docs, total
+
+    async def get_document_uids_with_any_label(self, user: KeycloakUser, labels: list[str]) -> set[str]:
+        """Resolve the union of readable document uids carrying ANY of
+        `labels` (OR semantics) — ONE ReBAC resolution, ONE indexed
+        `label IN (...)` query. UID-only: callers that need document
+        metadata should hydrate afterward (e.g. via `get_documents_by_uids`),
+        never call this label-by-label."""
+        targets = set(normalize_labels(labels))
+        if not targets:
+            return set()
+
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            uids = await self.metadata_store.get_document_uids_with_any_label(targets)
+        else:
+            authorized_ids = {d.id for d in authorized_doc_ref}
+            if not authorized_ids:
+                return set()
+            uids = await self.metadata_store.get_document_uids_with_any_label(targets, document_uids=authorized_ids)
+        return set(uids)
 
     async def list_document_labels(self, user: KeycloakUser) -> list[str]:
-        """Return the distinct labels used across the user's readable documents (UI vocabulary)."""
-        docs = await self.get_documents_metadata(user, {})
-        return normalize_labels([label for doc in docs for label in (doc.labels or [])])
+        """Return the distinct labels used across the user's readable documents
+        (UI vocabulary) — an indexed distinct query narrowed to the caller's
+        authorized documents, never revealing a label used only on documents
+        the caller cannot read."""
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return await self.metadata_store.get_distinct_labels()
+
+        authorized_ids = {d.id for d in authorized_doc_ref}
+        if not authorized_ids:
+            return []
+        return await self.metadata_store.get_distinct_labels(document_uids=authorized_ids)
 
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
@@ -849,7 +1029,37 @@ class MetadataService:
         """
         await self._persist_metadata_and_follow_up(user, metadata)
 
-    async def _persist_metadata_and_follow_up(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
+    async def update_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
+        """Persist a document the caller already read, never creating one.
+
+        Returns False when the document was deleted meanwhile — the write and
+        every follow-up (quota, ReBAC, tag timestamps, KPI) are then skipped.
+
+        Use this from anything that updates a document in flight, ingestion
+        activities above all: their work runs in a thread Python cannot kill, so
+        a cancelled activity keeps computing and would otherwise resurrect the
+        document its cancellation just deleted (#2315, see
+        `BaseDocumentMetadataStore.update_metadata`).
+        """
+        if metadata.tags:
+            for tag_id in metadata.tags.tag_ids:
+                await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+        return await self._persist_metadata_and_follow_up(user, metadata, update_only=True)
+
+    async def update_document_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
+        """`update_document_metadata` without the per-tag permission check —
+        same trust rationale as `save_document_metadata_trusted`."""
+        return await self._persist_metadata_and_follow_up(user, metadata, update_only=True)
+
+    async def _persist_metadata_and_follow_up(self, user: KeycloakUser, metadata: DocumentMetadata, *, update_only: bool = False) -> bool:
+        """Persist metadata and run every follow-up that must accompany it.
+
+        Returns True when the document was persisted. Only an `update_only`
+        call can return False, meaning the document no longer exists: nothing
+        was written and no follow-up ran, which is the point — crediting quota
+        or re-linking ReBAC for a deleted document is exactly the damage the
+        conditional UPDATE prevents.
+        """
         try:
             prev_metadata = None
             try:
@@ -861,8 +1071,25 @@ class MetadataService:
                     exc,
                 )
 
-            # Save the metadata first
-            await self.metadata_store.save_metadata(metadata)
+            # `metadata.labels` is never written into `doc` (see
+            # PostgresDocumentMetadataStore._to_dict) and this generic save
+            # never touches `document_labels` either — `mutate_document_labels`
+            # is the ONLY label mutation path (see its docstring). A caller
+            # holding a stale in-memory snapshot whose `.labels` no longer
+            # matches the table (e.g. a long-running revectorize activity that
+            # loaded a document before a label was removed from it) must not
+            # be able to reintroduce, drop, or otherwise affect a label by
+            # calling this method — that was the exact lost-update path this
+            # single-mutator invariant closes.
+            if update_only:
+                if not await self.metadata_store.update_metadata(metadata):
+                    logger.info(
+                        "[METADATA] document_uid=%s no longer exists; update and follow-ups skipped",
+                        metadata.document_uid,
+                    )
+                    return False
+            else:
+                await self.metadata_store.save_metadata(metadata)
             if prev_metadata is None:
                 try:
                     from fred_core.kpi import KPIActor
@@ -906,6 +1133,7 @@ class MetadataService:
             if metadata.tags:
                 await self._update_tag_timestamps(user, metadata.tags.tag_ids)
             await self._prune_stale_tabular_artifacts(metadata)
+            return True
 
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")

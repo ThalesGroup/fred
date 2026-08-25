@@ -24,7 +24,10 @@ _MISSING = object()
 
 
 def _write_configuration_yaml(
-    config_dir: Path, *, limit_concurrency: int | None | object = None
+    config_dir: Path,
+    *,
+    limit_concurrency: int | None | object = None,
+    max_chat_input_chars: int | object = _MISSING,
 ) -> None:
     """
     Write one minimal pod `configuration.yaml` fixture.
@@ -47,6 +50,11 @@ def _write_configuration_yaml(
     if limit_concurrency is not _MISSING:
         literal = "null" if limit_concurrency is None else str(limit_concurrency)
         limit_concurrency_block = f"\n              limit_concurrency: {literal}"
+    max_chat_input_chars_block = ""
+    if max_chat_input_chars is not _MISSING:
+        max_chat_input_chars_block = (
+            f"\n              max_chat_input_chars: {max_chat_input_chars}"
+        )
 
     (config_dir / "configuration.yaml").write_text(
         dedent(
@@ -55,7 +63,7 @@ def _write_configuration_yaml(
               name: "Test Pod"
               base_url: "/pod/v1"
               port: 8000
-              log_level: "info"{limit_concurrency_block}
+              log_level: "info"{limit_concurrency_block}{max_chat_input_chars_block}
 
             security:
               m2m:
@@ -108,7 +116,6 @@ def _write_models_catalog(path: Path, *, chat_name: str = "gpt-5") -> None:
             version: v1
             default_profile_by_capability:
               chat: default.chat
-              language: default.language
             profiles:
               - profile_id: default.chat
                 capability: chat
@@ -116,13 +123,6 @@ def _write_models_catalog(path: Path, *, chat_name: str = "gpt-5") -> None:
                   provider: openai
                   name: {chat_name}
                   settings: {{}}
-              - profile_id: default.language
-                capability: language
-                model:
-                  provider: openai
-                  name: gpt-5-mini
-                  settings: {{}}
-            rules: []
             """
         ).strip(),
         encoding="utf-8",
@@ -198,6 +198,7 @@ def test_load_agent_pod_config_loads_default_external_catalogs(
         "config/models_catalog.yaml"
     )
     assert config.app.limit_concurrency is None
+    assert config.app.max_chat_input_chars == 5_000
     assert config.ai.timeout.connect == 5.0
     assert config.ai.timeout.read == 30.0
     mcp_configuration = config.get_mcp_configuration()
@@ -388,3 +389,44 @@ def test_load_agent_pod_config_defaults_app_limit_concurrency_when_omitted(
     config = load_agent_pod_config()
 
     assert config.app.limit_concurrency is None
+
+
+def test_load_agent_pod_config_loads_chat_input_limit(tmp_path, monkeypatch) -> None:
+    """A positive YAML override becomes the pod's effective chat-input limit."""
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_configuration_yaml(config_dir, max_chat_input_chars=37)
+    _write_models_catalog(config_dir / "models_catalog.yaml")
+    _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
+    (config_dir / ".env").write_text("", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
+
+    config = load_agent_pod_config()
+
+    assert config.app.max_chat_input_chars == 37
+
+
+@pytest.mark.parametrize("invalid_limit", [0, -1])
+def test_load_agent_pod_config_rejects_non_positive_chat_input_limit(
+    tmp_path, monkeypatch, invalid_limit: int
+) -> None:
+    """Startup fails when the configured chat-input limit is not positive."""
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_configuration_yaml(config_dir, max_chat_input_chars=invalid_limit)
+    _write_models_catalog(config_dir / "models_catalog.yaml")
+    _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
+    (config_dir / ".env").write_text("", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        load_agent_pod_config()
+    assert exc_info.value.code == 1

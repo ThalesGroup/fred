@@ -43,7 +43,7 @@ _STUBBED_CONTROLLERS = [
     "IngestionController",
     "TagController",
     "VectorSearchController",
-    "TreeController",
+    "CorpusTreeController",
     "SummarizeController",
     "ExtractController",
     "ResourceController",

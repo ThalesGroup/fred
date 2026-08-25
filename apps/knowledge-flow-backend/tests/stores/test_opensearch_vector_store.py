@@ -318,6 +318,62 @@ def test_opensearch_vector_store_add_documents_batches_by_bulk_size(monkeypatch)
     assert all("ingested_at" in d.metadata for d in docs)
 
 
+def test_opensearch_vector_store_add_documents_stops_at_checkpoint_when_cancelled(monkeypatch):
+    # #2315: a user's cancel lands while a batch is in flight. The next batch
+    # attempt must not happen (each one is a paid embedding call for a document
+    # being deleted), and the store must raise WorkCancelled unwrapped — not the
+    # RuntimeError used for real failures — so callers can clean up quietly.
+    from knowledge_flow_backend.common.cancellation import WorkCancelled, cancellation_scope
+
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+
+    cancel = {}
+
+    class FakeVectorSearch:
+        instance: "FakeVectorSearch | None" = None
+
+        def __init__(self, *args, bulk_size: int, **kwargs) -> None:
+            self.calls = 0
+            FakeVectorSearch.instance = self
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            self.calls += 1
+            cancel["signal"].set()
+            return list(ids)
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=2,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(5)
+    ]
+
+    with cancellation_scope() as signal:
+        cancel["signal"] = signal
+        with pytest.raises(WorkCancelled):
+            store.add_documents(docs)
+
+    fake = FakeVectorSearch.instance
+    assert fake is not None
+    assert fake.calls == 1
+
+
 def test_opensearch_vector_store_add_documents_rejects_mismatched_ids(monkeypatch):
     fake_client = FakeOpenSearchClient(index_name="fred-vectors")
     monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)

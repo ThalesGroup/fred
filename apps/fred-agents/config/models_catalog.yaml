@@ -15,22 +15,14 @@ common_model_settings:
 
 default_profile_by_capability:
   chat: chat.mistral.small
-  language: language.mistral.small
 profiles:
   - profile_id: chat.mistral.medium
     capability: chat
+    model_display_name: "Mistral Medium 3.5"
     # Non-reasoning model: structured output (JSON) and tool loops are reliable.
     # A reasoning model (mistral-small-2603 + reasoning_effort) emits its content
     # as `thinking` blocks → structured/JSON parsing fails ("expected value at
-    # line 1 column 1"), and the tool loop re-issues calls (see ISSUE-005).
-    model:
-      provider: openai
-      name: mistral-medium-latest
-      settings:
-        base_url: https://api.mistral.ai/v1
-        max_retries: 2
-  - profile_id: language.mistral.medium
-    capability: language
+    # line 1 column 1"), and the tool loop re-issues calls (see GH #1780).
     model:
       provider: openai
       name: mistral-medium-latest
@@ -39,13 +31,12 @@ profiles:
         max_retries: 2
   - profile_id: chat.mistral.small
     capability: chat
+    model_display_name: "Mistral Small 4"
     description: "Faster and lower-cost Mistral Small profile for everyday chat tasks."
     # Declared aptitude, NOT activation (REASON-01 §4): this profile ships
     # `reasoning_effort`, so it must say so — a reasoning setting without this
     # flag fails at pod boot. Whether reasoning actually runs is the platform
     # admin's per-model toggle (§5), which is OFF until someone turns it on.
-    # Note `language.mistral.small` below shares this (provider, name) and is
-    # deliberately NOT thinking-capable: aptitude is per profile.
     supports_thinking: true
     model:
       provider: openai
@@ -54,28 +45,32 @@ profiles:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
         reasoning_effort: high
-
-  - profile_id: language.mistral.small
-    capability: language
-    description: "Faster and lower-cost Mistral Small profile for lightweight language tasks."
-    model:
-      provider: openai
-      name: mistral-small-latest
-      settings:
-        base_url: https://api.mistral.ai/v1
-        max_retries: 2
+        # CACHE-01: prompt caching runs entirely on Mistral's own
+        # infrastructure — nothing in Fred "activates" it. Mistral
+        # opportunistically caches repeated prompt prefixes on its own even
+        # with no prompt_cache_key set (confirmed: cache hits observed with
+        # this setting left disabled). Whatever tokens Mistral does serve
+        # from cache are billed at ~10% of the normal input-token price —
+        # that 10% is a fixed price, unrelated to whether a key is set.
+        # extra_body.prompt_cache_key is only an optional hint: a stable,
+        # deliberately-chosen string (static — same value for every
+        # session/user on this profile) that Mistral's docs say increases
+        # the *chance* of a hit, without a guarantee or a published number.
+        # We have not isolated its effect ourselves — our own tests
+        # confounded "key present" with "calls fired in quick succession",
+        # so we can't attribute the cache-rate difference we saw to the key
+        # specifically rather than to timing alone. Left unset here:
+        # flipping it changes the average cache-hit rate (and so the real
+        # Mistral bill) for every user on this profile — a product/FinOps
+        # call separate from this branch's cache *visibility* work, best
+        # made with a proper before/after measurement, not assumed.
+        # extra_body:
+        #   prompt_cache_key: "fred-chat-mistral-small"
 
   - profile_id: default.chat.openai.prod
     capability: chat
+    model_display_name: "GPT-5.1"
     description: "Default balanced chat model for production conversations."
-    model:
-      provider: openai
-      name: gpt-5.1
-      settings: {}
-
-  - profile_id: default.language.openai.prod
-    capability: language
-    description: "Default balanced language model for structured text tasks."
     model:
       provider: openai
       name: gpt-5.1
@@ -83,18 +78,8 @@ profiles:
 
   - profile_id: default.chat.local
     capability: chat
+    model_display_name: "GPT-5.1"
     description: "Local default chat profile with retries and shorter timeout."
-    model:
-      provider: openai
-      name: gpt-5.1
-      settings:
-        max_retries: 2
-        request_timeout: 90
-        temperature: 0.0
-
-  - profile_id: default.language.local
-    capability: language
-    description: "Local default language profile with retries and shorter timeout."
     model:
       provider: openai
       name: gpt-5.1
@@ -105,15 +90,8 @@ profiles:
 
   - profile_id: chat.openai.gpt52
     capability: chat
+    model_display_name: "GPT-5.2"
     description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
-    model:
-      provider: openai
-      name: gpt-5.2
-      settings: {}
-
-  - profile_id: language.openai.gpt52
-    capability: language
-    description: "Highest-quality GPT-5.2 profile for demanding language workloads."
     model:
       provider: openai
       name: gpt-5.2
@@ -121,15 +99,8 @@ profiles:
 
   - profile_id: chat.openai.gpt5
     capability: chat
+    model_display_name: "GPT-5"
     description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
-    model:
-      provider: openai
-      name: gpt-5
-      settings: {}
-
-  - profile_id: language.openai.gpt5
-    capability: language
-    description: "General-purpose GPT-5 language profile with strong overall quality."
     model:
       provider: openai
       name: gpt-5
@@ -137,15 +108,8 @@ profiles:
 
   - profile_id: chat.openai.gpt5mini
     capability: chat
+    model_display_name: "GPT-5 mini"
     description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
-    model:
-      provider: openai
-      name: gpt-5-mini
-      settings: {}
-
-  - profile_id: language.openai.gpt5mini
-    capability: language
-    description: "Faster and lower-cost GPT-5 Mini profile for lightweight language tasks."
     model:
       provider: openai
       name: gpt-5-mini
@@ -153,15 +117,8 @@ profiles:
 
   - profile_id: chat.openai.gpt5nano
     capability: chat
+    model_display_name: "GPT-5 nano"
     description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
-    model:
-      provider: openai
-      name: gpt-5-nano
-      settings: {}
-
-  - profile_id: language.openai.gpt5nano
-    capability: language
-    description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple language tasks."
     model:
       provider: openai
       name: gpt-5-nano
@@ -169,15 +126,8 @@ profiles:
 
   - profile_id: chat.openai.gpt41
     capability: chat
+    model_display_name: "GPT-4.1"
     description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
-    model:
-      provider: openai
-      name: gpt-4.1
-      settings: {}
-
-  - profile_id: language.openai.gpt41
-    capability: language
-    description: "Reliable GPT-4.1 language profile for stable text generation."
     model:
       provider: openai
       name: gpt-4.1
@@ -185,15 +135,8 @@ profiles:
 
   - profile_id: chat.openai.gpt41mini
     capability: chat
+    model_display_name: "GPT-4.1 mini"
     description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
-    model:
-      provider: openai
-      name: gpt-4.1-mini
-      settings: {}
-
-  - profile_id: language.openai.gpt41mini
-    capability: language
-    description: "Cost-efficient GPT-4.1 Mini profile for lightweight language work."
     model:
       provider: openai
       name: gpt-4.1-mini
@@ -201,6 +144,7 @@ profiles:
 
   - profile_id: chat.azure_apim.gpt4o
     capability: chat
+    model_display_name: "GPT-4o (Azure)"
     description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
     model:
       provider: azure-apim
@@ -215,6 +159,7 @@ profiles:
 
   - profile_id: chat.ollama.mistral
     capability: chat
+    model_display_name: "Mistral (Ollama)"
     description: "Local Ollama Mistral profile for private/offline chat experimentation."
     model:
       provider: ollama
@@ -222,25 +167,9 @@ profiles:
       settings:
         base_url: "http://host.docker.internal:11434"
 
-  - profile_id: language.ollama.mistral
-    capability: language
-    description: "Local Ollama Mistral profile for private/offline language tasks."
-    model:
-      provider: ollama
-      name: "mistral:latest"
-      settings:
-        base_url: "http://host.docker.internal:11434"
   - profile_id: default.chat.mock
     capability: chat
-    model:
-      provider: openai
-      name: mock-openai-chat
-      settings:
-        base_url: http://localhost:8383/v1
-        api_key: key-1 # pragma: allowlist secret (fake key for the local mock server)
-
-  - profile_id: default.language.mock
-    capability: language
+    model_display_name: "Mock OpenAI Chat"
     model:
       provider: openai
       name: mock-openai-chat
@@ -250,6 +179,7 @@ profiles:
 
   - profile_id: mock.chat.gpt4o
     capability: chat
+    model_display_name: "GPT-4o (mock)"
     model:
       provider: openai
       name: gpt-4o
@@ -259,6 +189,7 @@ profiles:
 
   - profile_id: mock.chat.latest
     capability: chat
+    model_display_name: "ChatGPT-4o (mock)"
     model:
       provider: openai
       name: chatgpt-4o-latest
@@ -268,6 +199,7 @@ profiles:
 
   - profile_id: chat.anthropic.claude-sonnet
     capability: chat
+    model_display_name: "Claude Sonnet 4.6"
     description: "Claude Sonnet 4.6 via Synapse Gateway (Anthropic-native). Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY in .env."
     model:
       provider: anthropic
@@ -275,16 +207,8 @@ profiles:
 
   - profile_id: chat.anthropic.claude-haiku
     capability: chat
+    model_display_name: "Claude Haiku 3.5"
     description: "Claude Haiku via Synapse Gateway, fast and cost-efficient. Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY in .env."
     model:
       provider: anthropic
       name: claude-haiku-3-5
-
-  - profile_id: language.anthropic.claude-sonnet
-    capability: language
-    description: "Claude Sonnet 4.6 via Synapse Gateway for structured language tasks. Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY in .env."
-    model:
-      provider: anthropic
-      name: claude-sonnet-4-6
-
-rules: []

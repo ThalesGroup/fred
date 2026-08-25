@@ -74,7 +74,13 @@ export default function TeamResourcesPage() {
   const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
   const userRoot = `teams/${fsTeamId}/users/${userId}`;
   const sharedRoot = `teams/${fsTeamId}/shared`;
-  const { data: team } = useGetTeamQuery({ teamId });
+  // `refetch` as well as `data`: the storage-quota meter below reads this team
+  // row's `current_resources_storage_size`, but every write to it comes from
+  // the knowledge-flow API (upload charges it, delete releases it) — a
+  // different RTK Query instance, whose tag invalidations cannot reach this
+  // control-plane cache entry. Without a manual refetch on the workspace's own
+  // change signal the meter keeps showing the figure it had at mount.
+  const { data: team, refetch: refetchTeam, isUninitialized: teamUninitialized } = useGetTeamQuery({ teamId });
   const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
   const { bootstrap } = useFrontendBootstrap();
   const enableAllResourceSpaces = bootstrap?.feature_flags?.enableAllResourceSpaces ?? false;
@@ -157,8 +163,12 @@ export default function TeamResourcesPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>{t("rework.resources.pageTitle")}</h1>
-          <p className={styles.subtitle}>{t("rework.resources.pageSubtitle")}</p>
+          <h1 className={styles.title}>
+            {isPersonalTeam ? t("rework.resources.pageTitlePersonal") : t("rework.resources.pageTitle")}
+          </h1>
+          <p className={styles.subtitle}>
+            {isPersonalTeam ? t("rework.resources.pageSubtitlePersonal") : t("rework.resources.pageSubtitle")}
+          </p>
         </div>
         <div className={styles.headerEnd}>
           <SettingChip
@@ -216,14 +226,15 @@ export default function TeamResourcesPage() {
             // catch-up fire on mount for any task target already in the
             // store — in the same commit where activeTab just switched to
             // "resources", DocumentWorkspace (child) mounts and can run this
-            // effect before corpusStats' own subscribing effect (parent)
-            // has dispatched its initial fetch, since React flushes child
+            // effect before these queries' own subscribing effects (parent)
+            // have dispatched their initial fetch, since React flushes child
             // effects before parent effects. Calling .refetch() on a query
             // that was never started throws and takes down the whole app.
             // Safe to just skip in that case — the query's own mount fetch
             // is already about to run.
             onDocumentsChanged={() => {
               if (!corpusStats.isUninitialized) void corpusStats.refetch();
+              if (!teamUninitialized) void refetchTeam();
             }}
           />
         )}

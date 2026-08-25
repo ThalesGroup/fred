@@ -17,23 +17,30 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from typing import cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.runtime import TracerPort
+from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+
+from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
+from fred_runtime.runtime_support.trace_payloads import (
+    final_assistant_message,
+    serialize_messages,
+    serialize_model_output,
+    to_langfuse_usage,
+)
 
 from ..react_model_adapter import (
     TRACE_MODEL_SPAN_NAME,
     extract_model_name_from_model_response,
     extract_model_name_from_object,
 )
-from .shared import state_messages
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +50,8 @@ class TracingKpiMiddleware(AgentMiddleware):
     Model-call span, latency KPI, and call/response logs (legacy `_wrap`).
 
     Why this exists:
-    - Fred tracing tags each model call with a `v2.react.model` span (operation
-      + model name) nested under the active agent span; KPI records
+    - Fred tracing tags each model call with a `v2.react.model` span (model
+      name) nested under the active agent span; KPI records
       `llm.call_latency_ms`; `[LLM][CALL]`/`[LLM][RESPONSE]` logs describe the
       exact request/response
     - this middleware is the INNERMOST `wrap_model_call` of the platform frame
@@ -62,33 +69,23 @@ class TracingKpiMiddleware(AgentMiddleware):
         tracer: TracerPort | None,
         kpi: BaseKPIWriter | None,
         binding: BoundRuntimeContext,
-        infer_operation_from_messages: Callable[[Sequence[object]], str],
-        default_operation: str,
     ) -> None:
         super().__init__()
         self._tracer = tracer
         self._kpi = kpi
         self._binding = binding
-        self._infer_operation_from_messages = infer_operation_from_messages
-        self._default_operation = default_operation
 
     async def awrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        messages = state_messages(request.state)
-        operation = (
-            self._infer_operation_from_messages(messages)
-            if messages
-            else self._default_operation
-        )
         model_name = extract_model_name_from_object(request.model)
         self._log_model_call(request)
 
         span = None
         if self._tracer is not None:
-            attributes: dict[str, object] = {"operation": operation}
+            attributes: dict[str, object] = {}
             if model_name is not None:
                 attributes["model_name"] = model_name
             from ..react_tracing import active_agent_span
@@ -99,11 +96,19 @@ class TracingKpiMiddleware(AgentMiddleware):
                 attributes=cast(dict[str, str | int | float | bool | None], attributes),
                 parent=active_agent_span.get(),
             )
+            # Serializing a full transcript is real work on the per-turn hot
+            # path, so it happens only when a backend will actually store it.
+            if self._tracer.captures_content:
+                span.set_io(
+                    input=serialize_messages(
+                        list(request.messages),
+                        system_prompt=request.system_prompt,
+                    )
+                )
 
         kpi_dims: dict[str, str | None] = {
             "agent_id": self._binding.portable_context.agent_name
             or self._binding.portable_context.agent_id,
-            "operation": operation,
         }
         if model_name is not None:
             kpi_dims["model_name"] = model_name
@@ -128,6 +133,9 @@ class TracingKpiMiddleware(AgentMiddleware):
                     )
                     if response_model_name is not None:
                         span.set_attribute("model_name", response_model_name)
+                    self._record_model_response(
+                        span, response, model_name=response_model_name or model_name
+                    )
                 self._log_model_response(response)
                 return response
             except Exception:
@@ -137,6 +145,46 @@ class TracingKpiMiddleware(AgentMiddleware):
             finally:
                 if span is not None:
                     span.end()
+
+    def _record_model_response(
+        self,
+        span: SpanPort,
+        response: ModelResponse,
+        *,
+        model_name: str | None,
+    ) -> None:
+        """
+        Attach the answer and the token accounting to the model-call span.
+
+        Why this exists:
+        - token counts and cost per call are the whole point of tracing an LLM
+          call; without `set_usage` a tracing backend can only show latency
+        - usage is technical measurement, so it is always recorded; the answer
+          text is content and follows `captures_content` (§7)
+
+        How to use:
+        - called once per successful model call, before the span ends
+        """
+
+        messages = [
+            message for message in response.result if isinstance(message, BaseMessage)
+        ]
+        if not messages:
+            return
+
+        assistant_message = final_assistant_message(messages)
+        if assistant_message is not None:
+            _, token_usage, finish_reason = runtime_metadata_from_message(
+                assistant_message
+            )
+            usage = to_langfuse_usage(token_usage)
+            if usage is not None or model_name is not None:
+                span.set_usage(model=model_name, usage=usage)
+            if finish_reason is not None:
+                span.set_attribute("finish_reason", str(finish_reason))
+
+        if self._tracer is not None and self._tracer.captures_content:
+            span.set_io(output=serialize_model_output(messages))
 
     @staticmethod
     def _log_model_call(request: ModelRequest) -> None:

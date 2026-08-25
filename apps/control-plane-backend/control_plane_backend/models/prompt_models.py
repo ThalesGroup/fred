@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     Integer,
@@ -63,6 +64,9 @@ class PromptRow(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     created_by: Mapped[str | None] = mapped_column(String, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    published: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     import_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     session_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)

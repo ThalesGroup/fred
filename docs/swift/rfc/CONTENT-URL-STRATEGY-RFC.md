@@ -2,7 +2,7 @@
 
 **Status:** implemented 2026-08-10 (#2318). §6 signed off; nothing left open.
 Durable behaviour now lives in the compact docs —
-`docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` §39 (config field, avatar
+`docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` §44 (config field, avatar
 URL semantics and TTL) and `docs/swift/platform/ENV_VARIABLES.md` §1.4.1 (signing
 keys). This file is kept as the design record; see §8 for what changed on contact
 with the code.

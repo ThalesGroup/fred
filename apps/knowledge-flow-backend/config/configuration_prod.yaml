@@ -19,6 +19,13 @@ app:
   log_level: info
   reload: false
   reload_dir: "."
+  # Must mirror the control-plane's own configuration_prod.yaml: that backend
+  # DISPLAYS the quota from these values, this one ENFORCES it from them. Left
+  # unset here they default to None, so `_evaluate_quota` skips the personal
+  # check entirely and any team without an explicit DB limit is unlimited —
+  # the UI shows "x / 5 GB" while uploads sail past it.
+  default_team_max_resources_storage_size: 5368709120
+  personal_max_resources_storage_size: 5368709120
 
 observability:
   kpi:

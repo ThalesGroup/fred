@@ -131,6 +131,18 @@
           ],
           "default": null,
           "description": "Optional banner shown on upload surfaces (document upload drawer, chat attachments). Omit to show nothing."
+        },
+        "info_banner": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InfoBanner"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional informative banner shown above the app content on every page. Omit to show nothing."
         }
       },
       "title": "FrontendBootstrapConfig",
@@ -231,6 +243,82 @@
         "type"
       ],
       "title": "InMemoryLogStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "InfoBanner": {
+      "description": "Deployer-configured global announcement banner.\n\nFull-width and non-dismissable, shown above the app content on every page\n\u2014 including the pre-auth GCU-acceptance and root-bootstrap screens.\nPersistent by default; set `auto_hide_seconds` to make it disappear on\nits own. Texts are resolved from the user's locale with \"en\" fallback.\nOmit the whole block to show nothing.",
+      "properties": {
+        "color": {
+          "default": "#00BBDD",
+          "description": "Banner background CSS color.",
+          "title": "Color",
+          "type": "string"
+        },
+        "auto_hide_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds after which the banner hides itself, measured from app load. Omit for a persistent banner \u2014 the default.",
+          "title": "Auto Hide Seconds"
+        },
+        "titles": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Locale \u2192 title map (e.g. {\"en\": \"...\", \"fr\": \"...\"}).",
+          "title": "Titles",
+          "type": "object"
+        },
+        "messages": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Locale \u2192 message map (e.g. {\"en\": \"...\", \"fr\": \"...\"}).",
+          "title": "Messages",
+          "type": "object"
+        },
+        "links": {
+          "description": "Links rendered on the right side of the banner.",
+          "items": {
+            "$ref": "#/$defs/InfoBannerLink"
+          },
+          "title": "Links",
+          "type": "array"
+        }
+      },
+      "title": "InfoBanner",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "InfoBannerLink": {
+      "description": "One link rendered on the right side of the info banner.",
+      "properties": {
+        "url": {
+          "description": "Link target URL.",
+          "title": "Url",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Locale \u2192 label map (e.g. {\"en\": \"...\", \"fr\": \"...\"}).",
+          "title": "Labels",
+          "type": "object"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "InfoBannerLink",
       "type": "object",
       "additionalProperties": false
     },

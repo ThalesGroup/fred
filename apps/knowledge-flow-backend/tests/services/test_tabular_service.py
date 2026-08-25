@@ -113,7 +113,11 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str) -> tuple[
     )
 
     output_dir = tmp_path / f"{document_uid}-output"
-    ExcelProcessor().convert_file_to_markdown(workbook_path, output_dir, document_uid)
+    processor = ExcelProcessor()
+    # This helper builds a deterministic workbook with openpyxl. Formula
+    # recalculation through LibreOffice is covered by the integration suite.
+    processor.recalc = False
+    processor.convert_file_to_markdown(workbook_path, output_dir, document_uid)
     metadata = ExcelTableRegistrationProcessor().process(str(output_dir / "output.md"), metadata)
     await MetadataService().save_document_metadata(_user(), metadata)
     return metadata, output_dir

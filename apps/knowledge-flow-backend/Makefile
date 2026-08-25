@@ -16,6 +16,20 @@ include ../../scripts/makefiles/help.mk
 ENV_FILE := $(ROOT_DIR)/config/.env
 export ENV_FILE
 
+# Put the venv's bin/ on PATH for every recipe in this project.
+#
+# Why: the DOCX processor shells out to `pandoc` by name, and the only pandoc we
+# ship is the one bundled by the `pypandoc-binary` dependency, exposed as
+# $(VENV)/bin/pandoc. Running $(PYTHON) by absolute path does NOT put $(VENV)/bin
+# on PATH — only `source .venv/bin/activate` does — so a locally started worker
+# died with `FileNotFoundError: 'pandoc'` while the binary sat unused in the venv.
+# The Docker images already do exactly this (`ENV PATH="/app/venv/bin:$PATH"`);
+# this makes local runs behave the same. Guarded so recursive make does not
+# prepend it twice.
+ifeq (,$(findstring $(VENV)/bin:,$(PATH)))
+export PATH := $(VENV)/bin:$(PATH)
+endif
+
 PADDLE_MODELS_DIR ?= ./models
 
 ##@ Run
@@ -31,7 +45,8 @@ tools-check:
 	@if ! command -v pandoc >/dev/null 2>&1; then \
 		echo "================================================================================"; \
 		echo "WARNING: pandoc not found on PATH. Doc ingestion (markdown/PDF conversions) will fail locally."; \
-		echo "Install pandoc or use the provided Docker image."; \
+		echo "It normally comes from the pypandoc-binary dependency ($(VENV)/bin/pandoc):"; \
+		echo "run 'make dev' to install it, or install a system pandoc."; \
 		echo "================================================================================"; \
 	fi
 	@if ! command -v pdfinfo >/dev/null 2>&1; then \

@@ -20,6 +20,7 @@ import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroup
 import CodenameModal from "@shared/molecules/CodenameModal/CodenameModal";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { getProperty } from "../../../../common/config";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import CODENAME from "../../../../releases/swift.json";
 import styles from "./ReleaseNotesContent.module.css";
 
@@ -108,12 +109,10 @@ export default function ReleaseNotesContent() {
 
   const handleCopy = async () => {
     if (!selectedContent) return;
-    try {
-      await navigator.clipboard.writeText(selectedContent);
+    const ok = await writeRichClipboard("", selectedContent);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard unavailable — silent fallback
     }
   };
 

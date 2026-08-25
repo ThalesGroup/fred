@@ -15,6 +15,8 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneRoutingPolicy",
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
+    "ControlPlanePlatformModelBinding",
+    "ControlPlanePlatformRole",
   ],
   endpoints: {
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
@@ -90,6 +92,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     listUsersControlPlaneV1UsersGet: {
       providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],
+    },
+    // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405). The
+    // holders table is one aggregate, so a single LIST tag: every grant/revoke
+    // re-reads it — including the root badge and caller flag.
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: {
+      providesTags: [{ type: "ControlPlanePlatformRole" as const, id: "LIST" }],
+    },
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
+    },
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
     },
     listTeamsControlPlaneV1TeamsGet: {
       providesTags: (result) =>
@@ -286,7 +300,52 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlanePrompt", id: arg.promptId },
         { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        // A deleted prompt (published or not) must also leave the community list.
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
       ],
+    },
+    // Prompts marketplace (PROMPT-06). The community listing is a live view of
+    // published team rows, so it shares the ControlPlanePrompt tag family: the
+    // shared "MARKETPLACE" id refreshes it, while per-prompt ids keep the team
+    // library and composer picker consistent when a prompt is (un)published.
+    getMarketplacePromptsControlPlaneV1MarketplacePromptsGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: "MARKETPLACE" },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: "MARKETPLACE" }],
+    },
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
+    },
+    postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    postUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    // Recording a use bumps the shared counter; refresh the community list so
+    // its "most-used first" ordering and counters reflect the new value.
+    postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: {
+      invalidatesTags: () => [{ type: "ControlPlanePrompt", id: "MARKETPLACE" }],
+    },
+    // Import copies the prompt (by value) into each target team's library.
+    postMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPost: {
+      invalidatesTags: (_, __, arg) =>
+        arg.marketplaceImportRequest.target_team_ids.map((teamId) => ({
+          type: "ControlPlanePrompt" as const,
+          id: `LIST-${teamId}`,
+        })),
     },
     // Team routing policy (TEAM-05, #2118).
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {
@@ -295,11 +354,35 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     updateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy", id: arg.teamId }],
     },
+    // The composer's model label (#2387). Tagged under the same
+    // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
+    // use, so saving a routing policy refetches it: without that, the composer
+    // would keep naming the previous model until a reload — the exact kind of
+    // stale label this issue exists to remove.
+    getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
+    },
+    // Platform-wide chat model binding — chat-only, at most one binding ever
+    // exists, so a single LIST tag covers it, same shape as the admin
+    // capabilities catalog above.
+    getPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGet: {
+      providesTags: [{ type: "ControlPlanePlatformModelBinding" as const, id: "LIST" }],
+    },
+    putPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
+    },
+    deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
+    },
   },
 });
 
 export const {
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
+  // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation: useRevokePlatformRoleMutation,
   // Batch uid → display-name resolution for audit fields (#1952).
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery: useUsersByIdsQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
@@ -324,6 +407,8 @@ export const {
   // Routing-policy picker option set (#2167).
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery:
     useAvailableModelProfilesQuery,
+  // The model a chat turn will actually route to — the composer label (#2387).
+  useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
@@ -364,4 +449,9 @@ export const {
   // Fired on demand from the disable-confirmation dialog (lazy — not on render).
   useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery:
     useLazyCapabilityRevokeImpactQuery,
+  // Platform-wide chat model binding — chat-only.
+  useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery: usePlatformModelBindingQuery,
+  usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
+  useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
+    useDeletePlatformModelBindingMutation,
 } = enhancedControlPlaneApi;

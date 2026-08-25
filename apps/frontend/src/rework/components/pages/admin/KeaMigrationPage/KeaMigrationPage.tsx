@@ -30,6 +30,7 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { personalTeamId } from "@shared/utils/teamId";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
 import { runKeaDryRun } from "../../../../features/migration/runKeaDryRun";
 import { taskRegistered } from "../../../../features/tasks/taskSlice";
@@ -130,9 +131,11 @@ export default function KeaMigrationPage() {
   // just the truncated display text), not a human-readable digest.
   const handleCopyReport = async () => {
     if (!report) return;
-    await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    const ok = await writeRichClipboard("", JSON.stringify(report, null, 2));
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
   };
 
   const handleDryRun = async () => {

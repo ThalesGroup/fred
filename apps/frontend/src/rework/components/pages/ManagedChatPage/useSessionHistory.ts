@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";
-import type { ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { getCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
 

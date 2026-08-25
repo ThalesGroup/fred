@@ -38,6 +38,7 @@ from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
+from fred_core.history.history_schema import coerce_finish_reason
 from fred_core.portable import MetricsProvider
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
@@ -97,10 +98,16 @@ from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
+    checkpoint_namespace,
 )
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
+)
+from fred_runtime.runtime_support.trace_payloads import (
+    serialize_messages,
+    serialize_model_output,
+    to_langfuse_usage,
 )
 
 logger = logging.getLogger(__name__)
@@ -211,7 +218,6 @@ class _GraphNodeExecutionContext:
     binding: BoundRuntimeContext
     services: RuntimeServices
     model: BaseChatModel | None
-    model_resolver: Callable[[str], BaseChatModel | None] | None
     graph_agent_id: str
     node_id: str
     allowed_tool_refs: frozenset[str]
@@ -225,10 +231,6 @@ class _GraphNodeExecutionContext:
     # being buffered in _events, so the caller receives tokens in real time.
     _live_emit: Callable[[RuntimeEvent], None] | None = None
     _last_model_name: str | None = None
-    # Usage of the single most recent model call in this node — used for
-    # per-step attribution (TRACE-01: attached to each ToolCallRuntimeEvent
-    # a node emits, so a step shows only the call that triggered it).
-    _last_token_usage: dict[str, int] | None = None
     # Summed across every model call this node makes — a node can call the
     # model more than once (e.g. planning then acting) before invoking a
     # tool, and the node's real total is their sum, not just the last one.
@@ -269,7 +271,6 @@ class _GraphNodeExecutionContext:
         if model_name:
             self._last_model_name = model_name
         if token_usage:
-            self._last_token_usage = token_usage
             self._total_token_usage = sum_token_usage(
                 self._total_token_usage, token_usage
             )
@@ -431,8 +432,6 @@ class _GraphNodeExecutionContext:
     async def invoke_model(
         self,
         messages: list[BaseMessage],
-        *,
-        operation: str = "default",
     ) -> BaseMessage:
         """
         Invoke the bound chat model and stream token deltas in real time.
@@ -453,11 +452,7 @@ class _GraphNodeExecutionContext:
         - the final accumulated chunk is cast to AIMessage so callers get a
           fully-populated BaseMessage with all metadata intact
         """
-        resolved_model = (
-            self.model_resolver(operation)
-            if self.model_resolver is not None
-            else self.model
-        )
+        resolved_model = self.model
         if resolved_model is None:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
@@ -469,7 +464,6 @@ class _GraphNodeExecutionContext:
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
             },
         )
@@ -478,10 +472,9 @@ class _GraphNodeExecutionContext:
             binding=self.binding,
             agent_id=self.graph_agent_id,
             phase="v2_graph_model",
-            agent_step=f"{self.node_id}:{operation}",
+            agent_step=self.node_id,
             extra_dims={
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
             },
         ):
@@ -534,6 +527,20 @@ class _GraphNodeExecutionContext:
                 )
                 if span is not None:
                     span.set_attribute("status", "ok")
+                    span.set_usage(
+                        model=captured_model_name,
+                        usage=to_langfuse_usage(captured_token_usage),
+                    )
+                    tracer = self.services.tracer
+                    if tracer is not None and tracer.captures_content:
+                        span.set_io(
+                            input=serialize_messages(messages),
+                            output=serialize_model_output(
+                                [accumulated]
+                                if isinstance(accumulated, BaseMessage)
+                                else []
+                            ),
+                        )
                 return accumulated
             except Exception:
                 if span is not None:
@@ -547,8 +554,6 @@ class _GraphNodeExecutionContext:
         self,
         output_model: type[BaseModel],
         messages: list[BaseMessage],
-        *,
-        operation: str = "default",
     ) -> BaseModel:
         """
         Invoke one structured-output control step with the bound chat model.
@@ -557,11 +562,7 @@ class _GraphNodeExecutionContext:
         instead of plain assistant text.
         """
 
-        resolved_model = (
-            self.model_resolver(operation)
-            if self.model_resolver is not None
-            else self.model
-        )
+        resolved_model = self.model
         if resolved_model is None:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
@@ -573,7 +574,6 @@ class _GraphNodeExecutionContext:
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
                 "output_model": output_model.__name__,
             },
@@ -587,10 +587,9 @@ class _GraphNodeExecutionContext:
             binding=self.binding,
             agent_id=self.graph_agent_id,
             phase="v2_graph_structured_model",
-            agent_step=f"{self.node_id}:{operation}",
+            agent_step=self.node_id,
             extra_dims={
                 "node_id": self.node_id,
-                "operation": operation,
                 "model_name": model_name,
                 "output_model": output_model.__name__,
             },
@@ -649,11 +648,6 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_ref,
                 call_id=call_id,
                 arguments=payload,
-                # Usage of the most recent model call recorded on this node
-                # (TRACE-01) — the same value `last_model_metadata` reads, not
-                # necessarily this specific call's own usage: a graph node can
-                # invoke several models before invoking a tool.
-                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -728,8 +722,6 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_name,
                 call_id=call_id,
                 arguments=arguments,
-                # See invoke_tool() above — same caveat applies.
-                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -1045,14 +1037,12 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         model: BaseChatModel | None,
         runtime_tools: tuple[BaseTool, ...],
         pending_checkpoints: dict[str, _PendingGraphCheckpoint],
+        checkpoint_ns: str,
     ) -> None:
         self._definition = definition
         self._binding = binding
         self._services = services
         self._model = model
-        self._models_by_operation: dict[str, BaseChatModel] = {}
-        if model is not None:
-            self._models_by_operation["default"] = model
         self._runtime_tools = {tool.name: tool for tool in runtime_tools}
         self._graph = definition.build_graph()
         self._handlers = _validated_handlers(definition=definition, graph=self._graph)
@@ -1074,6 +1064,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         self._total_token_usage: dict[str, int] | None = None
         self._last_finish_reason: str | None = None
         self._thought_records: list[ThoughtRecord] = []
+        self._checkpoint_ns = checkpoint_ns
 
     def _reset_model_metadata(self) -> None:
         """
@@ -1127,24 +1118,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             )
         if finish_reason:
             self._last_finish_reason = finish_reason
-
-    def _model_for_operation(self, operation: str) -> BaseChatModel | None:
-        cached = self._models_by_operation.get(operation)
-        if cached is not None:
-            return cached
-        factory = self._services.chat_model_factory
-        if factory is not None:
-            resolved = factory.build_for_operation(
-                definition=self._definition,
-                binding=self._binding,
-                purpose="chat",
-                operation=operation,
-            )
-            if resolved is not None:
-                if isinstance(resolved, BaseChatModel):
-                    self._models_by_operation[operation] = resolved
-                    return resolved
-        return self._model
 
     async def invoke(
         self, input_model: BaseModel, config: ExecutionConfig
@@ -1254,7 +1227,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 binding=self._binding,
                 services=self._services,
                 model=self._model,
-                model_resolver=self._model_for_operation,
                 graph_agent_id=self._definition.agent_id,
                 node_id=node_id,
                 allowed_tool_refs=self._allowed_tool_refs,
@@ -1466,7 +1438,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 binding=self._binding,
                 services=self._services,
                 model=self._model,
-                model_resolver=self._model_for_operation,
                 graph_agent_id=self._definition.agent_id,
                 node_id=member_id,
                 allowed_tool_refs=self._allowed_tool_refs,
@@ -1627,7 +1598,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             config={
                 "configurable": {
                     "thread_id": checkpoint_key,
-                    "checkpoint_ns": "",
+                    "checkpoint_ns": self._checkpoint_ns,
                     **(
                         {"checkpoint_id": config.checkpoint_id}
                         if config.checkpoint_id
@@ -1674,7 +1645,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             config={
                 "configurable": {
                     "thread_id": checkpoint_key,
-                    "checkpoint_ns": "",
+                    "checkpoint_ns": self._checkpoint_ns,
                 }
             }
         )
@@ -1784,7 +1755,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             config={
                 "configurable": {
                     "thread_id": checkpoint_key,
-                    "checkpoint_ns": "",
+                    "checkpoint_ns": self._checkpoint_ns,
                     **(
                         {"checkpoint_id": config.checkpoint_id}
                         if config.checkpoint_id
@@ -1804,7 +1775,12 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         if checkpointer is None:
             return None
         checkpoint_tuple = await self._get_checkpoint_tuple(
-            config={"configurable": {"thread_id": checkpoint_key, "checkpoint_ns": ""}}
+            config={
+                "configurable": {
+                    "thread_id": checkpoint_key,
+                    "checkpoint_ns": self._checkpoint_ns,
+                }
+            }
         )
         if checkpoint_tuple is None:
             return None
@@ -1942,6 +1918,11 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             self._capability_block,
             mcp_tool_names={tool.name for tool in mcp_tools},
         )
+        portable = binding.portable_context
+        graph_checkpoint_ns = checkpoint_namespace(
+            agent_instance_id=portable.baggage.get("agent_instance_id"),
+            agent_id=self.definition.agent_id,
+        )
         return _DeterministicGraphExecutor(
             definition=self.definition,
             binding=binding,
@@ -1949,6 +1930,7 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             model=self._model,
             runtime_tools=mcp_tools + capability_tools,
             pending_checkpoints=self._pending_checkpoints,
+            checkpoint_ns=graph_checkpoint_ns,
         )
 
     async def on_dispose(self) -> None:
@@ -2297,6 +2279,7 @@ def _final_event_from_output(
     - `event = _final_event_from_output(output_model, model_name=name, token_usage=usage)`
     """
 
+    normalized_finish_reason = coerce_finish_reason(finish_reason)
     if isinstance(output_model, GraphExecutionOutput):
         return FinalRuntimeEvent(
             sequence=0,
@@ -2305,7 +2288,7 @@ def _final_event_from_output(
             ui_parts=output_model.ui_parts,
             model_name=model_name,
             token_usage=token_usage or output_model.token_usage,
-            finish_reason=finish_reason,
+            finish_reason=normalized_finish_reason,
         )
 
     payload = output_model.model_dump(mode="json")
@@ -2317,7 +2300,7 @@ def _final_event_from_output(
         content=content,
         model_name=model_name,
         token_usage=token_usage,
-        finish_reason=finish_reason,
+        finish_reason=normalized_finish_reason,
     )
 
 

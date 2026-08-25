@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import styles from "./MindMapBlock.module.css";
 import {
   escapeHtml,
@@ -288,16 +289,18 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
   }, [chartReady, parsed, selectedNodeId]);
 
   function handleCopy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    writeRichClipboard("", code).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     });
   }
 
   if (parsed.ok === false) {
     return (
       <div className={styles.block}>
-        <div className={styles.header}>
+        <div className={styles.header} data-clipboard-ignore>
           <span className={styles.lang}>{language}</span>
           <button className={styles.copy} onClick={handleCopy} aria-label="Copy mindmap JSON">
             {copied ? "✓ Copied" : "Copy"}
@@ -323,7 +326,9 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
 
   return (
     <div ref={rootRef} className={`${styles.block} ${expanded ? styles.expanded : ""}`}>
-      <div className={styles.header}>
+      {/* Redundant with the chartPane's data-clipboard-diagram-label below —
+          the title still reaches a copy via that placeholder. */}
+      <div className={styles.header} data-clipboard-ignore>
         <div className={styles.headerText}>
           <span className={styles.lang}>{language}</span>
           <strong className={styles.title}>{payload.title}</strong>
@@ -342,7 +347,9 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
       </div>
 
       <div className={styles.summaryBar}>
-        <div className={styles.breadcrumbs}>
+        {/* Navigation chrome, not content — excluded. payload.summary below,
+            when present, is real descriptive text and stays copyable. */}
+        <div className={styles.breadcrumbs} data-clipboard-ignore>
           {breadcrumb.map((node, index) => (
             <button key={node.id} className={styles.crumb} onClick={() => setSelectedNodeId(node.id)}>
               {index > 0 ? " / " : ""}
@@ -350,12 +357,14 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
             </button>
           ))}
         </div>
-        <p className={styles.summary}>Selected: {selectedNode.name}</p>
+        <p className={styles.summary} data-clipboard-ignore>
+          Selected: {selectedNode.name}
+        </p>
         {payload.summary ? <p className={styles.summary}>{payload.summary}</p> : null}
       </div>
 
       <div className={styles.content}>
-        <div className={styles.chartPane}>
+        <div className={styles.chartPane} data-clipboard-diagram-label={payload.title}>
           <ReactECharts
             ref={chartRef}
             className={styles.chart}

@@ -27,7 +27,7 @@ import {
   selectActiveCount,
   selectUnacknowledgedFailures,
   selectActiveTaskForTarget,
-  makeSelectSucceededTargetsOfType,
+  makeSelectSettledTargetsOfType,
   makeSelectTaskTargetsOfType,
   EVICTION_DELAY_MS,
 } from "./taskSlice";
@@ -461,9 +461,9 @@ describe("selectActiveTaskForTarget", () => {
   });
 });
 
-// ── makeSelectSucceededTargetsOfType ──────────────────────────────────────────
+// ── makeSelectSettledTargetsOfType ──────────────────────────────────────────
 
-describe("makeSelectSucceededTargetsOfType", () => {
+describe("makeSelectSettledTargetsOfType", () => {
   it("returns succeeded tasks of the type, each with its target id", () => {
     const s = {
       byId: {
@@ -472,8 +472,32 @@ describe("makeSelectSucceededTargetsOfType", () => {
         failed: vm({ taskId: "failed", state: "failed", target: target({ type: "document", id: "doc-3" }) }),
       },
     };
-    const result = makeSelectSucceededTargetsOfType("document")(root(s));
+    const result = makeSelectSettledTargetsOfType("document")(root(s));
     expect(result).toEqual([{ taskId: "done", targetId: "doc-1" }]);
+  });
+
+  // A cancelled ingestion is not just "stopped": the backend erases the
+  // half-built document and releases the storage quota it was charged
+  // (`delete_cancelled_document`, #2315). Watching `succeeded` alone left the
+  // deleted row and the team's storage meter frozen until a manual reload.
+  it("returns cancelled tasks too, since cancelling erases the document", () => {
+    const s = {
+      byId: {
+        stopped: vm({ taskId: "stopped", state: "cancelled", target: target({ type: "document", id: "doc-9" }) }),
+      },
+    };
+    expect(makeSelectSettledTargetsOfType("document")(root(s))).toEqual([{ taskId: "stopped", targetId: "doc-9" }]);
+  });
+
+  // Failure keeps the document — only its stages change, and the row renders
+  // those from the retained task, so there is nothing to refetch.
+  it("still excludes failed tasks", () => {
+    const s = {
+      byId: {
+        failed: vm({ taskId: "failed", state: "failed", target: target({ type: "document", id: "doc-3" }) }),
+      },
+    };
+    expect(makeSelectSettledTargetsOfType("document")(root(s))).toEqual([]);
   });
 
   it("excludes succeeded tasks whose target type does not match", () => {
@@ -483,17 +507,17 @@ describe("makeSelectSucceededTargetsOfType", () => {
         conv: vm({ taskId: "conv", state: "succeeded", target: target({ type: "conversation", id: "s-1" }) }),
       },
     };
-    expect(makeSelectSucceededTargetsOfType("conversation")(root(s))).toEqual([{ taskId: "conv", targetId: "s-1" }]);
+    expect(makeSelectSettledTargetsOfType("conversation")(root(s))).toEqual([{ taskId: "conv", targetId: "s-1" }]);
   });
 
   it("excludes succeeded tasks with a null target", () => {
     const s = { byId: { t1: vm({ taskId: "t1", state: "succeeded", target: null }) } };
-    expect(makeSelectSucceededTargetsOfType("document")(root(s))).toEqual([]);
+    expect(makeSelectSettledTargetsOfType("document")(root(s))).toEqual([]);
   });
 
-  it("returns an empty array when nothing has succeeded", () => {
+  it("returns an empty array when nothing has settled", () => {
     const s = { byId: { t1: vm({ taskId: "t1", state: "running", target: target() }) } };
-    expect(makeSelectSucceededTargetsOfType("document")(root(s))).toEqual([]);
+    expect(makeSelectSettledTargetsOfType("document")(root(s))).toEqual([]);
   });
 });
 

@@ -14,9 +14,9 @@
 
 import logging
 from threading import Lock
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
 from fred_core.documents.document_structures import DocumentMetadata
 from pydantic import BaseModel, Field
@@ -56,6 +56,40 @@ class TagSizesRequest(BaseModel):
 
 class TagSizesResponse(BaseModel):
     sizes: Dict[str, int] = Field(..., description="Total document bytes per requested tag id (0 when unknown/empty)")
+
+
+class LabelMutationRequest(BaseModel):
+    """Canonical transport for a label add/remove batch. Replaces the label as
+    a raw URL path segment (`POST/DELETE /documents/{uid}/labels/{label}`,
+    still available for existing consumers — see their descriptions), which
+    cannot carry `/`, `#`, `?`, a literal `%`, or reliably round-trip through
+    every client's URL handling. A JSON body has none of those limits."""
+
+    add: List[str] = Field(default_factory=list, description="Labels to add.")
+    remove: List[str] = Field(default_factory=list, description="Labels to remove. Wins over `add` when the same value appears in both.")
+
+
+class LabelDocumentReference(BaseModel):
+    """Lean document reference for the paginated label listing — just enough
+    for an agent to identify and chain into another tool (e.g. summarize by
+    uid), not the full `DocumentMetadata` payload `BrowseDocumentsResponse`
+    carries."""
+
+    document_uid: str
+    document_name: str
+
+
+class LabelDocumentsPage(BaseModel):
+    """One deterministic page of the documents carrying `label`, ordered by
+    `document_uid` for a stable page boundary across calls."""
+
+    label: str
+    documents: List[LabelDocumentReference]
+    total: int = Field(..., description="Total number of matching documents across all pages.")
+    offset: int
+    limit: int
+    next_offset: Optional[int] = Field(default=None, description="Offset to request the next page, or null when there is no more.")
+    has_more: bool
 
 
 def handle_exception(e: Exception) -> HTTPException | Exception:
@@ -251,17 +285,47 @@ class MetadataController:
             sizes = await self.service.total_size_by_tags(user, req.tag_ids)
             return TagSizesResponse(sizes=sizes)
 
-        # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ===============
-        # Labels describe documents (e.g. 'CV', 'DVA') with NO scope/permission
+        # === Business labels (descriptive) ====================================
+        # Labels describe documents (e.g. 'DAT', 'MEX') with NO scope/permission
         # meaning; mirrors the tag add/remove shape but without any ReBAC on the
         # label. Used to target search subsets.
+        @router.patch(
+            "/documents/{document_uid}/labels",
+            tags=["Documents"],
+            operation_id="mutate_document_labels",
+            response_model=list[str],
+            summary="Add and/or remove descriptive business labels on a document",
+            description=(
+                "Canonical label transport: a JSON body carrying the labels to add and/or remove in one "
+                "request, in place of a raw URL path segment (see the deprecated single-label "
+                "POST/DELETE routes below). Supports any Unicode text, including characters a URL path "
+                "segment cannot carry reliably ('/', '#', '?', '%'). A value present in both `add` and "
+                "`remove` ends up absent (`remove` wins). Idempotent: re-adding an already-present label "
+                "or re-removing an absent one is a no-op, and an empty request returns the current set "
+                "unchanged. Returns the document's full, canonical stored label set."
+            ),
+        )
+        async def mutate_document_labels(document_uid: str, req: LabelMutationRequest, user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.mutate_document_labels(user, document_uid, add=req.add, remove=req.remove, modified_by=user.uid)
+            except Exception as e:
+                raise handle_exception(e)
+
         @router.post(
             "/documents/{document_uid}/labels/{label}",
             tags=["Documents"],
             operation_id="add_document_label",
             response_model=list[str],
+            deprecated=True,
             summary="Add a descriptive business label to a document",
-            description="Adds a descriptive label (idempotent). Returns the document's stored labels.",
+            description=(
+                "Deprecated: use PATCH /documents/{document_uid}/labels instead — this route places "
+                "the label as a raw URL path segment, which cannot carry '/', '#', '?', or a literal "
+                "'%' reliably. Kept only for existing consumers that already send labels this route can "
+                "transport; it is a thin adapter onto the same MetadataService.mutate_document_labels "
+                "used by the PATCH route, not a second mutation implementation. Removal condition: once "
+                "no known consumer calls this route directly (frontend already migrated off it)."
+            ),
         )
         async def add_document_label(document_uid: str, label: str, user: KeycloakUser = Depends(get_current_user)):
             try:
@@ -274,8 +338,13 @@ class MetadataController:
             tags=["Documents"],
             operation_id="remove_document_label",
             response_model=list[str],
+            deprecated=True,
             summary="Remove a descriptive business label from a document",
-            description="Removes a descriptive label. Returns the document's stored labels.",
+            description=(
+                "Deprecated: use PATCH /documents/{document_uid}/labels instead — same reasoning and "
+                "removal condition as the deprecated POST route above. A thin adapter onto "
+                "MetadataService.mutate_document_labels, not a second mutation implementation."
+            ),
         )
         async def remove_document_label(document_uid: str, label: str, user: KeycloakUser = Depends(get_current_user)):
             try:
@@ -303,12 +372,56 @@ class MetadataController:
             operation_id="list_documents_by_label",
             response_model=BrowseDocumentsResponse,
             summary="List documents carrying a business label",
-            description="Resolves a label to the readable documents carrying it (search resolve-then-target).",
+            description=(
+                "Resolves a label to the readable documents carrying it (search resolve-then-target). The label "
+                "rides as a raw URL path segment here, so it cannot reliably carry '/', '#', '?', a literal '%', "
+                "or arbitrary Unicode — use GET /documents/by-label (query parameter) for those. Kept unchanged "
+                "for existing consumers; both routes resolve through the same MetadataService.get_documents_with_label."
+            ),
         )
         async def list_documents_by_label(label: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 docs = await self.service.get_documents_with_label(user, label)
                 return BrowseDocumentsResponse(documents=docs, total=len(docs))
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/by-label",
+            tags=["Documents"],
+            operation_id="resolve_documents_by_label",
+            response_model=LabelDocumentsPage,
+            summary="List documents carrying a business label (paginated, query parameter transport)",
+            description=(
+                "Canonical label resolution: the label rides as a query parameter, so it carries any Unicode "
+                "text with no character restriction — symmetric with the PATCH /documents/{document_uid}/labels "
+                "mutation transport. Paginated and deterministic (ordered by document_uid): a label can match "
+                "many documents spread across the whole corpus, and this route is the exhaustive, page-by-page "
+                "way to enumerate them all. Resolves through the same MetadataService.get_document_uids_with_any_label "
+                "as the document_label_search capability's list_documents_by_label tool, not a second lookup "
+                "implementation. The path-segment GET /documents/by-label/{label} route above returns everything "
+                "unpaginated for existing consumers; this route is the one to use for a label that may match many "
+                "documents."
+            ),
+        )
+        async def resolve_documents_by_label(
+            label: str,
+            offset: int = Query(0, ge=0),
+            limit: int = Query(50, gt=0, le=500),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                docs, total = await self.service.get_documents_with_label_page(user, label, offset=offset, limit=limit)
+                next_offset = offset + len(docs)
+                return LabelDocumentsPage(
+                    label=label,
+                    documents=[LabelDocumentReference(document_uid=d.identity.document_uid, document_name=d.identity.document_name) for d in docs],
+                    total=total,
+                    offset=offset,
+                    limit=limit,
+                    next_offset=next_offset if next_offset < total else None,
+                    has_more=next_offset < total,
+                )
             except Exception as e:
                 raise handle_exception(e)
 

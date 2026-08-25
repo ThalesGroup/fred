@@ -249,38 +249,30 @@ This ensures that as soon as you open a Python file inside any backend or librar
 
 #### Model configuration (Agent pods)
 
-Model configuration for agent pods lives in **`apps/fred-agents/config/models_catalog.yaml`** (and equivalently in any third-party pod). This file is separate from `configuration.yaml` and owns the full model setup: named profiles, provider settings, shared HTTP client limits, and routing rules.
+Model configuration for agent pods lives in **`apps/fred-agents/config/models_catalog.yaml`** (and equivalently in any third-party pod). This file is separate from `configuration.yaml` and owns the pod's chat profiles, provider settings, shared HTTP client limits, local default, and optional static per-agent overrides.
 
 **Profiles** are named model configurations. Each profile declares a provider, a model name, and optional settings (temperature, timeouts, retries). Profiles are referenced by `profile_id`.
 
-**Defaults** declare which profile to use per capability when no rule matches:
+**Defaults** declare which profile to use when no more specific choice applies:
 
 ```yaml
 default_profile_by_capability:
   chat: default.chat.openai.prod
-  language: default.language.openai.prod
 ```
 
-**Routing rules** allow policy-based model selection based on team, agent, or operation context. Rules are evaluated in order; the first match wins:
+**Static overrides** let a pod operator select a different chat profile for a specific agent:
 
 ```yaml
-rules:
-  - rule_id: team-a-uses-ollama
-    capability: chat
-    team_id: team-a
-    operation: routing
-    target_profile_id: chat.ollama.mistral
-
-  - rule_id: graph-g1-json-validation
-    capability: chat
-    agent_id: internal.graph.g1
-    operation: json_validation_fc
-    target_profile_id: chat.azure_apim.gpt4o
+agent_profile_overrides:
+  internal.graph.g1: chat.azure_apim.gpt4o
 ```
 
-This makes it possible to route different teams, agents, or operation types to different models — including mixing providers — without changing any agent code.
+Platform-wide and team choices are configured through control-plane. The V1
+policy is chat-only and uses a deterministic default/per-agent fallback chain;
+there are no operation, purpose, or query-classification rules.
 
-For details on all supported match criteria (`team_id`, `agent_id`, `user_id`, `operation`, `purpose`) see [`docs/platform/LLM_ROUTING_FRED.md`](./docs/swift/platform/LLM_ROUTING_FRED.md).
+For the exact precedence, multi-pod rules, and administrator/team workflows,
+see [`LLM_ROUTING_FRED.md`](./docs/swift/platform/LLM_ROUTING_FRED.md).
 
 #### Set it up according to your development environment
 
@@ -649,7 +641,7 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | `apps/fred-agents/config/.env`                         | Secrets (API keys, passwords). Not committed to Git.          | Copy `.env.template` to `.env` and fill in any missing values. |
 | `apps/knowledge-flow-backend/config/.env`                   | Same as above                                                 | Same as above                                                  |
 | `apps/control-plane-backend/config/.env`               | Same as above                                                 | Same as above                                                  |
-| `apps/fred-agents/config/models_catalog.yaml`          | Model profiles, routing rules, provider settings for the pod. | Edit profiles and set `default_profile_by_capability`.         |
+| `apps/fred-agents/config/models_catalog.yaml`          | Chat profiles, local default/agent overrides, provider settings. | Edit profiles and set `default_profile_by_capability.chat`.    |
 | `apps/fred-agents/config/configuration.yaml`           | Pod runtime settings (base URL, feature flags, MCP catalog).  | -                                                              |
 | `apps/knowledge-flow-backend/config/configuration.yaml`     | Chat/embedding/vision model settings, ingestion options.      | -                                                              |
 | `apps/control-plane-backend/config/configuration.yaml` | Team/user policy settings, runtime catalog sources.           | -                                                              |

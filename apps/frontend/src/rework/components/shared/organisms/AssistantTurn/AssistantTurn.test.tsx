@@ -18,7 +18,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ChatMessage } from "../../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { AssistantTurn } from "./AssistantTurn";
 

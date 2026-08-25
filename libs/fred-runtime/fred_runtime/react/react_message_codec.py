@@ -204,7 +204,11 @@ def final_assistant_message(
     raise RuntimeError("ReAct execution completed without an assistant message.")
 
 
-def to_runnable_config(config: ExecutionConfig) -> Mapping[str, object] | None:
+def to_runnable_config(
+    config: ExecutionConfig,
+    *,
+    checkpoint_ns: str | None = None,
+) -> Mapping[str, object] | None:
     """
     Convert Fred execution config to LangChain runnable config.
 
@@ -228,6 +232,9 @@ def to_runnable_config(config: ExecutionConfig) -> Mapping[str, object] | None:
     if config.session_id is not None:
         # session_id is Fred's public identity; thread_id is LangGraph's internal key.
         configurable["thread_id"] = config.session_id
+
+    if checkpoint_ns is not None:
+        configurable["checkpoint_ns"] = checkpoint_ns
 
     if configurable:
         merged["configurable"] = configurable

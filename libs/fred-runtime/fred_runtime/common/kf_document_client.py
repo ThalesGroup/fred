@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from fred_core.common import OwnerFilter
 from pydantic import BaseModel
@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from fred_runtime.common.kf_base_client import (
     KfBaseClient,
     KnowledgeFlowAgentContext,
+    TokenRefreshCallback,
 )
 from fred_runtime.runtime_context import get_runtime_context
 
@@ -81,6 +82,21 @@ class DocumentTreeResult(BaseModel):
     truncated: bool
 
 
+class DocumentLabelReference(BaseModel):
+    document_uid: str
+    document_name: str
+
+
+class DocumentLabelPageResult(BaseModel):
+    label: str
+    documents: list[DocumentLabelReference] = []
+    total: int
+    offset: int
+    limit: int
+    next_offset: Optional[int] = None
+    has_more: bool
+
+
 class ExtractDocumentResult(BaseModel):
     document_uid: str
     extraction: str = ""
@@ -105,7 +121,7 @@ class KfDocumentClient(KfBaseClient):
         *,
         agent: Optional[KnowledgeFlowAgentContext] = None,
         access_token: Optional[str] = None,
-        refresh_user_access_token: Optional[Callable[[], str]] = None,
+        refresh_user_access_token: Optional[TokenRefreshCallback] = None,
     ):
         super().__init__(
             allowed_methods=frozenset({"GET", "POST"}),
@@ -209,6 +225,39 @@ class KfDocumentClient(KfBaseClient):
         )
         r.raise_for_status()
         return DocumentTreeResult.model_validate(r.json())
+
+    async def list_by_label(
+        self,
+        *,
+        label: str,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> DocumentLabelPageResult:
+        """
+        Wire format (matches controller):
+          GET /documents/by-label?label=...&offset=...&limit=...
+          -> {
+            "label": str,
+            "documents": [{"document_uid": str, "document_name": str}],
+            "total": int,
+            "offset": int,
+            "limit": int,
+            "next_offset": int?,
+            "has_more": bool
+          }
+
+        `tree()` does no label filtering — this is the only label-search
+        surface on this client, returning EVERY document carrying `label`,
+        page by page. See `DocumentTreePort.list_by_label`'s docstring.
+        """
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path="/documents/by-label",
+            phase_name="kf_document_list_by_label",
+            params={"label": label, "offset": offset, "limit": limit},
+        )
+        r.raise_for_status()
+        return DocumentLabelPageResult.model_validate(r.json())
 
     async def summarize(
         self,

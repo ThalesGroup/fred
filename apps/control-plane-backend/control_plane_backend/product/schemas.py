@@ -5,13 +5,14 @@ from typing import Any, Literal
 
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability import CapabilityCatalogEntry, ChatControlDescriptor
-from fred_sdk.contracts.context import TeamOperationRouteRule
+from fred_sdk.contracts.context import ModelBinding
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
+    InfoBanner,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     UploadWarning,
@@ -139,6 +140,20 @@ class FrontendConfig(BaseModel):
             "'not completed' alone as 'must show the bootstrap page'. The "
             "frontend must gate on this field, not re-derive the ReBAC/auth "
             "predicate itself."
+        ),
+    )
+    info_banner: InfoBanner | None = Field(
+        default=None,
+        description=(
+            "Deployer-configured global announcement banner, from "
+            "`platform.frontend.info_banner`. `None` "
+            "when the deployment configures none — the frontend then renders "
+            "nothing. Deliberately on this public pre-auth surface, not the "
+            "authenticated `FrontendBootstrap`: the banner shows on every "
+            "page, including the GCU-acceptance and root-bootstrap screens, "
+            "which render before `/frontend/bootstrap` can succeed. Carries "
+            "only deployer-authored announcement content — never anything "
+            "sensitive."
         ),
     )
 
@@ -344,6 +359,15 @@ class ExecutionPreparation(BaseModel):
     supports_streaming: bool = True
     supports_hitl: bool = True
     supports_ui_parts: bool = True
+    max_chat_input_chars: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Maximum Unicode code points accepted in one submitted chat message, "
+            "as advertised by the selected runtime pod. Null when an older runtime "
+            "does not publish the policy."
+        ),
+    )
     chat_controls: list[ChatControlDescriptor] = Field(
         default_factory=list,
         description=(
@@ -388,11 +412,11 @@ class ExecutionPreparation(BaseModel):
             "contract)."
         ),
     )
-    operation_route_rules: list[TeamOperationRouteRule] = Field(
-        default_factory=list,
+    agent_profile_overrides: dict[str, str] = Field(
+        default_factory=dict,
         description=(
-            "Team's per-operation model-routing overrides, same resolution "
-            "notes as chat_default_profile_id above (TEAM-ROUTING-POLICY-RFC.md §8.2)."
+            "Team's per-agent model-profile overrides (agent_id -> profile_id), "
+            "same resolution notes as chat_default_profile_id above."
         ),
     )
     reasoning_enabled_model_ids: list[str] = Field(
@@ -470,6 +494,7 @@ class PromptSummary(BaseModel):
     text_preview: str | None = None
     created_by: str | None = None
     version: int = 1
+    published: bool = False
     import_count: int = 0
     session_count: int = 0
     score: float | None = None
@@ -484,6 +509,32 @@ class PromptDetail(PromptSummary):
 
     team_id: TeamId
     text: str
+
+
+class MarketplacePromptSummary(PromptSummary):
+    """One published prompt card in the global prompts marketplace listing.
+
+    Extends the lightweight ``PromptSummary`` (``text_preview`` only, not the
+    full text) with the author team id and display name — the name is both the
+    card label and the team filter chip. The full prompt text is fetched on
+    demand via ``MarketplacePromptDetail`` when a card is opened, so the listing
+    payload stays small even with many published prompts. ``published`` is
+    always ``True`` here.
+    """
+
+    team_id: TeamId
+    team_name: str
+
+
+class MarketplacePromptDetail(PromptDetail):
+    """Full published prompt (with text) for the marketplace read-only view.
+
+    Fetched on demand when a marketplace card is opened, so the "copy to
+    clipboard" action has the full text without the listing carrying every
+    prompt's text. Adds the author team display name.
+    """
+
+    team_name: str
 
 
 class ContextPromptSummary(BaseModel):
@@ -509,6 +560,32 @@ class PromptPromoteRequest(BaseModel):
     """Request body for promoting (copy-by-value) one prompt to another team."""
 
     target_team_id: str = Field(..., min_length=1)
+
+
+class MarketplaceImportRequest(BaseModel):
+    """Request body for importing a published prompt into one or more teams.
+
+    Copy-by-value into every target space the caller can edit (personal space
+    or a team where the caller is editor). Each copy is a fresh instance with a
+    reset usage counter; on name collision the server appends a ``_imported-N``
+    suffix.
+    """
+
+    target_team_ids: list[str] = Field(..., min_length=1)
+
+
+class MarketplaceImportResult(BaseModel):
+    """Outcome of importing a published prompt into one target space."""
+
+    team_id: str
+    prompt: PromptSummary | None = None
+    error: str | None = None
+
+
+class MarketplaceImportResponse(BaseModel):
+    """Per-target results of a marketplace import into several teams."""
+
+    results: list[MarketplaceImportResult]
 
 
 class CreatePromptRequest(BaseModel):
@@ -794,3 +871,11 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # above, so adding this list costs one extra cheap store read, not a new
     # round trip.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Platform-operator `chat` model binding, resolved fresh on this same
+    # per-turn call — same trust boundary and same reasoning as
+    # reasoning_enabled_model_ids immediately above: a stale or
+    # client-forwarded copy could keep routing to a binding an admin already
+    # cleared. `None` means no platform chat binding is set (every
+    # deployment before this feature). V1 is chat-only — no
+    # language/embedding/image sibling field exists here.
+    platform_chat_model_binding: ModelBinding | None = None

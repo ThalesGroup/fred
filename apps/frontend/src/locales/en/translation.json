@@ -193,6 +193,10 @@
         }
       }
     },
+    "document_label_search": {
+      "name": "Search documents by label",
+      "description": "Ability to list every document carrying a given business label, exhaustively and page by page."
+    },
     "document_summarize": {
       "name": "Summarize a document",
       "description": "Ability to summarize a document and make use of the result.",
@@ -323,8 +327,14 @@
     },
     "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "conversationTokenUsage": {
-      "total_one": "Total: {{count}} token",
-      "total_other": "Total: {{count}} tokens"
+      "cached_one": "{{count, number}} token served from the provider's prompt cache",
+      "cached_other": "{{count, number}} tokens served from the provider's prompt cache",
+      "received_one": "{{count, number}} token received",
+      "received_other": "{{count, number}} tokens received",
+      "sent_one": "{{count, number}} token sent",
+      "sent_other": "{{count, number}} tokens sent",
+      "total_one": "Total: {{count, number}} token",
+      "total_other": "Total: {{count, number}} tokens"
     },
     "attachFiles": "Attach files",
     "attachmentChip": {
@@ -387,21 +397,27 @@
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
-      "scopeCorpus": "Resources",
-      "scopeCorpusAndWeb": "Model + Resources",
-      "scopeGeneral": "Model",
+      "scopeGeneral": "General knowledge",
+      "scopeCorpus": "Your documents",
+      "scopeCorpusAndWeb": "General knowledge + your documents",
       "scopeRowLabel": "Scope",
       "scopeTitle": "Search scope",
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
-      "selectLibraryFirst": "Select a library first."
+      "reasoningOff": "Fast",
+      "reasoningOn": "Boost",
+      "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
+      "selectLibraryFirst": "Select a library first.",
+      "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
     },
+    "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
     "conversationFiles": "Conversation files",
     "copyMessage": {
       "tooltip": "Copy message",
-      "success": "Message copied"
+      "response": "Copy response",
+      "copied": "Copied"
     },
     "editMessage": "Edit message",
     "dropFilesHere": "Drop files here",
@@ -413,14 +429,19 @@
       "contextPromptSaveFailedDetail": "Could not save the selected prompts — reverted to the last saved selection. Please try again.",
       "attachmentDeleteFailedSummary": "File not deleted",
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
-      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file."
+      "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
+      "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
+      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit."
     },
+    "hitlFreeTextLabel": "Your answer",
+    "hitlWaitingAria": "Agent is waiting for your input",
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "sendHitlAnswer": "Send",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -555,6 +576,7 @@
     "downloadStarting": "Getting ready to start downloading...",
     "dropFiles": "Drop your files here",
     "excessSize": "Excess: ",
+    "folderRequired": "Only files inside a folder can be added here — loose files were skipped.",
     "folders": "Folders",
     "ingestionMode": "Ingestion mode",
     "keywords": "Keywords",
@@ -566,6 +588,8 @@
     "makeSearchable": "Make searchable",
     "maxSize": "or click to select (max 200Mb per file)",
     "modifySearch": "Try to modify your search criteria",
+    "nestedFoldersHint_one": "{{count}} subfolder will be created to mirror the dropped folder",
+    "nestedFoldersHint_other": "{{count}} subfolders will be created to mirror the dropped folder",
     "newFilesSize": "Upload Size: ",
     "noDocument": "No document found",
     "noSummary": "No summary available.",
@@ -595,6 +619,10 @@
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
     "supportedFormats": "Supported files: PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "tooDeepRejected": "Nothing was added: the dropped folder would nest files deeper than {{max}} folder levels.",
+    "tooDeepSkipped_one": "{{count}} file was skipped: it would end up nested deeper than {{max}} folder levels.",
+    "tooDeepSkipped_other": "{{count}} files were skipped: they would end up nested deeper than {{max}} folder levels.",
+    "tooDeepTitle": "Folder too deep",
     "uploadAndProcess": "Upload & process",
     "uploadDestination": "Files will be added to",
     "uploadDrawerTitle": "Upload a document",
@@ -1093,6 +1121,33 @@
         "reasoningOnToast": "Reasoning enabled for this model.",
         "reasoningToggleError": "Could not change this model's reasoning setting."
       },
+      "platformModelBindings": {
+        "openButton": "Platform model binding",
+        "title": "Platform chat model binding",
+        "subtitle": "Assert one concrete (provider, name) chat model across every runtime pod — overrides each pod's own catalog default. Leave unset to keep today's per-pod behavior.",
+        "loading": "Loading the platform chat model binding…",
+        "loadError": "Could not load the platform chat model binding.",
+        "capability": {
+          "chat": "Chat"
+        },
+        "podDefault": "Using pod default",
+        "boundState": "{{provider}} / {{name}}",
+        "editAction": "Edit",
+        "deleteAction": "Reset to pod default",
+        "saveToast": "Platform chat model binding saved.",
+        "saveError": "Could not save the platform chat model binding.",
+        "deleteToast": "Platform chat model binding reset to pod default.",
+        "deleteError": "Could not reset the platform chat model binding.",
+        "form": {
+          "provider": "Provider",
+          "name": "Model name",
+          "settingsTitle": "Settings (JSON)",
+          "settingsHint": "A JSON object of provider settings, e.g. {\"temperature\": 0.2}. Unknown keys are rejected — there is no headers, cookies, or auth field here, so never put a credential in a value.",
+          "settingsInvalidJson": "Enter a valid JSON object.",
+          "save": "Save",
+          "cancel": "Cancel"
+        }
+      },
       "corpusAudit": {
         "title": "Corpus audit",
         "subtitle": "Compares each document's processing-stage record against what is actually present in the content store and vector store, and lets you clean up orphan data.",
@@ -1390,6 +1445,33 @@
         },
         "title": "Community teams",
         "yourTeams": "Your teams"
+      },
+      "prompts": {
+        "title": "Community prompts",
+        "searchPlaceholder": "Search a prompt...",
+        "clearSearch": "Clear search",
+        "loading": "Loading prompts...",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "emptySearch": "No prompt matches this search.",
+        "import": {
+          "title": "Copy this prompt to a team",
+          "subtitle": "Select the spaces to copy “{{name}}” into.",
+          "confirm": "Copy",
+          "personalSpace": "Personal space",
+          "searchPlaceholder": "Search a team",
+          "clearSearch": "Clear search",
+          "noTeams": "No team matches.",
+          "successToast": "Prompt copied ({{count}})",
+          "errorToast": "Copy failed ({{count}})",
+          "originTeam": "Origin team"
+        },
+        "unpublish": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "“{{name}}” will disappear from the marketplace and will no longer be available to other users.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        }
       }
     },
     "helpCenter": {
@@ -1523,14 +1605,24 @@
         "author": "Added by"
       },
       "embeddedTitleHint": "Embedded title: {{title}}",
+      "dropInFolder": "Drop your files to add them to \"{{folder}}\"",
+      "dropAtRoot": "Drop a folder to create it here with its structure",
+      "rootDrop": {
+        "rejectedTitle": "Drop a folder",
+        "rejectedDetail": "Loose files can't land at the top level — drop a folder (it becomes a library), or drop the files into an existing folder.",
+        "skippedDetail_one": "{{count}} loose file was skipped — only the dropped folders' content was kept.",
+        "skippedDetail_other": "{{count}} loose files were skipped — only the dropped folders' content was kept."
+      },
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
         "back": "Back to previous folder",
         "copyToTeam": "Copy to Team space",
         "delete": "Delete",
+        "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
         "download": "Download",
         "includeInSearch": "Include in search",
+        "manageLabels": "Manage labels",
         "more": "More actions",
         "newFolder": "New folder",
         "newSubfolder": "New subfolder in \"{{name}}\"",
@@ -1538,17 +1630,25 @@
         "process": "Process",
         "rename": "Rename",
         "reprocess": "Reprocess",
-        "searchable": "Exclude from search"
+        "searchable": "Exclude from search",
+        "stopIngestion": "Stop ingestion"
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
         "deleteBulkMessage": "Remove {{count}} documents from this folder?",
         "deleteTitle": "Remove document",
         "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
+        "deleteFolderMessageUnknownCount": "Delete \"{{name}}\" and all its content? This cannot be undone.",
         "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
         "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
-        "shareTitle": "Copy to Team space"
+        "shareTitle": "Copy to Team space",
+        "stopIngestionMessage": "Interrupt the processing of \"{{name}}\"? The document and all its data (file, vectors, metadata) will be deleted.",
+        "stopIngestionTitle": "Stop ingestion"
+      },
+      "errorTooltip": {
+        "reported": "Reported by the pipeline",
+        "stage": "Stage: {{stage}}"
       },
       "empty": {
         "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
@@ -1570,13 +1670,25 @@
         "inFolder": "In",
         "nameLabel": "Name",
         "namePlaceholder": "e.g. Reports 2026",
-        "title": "New folder"
+        "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
+        "title": "New folder",
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
       },
       "renameModal": {
         "title": "Rename",
         "nameLabel": "Name",
         "save": "Save",
         "error": "Could not rename"
+      },
+      "labelsModal": {
+        "title": "Manage labels",
+        "currentEmpty": "No labels yet",
+        "addPlaceholder": "Add a label…",
+        "add": "Add",
+        "createNew": "Create label",
+        "addFieldLabel": "Add a label",
+        "removeAriaLabel": "Remove label \"{{label}}\"",
+        "close": "Close"
       },
       "loading": "Loading resources...",
       "preview": {
@@ -1587,7 +1699,15 @@
           "raw": "Raw"
         },
         "loading": "Loading…",
-        "markdownUnavailable": "No Markdown version was generated for this document."
+        "markdownUnavailable": "No Markdown version was generated for this document.",
+        "pdf": {
+          "loadFailed": "Failed to load PDF document.",
+          "unavailable": "Document content is unavailable.",
+          "largeTitle": "Large document",
+          "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
+          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
+          "largeConfirm": "Display anyway"
+        }
       },
       "storage": {
         "aria": "Storage space used",
@@ -1600,8 +1720,18 @@
         "prev": "Previous page"
       },
       "status": {
+        "copyDetail": "Copy detail",
+        "detailCopied": "Detail copied",
+        "detailTitle": "Detail: {{label}}",
         "excludedFromSearch": "Excluded from search",
         "failed": "Error",
+        "folderFailedMore_one": "and {{count}} more",
+        "folderFailedMore_other": "and {{count}} more",
+        "folderFailedTooltip_one": "{{count}} document failed to process:",
+        "folderFailedTooltip_other": "{{count}} documents failed to process:",
+        "folderFailed_one": "{{count}} error",
+        "folderFailed_other": "{{count}} errors",
+        "justDone": "Done",
         "processing": "Processing...",
         "raw": "Pending",
         "ready": "Ready"
@@ -1638,8 +1768,12 @@
         "deleteFolderSuccess": "Folder deleted",
         "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
-        "processStarted": "Processing started"
-      }
+        "processStarted": "Processing started",
+        "stopIngestionError": "Could not stop the ingestion",
+        "stopIngestionRequested": "Ingestion stop requested"
+      },
+      "pageTitlePersonal": "Your personal resources",
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
     },
     "save": "Save",
     "serviceNotice": {
@@ -1670,6 +1804,7 @@
           "capabilities": "Features",
           "corpusAudit": "Corpus audit",
           "migration": "Platform data",
+          "platformRoles": "Platform roles",
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams"
@@ -1691,7 +1826,8 @@
       },
       "marketplace": {
         "menu": {
-          "teams": "Teams"
+          "teams": "Teams",
+          "prompts": "Prompts"
         },
         "title": "Marketplace"
       },
@@ -1804,6 +1940,8 @@
       "popover": {
         "acknowledge": "Dismiss",
         "close": "Close",
+        "copyError": "Copy error",
+        "errorCopied": "Error copied",
         "startedAgo": "started {{time}}",
         "title": "Details — {{label}}"
       },
@@ -1838,6 +1976,49 @@
         "acknowledge": "Dismiss",
         "copyWarnings": "Copy warnings",
         "copied": "Copied!"
+      }
+    },
+    "platformRoles": {
+      "title": "Platform roles",
+      "holders": {
+        "title": "Current role holders",
+        "empty": "No platform roles granted yet.",
+        "loading": "Loading platform roles…",
+        "error": "Platform roles could not be loaded.",
+        "rootBadge": "Primary admin",
+        "table": {
+          "user": "User",
+          "roles": "Roles"
+        }
+      },
+      "roles": {
+        "platform_admin": "Platform admin",
+        "platform_observer": "Platform observer"
+      },
+      "grant": {
+        "title": "Grant a role",
+        "userLabel": "User",
+        "userPlaceholder": "Search for a user",
+        "clearSelection": "Clear selected user",
+        "roleLabel": "Role",
+        "rootOnlyHint": "Only the primary admin can appoint or revoke platform admins.",
+        "submit": "Grant role",
+        "successSummary": "{{role}} granted to {{user}}",
+        "errors": {
+          "summary": "Could not grant the role",
+          "fallbackDetail": "An unexpected error occurred while granting the role.",
+          "forbiddenDetail": "Only the primary admin can manage platform admins.",
+          "conflictDetail": "Root bootstrap has never run on this platform."
+        }
+      },
+      "revoke": {
+        "ariaLabel": "Revoke {{role}} from {{user}}",
+        "successSummary": "{{role}} revoked from {{user}}",
+        "errors": {
+          "summary": "Could not revoke the role",
+          "fallbackDetail": "An unexpected error occurred while revoking the role.",
+          "forbiddenDetail": "This role is protected — only the primary admin can revoke platform admins, and the primary admin itself is unrevocable."
+        }
       }
     },
     "adminTeams": {
@@ -1875,7 +2056,16 @@
       "team_admin": "Admin",
       "team_editor": "Editor",
       "team_analyst": "Analyst",
-      "team_member": "Member"
+      "team_member": "Member",
+      "descriptions": {
+        "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
+        "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
+        "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
+        "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
+      },
+      "warnings": {
+        "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
+      }
     },
     "teamSettings": {
       "members": {
@@ -1932,20 +2122,19 @@
         "title": "Model routing",
         "defaultProfile": {
           "title": "Default chat model",
-          "explanation": "The model profile used for this team's managed chat agents when no operation override matches below. Leave empty to use the deployment default.",
+          "explanation": "The model profile used for this team's managed chat agents when no agent override matches below. Leave empty to use the deployment default.",
           "label": "Default profile id",
           "useDeploymentDefault": "Use deployment default"
         },
-        "operationRules": {
-          "title": "Operation overrides",
-          "explanation": "Override the default model for a specific runtime operation (e.g. planning), optionally refined further by purpose.",
-          "operation": "Operation",
-          "purpose": "Purpose (optional)",
-          "agent": "Agent (optional)",
-          "agentAny": "All agents",
+        "agentOverrides": {
+          "title": "Agent overrides",
+          "explanation": "Override the default model for one specific agent.",
+          "agent": "Agent",
+          "agentPlaceholder": "Select an agent",
           "targetProfileId": "Profile id",
           "targetProfilePlaceholder": "Select a model",
-          "addRule": "Add rule"
+          "addRule": "Add override",
+          "incompleteRow": "Pick both an agent and a profile for every override row (or remove the row) before saving."
         },
         "profileUnavailable": "No longer enabled for this team",
         "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
@@ -1962,7 +2151,9 @@
           "label": "Joining mode",
           "support": "Users can join your team freely or by invitation only.",
           "open": "Open",
-          "inviteOnly": "Invite only"
+          "inviteOnly": "Invite only",
+          "manual": "Manual only",
+          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
         },
         "visibility": {
           "label": "Team visibility",
@@ -2016,7 +2207,8 @@
           "all": "All",
           "aria": "Filter by pod"
         },
-        "title": "Chat with your {{agentsNicknamePlural}}"
+        "title": "Team agents",
+        "titlePersonal": "Your personal agents"
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
@@ -2137,10 +2329,20 @@
       },
       "prompts": {
         "card": {
-          "uses": "Uses: {{count}}"
+          "uses": "Uses: {{count}}",
+          "publishedChip": "Published",
+          "menu": {
+            "edit": "Edit",
+            "duplicate": "Duplicate",
+            "publish": "Publish to marketplace",
+            "unpublish": "Remove from marketplace",
+            "delete": "Delete",
+            "import": "Copy to...",
+            "removeFromMarketplace": "Remove from marketplace"
+          }
         },
         "clearSearch": "Clear search",
-        "create": "New prompt",
+        "create": "Create prompt",
         "emptySearch": "No prompts match this search.",
         "firstCreate": "Create prompt",
         "form": {
@@ -2153,12 +2355,40 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
-        "title": "Prompts",
+        "title": "Team prompts",
         "view": {
           "closeAria": "Close",
           "copiedToast": "Copied to clipboard",
           "copyAria": "Copy prompt"
-        }
+        },
+        "duplicateDialog": {
+          "title": "Duplicate this prompt",
+          "nameLabel": "New prompt name",
+          "cancel": "Cancel",
+          "confirm": "Duplicate",
+          "successToast": "Prompt duplicated",
+          "errorToast": "Failed to duplicate prompt"
+        },
+        "publishDialog": {
+          "title": "Publish this prompt to the marketplace?",
+          "message": "This prompt will become public to every user of the application. They will be able to use it and import it into their own spaces to edit it. The usage counter will also reflect uses outside your team, and any change you make will be immediately visible on the marketplace.",
+          "confirm": "Publish",
+          "successToast": "Prompt published to the marketplace",
+          "errorToast": "Failed to publish prompt"
+        },
+        "unpublishDialog": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "This prompt will disappear from the marketplace and will no longer be available to other users. Your team keeps its own copy.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        },
+        "editPublishedDialog": {
+          "title": "Save changes?",
+          "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
+          "confirm": "Save"
+        },
+        "titlePersonal": "Your personal prompts"
       }
     },
     "userSettings": {

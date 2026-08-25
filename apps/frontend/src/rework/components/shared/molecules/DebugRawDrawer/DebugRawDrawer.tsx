@@ -17,7 +17,8 @@ import { useTranslation } from "react-i18next";
 import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import type { ChatMessage } from "../../../../../slices/agentic/agenticOpenApi";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
 import styles from "./DebugRawDrawer.module.css";
 
 interface DebugRawDrawerProps {
@@ -38,13 +39,12 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
   const json = JSON.stringify(displayed, null, 2);
 
   const handleCopy = () => {
-    navigator.clipboard
-      .writeText(json)
-      .then(() => {
+    writeRichClipboard("", json).then((ok) => {
+      if (ok) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => {});
+      }
+    });
   };
 
   return (

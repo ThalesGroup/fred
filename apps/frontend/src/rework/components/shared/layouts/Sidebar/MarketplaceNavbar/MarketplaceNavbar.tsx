@@ -16,6 +16,7 @@ import styles from "./MarketplaceNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
 
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
@@ -27,11 +28,17 @@ export default function MarketplaceNavbar() {
       icon: { category: "outlined", type: "groups", filled: true },
       linkProps: { to: "/marketplace/teams" },
     },
+    {
+      type: "link",
+      label: t("rework.sidebar.marketplace.menu.prompts"),
+      icon: { category: "outlined", type: "edit_note", filled: true },
+      linkProps: { to: "/marketplace/prompts" },
+    },
   ];
 
   return (
     <div className={styles["marketplace-navbar-container"]}>
-      <div className={styles["marketplace-navbar-title"]}>{t("rework.sidebar.marketplace.title")}</div>
+      <NavPanelHeader title={t("rework.sidebar.marketplace.title")} />
       <NavigationMenu items={navigationItems} />
     </div>
   );

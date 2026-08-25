@@ -144,6 +144,15 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation: () => [
     async () => ({ unwrap: async () => undefined }),
   ],
+  usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation: () => [
+    async () => ({ unwrap: async () => undefined }),
+  ],
+  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation: () => [
+    async () => ({ unwrap: async () => undefined }),
+  ],
+  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation: () => [
+    async () => ({ unwrap: async () => undefined }),
+  ],
   usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation: () => [
     async () => ({ unwrap: async () => undefined }),
     { isLoading: false },
@@ -196,14 +205,21 @@ describe("PromptsPage edit form reseed", () => {
     });
 
     // Card click now opens the read-only view dialog — reach the edit form
-    // through the hover-edit pencil instead (see PROMPT-09 follow-up test below
-    // for the card-click-opens-view-dialog behavior itself).
+    // through the card's more-menu → "Edit" item instead (the pencil became a
+    // more-menu with the prompts marketplace, PROMPT-06). The menu renders in a
+    // portal on document.body, so the Edit item is queried from the document.
     const openEditForm = (index = 0) => {
       const cards = container.querySelectorAll('[role="button"]');
       const card = cards[index] as HTMLElement;
-      const editButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent === "edit");
+      const moreButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent?.includes("more_vert"));
       act(() => {
-        editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      const editItem = Array.from(document.querySelectorAll("li")).find((el) =>
+        el.textContent?.includes("card.menu.edit"),
+      );
+      act(() => {
+        editItem?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       });
     };
 
@@ -248,9 +264,15 @@ describe("PromptsPage edit form reseed", () => {
     const openEditForm = (index: number) => {
       const cards = container.querySelectorAll('[role="button"]');
       const card = cards[index] as HTMLElement;
-      const editButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent === "edit");
+      const moreButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent?.includes("more_vert"));
       act(() => {
-        editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      const editItem = Array.from(document.querySelectorAll("li")).find((el) =>
+        el.textContent?.includes("card.menu.edit"),
+      );
+      act(() => {
+        editItem?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       });
     };
 

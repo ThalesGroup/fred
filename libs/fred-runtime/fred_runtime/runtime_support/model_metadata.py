@@ -31,12 +31,13 @@ Example:
 
 from __future__ import annotations
 
+from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from langchain_core.messages import AIMessageChunk, BaseMessage
 
 
 def runtime_metadata_from_stream_event(
     raw_event: object,
-) -> tuple[str | None, dict[str, int] | None, str | None]:
+) -> tuple[str | None, dict[str, int] | None, FinishReason | None]:
     """
     Extract model metadata from one streamed LangChain message chunk.
 
@@ -59,7 +60,7 @@ def runtime_metadata_from_stream_event(
 
 def runtime_metadata_from_message(
     message: BaseMessage,
-) -> tuple[str | None, dict[str, int] | None, str | None]:
+) -> tuple[str | None, dict[str, int] | None, FinishReason | None]:
     """
     Normalize model metadata from one LangChain message.
 
@@ -88,9 +89,15 @@ def runtime_metadata_from_message(
 
     finish_reason = None
     if isinstance(response_metadata, dict):
-        raw_finish_reason = response_metadata.get("finish_reason")
-        if raw_finish_reason is not None:
-            finish_reason = str(raw_finish_reason)
+        # Anthropic reports this under "stop_reason", not "finish_reason" — every
+        # other provider Fred supports uses "finish_reason". Normalized here (not
+        # left raw) so the live SSE event and the persisted history agree on the
+        # same value for the same turn; see `coerce_finish_reason` for why this
+        # can never fail on an unrecognized provider value.
+        raw_finish_reason = response_metadata.get(
+            "finish_reason"
+        ) or response_metadata.get("stop_reason")
+        finish_reason = coerce_finish_reason(raw_finish_reason)
 
     token_usage = (
         normalize_token_usage(usage_metadata)
@@ -183,6 +190,13 @@ def normalize_token_usage(raw: object) -> dict[str, int] | None:
     if total_raw is None:
         total_raw = usage.get("token_count")
 
+    input_token_details = usage.get("input_token_details")
+    cache_read_raw = None
+    cache_creation_raw = None
+    if isinstance(input_token_details, dict):
+        cache_read_raw = input_token_details.get("cache_read")
+        cache_creation_raw = input_token_details.get("cache_creation")
+
     has_any = any(
         usage.get(key) is not None
         for key in (
@@ -213,6 +227,8 @@ def normalize_token_usage(raw: object) -> dict[str, int] | None:
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
+        "cache_read_tokens": _to_int(cache_read_raw),
+        "cache_creation_tokens": _to_int(cache_creation_raw),
     }
 
 
@@ -247,4 +263,8 @@ def sum_token_usage(
         "input_tokens": left.get("input_tokens", 0) + right.get("input_tokens", 0),
         "output_tokens": left.get("output_tokens", 0) + right.get("output_tokens", 0),
         "total_tokens": left.get("total_tokens", 0) + right.get("total_tokens", 0),
+        "cache_read_tokens": left.get("cache_read_tokens", 0)
+        + right.get("cache_read_tokens", 0),
+        "cache_creation_tokens": left.get("cache_creation_tokens", 0)
+        + right.get("cache_creation_tokens", 0),
     }

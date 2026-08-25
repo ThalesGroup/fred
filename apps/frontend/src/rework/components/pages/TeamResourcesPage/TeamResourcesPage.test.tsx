@@ -34,6 +34,8 @@ const probe = vi.hoisted(() => ({
     | undefined,
   corpusStatsUninitialized: false,
   corpusStatsRefetch: () => {},
+  teamUninitialized: false,
+  teamRefetch: () => {},
   onDocumentsChanged: undefined as (() => void) | undefined,
   // Existing "tab switcher" coverage below exercises the 4-tab (flag-on)
   // behavior — defaults true so it keeps passing unmodified. The dedicated
@@ -65,10 +67,17 @@ vi.mock("@shared/utils/teamId.ts", () => ({
   personalTeamId: (uid: string) => `personal-${uid}`,
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useGetTeamQuery: () => ({ data: probe.team }),
+  useGetTeamQuery: () => ({
+    data: probe.team,
+    isUninitialized: probe.teamUninitialized,
+    refetch: probe.teamRefetch,
+  }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  // The rollup reads the team's terminal ingestion history (#2384); no
+  // history in these fixtures, so it falls back to the live task feed.
+  useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
     isLoading: false,
     isFetching: false,
@@ -121,6 +130,8 @@ beforeEach(() => {
   };
   probe.corpusStatsUninitialized = false;
   probe.corpusStatsRefetch = vi.fn();
+  probe.teamUninitialized = false;
+  probe.teamRefetch = vi.fn();
   probe.onDocumentsChanged = undefined;
   probe.enableAllResourceSpaces = true;
   probe.bootstrapPending = false;
@@ -224,7 +235,7 @@ describe("TeamResourcesPage resource spaces feature flag", () => {
 // query that has not been started yet") and previously took down the whole
 // app. onDocumentsChanged must no-op instead of calling refetch() while
 // corpusStats is still uninitialized.
-describe("TeamResourcesPage onDocumentsChanged — corpusStats refetch guard", () => {
+describe("TeamResourcesPage onDocumentsChanged — refetch guard", () => {
   it("does not call refetch while corpusStats has not started yet", () => {
     probe.corpusStatsUninitialized = true;
     render();
@@ -239,6 +250,28 @@ describe("TeamResourcesPage onDocumentsChanged — corpusStats refetch guard", (
 
     probe.onDocumentsChanged?.();
     expect(probe.corpusStatsRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not call the team refetch while the team query has not started yet", () => {
+    probe.teamUninitialized = true;
+    render();
+
+    expect(() => probe.onDocumentsChanged?.()).not.toThrow();
+    expect(probe.teamRefetch).not.toHaveBeenCalled();
+  });
+});
+
+// The storage meter reads the control-plane team row, but every write to its
+// `current_resources_storage_size` comes from the knowledge-flow API — a
+// separate RTK Query instance whose tag invalidations cannot reach this cache
+// entry. Deleting a document or a library therefore left the meter frozen on
+// its mount-time figure until a manual page reload.
+describe("TeamResourcesPage storage meter freshness", () => {
+  it("refetches the team so the quota meter follows corpus add/delete", () => {
+    render();
+
+    probe.onDocumentsChanged?.();
+    expect(probe.teamRefetch).toHaveBeenCalledOnce();
   });
 });
 

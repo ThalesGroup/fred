@@ -15,14 +15,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional, Protocol
+from typing import Any, Dict, Optional, Protocol
 
 import httpx
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 
 from fred_runtime.common.kf_http_client import get_shared_kf_async_client
-from fred_runtime.common.structures import AgentSettingsLike
+from fred_runtime.common.structures import (
+    AgentSettingsLike,
+    TokenRefreshCallback,
+    resolve_refresh_result,
+)
 from fred_runtime.runtime_context import get_runtime_context
 
 logger = logging.getLogger(__name__)
@@ -32,11 +36,8 @@ class KnowledgeFlowAgentContext(Protocol):
     runtime_context: AgentRuntimeContext
     agent_settings: AgentSettingsLike
 
-    def refresh_user_access_token(self) -> str:
+    async def refresh_user_access_token(self) -> str:
         raise NotImplementedError()
-
-
-TokenRefreshCallback = Callable[[], str]
 
 
 class KfBaseClient:
@@ -50,7 +51,7 @@ class KfBaseClient:
         *,
         agent: Optional[KnowledgeFlowAgentContext] = None,
         access_token: Optional[str] = None,
-        refresh_user_access_token: Optional[Callable[[], str]] = None,
+        refresh_user_access_token: Optional[TokenRefreshCallback] = None,
     ):
         """
         Why: centralize KF client setup so all callers share the same transport and KPI wiring.
@@ -128,20 +129,20 @@ class KfBaseClient:
     # Internal helpers
     # ---------------------------
 
-    def _current_access_token(self) -> str:
+    async def _current_access_token(self) -> str:
         """Uniform accessor for the access token regardless of mode.
 
         Why: avoid duplicating token access logic across client call sites.
         How: read the agent/runtime token first, then fall back to refresh hooks.
         Example:
-            >>> token = self._current_access_token()
+            >>> token = await self._current_access_token()
         """
         if self._agent:
             token = getattr(self._agent.runtime_context, "access_token", None)
             if token:
                 return token
             # Centralized fallback: if token is missing, attempt a refresh once.
-            if self._try_refresh_token():
+            if await self._try_refresh_token():
                 refreshed = getattr(self._agent.runtime_context, "access_token", None)
                 if refreshed:
                     return refreshed
@@ -150,7 +151,7 @@ class KfBaseClient:
             )
 
         if not self._static_access_token and self._refresh_cb:
-            if self._try_refresh_token() and self._static_access_token:
+            if await self._try_refresh_token() and self._static_access_token:
                 return self._static_access_token
         if not self._static_access_token:
             raise ValueError(
@@ -158,11 +159,27 @@ class KfBaseClient:
             )
         return self._static_access_token
 
-    def _try_refresh_token(self) -> bool:
-        """Try to refresh token in either mode."""
-        if self._agent and getattr(self._agent, "refresh_user_access_token", None):
+    async def _try_refresh_token(self) -> bool:
+        """Try to refresh token in either mode.
+
+        Awaited rather than called inline: the Keycloak exchange is network I/O
+        on a path that already runs inside the pod's event loop.
+        """
+        agent_hook = getattr(self._agent, "refresh_user_access_token", None)
+        if self._agent and agent_hook:
+            # Shape-checked BEFORE invoking. An earlier version called the hook
+            # and then inspected its result, which for the synchronous shape had
+            # already run the blocking Keycloak round trip on the event loop —
+            # the very defect #2125 removes — and then threw the successful
+            # refresh away.
             try:
-                self._agent.refresh_user_access_token()
+                # Shape decided from the RESULT, not statically — see
+                # `resolve_refresh_result`. A legacy sync hook has already
+                # refreshed (and blocked the loop); its work is not thrown away.
+                refreshed = await resolve_refresh_result(agent_hook(), self._agent)
+                if not refreshed:
+                    logger.error("Agent-led token refresh returned an empty token.")
+                    return False
                 logger.info("Agent-led user token refresh succeeded.")
                 return True
             except Exception as e:
@@ -171,7 +188,7 @@ class KfBaseClient:
 
         if self._refresh_cb:
             try:
-                new_token = self._refresh_cb()
+                new_token = await resolve_refresh_result(self._refresh_cb(), self)
                 if not new_token:
                     logger.error("Session refresh callback returned empty token.")
                     return False
@@ -198,7 +215,7 @@ class KfBaseClient:
         url = f"{self.base_url}{path}"
 
         # Support explicit override of the token
-        token = kwargs.pop("access_token", None) or self._current_access_token()
+        token = kwargs.pop("access_token", None) or await self._current_access_token()
 
         headers: Dict[str, str] = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
@@ -263,7 +280,7 @@ class KfBaseClient:
                 method,
                 path,
             )
-            if self._try_refresh_token():
+            if await self._try_refresh_token():
                 # Drop the stale explicit token so _execute_authenticated_request
                 # falls back to _current_access_token() and picks up the refreshed one.
                 retry_kwargs = {k: v for k, v in kwargs.items() if k != "access_token"}
