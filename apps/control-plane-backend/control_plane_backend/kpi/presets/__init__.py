@@ -56,6 +56,9 @@ from control_plane_backend.kpi.presets.user_activity import (
     USER_MESSAGES_TOTAL_PRESET,
     USER_SESSIONS_TOTAL_PRESET,
 )
+from control_plane_backend.kpi.presets.user_recent import (
+    USER_RECENT_AGENTS_PRESET,
+)
 from control_plane_backend.kpi.presets.user_token_usage_by_agent import (
     USER_TOKEN_USAGE_BY_AGENT_PRESET,
 )
@@ -86,6 +89,7 @@ PRESETS: list[PresetDef] = [
     USER_AGENTS_USED_TOTAL_PRESET,
     USER_TOP_AGENTS_PRESET,
     USER_TOP_TEAMS_PRESET,
+    USER_RECENT_AGENTS_PRESET,
     USER_TOKEN_USAGE_OVER_TIME_PRESET,
     USER_TOKEN_USAGE_BY_AGENT_PRESET,
     USER_TOKEN_USAGE_BY_MODEL_PRESET,
