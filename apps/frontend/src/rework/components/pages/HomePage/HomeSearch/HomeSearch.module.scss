@@ -13,21 +13,29 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
-  transition: border-color 150ms ease;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-m);
   background: var(--surface-container-high);
   padding: 0 var(--spacing-m);
   height: 3.5rem;
 
   &:focus-within {
     border-color: var(--primary);
+    background: var(--surface-container-highest);
+  }
+
+  &:focus-within .searchIcon {
+    color: var(--primary);
   }
 }
 
 .searchIcon {
   display: flex;
   flex-shrink: 0;
+  transition: color 150ms ease;
   color: var(--on-surface-retreat);
   font-size: 1.5rem;
 }
