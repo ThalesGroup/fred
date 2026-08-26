@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Optional, TypedDict
@@ -70,9 +71,24 @@ class AudioProcessor(BaseMarkdownProcessor):
             from faster_whisper import WhisperModel
 
             audio_cfg = self._get_audio_config()
-            model_size = audio_cfg.get("whisper_model_size", "base")
+            # WHISPER_MODEL_SIZE is set by the prod image, which bakes exactly that
+            # model into the Hugging Face hub cache at build time (#2406). Reading it
+            # here keeps the baked model and the requested one in sync by construction.
+            model_size = audio_cfg.get("whisper_model_size") or os.getenv("WHISPER_MODEL_SIZE") or "base"
             device = audio_cfg.get("device", "cpu")
-            self._model = WhisperModel(model_size, device=device, compute_type="int8")
+            try:
+                # Offline-first (#2406): never touch the network when the model is
+                # already present in the local cache.
+                self._model = WhisperModel(model_size, device=device, compute_type="int8", local_files_only=True)
+            except Exception:
+                # Not necessarily a cache miss (a bad device or a corrupt snapshot lands
+                # here too), so log the real cause instead of asserting one.
+                logger.info(
+                    "Whisper model '%s' could not be loaded from the local cache; retrying with a Hugging Face hub download.",
+                    model_size,
+                    exc_info=True,
+                )
+                self._model = WhisperModel(model_size, device=device, compute_type="int8")
         return self._model
 
     def check_file_validity(self, file_path: Path) -> bool:
