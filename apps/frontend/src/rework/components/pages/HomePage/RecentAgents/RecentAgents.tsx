@@ -109,7 +109,7 @@ export default function RecentAgents() {
         <Icon category="outlined" type="history" />
         <h2 className={styles.title}>{t("rework.home.recentAgents.title")}</h2>
       </div>
-      <div className={styles.row}>
+      <div className={styles.row} data-count={tiles.length}>
         {tiles.map(({ instance, teamId }) => (
           <CompactAgentCard key={instance.agent_instance_id} instance={instance} teamId={teamId} />
         ))}
