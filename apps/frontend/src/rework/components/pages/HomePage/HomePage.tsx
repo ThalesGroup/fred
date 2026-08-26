@@ -66,7 +66,7 @@ export default function HomePage() {
           items={[
             { label: t("rework.home.tabs.quickAccess") },
             { label: t("rework.home.tabs.activity") },
-            { label: t("rework.home.tabs.news") },
+            { label: t("rework.home.tabs.trending") },
           ]}
         />
         {showPeriod && (
