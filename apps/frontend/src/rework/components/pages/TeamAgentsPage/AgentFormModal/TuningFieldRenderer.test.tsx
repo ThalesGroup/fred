@@ -115,4 +115,55 @@ describe("TuningFieldRenderer — prompt library auto-open", () => {
     expect(pickerShown()).toBe(false);
     expect(textareaShown()).toBe(true);
   });
+
+  it("keeps the library closed across an unmount/remount once emptied (controlled state)", () => {
+    // The form owns pickerExplicit so the decision survives a section switch
+    // (which unmounts this field). Emptying it reports write mode upward.
+    const changes: (boolean | null)[] = [];
+    const onPickerExplicitChange = (v: boolean | null) => changes.push(v);
+
+    act(() => {
+      root.render(
+        <TuningFieldRenderer
+          field={PROMPT_FIELD}
+          value="Existing prompt"
+          onChange={vi.fn()}
+          disabled={false}
+          teamId="t1"
+          pickerExplicit={null}
+          onPickerExplicitChange={onPickerExplicitChange}
+        />,
+      );
+    });
+    expect(textareaShown()).toBe(true);
+
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    act(() => {
+      nativeSetter?.call(textarea, "");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(changes).toContain(false); // reported write mode to the form
+
+    // Simulate leaving and returning to the Prompts section: unmount, then
+    // remount fresh with the persisted pickerExplicit=false and empty value.
+    act(() => root.unmount());
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <TuningFieldRenderer
+          field={PROMPT_FIELD}
+          value=""
+          onChange={vi.fn()}
+          disabled={false}
+          teamId="t1"
+          pickerExplicit={false}
+          onPickerExplicitChange={onPickerExplicitChange}
+        />,
+      );
+    });
+
+    expect(pickerShown()).toBe(false);
+    expect(textareaShown()).toBe(true);
+  });
 });
