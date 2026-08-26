@@ -2208,6 +2208,7 @@ async def _write_turn_history(
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
+    final_context_tokens: int | None = None
 
     for payload in payloads:
         kind = payload.get("kind")
@@ -2221,7 +2222,6 @@ async def _write_turn_history(
                     call_id=payload["call_id"],
                     name=payload["tool_name"],
                     args=payload.get("arguments", {}),
-                    token_usage=payload.get("token_usage"),
                 )
             )
             rank += 1
@@ -2357,6 +2357,9 @@ async def _write_turn_history(
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
+            raw_context_tokens = payload.get("context_tokens")
+            if isinstance(raw_context_tokens, (int, float)):
+                final_context_tokens = int(raw_context_tokens)
 
     # 2b. Blocks the stream never closed (truncated turn, crashed node). The live
     # UI closes them itself on `final` so the accordion does not pulse forever
@@ -2378,6 +2381,7 @@ async def _write_turn_history(
                 usage=final_token_usage,
                 sources=final_sources if final_sources else None,
                 finish_reason=final_finish_reason,
+                context_tokens=final_context_tokens,
             )
         )
 

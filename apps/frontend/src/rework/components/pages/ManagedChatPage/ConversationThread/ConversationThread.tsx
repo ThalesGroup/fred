@@ -99,6 +99,7 @@ export const ConversationThread = memo(function ConversationThread({
             sources={msg.sources}
             uiParts={msg.uiParts}
             tokenUsage={msg.tokenUsage}
+            marginalTokenUsage={msg.marginalTokenUsage}
             isStreaming={msg.isStreaming}
             pendingToolCallIds={pendingToolCallIds}
           />

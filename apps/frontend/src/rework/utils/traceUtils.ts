@@ -20,7 +20,6 @@ import type {
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
-import type { TokenUsage } from "@rework/types/conversation";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -212,19 +211,6 @@ export function toolResultOk(result: ChatMessage): boolean {
 
 export function toolResultLatencyMs(result: ChatMessage): number | null {
   return toolResultPart(result)?.latency_ms ?? null;
-}
-
-// Usage of the model call that decided to make this tool call (TRACE-01) —
-// carried on the tool_call message's metadata, not the result's.
-export function toolCallTokenUsage(call: ChatMessage): TokenUsage | null {
-  const tu = call.metadata?.token_usage;
-  if (!tu) return null;
-  return {
-    input_tokens: tu.input_tokens ?? 0,
-    output_tokens: tu.output_tokens ?? 0,
-    total_tokens: tu.total_tokens ?? 0,
-    cache_read_tokens: tu.cache_read_tokens,
-  };
 }
 
 export function toolResultContent(result: ChatMessage): string {
@@ -499,13 +485,6 @@ export function secondaryTextForEntry(entry: TraceEntry): string {
     return formatLatencyMs(toolResultLatencyMs(entry.result));
   }
   return "";
-}
-
-// Token usage to show alongside the latency (TRACE-01). Only tool steps
-// carry it — reasoning/note/error entries don't have a paired tool_call.
-export function tokenUsageForEntry(entry: TraceEntry): TokenUsage | null {
-  if (entry.kind === "combo") return toolCallTokenUsage(entry.call);
-  return null;
 }
 
 /**
