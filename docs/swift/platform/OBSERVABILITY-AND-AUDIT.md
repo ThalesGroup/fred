@@ -153,7 +153,7 @@ independently drops any record from that logger by name.
 |---|---|---|
 | Directly identifying | user email, full name | **Nowhere** — Fred uses opaque platform identifiers everywhere an identity reference is needed |
 | Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Product analytics (Stream 2, access-scoped) and the audit trail (Stream 3) — never in operational metrics (Stream 1) |
-| Content | prompts, tool arguments/results, documents, attachments | **Nowhere** in any observability or audit stream — content lives only in the product's own storage, under the product's own access control |
+| Content | prompts, tool arguments/results, documents, attachments | **Nowhere** in any observability or audit stream — content lives only in the product's own storage, under the product's own access control. One deliberate, default-off local exception: `observability.langfuse.capture_content` (see below) |
 | Secrets | tokens, cookies, signed URLs | **Nowhere**, ever |
 | Technical/bounded | tool name, error code, HTTP status, model name | All streams as relevant — none of this is personal data |
 
@@ -162,6 +162,37 @@ Stream 2 (product analytics, itself access-scoped per viewer) and Stream 3 (the 
 entire purpose is to attribute an action to a principal). Stream 1 (what a platform-wide Grafana
 audience can see) is designed to never carry it at all — not filtered as an afterthought, but
 structurally excluded before a metric is ever labeled.
+
+### 7.1 The one content exception: Langfuse local debugging (2026-08-20)
+
+Tracing (the optional `tracer: langfuse` backend) is the one place where a developer can
+deliberately turn the content exclusion off, and only for a Langfuse they run themselves. The
+switch is `observability.langfuse.capture_content` in `configuration.yaml`, overridable per-run by
+the `LANGFUSE_CAPTURE_CONTENT` env var. It is **off by default**, and enabling it exports prompts,
+model answers, and tool arguments/results to Langfuse.
+
+Why this is bounded rather than a hole in the rule:
+
+- **Default-off and structurally enforced.** The switch is exposed as `Tracer.captures_content`
+  (`libs/fred-core/fred_core/portable/observability.py`). Every call site checks it before
+  building a payload, and `Span.set_io` drops the payload again if it is off — so a call site that
+  forgets the check still cannot leak. `Tracer` and `LoggingTracer` both answer `False`
+  permanently, which is what keeps the generic app-log store (§6) and the audit trail (§5) content-
+  free no matter what tracing does.
+- **Never the log store.** `LoggingTracer` records payload *sizes* only, never the payload — the
+  same rule `tracing_kpi.py` has followed since issue #2009 (2026-07-18).
+- **Never Prometheus.** Content and identity both stay out of Stream 1; this exception adds no
+  metric and no label (§3's allow-list is untouched).
+- **Loud at startup.** The pod logs a warning naming the destination host whenever capture is on,
+  so an operator cannot leave it enabled unnoticed.
+
+Enabling it on a shared or production deployment exports user conversations to a system that does
+not enforce Fred's authorization model. It is a laptop-only debugging affordance, not a supported
+deployment mode.
+
+Independently of content, Langfuse traces do carry the pseudonymous identity set (`session_id`,
+`user_id`, `team_id`) in Langfuse's native trace fields — that is the row-2 category above, and it
+is what makes per-conversation and per-user trace analysis possible at all.
 
 ## 8. Cross-classification portability (C1 / C2 / C3)
 

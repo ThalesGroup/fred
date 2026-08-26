@@ -588,6 +588,7 @@ export type LinkPart = {
 };
 export type FinalRuntimeEvent = {
   content?: string;
+  context_tokens?: number | null;
   finish_reason?: FinishReason | null;
   kind?: "final";
   model_name?: string | null;
@@ -649,9 +650,6 @@ export type ToolCallRuntimeEvent = {
   call_id: string;
   kind?: "tool_call";
   sequence?: number;
-  token_usage?: {
-    [key: string]: number;
-  } | null;
   tool_name: string;
 };
 export type ToolResultRuntimeEvent = {
@@ -747,6 +745,7 @@ export type ChatTokenUsage = {
 };
 export type ChatMetadata = {
   agent_id?: string | null;
+  context_tokens?: number | null;
   finish_reason?: FinishReason | null;
   latency_ms?: number | null;
   model?: string | null;

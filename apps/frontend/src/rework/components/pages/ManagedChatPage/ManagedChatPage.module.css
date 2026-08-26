@@ -159,6 +159,17 @@
   gap: var(--spacing-s);
 }
 
+/* Conversation-wide billed total. Just the number: the per-message badges
+   carry the in/out breakdown, and repeating it here made the header a second
+   place to read the same decomposition (#2403). */
+.conversationTokens {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
 .topBarActions {
   display: flex;
   align-items: center;
