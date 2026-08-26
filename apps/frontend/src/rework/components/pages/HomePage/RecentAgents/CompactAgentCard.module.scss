@@ -4,14 +4,18 @@
  * only its buttons clickable. */
 .card {
   display: flex;
-  flex: 0 0 auto;
+  /* Capped at 180px; grows to fill up to that, so long names/roles don't widen
+   * the tile past it (they ellipsize instead). */
+  flex: 1 1 auto;
+  flex-direction: column;
   align-items: center;
   gap: var(--spacing-s);
   transition: background-color 150ms ease;
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
-  padding: var(--spacing-s) var(--spacing-m);
-  min-width: 0;
+  padding: var(--spacing-m);
+  max-width: 180px;
+  text-align: center;
   text-decoration: none;
 
   &:hover {
@@ -35,11 +39,14 @@
 .identity {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--spacing-3xs);
+  width: 100%;
   min-width: 0;
 }
 
 .name {
+  max-width: 100%;
   overflow: hidden;
   color: var(--secondary);
   font: var(--font-title-small);
@@ -48,6 +55,7 @@
 }
 
 .role {
+  max-width: 100%;
   overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
