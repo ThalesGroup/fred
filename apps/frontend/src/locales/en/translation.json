@@ -1521,7 +1521,6 @@
       },
       "pageTitle": "Home",
       "pageSubtitle": "Select a space in the left panel to get started.",
-      "eyebrow": "Welcome",
       "greeting": "Hello, what are we doing today?",
       "greetingNamed": "Hello {{name}}, what are we doing today?",
       "subtitle": "Access any agent, team or prompt from here.",

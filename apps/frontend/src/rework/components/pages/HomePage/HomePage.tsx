@@ -91,7 +91,6 @@ export default function HomePage() {
       {tabIndex === 0 && (
         <div className={styles.quickAccessTab}>
           <div className={styles.headerText}>
-            <p className={styles.eyebrow}>{t("rework.home.eyebrow")}</p>
             <h1 className={styles.title}>
               {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
             </h1>

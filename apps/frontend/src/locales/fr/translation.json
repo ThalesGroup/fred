@@ -1521,7 +1521,6 @@
       },
       "pageTitle": "Accueil",
       "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer.",
-      "eyebrow": "Bienvenue",
       "greeting": "Bonjour, que faisons-nous aujourd'hui ?",
       "greetingNamed": "Bonjour {{name}}, que faisons-nous aujourd'hui ?",
       "subtitle": "Accédez à n'importe quel agent, équipe ou prompt à partir d'ici.",
