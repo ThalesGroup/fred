@@ -180,9 +180,17 @@ describe("DocumentWorkspace — rename a document", () => {
     await clickSave();
 
     expect(renameDocument).toHaveBeenCalledTimes(1);
-    const [doc, newName] = renameDocument.mock.calls[0] as [{ identity: { document_uid: string } }, string];
+    const [doc, newName, tagId] = renameDocument.mock.calls[0] as [
+      { identity: { document_uid: string } },
+      string,
+      string | undefined,
+    ];
     expect(doc.identity.document_uid).toBe("uid-1");
     expect(newName).toBe("Q3-Final.pdf");
+    // #2407: the folder being viewed must be passed through - without it the
+    // command's refresh() cannot reload this page and the row keeps the old
+    // name even though the rename succeeded server-side.
+    expect(tagId).toBe("tag-cir");
   });
 
   it("does not select the row when clicking a 'more' menu item — the menu portals to document.body, and React bubbles portal clicks through the React tree, not the DOM tree, so the row's own click-to-select guard can't see them via target.closest()", () => {
