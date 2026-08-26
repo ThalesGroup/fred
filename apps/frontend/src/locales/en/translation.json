@@ -1514,8 +1514,102 @@
       "searchPlaceholder": "Search a team",
       "searchClear": "Clear search",
       "yourTeams": "Your teams",
+      "sort": {
+        "aria": "Sort teams",
+        "recent": "Recently viewed",
+        "alpha": "Alphabetical"
+      },
       "pageTitle": "Home",
-      "pageSubtitle": "Select a space in the left panel to get started."
+      "pageSubtitle": "Select a space in the left panel to get started.",
+      "greeting": "Hello, what are we doing today?",
+      "greetingNamed": "Hello {{name}}, what are we doing today?",
+      "subtitle": "Access any agent, team or prompt from here.",
+      "tabs": {
+        "aria": "Home sections",
+        "quickAccess": "Quick access",
+        "activity": "Your activity",
+        "trending": "Trending"
+      },
+      "responsible": {
+        "title": "Responsible AI",
+        "footprintInfo": {
+          "aria": "How is this estimate calculated?",
+          "title": "Where does this estimate come from?",
+          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
+          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "limitsTitle": "Good to keep in mind",
+          "limit1": "It's an estimate, not an exact measurement.",
+          "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
+          "limit3": "The goal is to give an order of magnitude to raise awareness, not a precise figure.",
+          "confirm": "Got it"
+        },
+        "cleanupTool": {
+          "aria": "Clean up",
+          "confirmAll": "Delete all",
+          "confirm": "Delete ({{count}})",
+          "cancel": "Cancel",
+          "toast": "{{count}} item(s) deleted"
+        },
+        "cleanupConversations": {
+          "title": "Clean up inactive conversations",
+          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
+          "empty": "No inactive conversation to clean up."
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 most-used prompts",
+        "uses": "uses",
+        "weekDelta": "▲ {{count}} · 7d",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "periodDelta": "▲ {{count}} · {{days}}d"
+      },
+      "period": {
+        "label": "Period",
+        "days": "{{count}}d",
+        "d7": "Last 7 days",
+        "d30": "Last 30 days",
+        "d90": "Last 90 days"
+      },
+      "search": {
+        "placeholder": "Search agents, teams, prompts…",
+        "empty": "No results.",
+        "groups": {
+          "agents": "Agents",
+          "teams": "Teams",
+          "prompts": "Prompts"
+        }
+      },
+      "recentAgents": {
+        "title": "Recently used agents"
+      },
+      "topAgents": {
+        "title": "Your most-used agents",
+        "unit": "conv.",
+        "empty": "No agent used in this period."
+      },
+      "topTeams": {
+        "title": "Your activity across your teams",
+        "unit": "conv.",
+        "personalSpace": "Personal space",
+        "empty": "You are not a member of any team.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Editor",
+          "team_analyst": "Analyst",
+          "team_member": "Member"
+        }
+      },
+      "activity": {
+        "title": "Your activity",
+        "conversations": "New conversations",
+        "messages": "Messages sent",
+        "agents": "Agents used",
+        "deltaUp": "▲ {{pct}}% ({{abs}})",
+        "deltaDown": "▼ {{pct}}% ({{abs}})",
+        "deltaFlat": "flat",
+        "vsPrevious": "vs previous period",
+        "periodCaption": "over the last {{count}} days"
+      }
     },
     "mainNav": {
       "ariaLabel": "Main navigation",

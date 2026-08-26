@@ -66,6 +66,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
     },
+    // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
+      providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
+    },
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: {
+      invalidatesTags: [{ type: "ControlPlaneSession", id: "INACTIVE" }],
+    },
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
     },
@@ -419,6 +426,21 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
+  // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery: useUserAgentsUsedTotalQuery,
+  // Home dashboard leaderboard — top agents / top teams (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery: useUserTopAgentsQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery: useUserTopTeamsQuery,
+  // Home dashboard — most recently used agents, newest first (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery: useUserRecentAgentsQuery,
+  // Lazy agent-instances fetch — the recent-agents preset returns only ids, so
+  // the Home tiles resolve each to its full instance across its (variable) team.
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: useLazyTeamAgentInstancesQuery,
+  // Home cleanup tool — inactive conversations across spaces + bulk delete (#2298).
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery: useMyInactiveSessionsQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation: useBulkDeleteMySessionsMutation,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,

@@ -1,0 +1,118 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface);
+}
+
+.title {
+  margin: 0;
+  font: var(--font-title-medium-emphasized);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-s);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+}
+
+/* Hover: an 8% on-surface layer over the resting surface (no border change). */
+.card:hover {
+  background-image: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover));
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.team {
+  overflow: hidden;
+  color: var(--primary);
+  font: var(--font-label-small);
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  min-height: 2.4em;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-2xs);
+}
+
+.uses {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.usesNum {
+  color: var(--on-surface);
+  font: var(--font-title-medium-emphasized);
+  font-variant-numeric: tabular-nums;
+}
+
+.usesLbl {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
+.delta {
+  margin-top: 2px;
+  color: var(--success);
+  font: var(--font-label-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-l);
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
