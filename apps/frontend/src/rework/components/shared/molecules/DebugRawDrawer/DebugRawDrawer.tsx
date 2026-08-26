@@ -52,7 +52,7 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
       <div className={styles.toolbar}>
         <ButtonGroup
           size="small"
-          color="primary"
+          color="secondary"
           variant="radio"
           aria-label={t("chatbot.debugRaw.scopeAria")}
           selectedIndex={scopeIndex}

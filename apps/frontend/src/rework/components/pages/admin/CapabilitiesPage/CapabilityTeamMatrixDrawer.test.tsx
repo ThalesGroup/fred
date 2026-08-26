@@ -30,9 +30,14 @@ import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: { defaultValue?: string; team?: string; count?: number }) =>
-      opts?.defaultValue ??
-      (opts?.team ? `${key}:${opts.team}` : opts?.count === undefined ? key : `${key}:${opts.count}`),
+    t: (key: string, opts?: { defaultValue?: string; team?: string; count?: number; deps?: string }) => {
+      if (opts?.defaultValue !== undefined) return opts.defaultValue;
+      // `deps` (the #2408 dependency hints) is echoed like `team`/`count`: the
+      // resolved dependency NAMES are what the assertions are about, and a
+      // bare key echo would hide whether they ever reached the label.
+      const interpolated = opts?.team ?? opts?.deps ?? opts?.count;
+      return interpolated === undefined ? key : `${key}:${interpolated}`;
+    },
     i18n: { language: "en" },
   }),
 }));
@@ -69,6 +74,7 @@ function render(props: Partial<ComponentProps<typeof CapabilityTeamMatrixDrawer>
   return renderToStaticMarkup(
     <CapabilityTeamMatrixDrawer
       capability={capability()}
+      allCapabilities={[]}
       teams={[]}
       teamsLoading={false}
       teamsError={false}
@@ -153,5 +159,96 @@ describe("CapabilityTeamMatrixDrawer tri-state controls", () => {
     expect(html).toContain("rework.admin.capabilities.matrix.disable");
     expect(html).toContain("rework.admin.capabilities.matrix.default");
     expect(html).toContain("rework.admin.capabilities.matrix.enable");
+  });
+});
+
+// Regression coverage for #2408: activating an agent whose default tool
+// capabilities the target team (or every personal space) cannot use yet was
+// offered freely and answered with a bare HTTP 409. The grant is now blocked
+// up front, and the row says which dependency is in the way.
+describe("CapabilityTeamMatrixDrawer agent dependency gate (#2408, RFC §8.6 depends_on)", () => {
+  const agent = capability({ id: "sentinel", name: "cap.sentinel", kind: "agent", default_capability_ids: ["dep"] });
+  const dep = (over: Partial<CapabilityEnablementItem> = {}) => capability({ id: "dep", name: "Tabular MCP", ...over });
+  const nb = [team("nb", "Nightly Build")];
+
+  const rows = (html: string) => html.split("<li ").slice(1);
+  const teamRow = (html: string) => rows(html).find((row) => !row.includes("_personalRow_")) ?? "";
+  const personalRow = (html: string) => rows(html).find((row) => row.includes("_personalRow_")) ?? "";
+  /** The row's three tri-state buttons, in CHOICES (disable/default/enable) order. */
+  const enableSegment = (rowHtml: string) => rowHtml.split("<button").slice(1, 4)[2] ?? "";
+
+  it("blocks Enable and names the dependency when the team cannot use it", () => {
+    const html = render({ capability: agent, allCapabilities: [agent, dep()], teams: nb });
+    const row = teamRow(html);
+    expect(row).toContain("rework.admin.capabilities.matrix.dependencyHint:Tabular MCP");
+    expect(enableSegment(row)).toContain("disabled");
+  });
+
+  it("offers Enable normally once the dependency is enabled for that team", () => {
+    const html = render({
+      capability: agent,
+      allCapabilities: [agent, dep({ enabled_team_ids: ["nb"] })],
+      teams: nb,
+    });
+    const row = teamRow(html);
+    expect(row).not.toContain("rework.admin.capabilities.matrix.dependencyHint");
+    expect(enableSegment(row)).not.toContain("disabled");
+  });
+
+  it("fails open when the dependency is not in the catalog list at all", () => {
+    // The backend stays the authority; blocking on a row we cannot evaluate
+    // would forbid a grant the server may well accept.
+    const html = render({ capability: agent, allCapabilities: [agent], teams: nb });
+    const row = teamRow(html);
+    expect(row).not.toContain("rework.admin.capabilities.matrix.dependencyHint");
+    expect(enableSegment(row)).not.toContain("disabled");
+  });
+
+  it("leaves an ordinary tool row untouched", () => {
+    const tool = capability({ id: "web_search" });
+    const html = render({ capability: tool, allCapabilities: [tool, dep()], teams: nb });
+    const row = teamRow(html);
+    expect(row).not.toContain("rework.admin.capabilities.matrix.dependencyHint");
+    expect(enableSegment(row)).not.toContain("disabled");
+  });
+
+  it("never disables the segment a team is already on, even with the dependency revoked", () => {
+    // A dependency CAN be revoked after the agent was granted. `ButtonGroup`
+    // gives only the selected item `tabIndex={0}`, so disabling it would strand
+    // the whole row for keyboard users — the admin could not even undo the
+    // now-broken grant. The stale "enable X first" hint is dropped with it.
+    const html = render({
+      capability: capability({ ...agent, enabled_team_ids: ["nb"] }),
+      allCapabilities: [agent, dep()],
+      teams: nb,
+    });
+    const row = teamRow(html);
+    expect(enableSegment(row)).not.toContain("disabled");
+    expect(row).not.toContain("rework.admin.capabilities.matrix.dependencyHint");
+  });
+
+  it("never disables the personal segment when the class is already enabled", () => {
+    const html = render({
+      capability: capability({ ...agent, personal_scope: "enabled" }),
+      allCapabilities: [agent, dep()],
+      teams: nb,
+    });
+    const row = personalRow(html);
+    expect(enableSegment(row)).not.toContain("disabled");
+    expect(row).not.toContain("rework.admin.capabilities.matrix.personal.dependencyHint");
+  });
+
+  it("blocks the personal-space class row when the dependency has no personal access", () => {
+    const html = render({ capability: agent, allCapabilities: [agent, dep()], teams: nb });
+    const row = personalRow(html);
+    expect(row).toContain("rework.admin.capabilities.matrix.personal.dependencyHint:Tabular MCP");
+    expect(enableSegment(row)).toContain("disabled");
+  });
+
+  it("offers the personal-space class row once the dependency is on by default", () => {
+    const html = render({ capability: agent, allCapabilities: [agent, dep({ default_on: true })], teams: nb });
+    const row = personalRow(html);
+    expect(row).not.toContain("rework.admin.capabilities.matrix.personal.dependencyHint");
+    expect(enableSegment(row)).not.toContain("disabled");
   });
 });

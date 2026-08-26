@@ -1,0 +1,64 @@
+/* Compact agent tile for the Home "recently used agents" row. Mirrors the
+ * enabled AgentCard palette (secondary-container icon, secondary name) but the
+ * whole tile is the interactive surface — unlike AgentCard, which is inert with
+ * only its buttons clickable. */
+.card {
+  display: flex;
+  /* Fixed 180px basis (no grow/shrink) so every tile is exactly the same width
+   * regardless of name/role length — longer text ellipsizes instead of widening
+   * its tile. */
+  flex: 0 0 180px;
+  align-items: center;
+  gap: var(--spacing-s);
+  transition: background-color 150ms ease;
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container);
+  padding: var(--spacing-s);
+  /* Drop the flex item's automatic min-content minimum, which would otherwise
+   * let a tile with a long word grow past the 180px basis. */
+  min-width: 0;
+  text-decoration: none;
+
+  &:hover {
+    background-color: var(--state-on-surface-hover);
+  }
+}
+
+.icon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-s);
+  background-color: var(--secondary-container);
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--on-secondary-container);
+  font-size: 1.5rem;
+}
+
+.identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--secondary);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

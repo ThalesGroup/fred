@@ -166,6 +166,11 @@ export function AgentFormBody({
   // per-capability list. UI-only, reset to Simple on each mount (#2220).
   const [capabilityView, setCapabilityView] = useState<"simple" | "advanced">("simple");
 
+  // Prompt-picker mode per field key, kept here (this body stays mounted across
+  // section switches) so a field the user emptied doesn't auto-reopen the
+  // library when they leave and return to the Prompts section (#bug).
+  const [promptPickerExplicit, setPromptPickerExplicit] = useState<Record<string, boolean | null>>({});
+
   // Resolve audit uids (created_by / updated_by) to display names (#1952).
   const auditUids = Array.from(
     new Set([editInstance?.created_by, editInstance?.updated_by].filter((uid): uid is string => Boolean(uid))),
@@ -247,6 +252,8 @@ export function AgentFormBody({
         disabled={isSubmitting}
         teamId={teamId}
         allValues={effectiveTuningValues}
+        pickerExplicit={promptPickerExplicit[field.key] ?? null}
+        onPickerExplicitChange={(v) => setPromptPickerExplicit((prev) => ({ ...prev, [field.key]: v }))}
         error={
           submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
         }

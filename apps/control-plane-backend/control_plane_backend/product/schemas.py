@@ -456,6 +456,43 @@ class SessionListItem(BaseModel):
     updated_at: datetime | None = None
 
 
+class InactiveSessionItem(BaseModel):
+    """One of the caller's conversations that has gone quiet — home dashboard
+    cleanup tool (#2298). Carries the resolved agent display name (unlike the
+    sidebar `SessionListItem`) so the cleanup list needs no extra lookup."""
+
+    session_id: str
+    team_id: TeamId
+    title: str | None = None
+    agent_name: str | None = None
+    updated_at: datetime | None = None
+
+
+class InactiveSessionsResponse(BaseModel):
+    sessions: list[InactiveSessionItem]
+
+
+class BulkDeleteSessionRef(BaseModel):
+    """A (session, space) pair to delete. team_id is required because a session
+    is only addressable within its team; ownership is still enforced per session
+    server-side, so a wrong pair simply fails rather than deleting anything."""
+
+    session_id: str
+    team_id: TeamId
+
+
+class BulkDeleteSessionsRequest(BaseModel):
+    sessions: list[BulkDeleteSessionRef]
+
+
+class BulkDeleteSessionsResponse(BaseModel):
+    """Partial-success report: bulk delete never aborts the whole batch on one
+    failure (a since-deleted or non-owned session just lands in `failed`)."""
+
+    deleted: list[str]
+    failed: list[str]
+
+
 class SessionAttachmentSummary(BaseModel):
     """Persisted conversation-level attachment metadata owned by control-plane."""
 

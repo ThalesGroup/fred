@@ -485,6 +485,27 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
     }),
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/inactive-sessions`,
+        params: {
+          inactive_days: queryArg.inactiveDays,
+        },
+      }),
+    }),
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: build.mutation<
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse,
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/sessions/bulk-delete`,
+        method: "POST",
+        body: queryArg.bulkDeleteSessionsRequest,
+      }),
+    }),
     getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: build.query<
       GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse,
       GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg
@@ -854,6 +875,84 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/kpi/presets/documents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserSessionsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_sessions_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserMessagesTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_messages_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_agents_used_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTopAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTopTeamsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_teams`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserRecentAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_recent_agents`,
         params: {
           since: queryArg.since,
           until: queryArg.until,
@@ -1338,6 +1437,16 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
 };
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
+  /** status 200 Successful Response */ InactiveSessionsResponse;
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
+  inactiveDays?: number;
+};
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse =
+  /** status 200 Successful Response */ BulkDeleteSessionsResponse;
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg = {
+  bulkDeleteSessionsRequest: BulkDeleteSessionsRequest;
+};
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
   /** status 200 Successful Response */ SessionListItem;
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg = {
@@ -1603,6 +1712,66 @@ export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
 export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserTopAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserRecentAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -2516,6 +2685,27 @@ export type CreateSessionRequest = {
   agent_instance_id?: string | null;
   title?: string | null;
 };
+export type InactiveSessionItem = {
+  session_id: string;
+  team_id: string;
+  title?: string | null;
+  agent_name?: string | null;
+  updated_at?: string | null;
+};
+export type InactiveSessionsResponse = {
+  sessions: InactiveSessionItem[];
+};
+export type BulkDeleteSessionsResponse = {
+  deleted: string[];
+  failed: string[];
+};
+export type BulkDeleteSessionRef = {
+  session_id: string;
+  team_id: string;
+};
+export type BulkDeleteSessionsRequest = {
+  sessions: BulkDeleteSessionRef[];
+};
 export type UpdateSessionRequest = {
   /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */
   updated_at?: string | null;
@@ -2630,6 +2820,8 @@ export type CapabilityEnablementItem = {
   team_settings_fields?: FieldSpec[];
   /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). */
   kind?: "tool" | "agent" | "model";
+  /** For a `kind="agent"` row: the template's default tool/MCP capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). Enabling the agent for a team 409s unless each of these is already usable by that team - exposed so the admin UI can disable the grant up front and explain why (GitHub #2408). Always empty for `kind="tool"`/`"model"`. */
+  default_capability_ids?: string[];
   /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
   suspended_instances?: number;
   /** Instances selecting this capability whose runtime pod was unreachable, so their health is UNKNOWN rather than broken. Kept separate from `suspended_instances`: the reconciliation sweep skips an unreachable pod rather than suspending on a transient outage (#1975, RFC §3.9), and this count reports the same way. */
@@ -2922,6 +3114,28 @@ export type MultiSeriesTimeSeriesResponse = {
   until: string;
   interval: string;
 };
+export type UserTopAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  value: number;
+};
+export type UserTopAgentsResponse = {
+  rows: UserTopAgentRow[];
+  since: string;
+  until: string;
+};
+export type UserRecentAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  last_used: string;
+};
+export type UserRecentAgentsResponse = {
+  rows: UserRecentAgentRow[];
+  since: string;
+  until: string;
+};
 export type TeamStorageRow = {
   team_id: string;
   label: string;
@@ -3173,6 +3387,9 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
@@ -3231,6 +3448,18 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
