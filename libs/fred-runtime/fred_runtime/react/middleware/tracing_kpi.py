@@ -31,8 +31,9 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
 from fred_runtime.runtime_support.trace_payloads import (
     final_assistant_message,
-    serialize_messages,
+    model_request_char_sizes,
     serialize_model_output,
+    serialize_model_request,
     to_langfuse_usage,
 )
 
@@ -98,13 +99,33 @@ class TracingKpiMiddleware(AgentMiddleware):
             )
             # Serializing a full transcript is real work on the per-turn hot
             # path, so it happens only when a backend will actually store it.
+            # `tools` is part of that payload: it is a sibling field of the same
+            # request, it carries the argument schemas the model generates tool
+            # calls against, and it exists in no other channel — a trace without
+            # it looks complete while hiding a large share of what was sent.
             if self._tracer.captures_content:
                 span.set_io(
-                    input=serialize_messages(
+                    input=serialize_model_request(
                         list(request.messages),
                         system_prompt=request.system_prompt,
+                        tools=request.tools,
                     )
                 )
+            # Sizes are measurement, not content (§7), so they are recorded even
+            # with capture off — the one volume signal available in production.
+            #
+            # Attributes, NOT `usage_details`: Langfuse renders every usage key
+            # under one "TOKENS" unit and sums the ones it does not recognize
+            # into an "Other usage" line. Three character counts became a single
+            # 119 778 shown beside "Input usage 32 155", reading as extra tokens.
+            # The token totals stayed correct — the display did not. Metadata has
+            # no unit and no aggregation, so each count stands on its own.
+            for key, value in model_request_char_sizes(
+                list(request.messages),
+                system_prompt=request.system_prompt,
+                tools=request.tools,
+            ).items():
+                span.set_attribute(key, value)
 
         kpi_dims: dict[str, str | None] = {
             "agent_id": self._binding.portable_context.agent_name
@@ -134,7 +155,9 @@ class TracingKpiMiddleware(AgentMiddleware):
                     if response_model_name is not None:
                         span.set_attribute("model_name", response_model_name)
                     self._record_model_response(
-                        span, response, model_name=response_model_name or model_name
+                        span,
+                        response,
+                        model_name=response_model_name or model_name,
                     )
                 self._log_model_response(response)
                 return response

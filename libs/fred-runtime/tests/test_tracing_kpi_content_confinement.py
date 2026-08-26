@@ -25,7 +25,7 @@ only lengths/names/counts are logged, never message/argument/answer text.
 from __future__ import annotations
 
 import logging
-from typing import cast
+from typing import Any, cast
 
 from fred_runtime.react.middleware import tracing_kpi as tracing_kpi_module
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
@@ -78,3 +78,97 @@ def test_log_model_response_never_logs_tool_args_or_answer_text(caplog) -> None:
         message = record.getMessage()
         assert SECRET_ARG_VALUE not in message
         assert SECRET_ANSWER not in message
+
+
+def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
+    """
+    End-to-end through the middleware, not just the serializer.
+
+    `serialize_model_request` falls back to a bare message list when `tools` is
+    empty, so a rename upstream (`ModelRequest.system_prompt` is already a
+    back-compat property) would silently revert the capture to messages-only
+    with every serializer test still green. This drives the real hook against a
+    real `ModelRequest` so that regression fails here (#2412 measurement needs
+    the tools payload to actually reach the trace).
+    """
+
+    import asyncio
+
+    from fred_sdk.contracts.runtime import SpanPort, TracerPort
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+
+    class _Args(BaseModel):
+        sql: str
+
+    class _PortableContext:
+        agent_name = "fred-auto"
+        agent_id = "fred-auto"
+
+    class _Binding:
+        portable_context = _PortableContext()
+
+    captured: dict[str, Any] = {}
+
+    class _Span(SpanPort):
+        def set_attribute(self, key: str, value: Any) -> None:
+            captured.setdefault("attrs", {})[key] = value
+
+        def set_io(self, *, input: Any = None, output: Any = None) -> None:
+            if input is not None:
+                captured["input"] = input
+
+        def end(self) -> None: ...
+
+    class _Tracer(TracerPort):
+        @property
+        def captures_content(self) -> bool:
+            return True
+
+        def start_span(
+            self,
+            name: str,
+            *,
+            context: object | None = None,
+            attributes: Any = None,
+            parent: Any = None,
+            **kwargs: object,
+        ) -> Any:
+            return _Span()
+
+    request = ModelRequest(
+        model=cast(BaseChatModel, None),
+        messages=[HumanMessage(content="combien de voitures ?")],
+        system_prompt="be helpful",
+        tools=[
+            StructuredTool.from_function(
+                func=lambda **kwargs: None,
+                name="read_query",
+                description="Execute one read-only SQL query",
+                args_schema=_Args,
+            )
+        ],
+        state={"messages": []},
+    )
+
+    middleware = TracingKpiMiddleware(
+        tracer=cast(Any, _Tracer()), kpi=None, binding=cast(Any, _Binding())
+    )
+
+    async def _handler(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(result=[AIMessage(content="8")])
+
+    asyncio.run(middleware.awrap_model_call(request, _handler))
+
+    payload = captured.get("input")
+    assert isinstance(payload, dict), "tools present: payload must carry both fields"
+    assert [tool["name"] for tool in payload["tools"]] == ["read_query"]
+    assert "sql" in str(payload["tools"][0]["parameters"])
+
+    # Character sizes ride as attributes, never as usage details: Langfuse
+    # renders every usage key under one TOKENS unit and aggregates the ones it
+    # does not know, so a character count shown there reads as extra tokens.
+    attrs = cast(dict[str, int], captured.get("attrs", {}))
+    assert attrs["chars_system"] == len("be helpful")
+    assert attrs["chars_messages"] == len("combien de voitures ?")
+    assert attrs["chars_tools"] > 0
