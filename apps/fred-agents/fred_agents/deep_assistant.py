@@ -125,6 +125,12 @@ class DeepAssistantDefinition(DeepAgentDefinition):
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id="document_access"),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
+        # Removed from the prod defaults (#2429) - uncomment to restore (and
+        # re-import the constants from fred_sdk):
+        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
+        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
+        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
+        # MCPServerRef(id="mcp-web-github-readonly"),
     )
 
     fields: tuple[FieldSpec, ...] = (
