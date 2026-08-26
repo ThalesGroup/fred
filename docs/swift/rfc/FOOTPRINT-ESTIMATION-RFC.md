@@ -4,7 +4,7 @@
 (see "Current state"); this RFC is scoped only to the **open question of factor
 accuracy**: the per-model impact factors are rough estimates and must be refined
 before the "IA responsable" footprint figures can be treated as anything better
-than order-of-magnitude. Not yet tracked in a GitHub issue.
+than order-of-magnitude. Tracked in [GitHub issue #2430](https://github.com/ThalesGroup/fred/issues/2430).
 
 ## 1. Problem statement
 
