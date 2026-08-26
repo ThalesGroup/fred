@@ -1555,6 +1555,15 @@
         "d30": "Last 30 days",
         "d90": "Last 90 days"
       },
+      "search": {
+        "placeholder": "Search agents, teams, prompts…",
+        "empty": "No results.",
+        "groups": {
+          "agents": "Agents",
+          "teams": "Teams",
+          "prompts": "Prompts"
+        }
+      },
       "recentAgents": {
         "title": "Recently used agents"
       },

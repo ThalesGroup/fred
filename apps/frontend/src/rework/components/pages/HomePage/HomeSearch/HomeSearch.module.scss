@@ -1,0 +1,137 @@
+/* Home "Spotlight" search. The field borrows the chat composer's look (large
+ * radius, surface-container-high fill); the results menu drops below it and
+ * overlays the sections underneath. */
+.wrap {
+  position: relative;
+  align-self: center;
+  z-index: 10;
+  width: 100%;
+  max-width: 720px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  transition: border-color 150ms ease;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-high);
+  padding: 0 var(--spacing-m);
+  height: 3.5rem;
+
+  &:focus-within {
+    border-color: var(--primary);
+  }
+}
+
+.searchIcon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font-size: 1.5rem;
+}
+
+.input {
+  flex: 1;
+  outline: none;
+  border: none;
+  background: transparent;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+
+  &::placeholder {
+    color: var(--on-surface-retreat);
+  }
+}
+
+/* Results menu, anchored just under the field. */
+.menu {
+  position: absolute;
+  top: calc(3.5rem + var(--spacing-2xs));
+  right: 0;
+  left: 0;
+  z-index: 20;
+  box-shadow: var(--elevation-2, 0 8px 24px rgb(0 0 0 / 18%));
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-2xs);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.group {
+  &:not(:first-child) {
+    margin-top: var(--spacing-2xs);
+  }
+}
+
+.groupTitle {
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  text-align: left;
+
+  /* Keyboard/hover highlight share one state (activeIndex tracks both). */
+  &[data-active="true"] {
+    background: var(--state-on-surface-hover);
+  }
+}
+
+.rowIcon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-s);
+  background: var(--secondary-container);
+  width: 2rem;
+  height: 2rem;
+  color: var(--on-secondary-container);
+  font-size: 1.125rem;
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rowLabel {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSublabel {
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: var(--spacing-m) var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: center;
+}

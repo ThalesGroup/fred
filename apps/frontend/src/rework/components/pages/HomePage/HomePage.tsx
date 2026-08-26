@@ -16,6 +16,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
+import HomeSearch from "./HomeSearch/HomeSearch.tsx";
 import ActivityKpis from "./ActivityKpis/ActivityKpis.tsx";
 import RecentAgents from "./RecentAgents/RecentAgents.tsx";
 import ResponsibleAiSection from "./ResponsibleAiSection/ResponsibleAiSection.tsx";
@@ -67,6 +68,7 @@ export default function HomePage() {
         />
       </header>
 
+      <HomeSearch />
       <RecentAgents />
       <ActivityKpis period={period} />
       <ResponsibleAiSection period={period} />
