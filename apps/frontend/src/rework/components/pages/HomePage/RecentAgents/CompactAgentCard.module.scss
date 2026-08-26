@@ -4,10 +4,10 @@
  * only its buttons clickable. */
 .card {
   display: flex;
-  /* Fixed 180px basis (no grow/shrink) so every tile is exactly the same width
+  /* Fixed 220px basis (no grow/shrink) so every tile is exactly the same width
    * regardless of name/role length — longer text ellipsizes instead of widening
    * its tile. */
-  flex: 0 0 180px;
+  flex: 0 0 220px;
   align-items: center;
   gap: var(--spacing-s);
   transition: background-color 150ms ease;
