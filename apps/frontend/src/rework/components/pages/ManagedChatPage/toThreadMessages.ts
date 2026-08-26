@@ -123,11 +123,97 @@ export function hitlResponseKey(choiceId: string): string | null {
   return null;
 }
 
+/**
+ * What a turn genuinely ADDED, as opposed to what it was billed (#2403).
+ *
+ * Within a conversation the context only grows, so a turn's new input is the
+ * context it ends with minus the context the PREVIOUS turn ended with. That
+ * span covers the previous answer as it is re-sent, the new question, and the
+ * growth from this turn's tool rounds. Everything else in the billed figure is
+ * older history being re-sent — real cost, shown in the header, but not new.
+ *
+ * The anchor is the previous `contextTokens` ALONE — deliberately not
+ * `+ output(T-1)`. Adding the previous turn's output assumes all of it comes
+ * back in the next prompt, and it does not: reasoning tokens are counted in
+ * `output_tokens` but dropped from replay (`checkpoint_hygiene.py` —
+ * "reasoning from closed turns is dropped"). That over-subtracted by however
+ * much the model had reasoned, understating the turn and, on a short answer
+ * with a long reasoning block, driving the figure negative. Live case: a turn
+ * whose two tool rows read +2254 and +332 displayed 2534 new input tokens —
+ * the parts visibly exceeded the whole.
+ *
+ * The previous answer therefore counts as output when produced and as input
+ * when re-sent. That is not double counting: both are real, at different
+ * rates.
+ *
+ * `previousContextTokens` is `0` before the first turn (nothing in context
+ * yet, so a first turn's whole prompt is genuinely new) and `null` once the
+ * chain is broken by a turn that reported no `contextTokens` — there, the
+ * honest answer is "unknown", and the caller falls back to the billed total
+ * rather than subtracting a stale anchor and understating the turn.
+ */
+export function marginalTokenUsage(
+  contextTokens: number | null | undefined,
+  billed: TokenUsage | null,
+  previousContextTokens: number | null,
+): TokenUsage | null {
+  if (contextTokens == null || billed == null || previousContextTokens == null) return null;
+  // Clamped: history trimming can leave a turn ending on a smaller context
+  // than the one before it, and a negative "new tokens" reads as a bug.
+  const newInput = Math.max(0, contextTokens - previousContextTokens);
+  return {
+    input_tokens: newInput,
+    output_tokens: billed.output_tokens,
+    total_tokens: newInput + billed.output_tokens,
+    // Deliberately no cache_read_tokens: caching is a property of a whole
+    // prompt, not of a delta. The header still reports it.
+  };
+}
+
+/**
+ * Conversation-level total for the chat header (#2403).
+ *
+ * Sums exactly what the per-message badges show, so the header reconciles with
+ * the thread: a reader adding up the messages lands on the header figure.
+ * Summing the provider's per-call usage there instead put 72 595 above two
+ * messages reading 16 871 and 3 136 — the same parts-versus-whole mismatch
+ * that made the per-tool badges unreadable, one level up.
+ *
+ * Because each turn's displayed input is `contextTokens(T) - contextTokens(T-1)`,
+ * the sum telescopes to `contextTokens(last) + every output` — the tokens the
+ * conversation actually holds.
+ */
+export function conversationTokenTotals(messages: ThreadMessage[]): TokenUsage {
+  const total: TokenUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+
+  for (const message of messages) {
+    // Same fallback the badge applies: a turn with no marginal figure shows
+    // its billed one, so the header must add the same number the reader sees.
+    const shown = message.marginalTokenUsage ?? message.tokenUsage;
+    if (!shown) continue;
+    total.input_tokens += shown.input_tokens;
+    total.output_tokens += shown.output_tokens;
+    total.total_tokens += shown.total_tokens;
+  }
+
+  return total;
+}
+
 export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
   const { order, groups } = groupByExchange(messages);
 
   const result: ThreadMessage[] = [];
   const lastEid = order[order.length - 1] as string | undefined;
+  // Rolling anchor for the marginal computation above. Exchanges are walked
+  // in order, so each turn sees the context the previous one ended on.
+  //
+  // Starting at 0 assumes `messages` is the WHOLE conversation, which the
+  // history store currently guarantees (it has no pagination). If windowed
+  // loading is ever added, the first loaded exchange would be a mid-
+  // conversation turn measured against an empty context and would report its
+  // entire prompt as new — seed this from the turn before the window instead
+  // of 0, or pass null to fall back to the billed total.
+  let previousContextTokens: number | null = 0;
 
   for (const eid of order) {
     const msgs = groups.get(eid)!;
@@ -192,6 +278,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     if (traceMessages.length > 0 || finalMessages.length > 0 || (isStreaming && isLast)) {
       const sources: VectorSearchHit[] = [];
       let tokenUsage: TokenUsage | null = null;
+      let contextTokens: number | null = null;
       for (let i = finalMessages.length - 1; i >= 0; i--) {
         const meta = finalMessages[i].metadata as Record<string, unknown> | undefined;
         if (!tokenUsage && meta?.token_usage) {
@@ -202,12 +289,17 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
             total_tokens: tu.total_tokens ?? 0,
           };
         }
+        if (contextTokens === null && typeof meta?.context_tokens === "number") {
+          contextTokens = meta.context_tokens;
+        }
         if (sources.length === 0) {
           const srcs = meta?.sources as VectorSearchHit[] | undefined;
           if (srcs && srcs.length > 0) sources.push(...srcs);
         }
-        if (tokenUsage && sources.length > 0) break;
+        if (tokenUsage && contextTokens !== null && sources.length > 0) break;
       }
+      const marginal = marginalTokenUsage(contextTokens, tokenUsage, previousContextTokens);
+      previousContextTokens = contextTokens;
       // Raw retention (#1977): every ui_part — link, geo, capability kinds,
       // and kinds this build does not know — survives into the view model.
       const uiParts: RawUiPart[] = finalMessages.flatMap((m) => uiPartsOf(m));
@@ -220,6 +312,8 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         sources,
         uiParts,
         tokenUsage,
+        contextTokens,
+        marginalTokenUsage: marginal,
       });
     }
   }

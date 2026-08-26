@@ -37,7 +37,13 @@ interface AssistantTurnProps {
   sources: VectorSearchHit[];
   /** Raw chat parts (#1977); rendering dispatches through the part-renderer registry. */
   uiParts: RawUiPart[];
+  /** Billed usage for the turn (every model call summed). Shown only as a
+   *  fallback when the marginal figure below could not be computed. */
   tokenUsage?: TokenUsage | null;
+  /** What this turn genuinely ADDED (#2403) — the badge's normal content.
+   *  The conversation header carries the billed running total, so repeating
+   *  it per message told the reader nothing they could act on. */
+  marginalTokenUsage?: TokenUsage | null;
   isStreaming: boolean;
   /** call_ids of every tool call currently gated behind an unanswered HITL prompt, if any — see statusForEntry(). */
   pendingToolCallIds?: readonly string[] | null;
@@ -52,6 +58,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   sources,
   uiParts,
   tokenUsage,
+  marginalTokenUsage,
   isStreaming,
   pendingToolCallIds,
 }: AssistantTurnProps) {
@@ -141,7 +148,13 @@ export const AssistantTurn = memo(function AssistantTurn({
       {!isStreaming && text && (
         <div className={styles.footer}>
           <ActionBar actions={actions} alwaysVisible />
-          {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
+          {/* Marginal by default; the billed total only when the marginal
+              figure is not computable (Graph agents, pre-#2403 history). */}
+          {marginalTokenUsage ? (
+            <TokenUsageBadge usage={marginalTokenUsage} />
+          ) : (
+            tokenUsage && <TokenUsageBadge usage={tokenUsage} />
+          )}
         </div>
       )}
 
