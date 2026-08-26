@@ -22,10 +22,10 @@ Why this module exists:
   `general_assistant` (all KF MCP servers by default), which was confusing
 
 Key design:
-- declares its core capabilities in `default_mcp_servers` (MCP-backed and
-  native alike, RFC §2) so the Tools tab in the enrollment form shows every
-  available one
-- all of them are active by default (selected_capability_ids = null → the
+- declares a slim, end-user default set in `default_mcp_servers` (document
+  search + tabular analysis, #2429); admin/ops servers are added per instance
+  via the control-plane agent form, never by default
+- all defaults are active by default (selected_capability_ids = null → the
   template's default capabilities, #1978, #1988); each is a capability the
   operator unchecks in the Tools tab when not needed
 - one `prompts.system` field lets operators specialise the role without creating
@@ -42,10 +42,8 @@ Example:
 """
 
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-    MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
-    MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
+    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     FieldSpec,
     MCPServerRef,
     UIHints,
@@ -90,10 +88,10 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
 
     Why this class exists:
     - single entry point for operators who want to build a custom agent from
-      scratch: they see every available capability, pick what they need, and
-      write their own system prompt
-    - exposes its core capabilities so the Tools tab is fully populated at
-      enrollment time without requiring any code change
+      scratch: they pick the capabilities they need and write their own
+      system prompt
+    - ships end-user defaults only (document search + tabular, #2429); the
+      Tools tab lets operators add or remove capabilities per instance
 
     Key design choices:
     - `default_mcp_servers` lists this template's default capabilities, MCP-backed
@@ -131,30 +129,26 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     tags: tuple[str, ...] = ("general", "react")
     system_prompt_template: str = _SYSTEM_PROMPT
 
-    # Core capabilities that are part of the standard platform deployment —
-    # MCP-backed and native alike (RFC §2, no distinction at this level).
-    # Demo servers are omitted here because they are not guaranteed to be
-    # running — an unreachable declared server crashes the agent turn.
-    # Operators who have those services running should create a custom
-    # instance and add them via the control-plane agent form.
+    # End-user capabilities only (#2429): document search and tabular analysis.
+    # Admin/ops servers (corpus administration, OpenSearch and Prometheus
+    # monitoring, GitHub read-only) are too technical for the production
+    # deployments this blank-slate template lands on, and each default also
+    # feeds the #2408 dependency gate - enabling this agent for a team requires
+    # every listed server to be usable by that team. Operators who need one of
+    # the removed servers add it per instance via the control-plane agent form.
     #
-    # Document search: `document_access` (native, #1906 pilot) rather than the
-    # legacy inprocess `mcp-knowledge-flow-mcp-text` — this is the forward path
-    # under live A/B evaluation against `react_rag_mcp`, which stays on the
-    # legacy capability on purpose as the comparison baseline. Do not select
-    # both on one instance (duplicate vector-search tool, see
+    # Document search: the proven `mcp-knowledge-flow-mcp-text` server rather
+    # than the `document_access` native pilot (#1906) - a production default
+    # must not ride an A/B arm; the pilot stays selectable per instance. Never
+    # select both on one instance (duplicate vector-search tool, see
     # `document_access/capability.py`'s module docstring).
     #
     # Filesystem (`mcp-knowledge-flow-fs`) is deliberately excluded: the /fs
     # boundary is not agent/team-scoped yet (AGENT-FILESYSTEM-HARDENING-RFC F1,
-    # #2334) — same stance as `deep_assistant`. Do not re-add until that lands.
+    # #2334) - same stance as `deep_assistant`. Do not re-add until that lands.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id="document_access"),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
-        MCPServerRef(id="mcp-web-github-readonly"),
     )
 
     fields: tuple[FieldSpec, ...] = (
