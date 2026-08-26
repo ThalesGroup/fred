@@ -1102,6 +1102,8 @@
           "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
           "defaultError": "Could not reset the feature to the platform default.",
           "rowControlAria": "Access for {{team}}",
+          "dependencyHint": "Requires {{deps}} to be enabled for this team first.",
+          "dependencyConflict": "This agent needs {{deps}} enabled for this team first.",
           "personal": {
             "label": "All personal spaces",
             "hint": "Applies to every user's personal space at once — past, future, and users who never log in.",
@@ -1112,9 +1114,13 @@
             "disableError": "Could not disable the feature for personal spaces.",
             "defaultToast": "Personal spaces now follow the platform default.",
             "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
-            "defaultError": "Could not reset the personal-space default."
+            "defaultError": "Could not reset the personal-space default.",
+            "dependencyHint": "Requires {{deps}} to be enabled for all personal spaces (or on by default) first.",
+            "dependencyConflict": "This agent needs {{deps}} enabled for all personal spaces (or on by default) first."
           }
         },
+        "defaultOnRequiresSettingsHint": "This feature has required team settings, so it cannot be on by default - enable it team by team instead.",
+        "defaultOnConflict": "This feature has required team settings, so it cannot be on by default. Enable it team by team instead.",
         "defaultOffReasoningToast": "Reasoning was switched off with the model. Re-enable the model, then reasoning, to bring it back.",
         "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
         "reasoningOffToast": "Reasoning disabled for this model.",

@@ -27,6 +27,11 @@ const h = vi.hoisted(() => ({
     isError: boolean;
   },
   allTeams: { data: [] as Team[], isLoading: false, isError: false },
+  // Every key `t` was asked for during the last render. Needed for hints that
+  // live in a `Tooltip`: its panel is portaled and only mounts once hovered, so
+  // `renderToStaticMarkup` (no effects, no DOM) never contains the hint text —
+  // the key request is the only observable signal that the hint was wired up.
+  tKeys: [] as string[],
 }));
 
 // `t` echoes its key, but appends an interpolated `count` (or the composed
@@ -36,6 +41,7 @@ const h = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: { defaultValue?: string; count?: number; content?: string }) => {
+      h.tKeys.push(key);
       const interpolated = opts?.count ?? opts?.content;
       return opts?.defaultValue ?? (interpolated === undefined ? key : `${key}:${interpolated}`);
     },
@@ -93,6 +99,7 @@ function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablement
 }
 
 function render(): string {
+  h.tKeys = [];
   return renderToStaticMarkup(<CapabilitiesPage />);
 }
 
@@ -140,6 +147,16 @@ describe("CapabilitiesPage team registry wiring", () => {
     h.allTeams = { data: registryTeams, isLoading: false, isError: false };
     render();
     expect(drawerProps.current).toMatchObject({ teams: registryTeams });
+  });
+
+  it("passes the FULL catalog to the drawer, not the kind-filtered view", () => {
+    // #2408: an agent's `default_capability_ids` name TOOL rows, which the
+    // Agents tab has filtered out — the drawer cannot evaluate the dependency
+    // gate unless it receives the unfiltered list.
+    const items = [cap({ id: "sentinel", kind: "agent" }), cap({ id: "web_search", kind: "tool" })];
+    h.list = { data: { items }, isLoading: false, isError: false };
+    render();
+    expect(drawerProps.current).toMatchObject({ allCapabilities: items });
   });
 
   it("forwards the registry's loading and error flags to the drawer", () => {
@@ -327,6 +344,67 @@ describe("CapabilitiesPage catalog rows", () => {
       isError: false,
     };
     expect(render()).toContain("checked");
+  });
+});
+
+// Regression coverage for #2408: the default-on switch was offered for a
+// capability with a required team setting, which the backend always refuses
+// (`DefaultOnNotAllowed`, HTTP 409) — nobody has filled the settings for the
+// teams that would inherit it (RFC §8.2).
+describe("CapabilitiesPage default-on gate for required team settings (#2408)", () => {
+  const REQUIRED_FIELD = { key: "endpoint", type: "url" as const, title: "Endpoint", required: true };
+
+  /** The default-on column is the first cell, so its Switch is the first input. */
+  function defaultOnInput(html: string): string {
+    return html.split("<input").slice(1)[0] ?? "";
+  }
+
+  it("disables the switch and offers the hint when a required setting blocks default-on", () => {
+    h.list = {
+      data: { items: [cap({ id: "corp_drive", default_on: false, team_settings_fields: [REQUIRED_FIELD] })] },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    expect(defaultOnInput(html)).toContain("disabled");
+    // The hint lives in a portaled Tooltip panel that only mounts on hover, so
+    // the requested key — not rendered text — is what proves it was wired up.
+    expect(h.tKeys).toContain("rework.admin.capabilities.defaultOnRequiresSettingsHint");
+  });
+
+  it("leaves the switch usable for an already-default-on capability, so it can be turned back OFF", () => {
+    // Settings can be made required after the fact; trapping such a row in
+    // default-on would be a worse bug than the 409 this gate prevents.
+    h.list = {
+      data: { items: [cap({ id: "corp_drive", default_on: true, team_settings_fields: [REQUIRED_FIELD] })] },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    expect(defaultOnInput(html)).not.toContain("disabled");
+    expect(h.tKeys).not.toContain("rework.admin.capabilities.defaultOnRequiresSettingsHint");
+  });
+
+  it("leaves the switch usable when every team setting is optional", () => {
+    h.list = {
+      data: {
+        items: [
+          cap({
+            id: "corp_drive",
+            default_on: false,
+            team_settings_fields: [{ key: "note", type: "string", title: "Note" }],
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+
+    expect(defaultOnInput(html)).not.toContain("disabled");
+    expect(h.tKeys).not.toContain("rework.admin.capabilities.defaultOnRequiresSettingsHint");
   });
 });
 

@@ -37,6 +37,7 @@ import {
   useEnableTeamCapabilityMutation,
   useSetCapabilityPersonalScopeMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import { TuningFieldRenderer } from "../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer.tsx";
 import styles from "./CapabilityTeamMatrixDrawer.module.css";
 import {
@@ -45,6 +46,9 @@ import {
   excludePersonalTeams,
   filterTeamsByName,
   isCapabilityOnForTeam,
+  missingAgentDependenciesForPersonalSpaces,
+  missingAgentDependenciesForTeam,
+  requiresTeamSettings,
   seedSettingsFromFields,
   sortTeamsForMatrix,
   teamCapabilityChoice,
@@ -54,6 +58,11 @@ import {
 
 interface CapabilityTeamMatrixDrawerProps {
   capability: CapabilityEnablementItem | null;
+  /** The FULL unfiltered catalog, not the kind-filtered view: an agent's
+   * `default_capability_ids` name tool capabilities, which the Agents tab has
+   * already filtered out. Needed to tell whether each dependency is usable by
+   * the row's team before offering "Enable" (#2408). */
+  allCapabilities: CapabilityEnablementItem[];
   teams: Team[];
   /** `useListAllTeamsQuery` in flight — the roster isn't `teams.length === 0`, it's unknown yet. */
   teamsLoading: boolean;
@@ -107,6 +116,7 @@ const PERSONAL_TOAST_KEYS = {
 
 export function CapabilityTeamMatrixDrawer({
   capability,
+  allCapabilities,
   teams,
   teamsLoading,
   teamsError,
@@ -201,7 +211,23 @@ export function CapabilityTeamMatrixDrawer({
   const hasSettings = fields.length > 0;
   // A capability with a REQUIRED team setting cannot be class-enabled for all
   // personal spaces (nobody filled the settings) — same §8.2 rule as default-on.
-  const requiresSettings = fields.some((field) => field.required);
+  const requiresSettings = capability ? requiresTeamSettings(capability) : false;
+
+  // Dependency ids are opaque; the hint has to name what the admin actually
+  // sees in the catalog. Falls back to the raw id for a dependency the list
+  // doesn't carry — the same fail-open direction the predicates take.
+  const dependencyLabels = (ids: string[]) =>
+    ids
+      .map((depId) => {
+        const dep = allCapabilities.find((candidate) => candidate.id === depId);
+        return dep ? t(dep.name, { defaultValue: dep.name }) : depId;
+      })
+      .join(", ");
+
+  // The personal-class `depends_on` gate (RFC §8.6): class-enabling an agent
+  // 409s unless each default tool capability already has org-level personal
+  // access. Computed once — it has no per-row axis, unlike the team variant.
+  const missingPersonalDeps = capability ? missingAgentDependenciesForPersonalSpaces(capability, allCapabilities) : [];
 
   const hasQuery = teamQuery.trim() !== "";
   const visibleTeams = filterTeamsByName(orderedTeams, teamQuery);
@@ -238,6 +264,19 @@ export function CapabilityTeamMatrixDrawer({
 
   const submitEnable = async (teamId: string, settings: Record<string, unknown>) => {
     if (!capability) return;
+    // The single choke point for the #2408 gate: both the tri-state click and
+    // the enable-with-settings form's submit land here, and the catalog can
+    // refetch (revoking a dependency) while that form sits open. Refused with
+    // the same sentence the residual 409 would have carried, rather than
+    // silently doing nothing to a Save the admin just clicked.
+    const blocking = missingAgentDependenciesForTeam(capability, allCapabilities, teamId);
+    if (blocking.length > 0) {
+      showError({
+        summary: t("rework.admin.capabilities.matrix.enableError"),
+        detail: t("rework.admin.capabilities.matrix.dependencyConflict", { deps: dependencyLabels(blocking) }),
+      });
+      return;
+    }
     markPending(teamId, "enabled");
     try {
       await enableCapability({
@@ -249,9 +288,21 @@ export function CapabilityTeamMatrixDrawer({
         summary: t("rework.admin.capabilities.matrix.enabledToast", { team: teamLabel(teamId) }),
       });
       setEditingTeamId(null);
-    } catch {
+    } catch (err) {
       unmarkPending(teamId);
-      showError({ summary: t("rework.admin.capabilities.matrix.enableError") });
+      // A 409 here is a real, explainable refusal (the `depends_on` gate, or a
+      // stale client racing another admin) — not a transport failure. Say which
+      // dependencies are missing when we can name them locally, otherwise pass
+      // the backend's own sentence through instead of swallowing it (#2408).
+      const normalized = normalizeApiError(err);
+      // `capability` is non-null here: guarded at the top of `submitEnable`,
+      // and this closure's binding cannot change mid-invocation.
+      const missing = missingAgentDependenciesForTeam(capability, allCapabilities, teamId);
+      const detail =
+        normalized.kind === "conflict" && missing.length > 0
+          ? t("rework.admin.capabilities.matrix.dependencyConflict", { deps: dependencyLabels(missing) })
+          : normalized.detail;
+      showError({ summary: t("rework.admin.capabilities.matrix.enableError"), detail });
     }
   };
 
@@ -268,9 +319,9 @@ export function CapabilityTeamMatrixDrawer({
       } else {
         showSuccess({ summary: t(keys.done, { team: teamLabel(teamId) }) });
       }
-    } catch {
+    } catch (err) {
       unmarkPending(teamId);
-      showError({ summary: t(keys.error) });
+      showError({ summary: t(keys.error), detail: normalizeApiError(err).detail });
     }
   };
 
@@ -295,21 +346,31 @@ export function CapabilityTeamMatrixDrawer({
       } else {
         showSuccess({ summary: t(keys.done, { team: personalLabel }) });
       }
-    } catch {
+    } catch (err) {
       unmarkPending(PERSONAL_SCOPE_ROW_ID);
-      showError({ summary: t(keys.error) });
+      const normalized = normalizeApiError(err);
+      const detail =
+        normalized.kind === "conflict" && missingPersonalDeps.length > 0
+          ? t("rework.admin.capabilities.matrix.personal.dependencyConflict", {
+              deps: dependencyLabels(missingPersonalDeps),
+            })
+          : normalized.detail;
+      showError({ summary: t(keys.error), detail });
     }
   };
 
   const selectPersonalChoice = (current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
     if (busy || next === current) return;
-    if (next === "enabled" && requiresSettings) return;
+    if (next === "enabled" && (requiresSettings || missingPersonalDeps.length > 0)) return;
     void submitPersonalScope(next);
   };
 
   const selectChoice = (teamId: string, current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
     if (busy || next === current) return;
     if (next === "enabled") {
+      // Defensive twin of the disabled segment: a grant the backend would 409
+      // (#2408) must not reach the wire from a keyboard path either.
+      if (!capability || missingAgentDependenciesForTeam(capability, allCapabilities, teamId).length > 0) return;
       startEnable(teamId);
       return;
     }
@@ -368,6 +429,13 @@ export function CapabilityTeamMatrixDrawer({
                       const pendingChoice = pendingByTeam[PERSONAL_SCOPE_ROW_ID];
                       const isPending = pendingChoice !== undefined;
                       const displayChoice = pendingChoice ?? personalChoice;
+                      // Same rule as the team rows: never block the segment
+                      // that is already selected, or a class grant whose
+                      // dependency was revoked afterwards would strand this
+                      // row's control for keyboard users (`ButtonGroup` only
+                      // gives the selected item `tabIndex={0}`).
+                      const enableBlocked =
+                        displayChoice !== "enabled" && (requiresSettings || missingPersonalDeps.length > 0);
                       return (
                         <li
                           key={PERSONAL_SCOPE_ROW_ID}
@@ -379,6 +447,13 @@ export function CapabilityTeamMatrixDrawer({
                             <span className={styles.personalSub}>
                               {t("rework.admin.capabilities.matrix.personal.hint")}
                             </span>
+                            {missingPersonalDeps.length > 0 && displayChoice !== "enabled" && (
+                              <span className={styles.blockedSub}>
+                                {t("rework.admin.capabilities.matrix.personal.dependencyHint", {
+                                  deps: dependencyLabels(missingPersonalDeps),
+                                })}
+                              </span>
+                            )}
                           </div>
                           <div className={styles.teamActions}>
                             {isPending && <span className={styles.spinner} aria-hidden="true" />}
@@ -393,7 +468,7 @@ export function CapabilityTeamMatrixDrawer({
                               onSelectedIndexChange={(index) => selectPersonalChoice(displayChoice, CHOICES[index])}
                               items={CHOICES.map((target) => ({
                                 label: t(CHOICE_LABEL_KEY[target]),
-                                disabled: busy || (target === "enabled" && requiresSettings),
+                                disabled: busy || (target === "enabled" && enableBlocked),
                               }))}
                             />
                           </div>
@@ -410,6 +485,20 @@ export function CapabilityTeamMatrixDrawer({
                       const pendingChoice = pendingByTeam[team.id];
                       const isPending = pendingChoice !== undefined;
                       const displayChoice = pendingChoice ?? choice;
+                      // #2408: the same `depends_on` gate the enable write
+                      // enforces (RFC §8.6). Blocking here is what turns a bare
+                      // 409 into an explanation the admin can act on.
+                      //
+                      // Never applied to the segment that is already selected.
+                      // A dependency CAN be revoked after the agent was granted
+                      // (`product/service.py` documents that exact sequence),
+                      // and `ButtonGroup` gives only the selected item
+                      // `tabIndex={0}` — disabling it would make the whole row
+                      // keyboard-unreachable, so the admin could no longer even
+                      // revoke the now-broken grant. Nothing is lost: an
+                      // already-enabled row has no enable action to prevent.
+                      const missingDeps = missingAgentDependenciesForTeam(capability, allCapabilities, team.id);
+                      const dependencyBlocked = missingDeps.length > 0 && displayChoice !== "enabled";
                       return (
                         <li
                           key={team.id}
@@ -420,6 +509,13 @@ export function CapabilityTeamMatrixDrawer({
                             <span className={styles.teamName} title={team.name}>
                               {team.name}
                             </span>
+                            {dependencyBlocked && (
+                              <span className={styles.blockedSub}>
+                                {t("rework.admin.capabilities.matrix.dependencyHint", {
+                                  deps: dependencyLabels(missingDeps),
+                                })}
+                              </span>
+                            )}
                           </div>
                           <div className={styles.teamActions}>
                             {isPending && <span className={styles.spinner} aria-hidden="true" />}
@@ -432,7 +528,7 @@ export function CapabilityTeamMatrixDrawer({
                               onSelectedIndexChange={(index) => selectChoice(team.id, displayChoice, CHOICES[index])}
                               items={CHOICES.map((target) => ({
                                 label: t(CHOICE_LABEL_KEY[target]),
-                                disabled: busy || (target === "enabled" && isEditing),
+                                disabled: busy || (target === "enabled" && (isEditing || dependencyBlocked)),
                               }))}
                             />
                           </div>

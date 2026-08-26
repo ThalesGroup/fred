@@ -1102,6 +1102,8 @@
           "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
           "defaultError": "Impossible de remettre la fonctionnalité au défaut de la plateforme.",
           "rowControlAria": "Accès pour {{team}}",
+          "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour cette équipe.",
+          "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour cette équipe.",
           "personal": {
             "label": "Tous les espaces personnels",
             "hint": "S'applique d'un coup à l'espace personnel de chaque utilisateur — passés, futurs, et ceux qui ne se connectent jamais.",
@@ -1112,9 +1114,13 @@
             "disableError": "Impossible de désactiver la fonctionnalité pour les espaces personnels.",
             "defaultToast": "Les espaces personnels suivent désormais le défaut de la plateforme.",
             "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
-            "defaultError": "Impossible de remettre le défaut des espaces personnels."
+            "defaultError": "Impossible de remettre le défaut des espaces personnels.",
+            "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut).",
+            "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut)."
           }
         },
+        "defaultOnRequiresSettingsHint": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
+        "defaultOnConflict": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
         "defaultOffReasoningToast": "Le raisonnement a été désactivé avec le modèle. Réactivez le modèle, puis le raisonnement, pour le rétablir.",
         "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement — mais désactiver le modèle éteint son raisonnement.",
         "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
