@@ -1250,7 +1250,7 @@
         },
         "topByConversations": {
           "title": "Most talked-to agents",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         },
         "total": "Total agents number"
       },
@@ -1373,7 +1373,7 @@
         },
         "mostActiveAgents": {
           "title": "Most active agents",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         }
       }
     },
