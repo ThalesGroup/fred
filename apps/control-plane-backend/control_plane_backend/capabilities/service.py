@@ -247,10 +247,6 @@ async def _build_enablement_item(
         personal_scope=personal_scope,
         team_settings_fields=list(entry.team_settings_fields),
         kind=entry.kind,
-        # #2408: the `depends_on` gate the enable/personal-scope writes enforce
-        # (RFC §8.6) was invisible to the admin UI, which offered "Enable" for
-        # an agent whose tools the team lacks and then took a bare 409. Carried
-        # verbatim; empty for every kind but "agent" by construction.
         default_capability_ids=list(entry.default_capability_ids),
         suspended_instances=entry_impact.suspended_instances if entry_impact else 0,
         health_unknown_instances=(
