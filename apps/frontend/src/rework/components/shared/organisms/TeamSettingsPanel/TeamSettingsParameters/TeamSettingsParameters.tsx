@@ -102,7 +102,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   // by a single disabled "manual only" button rather than a two-state control
   // that refuses every click — one inert, locked state reads as the fact it
   // is, where a greyed-out toggle still reads as a choice.
-  const visibility = team.visibility ?? "public";
+  // #2433: private is the platform default — mirror it when the field is absent.
+  const visibility = team.visibility ?? "private";
   const isPrivate = visibility === "private";
   const handleSelectVisibility = (index: number) => {
     const newVisibility = VISIBILITIES[index];

@@ -64,7 +64,9 @@ is the current authority for implemented runtime behavior.
 > ✅ **Public-team content/execution gap closed — 2026-07-29 (issue #2146, PR #2147).**
 > TEAM-09/TEAM-10 widened `TeamPermission.CAN_READ` to include any authenticated
 > user via the `public` marketplace-discovery relation on `PUBLIC`-visibility
-> teams (the default for every team). Every pod-side authorization check that
+> teams (the default for every team at the time; new teams default to
+> `PRIVATE` since 2026-08-26, #2433 — existing rows keep their stored value).
+> Every pod-side authorization check that
 > gates real content or execution — not just team-profile discovery — must
 > therefore use `TeamPermission.CAN_USE_TEAM_AGENTS` (`team_member`-only)
 > instead. This was true at turn start (`_authorize_execution_or_raise`,
@@ -1724,7 +1726,8 @@ top-of-document callouts** — accurate for their own dates, superseded now.
 **What changed.** TEAM-09/TEAM-10 (`FRED-TEAM-CONFIG-RFC.md` §5.1.1/§5.1.2)
 deliberately widened `TeamPermission.CAN_READ` to include any authenticated
 user via the `public` marketplace-discovery relation, granted unconditionally
-on every `PUBLIC`-visibility team (the default for every team). The OpenFGA
+on every `PUBLIC`-visibility team (the default for every team at the time;
+new teams default to `PRIVATE` since 2026-08-26, #2433). The OpenFGA
 model (`schema.fga`) already anticipated this and kept `can_use_team_agents`
 strictly `team_member`-only, but three pod-side/runtime call sites written
 before that split still checked the wide `CAN_READ`, so a non-member visiting

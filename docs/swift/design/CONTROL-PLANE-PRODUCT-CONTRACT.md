@@ -2883,3 +2883,39 @@ Same-invariant guard on an existing route: `DELETE /users/{user_id}` now
 root's Keycloak account would freeze the `platform_admin` population the
 same irreversible way (the uid could never authenticate again while
 bootstrap stays permanently closed).
+
+## 44. Contract Notes — new teams are private by default (2026-08-26, issue #2433)
+
+**Supersedes §30's "Default and migration" paragraph.** `Team.visibility`
+now defaults to **`private`**: a brand-new team starts invisible to
+non-members (no marketplace listing, `GET /teams/{id}` 403s for them) until
+a team admin deliberately flips it to public in the team settings. §30's
+mechanism is unchanged — only the starting value flipped.
+
+**Where the default lives.** `TeamMetadataStore.create` inserts only
+`(id, name)`, so the governing default is the ORM column default
+(`TeamMetadataRow.visibility`, fred-core), mirrored by the `TeamMetadata`
+and `Team` Pydantic defaults so the OpenAPI spec agrees. Migration
+`0c70cb820802` aligns the DB `server_default` for raw-SQL inserts only.
+
+**`create_team` grants nothing.** The immediate TEAM-09 `public`-relation
+grant at creation is now conditional on the created metadata's visibility —
+for a default (private) team no ReBAC `public` tuple is ever written, not
+even transiently (a grant-then-lazy-revoke would leave the team readable by
+anyone until the next `_list_teams` pass). The idempotent
+grant/revoke backfill in `_list_teams` (§30) is unchanged and remains the
+backstop.
+
+**Existing teams are untouched.** Every pre-existing row keeps its stored
+value — nothing becomes private as a side effect of this rollout (the exact
+mirror of §30's rollout stance). Hiding a pre-existing team remains a
+per-team admin action. Same fidelity rule on import: a bundle exported
+before the `visibility` field existed still imports as `public`
+(`importer.py`), preserving the exporting platform's actual behavior.
+
+**Personal spaces now say so.** `build_personal_team` states
+`visibility: "private"` explicitly (previously it inherited the schema
+default and reported `"public"`) — truthful for a space that was never
+marketplace-listed and never readable by non-members. Joining-mode UI
+consequence (already shipped in #2398): a new team's settings show the
+locked "manual only" joining state until it is made public.

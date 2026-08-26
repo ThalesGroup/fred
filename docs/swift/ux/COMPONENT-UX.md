@@ -1387,8 +1387,9 @@ plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
-(`public`/`private`, default `public`) gating marketplace discoverability
-— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
+(`public`/`private`; default `public` at the time — new teams default to
+`private` since 2026-08-26, #2433) gating marketplace discoverability
+— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30/§44 for the full ReBAC
 mechanism. No client-side write of `joining_mode` ever accompanies a
 visibility PATCH — the resulting `joining_mode`, if it changes, comes back
 from the server on refetch.

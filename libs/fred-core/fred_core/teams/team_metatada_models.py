@@ -51,9 +51,11 @@ class TeamMetadataRow(Base):
     )
     # TEAM-10: gates marketplace discoverability, independent of
     # joining_mode. Values are `TeamVisibility` `.value` strings — same
-    # plain-`String` convention as `joining_mode` above.
+    # plain-`String` convention as `joining_mode` above. Private by default
+    # (#2433): a new team stays invisible to non-members until its admin
+    # deliberately opts into the marketplace.
     visibility: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="public"
+        String(20), nullable=False, default="private"
     )
     banner_object_storage_key: Mapped[str | None] = mapped_column(
         String(300), nullable=True
