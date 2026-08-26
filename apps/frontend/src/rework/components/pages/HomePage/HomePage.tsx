@@ -38,47 +38,82 @@ export default function HomePage() {
   const { t } = useTranslation();
   const { bootstrap } = useFrontendBootstrap();
   const user = bootstrap?.current_user;
-  const firstName = user?.first_name || user?.username || undefined;
+  const rawFirstName = user?.first_name || user?.username || undefined;
+  // Capitalize the leading letter for the greeting (usernames often arrive
+  // lower-cased); the rest is left as-is so "jean-Marie" keeps its casing.
+  const firstName = rawFirstName ? rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1) : undefined;
 
   // Default to 30 days (index 1 in PERIODS) — a fuller picture than 7 on landing.
   const [periodIndex, setPeriodIndex] = useState(1);
   const period = PERIODS[periodIndex];
 
+  // Tabs split the dashboard so the landing view stays light (#2298). Default to
+  // "Accès rapide" (search + recent agents); the period-scoped stats live under
+  // the other two tabs, so the period selector is hidden on this first one.
+  const [tabIndex, setTabIndex] = useState(0);
+  const showPeriod = tabIndex !== 0;
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <div className={styles.headerText}>
-          <p className={styles.eyebrow}>{t("rework.home.eyebrow")}</p>
-          <h1 className={styles.title}>
-            {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
-          </h1>
-          <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
-        </div>
         <ButtonGroup
-          size="small"
+          size="2xs"
           color="secondary"
           variant="radio"
-          aria-label={t("rework.home.period.label")}
-          selectedIndex={periodIndex}
-          onSelectedIndexChange={setPeriodIndex}
-          items={PERIODS.map((days) => ({
-            label: t("rework.home.period.days", { count: days }),
-            title: t(`rework.home.period.d${days}`),
-          }))}
+          aria-label={t("rework.home.tabs.aria")}
+          selectedIndex={tabIndex}
+          onSelectedIndexChange={setTabIndex}
+          items={[
+            { label: t("rework.home.tabs.quickAccess") },
+            { label: t("rework.home.tabs.activity") },
+            { label: t("rework.home.tabs.news") },
+          ]}
         />
+        {showPeriod && (
+          <div className={styles.periodSlot}>
+            <ButtonGroup
+              size="small"
+              color="secondary"
+              variant="radio"
+              aria-label={t("rework.home.period.label")}
+              selectedIndex={periodIndex}
+              onSelectedIndexChange={setPeriodIndex}
+              items={PERIODS.map((days) => ({
+                label: t("rework.home.period.days", { count: days }),
+                title: t(`rework.home.period.d${days}`),
+              }))}
+            />
+          </div>
+        )}
       </header>
 
-      <HomeSearch />
-      <RecentAgents />
-      <ActivityKpis period={period} />
-      <ResponsibleAiSection period={period} />
+      {/* Only the active tab mounts, so a tab's queries fire when it's opened. */}
+      {tabIndex === 0 && (
+        <div className={styles.quickAccessTab}>
+          <div className={styles.headerText}>
+            <p className={styles.eyebrow}>{t("rework.home.eyebrow")}</p>
+            <h1 className={styles.title}>
+              {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
+            </h1>
+            <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
+          </div>
+          <HomeSearch />
+          <RecentAgents />
+        </div>
+      )}
 
-      <div className={styles.cols}>
-        <TopTeams period={period} />
-        <TopAgents period={period} />
-      </div>
+      {tabIndex === 1 && (
+        <>
+          <ActivityKpis period={period} />
+          <ResponsibleAiSection period={period} />
+          <div className={styles.cols}>
+            <TopTeams period={period} />
+            <TopAgents period={period} />
+          </div>
+        </>
+      )}
 
-      <MarketplaceTopPrompts period={period} />
+      {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
     </div>
   );
 }

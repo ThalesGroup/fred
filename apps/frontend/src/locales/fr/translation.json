@@ -1511,10 +1511,16 @@
       },
       "pageTitle": "Accueil",
       "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer.",
-      "eyebrow": "Vue d'ensemble",
-      "greeting": "Bonjour",
-      "greetingNamed": "Bonjour, {{name}}",
-      "subtitle": "Un aperçu de votre activité et de son empreinte sur la plateforme.",
+      "eyebrow": "Bienvenue",
+      "greeting": "Bonjour, que faisons-nous aujourd'hui ?",
+      "greetingNamed": "Bonjour {{name}}, que faisons-nous aujourd'hui ?",
+      "subtitle": "Accédez à n'importe quel agent, équipe ou prompt à partir d'ici.",
+      "tabs": {
+        "aria": "Sections de l'accueil",
+        "quickAccess": "Accès rapide",
+        "activity": "Votre activité",
+        "news": "Actualités"
+      },
       "responsible": {
         "title": "IA responsable",
         "footprintInfo": {

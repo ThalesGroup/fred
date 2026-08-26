@@ -23,18 +23,43 @@
   max-width: 1160px;
   height: 100%;
   overflow-y: auto;
+  /* Always reserve the scrollbar track so switching to a tab with less content
+   * (no scrollbar) doesn't widen the page and shift the right-aligned header
+   * period selector sideways. */
+  scrollbar-gutter: stable;
 }
 
+/* Tabs sit dead-center of the page; the period selector floats at the right
+ * edge (absolute) so it never pulls the tabs off that center. */
 .header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-m);
+  position: relative;
+  justify-content: center;
+  align-items: center;
+}
+
+.periodSlot {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+/* "Accès rapide" tab: content centered horizontally and anchored to the top,
+ * pushed down from the tab bar by a comfortable top padding. */
+.quickAccessTab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-l);
+  padding-top: var(--spacing-4xl);
 }
 
 .headerText {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .cols {
