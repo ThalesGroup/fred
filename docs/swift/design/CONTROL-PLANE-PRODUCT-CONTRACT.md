@@ -1277,7 +1277,7 @@ another of the caller's teams no longer appears (and can no longer be saved,
 
 | Method + path | Request | Response | Effect |
 | --- | --- | --- | --- |
-| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs). |
+| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs), `default_capability_ids` (2026-08-25, see below). |
 | `PUT /admin/capabilities/{capability_id}/teams/{team_id}` | `EnableTeamCapabilityRequest` (`settings`) | `TeamCapabilityEnablementResult` | Enable-with-settings: validates `settings` against `team_settings_fields`, writes the settings row then the `enabled` tuple. |
 | `DELETE /admin/capabilities/{capability_id}/teams/{team_id}` | — | `TeamCapabilityEnablementResult` (`suspended_instances`) | Revoke: deletes the `enabled` tuple (writes a `disabled` opt-out for a default-on cap), reconciles dependent instances → suspension. |
 | `PUT /admin/capabilities/{capability_id}/default-on` | `SetCapabilityDefaultOnRequest` (`default_on`) | `CapabilityDefaultOnResult` (`suspended_instances`) | Toggle the platform-wide `default_on` marker; turning it off revokes inherited access team-by-team and may suspend instances. |
@@ -1426,6 +1426,46 @@ ReBAC is already active for a team, the platform_admin must toggle
 default-on for the desired model(s) in the same deploy window ReBAC
 enforcement reaches that team, or that team's chat fails closed until the
 toggle is flipped — a deploy-runbook step, not a code gap.
+
+**2026-08-25 — the enablement 409s become visible before the click (GitHub
+#2408).** Activating some capabilities from the admin dashboard failed with a
+bare HTTP 409: the gates were enforced server-side but invisible to the UI,
+which offered the action anyway and then showed a generic "could not enable"
+toast. One field added, no route, exception, or error-shape change.
+
+`GET /admin/capabilities` items gain **`default_capability_ids: list[str]`** —
+a verbatim projection of `CapabilityCatalogEntry.default_capability_ids`
+(itself added by the 2026-07-19 `depends_on` entry above), empty for
+`kind="tool"`/`kind="model"` by construction, following the tagged-union rule
+stated for the other per-kind fields. This is the missing half of the
+2026-07-19 gate: the write path already 409'd
+(`AgentCapabilityDependencyNotSatisfied`) when an agent's default tool
+capabilities were not usable by the target team, but the list contract carried
+no way for the dashboard to know it.
+
+Client-side consequences (`CapabilitiesPage.tsx`,
+`CapabilityTeamMatrixDrawer.tsx`, predicates in `capabilityEnablement.ts`):
+the drawer disables "Enable" and names the blocking dependencies for a team
+that cannot use them; the personal-space class row does the same against the
+org-level personal-access rule (`(personal_on OR default_on) AND NOT
+personal_disabled`); the default-on Switch is disabled for a capability with a
+required team setting (`DefaultOnNotAllowed`), while turning it OFF stays
+possible. The predicates **fail open** on a dependency id absent from the list
+— the backend remains the sole authority, and the client gate is a
+better-error affordance, never an enforcement point. Residual 409s (stale
+client, concurrent admin) are mapped through `normalizeApiError` to an
+explanatory toast detail instead of being swallowed.
+
+**Error contract unchanged.** These routes still answer a plain-string
+`detail` and no `error_code`; the per-endpoint 409 semantics are unambiguous
+on their own, so the frontend disambiguates by which mutation failed plus its
+own locally-computed reason.
+
+**Known caveat (accepted).** With ReBAC disabled, `usable_capability_ids`
+returns `None` and the backend applies no dependency scoping at all, but the
+client predicate still reads the (empty) grant lists and can render an agent
+row as blocked. The team matrix is already decorative in that mode, so the
+mismatch is cosmetic and not worth a second code path.
 
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 

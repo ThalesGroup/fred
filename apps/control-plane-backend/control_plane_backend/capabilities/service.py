@@ -247,6 +247,7 @@ async def _build_enablement_item(
         personal_scope=personal_scope,
         team_settings_fields=list(entry.team_settings_fields),
         kind=entry.kind,
+        default_capability_ids=list(entry.default_capability_ids),
         suspended_instances=entry_impact.suspended_instances if entry_impact else 0,
         health_unknown_instances=(
             entry_impact.skipped_unreachable if entry_impact else 0
