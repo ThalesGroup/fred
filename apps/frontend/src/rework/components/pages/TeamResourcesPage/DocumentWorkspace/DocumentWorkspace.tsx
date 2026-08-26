@@ -1630,7 +1630,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               const tag = renameTarget.node.tagsHere[0];
               if (tag) await commands.renameTag(tag as unknown as TagWithItemsId, newName);
             } else {
-              await commands.renameDocument(renameTarget.doc, newName);
+              await commands.renameDocument(renameTarget.doc, newName, currentTag?.id);
             }
           }}
         />
