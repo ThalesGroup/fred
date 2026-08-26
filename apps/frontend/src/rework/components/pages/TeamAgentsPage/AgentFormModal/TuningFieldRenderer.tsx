@@ -188,7 +188,15 @@ export function TuningFieldRenderer({
           value={String(fieldValue)}
           rows={field.ui?.max_lines ?? 4}
           placeholder={field.ui?.placeholder ?? undefined}
-          onChange={(e) => onChange(field.key, e.target.value)}
+          onChange={(e) => {
+            onChange(field.key, e.target.value);
+            // Clearing the field WHILE EDITING must not re-trigger the
+            // auto-picker: the auto-open (pickerExplicit === null && empty) is
+            // only meant for the initial empty state. Once the user has emptied
+            // it themselves, lock into write mode — they can still reopen the
+            // library from the "pick from library" button above.
+            if (e.target.value.trim() === "") setPickerExplicit(false);
+          }}
           disabled={disabled || isLoadingDetail}
           error={error}
         />
