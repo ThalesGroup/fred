@@ -46,7 +46,6 @@ Example:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     FieldSpec,
     MCPServerRef,
     UIHints,
@@ -120,12 +119,11 @@ class DeepAssistantDefinition(DeepAgentDefinition):
     system_prompt_template: str = _SYSTEM_PROMPT_EN
 
     # Same slim end-user defaults as GENERAL_ASSISTANT_AGENT (#2429): document
-    # search + tabular analysis - see that template's comment for the full
-    # rationale (admin/ops servers out, #2408 dependency gate, text-search
-    # server over the `document_access` pilot). Filesystem stays excluded -
-    # see module docstring.
+    # search (the `document_access` #1906 pilot) + tabular analysis - see that
+    # template's comment for the full rationale (admin/ops servers out, #2408
+    # dependency gate). Filesystem stays excluded - see module docstring.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
+        MCPServerRef(id="document_access"),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
     )
 

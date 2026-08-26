@@ -43,7 +43,6 @@ Example:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     FieldSpec,
     MCPServerRef,
     UIHints,
@@ -137,17 +136,18 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     # every listed server to be usable by that team. Operators who need one of
     # the removed servers add it per instance via the control-plane agent form.
     #
-    # Document search: the proven `mcp-knowledge-flow-mcp-text` server rather
-    # than the `document_access` native pilot (#1906) - a production default
-    # must not ride an A/B arm; the pilot stays selectable per instance. Never
-    # select both on one instance (duplicate vector-search tool, see
+    # Document search: `document_access` (native, #1906 pilot) rather than the
+    # legacy inprocess `mcp-knowledge-flow-mcp-text` - the forward path under
+    # live A/B evaluation against `react_rag_mcp`, which stays on the legacy
+    # capability on purpose as the comparison baseline. Do not select both on
+    # one instance (duplicate vector-search tool, see
     # `document_access/capability.py`'s module docstring).
     #
     # Filesystem (`mcp-knowledge-flow-fs`) is deliberately excluded: the /fs
     # boundary is not agent/team-scoped yet (AGENT-FILESYSTEM-HARDENING-RFC F1,
     # #2334) - same stance as `deep_assistant`. Do not re-add until that lands.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
+        MCPServerRef(id="document_access"),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
     )
 
