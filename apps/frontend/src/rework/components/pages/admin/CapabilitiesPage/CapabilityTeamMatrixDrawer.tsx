@@ -295,7 +295,9 @@ export function CapabilityTeamMatrixDrawer({
       // dependencies are missing when we can name them locally, otherwise pass
       // the backend's own sentence through instead of swallowing it (#2408).
       const normalized = normalizeApiError(err);
-      const missing = capability ? missingAgentDependenciesForTeam(capability, allCapabilities, teamId) : [];
+      // `capability` is non-null here: guarded at the top of `submitEnable`,
+      // and this closure's binding cannot change mid-invocation.
+      const missing = missingAgentDependenciesForTeam(capability, allCapabilities, teamId);
       const detail =
         normalized.kind === "conflict" && missing.length > 0
           ? t("rework.admin.capabilities.matrix.dependencyConflict", { deps: dependencyLabels(missing) })
