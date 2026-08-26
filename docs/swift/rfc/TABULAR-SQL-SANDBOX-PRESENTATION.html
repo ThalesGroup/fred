@@ -166,9 +166,15 @@
   .node .egress-tag .ok { color: var(--green); display: block; }
   .node .egress-tag .no { color: var(--red); display: block; }
   .node .egress-tag .warn { color: var(--amber); display: block; }
-  .wire { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; padding: 0 10px; margin-bottom: 40px; }
+  .wire { flex: 0 0 auto; width: 110px; display: flex; flex-direction: column; align-items: center; padding: 0 6px; margin-bottom: 40px; }
   .wire .arw { font-size: 34px; line-height: 1; color: var(--accent); }
   .wire span { font-size: 11.5px; color: var(--muted); margin-top: 5px; max-width: 100px; line-height: 1.3; }
+  .diagram-inner { position: relative; width: 862px; }
+  .diagram-row { display: flex; align-items: center; justify-content: center; }
+  .mint-arc { display: block; width: 862px; height: 78px; margin-top: -26px; overflow: visible; }
+  .mint-arc path { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 7 6; }
+  .mint-arc text { fill: var(--amber); font-size: 13.5px; font-weight: 600; }
+  .mint-arc .halo { stroke: #070b12; stroke-width: 9; fill: none; }
 
   /* holes / status cards */
   .cards { display: flex; gap: 22px; flex: 1; }
@@ -365,33 +371,56 @@
 <section class="slide">
   <div class="kicker">Solution B · in depth</div>
   <h2>Mint a scoped key — in a pod that can only reach the store</h2>
-  <p class="sub" style="font-size:19px; margin-bottom:2px;">Per query: ReBAC picks the datasets, KF mints a token scoped to <em>those keys only</em>, and hands it to a locked-down executor.</p>
+  <div class="flow">
+    <div class="flow-step"><b>ReBAC</b><span>resolve the authorized datasets</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Mint token</b><span>scoped to those exact object keys</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Executor runs</b><span>DuckDB httpfs, with the scoped token</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Range-read</b><span>only needed bytes → rows back to KF</span></div>
+  </div>
   <div class="diagram">
-    <div class="node kf">
-      <div class="glyph">📦</div>
-      <div class="plate">
-        <b>Knowledge Flow</b>
-        <div class="role">ReBAC · mints the scoped token</div>
-        <div class="egress-tag"><span class="warn">↳ needs the metadata server</span></div>
+    <div class="diagram-inner">
+      <div class="diagram-row">
+        <div class="node kf">
+          <div class="glyph">📦</div>
+          <div class="plate">
+            <b>Knowledge Flow</b>
+            <div class="role">ReBAC · mints the scoped token</div>
+            <div class="egress-tag"><span class="warn">↳ needs the metadata server</span></div>
+          </div>
+        </div>
+        <div class="wire"><span class="arw">→</span><span>SQL + scoped token</span></div>
+        <div class="node exec">
+          <div class="glyph">🔒</div>
+          <div class="plate">
+            <b>tabular-executor</b>
+            <div class="role">DuckDB + httpfs · no-privilege pod</div>
+            <div class="egress-tag"><span class="no">✗ metadata · ✗ internal</span></div>
+          </div>
+        </div>
+        <div class="wire"><span class="arw">↔</span><span>range reads</span></div>
+        <div class="node store">
+          <div class="glyph">🪣</div>
+          <div class="plate">
+            <b>GCS / MinIO</b>
+            <div class="role">403 on a foreign key, at the IAM layer</div>
+            <div class="egress-tag"><span class="ok">✓ scoped token only</span></div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="wire"><span class="arw">→</span><span>SQL + scoped token</span></div>
-    <div class="node exec">
-      <div class="glyph">🔒</div>
-      <div class="plate">
-        <b>tabular-executor</b>
-        <div class="role">DuckDB + httpfs · no-privilege pod</div>
-        <div class="egress-tag"><span class="no">✗ metadata · ✗ internal</span></div>
-      </div>
-    </div>
-    <div class="wire"><span class="arw">↔</span><span>range reads</span></div>
-    <div class="node store">
-      <div class="glyph">🪣</div>
-      <div class="plate">
-        <b>GCS / MinIO</b>
-        <div class="role">403 on a foreign key, at the IAM layer</div>
-        <div class="egress-tag"><span class="ok">✓ scoped token only</span></div>
-      </div>
+      <svg class="mint-arc" viewBox="0 0 862 78" aria-label="Knowledge Flow mints the scoped token against the store's STS API">
+        <defs>
+          <marker id="arcArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#fbbf24" stroke="none"/>
+          </marker>
+        </defs>
+        <path class="halo" d="M 107 6 C 250 74, 612 74, 755 6"/>
+        <path d="M 107 6 C 250 74, 612 74, 755 6" marker-start="url(#arcArrow)" marker-end="url(#arcArrow)"/>
+        <rect x="330" y="46" width="202" height="24" rx="6" fill="#070b12"/>
+        <text x="431" y="63" text-anchor="middle">mint scoped token · STS API</text>
+      </svg>
     </div>
   </div>
   <p class="punch" style="font-size:20px;">The catch: httpfs can't be locked down like A — external access must stay on, so SSRF is closed at the <strong>pod's network edge</strong>, not in DuckDB. That edge can't live on KF (it needs the metadata server) → a <strong>separate minimal pod</strong>.</p>
