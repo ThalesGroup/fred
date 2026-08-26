@@ -45,7 +45,7 @@ When you include Mermaid diagrams, follow these rules strictly so the diagram al
 - Letters, numbers, and underscores only (for example `API_1`, `LB2`, `DB_MAIN`)
 - Do not use accents, spaces, hyphens, dots, or emojis in IDs
 - Always reference a node by its ID, never by its label text
-- Wrong: `A --> LLM Azure` (label text used as an endpoint); right: `A --> LLM_AZURE["LLM Azure"]`
+- Wrong: `A --> LLM Azure` (label text used as an endpoint); right: declare `LLM_AZURE["LLM Azure"]` on its own line, then reference `A --> LLM_AZURE`
 
 8. Use only the safest edge syntax:
 - `A --> B`
