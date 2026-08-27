@@ -447,15 +447,15 @@ applications:
     job:
       enabled: false
     migration:
-      # ON since writable_document (#1905) — the first fred-agents capability
-      # that owns a DB table. The pre-install/pre-upgrade hook Job now runs on
-      # every deploy so a fresh platform and every upgrade get the schema.
-      enabled: true
-      scaleDown: true         # Scale deployment to 0 before migrating (safe, downtime acceptable)
-      backoffLimit: 3         # Retry count on migration failure
-      # fred-agents runs the runtime CLI (not bare alembic): it upgrades
-      # fred-runtime's own tree AND every installed capability's own tree,
-      # each under its per-capability version table (RFC §7.1, #1979).
+      # OFF by default, like the other backends - a platform overlay turns this
+      # Job on in its own values or runs the upgrade imperatively. Capabilities
+      # that own a table (writable_document and friends) need it either way.
+      enabled: false
+      scaleDown: true
+      backoffLimit: 3
+      # fred-agents runs the runtime CLI, not bare alembic: it upgrades
+      # fred-runtime's own tree and every installed capability's tree, each
+      # under its own version table.
       command: ["python"]
       args: ["-m", "fred_runtime", "migrate"]
       # resources: {}         # Override resource limits for migration job
@@ -1096,7 +1096,10 @@ applications:
     job:
       enabled: false
     migration:
-      enabled: false    # Enable when knowledge-flow-backend gets Alembic migrations
+      # OFF by default - a platform overlay either turns this Job on in its own
+      # values or runs the upgrade imperatively. knowledge-flow creates no table
+      # at startup, so migrate before the pods roll either way.
+      enabled: false
       scaleDown: true
       backoffLimit: 3
     rollingUpdate:
@@ -1468,7 +1471,9 @@ applications:
     job:
       enabled: false
     migration:
-      enabled: false    # Enable when control-plane-backend gets Alembic migrations
+      # OFF by default, same reason as knowledge-flow's. This tree owns the
+      # users/teammetadata tables knowledge-flow reads at boot - upgrade it first.
+      enabled: false
       scaleDown: true
       backoffLimit: 3
     rollingUpdate:
