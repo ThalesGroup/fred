@@ -459,7 +459,7 @@ export function CapabilityTeamMatrixDrawer({
                             {isPending && <span className={styles.spinner} aria-hidden="true" />}
                             <ButtonGroup
                               size="small"
-                              color="primary"
+                              color="secondary"
                               variant="radio"
                               aria-label={t("rework.admin.capabilities.matrix.rowControlAria", {
                                 team: personalLabel,
@@ -521,7 +521,7 @@ export function CapabilityTeamMatrixDrawer({
                             {isPending && <span className={styles.spinner} aria-hidden="true" />}
                             <ButtonGroup
                               size="small"
-                              color="primary"
+                              color="secondary"
                               variant="radio"
                               aria-label={t("rework.admin.capabilities.matrix.rowControlAria", { team: team.name })}
                               selectedIndex={CHOICES.indexOf(displayChoice)}

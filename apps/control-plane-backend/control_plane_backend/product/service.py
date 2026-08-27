@@ -59,6 +59,8 @@ from control_plane_backend.config.models import (
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    BulkDeleteSessionRef,
+    BulkDeleteSessionsResponse,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptCategoryRequest,
@@ -69,6 +71,8 @@ from control_plane_backend.product.schemas import (
     FrontendBootstrap,
     FrontendConfig,
     FrontendUserAuthConfig,
+    InactiveSessionItem,
+    InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     MarketplacePromptDetail,
@@ -4128,6 +4132,114 @@ async def list_sessions(
         limit=limit,
     )
     return [_record_to_item(r) for r in records]
+
+
+# Home cleanup tool (#2298). Per-team scan cap: a user's own session count in one
+# space is small, but bound it so a runaway space can't produce an unbounded scan.
+_INACTIVE_SESSION_SCAN_LIMIT = 500
+# Bound concurrent deletes so a large selection can't saturate the DB pool or the
+# runtime erase fan-out.
+_BULK_DELETE_CONCURRENCY = 5
+
+
+def _as_aware_utc(dt: datetime) -> datetime:
+    """Treat a naive timestamp as UTC (SQLite may hand back naive datetimes)."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+async def list_inactive_sessions(
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+    *,
+    inactive_days: int,
+) -> InactiveSessionsResponse:
+    """The caller's conversations that have gone quiet, across every space they
+    belong to (personal + each team) — home dashboard cleanup tool (#2298).
+
+    "Inactive" = no activity for more than `inactive_days` (updated_at older than
+    the cutoff). Deliberately NOT period-scoped: a cleanup tool should surface
+    every stale conversation, however old, so the user can clear as much as
+    possible — the home period selector doesn't apply here. The agent display
+    name is resolved here (one batch lookup per space) so the cleanup list needs
+    no extra call.
+    """
+    now = _utcnow()
+    cutoff = now - timedelta(days=inactive_days)
+
+    teams = await list_teams_from_service(user, deps.team_dependencies)
+
+    async def _for_team(team_id: TeamId) -> list[InactiveSessionItem]:
+        sessions = await list_sessions(
+            team_id, deps, user_id=user.uid, limit=_INACTIVE_SESSION_SCAN_LIMIT
+        )
+        inactive = [
+            s
+            for s in sessions
+            if s.updated_at is not None and _as_aware_utc(s.updated_at) <= cutoff
+        ]
+        if not inactive:
+            return []
+        agents = await deps.get_agent_instance_store().list_by_team(team_id)
+        name_by_id = {a.agent_instance_id: a.display_name for a in agents}
+        return [
+            InactiveSessionItem(
+                session_id=s.session_id,
+                team_id=team_id,
+                title=s.title,
+                agent_name=(
+                    name_by_id.get(s.agent_instance_id) if s.agent_instance_id else None
+                ),
+                updated_at=s.updated_at,
+            )
+            for s in inactive
+        ]
+
+    # Scan every space concurrently — independent per-team reads.
+    per_team = await asyncio.gather(*[_for_team(team.id) for team in teams])
+    sessions = [item for group in per_team for item in group]
+    # Newest-first, so each per-space group in the dialog reads consistently.
+    sessions.sort(key=lambda s: s.updated_at or now, reverse=True)
+    return InactiveSessionsResponse(sessions=sessions)
+
+
+async def bulk_delete_sessions(
+    user: KeycloakUser,
+    refs: list[BulkDeleteSessionRef],
+    *,
+    authorization: str,
+    deps: ProductServiceDependencies,
+) -> BulkDeleteSessionsResponse:
+    """Delete several of the caller's conversations in one action (home cleanup
+    tool). Reuses the single-session governed delete primitive per item, so each
+    goes through the same deferred-erase lifecycle; ownership is enforced there,
+    so a foreign/already-gone session lands in `failed` rather than aborting the
+    batch. Concurrency is bounded (`_BULK_DELETE_CONCURRENCY`)."""
+    semaphore = asyncio.Semaphore(_BULK_DELETE_CONCURRENCY)
+
+    async def _delete(ref: BulkDeleteSessionRef) -> tuple[str, bool]:
+        async with semaphore:
+            try:
+                await delete_or_defer_session(
+                    team_id=ref.team_id,
+                    session_id=ref.session_id,
+                    user_id=user.uid,
+                    authorization=authorization,
+                    deps=deps,
+                )
+                return ref.session_id, True
+            except Exception:
+                logger.warning(
+                    "[control-plane][home] bulk delete failed for session %s in team %s",
+                    ref.session_id,
+                    ref.team_id,
+                    exc_info=True,
+                )
+                return ref.session_id, False
+
+    results = await asyncio.gather(*[_delete(ref) for ref in refs])
+    deleted = [sid for sid, ok in results if ok]
+    failed = [sid for sid, ok in results if not ok]
+    return BulkDeleteSessionsResponse(deleted=deleted, failed=failed)
 
 
 async def update_session_activity(

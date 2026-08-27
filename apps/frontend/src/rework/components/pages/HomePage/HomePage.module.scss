@@ -16,21 +16,75 @@
 .page {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-m);
+  margin: 0 auto;
+  padding: var(--spacing-l);
+  width: 100%;
+  max-width: 1160px;
+  height: 100%;
+  overflow-y: auto;
+  /* Always reserve the scrollbar track so switching to a tab with less content
+   * (no scrollbar) doesn't widen the page and shift the right-aligned header
+   * period selector sideways. */
+  scrollbar-gutter: stable;
+}
+
+/* Tabs sit dead-center of the page; the period selector floats at the right
+ * edge (absolute) so it never pulls the tabs off that center. */
+.header {
+  display: flex;
+  position: relative;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xl);
-  height: 100%;
+}
+
+.periodSlot {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+/* "Accès rapide" tab: content centered horizontally and anchored to the top,
+ * pushed down from the tab bar by a comfortable top padding. */
+.quickAccessTab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-l);
+  padding-top: var(--spacing-4xl);
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: var(--spacing-m);
+}
+
+@media (max-width: 900px) {
+  .cols {
+    grid-template-columns: 1fr;
+  }
+}
+
 .title {
+  margin: 0;
   color: var(--on-surface);
-  font: var(--font-headline-small);
+  font: var(--font-title-large-emphasized);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 .subtitle {
-  max-width: 60ch;
+  margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }

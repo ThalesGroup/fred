@@ -45,7 +45,6 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { Protected } from "@core/guards/Protected";
-import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
@@ -58,17 +57,6 @@ const basename = getConfig().frontend_basename;
 const ManagedChatPageRoute = () => {
   const { agentInstanceId } = useParams<{ agentInstanceId: string }>();
   return <ManagedChatPage key={agentInstanceId} />;
-};
-
-// Bare `/` should land on the canonical personal-space URL (`personal-<uid>`,
-// not the bare `"personal"` alias) so the address bar and the team selection
-// check agree from the first paint. A static `<Navigate>` here never
-// resolves the real id: CTRLP-10 residual, see
-// docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md §4.3.
-const HomeIndexRoute = () => {
-  const { activeTeam, isLoading } = useFrontendBootstrap();
-  if (isLoading) return null;
-  return <Navigate to={`/team/${activeTeam?.id ?? "personal"}/agents`} replace />;
 };
 
 // Bare `/admin` has no page of its own — land on the first page the caller
@@ -108,8 +96,11 @@ export const routes: RouteObject[] = [
     element: <MainLayout />,
     children: [
       {
+        // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
+        // in the Home nav panel; the personal-space agents page is reached from
+        // there rather than being the app's landing route.
         index: true,
-        element: <HomeIndexRoute />,
+        element: <Navigate to="/home" replace />,
       },
       {
         // Landing behind the mainNavBar Home entry (#2298). The team switcher

@@ -1,6 +1,13 @@
 .chatItemContainer {
   --display-action: none;
+  /* Opaque twin of the tile's own hover background, so the delete-button
+   * overlay fades into the exact same colour with no visible seam. The tile
+   * hover layer is `--state-on-surface-hover` (on-surface at 8%) over the panel
+   * `--surface-container-high`; this flattens that composite into one solid
+   * colour the gradient can fade to. Redefined for the selected state below. */
+  --tile-hover-bg: color-mix(in srgb, var(--on-surface) 8%, var(--surface-container-high));
   display: flex;
+  position: relative;
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;
@@ -16,6 +23,9 @@
   }
 
   &[data-selected="true"] {
+    /* A selected tile keeps its own background even while hovered (this rule
+     * wins over `:hover` by source order), so match that colour instead. */
+    --tile-hover-bg: color-mix(in srgb, var(--secondary) 16%, var(--surface-container-high));
     background-color: color-mix(in srgb, var(--secondary), transparent 84%);
   }
 }
@@ -48,11 +58,13 @@
   white-space: nowrap;
 }
 
-/* Grows to fill the row so its box is the same width on every line: short
- * names leave a gap, long names ellipsize, and the separator + date land at
- * the same x everywhere — a fixed-width column without a hardcoded width. */
+/* Sits directly against the date: it does NOT grow (flex-grow 0), so a short
+ * name keeps the separator + date tucked right after it instead of pushing
+ * them to the far right. It still shrinks (flex-shrink 1, min-width 0) so a
+ * long name ellipsizes on the one line rather than wrapping the date onto a
+ * second — the date then lands at the row's right edge, always visible. */
 .agentName {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--primary);
@@ -71,9 +83,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Overlaid on hover, not laid out in flow: the delete button appears ABOVE the
+ * tile's right edge without stealing width from the description, so nothing
+ * shifts when it fades in. `inset: 0` spans the tile's FULL height and reaches
+ * its true right edge — absolute offsets are measured from the padding box,
+ * which already includes the container's padding, so 0 lands exactly on the
+ * tile edges. Right corners are rounded to match the tile. The gradient fades
+ * into `--tile-hover-bg` — the tile's exact hovered colour — so on a long-name
+ * row where it lands over the date, the date reads as fading out behind the
+ * button rather than being abruptly clipped. */
 .chatActions {
   display: var(--display-action);
-  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   align-items: center;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: linear-gradient(to right, transparent, var(--tile-hover-bg) var(--spacing-l));
+  padding-right: var(--spacing-xs);
+  padding-left: var(--spacing-xl);
   color: var(--error);
 }

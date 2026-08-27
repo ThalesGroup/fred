@@ -28,8 +28,11 @@ interface BulkActionsBarProps {
    *  when every selected doc is currently searchable, "include" when every
    *  one is already excluded. Omit to hide the action entirely — including
    *  on a mixed selection (some excluded, some not), where there's no single
-   *  unambiguous direction to offer. */
-  searchToggle?: { mode: "exclude" | "include"; onClick: () => void };
+   *  unambiguous direction to offer. `loading` shows the same in-button
+   *  spinner as `downloadLoading`: a folder-containing selection resolves its
+   *  descendant documents on click before toggling them (#2446), which reads
+   *  as a dead click otherwise. */
+  searchToggle?: { mode: "exclude" | "include"; onClick: () => void; loading?: boolean };
   /** One file downloads directly; 2+ download as a single ZIP (RFC §13.13,
    *  client-side). Omit to hide the action — e.g. a folders-only selection
    *  on `FilesystemWorkspace`, which has nothing downloadable selected. */
@@ -39,6 +42,10 @@ interface BulkActionsBarProps {
    *  reads as a dead click without this: swaps the icon for a spinner and
    *  disables the button instead of leaving it looking unresponsive. */
   downloadLoading?: boolean;
+  /** True while a folder-containing delete is in flight — deleting a folder
+   *  cascades server-side and, with several folders selected, the round-trips
+   *  add up (#2446). Same in-button spinner as `downloadLoading`. */
+  deleteLoading?: boolean;
 }
 
 /**
@@ -54,6 +61,7 @@ export default function BulkActionsBar({
   searchToggle,
   onDownload,
   downloadLoading = false,
+  deleteLoading = false,
 }: BulkActionsBarProps) {
   const { t } = useTranslation();
 
@@ -75,6 +83,7 @@ export default function BulkActionsBar({
                 size="small"
                 icon={{ category: "outlined", type: searchToggle.mode === "exclude" ? "search_off" : "search" }}
                 aria-label={t(key)}
+                loading={searchToggle.loading}
                 onClick={searchToggle.onClick}
               />
             </Tooltip>
@@ -99,6 +108,7 @@ export default function BulkActionsBar({
           size="small"
           icon={{ category: "outlined", type: "delete" }}
           aria-label={t("rework.resources.bulkActions.delete")}
+          loading={deleteLoading}
           onClick={onDelete}
         />
       </Tooltip>
