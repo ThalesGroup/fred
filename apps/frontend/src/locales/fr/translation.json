@@ -407,7 +407,7 @@
       "reasoningRowLabel": "Raisonnement",
       "reasoningModelsSection": "Modèles",
       "reasoningEffortSection": "Effort",
-      "reasoningOff": "Normal",
+      "reasoningOff": "Faible",
       "reasoningOn": "Élevé",
       "reasoningOnMenu": "Élevé (Raisonnement)",
       "reasoningHint": "Active le raisonnement pour les questions approfondies (augmente le temps de réponse et la consommation de tokens).",

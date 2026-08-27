@@ -82,43 +82,12 @@
      rather than widening the row's `gap`, which would push the chevron out
      too and re-open the space the mockup keeps tight. */
   margin-left: var(--spacing-2xs);
-  /* One step fainter than retreat in both themes — the colour contrast alone
-     separates the model name from the reasoning state. */
-  color: var(--on-surface-muted);
+  /* Uniform muted styling for the effort word in BOTH modes (Faible/Élevé):
+     no gradient, no per-mode accent — the word alone carries the state, one
+     step fainter than the model name so the colour contrast still separates
+     the two. */
+  color: var(--on-surface-retreat);
   line-height: 1;
-}
-
-/* Boost is a live mode, not a resting state: it steps forward instead of
-   retreating, wearing the same spectrum as the agent surfaces' rotating border
-   so the one "this is the AI doing more" signal reads the same everywhere.
-
-   Two deliberate departures from the border version, both carried by the
-   `-core` stop list in styles/gradients.css. It is a LINEAR gradient, not
-   conic: a conic sweep across ~40px of text reads as an arbitrary smear rather
-   than a sweep. And the white/peach stops are gone — white is a hole in text
-   rather than a travelling highlight.
-
-   The WORD still carries the state on its own, so this is reinforcement and
-   never the only signal — a colour-blind reader reads "Boost" vs "Rapide". */
-.state[data-on] {
-  background: linear-gradient(90deg, var(--gradient-spectrum-stops-core));
-  background-clip: text;
-  -webkit-background-clip: text;
-  /* Fallback first: any engine that ignores background-clip: text keeps a
-     solid, readable colour instead of transparent (invisible) text. */
-  color: var(--primary);
-  font-weight: 500;
-  -webkit-text-fill-color: transparent;
-}
-
-/* Forced-colours users get the system palette, not our spectrum — a gradient
-   clipped to text is exactly what that mode exists to override. */
-@media (forced-colors: active) {
-  .state[data-on] {
-    background: none;
-    -webkit-text-fill-color: currentcolor;
-    color: highlight;
-  }
 }
 
 .chevron {

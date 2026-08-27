@@ -258,9 +258,7 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
                 <Icon category="outlined" type="error_outline" />
               </span>
             )}
-            <span className={styles.state} data-on={on || undefined}>
-              {stateLabel}
-            </span>
+            <span className={styles.state}>{stateLabel}</span>
           </>
         ) : (
           <span className={styles.value}>{on ? onLabel : title}</span>
