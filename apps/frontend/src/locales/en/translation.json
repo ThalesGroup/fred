@@ -405,8 +405,11 @@
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
-      "reasoningOff": "Fast",
-      "reasoningOn": "Boost",
+      "reasoningModelsSection": "Models",
+      "reasoningEffortSection": "Effort",
+      "reasoningOff": "Low",
+      "reasoningOn": "High",
+      "reasoningOnMenu": "High (Reasoning)",
       "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
       "selectLibraryFirst": "Select a library first.",
       "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
