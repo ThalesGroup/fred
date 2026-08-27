@@ -1,22 +1,9 @@
+@use "src/styles/spectrum-border" as *;
+
 /* Compact agent tile for the Home "recently used agents" row. Mirrors the
  * enabled AgentCard palette (secondary-container icon, secondary name) but the
  * whole tile is the interactive surface — unlike AgentCard, which is inert with
  * only its buttons clickable. */
-
-/* Re-registered here rather than relied upon from AgentCard.module.scss: that
- * stylesheet is only loaded when a page renders an AgentCard, and Home does
- * not. Without a registered <angle> type the custom property can't animate. */
-@property --angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-@keyframes rotate-gradient {
-  to {
-    --angle: 360deg;
-  }
-}
 
 .card {
   display: flex;
@@ -26,7 +13,7 @@
   flex: 0 0 220px;
   align-items: center;
   gap: var(--spacing-s);
-  animation: rotate-gradient 2s linear infinite;
+  animation: spectrum-rotate 2s linear infinite;
   animation-play-state: paused;
   /* Reserved at all times and transparent at rest, so revealing the hover
    * gradient below doesn't grow the tile 4px taller under the row. */
@@ -39,20 +26,14 @@
   min-width: 0;
   text-decoration: none;
 
-  /* Same rotating conic-gradient border as AgentCard's Chat button — both are
-   * the "start a conversation with this agent" affordance, so they carry the
-   * same signal. The interior stays at --surface-container instead of taking a
-   * hover state layer: a lightening surface competes with the gradient rather
-   * than reinforcing it (see AgentCard.module.scss).
-   *
-   * design-token exception: full-spectrum conic gradient
-   * (white→cyan→violet→peach→pink→white), shared verbatim with that button and
-   * the composer's Boost text. No semantic token family covers this sequence. */
+  /* Same rotating spectrum border as AgentCard's Chat button — both are the
+   * "start a conversation with this agent" affordance, so they carry the same
+   * signal. The interior keeps its resting --surface-container instead of
+   * taking a hover state layer: a lightening surface competes with the gradient
+   * rather than reinforcing it (see AgentCard.module.scss). */
   &:hover {
     animation-play-state: running;
-    background:
-      linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
-      conic-gradient(from var(--angle), #ffffff, #37c9e4, #6f78fc, #e4ae66, #db47ae, #ffffff) border-box;
+    @include spectrum-border-fill;
   }
 }
 
