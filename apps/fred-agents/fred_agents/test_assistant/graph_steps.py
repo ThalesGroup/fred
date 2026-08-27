@@ -26,6 +26,8 @@ Scenario routing (handled by dispatch_step):
   "error"       → dispatch routes "error"        → error_step
                                                    (raises)         → finalize via on_error
   "think"       → dispatch routes "think"        → think_step       → finalize
+  "markdown"    → dispatch routes "markdown"     → markdown_step    → finalize
+  "mermaid"     → dispatch routes "mermaid"      → mermaid_step     → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
   "files"       → dispatch routes "files"        → files_step       → finalize
   "geo"         → dispatch routes "geo"          → geo_step         → finalize
@@ -147,6 +149,9 @@ async def dispatch_step(
       "hitl_text"   → hitl_text_step
       "trace"       → trace_step
       "error"       → error_step
+      "think"       → think_step
+      "markdown"    → markdown_step
+      "mermaid"     → mermaid_step
       "long"        → long_step
       "files"       → files_step
       "geo"         → geo_step
@@ -179,6 +184,8 @@ async def dispatch_step(
         scenario = "think"
     elif text.startswith("markdown"):
         scenario = "markdown"
+    elif text.startswith("mermaid"):
+        scenario = "mermaid"
     elif text.startswith("long"):
         scenario = "long"
     elif text.startswith("files"):
@@ -1068,6 +1075,108 @@ async def markdown_step(
     )
 
 
+# ── Step: mermaid ─────────────────────────────────────────────────────────────
+
+_MERMAID_PAYLOAD = """\
+## Mermaid sanitizer test (issue #2382)
+
+Every diagram below is **deliberately malformed** - the kind of Mermaid a
+weaker model emits when it ignores the output contract. None of them parse
+as-is: `MermaidBlock` catches the parse error and retries through
+`sanitizeMermaidForParsing`, which repairs the source before rendering.
+
+Read each *Expected* line, then look at the diagram. A red "Diagram error"
+box, a duplicated box, or a missing edge means the sanitizer regressed.
+Do not "fix" these fences - they are the fixture.
+
+---
+
+### 1 - Bare reference to a declared node (the reported case)
+
+Expected: 3 boxes. `LLM Azure` appears **once**, and both labelled edges
+point at the node declared as `LLMAzure` rather than at a second copy.
+
+```mermaid
+flowchart TD
+BackendPython --> LLMAzure[LLM Azure]
+OpenSearch -->|Recherche semantique| LLM Azure
+LLM Azure -->|Reponse filtree| BackendPython
+```
+
+---
+
+### 2 - Bare references never declared, with accents
+
+Expected: 3 boxes chained, accented labels intact.
+
+```mermaid
+flowchart TD
+Utilisateur --> Base de données
+Base de données --> Cache Redis
+```
+
+---
+
+### 3 - Semicolon statements and a decorated edge
+
+Expected: 3 boxes; the `---o` edge keeps its circle head.
+
+```mermaid
+graph TD;
+A --> LLM Azure;
+LLM Azure ---o Vector Store;
+```
+
+---
+
+### 4 - Non-regression: an arrow inside a label
+
+Expected: exactly 2 boxes. The first one keeps `raw data --> clean data` as
+label text; the repair must not split it into extra nodes.
+
+```mermaid
+flowchart TD
+A[Flow (v2): raw data --> clean data] --> B[Index]
+```
+"""
+
+
+@typed_node(TestState)
+async def mermaid_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Emit deliberately malformed Mermaid to validate the frontend sanitizer.
+
+    Why this scenario exists:
+    `mermaidSanitizer.ts` is the last-resort fallback before the user sees a
+    raw Mermaid parse error (issue #2382). Its unit tests cover the repair in
+    isolation; this scenario exercises the same repair through the real chat
+    path (SSE → MarkdownRenderer → MermaidBlock → mermaid.render), which is
+    the only place a regression actually becomes visible.
+
+    The payload is a static fixture: no LLM is involved, and the Mermaid
+    output contract (which forbids emitting broken diagrams on purpose)
+    governs model-generated text, not a graph agent's canned reply.
+
+    SSE events exercised: status, assistant_delta, final.
+    """
+    delay = _delay_seconds(context)
+    context.emit_status(
+        "mermaid", "Emitting malformed Mermaid for sanitizer validation."
+    )
+    await asyncio.sleep(0.05 + delay)
+    context.emit_assistant_delta(_MERMAID_PAYLOAD)
+
+    return StepResult(
+        state_update={
+            "final_text": _MERMAID_PAYLOAD,
+            "done_reason": "mermaid_complete",
+        }
+    )
+
+
 # ── Step: think ───────────────────────────────────────────────────────────────
 
 _THINK_FINAL = """\
@@ -1523,6 +1632,7 @@ _SCENARIO_TABLE = """\
 | `error` | Deliberate node error → on_error route |
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
+| `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback (#2382) repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
 | `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
