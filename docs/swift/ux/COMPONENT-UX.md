@@ -1329,7 +1329,8 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only` | No button; muted label (`on-surface-retreat`) |
+| `invite_only`, team is `public`, at least one admin has an email | "Join" button (`mail` icon) - opens the user's mail client on a `mailto:` prefilled for the team admins (#2453, see below) |
+| `invite_only`, any other case | No button; muted label (`on-surface-retreat`) |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -1341,6 +1342,44 @@ so keeping both would duplicate the signal.
 system to route requests to team admins was never built) and `closed` (a
 second muted label, indistinguishable in practice from `invite_only`) were
 dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
+
+**Ask for an invitation (#2453, 2026-08-27).** A public invite-only team is
+discoverable but not joinable, and the muted label alone left the visitor with
+no next step. The card restores the pre-TEAM-09 escape hatch: a `mailto:`
+addressed to every team admin whose `UserSummary.email` resolved, prefilled
+with the subject, the caller's identity, and a link to the team page
+(`rework.teamCard.invitationMail.*`; the FR strings are the pre-TEAM-09 wording
+verbatim, now translated rather than hardcoded French as it was then). The
+button reuses the `join` label - it is the same intent, and a second, longer
+label wrapped the card's footer onto two lines; the `mail` icon and the draft
+that opens are what distinguish it from the instant `open` join.
+
+Two guards decide whether the button replaces the label:
+
+- **public only.** A private team keeps the label: the UI does not offer a
+  non-member a private team's admin addresses. This is a product rule about
+  what the card *proposes*, not a disclosure guarantee - `GET /teams` puts
+  `admins` (email included) in the payload for every team it returns, and
+  `MarketplaceTeams` records that private teams reach the client at all when
+  authorization is disabled. Withholding them from the wire is a server-side
+  question, still open. `TeamCard` checks `visibility` itself rather than
+  trusting `MarketplaceTeams`' filter: it is a shared component, and the check
+  is `=== "public"` so a payload with no `visibility` fails closed (#2433).
+- **a reachable address.** `admins` falls back to a bare `UserSummary(id=...)`
+  when the Keycloak lookup returns nothing, so an admin list can render with no
+  email at all. With no recipient there is nothing to open, so the label stays
+  rather than producing an empty `mailto:`.
+
+Mechanics worth keeping: recipients are comma-separated (RFC 6068) and
+percent-encoded, since the addresses come from a directory sync and nothing
+guarantees they are URL-safe; `URLSearchParams`' `+` is rewritten to `%20` or
+mail clients render it literally in the subject; the team link prepends the
+router basename (`normalizeBasename`, shared with `buildDocumentViewerPath`)
+because a mailed URL inherits nothing from the router; and the identity line
+degrades to whichever of `name` / `preferred_username` Keycloak returned.
+
+No server-side request flow is involved: this is a client-side mail draft, the
+same as before TEAM-09. Nothing routes an invitation request through the API.
 
 ---
 

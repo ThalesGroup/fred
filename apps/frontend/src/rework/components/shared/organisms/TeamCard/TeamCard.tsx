@@ -25,6 +25,8 @@ import { useFrontendBootstrap } from "src/hooks/useFrontendBootstrap";
 import Button from "@shared/atoms/Button/Button.tsx";
 import React from "react";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
+import { getConfig } from "src/common/config";
+import { normalizeBasename } from "../../../../utils/documentViewerUtils";
 
 export interface TeamCardProps {
   team: Team;
@@ -36,11 +38,12 @@ export interface TeamCardProps {
 }
 
 export default function TeamCard({ team, withDescription, onJoined }: TeamCardProps) {
-  const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
+  const { defaultTeamAvatarFile, defaultPersonalAvatarFile, siteTitle, siteSubtitle } = useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
   const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
   const userFullName = KeyCloakService.GetUserFullName();
+  const username = KeyCloakService.GetUserName();
 
   // A configured default avatar replaces initials; without one, the card keeps
   // the name-derived coloured initials. The personal space renders round, teams
@@ -59,6 +62,40 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
     } catch (error) {
       console.error("Join team error:", error);
     }
+  };
+
+  // #2453: a public invite-only team is discoverable but not joinable, which
+  // left the visitor on a dead-end label. Restore the pre-TEAM-09 escape hatch
+  // (still live on main): a prefilled mail to the team admins. Only public
+  // teams get the button - the UI must not hand a non-member a private team's
+  // admin addresses - and only when at least one address actually resolved,
+  // otherwise there is nobody to write to and the passive label stays.
+  const isInviteOnlyOutsider = !team.is_member && team.joining_mode === "invite_only";
+  const adminEmails = (team.admins ?? [])
+    .map((admin) => admin.email)
+    .filter((email): email is string => Boolean(email));
+  const canRequestInvitation = isInviteOnlyOutsider && team.visibility === "public" && adminEmails.length > 0;
+
+  const handleRequestInvitation = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    const site = [siteTitle, siteSubtitle].filter(Boolean).join(" ");
+    // Keycloak omits `name` / `preferred_username` on some accounts; render
+    // whichever resolved rather than the empty "  ()" the admin cannot act on.
+    const user = [userFullName, username && `(${username})`].filter(Boolean).join(" ");
+    // A mailed link does not inherit the router basename, so prepend it - the
+    // same reason buildDocumentViewerPath does (subpath deployments).
+    const base = normalizeBasename(getConfig().frontend_basename);
+    const teamUrl = `${window.location.origin}${base}/team/${team.id}/agents`;
+    // URLSearchParams encodes spaces as "+", which mail clients render
+    // literally in a mailto subject/body - swap them back to %20. The
+    // recipients are comma-separated (RFC 6068) and percent-encoded: they come
+    // from a directory sync, so nothing guarantees they are URL-safe.
+    const recipients = adminEmails.map(encodeURIComponent).join(",");
+    const params = new URLSearchParams({
+      subject: t("rework.teamCard.invitationMail.subject", { site, team: team.name }),
+      body: t("rework.teamCard.invitationMail.body", { site, team: team.name, user, teamUrl }),
+    });
+    window.location.href = `mailto:${recipients}?${params.toString().replace(/\+/g, "%20")}`;
   };
 
   return (
@@ -115,7 +152,18 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               {t("rework.teamCard.join")}
             </Button>
           )}
-          {!team.is_member && team.joining_mode === "invite_only" && (
+          {canRequestInvitation && (
+            <Button
+              color={"primary"}
+              variant={"outlined"}
+              size={"medium"}
+              icon={{ category: "outlined", type: "mail" }}
+              onClick={handleRequestInvitation}
+            >
+              {t("rework.teamCard.join")}
+            </Button>
+          )}
+          {isInviteOnlyOutsider && !canRequestInvitation && (
             <span className={styles.teamJoiningLabel}>{t("rework.teamCard.inviteOnly")}</span>
           )}
         </div>
