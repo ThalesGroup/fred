@@ -516,7 +516,13 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Same three metrics, same column order as the histograms above, so a
-            reader tracks one column down instead of hunting for the pair. */}
+            reader tracks one column down instead of hunting for the pair.
+
+            Each carries its own `emptyMessage`: a trend can be empty while the
+            histogram beside it is not. The series drops the current, partial
+            bucket, so a range whose only activity is today has no bucket left
+            to plot even though the histogram counts it. Left to the generic
+            "no data" that pairing reads as a bug in the chart. */}
         <div className={styles.chartGrid}>
           <TimeSeriesLineChart
             title={trendTitle(
@@ -529,6 +535,7 @@ export default function AnalyticsPage() {
               "rework.analytics.engagement.conversationsPerUserTrend.valueLabel",
               conversationsPerUserTrendData?.window,
             )}
+            emptyMessage={t("rework.analytics.engagement.conversationsPerUserTrend.empty")}
             isFetching={conversationsPerUserTrendIsFetching}
             isLoading={conversationsPerUserTrendIsLoading}
             isError={conversationsPerUserTrendIsError}
@@ -544,6 +551,7 @@ export default function AnalyticsPage() {
               "rework.analytics.engagement.conversationDepthTrend.valueLabel",
               conversationDepthTrendData?.window,
             )}
+            emptyMessage={t("rework.analytics.engagement.conversationDepthTrend.empty")}
             isFetching={conversationDepthTrendIsFetching}
             isLoading={conversationDepthTrendIsLoading}
             isError={conversationDepthTrendIsError}
@@ -556,6 +564,7 @@ export default function AnalyticsPage() {
               "rework.analytics.engagement.agentsPerUserTrend.valueLabel",
               agentsPerUserTrendData?.window,
             )}
+            emptyMessage={t("rework.analytics.engagement.agentsPerUserTrend.empty")}
             isFetching={agentsPerUserTrendIsFetching}
             isLoading={agentsPerUserTrendIsLoading}
             isError={agentsPerUserTrendIsError}

@@ -1277,6 +1277,7 @@
           "valueLabel": "Users"
         },
         "agentsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
           "title": "Agents per user over time",
           "valueLabel": "Median agents per user ({{window}})"
         },
@@ -1287,6 +1288,7 @@
           "valueLabel": "Conversations"
         },
         "conversationDepthTrend": {
+          "empty": "Not enough conversations in this period to plot a trend.",
           "title": "Conversation depth over time",
           "valueLabel": "Median messages per conversation ({{window}})"
         },
@@ -1297,6 +1299,7 @@
           "valueLabel": "Users"
         },
         "conversationsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
           "title": "Conversations per user over time",
           "valueLabel": "Median conversations per user ({{window}})"
         },

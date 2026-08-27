@@ -1277,6 +1277,7 @@
           "valueLabel": "Utilisateurs"
         },
         "agentsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
           "title": "Agents par utilisateur dans le temps",
           "valueLabel": "Médiane d'agents par utilisateur ({{window}})"
         },
@@ -1287,6 +1288,7 @@
           "valueLabel": "Conversations"
         },
         "conversationDepthTrend": {
+          "empty": "Pas assez de conversations sur cette période pour tracer une tendance.",
           "title": "Profondeur des conversations dans le temps",
           "valueLabel": "Médiane de messages par conversation ({{window}})"
         },
@@ -1297,6 +1299,7 @@
           "valueLabel": "Utilisateurs"
         },
         "conversationsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
           "title": "Conversations par utilisateur dans le temps",
           "valueLabel": "Médiane de conversations par utilisateur ({{window}})"
         },

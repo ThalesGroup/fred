@@ -34,6 +34,7 @@ interface TimeSeriesLineChartProps {
   rows: TimeSeriesPoint[];
   interval?: string;
   valueLabel?: string;
+  emptyMessage?: string;
   isFetching: boolean;
   isLoading: boolean;
   isError: boolean;
@@ -44,6 +45,7 @@ export default function TimeSeriesLineChart({
   rows,
   interval,
   valueLabel,
+  emptyMessage,
   isFetching,
   isLoading,
   isError,
@@ -72,6 +74,15 @@ export default function TimeSeriesLineChart({
 
       {(isLoading || isFetching) && !rows.length && <div className={styles.state}>{t("common.loading")}</div>}
       {isError && <div className={styles.stateError}>{t("common.loadingError")}</div>}
+      {/* Without this branch an empty series rendered as a bare titled box with
+          nothing under it, which reads as a broken chart rather than as "there
+          is nothing to plot" - the same empty state BarChart and PieChart have
+          always shown. Trend series hit it routinely: they are sparse by
+          design and drop the current partial bucket, so a range whose only
+          activity is today legitimately has no point to draw. */}
+      {!isLoading && !isFetching && !isError && !rows.length && (
+        <div className={styles.state}>{emptyMessage ?? t("common.noData")}</div>
+      )}
 
       {!!rows.length && (
         <ResponsiveContainer width="100%" height={220}>
@@ -108,7 +119,11 @@ export default function TimeSeriesLineChart({
               dataKey="value"
               stroke={css["--primary"]}
               strokeWidth={2}
-              dot={false}
+              // A one-point series draws a degenerate path with nothing on it,
+              // so hiding the dots would leave axes over an empty plot - the
+              // same "looks broken" reading the empty state above exists to
+              // avoid. Sparse trend series reach that case routinely.
+              dot={rows.length < 2}
               activeDot={{ r: 4, fill: css["--primary"] }}
             />
           </LineChart>
