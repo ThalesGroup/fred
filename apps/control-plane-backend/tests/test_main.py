@@ -833,7 +833,9 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "is_member": True,
             "my_relations": ["team_editor"],
             "joining_mode": "invite_only",
-            "visibility": "public",
+            # #2433: a personal space is stated private explicitly — it is
+            # never marketplace-listed and unreadable to non-members.
+            "visibility": "private",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
         }
@@ -1411,7 +1413,8 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "admins": [],
         "is_member": True,
         "joining_mode": "invite_only",
-        "visibility": "public",
+        # #2433: a personal space is stated private explicitly.
+        "visibility": "private",
         "permissions": [
             "can_read",
             "can_update_resources",
@@ -5284,7 +5287,17 @@ async def test_update_team_checks_can_update_info_permission(
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
         permissions = _args[3]
         captured_permissions.append(permissions)
-        return TeamMetadata(id=TeamId("thales"), name="Thales"), "token"
+        # Explicitly PUBLIC (#2433 made the metadata default PRIVATE): this
+        # test PATCHes `joining_mode: open`, and the TEAM-10 downgrade rule
+        # would rewrite that to `invite_only` on a private team — the
+        # downgrade has its own test; this one covers permission gating and
+        # the banner-field bridge.
+        return (
+            TeamMetadata(
+                id=TeamId("thales"), name="Thales", visibility=TeamVisibility.PUBLIC
+            ),
+            "token",
+        )
 
     async def _fake_get_team_permissions_for_user(*_args, **_kwargs):
         return [TeamPermission.CAN_UPDATE_INFO]

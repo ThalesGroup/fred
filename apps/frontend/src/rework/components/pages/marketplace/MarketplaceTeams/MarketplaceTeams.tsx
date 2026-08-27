@@ -78,9 +78,13 @@ export default function MarketplaceTeams() {
   // product rule — so never offer a private team to a non-member here,
   // whatever the endpoint returned. A member keeps seeing their own private
   // teams under "your teams": they need them to navigate.
+  //
+  // #2433: require `=== "public"` rather than `!== "private"` — private is
+  // now the platform default, so a payload missing the field (version-skew
+  // backend) must err on non-disclosure, matching the `?? "private"`
+  // fallback in TeamSettingsParameters.
   const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
-  const otherTeams =
-    teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id) && t.visibility !== "private");
+  const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id) && t.visibility === "public");
 
   const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search), [yourTeams, search]);
   const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search), [otherTeams, search]);

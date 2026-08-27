@@ -268,10 +268,14 @@ than "does not appear, does not resolve for anyone outside it."
 
 ```
 enum TeamVisibility:
-  PUBLIC   # default; marketplace-listed, ReBAC `public` relation granted
+  PUBLIC   # marketplace-listed, ReBAC `public` relation granted
   PRIVATE  # not marketplace-listed; ReBAC `public` relation withheld —
            # a non-member has no `can_read` on the team, direct-link or not
 ```
+
+*(2026-08-26 update, #2433: the default flipped after this RFC shipped —
+new teams are now `PRIVATE` by default. Current contract:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §44.)*
 
 **Mechanism.** `ensure_team_public_relations` (RFC §5.1.1, `_list_teams`)
 is no longer called unconditionally for every team. It now runs only for
@@ -303,7 +307,9 @@ silently downgrades `joining_mode` to `INVITE_ONLY` rather than rejecting
 the request. This is a downgrade, never a rejection, and never trusts the
 client's belief about the current stored state.
 
-**Default and migration.** `PUBLIC` is the default for both freshly
+**Default and migration.** *(Superseded 2026-08-26, #2433 — new teams now
+default to `PRIVATE`; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §44. Accurate
+for this RFC's own date below.)* `PUBLIC` is the default for both freshly
 created and pre-existing teams (Alembic backfill) — this preserves every
 team's current (unconditional) marketplace presence exactly; nothing
 becomes newly private as a side effect of this rollout. Moving a team to
