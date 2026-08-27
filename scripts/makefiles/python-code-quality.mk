@@ -63,7 +63,7 @@ code-quality-fix: dev lint-fix import-order-fix format-fix ## Auto-fix formattin
 	@echo "************ All auto-fix code quality checks completed ************"
 
 .PHONY: code-quality
-code-quality: dev lint format sast detect-secret type-check ## Run all code quality checks
+code-quality: dev lint import-order format sast detect-secret type-check ## Run all code quality checks
 	@echo "************ All code quality checks completed ************"
 
 # ------------------------------------------------------------

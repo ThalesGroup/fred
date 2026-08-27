@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 
 from sqlalchemy import MetaData, pool, text
@@ -68,10 +68,86 @@ def _build_url(get_postgres_config: Callable[[], PostgresStoreConfig]) -> str:
     return pg.async_dsn()
 
 
+def build_ownership_filters(
+    owned_tables: frozenset[str],
+) -> tuple[Callable[..., bool], Callable[..., bool]]:
+    """Return ``(include_name, include_object)`` scoping Alembic to *owned_tables*.
+
+    Both filters are needed, and they cover different directions (#2314):
+
+    - ``include_name`` filters names reflected from the **database**, so
+      autogenerate and ``alembic check`` ignore (never DROP, never report
+      drift for) tables that belong to other backends sharing the database.
+    - ``include_object`` filters objects on the **metadata** side, so
+      autogenerate never proposes CREATE for a foreign table that happens to
+      be registered on a shared declarative base but is absent from the
+      database. With ``include_name`` alone that exact leak occurs: the
+      shared-base table is not in the DB, is present in ``target_metadata``,
+      and comes out of autogenerate as a ``create_table`` — a second writer
+      for a table another backend's tree owns.
+    """
+
+    def include_name(name: str | None, type_: str, _parent_names: object) -> bool:
+        if type_ == "table":
+            return name in owned_tables
+        return True
+
+    def include_object(
+        obj: object, name: str | None, type_: str, _reflected: bool, _compare_to: object
+    ) -> bool:
+        if type_ == "table":
+            return name in owned_tables
+        return True
+
+    return include_name, include_object
+
+
+def autogenerate_diffs(
+    connection: Connection,
+    target_metadata: MetaData | Sequence[MetaData],
+    owned_tables: Collection[str],
+) -> list[object]:
+    """Run an autogenerate comparison scoped by ``build_ownership_filters``.
+
+    Tests and CI checks only (same scoping rule as
+    ``fred_core.history.create_history_schema``): this is how each backend's
+    ownership tests assert the #2314 acceptance shape — "a database holding
+    exactly the owned tables yields an empty migration" — without every app
+    duplicating the MigrationContext/compare plumbing. Production migrations
+    go through ``make_alembic_env`` alone.
+
+    Merges *target_metadata* into one ``MetaData`` because Alembic accepts a
+    sequence at runtime but ``compare_metadata``'s signature is typed for a
+    single object.
+    """
+    from alembic.autogenerate import compare_metadata
+    from alembic.runtime.migration import MigrationContext
+
+    metas = (
+        target_metadata if isinstance(target_metadata, Sequence) else [target_metadata]
+    )
+    union = MetaData()
+    for meta in metas:
+        for table in meta.tables.values():
+            table.to_metadata(union)
+
+    include_name, include_object = build_ownership_filters(frozenset(owned_tables))
+    context = MigrationContext.configure(
+        connection,
+        opts={
+            "target_metadata": union,
+            "include_name": include_name,
+            "include_object": include_object,
+        },
+    )
+    return compare_metadata(context, union)
+
+
 def make_alembic_env(
     target_metadata: MetaData | Sequence[MetaData],
     get_postgres_config: Callable[[], PostgresStoreConfig],
     version_table: str = "alembic_version",
+    owned_tables: Collection[str] | None = None,
 ) -> tuple[Callable[[], None], Callable[[], None]]:
     """Return ``(run_migrations_offline, run_migrations_online)`` for *env.py*.
 
@@ -84,25 +160,36 @@ def make_alembic_env(
         version_table: Name of the Alembic version table.  Set a unique name
             per backend when multiple backends share the same database so their
             migration histories don't collide.
+        owned_tables: Table names this backend's migration tree owns. REQUIRED
+            whenever *target_metadata* includes a shared declarative base
+            (fred-core's ``CoreBase``): deriving ownership from the metadata
+            would claim every table on the shared base, including those other
+            backends migrate — which is how control-plane's autogenerate once
+            proposed creating knowledge-flow's ``tag``/``metadata`` (#2314).
+            When ``None`` (the default, for backends whose metadata is fully
+            their own), ownership is derived from *target_metadata* as before.
+            Alembic-only tables with no ORM model (e.g. knowledge-flow's
+            ``sched_workflow_tasks``) must stay OUT of the set: they are not
+            in the metadata, so owning them would make autogenerate propose
+            their DROP.
     """
     # Import here to keep alembic an optional dependency of fred_core
     # (only needed in migration contexts, not at application runtime).
     from alembic import context
 
-    # Build the set of table names owned by this backend so that autogenerate
-    # and `alembic check` ignore tables that belong to other backends sharing
-    # the same database.
-    metas = (
-        target_metadata if isinstance(target_metadata, Sequence) else [target_metadata]
-    )
-    _owned_tables: frozenset[str] = frozenset(t for m in metas for t in m.tables) | {
-        version_table
-    }
+    # The set of table names owned by this backend: declared by the caller, or
+    # derived from the metadata when the metadata contains nothing shared.
+    if owned_tables is not None:
+        _owned_tables: frozenset[str] = frozenset(owned_tables) | {version_table}
+    else:
+        metas = (
+            target_metadata
+            if isinstance(target_metadata, Sequence)
+            else [target_metadata]
+        )
+        _owned_tables = frozenset(t for m in metas for t in m.tables) | {version_table}
 
-    def _include_name(name: str | None, type_: str, _parent_names: object) -> bool:
-        if type_ == "table":
-            return name in _owned_tables
-        return True
+    _include_name, _include_object = build_ownership_filters(_owned_tables)
 
     def _is_postgres(url: str) -> bool:
         return url.startswith("postgresql")
@@ -117,6 +204,7 @@ def make_alembic_env(
             render_as_batch=not is_postgres,
             version_table=version_table,
             include_name=_include_name,
+            include_object=_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()
@@ -139,6 +227,7 @@ def make_alembic_env(
             dialect_opts={"paramstyle": "named"},
             version_table=version_table,
             include_name=_include_name,
+            include_object=_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()
