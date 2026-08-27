@@ -83,10 +83,12 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
     // Keycloak omits `name` / `preferred_username` on some accounts; render
     // whichever resolved rather than the empty "  ()" the admin cannot act on.
     const user = [userFullName, username && `(${username})`].filter(Boolean).join(" ");
+    // Deep-link the team's members page, not its agents: the recipients are the
+    // admins, and adding the sender by hand is the whole point of the mail.
     // A mailed link does not inherit the router basename, so prepend it - the
     // same reason buildDocumentViewerPath does (subpath deployments).
     const base = normalizeBasename(getConfig().frontend_basename);
-    const teamUrl = `${window.location.origin}${base}/team/${team.id}/agents`;
+    const teamUrl = `${window.location.origin}${base}/team/${team.id}/settings/members`;
     // URLSearchParams encodes spaces as "+", which mail clients render
     // literally in a mailto subject/body - swap them back to %20. The
     // recipients are comma-separated (RFC 6068) and percent-encoded: they come
