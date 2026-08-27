@@ -1374,7 +1374,13 @@ Two guards decide whether the button replaces the label:
   email at all. With no recipient there is nothing to open, so the label stays
   rather than producing an empty `mailto:`.
 
-Mechanics worth keeping: recipients are comma-separated (RFC 6068) and
+Mechanics worth keeping: the draft opens with `window.open(..., "_blank",
+"noopener,noreferrer")` rather than a `location.href` assignment, so a webmail
+registered as the `mailto:` handler opens beside the app instead of replacing
+it (a native client takes over the throwaway tab and the browser drops it);
+`noopener` makes `window.open` return `null` by spec, so there is nothing to
+test for a fallback - the click is the user gesture popup blockers key off.
+Recipients are comma-separated (RFC 6068) and
 percent-encoded, since the addresses come from a directory sync and nothing
 guarantees they are URL-safe; `URLSearchParams`' `+` is rewritten to `%20` or
 mail clients render it literally in the subject; the team link prepends the

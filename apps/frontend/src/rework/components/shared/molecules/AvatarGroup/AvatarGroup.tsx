@@ -29,13 +29,10 @@ export default function AvatarGroup({ avatars, max = 4 }: AvatarGroupProps) {
   return (
     <div className={styles.userAvatarContainer}>
       {hidden.length > 0 && (
-        // Wrapped in a Tooltip like every other avatar rather than rendered
-        // bare: `.userAvatarContainer > *` puts the 2px ring on the direct
-        // child, and under the global `box-sizing: border-box` a bare avatar
-        // pays for that ring out of its own 2rem while a Tooltip-wrapped one
-        // grows by it - the badge came out 4px smaller than its neighbours.
-        // The tooltip then also names the people "+N" stands for, one per line
-        // (a comma-joined run stops being readable past two or three).
+        // Wrapped like every other avatar, not bare: the container puts its
+        // 2px ring on the direct child, and under the global border-box a
+        // bare badge pays for that ring out of its own 2rem - it rendered 4px
+        // smaller. The wrapper also earns it the list of hidden names.
         <Tooltip
           content={
             <ul className={styles.hiddenAvatarNames}>

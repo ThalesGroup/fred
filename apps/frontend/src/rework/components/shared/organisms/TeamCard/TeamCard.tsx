@@ -64,12 +64,10 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
     }
   };
 
-  // #2453: a public invite-only team is discoverable but not joinable, which
-  // left the visitor on a dead-end label. Restore the pre-TEAM-09 escape hatch
-  // (still live on main): a prefilled mail to the team admins. Only public
-  // teams get the button - the UI must not hand a non-member a private team's
-  // admin addresses - and only when at least one address actually resolved,
-  // otherwise there is nobody to write to and the passive label stays.
+  // #2453: a public invite-only team gets a prefilled mail to its admins
+  // instead of a dead-end label. Public only (never hand a non-member a
+  // private team's addresses), and only when one resolved - nobody to write
+  // to otherwise. Full rationale: COMPONENT-UX.md `TeamCard`.
   const canJoinDirectly = !team.is_member && team.joining_mode === "open";
   const isInviteOnlyOutsider = !team.is_member && team.joining_mode === "invite_only";
   const adminEmails = (team.admins ?? [])
@@ -80,25 +78,24 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
   const handleRequestInvitation = (e: React.MouseEvent<HTMLButtonElement>): void => {
     e.preventDefault();
     const site = [siteTitle, siteSubtitle].filter(Boolean).join(" ");
-    // Keycloak omits `name` / `preferred_username` on some accounts; render
-    // whichever resolved rather than the empty "  ()" the admin cannot act on.
+    // Keycloak omits `name` / `preferred_username` on some accounts.
     const user = [userFullName, username && `(${username})`].filter(Boolean).join(" ");
-    // Deep-link the team's members page, not its agents: the recipients are the
-    // admins, and adding the sender by hand is the whole point of the mail.
-    // A mailed link does not inherit the router basename, so prepend it - the
-    // same reason buildDocumentViewerPath does (subpath deployments).
+    // The members page, not the agents: the recipients are the admins who add
+    // the sender by hand. A mailed link inherits no router basename.
     const base = normalizeBasename(getConfig().frontend_basename);
     const teamUrl = `${window.location.origin}${base}/team/${team.id}/settings/members`;
-    // URLSearchParams encodes spaces as "+", which mail clients render
-    // literally in a mailto subject/body - swap them back to %20. The
-    // recipients are comma-separated (RFC 6068) and percent-encoded: they come
-    // from a directory sync, so nothing guarantees they are URL-safe.
+    // Comma-separated and encoded per RFC 6068 - the addresses come from a
+    // directory sync, so nothing guarantees they are URL-safe.
     const recipients = adminEmails.map(encodeURIComponent).join(",");
     const params = new URLSearchParams({
       subject: t("rework.teamCard.invitationMail.subject", { site, team: team.name }),
       body: t("rework.teamCard.invitationMail.body", { site, team: team.name, user, teamUrl }),
     });
-    window.location.href = `mailto:${recipients}?${params.toString().replace(/\+/g, "%20")}`;
+    // `+` back to %20 or mail clients render it literally in the subject.
+    const href = `mailto:${recipients}?${params.toString().replace(/\+/g, "%20")}`;
+    // A new tab: a webmail registered for mailto: would otherwise replace the
+    // app. `noopener` makes window.open return null, so no fallback to test.
+    window.open(href, "_blank", "noopener,noreferrer");
   };
 
   return (

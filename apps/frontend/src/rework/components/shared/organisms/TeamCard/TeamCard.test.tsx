@@ -44,7 +44,7 @@ const k = vi.hoisted(() => ({
 
 vi.mock("react-i18next", () => ({
   // Interpolation values are appended to the key so the mailto assertions can
-  // check what the card actually fed into the subject/body templates.
+  // see what the card fed into the subject/body templates.
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key}:${Object.values(opts).join("|")}` : key),
   }),
@@ -71,18 +71,17 @@ vi.mock("../../../../../security/KeycloakService.ts", () => ({
   KeyCloakService: { GetUserFullName: () => k.fullName, GetUserName: () => k.username },
 }));
 
-// A subpath deployment is the interesting case: the mailed link must carry the
-// basename, which a router-less string concat does not get for free.
+// A subpath deployment: the mailed link must carry the basename.
 vi.mock("src/common/config", () => ({
   getConfig: () => ({ frontend_basename: "/fred/" }),
 }));
 
 import TeamCard from "./TeamCard.tsx";
 
-// The mailto is triggered by assigning window.location.href; happy-dom would
-// try to navigate on that, so intercept the assignment and record it instead.
-// Restored in afterAll: the stub carries only what this file needs, so leaving
-// it in place would silently break anything else that reads window.location.
+// Record the mailto instead of letting happy-dom act on it. The href setter
+// doubles as the assertion that this tab is never navigated away. location is
+// restored in afterAll - the stub only carries what this file needs.
+const openSpy = vi.fn();
 const hrefSetter = vi.fn();
 const realLocation = Object.getOwnPropertyDescriptor(window, "location");
 Object.defineProperty(window, "location", {
@@ -102,7 +101,7 @@ afterAll(() => {
 const admin = { id: "u-1", first_name: "Ay", last_name: "One", email: "ay@example.com" };
 
 function lastMailto(): string {
-  const calls = hrefSetter.mock.calls;
+  const calls = openSpy.mock.calls;
   return calls[calls.length - 1]?.[0] ?? "";
 }
 
@@ -110,6 +109,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 function render(ui: React.ReactElement) {
+  vi.stubGlobal("open", openSpy);
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -125,6 +125,8 @@ afterEach(() => {
   container.remove();
   h.joinTeam.mockClear();
   hrefSetter.mockClear();
+  openSpy.mockClear();
+  vi.unstubAllGlobals();
   h.isJoining = false;
   k.fullName = "Test User";
   k.username = "test.user";
@@ -158,8 +160,7 @@ describe("TeamCard joining_mode rendering", () => {
   });
 
   it("INVITE_ONLY with no visibility on the payload: fails closed to the label", () => {
-    // A version-skew backend can omit `visibility` (#2433) - the card must not
-    // hand out the admin addresses on a payload it cannot read as public.
+    // A version-skew backend can omit `visibility` (#2433).
     render(<TeamCard team={baseTeam({ joining_mode: "invite_only", admins: [admin] })} withDescription={false} />);
 
     expect(container.querySelector("button")).toBeNull();
@@ -219,17 +220,19 @@ describe("TeamCard invitation request (#2453)", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
+    // A new tab, and this one left alone.
+    expect(openSpy).toHaveBeenCalledWith(expect.any(String), "_blank", "noopener,noreferrer");
+    expect(hrefSetter).not.toHaveBeenCalled();
+
     // Recipients are comma-separated per RFC 6068 and percent-encoded.
     const raw = lastMailto();
     expect(raw.startsWith("mailto:ay%40example.com,bee%40example.com?")).toBe(true);
-    // Spaces must survive as %20, never as the "+" URLSearchParams emits: mail
-    // clients render that literally in the subject line.
+    // Spaces survive as %20, never the "+" URLSearchParams emits.
     expect(raw).not.toContain("+");
 
     const href = decodeURIComponent(raw);
     expect(href).toContain("rework.teamCard.invitationMail.subject:Fred Platform|Team One");
-    // The link lands on the members page (the admins add the sender by hand)
-    // and carries the configured basename ("/fred/").
+    // The members page, under the configured basename.
     expect(href).toContain(
       "rework.teamCard.invitationMail.body:Fred Platform|Team One|Test User (test.user)|http://localhost:3000/fred/team/team-1/settings/members",
     );
