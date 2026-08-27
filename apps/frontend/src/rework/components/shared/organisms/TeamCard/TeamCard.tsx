@@ -70,6 +70,7 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
   // teams get the button - the UI must not hand a non-member a private team's
   // admin addresses - and only when at least one address actually resolved,
   // otherwise there is nobody to write to and the passive label stays.
+  const canJoinDirectly = !team.is_member && team.joining_mode === "open";
   const isInviteOnlyOutsider = !team.is_member && team.joining_mode === "invite_only";
   const adminEmails = (team.admins ?? [])
     .map((admin) => admin.email)
@@ -139,9 +140,15 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
         </div>
         {withDescription && <div className={styles.teamCardDescription}>{team.description}</div>}
         <div className={styles.teamCardFooter}>
-          <AvatarGroup avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))} />
-          {!team.is_member && team.joining_mode === "open" && (
+          <div className={styles.teamCardAdmins}>
+            <AvatarGroup
+              avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))}
+              max={canJoinDirectly || canRequestInvitation ? 2 : 4}
+            />
+          </div>
+          {canJoinDirectly && (
             <Button
+              className={styles.teamCardJoinAction}
               color={"primary"}
               variant={"outlined"}
               size={"medium"}
@@ -154,6 +161,7 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
           )}
           {canRequestInvitation && (
             <Button
+              className={styles.teamCardJoinAction}
               color={"primary"}
               variant={"outlined"}
               size={"medium"}

@@ -1381,6 +1381,36 @@ degrades to whichever of `name` / `preferred_username` Keycloak returned.
 No server-side request flow is involved: this is a client-side mail draft, the
 same as before TEAM-09. Nothing routes an invitation request through the API.
 
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge and squashed the avatars into ellipses on the way. Three
+changes, none of them resizing an avatar: the button never shrinks (it must
+keep its whole label), `AvatarGroup` gained a `max` prop (default 4, so its
+other consumer is unchanged) and the card drops to `max={2}` whenever a button
+shares the footer, and an avatar is now `flex-shrink: 0` - a fixed-size circle
+should clip, never deform. `.teamCardAdmins` does that clipping as a last
+resort for an unusually long translation; the row runs right-to-left, so the
+overflow falls off the left and the "+N" badge stays visible.
+
+Two `AvatarGroup` fixes came out of the same pass, and apply everywhere it is
+used. The "+N" badge now goes through the same `Tooltip` wrapper as the other
+avatars: `.userAvatarContainer > *` puts the 2px ring on the direct child, so
+under the global `box-sizing: border-box` a bare badge paid for that ring out
+of its own 2rem while a wrapped avatar grew by it - the badge rendered 4px
+smaller than its neighbours. That wrapper also gives the badge a tooltip
+listing the hidden names, one per line (a `content` tooltip, so it owns its own
+padding).
+
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge. The button never shrinks (it must keep its whole label) and
+the avatar row is the half that gives up width - `AvatarGroup` gained a `max`
+prop (default 4, so its other consumer is unchanged) and the card drops to
+`max={2}` whenever a button shares the footer, collapsing the rest into "+N".
+`.teamCardAdmins` clips as a last resort for an unusually long translation; the
+avatars run right-to-left, so the overflow falls off the left and the badge
+stays visible.
+
 ---
 
 ### `MarketplaceTeams` — what the discover section may list (#2398)

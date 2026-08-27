@@ -5,7 +5,22 @@
   gap: var(--spacing-2xs);
 
   > * {
+    /* An avatar is a fixed-size circle: as a flex item it would shrink when
+     * the row runs out of width and render as an ellipse with the initials
+     * squeezed out of it. The "+N" badge sits at the row's main-start, so it
+     * took that first. Let the row overflow (and its container clip) instead. */
+    flex-shrink: 0;
     border: 2px solid var(--surface-container);
     border-radius: 50%;
   }
+}
+
+/* Names behind the "+N" badge. A `content` tooltip drops the plain hint's
+ * padding (Tooltip.module.scss: the content owns its own spacing), so restate
+ * it here, and keep each name on its own unwrapped line. */
+.hiddenAvatarNames {
+  margin: 0;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  list-style: none;
+  white-space: nowrap;
 }

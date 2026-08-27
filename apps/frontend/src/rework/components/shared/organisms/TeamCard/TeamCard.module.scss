@@ -83,10 +83,29 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* Without a gap the two halves touch as soon as the row is full - the card
+   * is a fixed 290px, so that happens on any team with a few admins. */
+  gap: var(--spacing-s);
   margin-top: auto;
 }
 
+/* The admin avatars are the elastic half of the footer: a team with several
+ * admins used to push the join button past the card's right edge (#2453).
+ * The button keeps its whole label and the avatar row clips instead -
+ * AvatarGroup's `max` already collapses the tail into "+N", so this only
+ * bites on an unusually long translation. Clipping the row does not hide the
+ * badge: the avatars run right-to-left, so the overflow falls off the left. */
+.teamCardAdmins {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.teamCardJoinAction {
+  flex-shrink: 0;
+}
+
 .teamJoiningLabel {
+  flex-shrink: 0;
   /* Escape-hatch margin (see design system guidance): this offset applies
    * only to the label-only (invite-only) state — the sibling join button in
    * the same footer slot must stay flush with the card's padding edge, so

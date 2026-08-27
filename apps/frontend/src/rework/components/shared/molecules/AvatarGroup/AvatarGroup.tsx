@@ -18,13 +18,37 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 
 interface AvatarGroupProps {
   avatars: Omit<UserAvatarProps, "size">[];
+  /** How many avatars render before the rest collapse into a "+N" badge.
+   *  Lower it where the row shares a narrow line with something else - a
+   *  TeamCard footer holding a join button has ~118px for the whole row. */
+  max?: number;
 }
 
-export default function AvatarGroup({ avatars }: AvatarGroupProps) {
+export default function AvatarGroup({ avatars, max = 4 }: AvatarGroupProps) {
+  const hidden = avatars.slice(max);
   return (
     <div className={styles.userAvatarContainer}>
-      {avatars.length > 4 && <UserAvatar name={`+ ${(avatars.length - 4).toString()}`} size={"small"} />}
-      {avatars.slice(0, 4).map((avatar, index) => (
+      {hidden.length > 0 && (
+        // Wrapped in a Tooltip like every other avatar rather than rendered
+        // bare: `.userAvatarContainer > *` puts the 2px ring on the direct
+        // child, and under the global `box-sizing: border-box` a bare avatar
+        // pays for that ring out of its own 2rem while a Tooltip-wrapped one
+        // grows by it - the badge came out 4px smaller than its neighbours.
+        // The tooltip then also names the people "+N" stands for, one per line
+        // (a comma-joined run stops being readable past two or three).
+        <Tooltip
+          content={
+            <ul className={styles.hiddenAvatarNames}>
+              {hidden.map((avatar, index) => (
+                <li key={index}>{avatar.name}</li>
+              ))}
+            </ul>
+          }
+        >
+          <UserAvatar name={`+ ${hidden.length.toString()}`} size={"small"} />
+        </Tooltip>
+      )}
+      {avatars.slice(0, max).map((avatar, index) => (
         <Tooltip key={index} text={avatar.name}>
           <UserAvatar size={"small"} {...avatar} />
         </Tooltip>
