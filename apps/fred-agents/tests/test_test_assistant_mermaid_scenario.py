@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Wiring guard for the `mermaid` scenario of `test_assistant` (issue #2382).
+Wiring guard for the `mermaid` scenario of `test_assistant`.
 
 Why this file exists:
 The scenario's value is manual - a developer types `mermaid` in the chat and

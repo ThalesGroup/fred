@@ -1078,7 +1078,7 @@ async def markdown_step(
 # ── Step: mermaid ─────────────────────────────────────────────────────────────
 
 _MERMAID_PAYLOAD = """\
-## Mermaid sanitizer test (issue #2382)
+## Mermaid sanitizer test
 
 Every diagram below is **deliberately malformed** - the kind of Mermaid a
 weaker model emits when it ignores the output contract. None of them parse
@@ -1151,7 +1151,7 @@ async def mermaid_step(
 
     Why this scenario exists:
     `mermaidSanitizer.ts` is the last-resort fallback before the user sees a
-    raw Mermaid parse error (issue #2382). Its unit tests cover the repair in
+    raw Mermaid parse error. Its unit tests cover the repair in
     isolation; this scenario exercises the same repair through the real chat
     path (SSE → MarkdownRenderer → MermaidBlock → mermaid.render), which is
     the only place a regression actually becomes visible.
@@ -1632,7 +1632,7 @@ _SCENARIO_TABLE = """\
 | `error` | Deliberate node error → on_error route |
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
-| `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback (#2382) repairs it instead of showing a parse error |
+| `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
 | `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
