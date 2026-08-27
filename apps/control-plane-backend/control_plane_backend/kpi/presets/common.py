@@ -32,6 +32,13 @@ class TimeSeriesResponse(BaseModel):
     since: AwareDatetime
     until: AwareDatetime
     interval: str
+    # Set only by the trailing-window trend presets (issue #2428) — the window
+    # each point pools before taking its median, in the same compact form as
+    # `interval` ("7d" for 7 daily buckets). None everywhere else, and the
+    # routes serialize with `response_model_exclude_none=True`, so a plain
+    # time-series preset's payload is unchanged on the wire. The frontend
+    # localizes the unit letter rather than hardcoding "7-day".
+    window: str | None = None
 
 
 class ScalarResponse(BaseModel):

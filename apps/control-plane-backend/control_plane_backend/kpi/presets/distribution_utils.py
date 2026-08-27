@@ -14,11 +14,11 @@
 
 """Shared bucketing/median helpers for the engagement distribution presets.
 
-Both `conversations_per_user` and `conversation_depth` (issue #2426) reduce a
-`terms` aggregation to the same shape: a list of per-entity doc_counts turned
-into a fixed 5-bucket histogram plus a median. The maths lives here, pure and
-unit-testable, so the two presets cannot drift apart — the preset modules keep
-only their OpenSearch query.
+`conversations_per_user`, `conversation_depth` and `agents_per_user` (issue
+#2426) reduce a `terms` aggregation to the same shape: a list of per-entity
+counts turned into a fixed 11-bucket histogram plus a median. The maths lives
+here, pure and unit-testable, so the presets cannot drift apart — the preset
+modules keep only their OpenSearch query.
 """
 
 from __future__ import annotations
@@ -33,12 +33,14 @@ from control_plane_backend.kpi.presets.common import (
     LabelValuePoint,
 )
 
-# `terms` size cap shared by both engagement presets. Same large-size precedent
+# `terms` size cap shared by the engagement presets. Same large-size precedent
 # as `agent_prompt_length_distribution`: a platform with more than this many
 # distinct users (or conversations) in one window silently loses the tail of the
 # distribution — and not uniformly: `terms` keeps the highest doc_counts, so
 # what drops is the *low*-count tail, undercounting the "1" bucket and biasing
-# the median upward. Acceptable for a dashboard histogram, and cheaper than a
+# the median upward. (For a `cardinality_of` body the kept entities are still
+# those with the most rows — only a proxy for the distinct-count actually
+# bucketed.) Acceptable for a dashboard histogram, and cheaper than a
 # composite-agg pagination loop — revisit if a deployment ever gets close.
 TERMS_SIZE = 10000
 
@@ -49,10 +51,16 @@ TERMS_SIZE = 10000
 # translation.
 BUCKETS: tuple[tuple[int, int | None, str], ...] = (
     (1, 1, "1"),
-    (2, 5, "2-5"),
-    (6, 10, "6-10"),
-    (11, 20, "11-20"),
-    (21, None, "21+"),
+    (2, 3, "2-3"),
+    (4, 5, "4-5"),
+    (6, 7, "6-7"),
+    (8, 9, "8-9"),
+    (10, 11, "10-11"),
+    (12, 13, "12-13"),
+    (14, 15, "14-15"),
+    (16, 17, "16-17"),
+    (18, 19, "18-19"),
+    (20, None, "20+"),
 )
 
 
@@ -92,26 +100,29 @@ def median_of(counts: Sequence[int]) -> float | None:
 
 AGG_NAME = "by_entity"
 
+# Sub-agg name for the cardinality variant. `agents_per_user` does not ask "how
+# many rows does this user have" but "how many *distinct* agents do those rows
+# mention", so its per-entity number is a cardinality, not a doc_count — same
+# bucketing and median afterwards.
+CARDINALITY_AGG_NAME = "distinct"
 
-def distribution_body(
+
+def metric_filters(
     *,
     metric_name: str,
-    group_by: str,
     since: datetime,
     until: datetime,
     team_id: TeamId | None,
-    require_group_by: bool = False,
-) -> dict[str, Any]:
-    """Build the OpenSearch body for a "count per entity" distribution.
+    exists_fields: Sequence[str | None] = (),
+) -> list[dict[str, Any]]:
+    """The `bool.filter` clauses every engagement query shares.
 
-    Both engagement presets ask the same question of different fields — count
-    `metric_name` rows in the window, grouped by `group_by` — so the body is
-    built once here. In particular the team filter is written in one place: the
-    `kpi/README.md` warning about a preset silently returning unfiltered data
-    for a team_id it doesn't honour applies to every copy of that clause.
-
-    `require_group_by` adds an `exists` filter, for a dim that only some rows
-    carry.
+    Written in one place because of the `kpi/README.md` warning: a preset that
+    silently returns unfiltered data for a `team_id` it doesn't honour is worse
+    than one that refuses team scoping outright. `trend_utils` builds on this
+    too, so the trend presets cannot filter differently from their distribution
+    siblings. `None` entries in `exists_fields` are skipped, so callers can pass
+    their optional dims straight through.
     """
     filters: list[dict[str, Any]] = [
         {
@@ -124,16 +135,59 @@ def distribution_body(
         },
         {"term": {"metric.name": metric_name}},
     ]
-    if require_group_by:
-        filters.append({"exists": {"field": group_by}})
+    filters.extend(
+        {"exists": {"field": field}} for field in exists_fields if field is not None
+    )
     if team_id is not None:
         filters.append({"term": {"dims.team_id": str(team_id)}})
+    return filters
+
+
+def distribution_body(
+    *,
+    metric_name: str,
+    group_by: str,
+    since: datetime,
+    until: datetime,
+    team_id: TeamId | None,
+    require_group_by: bool = False,
+    cardinality_of: str | None = None,
+) -> dict[str, Any]:
+    """Build the OpenSearch body for a "count per entity" distribution.
+
+    The engagement presets ask the same question of different fields — count
+    `metric_name` rows in the window, grouped by `group_by` — so the body is
+    built once here, over the shared `metric_filters` clauses.
+
+    `require_group_by` adds an `exists` filter, for a dim that only some rows
+    carry.
+
+    `cardinality_of` switches the per-entity number from the bucket doc_count to
+    the number of distinct values of that field. Rows missing the field never
+    affect a cardinality agg; the `exists` filter is for entities whose rows
+    *all* lack it — kept, they would reduce to a cardinality of 0, which
+    `bucket_counts` drops but `median_of` would count, leaving the histogram and
+    the median describing different populations.
+    """
+    filters = metric_filters(
+        metric_name=metric_name,
+        since=since,
+        until=until,
+        team_id=team_id,
+        exists_fields=(group_by if require_group_by else None, cardinality_of),
+    )
+
+    # One bucket per entity; its doc_count is that entity's count.
+    by_entity: dict[str, Any] = {"terms": {"field": group_by, "size": TERMS_SIZE}}
+    if cardinality_of is not None:
+        by_entity["aggs"] = {
+            CARDINALITY_AGG_NAME: {"cardinality": {"field": cardinality_of}}
+        }
 
     return {
         "size": 0,
         "query": {"bool": {"filter": filters}},
-        # One bucket per entity; its doc_count is that entity's count.
-        "aggs": {AGG_NAME: {"terms": {"field": group_by, "size": TERMS_SIZE}}},
+        "aggs": {AGG_NAME: by_entity},
     }
 
 
@@ -146,14 +200,18 @@ def distribution_from_terms_agg(
 ) -> DistributionResponse:
     """Reduce a `distribution_body` response to a `DistributionResponse`.
 
-    One bucket per entity, its `doc_count` being that entity's count. Kept here
-    so the two presets share one reduction instead of two copies that can drift.
+    One bucket per entity, its `doc_count` being that entity's count — or the
+    `CARDINALITY_AGG_NAME` sub-agg's value when the body was built with
+    `cardinality_of`, detected per bucket so the two call sites cannot fall out
+    of agreement. Kept here so the presets share one reduction instead of
+    copies that can drift.
     """
+    buckets = response.get("aggregations", {}).get(agg_name, {}).get("buckets", [])
     counts = [
-        int(bucket["doc_count"])
-        for bucket in response.get("aggregations", {})
-        .get(agg_name, {})
-        .get("buckets", [])
+        int(bucket[CARDINALITY_AGG_NAME]["value"])
+        if CARDINALITY_AGG_NAME in bucket
+        else int(bucket["doc_count"])
+        for bucket in buckets
     ]
     return DistributionResponse(
         rows=bucket_counts(counts),

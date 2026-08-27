@@ -40,7 +40,7 @@ interface HistogramChartProps {
  *   spread the buckets further apart, the opposite of what a histogram wants.
  *
  * Bucket labels come from the backend already display-ready (numeric ranges such
- * as "2-5"), so they are rendered verbatim and need no translation.
+ * as "2-3"), so they are rendered verbatim and need no translation.
  */
 export default function HistogramChart({
   title,

@@ -20,8 +20,9 @@ Generates:
 Conversation model
 ------------------
 There is a single conversation population, so the same turns feed
-`top_agents_by_conversations`, `messages_over_time`, `conversation_depth` and
-`conversations_per_user` instead of two disjoint turn sets:
+`top_agents_by_conversations`, `messages_over_time`, `conversation_depth`,
+`conversations_per_user` and `agents_per_user` instead of two disjoint turn
+sets:
 
     per-agent turn budget (CONVERSATION_DISTRIBUTION, scaled by --since-days)
       → carved into conversations, each one's length drawn from
@@ -68,7 +69,7 @@ Conversation length — turns per conversation (`conversation_depth`):
         11–20 turns : 10 %
         21–40 turns :  5 %   (marathons)
 
-    → median ≈ 2–3 turns, all five dashboard buckets populated.
+    → median ≈ 2–3 turns, with mass across the whole dashboard bucket axis.
 
 User activity — share of the user population, by conversations created
 (`conversations_per_user`):
@@ -209,9 +210,9 @@ CONVERSATION_LENGTH_DISTRIBUTION = [
 # (% of users, min, max, mode) — conversations created by one user over the
 # window. Unlike the table above these weights are shares of the *population*,
 # not of the draws: the population is sized from the conversation count and then
-# split by these shares, so the "1" and "2-5" buckets always hold more than half
-# the users. That is what pins the dashboard median inside 2-5 instead of
-# letting it wander with the sampling luck of a 60-odd draw population.
+# split by these shares, so counts of 1-5 always cover more than half the
+# users. That is what pins the dashboard median in the low single digits instead
+# of letting it wander with the sampling luck of a 60-odd draw population.
 USER_ACTIVITY_DISTRIBUTION = [
     (35, 1, 1, 1),
     (29, 2, 5, 3),
@@ -225,10 +226,16 @@ USER_ACTIVITY_DISTRIBUTION = [
 # output can be compared with the charts line by line.
 DASHBOARD_BUCKETS: tuple[tuple[int, int | None, str], ...] = (
     (1, 1, "1"),
-    (2, 5, "2-5"),
-    (6, 10, "6-10"),
-    (11, 20, "11-20"),
-    (21, None, "21+"),
+    (2, 3, "2-3"),
+    (4, 5, "4-5"),
+    (6, 7, "6-7"),
+    (8, 9, "8-9"),
+    (10, 11, "10-11"),
+    (12, 13, "12-13"),
+    (14, 15, "14-15"),
+    (16, 17, "16-17"),
+    (18, 19, "18-19"),
+    (20, None, "20+"),
 )
 
 
@@ -757,8 +764,10 @@ def main() -> None:
 
     agent_total = sum(c for c, *_ in TARGET_DISTRIBUTION)
     per_user: dict[str, int] = {}
+    agents_per_user: dict[str, set[str]] = {}
     for conv in conversations:
         per_user[conv.user_id] = per_user.get(conv.user_id, 0) + 1
+        agents_per_user.setdefault(conv.user_id, set()).add(conv.agent_id)
 
     print(f"Generated {len(events)} total events:")
     print(f"  Lifecycle ({agent_total} agents, all paired with delete):")
@@ -777,6 +786,9 @@ def main() -> None:
     )
     _print_distribution(
         "conversations_per_user", list(per_user.values()), "conversations"
+    )
+    _print_distribution(
+        "agents_per_user", [len(a) for a in agents_per_user.values()], "agents"
     )
 
     if args.dry_run:

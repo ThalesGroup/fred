@@ -19,9 +19,13 @@ import styles from "./AnalyticsPage.module.css";
 import {
   useActiveUsersOverTimeQuery,
   useAgentPromptLengthDistributionQuery,
+  useAgentsPerUserQuery,
+  useAgentsPerUserTrendQuery,
   useAgentsTotalQuery,
   useConversationDepthQuery,
+  useConversationDepthTrendQuery,
   useConversationsPerUserQuery,
+  useConversationsPerUserTrendQuery,
   useDocumentsTotalQuery,
   useMessagesOverTimeQuery,
   useSessionsByScopeQuery,
@@ -49,6 +53,7 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact.tsx";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { formatTrendWindow } from "./trendWindow";
 
 const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
 const defaultRange: TimeRange = { ...defaultPreset.resolve(), presetKey: "last30d" };
@@ -150,7 +155,8 @@ export default function AnalyticsPage() {
   );
 
   // Engagement distributions (#2426) — how many conversations a user starts,
-  // and how deep a conversation goes. Both return histogram rows plus a median.
+  // how deep a conversation goes, and how many distinct agents a user reaches
+  // for. All three return histogram rows plus a median.
   const {
     data: conversationsPerUserData,
     isLoading: conversationsPerUserIsLoading,
@@ -165,6 +171,63 @@ export default function AnalyticsPage() {
     isLoading: conversationDepthIsLoading,
     isError: conversationDepthIsError,
   } = useConversationDepthQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
+
+  const {
+    data: agentsPerUserData,
+    isLoading: agentsPerUserIsLoading,
+    isError: agentsPerUserIsError,
+  } = useAgentsPerUserQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: 300 });
+
+  // Engagement trends (#2428) — the same three medians recomputed per bucket
+  // over a trailing window, so the section shows how usage is moving and not
+  // only where it stands over the whole range.
+  const {
+    data: conversationsPerUserTrendData,
+    isLoading: conversationsPerUserTrendIsLoading,
+    isFetching: conversationsPerUserTrendIsFetching,
+    isError: conversationsPerUserTrendIsError,
+  } = useConversationsPerUserTrendQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: 300 },
+  );
+
+  const {
+    data: conversationDepthTrendData,
+    isLoading: conversationDepthTrendIsLoading,
+    isFetching: conversationDepthTrendIsFetching,
+    isError: conversationDepthTrendIsError,
+  } = useConversationDepthTrendQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: 300 },
+  );
+
+  const {
+    data: agentsPerUserTrendData,
+    isLoading: agentsPerUserTrendIsLoading,
+    isFetching: agentsPerUserTrendIsFetching,
+    isError: agentsPerUserTrendIsError,
+  } = useAgentsPerUserTrendQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: 300 },
+  );
+
+  // The window is the backend's to decide (it follows the bucket interval), so
+  // it can only be named once the response is in — until then the tooltip goes
+  // without a label rather than announcing a window nobody resolved yet.
+  const trendValueLabel = (key: string, window: string | null | undefined) => {
+    const formatted = formatTrendWindow(window, t);
+    return formatted ? t(key, { window: formatted }) : undefined;
+  };
+
+  // The window belongs in the title too, not only in the tooltip: without it an
+  // admin who never hovers cannot tell this median line from the range-wide
+  // median tile above. Falls back to the bare title until the response names
+  // the window.
+  const trendTitle = (key: string, window: string | null | undefined) => {
+    const formatted = formatTrendWindow(window, t);
+    const title = t(key);
+    return formatted ? t("rework.analytics.engagement.trendTitleWithWindow", { title, window: formatted }) : title;
+  };
 
   // Token usage + green/cost (§2.7, F1) — platform-wide (no teamId), same
   // presets the personal dashboard (Page 3) and the team dashboard (Page 2,
@@ -242,6 +305,10 @@ export default function AnalyticsPage() {
     promptLengthIsError,
     conversationsPerUserIsError,
     conversationDepthIsError,
+    agentsPerUserIsError,
+    conversationsPerUserTrendIsError,
+    conversationDepthTrendIsError,
+    agentsPerUserTrendIsError,
   ].every(Boolean);
 
   if (serviceDown) {
@@ -380,10 +447,17 @@ export default function AnalyticsPage() {
         </div>
       </Disclosure>
 
-      {/* Engagement (#2426): the two shape-of-usage questions the totals above
+      {/* Engagement (#2426): the shape-of-usage questions the totals above
           can't answer — is usage spread across users or concentrated in a few,
-          and do conversations go anywhere past the first message. */}
+          do conversations go anywhere past the first message, and how many
+          distinct agents a user actually reaches for. The trend row below the
+          histograms (#2428) adds the direction each of those three is moving:
+          the same median, recomputed over a trailing window per bucket. */}
       <Disclosure title={t("rework.analytics.sections.engagement")} defaultOpen>
+        {/* Every figure in this section covers only users active in the range
+            (≥1 conversation started) — there is deliberately no "0" bar, and
+            the note below says so rather than leaving readers to infer it. */}
+        <p className={styles.sectionDescription}>{t("rework.analytics.engagement.description")}</p>
         {/* `median` is null when the range holds nothing to take a median of.
             Flagging that as `unavailable` makes the card say "no data" — left
             unset it would render as a label with nothing under it. The value is
@@ -404,11 +478,17 @@ export default function AnalyticsPage() {
             isLoading={conversationDepthIsLoading}
             isError={conversationDepthIsError}
           />
+          <KpiStatCard
+            label={t("rework.analytics.engagement.agentsPerUser.medianLabel")}
+            value={agentsPerUserData?.median}
+            unavailable={agentsPerUserData != null && agentsPerUserData.median == null}
+            isLoading={agentsPerUserIsLoading}
+            isError={agentsPerUserIsError}
+          />
         </div>
 
-        {/* Exactly two histograms — split the row 50/50 instead of leaving the
-            third bento column empty. */}
-        <div className={styles.chartGridHalves}>
+        {/* Three histograms, one per bento column. */}
+        <div className={styles.chartGrid}>
           <HistogramChart
             title={t("rework.analytics.engagement.conversationsPerUser.title")}
             rows={conversationsPerUserData?.rows ?? []}
@@ -424,6 +504,61 @@ export default function AnalyticsPage() {
             emptyMessage={t("rework.analytics.engagement.conversationDepth.empty")}
             isLoading={conversationDepthIsLoading}
             isError={conversationDepthIsError}
+          />
+          <HistogramChart
+            title={t("rework.analytics.engagement.agentsPerUser.title")}
+            rows={agentsPerUserData?.rows ?? []}
+            valueLabel={t("rework.analytics.engagement.agentsPerUser.valueLabel")}
+            emptyMessage={t("rework.analytics.engagement.agentsPerUser.empty")}
+            isLoading={agentsPerUserIsLoading}
+            isError={agentsPerUserIsError}
+          />
+        </div>
+
+        {/* Same three metrics, same column order as the histograms above, so a
+            reader tracks one column down instead of hunting for the pair. */}
+        <div className={styles.chartGrid}>
+          <TimeSeriesLineChart
+            title={trendTitle(
+              "rework.analytics.engagement.conversationsPerUserTrend.title",
+              conversationsPerUserTrendData?.window,
+            )}
+            rows={conversationsPerUserTrendData?.rows ?? []}
+            interval={conversationsPerUserTrendData?.interval}
+            valueLabel={trendValueLabel(
+              "rework.analytics.engagement.conversationsPerUserTrend.valueLabel",
+              conversationsPerUserTrendData?.window,
+            )}
+            isFetching={conversationsPerUserTrendIsFetching}
+            isLoading={conversationsPerUserTrendIsLoading}
+            isError={conversationsPerUserTrendIsError}
+          />
+          <TimeSeriesLineChart
+            title={trendTitle(
+              "rework.analytics.engagement.conversationDepthTrend.title",
+              conversationDepthTrendData?.window,
+            )}
+            rows={conversationDepthTrendData?.rows ?? []}
+            interval={conversationDepthTrendData?.interval}
+            valueLabel={trendValueLabel(
+              "rework.analytics.engagement.conversationDepthTrend.valueLabel",
+              conversationDepthTrendData?.window,
+            )}
+            isFetching={conversationDepthTrendIsFetching}
+            isLoading={conversationDepthTrendIsLoading}
+            isError={conversationDepthTrendIsError}
+          />
+          <TimeSeriesLineChart
+            title={trendTitle("rework.analytics.engagement.agentsPerUserTrend.title", agentsPerUserTrendData?.window)}
+            rows={agentsPerUserTrendData?.rows ?? []}
+            interval={agentsPerUserTrendData?.interval}
+            valueLabel={trendValueLabel(
+              "rework.analytics.engagement.agentsPerUserTrend.valueLabel",
+              agentsPerUserTrendData?.window,
+            )}
+            isFetching={agentsPerUserTrendIsFetching}
+            isLoading={agentsPerUserTrendIsLoading}
+            isError={agentsPerUserTrendIsError}
           />
         </div>
       </Disclosure>

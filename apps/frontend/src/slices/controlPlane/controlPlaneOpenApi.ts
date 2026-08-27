@@ -843,6 +843,58 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsAgentsPerUserGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_per_user`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationsPerUserTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversations_per_user_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationDepthTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversation_depth_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentsPerUserTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_per_user_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
       HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
       HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
@@ -1708,6 +1760,46 @@ export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse =
   /** status 200 Successful Response */ DistributionResponse;
 export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -3122,6 +3214,7 @@ export type TimeSeriesResponse = {
   since: string;
   until: string;
   interval: string;
+  window?: string | null;
 };
 export type ScalarResponse = {
   value: number;
@@ -3494,6 +3587,14 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
   useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
   useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,

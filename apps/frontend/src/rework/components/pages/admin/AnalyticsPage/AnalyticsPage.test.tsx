@@ -81,6 +81,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSessionsByScopeQuery: h.neutralQuery,
   useConversationsPerUserQuery: h.neutralQuery,
   useConversationDepthQuery: h.neutralQuery,
+  useAgentsPerUserQuery: h.neutralQuery,
+  useConversationsPerUserTrendQuery: h.neutralQuery,
+  useConversationDepthTrendQuery: h.neutralQuery,
+  useAgentsPerUserTrendQuery: h.neutralQuery,
   useTopTeamsBySessionsQuery: h.neutralQuery,
   useAgentsTotalQuery: h.neutralQuery,
   useDocumentsTotalQuery: h.neutralQuery,
@@ -127,7 +131,13 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
     expect(html).toContain("rework.analytics.sections.engagement");
     expect(html).toContain("rework.analytics.engagement.conversationsPerUser.title");
     expect(html).toContain("rework.analytics.engagement.conversationDepth.title");
+    expect(html).toContain("rework.analytics.engagement.agentsPerUser.title");
     expect(html).toContain("rework.analytics.engagement.conversationsPerUser.medianLabel");
     expect(html).toContain("rework.analytics.engagement.conversationDepth.medianLabel");
+    expect(html).toContain("rework.analytics.engagement.agentsPerUser.medianLabel");
+    expect(html).toContain("rework.analytics.engagement.description");
+    expect(html).toContain("rework.analytics.engagement.conversationsPerUserTrend.title");
+    expect(html).toContain("rework.analytics.engagement.conversationDepthTrend.title");
+    expect(html).toContain("rework.analytics.engagement.agentsPerUserTrend.title");
   });
 });

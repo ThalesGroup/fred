@@ -106,6 +106,16 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/agents_per_user
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/agents_per_user_trend
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/agents_total
     review_status: pending_review
     required_permission: pending_review
@@ -116,7 +126,17 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/conversation_depth_trend
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/conversations_per_user
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/conversations_per_user_trend
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane

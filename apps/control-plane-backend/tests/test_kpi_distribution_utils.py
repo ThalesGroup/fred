@@ -26,6 +26,7 @@ import pytest
 from control_plane_backend.kpi.presets.distribution_utils import (
     AGG_NAME,
     BUCKETS,
+    CARDINALITY_AGG_NAME,
     TERMS_SIZE,
     bucket_counts,
     distribution_body,
@@ -33,14 +34,31 @@ from control_plane_backend.kpi.presets.distribution_utils import (
     median_of,
 )
 
-BUCKET_LABELS = ["1", "2-5", "6-10", "11-20", "21+"]
+BUCKET_LABELS = [
+    "1",
+    "2-3",
+    "4-5",
+    "6-7",
+    "8-9",
+    "10-11",
+    "12-13",
+    "14-15",
+    "16-17",
+    "18-19",
+    "20+",
+]
 
 
 def _values(counts: list[int]) -> dict[str, int]:
     return {row.label: row.value for row in bucket_counts(counts)}
 
 
-def test_buckets_are_the_agreed_five() -> None:
+def _expected(nonzero: dict[str, int]) -> dict[str, int]:
+    # Full 11-bucket expectation, zero everywhere the test doesn't name.
+    return dict.fromkeys(BUCKET_LABELS, 0) | nonzero
+
+
+def test_buckets_are_the_agreed_eleven() -> None:
     assert [label for _low, _high, label in BUCKETS] == BUCKET_LABELS
 
 
@@ -58,14 +76,16 @@ def test_bucket_order_is_stable_regardless_of_input_order() -> None:
     ("count", "expected_label"),
     [
         (1, "1"),
-        (2, "2-5"),
-        (5, "2-5"),
-        (6, "6-10"),
-        (10, "6-10"),
-        (11, "11-20"),
-        (20, "11-20"),
-        (21, "21+"),
-        (10_000, "21+"),
+        (2, "2-3"),
+        (3, "2-3"),
+        (4, "4-5"),
+        (5, "4-5"),
+        (6, "6-7"),
+        (17, "16-17"),
+        (18, "18-19"),
+        (19, "18-19"),
+        (20, "20+"),
+        (10_000, "20+"),
     ],
 )
 def test_bucket_edges(count: int, expected_label: str) -> None:
@@ -75,13 +95,9 @@ def test_bucket_edges(count: int, expected_label: str) -> None:
 
 
 def test_counts_accumulate_per_bucket() -> None:
-    assert _values([1, 1, 3, 4, 5, 12, 99]) == {
-        "1": 2,
-        "2-5": 3,
-        "6-10": 0,
-        "11-20": 1,
-        "21+": 1,
-    }
+    assert _values([1, 1, 3, 4, 5, 12, 99]) == _expected(
+        {"1": 2, "2-3": 1, "4-5": 2, "12-13": 1, "20+": 1}
+    )
 
 
 def test_counts_below_the_first_bucket_are_ignored() -> None:
@@ -127,13 +143,9 @@ def test_distribution_from_terms_agg_reduces_doc_counts() -> None:
 
     result = distribution_from_terms_agg(response, since=since, until=until)
 
-    assert {row.label: row.value for row in result.rows} == {
-        "1": 1,
-        "2-5": 0,
-        "6-10": 1,
-        "11-20": 0,
-        "21+": 1,
-    }
+    assert {row.label: row.value for row in result.rows} == _expected(
+        {"1": 1, "6-7": 1, "20+": 1}
+    )
     assert result.median == 7.0
     assert result.since == since
     assert result.until == until
@@ -145,7 +157,7 @@ def test_distribution_from_terms_agg_handles_a_missing_aggregation() -> None:
 
     result = distribution_from_terms_agg({}, since=since, until=until)
 
-    assert [row.value for row in result.rows] == [0, 0, 0, 0, 0]
+    assert [row.value for row in result.rows] == [0] * len(BUCKET_LABELS)
     assert result.median is None
 
 
@@ -205,3 +217,55 @@ def test_distribution_body_excludes_rows_without_the_group_by_dim() -> None:
 def test_distribution_body_has_no_exists_filter_by_default() -> None:
     filters = _body()["query"]["bool"]["filter"]
     assert not any("exists" in f for f in filters)
+
+
+def test_distribution_body_has_no_cardinality_sub_agg_by_default() -> None:
+    assert "aggs" not in _body()["aggs"][AGG_NAME]
+
+
+def test_distribution_body_counts_distinct_values_when_asked() -> None:
+    body = _body(cardinality_of="dims.agent_instance_id")
+    assert body["aggs"][AGG_NAME]["aggs"] == {
+        CARDINALITY_AGG_NAME: {"cardinality": {"field": "dims.agent_instance_id"}}
+    }
+
+
+def test_distribution_body_excludes_rows_missing_the_cardinality_field() -> None:
+    # dims.agent_instance_id is nullable on session.created_total. A user whose
+    # sessions all lack it would reduce to cardinality 0 — dropped from the
+    # histogram but counted by the median — so those rows are filtered out.
+    filters = _body(cardinality_of="dims.agent_instance_id")["query"]["bool"]["filter"]
+    assert {"exists": {"field": "dims.agent_instance_id"}} in filters
+
+
+def test_distribution_from_terms_agg_reduces_cardinalities() -> None:
+    # doc_count is the number of rows, the cardinality the number of distinct
+    # values in them — when the sub-agg is present, only the latter is read.
+    since = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    until = datetime(2026, 8, 25, tzinfo=timezone.utc)
+    response = {
+        "aggregations": {
+            AGG_NAME: {
+                "buckets": [
+                    {
+                        "key": "alice",
+                        "doc_count": 30,
+                        CARDINALITY_AGG_NAME: {"value": 1},
+                    },
+                    {"key": "bob", "doc_count": 9, CARDINALITY_AGG_NAME: {"value": 3}},
+                    {
+                        "key": "carol",
+                        "doc_count": 12,
+                        CARDINALITY_AGG_NAME: {"value": 7},
+                    },
+                ]
+            }
+        }
+    }
+
+    result = distribution_from_terms_agg(response, since=since, until=until)
+
+    assert {row.label: row.value for row in result.rows} == _expected(
+        {"1": 1, "2-3": 1, "6-7": 1}
+    )
+    assert result.median == 3.0
