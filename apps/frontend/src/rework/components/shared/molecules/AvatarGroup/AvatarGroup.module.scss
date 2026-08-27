@@ -5,7 +5,19 @@
   gap: var(--spacing-2xs);
 
   > * {
+    /* A fixed-size circle: shrinking it as a flex item renders an ellipse
+     * with the initials squeezed out. Let the row overflow and clip instead. */
+    flex-shrink: 0;
     border: 2px solid var(--surface-container);
     border-radius: 50%;
   }
+}
+
+/* Names behind the "+N" badge. A `content` tooltip drops the plain hint's
+ * padding (its content owns that), so restate it here. */
+.hiddenAvatarNames {
+  margin: 0;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  list-style: none;
+  white-space: nowrap;
 }
