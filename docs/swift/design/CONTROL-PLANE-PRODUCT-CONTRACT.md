@@ -1961,7 +1961,9 @@ while `visibility === private`, so the invalid combination is unreachable
 from the UI in the first place; the server-side downgrade is the
 authoritative backstop.
 
-**Default and migration.** `PUBLIC` for both new and pre-existing teams
+**Default and migration.** *(Superseded 2026-08-26 — new teams default to
+`PRIVATE` since #2433, see §44; accurate for its own date below.)*
+`PUBLIC` for both new and pre-existing teams
 (migration `8092a626d4d0`, `server_default='public'`) — preserves every
 team's current unconditional marketplace presence exactly; nothing becomes
 private as a side effect of this rollout. A bundle exported before this
@@ -2904,14 +2906,27 @@ for a default (private) team no ReBAC `public` tuple is ever written, not
 even transiently (a grant-then-lazy-revoke would leave the team readable by
 anyone until the next `_list_teams` pass). The idempotent
 grant/revoke backfill in `_list_teams` (§30) is unchanged and remains the
-backstop.
+backstop. Corollary for the creator: a platform_admin who creates a team
+without naming themselves in `initial_team_admin_ids` holds no `can_read`
+on it once `create_team` returns (previously the unconditional `public`
+grant kept it readable) — by design (RFC §24.2, the creator is not
+necessarily a member), and the registry/admin surfaces they operate are not
+`can_read`-gated.
 
 **Existing teams are untouched.** Every pre-existing row keeps its stored
 value — nothing becomes private as a side effect of this rollout (the exact
 mirror of §30's rollout stance). Hiding a pre-existing team remains a
-per-team admin action. Same fidelity rule on import: a bundle exported
-before the `visibility` field existed still imports as `public`
-(`importer.py`), preserving the exporting platform's actual behavior.
+per-team admin action. Same fidelity rule everywhere a row is materialized
+for a team that pre-dates it: a bundle exported before the `visibility`
+field existed still imports as `public` (`importer.py`), and the
+knowledge-flow storage backfill (`backfill_storage_usage.py`) states
+`visibility="public"` explicitly when it manufactures a missing registry
+row — both preserve the platform's actual pre-#2433 behavior instead of
+letting the new ORM default apply. One deliberate exception: a team
+*provisioned from a bundle's `users.json` references alone* (no
+`team_metadata` row anywhere in the bundle) goes through `create_team` and
+lands private — the bundle carries no visibility for it, so the platform
+default is the only honest choice.
 
 **Personal spaces now say so.** `build_personal_team` states
 `visibility: "private"` explicitly (previously it inherited the schema

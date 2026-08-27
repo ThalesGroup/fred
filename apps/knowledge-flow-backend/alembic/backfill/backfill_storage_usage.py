@@ -259,7 +259,15 @@ async def update_database(session: AsyncSession, user_totals: dict[str, int], te
             # backfills storage totals, not team identity — fall back to the
             # id rather than pulling in a Keycloak lookup this script has no
             # wiring for.
-            team_row = TeamMetadataRow(id=team_id, name=team_id, current_resources_storage_size=total_size)
+            # #2433: `visibility` must be explicit here, not left to the ORM
+            # default (now "private"). A team reaching this branch pre-exists
+            # the registry row and was behaviorally public under the old
+            # regime — letting the private default apply would make
+            # `_list_teams`' lazy backfill revoke its ReBAC `public` relation
+            # and silently hide it from the marketplace as a side effect of a
+            # storage repair (same fidelity rule as `importer.py`'s
+            # pre-visibility-bundle fallback).
+            team_row = TeamMetadataRow(id=team_id, name=team_id, current_resources_storage_size=total_size, visibility="public")
             session.add(team_row)
 
     await session.commit()

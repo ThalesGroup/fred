@@ -97,7 +97,7 @@ describe("MarketplaceTeams personal-space exclusion", () => {
       data: [
         { id: "personal-me", name: "personal", is_member: true } as Team,
         { id: "personal-other-user", name: "personal", is_member: false } as Team,
-        { id: "fredlab", name: "fredlab", is_member: false } as Team,
+        { id: "fredlab", name: "fredlab", is_member: false, visibility: "public" } as Team,
       ],
     };
     const html = render();
@@ -138,6 +138,21 @@ describe("MarketplaceTeams private-team exclusion", () => {
     };
     expect(render()).toContain("team-card-fredlab");
   });
+
+  // #2433: private is the platform default, so a payload missing the field
+  // (version-skew backend) must err on non-disclosure — discover lists only
+  // teams that are explicitly public.
+  it("never renders a non-member team whose visibility is absent from the payload", () => {
+    h.teams = {
+      data: [
+        { id: "skewed", name: "skewed", is_member: false } as Team,
+        { id: "globex", name: "globex", is_member: false, visibility: "public" } as Team,
+      ],
+    };
+    const html = render();
+    expect(html).not.toContain("team-card-skewed");
+    expect(html).toContain("team-card-globex");
+  });
 });
 
 describe("MarketplaceTeams card navigability", () => {
@@ -155,7 +170,7 @@ describe("MarketplaceTeams card navigability", () => {
     h.teams = {
       data: [
         { id: "fredlab", name: "fredlab", is_member: true } as Team,
-        { id: "acme", name: "acme", is_member: false } as Team,
+        { id: "acme", name: "acme", is_member: false, visibility: "public" } as Team,
       ],
     };
     const html = render();
@@ -176,7 +191,7 @@ describe("MarketplaceTeams search", () => {
     h.teams = {
       data: [
         { id: "fredlab", name: "Fred Lab", is_member: true } as Team,
-        { id: "acme", name: "Acme", is_member: false } as Team,
+        { id: "acme", name: "Acme", is_member: false, visibility: "public" } as Team,
       ],
     };
   });

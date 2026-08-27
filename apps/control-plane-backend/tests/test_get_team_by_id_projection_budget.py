@@ -89,11 +89,11 @@ class _FakeMetadataStore:
         self,
         teams: dict[str, TeamMetadata],
         *,
-        create_visibility: TeamVisibility | None = None,
+        create_visibility: TeamVisibility = TeamVisibility.PRIVATE,
     ) -> None:
         self._teams = dict(teams)
-        # #2433: lets a test exercise `create_team`'s public branch — the real
-        # store's ORM default makes every created row PRIVATE.
+        # #2433: mirrors the real store's ORM default (PRIVATE); a test that
+        # needs `create_team`'s public branch overrides it.
         self._create_visibility = create_visibility
 
     async def get_by_team_id(
@@ -105,11 +105,9 @@ class _FakeMetadataStore:
         return next((t for t in self._teams.values() if t.name == name), None)
 
     async def create(self, team_id: TeamId, name: str, session=None) -> TeamMetadata:
-        metadata = TeamMetadata(id=team_id, name=name)
-        if self._create_visibility is not None:
-            metadata = metadata.model_copy(
-                update={"visibility": self._create_visibility}
-            )
+        metadata = TeamMetadata(
+            id=team_id, name=name, visibility=self._create_visibility
+        )
         self._teams[str(team_id)] = metadata
         return metadata
 
@@ -575,9 +573,8 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     assert created.member_count == 1
     assert set(created.my_relations) == set()  # the creator isn't a member
     assert _admin_relation(str(created.id), "alice") in engine.direct_relations
-    # #2433: a new team is private by default, so `create_team` skips the
-    # TEAM-09 public grant entirely — zero `list_relations` calls left (never
-    # an organization existence-check read either, #2065).
+    # #2433: private default — no TEAM-09 grant, so zero `list_relations`
+    # calls (see test_create_team_is_private_by_default... for the rule).
     assert engine.list_relations_calls == []
     org_relations = [
         r for r in engine.direct_relations if r.relation == RelationType.ORGANIZATION

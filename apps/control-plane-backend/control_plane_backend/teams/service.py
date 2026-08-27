@@ -573,11 +573,9 @@ async def create_team(
     # a brand-new team has never held the `public` relation, so the private
     # branch has nothing to revoke (the idempotent revoke in `_list_teams`
     # remains the backstop if the default ever changes again).
-    public_token = (
-        await rebac.ensure_team_public_relations([team_id])
-        if metadata.visibility == TeamVisibility.PUBLIC
-        else None
-    )
+    public_token = None
+    if metadata.visibility == TeamVisibility.PUBLIC:
+        public_token = await rebac.ensure_team_public_relations([team_id])
     # Both writes above target this same brand-new team; use the latest one
     # that actually happened (OpenFGA has no per-write snapshot token today —
     # `_persist_relation` always returns the same `HIGHER_CONSISTENCY`
