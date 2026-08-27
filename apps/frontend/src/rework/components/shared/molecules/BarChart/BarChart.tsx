@@ -50,6 +50,12 @@ interface BarChartProps {
    *  there isn't room for them at this size — so `valueLabel`/tooltip carries the
    *  meaning instead. */
   compact?: boolean;
+  /** Gap between bars, as a percentage of the band or a pixel count, forwarded
+   *  verbatim to Recharts. A LARGER value means a wider gap and therefore
+   *  narrower bars (`ChartUtils.getBarPosition`). Left unset here so Recharts
+   *  applies its own `'10%'` default — only `HistogramChart` passes it, to make
+   *  adjacent buckets read as one contiguous distribution. */
+  barCategoryGap?: string | number;
 }
 
 export default function BarChart({
@@ -63,6 +69,7 @@ export default function BarChart({
   barHeight = 32,
   orientation = "horizontal",
   compact = false,
+  barCategoryGap,
 }: BarChartProps) {
   const { t } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
@@ -105,6 +112,7 @@ export default function BarChart({
                 data={displayRows}
                 layout="horizontal"
                 margin={compact ? { top: 2, right: 2, left: 2, bottom: 2 } : { top: 8, right: 8, left: 8, bottom: 40 }}
+                barCategoryGap={barCategoryGap}
               >
                 {!compact && <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} vertical={false} />}
                 <XAxis
@@ -154,7 +162,12 @@ export default function BarChart({
                 <Bar dataKey="value" fill={css["--primary"]} radius={[4, 4, 0, 0]} />
               </RechartsBarChart>
             ) : (
-              <RechartsBarChart data={displayRows} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+              <RechartsBarChart
+                data={displayRows}
+                layout="vertical"
+                margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                barCategoryGap={barCategoryGap}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
                 <XAxis
                   type="number"

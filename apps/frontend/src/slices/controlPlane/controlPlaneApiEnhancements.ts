@@ -421,6 +421,16 @@ export const {
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery: useMessagesOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery: useSessionsByScopeQuery,
+  // Engagement distributions (#2426) — histogram rows + a median, both fed to
+  // the Engagement section of the admin analytics page.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery: useConversationsPerUserQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery: useConversationDepthQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery: useAgentsPerUserQuery,
+  // Engagement trends (#2428) — the same three medians, recomputed per bucket
+  // over a trailing window the response carries in `window`.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery: useConversationsPerUserTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery: useConversationDepthTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery: useAgentsPerUserTrendQuery,
   useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery: useTopTeamsBySessionsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery: useAgentsTotalQuery,
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,

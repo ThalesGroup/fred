@@ -5,6 +5,14 @@
   padding: var(--spacing-xl);
 }
 
+/* One-line scope note under a section title — muted so it reads as context,
+   not as a chart label. */
+.sectionDescription {
+  margin: 0 0 var(--spacing-m);
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+}
+
 /* Compact number tiles, wrapping across the width. */
 .kpiRow {
   display: grid;
@@ -12,10 +20,12 @@
   gap: var(--spacing-s);
 }
 
-/* Disclosure's content wrapper is a plain block container, so these two grids
-   would otherwise sit flush — the KPI tiles touching the chart cards below.
-   Space them on the chart grid's own rhythm rather than the tighter tile gap. */
-.kpiRow + .chartGrid {
+/* Disclosure's content wrapper is a plain block container, so consecutive grids
+   would otherwise sit flush — the KPI tiles touching the chart cards below, or
+   Engagement's trend row touching its histograms. Space them on the chart
+   grid's own rhythm rather than the tighter tile gap. */
+.kpiRow + .chartGrid,
+.chartGrid + .chartGrid {
   margin-top: var(--spacing-m);
 }
 

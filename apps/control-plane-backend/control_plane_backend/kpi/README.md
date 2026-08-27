@@ -14,6 +14,7 @@ presets/
   common.py     — shared response types (TimeSeriesResponse, …)
   <name>.py     — one file per preset
 utils.py        — resolve_interval(): picks OpenSearch bucket size from time range
+                  resolve_trend_interval(): the same, plus the trailing window
 ```
 
 Every preset is a `PresetDef`:
@@ -109,3 +110,59 @@ ScalarResponse(
 ```
 
 The frontend `KpiStatCard` molecule consumes this shape directly.
+
+**`DistributionResponse`** (`common.py`) — use for a "how many X per Y" histogram:
+
+```python
+DistributionResponse(
+    rows=[LabelValuePoint(label="2-3", value=12), …],  # every bucket, 0 when empty
+    median=3.0,    # None when the range holds no entity at all
+    since=since,
+    until=until,
+)
+```
+
+Build the query with `distribution_utils.distribution_body(metric_name=…,
+group_by=…, since=…, until=…, team_id=…)` and reduce the response with
+`distribution_from_terms_agg(resp, since=…, until=…)`, which turns one bucket
+per entity (`doc_count` = that entity's count) into the shared 11-bucket
+histogram (`1`, `2-3`, `4-5`, … `18-19`, `20+`) plus the median. Pass
+`require_group_by=True` when only some rows carry the grouping dim. Pass
+`cardinality_of="dims.<field>"` when the per-entity number is a distinct-value
+count rather than a row count: the body gains a `cardinality` sub-agg plus an
+`exists` filter on that field, and the reducer picks the sub-agg up per bucket
+automatically. Do not re-implement the filters or the bucketing — see
+`conversations_per_user.py` / `conversation_depth.py` / `agents_per_user.py`,
+all ~10 lines because of this.
+
+The frontend `HistogramChart` molecule consumes `rows` directly, `median` feeds a
+`KpiStatCard` beside it.
+
+**Trailing-window trend** (`trend_utils.py`) — a `TimeSeriesResponse` whose value
+is the same median, recomputed per bucket over a trailing window instead of once
+over the whole range:
+
+```python
+resolved = resolve_trend_interval(since, until)          # utils.py
+body = trend_body(metric_name=…, group_by=…, interval=resolved.interval,
+                  since=since - resolved.lookback, until=until, team_id=…)
+return trend_response(count_slices(resp, bucket=resolved.bucket),
+                      pool=pool_counts, resolved=resolved, since=since, until=until)
+```
+
+The window is always `TREND_WINDOW_BUCKETS` (7) × the resolved interval — 7 daily
+buckets are a 7-day window, 7 hourly buckets a 7-hour one — and
+`resolve_trend_interval` returns both so they cannot drift. It also returns the
+`lookback` the query must reach back by, so the first displayed point already
+pools a full window, and the `window` string (`"7d"`) the response carries in
+`TimeSeriesResponse.window` for the frontend to localize.
+
+Counts pool by sum (`count_slices` + `pool_counts`); distinct values pool by union
+(`distinct_slices` + `pool_distinct`, `trend_body(distinct_of=…)`) — per-bucket
+cardinalities cannot be added across a window, so that variant keeps the
+identities rather than a `cardinality` sub-agg. One OpenSearch pass per request,
+reduced in Python; never a query per bucket. Buckets whose whole window is empty
+are left out of `rows` rather than reported as 0, matching `median=None` above.
+The trailing bucket is trimmed when `until` falls inside it (it usually does —
+`until` is normally "now"): a window one short bucket wide would make the median
+dip systematically at the right edge.

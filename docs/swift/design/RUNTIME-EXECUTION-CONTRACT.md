@@ -4195,3 +4195,38 @@ twice per model call:
 Both are real reductions and neither was taken here — this change is display
 and accounting only, kept separate per the consolidation rule against bundling
 a reduction with an unrelated fix.
+
+### 8.58 ✅ `agent.turn_completed` carries `session_id` — issue #2426 (2026-08-25)
+
+**Problem.** Conversation depth (how many messages a conversation actually
+gets) is not derivable from any existing KPI row. `agent.turn_completed` is the
+one event emitted once per turn, but its dims stopped at the agent/model
+identity — with no conversation key, turns could not be grouped per session.
+
+**`agent.turn_completed` dims — one additive field.**
+
+| Field | Meaning |
+| ----- | ------- |
+| `session_id: str \| None` | The conversation the turn belongs to. `None` for a turn with no session (the same cases the ring-buffer record already tolerates). |
+
+`agent.turn_error_total`, which reuses the same dims dict, carries it too.
+
+**OpenSearch only — not a Prometheus label.** The cardinality protection is
+`PROMETHEUS_ALLOWED_LABELS` (`fred_core/kpi/prometheus_kpi_store.py`), an
+allowlist: `session_id` is absent from it, so it is stripped before Prometheus
+label resolution while the OpenSearch KPI store keeps the full dims. This is the
+established pattern, not a new one — `identity_kpi_dims`
+(`fred_runtime/react/middleware/shared.py`) emits `session_id`/`user_id`/
+`team_id` the same way. `_emit_turn_completed`'s old comment claimed the
+exclusion itself was the protection; it was rewritten to point at the allowlist.
+`exchange_id` and `user_id` are deliberately still not carried here — no query
+needs them, and per-turn tracing already has them in history rows and SSE logs.
+
+**No index-mapping change.** `dims.session_id` is already an explicit `keyword`
+in `KPI_INDEX_MAPPING` (added for the CTRLP-12 A3 erasure `update_by_query`), so
+the new dim is `term`-aggregatable on existing indexes with no migration.
+
+**Consumer.** Control-plane's `conversation_depth` KPI preset (`GET
+/kpi/presets/conversation_depth`) — a `terms` agg on `dims.session_id` behind an
+`exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
+one bucket.

@@ -1269,6 +1269,53 @@
         "deltaLabel": "Change over period",
         "total": "Uploaded documents"
       },
+      "engagement": {
+        "agentsPerUser": {
+          "empty": "No user activity in this period.",
+          "medianLabel": "Median agents per user",
+          "title": "Agents per user",
+          "valueLabel": "Users"
+        },
+        "agentsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
+          "title": "Agents per user over time",
+          "valueLabel": "Median agents per user ({{window}})"
+        },
+        "conversationDepth": {
+          "empty": "No conversations in this period.",
+          "medianLabel": "Median messages per conversation",
+          "title": "Conversation depth",
+          "valueLabel": "Conversations"
+        },
+        "conversationDepthTrend": {
+          "empty": "Not enough conversations in this period to plot a trend.",
+          "title": "Conversation depth over time",
+          "valueLabel": "Median messages per conversation ({{window}})"
+        },
+        "conversationsPerUser": {
+          "empty": "No user activity in this period.",
+          "medianLabel": "Median conversations per user",
+          "title": "Conversations per user",
+          "valueLabel": "Users"
+        },
+        "conversationsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
+          "title": "Conversations per user over time",
+          "valueLabel": "Median conversations per user ({{window}})"
+        },
+        "description": "Covers only users active over the selected period — anyone who started at least one conversation. Inactive users are not counted.",
+        "trendTitleWithWindow": "{{title}} ({{window}})",
+        "trendWindow": {
+          "day_one": "trailing {{count}} day",
+          "day_other": "trailing {{count}} days",
+          "hour_one": "trailing {{count}} hour",
+          "hour_other": "trailing {{count}} hours",
+          "minute_one": "trailing {{count}} minute",
+          "minute_other": "trailing {{count}} minutes",
+          "second_one": "trailing {{count}} second",
+          "second_other": "trailing {{count}} seconds"
+        }
+      },
       "error": "Failed to load data.",
       "loading": "Loading...",
       "messages": {
@@ -1293,6 +1340,7 @@
         "administration": "Platform administration",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Usage overview",
         "resources": "Resources",
         "tokenUsage": "Token usage",

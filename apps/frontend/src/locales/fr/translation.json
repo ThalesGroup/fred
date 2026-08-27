@@ -1269,6 +1269,53 @@
         "deltaLabel": "Variation sur la période",
         "total": "Documents téléversés"
       },
+      "engagement": {
+        "agentsPerUser": {
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "medianLabel": "Médiane d'agents par utilisateur",
+          "title": "Agents par utilisateur",
+          "valueLabel": "Utilisateurs"
+        },
+        "agentsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
+          "title": "Agents par utilisateur dans le temps",
+          "valueLabel": "Médiane d'agents par utilisateur ({{window}})"
+        },
+        "conversationDepth": {
+          "empty": "Aucune conversation sur cette période.",
+          "medianLabel": "Médiane de messages par conversation",
+          "title": "Profondeur des conversations",
+          "valueLabel": "Conversations"
+        },
+        "conversationDepthTrend": {
+          "empty": "Pas assez de conversations sur cette période pour tracer une tendance.",
+          "title": "Profondeur des conversations dans le temps",
+          "valueLabel": "Médiane de messages par conversation ({{window}})"
+        },
+        "conversationsPerUser": {
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "medianLabel": "Médiane de conversations par utilisateur",
+          "title": "Conversations par utilisateur",
+          "valueLabel": "Utilisateurs"
+        },
+        "conversationsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
+          "title": "Conversations par utilisateur dans le temps",
+          "valueLabel": "Médiane de conversations par utilisateur ({{window}})"
+        },
+        "description": "Ne couvre que les utilisateurs actifs sur la période sélectionnée — ceux ayant démarré au moins une conversation. Les utilisateurs inactifs ne sont pas comptés.",
+        "trendTitleWithWindow": "{{title}} ({{window}})",
+        "trendWindow": {
+          "day_one": "{{count}} jour glissant",
+          "day_other": "{{count}} jours glissants",
+          "hour_one": "{{count}} heure glissante",
+          "hour_other": "{{count}} heures glissantes",
+          "minute_one": "{{count}} minute glissante",
+          "minute_other": "{{count}} minutes glissantes",
+          "second_one": "{{count}} seconde glissante",
+          "second_other": "{{count}} secondes glissantes"
+        }
+      },
       "error": "Impossible de charger les données.",
       "loading": "Chargement...",
       "messages": {
@@ -1293,6 +1340,7 @@
         "administration": "Administration de la plateforme",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Vue d'ensemble",
         "resources": "Ressources",
         "tokenUsage": "Consommation de tokens",

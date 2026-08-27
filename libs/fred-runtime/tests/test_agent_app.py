@@ -2230,6 +2230,93 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
     assert turns[0]["is_error"] is False
 
 
+def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
+    """
+    `agent.turn_completed` must carry `dims.session_id` (issue #2426).
+
+    Why this exists:
+    - control-plane's `conversation_depth` preset groups turns by
+      `dims.session_id`; without the dim the whole preset returns nothing, and
+      nothing else in this suite asserts the dim reaches the KPI writer
+    - the ring-buffer record sources `session_id` from the same `turn_dims`
+      dict, and `KpiTurnRecord` requires that key while the surrounding `cast`
+      hides its loss from the type checker — so it needs a runtime assertion
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+    """
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    async def _fake_iterate(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        yield {"kind": "final", "sequence": 0, "content": "pong"}
+
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+
+    with TestClient(app) as client:
+        container = get_pod_container_from_app(app)
+        container.kpi_turns_buffer.clear()
+        # `_emit_turn_completed` reads the writer off the runtime context, which
+        # only exists once the app has started — hence patching inside the
+        # TestClient block. `RuntimeConfig` is a frozen dataclass, so the seam
+        # is the accessor rather than the field.
+        recording = _RecordingKPIWriter()
+        monkeypatch.setattr(
+            type(get_runtime_context()),
+            "get_kpi_writer",
+            lambda _self: recording,
+        )
+
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "ping",
+                "session_id": "session-depth",
+            },
+        )
+        assert resp.status_code == 200
+
+        with container._kpi_turns_lock:
+            turns = list(container.kpi_turns_buffer)
+
+    turn_completed = [e for e in emitted if e.get("name") == "agent.turn_completed"]
+    assert len(turn_completed) == 1
+    assert turn_completed[0]["dims"]["session_id"] == "session-depth"
+    # Deliberately NOT carried — see RUNTIME-EXECUTION-CONTRACT.md §8.58.
+    assert "exchange_id" not in turn_completed[0]["dims"]
+    assert "user_id" not in turn_completed[0]["dims"]
+
+    assert len(turns) == 1
+    assert turns[0]["session_id"] == "session-depth"
+
+
 def test_execute_route_propagates_checkpoint_and_observability_context(
     monkeypatch, tmp_path
 ) -> None:
