@@ -30,9 +30,9 @@
   justify-content: center;
   gap: 12px;
 
-  /* With 5 tiles, constrain the row to exactly 3 tiles wide (3×180px + 2×12px
+  /* With 5 tiles, constrain the row to exactly 3 tiles wide (3×220px + 2×12px
    * gap) so it wraps into a 3 + 2 layout; 4 or fewer stay on one line. */
   &[data-count="5"] {
-    max-width: 564px;
+    max-width: 684px;
   }
 }

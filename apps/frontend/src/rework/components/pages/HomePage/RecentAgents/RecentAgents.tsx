@@ -15,11 +15,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import {
   useLazyTeamAgentInstancesQuery,
   useUserRecentAgentsQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { ManagedAgentInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import CompactAgentCard from "./CompactAgentCard.tsx";
 import styles from "./RecentAgents.module.scss";
 
@@ -35,6 +37,13 @@ const TILE_COUNT = 5;
  * nothing resolves. */
 export default function RecentAgents() {
   const { t } = useTranslation();
+  const { availableTeams } = useFrontendBootstrap();
+
+  // team_id → display name (personal space shown as "Espace personnel"), for the
+  // origin label on each tile. Same mapping as the leaderboard cards.
+  const teamNameById = useMemo(() => new Map(availableTeams.map((team) => [team.id, team.name])), [availableTeams]);
+  const teamLabel = (teamId: string): string | undefined =>
+    isPersonalTeamId(teamId) ? t("rework.home.topTeams.personalSpace") : teamNameById.get(teamId);
 
   // Wide, fixed window captured once on mount — "recently used" is not tied to
   // the page's period selector. Memoised so `until` doesn't change every render
@@ -111,7 +120,12 @@ export default function RecentAgents() {
       </div>
       <div className={styles.row} data-count={tiles.length}>
         {tiles.map(({ instance, teamId }) => (
-          <CompactAgentCard key={instance.agent_instance_id} instance={instance} teamId={teamId} />
+          <CompactAgentCard
+            key={instance.agent_instance_id}
+            instance={instance}
+            teamId={teamId}
+            teamName={teamLabel(teamId)}
+          />
         ))}
       </div>
     </section>
