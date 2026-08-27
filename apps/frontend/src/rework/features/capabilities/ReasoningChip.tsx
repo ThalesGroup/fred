@@ -171,6 +171,11 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
   // back at the user implied a per-question choice that never existed (#2387).
   const onLabel = t("chatbot.composerSettings.reasoningOn");
   const offLabel = t("chatbot.composerSettings.reasoningOff");
+  // The "Élevé (Raisonnement)" wording is shown ONLY in the menu, where the
+  // parenthetical says which effort level maps to reasoning; the closed chip
+  // keeps just "Élevé" (onLabel) after the model name — the reasoning meaning
+  // is already carried by the menu the user picked it from.
+  const onMenuLabel = t("chatbot.composerSettings.reasoningOnMenu");
   // Model identity first, Claude-style ("Mistral Small Élevé"): model in the
   // regular button text, reasoning state one step fainter
   // (--on-surface-muted) — the color contrast is the separator.
@@ -269,9 +274,37 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
         <div className={styles.menu}>
           <MenuPopover
             aria-label={title}
-            header={<div className={styles.description}>{t("chatbot.composerSettings.reasoningHint")}</div>}
             groups={[
+              // Section 1 — Models. Per-turn model selection does not exist yet
+              // (no runtime override field, routing is server-resolved), so the
+              // resolved model shows as a single read-only, already-checked row.
+              // The section is here so real multi-model selection can later drop
+              // sibling rows with an onClick beside this one. Omitted when no
+              // model label resolved (older backend / unreachable pod).
+              ...(displayLabel
+                ? [
+                    [
+                      <div key="models-title" className={styles.sectionTitle}>
+                        {t("chatbot.composerSettings.reasoningModelsSection")}
+                      </div>,
+                      <MenuPopoverItem
+                        key="model"
+                        role="option"
+                        label={displayLabel}
+                        selected
+                        accentSelected
+                        trailingIcon="check_circle"
+                      />,
+                    ],
+                  ]
+                : []),
+              // Section 2 — Effort. "Normal" = reasoning off, "Élevé
+              // (Raisonnement)" = reasoning on (the parenthetical lives here, not
+              // in the closed chip). The effort/latency explainer trails the two.
               [
+                <div key="effort-title" className={styles.sectionTitle}>
+                  {t("chatbot.composerSettings.reasoningEffortSection")}
+                </div>,
                 <MenuPopoverItem
                   key="off"
                   role="option"
@@ -284,12 +317,15 @@ export function ReasoningChip({ chatControls, composer, disabled = false, effect
                 <MenuPopoverItem
                   key="on"
                   role="option"
-                  label={onLabel}
+                  label={onMenuLabel}
                   selected={on}
                   accentSelected
                   trailingIcon={on ? "check_circle" : undefined}
                   onClick={() => pick(true)}
                 />,
+                <div key="effort-hint" className={styles.description}>
+                  {t("chatbot.composerSettings.reasoningHint")}
+                </div>,
               ],
             ]}
           />

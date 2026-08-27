@@ -139,6 +139,15 @@
   font: var(--font-body-small);
 }
 
+/* Section heading inside the menu ("Modèles", "Effort") — a quiet label that
+   groups the rows below it, one step above the muted body so it reads as a
+   heading without competing with the selectable rows. */
+.sectionTitle {
+  padding: var(--spacing-xs) var(--spacing-s) var(--spacing-3xs);
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
 .menu {
   position: absolute;
   right: 0;

@@ -405,8 +405,11 @@
       "searchPolicyRowLabel": "Recherche",
       "searchPolicyTitle": "Politique de recherche",
       "reasoningRowLabel": "Raisonnement",
-      "reasoningOff": "Rapide",
-      "reasoningOn": "Boost",
+      "reasoningModelsSection": "Modèles",
+      "reasoningEffortSection": "Effort",
+      "reasoningOff": "Normal",
+      "reasoningOn": "Élevé",
+      "reasoningOnMenu": "Élevé (Raisonnement)",
       "reasoningHint": "Active le raisonnement pour les questions approfondies (augmente le temps de réponse et la consommation de tokens).",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
       "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe — le message échouera. Demandez à un administrateur de la plateforme de l'activer."
