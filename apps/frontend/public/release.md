@@ -1,3 +1,56 @@
+**v2.1.37** — 2026-08-27
+
+- **Summary**
+
+  Home is now a dashboard: one search field over every agent, team and prompt
+  you can reach, your recent agents, and your own usage. Teams can publish
+  prompts to a community marketplace. New teams start private, and a public
+  invite-only team can be asked for an invitation by mail.
+
+- **Features**
+
+  - Home opens on a tabbed dashboard: a search field over every agent, team and prompt you can reach, plus your recently used agents (#2436)
+  - Your activity tab tracks your conversations, messages and agents used over 7, 30 or 90 days, with your token footprint and a one-click cleanup of idle conversations (#2436)
+  - Teams can publish prompts to a community marketplace, where anyone can browse them, copy one, or import it into their own spaces (#2317)
+  - A Platform roles admin page grants and revokes platform admin and observer rights, with a protected primary admin and an audit trail (#2405)
+  - Analytics gains an Engagement section: conversations per user, conversation depth and agents per user, each with a median, a distribution and a trend (#2426)
+  - Folders can be selected in Resources and deleted, downloaded or excluded from search in bulk, along with everything underneath them (#2446)
+  - A public invite-only team can be asked for an invitation: its card opens a mail to the team admins, prefilled (#2453)
+
+- **Improvements**
+
+  - New teams are private by default and stay invisible outside their members until an admin publishes them (#2443)
+  - The chat composer's reasoning menu now names the answering model and the effort level in two separate sections (#2450)
+  - The two general-purpose assistants are renamed and described in plain language, and no longer need admin or ops capabilities to be enabled for a team (#2409, #2429)
+  - Local Langfuse traces can capture prompts, answers and tool payloads, off by default (#2442)
+
+- **Security**
+
+  - Routine dependency updates: aiohttp, cryptography, pyasn1 (#2401)
+
+- **Bug Fixes**
+
+  - "Most talked-to agents" called its message counts conversations, under-counted busy agents and merged two agents sharing a name into one line (#2431)
+  - A Mermaid diagram with malformed syntax showed a parse error instead of the diagram; common defects are now repaired before rendering (#2382)
+  - Enabling a capability on an agent failed with a generic error when its team lacked a required one; the blocking dependency is now named up front (#2408)
+  - Voice dictation never worked on air-gapped deployments; a small Whisper model now ships in the image (#2406)
+  - Renaming a document in Resources kept showing the old name until a reload (#2407)
+  - The agent form reopened the prompt library every time the prompt field was emptied (#2438)
+  - A chat turn that failed to start reported "[object Object]" instead of the real error (#2449)
+  - Conversation tiles in the side panel pushed the date to the far right, and the delete button shifted the tile on hover (#2448, #2402)
+  - Two agents used in the same conversation could resume from each other's saved state (#2415)
+  - Token badges charged each tool call the whole prompt; a message now shows what it actually added (#2403)
+  - A knowledge-flow upgrade could wedge its migration job on a table the service had already created at startup (#2314)
+
+- **Deployment note**
+
+  Existing teams keep their current visibility - only teams created after the
+  upgrade start private. Knowledge-flow now refuses to start until its
+  migrations have run and the tables are present, so let the migration job finish first - the chart ships
+  every migration job off by default, fred-agents included, so enable it in your
+  values or run the upgrade yourself (#2456). Chart config maps and secrets are
+  ordinary release resources again, so `helm uninstall` removes them (#2440).
+
 **v2.1.36** — 2026-08-20
 
 - **Summary**
