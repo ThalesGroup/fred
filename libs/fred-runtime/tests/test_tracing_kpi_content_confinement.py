@@ -118,7 +118,8 @@ def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
             if input is not None:
                 captured["input"] = input
 
-        def end(self) -> None: ...
+        def end(self) -> None:
+            pass
 
     class _Tracer(TracerPort):
         @property

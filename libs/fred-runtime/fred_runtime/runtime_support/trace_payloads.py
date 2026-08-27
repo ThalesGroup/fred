@@ -260,6 +260,8 @@ def _json_schema_of(args_schema: object) -> str | None:
     try:
         _JSON_SCHEMA_CACHE[args_schema] = schema
     except TypeError:
+        # Same non-weak-referenceable schema class as above: it cannot be cached,
+        # so return the rendered schema uncached rather than refusing to trace it.
         pass
     return schema
 
