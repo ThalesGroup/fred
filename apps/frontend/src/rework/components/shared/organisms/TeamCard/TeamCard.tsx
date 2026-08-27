@@ -64,7 +64,7 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
     }
   };
 
-  // #2453: a public invite-only team gets a prefilled mail to its admins
+  // A public invite-only team gets a prefilled mail to its admins
   // instead of a dead-end label. Public only (never hand a non-member a
   // private team's addresses), and only when one resolved - nobody to write
   // to otherwise. Full rationale: COMPONENT-UX.md `TeamCard`.

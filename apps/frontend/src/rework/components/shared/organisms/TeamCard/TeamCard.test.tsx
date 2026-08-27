@@ -18,7 +18,7 @@
 // button for OPEN, an "invite only" label otherwise, plus the self-service
 // join mutation actually firing for OPEN.
 //
-// #2453 adds one branch on top: a public INVITE_ONLY team whose admins have a
+// One branch on top: a public INVITE_ONLY team whose admins have a
 // reachable address gets a prefilled mailto button instead of that label.
 
 import { act } from "react";
@@ -199,7 +199,7 @@ describe("TeamCard joining_mode rendering", () => {
   });
 });
 
-describe("TeamCard invitation request (#2453)", () => {
+describe("TeamCard invitation request", () => {
   it("PUBLIC + INVITE_ONLY: opens a prefilled mailto addressed to every admin", () => {
     render(
       <TeamCard

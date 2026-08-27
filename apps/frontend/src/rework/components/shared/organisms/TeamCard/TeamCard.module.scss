@@ -90,7 +90,7 @@
 }
 
 /* The avatars are the elastic half of the footer: the button keeps its whole
- * label, the row clips instead (#2453). AvatarGroup's `max` collapses the tail
+ * label, the row clips instead. AvatarGroup's `max` collapses the tail
  * first, so this only bites on an unusually long translation - and the row runs
  * right-to-left, so what falls off the left is never the "+N" badge. */
 .teamCardAdmins {
