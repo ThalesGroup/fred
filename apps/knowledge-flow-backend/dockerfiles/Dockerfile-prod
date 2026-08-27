@@ -107,6 +107,16 @@ from sentence_transformers import CrossEncoder; \
 import os; \
 CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
 
+# Whisper dictation/transcription model (issue #2406): bake into the HF hub
+# cache so faster-whisper resolves it offline at runtime (HF_HUB_OFFLINE=1).
+# audio_processor.py reads WHISPER_MODEL_SIZE too, so the baked model and the
+# one requested at runtime cannot drift apart.
+ENV WHISPER_MODEL_SIZE=base
+RUN python -c "\
+from faster_whisper import download_model; \
+import os; \
+print(download_model(os.environ['WHISPER_MODEL_SIZE']))"
+
 # Runtime offline policy for Hugging Face based dependencies.
 ENV HF_HUB_OFFLINE=${HF_OFFLINE_STRICT}
 ENV TRANSFORMERS_OFFLINE=${HF_OFFLINE_STRICT}

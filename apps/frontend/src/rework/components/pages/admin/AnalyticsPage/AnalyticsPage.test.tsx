@@ -52,7 +52,15 @@ vi.mock("@hooks/useUserCapabilities.ts", () => ({
 // suite stays focused on AnalyticsPage's own section/gating logic, the same
 // isolation CapabilitiesPage.test.tsx applies to its drawer.
 vi.mock("@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart", () => ({
-  default: ({ title }: { title: string }) => <div>{title}</div>,
+  // Echoes `emptyMessage` too: it is a plain string the page picks per chart,
+  // so a mistyped key would otherwise type-check and lint its way to an admin's
+  // screen as the raw key.
+  default: ({ title, emptyMessage }: { title: string; emptyMessage?: string }) => (
+    <div>
+      {title}
+      {emptyMessage}
+    </div>
+  ),
 }));
 vi.mock("@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart", () => ({
   default: ({ title }: { title: string }) => <div>{title}</div>,
@@ -61,6 +69,9 @@ vi.mock("@shared/molecules/PieChart/PieChart", () => ({
   default: ({ title }: { title: string }) => <div>{title}</div>,
 }));
 vi.mock("@shared/molecules/BarChart/BarChart", () => ({
+  default: ({ title }: { title: string }) => <div>{title}</div>,
+}));
+vi.mock("@shared/molecules/HistogramChart/HistogramChart", () => ({
   default: ({ title }: { title: string }) => <div>{title}</div>,
 }));
 vi.mock("@shared/molecules/KpiStatCard/KpiStatCard", () => ({
@@ -76,6 +87,12 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSessionsOverTimeQuery: h.neutralQuery,
   useMessagesOverTimeQuery: h.neutralQuery,
   useSessionsByScopeQuery: h.neutralQuery,
+  useConversationsPerUserQuery: h.neutralQuery,
+  useConversationDepthQuery: h.neutralQuery,
+  useAgentsPerUserQuery: h.neutralQuery,
+  useConversationsPerUserTrendQuery: h.neutralQuery,
+  useConversationDepthTrendQuery: h.neutralQuery,
+  useAgentsPerUserTrendQuery: h.neutralQuery,
   useTopTeamsBySessionsQuery: h.neutralQuery,
   useAgentsTotalQuery: h.neutralQuery,
   useDocumentsTotalQuery: h.neutralQuery,
@@ -88,6 +105,14 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 }));
 
 import AnalyticsPage from "./AnalyticsPage";
+import en from "../../../../../locales/en/translation.json";
+import fr from "../../../../../locales/fr/translation.json";
+
+const TREND_EMPTY_KEYS = [
+  "rework.analytics.engagement.conversationsPerUserTrend.empty",
+  "rework.analytics.engagement.conversationDepthTrend.empty",
+  "rework.analytics.engagement.agentsPerUserTrend.empty",
+];
 
 function render(): string {
   return renderToStaticMarkup(<AnalyticsPage />);
@@ -112,5 +137,36 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
     const html = render();
     expect(html).toContain("rework.analytics.sections.overview");
     expect(html).toContain("rework.analytics.sections.tokenUsage");
+  });
+
+  // #2426: the engagement section is not admin-gated — it sits behind the same
+  // can_observe_platform every non-admin section here requires.
+  it("renders the engagement section for a plain platform_observer", () => {
+    h.capabilities = { ...h.capabilities, canAdmin: false };
+    const html = render();
+    expect(html).toContain("rework.analytics.sections.engagement");
+    expect(html).toContain("rework.analytics.engagement.conversationsPerUser.title");
+    expect(html).toContain("rework.analytics.engagement.conversationDepth.title");
+    expect(html).toContain("rework.analytics.engagement.agentsPerUser.title");
+    expect(html).toContain("rework.analytics.engagement.conversationsPerUser.medianLabel");
+    expect(html).toContain("rework.analytics.engagement.conversationDepth.medianLabel");
+    expect(html).toContain("rework.analytics.engagement.agentsPerUser.medianLabel");
+    expect(html).toContain("rework.analytics.engagement.description");
+    expect(html).toContain("rework.analytics.engagement.conversationsPerUserTrend.title");
+    expect(html).toContain("rework.analytics.engagement.conversationDepthTrend.title");
+    expect(html).toContain("rework.analytics.engagement.agentsPerUserTrend.title");
+  });
+
+  // A trend is empty whenever the range holds no bucket to plot - routine, since
+  // the series drops the current partial bucket. Without a message the card is a
+  // title over blank space, which reads as a chart that failed to draw.
+  it("gives each engagement trend its own empty-state message", () => {
+    h.capabilities = { ...h.capabilities, canAdmin: false };
+    const html = render();
+    for (const key of TREND_EMPTY_KEYS) {
+      expect(html).toContain(key);
+      expect(en).toHaveProperty(key);
+      expect(fr).toHaveProperty(key);
+    }
   });
 });

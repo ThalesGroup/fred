@@ -327,10 +327,14 @@
     },
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
-      "total_one": "Total : {{count}} token",
-      "total_other": "Total : {{count}} tokens",
-      "cached_one": "{{count}} token servi depuis le cache du fournisseur",
-      "cached_other": "{{count}} tokens servis depuis le cache du fournisseur"
+      "cached_one": "{{count, number}} token servi depuis le cache du fournisseur",
+      "cached_other": "{{count, number}} tokens servis depuis le cache du fournisseur",
+      "received_one": "{{count, number}} token reçu",
+      "received_other": "{{count, number}} tokens reçus",
+      "sent_one": "{{count, number}} token envoyé",
+      "sent_other": "{{count, number}} tokens envoyés",
+      "total_one": "Total : {{count, number}} token",
+      "total_other": "Total : {{count, number}} tokens"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
@@ -1098,6 +1102,8 @@
           "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
           "defaultError": "Impossible de remettre la fonctionnalité au défaut de la plateforme.",
           "rowControlAria": "Accès pour {{team}}",
+          "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour cette équipe.",
+          "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour cette équipe.",
           "personal": {
             "label": "Tous les espaces personnels",
             "hint": "S'applique d'un coup à l'espace personnel de chaque utilisateur — passés, futurs, et ceux qui ne se connectent jamais.",
@@ -1108,9 +1114,13 @@
             "disableError": "Impossible de désactiver la fonctionnalité pour les espaces personnels.",
             "defaultToast": "Les espaces personnels suivent désormais le défaut de la plateforme.",
             "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
-            "defaultError": "Impossible de remettre le défaut des espaces personnels."
+            "defaultError": "Impossible de remettre le défaut des espaces personnels.",
+            "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut).",
+            "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut)."
           }
         },
+        "defaultOnRequiresSettingsHint": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
+        "defaultOnConflict": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
         "defaultOffReasoningToast": "Le raisonnement a été désactivé avec le modèle. Réactivez le modèle, puis le raisonnement, pour le rétablir.",
         "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement — mais désactiver le modèle éteint son raisonnement.",
         "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
@@ -1240,7 +1250,7 @@
         },
         "topByConversations": {
           "title": "Agents les plus sollicités",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         },
         "total": "Nombre d'agents total"
       },
@@ -1258,6 +1268,53 @@
       "documents": {
         "deltaLabel": "Variation sur la période",
         "total": "Documents téléversés"
+      },
+      "engagement": {
+        "agentsPerUser": {
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "medianLabel": "Médiane d'agents par utilisateur",
+          "title": "Agents par utilisateur",
+          "valueLabel": "Utilisateurs"
+        },
+        "agentsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
+          "title": "Agents par utilisateur dans le temps",
+          "valueLabel": "Médiane d'agents par utilisateur ({{window}})"
+        },
+        "conversationDepth": {
+          "empty": "Aucune conversation sur cette période.",
+          "medianLabel": "Médiane de messages par conversation",
+          "title": "Profondeur des conversations",
+          "valueLabel": "Conversations"
+        },
+        "conversationDepthTrend": {
+          "empty": "Pas assez de conversations sur cette période pour tracer une tendance.",
+          "title": "Profondeur des conversations dans le temps",
+          "valueLabel": "Médiane de messages par conversation ({{window}})"
+        },
+        "conversationsPerUser": {
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "medianLabel": "Médiane de conversations par utilisateur",
+          "title": "Conversations par utilisateur",
+          "valueLabel": "Utilisateurs"
+        },
+        "conversationsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
+          "title": "Conversations par utilisateur dans le temps",
+          "valueLabel": "Médiane de conversations par utilisateur ({{window}})"
+        },
+        "description": "Ne couvre que les utilisateurs actifs sur la période sélectionnée — ceux ayant démarré au moins une conversation. Les utilisateurs inactifs ne sont pas comptés.",
+        "trendTitleWithWindow": "{{title}} ({{window}})",
+        "trendWindow": {
+          "day_one": "{{count}} jour glissant",
+          "day_other": "{{count}} jours glissants",
+          "hour_one": "{{count}} heure glissante",
+          "hour_other": "{{count}} heures glissantes",
+          "minute_one": "{{count}} minute glissante",
+          "minute_other": "{{count}} minutes glissantes",
+          "second_one": "{{count}} seconde glissante",
+          "second_other": "{{count}} secondes glissantes"
+        }
       },
       "error": "Impossible de charger les données.",
       "loading": "Chargement...",
@@ -1283,6 +1340,7 @@
         "administration": "Administration de la plateforme",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Vue d'ensemble",
         "resources": "Ressources",
         "tokenUsage": "Consommation de tokens",
@@ -1363,7 +1421,7 @@
         },
         "mostActiveAgents": {
           "title": "Agents les plus actifs",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         }
       }
     },
@@ -1504,8 +1562,102 @@
       "searchPlaceholder": "Rechercher une équipe",
       "searchClear": "Effacer la recherche",
       "yourTeams": "Vos équipes",
+      "sort": {
+        "aria": "Trier les équipes",
+        "recent": "Récemment consultées",
+        "alpha": "Ordre alphabétique"
+      },
       "pageTitle": "Accueil",
-      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer."
+      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer.",
+      "greeting": "Bonjour, que faisons-nous aujourd'hui ?",
+      "greetingNamed": "Bonjour {{name}}, que faisons-nous aujourd'hui ?",
+      "subtitle": "Accédez à n'importe quel agent, équipe ou prompt à partir d'ici.",
+      "tabs": {
+        "aria": "Sections de l'accueil",
+        "quickAccess": "Accès rapide",
+        "activity": "Votre activité",
+        "trending": "Tendances"
+      },
+      "responsible": {
+        "title": "IA responsable",
+        "footprintInfo": {
+          "aria": "Comment est calculée cette estimation ?",
+          "title": "D'où vient cette estimation ?",
+          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA à partir de la quantité de texte traité (ce qu'on appelle les « tokens »). Plus vous échangez de texte avec l'IA, plus la consommation estimée augmente.",
+          "convert": "Cette énergie est ensuite convertie en CO₂ selon l'électricité utilisée pour faire fonctionner l'IA.",
+          "limitsTitle": "Ce qu'il faut garder en tête",
+          "limit1": "C'est une estimation, pas une mesure exacte.",
+          "limit2": "La consommation réelle dépend des serveurs, du modèle d'IA et de la région où il fonctionne.",
+          "limit3": "L'objectif est de donner un ordre de grandeur pour sensibiliser, pas un chiffre précis.",
+          "confirm": "J'ai compris"
+        },
+        "cleanupTool": {
+          "aria": "Nettoyer",
+          "confirmAll": "Tout supprimer",
+          "confirm": "Supprimer ({{count}})",
+          "cancel": "Annuler",
+          "toast": "{{count}} élément(s) supprimé(s)"
+        },
+        "cleanupConversations": {
+          "title": "Nettoyer les conversations inactives",
+          "subtitle": "Ces conversations n'ont plus d'activité depuis plus de 5 jours. Tout est sélectionné — décochez ce que vous souhaitez conserver.",
+          "empty": "Aucune conversation inactive à nettoyer."
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 des prompts les plus utilisés",
+        "uses": "usages",
+        "weekDelta": "▲ {{count}} · 7 j",
+        "empty": "Aucun prompt n'a encore été publié dans la marketplace.",
+        "periodDelta": "▲ {{count}} · {{days}} j"
+      },
+      "period": {
+        "label": "Période",
+        "days": "{{count}} j",
+        "d7": "7 derniers jours",
+        "d30": "30 derniers jours",
+        "d90": "90 derniers jours"
+      },
+      "search": {
+        "placeholder": "Rechercher un agent, une équipe, un prompt…",
+        "empty": "Aucun résultat.",
+        "groups": {
+          "agents": "Agents",
+          "teams": "Équipes",
+          "prompts": "Prompts"
+        }
+      },
+      "recentAgents": {
+        "title": "Derniers agents consultés"
+      },
+      "topAgents": {
+        "title": "Les agents que vous avez le plus utilisés",
+        "unit": "conv.",
+        "empty": "Aucun agent utilisé sur cette période."
+      },
+      "topTeams": {
+        "title": "Votre activité au sein de vos équipes",
+        "unit": "conv.",
+        "personalSpace": "Espace personnel",
+        "empty": "Vous n'êtes membre d'aucune équipe.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Éditeur",
+          "team_analyst": "Analyste",
+          "team_member": "Membre"
+        }
+      },
+      "activity": {
+        "title": "Votre activité",
+        "conversations": "Nouvelles conversations",
+        "messages": "Messages envoyés",
+        "agents": "Agents utilisés",
+        "deltaUp": "▲ {{pct}} % ({{abs}})",
+        "deltaDown": "▼ {{pct}} % ({{abs}})",
+        "deltaFlat": "stable",
+        "vsPrevious": "vs période précédente",
+        "periodCaption": "sur les {{count}} derniers jours"
+      }
     },
     "mainNav": {
       "ariaLabel": "Navigation principale",
@@ -1636,6 +1788,8 @@
         "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
         "deleteFolderMessageUnknownCount": "Supprimer « {{name}} » et tout son contenu ? Cette action est irréversible.",
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
+        "deleteFoldersMessage": "Supprimer {{count}} dossier(s) et tout leur contenu ? Cette action est irréversible.",
+        "deleteMixedMessage": "Supprimer {{folderCount}} dossier(s) avec tout leur contenu et retirer {{docCount}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
         "shareTitle": "Copier dans l'espace d'équipe",
@@ -1760,8 +1914,12 @@
       },
       "title": "Ressources",
       "toast": {
+        "bulkExcludeError": "Impossible d'exclure la sélection de la recherche",
+        "bulkExcludeNothing": "Les éléments sélectionnés sont déjà exclus de la recherche",
+        "bulkExcludedFromSearch": "{{count}} document(s) exclu(s) de la recherche",
         "deleteFolderError": "Impossible de supprimer le dossier",
         "deleteFolderSuccess": "Dossier supprimé",
+        "downloadEmpty": "Les dossiers sélectionnés ne contiennent aucun document à télécharger",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé",

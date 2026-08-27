@@ -10,6 +10,7 @@ from fastapi import (
     Form,
     HTTPException,
     Path,
+    Query,
     Request,
     UploadFile,
 )
@@ -31,6 +32,8 @@ from control_plane_backend.product.dependencies import (
 )
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    BulkDeleteSessionsRequest,
+    BulkDeleteSessionsResponse,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptCategoryRequest,
@@ -40,6 +43,7 @@ from control_plane_backend.product.schemas import (
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
+    InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     MarketplaceImportRequest,
@@ -69,6 +73,7 @@ from control_plane_backend.product.service import (
     SessionAttachmentRequestError,
     build_frontend_bootstrap,
     build_frontend_config,
+    bulk_delete_sessions,
     create_prompt,
     create_prompt_category,
     create_session,
@@ -85,6 +90,7 @@ from control_plane_backend.product.service import (
     import_published_prompt_into_team,
     list_agent_templates,
     list_context_prompts,
+    list_inactive_sessions,
     list_managed_agent_instances,
     list_marketplace_prompts,
     list_prompt_categories,
@@ -1418,6 +1424,51 @@ async def get_team_sessions(
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
     return await list_sessions(team_id, user_id=user.uid, deps=deps)
+
+
+@router.get(
+    "/me/inactive-sessions",
+    response_model=InactiveSessionsResponse,
+    response_model_exclude_none=True,
+    summary="List the caller's inactive conversations across every space (home cleanup tool).",
+)
+async def get_my_inactive_sessions(
+    deps: ProductDependencies,
+    inactive_days: Annotated[int, Query(ge=1, le=365)] = 5,
+    user: KeycloakUser = Depends(get_current_user),
+) -> InactiveSessionsResponse:
+    """Every conversation the caller owns that has had no activity for more than
+    `inactive_days`, across their personal space and each team they belong to.
+
+    Not period-scoped — a cleanup tool surfaces every stale conversation however
+    old. Self-scoped: only the caller's own sessions are returned (the service
+    filters by `user_id`), so no per-team permission gate is needed here.
+    """
+    return await list_inactive_sessions(user, deps, inactive_days=inactive_days)
+
+
+@router.post(
+    "/me/sessions/bulk-delete",
+    response_model=BulkDeleteSessionsResponse,
+    summary="Delete several of the caller's conversations at once (home cleanup tool).",
+)
+async def post_bulk_delete_my_sessions(
+    body: BulkDeleteSessionsRequest,
+    request: Request,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> BulkDeleteSessionsResponse:
+    """Delete a batch of the caller's conversations across their spaces. Reuses
+    the governed single-session delete per item, so each follows the same
+    deferred-erase lifecycle; ownership is enforced per session, so a foreign or
+    already-gone session lands in `failed` rather than aborting the batch.
+    """
+    return await bulk_delete_sessions(
+        user,
+        body.sessions,
+        authorization=request.headers.get("Authorization", ""),
+        deps=deps,
+    )
 
 
 @router.get(

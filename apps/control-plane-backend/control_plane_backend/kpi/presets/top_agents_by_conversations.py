@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from datetime import datetime
 from typing import Any
 
@@ -113,13 +114,24 @@ async def query_top_agents_by_conversations(
             interval=interval,
         )
 
-    # agent_instance_id → display label (agent_instance_name if stored, else the id).
-    id_to_label: dict[str, str] = {}
+    # agent_instance_id → name (agent_instance_name if stored, else the id).
+    id_to_name: dict[str, str] = {}
     for bucket in top_buckets:
         instance_id = str(bucket["key"])
         hits = bucket.get("latest_name", {}).get("hits", {}).get("hits", [])
         dims = hits[0]["_source"].get("dims", {}) if hits else {}
-        id_to_label[instance_id] = dims.get("agent_instance_name") or instance_id
+        id_to_name[instance_id] = dims.get("agent_instance_name") or instance_id
+
+    # Instance names are not unique — two live instances may share one. Keying
+    # the series by name would merge them into a single line whose counts are
+    # the sum of both, so the id stays the accumulation key throughout and the
+    # name is only ever a display label. Colliding names get a short id suffix
+    # so the chart still shows two distinguishable lines.
+    name_counts = Counter(id_to_name.values())
+    id_to_label: dict[str, str] = {
+        instance_id: f"{name} ({instance_id[:8]})" if name_counts[name] > 1 else name
+        for instance_id, name in id_to_name.items()
+    }
 
     # Phase 2: time-series breakdown per instance.
     series_body: dict[str, Any] = {
@@ -137,8 +149,17 @@ async def query_top_agents_by_conversations(
                     },
                 },
                 "aggs": {
+                    # `include` pins this sub-agg to the instances phase 1
+                    # picked. Without it each date bucket independently returns
+                    # *its own* top N, so a globally-top agent that lost a
+                    # single bucket to N busier ones silently drops that
+                    # bucket's turns from its running total.
                     "by_agent": {
-                        "terms": {"field": "dims.agent_instance_id", "size": TOP_N}
+                        "terms": {
+                            "field": "dims.agent_instance_id",
+                            "size": TOP_N,
+                            "include": list(id_to_label),
+                        }
                     }
                 },
             }
@@ -153,18 +174,26 @@ async def query_top_agents_by_conversations(
     series_labels = list(id_to_label.values())
 
     # Accumulate per-bucket counts into running totals so each point represents
-    # the total number of conversations for that agent up to that point in time.
-    running: dict[str, float] = {label: 0.0 for label in series_labels}
+    # the total number of turns for that agent up to that point in time.
+    running: dict[str, float] = {instance_id: 0.0 for instance_id in id_to_label}
     rows: list[MultiSeriesPoint] = []
     for bucket in time_buckets:
         date_label = datetime.fromisoformat(
             bucket["key_as_string"].replace("Z", "+00:00")
         ).strftime(date_fmt)
         for agent_bucket in bucket.get("by_agent", {}).get("buckets", []):
-            label = id_to_label.get(str(agent_bucket["key"]))
-            if label is not None:
-                running[label] += float(agent_bucket["doc_count"])
-        rows.append(MultiSeriesPoint(date=date_label, values=dict(running)))
+            instance_id = str(agent_bucket["key"])
+            if instance_id in running:
+                running[instance_id] += float(agent_bucket["doc_count"])
+        rows.append(
+            MultiSeriesPoint(
+                date=date_label,
+                values={
+                    id_to_label[instance_id]: total
+                    for instance_id, total in running.items()
+                },
+            )
+        )
 
     return MultiSeriesTimeSeriesResponse(
         rows=rows,

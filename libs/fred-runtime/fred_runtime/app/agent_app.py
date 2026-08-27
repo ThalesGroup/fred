@@ -2208,6 +2208,7 @@ async def _write_turn_history(
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
+    final_context_tokens: int | None = None
 
     for payload in payloads:
         kind = payload.get("kind")
@@ -2221,7 +2222,6 @@ async def _write_turn_history(
                     call_id=payload["call_id"],
                     name=payload["tool_name"],
                     args=payload.get("arguments", {}),
-                    token_usage=payload.get("token_usage"),
                 )
             )
             rank += 1
@@ -2357,6 +2357,9 @@ async def _write_turn_history(
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
+            raw_context_tokens = payload.get("context_tokens")
+            if isinstance(raw_context_tokens, (int, float)):
+                final_context_tokens = int(raw_context_tokens)
 
     # 2b. Blocks the stream never closed (truncated turn, crashed node). The live
     # UI closes them itself on `final` so the accordion does not pulse forever
@@ -2378,6 +2381,7 @@ async def _write_turn_history(
                 usage=final_token_usage,
                 sources=final_sources if final_sources else None,
                 finish_reason=final_finish_reason,
+                context_tokens=final_context_tokens,
             )
         )
 
@@ -2540,8 +2544,13 @@ def _emit_turn_completed(
     Two metrics are emitted:
 
     agent.turn_completed (Histogram, ms):
-      Low-cardinality Prometheus dims only — session_id and exchange_id are
-      intentionally excluded to avoid high-cardinality label explosions.
+      Carries `session_id` so OpenSearch analytics can group turns per
+      conversation (issue #2426, the conversation-depth preset). It stays
+      Prometheus-safe because `PROMETHEUS_ALLOWED_LABELS`
+      (`fred_core/kpi/prometheus_kpi_store.py`) does not list it, so it is
+      stripped before label resolution — the OpenSearch store keeps the full
+      dims. Same pattern as `identity_kpi_dims`
+      (`fred_runtime/react/middleware/shared.py`).
       finish_reason="error" when the turn ended with execution_error instead
       of a normal final event.
       Quantities (token counters, tool count) become Prometheus counters via
@@ -2556,11 +2565,19 @@ def _emit_turn_completed(
         outcome = _parse_turn_outcome(payloads, turn_start)
         runtime_id = get_runtime_context().config.service_name
 
-        # Prometheus-safe dims: low-cardinality only.
-        # session_id, exchange_id, user_id, agent_instance_id are per-turn
-        # UUIDs — they must NOT become Prometheus labels (cardinality bomb).
-        # They are available in history rows and SSE logs for per-turn tracing.
-        prom_dims: dict[str, str | None] = {
+        # Dims for both turn metrics. `session_id` is carried on purpose (issue
+        # #2426): the OpenSearch KPI store keeps the full dims, which is what
+        # the conversation-depth preset groups by. It never reaches Prometheus
+        # as a label — `PROMETHEUS_ALLOWED_LABELS`
+        # (`fred_core/kpi/prometheus_kpi_store.py`) is an allowlist and does not
+        # contain it, so it is stripped before label resolution. That allowlist,
+        # not this dict, is what protects against the cardinality bomb; the same
+        # reasoning is spelled out in `identity_kpi_dims`
+        # (`fred_runtime/react/middleware/shared.py`).
+        # exchange_id and user_id stay out: nothing queries them here, and
+        # per-turn tracing already has them in history rows and SSE logs.
+        turn_dims: dict[str, str | None] = {
+            "session_id": session_id,
             "team_id": team_id,
             "template_agent_id": template_agent_id,
             "agent_instance_id": agent_instance_id,
@@ -2575,7 +2592,7 @@ def _emit_turn_completed(
             type="timer",
             value=outcome.total_ms,
             unit="ms",
-            dims=prom_dims,
+            dims=turn_dims,
             quantities={
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
@@ -2590,7 +2607,7 @@ def _emit_turn_completed(
                 name="agent.turn_error_total",
                 type="counter",
                 value=1,
-                dims=prom_dims,
+                dims=turn_dims,
                 actor=KPIActor(type="human", user_id=user_id),
             )
 
@@ -2599,12 +2616,13 @@ def _emit_turn_completed(
             KpiTurnRecord,
             {
                 "ts": datetime.now(timezone.utc).isoformat(),
-                "session_id": session_id,
                 "exchange_id": exchange_id,
                 "user_id": user_id,
                 "total_ms": outcome.total_ms,
                 "is_error": outcome.is_error,
-                **prom_dims,
+                # `session_id` (a required KpiTurnRecord key) and the agent /
+                # model identity keys all come from this spread.
+                **turn_dims,
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,

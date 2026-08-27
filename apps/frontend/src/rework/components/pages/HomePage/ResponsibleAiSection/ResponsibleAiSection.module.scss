@@ -1,0 +1,106 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface);
+}
+
+.title {
+  margin: 0;
+  font: var(--font-title-medium-emphasized);
+}
+
+.card {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-s);
+}
+
+.ind {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-s);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ic {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--primary-container), transparent 84%);
+  width: 32px;
+  height: 32px;
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.value {
+  color: var(--on-surface);
+  font: var(--font-title-small-emphasized);
+  font-variant-numeric: tabular-nums;
+}
+
+.caption {
+  margin-top: 2px;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+/* ── Footprint info dialog ─────────────────────────────────────────────────── */
+
+.infoBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: 100%;
+}
+
+.infoBody p {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.infoSubhead {
+  margin-top: var(--spacing-2xs);
+  color: var(--on-surface);
+  font: var(--font-title-small-emphasized);
+}
+
+.infoList {
+  margin: 0;
+  padding-left: var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.infoList li {
+  margin-top: var(--spacing-2xs);
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
 import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
+import TeamSortSelect, { type TeamSortOption } from "./TeamSortSelect.tsx";
+import { getTeamRecency, getTeamSortMode, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
@@ -39,6 +42,19 @@ export default function HomeNavPanel() {
   const { defaultTeamAvatarFile } = useFrontendProperties();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const [search, setSearch] = useState("");
+  // The search field is hidden behind a magnifier button and only mounts (as an
+  // overlay over the list header) once opened; it collapses again when it loses
+  // focus, but only while empty — a live filter keeps it open (chosen #2298).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortMode, setSortMode] = useState<TeamSortMode>(getTeamSortMode);
+  // Read once on mount — recency only changes while the user is inside a team,
+  // and this panel remounts when they return to Home.
+  const recency = useMemo(() => getTeamRecency(), []);
+
+  const changeSortMode = (mode: TeamSortMode) => {
+    setSortMode(mode);
+    setTeamSortMode(mode);
+  };
 
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId && team.is_member);
@@ -46,6 +62,26 @@ export default function HomeNavPanel() {
   const visibleTeams = query
     ? collaborativeTeams.filter((team) => team.name.toLowerCase().includes(query))
     : collaborativeTeams;
+
+  const sortedTeams = useMemo(() => {
+    const list = [...visibleTeams];
+    if (sortMode === "alpha") {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      // Most recently visited first; never-visited teams fall to the bottom,
+      // tie-broken alphabetically.
+      list.sort((a, b) => {
+        const diff = (recency[b.id] ?? 0) - (recency[a.id] ?? 0);
+        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      });
+    }
+    return list;
+  }, [visibleTeams, sortMode, recency]);
+
+  const sortOptions: TeamSortOption<TeamSortMode>[] = [
+    { value: "recent", label: t("rework.home.sort.recent") },
+    { value: "alpha", label: t("rework.home.sort.alpha") },
+  ];
 
   return (
     <div className={styles.panel}>
@@ -64,19 +100,42 @@ export default function HomeNavPanel() {
       <div className={styles.teamList}>
         <div className={styles.teamListHeader}>
           <span className={styles.teamListHeaderLabel}>{t("rework.home.yourTeams")}</span>
+          <IconButton
+            size="small"
+            variant="icon"
+            icon={{ category: "outlined", type: "search" }}
+            aria-label={t("rework.home.searchPlaceholder")}
+            onClick={() => setSearchOpen(true)}
+          />
+          {searchOpen && (
+            <div className={styles.searchOverlay}>
+              <SearchInput
+                size="xs"
+                value={search}
+                onChange={setSearch}
+                autoFocus
+                // Collapse when focus leaves, but only if the field is empty —
+                // an active filter stays open so the list keeps its context.
+                onBlur={() => {
+                  if (!search.trim()) setSearchOpen(false);
+                }}
+                placeholder={t("rework.home.searchPlaceholder")}
+                ariaLabel={t("rework.home.searchPlaceholder")}
+                clearAriaLabel={t("rework.home.searchClear")}
+              />
+            </div>
+          )}
         </div>
-        <div className={styles.teamSearch}>
-          <SearchInput
-            size="xs"
-            value={search}
-            onChange={setSearch}
-            placeholder={t("rework.home.searchPlaceholder")}
-            ariaLabel={t("rework.home.searchPlaceholder")}
-            clearAriaLabel={t("rework.home.searchClear")}
+        <div className={styles.teamSort}>
+          <TeamSortSelect<TeamSortMode>
+            value={sortMode}
+            options={sortOptions}
+            onChange={changeSortMode}
+            ariaLabel={t("rework.home.sort.aria")}
           />
         </div>
         <div className={styles.scroll}>
-          {visibleTeams.map((team) => (
+          {sortedTeams.map((team) => (
             <TeamSelectionListItem
               key={team.id}
               redirection={`/team/${team.id}/agents`}

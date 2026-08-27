@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { MaterialIconType } from "./Type.ts";
+import { materialIcons, type MaterialIconType } from "./Type.ts";
 
 /**
  * Keyword → icon rules for `guessAgentIcon` (#2076 follow-up).
@@ -283,4 +283,18 @@ export function guessAgentIcon(
     }
   }
   return best?.icon ?? fallback;
+}
+
+/** The icon to render for an agent instance: a keyword guess from its own
+ * identity, falling back to the site-configured default (an untyped config
+ * string, validated to the material subset like `toIconType` does) and finally
+ * to `smart_toy`. One source of truth for AgentCard and the compact Home tiles. */
+export function resolveAgentIcon(
+  instance: { display_name: string; role: string; description?: string | null },
+  configuredDefault: string,
+): MaterialIconType {
+  const fallback: MaterialIconType = (materialIcons as readonly string[]).includes(configuredDefault)
+    ? (configuredDefault as MaterialIconType)
+    : "smart_toy";
+  return guessAgentIcon(instance.display_name, instance.role, instance.description ?? "", fallback);
 }

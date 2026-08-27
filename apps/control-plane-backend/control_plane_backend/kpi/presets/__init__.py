@@ -20,8 +20,24 @@ from control_plane_backend.kpi.presets.active_users_over_time import (
 from control_plane_backend.kpi.presets.agent_prompt_length_distribution import (
     AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,
 )
+from control_plane_backend.kpi.presets.agents_per_user import AGENTS_PER_USER_PRESET
+from control_plane_backend.kpi.presets.agents_per_user_trend import (
+    AGENTS_PER_USER_TREND_PRESET,
+)
 from control_plane_backend.kpi.presets.agents_total import AGENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.base import PresetDef
+from control_plane_backend.kpi.presets.conversation_depth import (
+    CONVERSATION_DEPTH_PRESET,
+)
+from control_plane_backend.kpi.presets.conversation_depth_trend import (
+    CONVERSATION_DEPTH_TREND_PRESET,
+)
+from control_plane_backend.kpi.presets.conversations_per_user import (
+    CONVERSATIONS_PER_USER_PRESET,
+)
+from control_plane_backend.kpi.presets.conversations_per_user_trend import (
+    CONVERSATIONS_PER_USER_TREND_PRESET,
+)
 from control_plane_backend.kpi.presets.documents_total import DOCUMENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.messages_over_time import (
     MESSAGES_OVER_TIME_PRESET,
@@ -51,6 +67,14 @@ from control_plane_backend.kpi.presets.top_teams_by_sessions import (
 from control_plane_backend.kpi.presets.unique_users_total import (
     UNIQUE_USERS_TOTAL_PRESET,
 )
+from control_plane_backend.kpi.presets.user_activity import (
+    USER_AGENTS_USED_TOTAL_PRESET,
+    USER_MESSAGES_TOTAL_PRESET,
+    USER_SESSIONS_TOTAL_PRESET,
+)
+from control_plane_backend.kpi.presets.user_recent import (
+    USER_RECENT_AGENTS_PRESET,
+)
 from control_plane_backend.kpi.presets.user_token_usage_by_agent import (
     USER_TOKEN_USAGE_BY_AGENT_PRESET,
 )
@@ -60,6 +84,10 @@ from control_plane_backend.kpi.presets.user_token_usage_by_model import (
 from control_plane_backend.kpi.presets.user_token_usage_over_time import (
     USER_TOKEN_USAGE_OVER_TIME_PRESET,
 )
+from control_plane_backend.kpi.presets.user_top import (
+    USER_TOP_AGENTS_PRESET,
+    USER_TOP_TEAMS_PRESET,
+)
 
 PRESETS: list[PresetDef] = [
     ACTIVE_USERS_OVER_TIME_PRESET,
@@ -67,11 +95,23 @@ PRESETS: list[PresetDef] = [
     SESSIONS_OVER_TIME_PRESET,
     MESSAGES_OVER_TIME_PRESET,
     SESSIONS_BY_SCOPE_PRESET,
+    CONVERSATIONS_PER_USER_PRESET,
+    CONVERSATION_DEPTH_PRESET,
+    AGENTS_PER_USER_PRESET,
+    CONVERSATIONS_PER_USER_TREND_PRESET,
+    CONVERSATION_DEPTH_TREND_PRESET,
+    AGENTS_PER_USER_TREND_PRESET,
     TOP_TEAMS_BY_SESSIONS_PRESET,
     AGENTS_TOTAL_PRESET,
     AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,
     TOP_AGENTS_BY_CONVERSATIONS_PRESET,
     DOCUMENTS_TOTAL_PRESET,
+    USER_SESSIONS_TOTAL_PRESET,
+    USER_MESSAGES_TOTAL_PRESET,
+    USER_AGENTS_USED_TOTAL_PRESET,
+    USER_TOP_AGENTS_PRESET,
+    USER_TOP_TEAMS_PRESET,
+    USER_RECENT_AGENTS_PRESET,
     USER_TOKEN_USAGE_OVER_TIME_PRESET,
     USER_TOKEN_USAGE_BY_AGENT_PRESET,
     USER_TOKEN_USAGE_BY_MODEL_PRESET,

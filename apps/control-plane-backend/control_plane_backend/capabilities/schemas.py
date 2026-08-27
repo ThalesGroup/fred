@@ -96,6 +96,17 @@ class CapabilityEnablementItem(BaseModel):
             " (provider, name) pair (OBSERV-02 v3, RFC §8.7)."
         ),
     )
+    default_capability_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            'For a `kind="agent"` row: the template\'s default tool/MCP '
+            "capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). "
+            "Enabling the agent for a team 409s unless each of these is "
+            "already usable by that team - exposed so the admin UI can "
+            "disable the grant up front and explain why (GitHub #2408). "
+            'Always empty for `kind="tool"`/`"model"`.'
+        ),
+    )
     suspended_instances: int = Field(
         default=0,
         description=(

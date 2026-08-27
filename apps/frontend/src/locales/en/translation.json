@@ -327,10 +327,14 @@
     },
     "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "conversationTokenUsage": {
-      "total_one": "Total: {{count}} token",
-      "total_other": "Total: {{count}} tokens",
-      "cached_one": "{{count}} token served from the provider's prompt cache",
-      "cached_other": "{{count}} tokens served from the provider's prompt cache"
+      "cached_one": "{{count, number}} token served from the provider's prompt cache",
+      "cached_other": "{{count, number}} tokens served from the provider's prompt cache",
+      "received_one": "{{count, number}} token received",
+      "received_other": "{{count, number}} tokens received",
+      "sent_one": "{{count, number}} token sent",
+      "sent_other": "{{count, number}} tokens sent",
+      "total_one": "Total: {{count, number}} token",
+      "total_other": "Total: {{count, number}} tokens"
     },
     "attachFiles": "Attach files",
     "attachmentChip": {
@@ -1098,6 +1102,8 @@
           "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
           "defaultError": "Could not reset the feature to the platform default.",
           "rowControlAria": "Access for {{team}}",
+          "dependencyHint": "Requires {{deps}} to be enabled for this team first.",
+          "dependencyConflict": "This agent needs {{deps}} enabled for this team first.",
           "personal": {
             "label": "All personal spaces",
             "hint": "Applies to every user's personal space at once — past, future, and users who never log in.",
@@ -1108,9 +1114,13 @@
             "disableError": "Could not disable the feature for personal spaces.",
             "defaultToast": "Personal spaces now follow the platform default.",
             "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
-            "defaultError": "Could not reset the personal-space default."
+            "defaultError": "Could not reset the personal-space default.",
+            "dependencyHint": "Requires {{deps}} to be enabled for all personal spaces (or on by default) first.",
+            "dependencyConflict": "This agent needs {{deps}} enabled for all personal spaces (or on by default) first."
           }
         },
+        "defaultOnRequiresSettingsHint": "This feature has required team settings, so it cannot be on by default - enable it team by team instead.",
+        "defaultOnConflict": "This feature has required team settings, so it cannot be on by default. Enable it team by team instead.",
         "defaultOffReasoningToast": "Reasoning was switched off with the model. Re-enable the model, then reasoning, to bring it back.",
         "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
         "reasoningOffToast": "Reasoning disabled for this model.",
@@ -1240,7 +1250,7 @@
         },
         "topByConversations": {
           "title": "Most talked-to agents",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         },
         "total": "Total agents number"
       },
@@ -1258,6 +1268,53 @@
       "documents": {
         "deltaLabel": "Change over period",
         "total": "Uploaded documents"
+      },
+      "engagement": {
+        "agentsPerUser": {
+          "empty": "No user activity in this period.",
+          "medianLabel": "Median agents per user",
+          "title": "Agents per user",
+          "valueLabel": "Users"
+        },
+        "agentsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
+          "title": "Agents per user over time",
+          "valueLabel": "Median agents per user ({{window}})"
+        },
+        "conversationDepth": {
+          "empty": "No conversations in this period.",
+          "medianLabel": "Median messages per conversation",
+          "title": "Conversation depth",
+          "valueLabel": "Conversations"
+        },
+        "conversationDepthTrend": {
+          "empty": "Not enough conversations in this period to plot a trend.",
+          "title": "Conversation depth over time",
+          "valueLabel": "Median messages per conversation ({{window}})"
+        },
+        "conversationsPerUser": {
+          "empty": "No user activity in this period.",
+          "medianLabel": "Median conversations per user",
+          "title": "Conversations per user",
+          "valueLabel": "Users"
+        },
+        "conversationsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
+          "title": "Conversations per user over time",
+          "valueLabel": "Median conversations per user ({{window}})"
+        },
+        "description": "Covers only users active over the selected period — anyone who started at least one conversation. Inactive users are not counted.",
+        "trendTitleWithWindow": "{{title}} ({{window}})",
+        "trendWindow": {
+          "day_one": "trailing {{count}} day",
+          "day_other": "trailing {{count}} days",
+          "hour_one": "trailing {{count}} hour",
+          "hour_other": "trailing {{count}} hours",
+          "minute_one": "trailing {{count}} minute",
+          "minute_other": "trailing {{count}} minutes",
+          "second_one": "trailing {{count}} second",
+          "second_other": "trailing {{count}} seconds"
+        }
       },
       "error": "Failed to load data.",
       "loading": "Loading...",
@@ -1283,6 +1340,7 @@
         "administration": "Platform administration",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Usage overview",
         "resources": "Resources",
         "tokenUsage": "Token usage",
@@ -1363,7 +1421,7 @@
         },
         "mostActiveAgents": {
           "title": "Most active agents",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         }
       }
     },
@@ -1504,8 +1562,102 @@
       "searchPlaceholder": "Search a team",
       "searchClear": "Clear search",
       "yourTeams": "Your teams",
+      "sort": {
+        "aria": "Sort teams",
+        "recent": "Recently viewed",
+        "alpha": "Alphabetical"
+      },
       "pageTitle": "Home",
-      "pageSubtitle": "Select a space in the left panel to get started."
+      "pageSubtitle": "Select a space in the left panel to get started.",
+      "greeting": "Hello, what are we doing today?",
+      "greetingNamed": "Hello {{name}}, what are we doing today?",
+      "subtitle": "Access any agent, team or prompt from here.",
+      "tabs": {
+        "aria": "Home sections",
+        "quickAccess": "Quick access",
+        "activity": "Your activity",
+        "trending": "Trending"
+      },
+      "responsible": {
+        "title": "Responsible AI",
+        "footprintInfo": {
+          "aria": "How is this estimate calculated?",
+          "title": "Where does this estimate come from?",
+          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
+          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "limitsTitle": "Good to keep in mind",
+          "limit1": "It's an estimate, not an exact measurement.",
+          "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
+          "limit3": "The goal is to give an order of magnitude to raise awareness, not a precise figure.",
+          "confirm": "Got it"
+        },
+        "cleanupTool": {
+          "aria": "Clean up",
+          "confirmAll": "Delete all",
+          "confirm": "Delete ({{count}})",
+          "cancel": "Cancel",
+          "toast": "{{count}} item(s) deleted"
+        },
+        "cleanupConversations": {
+          "title": "Clean up inactive conversations",
+          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
+          "empty": "No inactive conversation to clean up."
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 most-used prompts",
+        "uses": "uses",
+        "weekDelta": "▲ {{count}} · 7d",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "periodDelta": "▲ {{count}} · {{days}}d"
+      },
+      "period": {
+        "label": "Period",
+        "days": "{{count}}d",
+        "d7": "Last 7 days",
+        "d30": "Last 30 days",
+        "d90": "Last 90 days"
+      },
+      "search": {
+        "placeholder": "Search agents, teams, prompts…",
+        "empty": "No results.",
+        "groups": {
+          "agents": "Agents",
+          "teams": "Teams",
+          "prompts": "Prompts"
+        }
+      },
+      "recentAgents": {
+        "title": "Recently used agents"
+      },
+      "topAgents": {
+        "title": "Your most-used agents",
+        "unit": "conv.",
+        "empty": "No agent used in this period."
+      },
+      "topTeams": {
+        "title": "Your activity across your teams",
+        "unit": "conv.",
+        "personalSpace": "Personal space",
+        "empty": "You are not a member of any team.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Editor",
+          "team_analyst": "Analyst",
+          "team_member": "Member"
+        }
+      },
+      "activity": {
+        "title": "Your activity",
+        "conversations": "New conversations",
+        "messages": "Messages sent",
+        "agents": "Agents used",
+        "deltaUp": "▲ {{pct}}% ({{abs}})",
+        "deltaDown": "▼ {{pct}}% ({{abs}})",
+        "deltaFlat": "flat",
+        "vsPrevious": "vs previous period",
+        "periodCaption": "over the last {{count}} days"
+      }
     },
     "mainNav": {
       "ariaLabel": "Main navigation",
@@ -1636,6 +1788,8 @@
         "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
         "deleteFolderMessageUnknownCount": "Delete \"{{name}}\" and all its content? This cannot be undone.",
         "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
+        "deleteFoldersMessage": "Delete {{count}} folder(s) and all their content? This cannot be undone.",
+        "deleteMixedMessage": "Delete {{folderCount}} folder(s) with all their content and remove {{docCount}} document(s)? This cannot be undone.",
         "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
         "shareTitle": "Copy to Team space",
@@ -1760,8 +1914,12 @@
       },
       "title": "Resources",
       "toast": {
+        "bulkExcludeError": "Could not exclude the selection from search",
+        "bulkExcludeNothing": "The selected items are already excluded from search",
+        "bulkExcludedFromSearch": "{{count}} document(s) excluded from search",
         "deleteFolderError": "Could not delete the folder",
         "deleteFolderSuccess": "Folder deleted",
+        "downloadEmpty": "The selected folders contain no documents to download",
         "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
         "processStarted": "Processing started",

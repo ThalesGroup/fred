@@ -1,8 +1,4 @@
-@property --angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
+@use "src/styles/spectrum-border" as *;
 
 /* ── Enabled / disabled state cascade ─────────────────────────────────────── */
 
@@ -38,12 +34,6 @@
   background-color: var(--surface-container);
   width: 100%;
   height: 100%;
-}
-
-@keyframes rotate-gradient {
-  to {
-    --angle: 360deg;
-  }
 }
 
 /* ── Inner layout ──────────────────────────────────────────────────────────── */
@@ -219,14 +209,14 @@
   white-space: nowrap;
 }
 
-/* The rotating conic-gradient border that used to signal the whole card was
+/* The rotating spectrum border that used to signal the whole card was
    clickable now lives on the Chat button instead (#2076) — it's the one
    action that starts a conversation. Tripled class for guaranteed
    specificity: Button's own `.btn-primary.btn-outlined` (and its `:hover`
    variant) match at the same weight otherwise, which would make the winner
    depend on stylesheet load order alone. */
 .chatButton {
-  animation: rotate-gradient 2s linear infinite;
+  animation: spectrum-rotate 2s linear infinite;
   animation-play-state: paused;
 }
 
@@ -252,14 +242,6 @@
      lightens on hover, which reads as competing with the gradient border. */
   --btn-background-surface: transparent;
   --btn-text-color: var(--on-surface);
-  /* design-token exception: full-spectrum conic gradient (white→cyan→violet→peach→pink→white),
-     matching the card's former hover treatment. No semantic token family covers this rainbow
-     sequence; discretising to 5 tokens would destroy the animation effect.
-     2026-08-21: colour stops saturated and moderately darkened (same hues,
-     shared with the composer's Boost text in ReasoningChip.module.css) — the
-     pastels washed out on the light theme, a fully darkened pass sank into
-     the dark one; these sit halfway between. One gradient, both themes. */
-  background:
-    linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
-    conic-gradient(from var(--angle), #ffffff, #37c9e4, #6f78fc, #e4ae66, #db47ae, #ffffff) border-box;
+  /* Matches the card's former hover treatment. */
+  @include spectrum-border-fill;
 }

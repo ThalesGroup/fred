@@ -1,5 +1,6 @@
 /* Spacings */
 :root {
+  --spacing-4xl: 56px;
   --spacing-3xl: 48px;
   --spacing-2xl: 40px;
   --spacing-xl: 32px;

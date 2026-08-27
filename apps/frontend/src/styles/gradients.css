@@ -1,0 +1,63 @@
+/*
+  Fred's brand spectrum — the one "the AI is doing something" accent.
+
+  Deliberate design-token exception: these hex stops are branding colours with
+  no semantic token family behind them (no surface/on-surface pairing, no
+  light/dark variants). Discretising them into 5 tokens would destroy the
+  gradient. They live here, once, so the surfaces that wear the spectrum can't
+  drift apart — which is exactly what they had started to do.
+
+  2026-08-21: stops saturated and moderately darkened from the original pastels,
+  same hues. The pastels washed out on the light theme, a fully darkened pass
+  sank into the dark one; these sit halfway between, so one set serves both.
+
+  Only the stop lists are shared, not a ready-made gradient: `--angle` below is
+  registered `inherits: false`, so a `conic-gradient(from var(--angle), …)`
+  hoisted into a `:root` custom property would bake in the initial 0deg instead
+  of tracking each element's own animated angle. The `spectrum-border` mixin in
+  styles/spectrum-border.scss writes the gradient for you.
+*/
+
+:root {
+  /* Full spectrum, white→cyan→violet→peach→pink→white. The white stops are what
+     make a highlight visibly travel around a border; closing on white keeps the
+     conic sweep seamless at 360deg. */
+  --gradient-spectrum-stops: #ffffff, #37c9e4, #6f78fc, #e4ae66, #db47ae, #ffffff;
+
+  /* Saturated run only. For gradients clipped to text, where white is a hole
+     rather than a highlight (invisible on the light theme) and peach sits too
+     close to the surrounding body colour to read. */
+  --gradient-spectrum-stops-core: #37c9e4, #6f78fc, #db47ae;
+}
+
+/*
+  Rotation driver for spectrum borders. Registering the property is what makes
+  the angle animatable at all — an unregistered custom property is an untyped
+  token stream and jumps rather than interpolates.
+
+  Global rather than per-component because `@property` registers on the
+  document: declaring it inside a CSS module meant the registration only existed
+  on pages that happened to load that component's stylesheet.
+
+  The matching `@keyframes` can NOT live here — CSS Modules rewrites every
+  `animation-name` it sees to a per-file hash, including names it can't resolve
+  locally, so a module referencing a global keyframe silently animates nothing.
+  It lives in the SCSS mixin instead, which emits one hashed copy per consumer.
+*/
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* Forced-colours users get the system palette, not our spectrum — a decorative
+   gradient is exactly what that mode exists to override. Flattening the stop
+   lists to a single colour neutralises every consumer at once; callers that
+   clip the spectrum to text must also restore a solid colour, see
+   ReasoningChip.module.css. */
+@media (forced-colors: active) {
+  :root {
+    --gradient-spectrum-stops: currentcolor, currentcolor;
+    --gradient-spectrum-stops-core: currentcolor, currentcolor;
+  }
+}

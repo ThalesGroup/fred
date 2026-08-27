@@ -111,6 +111,16 @@
           "default": "http://localhost:3001",
           "title": "Host",
           "type": "string"
+        },
+        "capture_content": {
+          "default": false,
+          "title": "Capture Content",
+          "type": "boolean"
+        },
+        "max_content_chars": {
+          "default": 100000,
+          "title": "Max Content Chars",
+          "type": "integer"
         }
       },
       "title": "LangfuseObservabilityConfig",

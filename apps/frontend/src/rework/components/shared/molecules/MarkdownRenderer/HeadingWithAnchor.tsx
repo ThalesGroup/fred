@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { stripDiacritics } from "@rework/utils/stripDiacritics";
 import styles from "./MarkdownRenderer.module.css";
 
 /**
@@ -26,10 +27,7 @@ import styles from "./MarkdownRenderer.module.css";
  * heading's wording doesn't change (documented in the help-content README).
  */
 export function slugifyHeading(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+  return stripDiacritics(text.toLowerCase())
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
