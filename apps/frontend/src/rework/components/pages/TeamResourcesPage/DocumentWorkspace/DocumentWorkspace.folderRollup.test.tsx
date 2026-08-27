@@ -150,6 +150,9 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useCreateTagKnowledgeFlowV1TagsPostMutation: () => [vi.fn()],
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
+  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
+    vi.fn(() => ({ unwrap: async () => ({}) })),
+  ],
 }));
 vi.mock("../../../../features/tasks/taskSlice", () => ({
   selectActiveTasks: () => tasks.filter((t) => !TERMINAL.has(t.state)),
