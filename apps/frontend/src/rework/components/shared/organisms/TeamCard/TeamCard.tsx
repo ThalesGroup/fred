@@ -80,16 +80,22 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
     const site = [siteTitle, siteSubtitle].filter(Boolean).join(" ");
     // Keycloak omits `name` / `preferred_username` on some accounts.
     const user = [userFullName, username && `(${username})`].filter(Boolean).join(" ");
-    // The members page, not the agents: the recipients are the admins who add
-    // the sender by hand. A mailed link inherits no router basename.
-    const base = normalizeBasename(getConfig().frontend_basename);
-    const teamUrl = `${window.location.origin}${base}/team/${team.id}/settings/members`;
+    // Two links: the team page for context, and the members page where the
+    // recipients - its admins - actually add the sender. A mailed link
+    // inherits no router basename.
+    const teamPath = `${window.location.origin}${normalizeBasename(getConfig().frontend_basename)}/team/${team.id}`;
     // Comma-separated and encoded per RFC 6068 - the addresses come from a
     // directory sync, so nothing guarantees they are URL-safe.
     const recipients = adminEmails.map(encodeURIComponent).join(",");
     const params = new URLSearchParams({
       subject: t("rework.teamCard.invitationMail.subject", { site, team: team.name }),
-      body: t("rework.teamCard.invitationMail.body", { site, team: team.name, user, teamUrl }),
+      body: t("rework.teamCard.invitationMail.body", {
+        site,
+        team: team.name,
+        user,
+        agentsUrl: `${teamPath}/agents`,
+        membersUrl: `${teamPath}/settings/members`,
+      }),
     });
     // `+` back to %20 or mail clients render it literally in the subject.
     const href = `mailto:${recipients}?${params.toString().replace(/\+/g, "%20")}`;

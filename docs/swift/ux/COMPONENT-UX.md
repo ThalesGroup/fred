@@ -1347,12 +1347,11 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 discoverable but not joinable, and the muted label alone left the visitor with
 no next step. The card restores the pre-TEAM-09 escape hatch: a `mailto:`
 addressed to every team admin whose `UserSummary.email` resolved, prefilled
-with the subject, the caller's identity, and a deep link to the team's members
-page - the recipients are the admins and adding the sender by hand is the whole
-point of the mail, so the link lands where they do that, not on the team's
-agents. The wording is the pre-TEAM-09 one (`rework.teamCard.invitationMail.*`)
-apart from that closing line, and now lives in the locale files instead of
-hardcoded French as it did then.
+with the subject, the caller's identity, and two links: the team's agents page
+for context (what `main` sent) plus a deep link to its members page, where the
+recipients - the admins - actually add the sender by hand. The wording is the
+pre-TEAM-09 one (`rework.teamCard.invitationMail.*`) plus that second line, and
+now lives in the locale files instead of hardcoded French as it did then.
 
 The button reuses the `join` label - it is the same intent, and a second,
 longer label wrapped the card's footer onto two lines; the `mail` icon and the

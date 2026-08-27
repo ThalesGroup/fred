@@ -232,9 +232,10 @@ describe("TeamCard invitation request", () => {
 
     const href = decodeURIComponent(raw);
     expect(href).toContain("rework.teamCard.invitationMail.subject:Fred Platform|Team One");
-    // The members page, under the configured basename.
+    // The team page and the members page, both under the configured basename.
     expect(href).toContain(
-      "rework.teamCard.invitationMail.body:Fred Platform|Team One|Test User (test.user)|http://localhost:3000/fred/team/team-1/settings/members",
+      "rework.teamCard.invitationMail.body:Fred Platform|Team One|Test User (test.user)|" +
+        "http://localhost:3000/fred/team/team-1/agents|http://localhost:3000/fred/team/team-1/settings/members",
     );
   });
 
