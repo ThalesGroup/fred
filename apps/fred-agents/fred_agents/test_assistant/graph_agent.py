@@ -379,6 +379,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "error": "error",
                 "think": "think",
                 "markdown": "markdown",
+                "mermaid": "mermaid",
                 "long": "long",
                 "files": "files",
                 "geo": "geo",

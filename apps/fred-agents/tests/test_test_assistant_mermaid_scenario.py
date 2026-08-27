@@ -98,12 +98,35 @@ async def test_mermaid_step_streams_the_payload_and_finalizes() -> None:
     assert result.state_update["done_reason"] == "mermaid_complete"
 
 
-def test_graph_registers_the_mermaid_node_and_its_edge() -> None:
+def test_graph_routes_dispatch_to_the_mermaid_node_and_back_to_finalize() -> None:
+    """
+    The three wiring points must agree, or the scenario is unreachable:
+    dispatch's route table (the branch), the node registration (the handler),
+    and the outgoing edge (the way back to finalize).
+
+    Registering only the node and the edge raises
+    "Node 'dispatch' returned unknown route_key 'mermaid'" at runtime, which is
+    exactly what the first version of this scenario shipped with - hence the
+    assertion on `routes`.
+    """
     workflow = TestAssistantGraphAgent.workflow
     assert workflow is not None
 
+    assert workflow.routes["dispatch"]["mermaid"] == "mermaid"
     assert workflow.nodes["mermaid"] is mermaid_step
     assert workflow.edges["mermaid"] == "finalize"
+
+
+def test_every_dispatch_scenario_is_routed_and_registered() -> None:
+    """
+    Guard the whole table, not just the new row: any scenario dispatch can
+    return must have a route and a registered node.
+    """
+    workflow = TestAssistantGraphAgent.workflow
+    assert workflow is not None
+
+    for scenario, target in workflow.routes["dispatch"].items():
+        assert target in workflow.nodes, f"route '{scenario}' targets unknown node"
 
 
 def test_payload_is_still_malformed_on_purpose() -> None:
