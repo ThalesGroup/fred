@@ -50,6 +50,87 @@ export function isCapabilityOnForTeam(capability: EnablementFacts, teamId: strin
 }
 
 /**
+ * Whether this capability carries a REQUIRED team setting (#2408).
+ *
+ * Mirrors the backend's `team_settings_has_required_fields` (`enablement.py`):
+ * such a capability can be neither default-on nor class-enabled for all
+ * personal spaces, because nobody has filled the settings for the teams that
+ * would inherit it (RFC §8.2/§8.4) — both writes 409. Surfaced here so the
+ * admin controls can be disabled with an explanation instead of failing.
+ */
+export function requiresTeamSettings(capability: Pick<CapabilityEnablementItem, "team_settings_fields">): boolean {
+  return (capability.team_settings_fields ?? []).some((field) => field.required);
+}
+
+/**
+ * The `default_capability_ids` of a `kind="agent"` capability that the team
+ * cannot use yet — the client-side mirror of `enablement.py`'s
+ * `agent_capability_missing_dependencies` (RFC §8.6 `depends_on` gate, #2004
+ * item 5). A non-empty answer is exactly what makes the enable write 409
+ * (#2408), so the drawer can disable the grant and name the blockers up front.
+ *
+ * **Fails open on an unknown dependency**: an id with no row in
+ * `allCapabilities` is skipped rather than counted as missing. A dependency
+ * can be absent (a pod stopped advertising it, a stale client), and the
+ * backend remains the sole authority — blocking on a row we cannot evaluate
+ * would forbid a grant the server would happily accept.
+ *
+ * Known asymmetry, accepted: the backend counts an id with no ReBAC grant at
+ * all as missing, so a template declaring a default capability no pod
+ * advertises 409s for every team while this returns `[]` and the row stays
+ * enabled-looking. The click is still explained — with no locally-known
+ * blockers the toast falls through to the backend's own sentence, which names
+ * the offending ids. Guessing "missing" from an absent row would instead
+ * block every legitimate grant the moment the list is incomplete.
+ */
+export function missingAgentDependenciesForTeam(
+  capability: Pick<CapabilityEnablementItem, "kind" | "default_capability_ids">,
+  allCapabilities: CapabilityEnablementItem[],
+  teamId: string,
+): string[] {
+  if (capability.kind !== "agent") {
+    return [];
+  }
+  const missing: string[] = [];
+  for (const depId of capability.default_capability_ids ?? []) {
+    const dep = allCapabilities.find((candidate) => candidate.id === depId);
+    if (!dep) continue;
+    if (teamCapabilityState(dep, teamId) === "off") {
+      missing.push(depId);
+    }
+  }
+  return missing;
+}
+
+/**
+ * Personal-class counterpart of `missingAgentDependenciesForTeam`, mirroring
+ * `_require_agent_capability_dependencies_usable_by_all_personal_spaces`
+ * (`enablement.py`): there is no single team to evaluate, so a dependency
+ * counts as usable only when it has ORG-level personal access — `personal_on`
+ * or `default_on`, and not `personal_disabled`. Same fail-open rule for an
+ * unknown dependency id.
+ */
+export function missingAgentDependenciesForPersonalSpaces(
+  capability: Pick<CapabilityEnablementItem, "kind" | "default_capability_ids">,
+  allCapabilities: CapabilityEnablementItem[],
+): string[] {
+  if (capability.kind !== "agent") {
+    return [];
+  }
+  const missing: string[] = [];
+  for (const depId of capability.default_capability_ids ?? []) {
+    const dep = allCapabilities.find((candidate) => candidate.id === depId);
+    if (!dep) continue;
+    const scope = capabilityPersonalScopeChoice(dep);
+    const usable = (scope === "enabled" || dep.default_on) && scope !== "disabled";
+    if (!usable) {
+      missing.push(depId);
+    }
+  }
+  return missing;
+}
+
+/**
  * The team's *explicit* tri-state position — what the admin actually chose,
  * as opposed to `teamCapabilityState` which is the *effective* access after
  * inheritance. `default` means "no explicit tuple: the platform default

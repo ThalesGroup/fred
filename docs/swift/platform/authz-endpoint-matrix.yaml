@@ -176,6 +176,26 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/user_agents_used_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_messages_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_recent_agents
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_sessions_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/user_token_usage_by_agent
     review_status: pending_review
     required_permission: pending_review
@@ -190,8 +210,28 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_top_agents
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_top_teams
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
     method: POST
     path: /control-plane/v1/lifecycle/run-once
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/me/inactive-sessions
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/me/sessions/bulk-delete
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane

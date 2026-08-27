@@ -55,6 +55,8 @@ Workflow overview (keyword-routed by dispatch_step):
      ├─ trace       ──► trace_step       ──► finalize
      ├─ error       ──► error_step  (raises) → finalize (via on_error)
      ├─ think       ──► think_step        ──► finalize
+     ├─ markdown    ──► markdown_step     ──► finalize
+     ├─ mermaid     ──► mermaid_step      ──► finalize
      ├─ long        ──► long_step         ──► finalize
      ├─ files       ──► files_step        ──► finalize
      ├─ geo         ──► geo_step          ──► finalize
@@ -95,6 +97,7 @@ from .graph_steps import (
     hitl_text_step,
     long_step,
     markdown_step,
+    mermaid_step,
     model_probe_step,
     think_step,
     trace_step,
@@ -104,7 +107,7 @@ _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
     "Send a message starting with one of these keywords to trigger a scenario:\n"
     "  echo | model | planning | hitl choice | hitl text | "
-    "trace | error | think | markdown | long | files | geo | document\n\n"
+    "trace | error | think | markdown | mermaid | long | files | geo | document\n\n"
     "Any other message shows this help menu."
 )
 
@@ -339,6 +342,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "error": error_step,
             "think": think_step,
             "markdown": markdown_step,
+            "mermaid": mermaid_step,
             "long": long_step,
             "files": files_step,
             "geo": geo_step,
@@ -354,6 +358,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "trace": "finalize",
             "think": "finalize",
             "markdown": "finalize",
+            "mermaid": "finalize",
             "long": "finalize",
             "files": "finalize",
             "geo": "finalize",
@@ -374,6 +379,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "error": "error",
                 "think": "think",
                 "markdown": "markdown",
+                "mermaid": "mermaid",
                 "long": "long",
                 "files": "files",
                 "geo": "geo",

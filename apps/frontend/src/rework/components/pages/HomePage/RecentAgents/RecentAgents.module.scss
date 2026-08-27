@@ -1,0 +1,38 @@
+/* Header mirrors the other Home sections (LeaderboardSection / ActivityKpis):
+ * an icon + title over the content. Content here is a horizontal row of compact
+ * agent tiles rather than a single card. */
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-s);
+  width: 100%;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+/* Horizontal launcher row; wraps rather than overflowing on narrow viewports.
+ * 12px gap between tiles, per spec. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+
+  /* With 5 tiles, constrain the row to exactly 3 tiles wide (3×220px + 2×12px
+   * gap) so it wraps into a 3 + 2 layout; 4 or fewer stay on one line. */
+  &[data-count="5"] {
+    max-width: 684px;
+  }
+}

@@ -68,7 +68,7 @@ export default function MainNavBar() {
     },
     {
       key: "help",
-      icon: "help_center",
+      icon: "help",
       label: t("rework.mainNav.helpCenter"),
       active: false,
       onClick: () => window.open(helpCenterHref, "_blank", "noopener,noreferrer"),

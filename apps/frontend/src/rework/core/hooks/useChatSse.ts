@@ -48,6 +48,7 @@ import {
 } from "../utils/runtimeStream";
 import { countUnicodeCodePoints } from "../utils/chatInput";
 import { personalTeamId } from "../../components/shared/utils/teamId";
+import { normalizeApiError } from "../errors/normalizeApiError";
 
 // The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
 // before bootstrap resolves the real per-user id. The control-plane resolves
@@ -809,8 +810,19 @@ export function useChatSse(
           console.debug(`[useChatSse][${sendId}] ${stage} settled after cancellation — no toast`);
           return;
         }
-        const msg = (err as Error)?.message ?? String(err);
-        console.error(`[useChatSse][${sendId}] ${stage} failed — ${msg}`);
+        // Extract a readable message. The prepare-execution stage rejects with
+        // an RTK Query error ({ status, data }) or a SerializedError, neither of
+        // which is a real Error nor has a usable `.message` — so the old
+        // `String(err)` rendered "[object Object]" and hid the real failure.
+        // normalizeApiError pulls the backend `detail`/network reason out of
+        // those shapes; fall back to a real Error's message, then the HTTP
+        // status, then a generic string — never "[object Object]".
+        const normalized = normalizeApiError(err);
+        const msg =
+          normalized.detail ??
+          (err instanceof Error ? err.message : undefined) ??
+          (normalized.status !== undefined ? `HTTP ${normalized.status}` : "unexpected error");
+        console.error(`[useChatSse][${sendId}] ${stage} failed — ${msg}`, err);
         onError?.(`Could not prepare this turn: ${msg}`);
       };
 

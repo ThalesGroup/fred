@@ -50,6 +50,7 @@ import {
   useListTasksKnowledgeFlowV1TasksGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
+  useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   buildTree,
@@ -176,6 +177,24 @@ function rowLabel(row: Row): string {
   return row.kind === "folder" ? row.node.name : documentDisplayName(row.doc);
 }
 
+// Every tag under `node` (its sub-folders included) paired with the directory it
+// sits at, expressed relative to `basePrefix` (the folder currently being
+// viewed). Used by the bulk download to mirror the on-disk tree inside the ZIP —
+// a selected folder "Reports" viewed from "A/B" yields `relDir` values like
+// "Reports" and "Reports/2024", so its documents zip under those paths.
+// collectDescendantTagIds returns ids only; this keeps the path alongside each.
+function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: string; relDir: string }[] {
+  const out: { tagId: string; relDir: string }[] = [];
+  const prefix = basePrefix ? `${basePrefix}/` : "";
+  const walk = (n: TagNode) => {
+    const relDir = prefix && n.full.startsWith(prefix) ? n.full.slice(prefix.length) : n.full;
+    n.tagsHere.forEach((tag) => out.push({ tagId: tag.id, relDir }));
+    n.children.forEach((child) => walk(child));
+  };
+  walk(node);
+  return out;
+}
+
 /**
  * Corpus d'équipe tab (RFC §13, Resources dashboard v2): breadcrumb drill-down
  * through one library (tag) level at a time — replaces the pre-FRONT-09.G
@@ -185,7 +204,7 @@ function rowLabel(row: Row): string {
  */
 function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
-  const { showSuccess, showError, showWarn } = useToast();
+  const { showSuccess, showError, showWarn, showInfo } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
@@ -357,6 +376,12 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
   const [cancelTask] = useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation();
   const [createTag] = useCreateTagKnowledgeFlowV1TagsPostMutation();
+  // Direct retrievable mutation for the folder-aware "exclude from search" bulk
+  // action (#2446): a folder's descendant documents are toggled one PUT each,
+  // and unlike commands.toggleRetrievable this stays silent so a large subtree
+  // shows a single summary toast instead of one per document.
+  const [updateRetrievable] =
+    useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
 
   const currentNode = currentFolderFull ? findNode(tree, currentFolderFull) : tree;
   const currentTag = currentNode.tagsHere[0] ?? null;
@@ -932,14 +957,111 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     [filteredRows, selectedKeys],
   );
 
+  // Selected folder rows (#2446). Folder checkboxes have always rendered but did
+  // nothing; these now drive the same contextual bar as documents, with every
+  // action applied recursively to the folder's contents.
+  const selectedFolders = useMemo(
+    () =>
+      filteredRows
+        .filter((row): row is Row & { kind: "folder" } => row.kind === "folder" && selectedKeys.has(rowKey(row)))
+        .map((row) => row.node),
+    [filteredRows, selectedKeys],
+  );
+
+  // Page through every document under one tag. A folder bulk action can span a
+  // large subtree, so this is deliberately called only when the action fires
+  // (never on selection) — ticking a folder box must stay instant.
+  const fetchAllDocsForTag = useCallback(
+    async (tagId: string): Promise<DocumentMetadata[]> => {
+      const PAGE = 200;
+      const first = await browseDocumentsByTag({
+        browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: PAGE },
+      }).unwrap();
+      const docs = [...(first.documents ?? [])];
+      const total = first.total ?? docs.length;
+      for (let offset = PAGE; offset < total; offset += PAGE) {
+        const next = await browseDocumentsByTag({
+          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit: PAGE },
+        }).unwrap();
+        docs.push(...(next.documents ?? []));
+      }
+      return docs;
+    },
+    [browseDocumentsByTag],
+  );
+
+  // Resolve every document under the given folders, each paired with the ZIP-
+  // relative directory it lives in (for `bulkDownload`'s structure). Fetched on
+  // demand, deduplicated by uid (a document is tagged into exactly one folder,
+  // but the walk does not rely on it).
+  const resolveFolderDocs = useCallback(
+    async (folders: TagNode[]): Promise<{ doc: DocumentMetadata; relDir: string }[]> => {
+      const tagEntries = folders.flatMap((node) => descendantTagsWithPaths(node, currentNode.full));
+      const perTagResults = await Promise.all(
+        tagEntries.map(async ({ tagId, relDir }) => (await fetchAllDocsForTag(tagId)).map((doc) => ({ doc, relDir }))),
+      );
+      const seen = new Set<string>();
+      const out: { doc: DocumentMetadata; relDir: string }[] = [];
+      for (const entry of perTagResults.flat()) {
+        if (seen.has(entry.doc.identity.document_uid)) continue;
+        seen.add(entry.doc.identity.document_uid);
+        out.push(entry);
+      }
+      return out;
+    },
+    [fetchAllDocsForTag, currentNode.full],
+  );
+
+  const hasSelection = selectedDocs.length > 0 || selectedFolders.length > 0;
+
+  // Delete is folder-aware (#2446): each selected folder's tag is deleted (the
+  // backend cascades to sub-folders + their documents, same path as the single-
+  // folder delete), and the loose selected documents are untagged from the
+  // current folder. A precise recursive count is deliberately NOT recomputed
+  // here — that would cost one browse per subtree tag; the confirmation warns
+  // generically once folders are involved, while the single-folder delete keeps
+  // its live count.
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const bulkDelete = () => {
-    if (!currentTag || selectedDocs.length === 0) return;
+    if (!hasSelection) return;
+    const docCount = selectedDocs.length;
+    const folderCount = selectedFolders.length;
+    const message =
+      folderCount === 0
+        ? t("rework.resources.confirm.deleteBulkMessage", { count: docCount })
+        : docCount === 0
+          ? t("rework.resources.confirm.deleteFoldersMessage", { count: folderCount })
+          : t("rework.resources.confirm.deleteMixedMessage", { folderCount, docCount });
     showConfirmationDialog({
       title: t("rework.resources.confirm.deleteTitle"),
-      message: t("rework.resources.confirm.deleteBulkMessage", { count: selectedDocs.length }),
-      onConfirm: () => {
-        void commands.bulkRemoveFromLibraryForTag(selectedDocs, currentTag as unknown as TagWithItemsId);
-        setSelectedKeys(new Set());
+      message,
+      onConfirm: async () => {
+        setBulkDeleting(true);
+        try {
+          await Promise.all(
+            selectedFolders.map((node) => {
+              const tag = node.tagsHere[0];
+              return tag ? deleteTag({ tagId: tag.id }).unwrap() : Promise.resolve();
+            }),
+          );
+          if (docCount > 0 && currentTag) {
+            // Handles its own success toast + tag/doc refresh.
+            await commands.bulkRemoveFromLibraryForTag(selectedDocs, currentTag as unknown as TagWithItemsId);
+          }
+          if (folderCount > 0) {
+            showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
+            void refetchTags();
+          }
+          setSelectedKeys(new Set());
+        } catch (e: unknown) {
+          showError?.({
+            summary: t("validation.error"),
+            detail:
+              (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.deleteFolderError"),
+          });
+        } finally {
+          setBulkDeleting(false);
+        }
       },
     });
   };
@@ -1013,6 +1135,55 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     setSelectedKeys(new Set());
   };
 
+  // Folder-aware "exclude from search" (#2446). When the selection contains a
+  // folder there is no cheap way to know the uniform retrievable state of its
+  // subtree, so this is not the directional file-only toggle: it resolves every
+  // descendant document on click (spinner meanwhile) and forces `retrievable`
+  // to false on all of them — the one direction the user asked for at the folder
+  // level. Silent per-document mutation with a single summary toast, unlike
+  // bulkToggleSearchable's one-toast-per-doc path (kept for the file-only case).
+  const [bulkExcluding, setBulkExcluding] = useState(false);
+  const bulkExcludeSelection = async () => {
+    setBulkExcluding(true);
+    try {
+      const folderDocs = selectedFolders.length > 0 ? (await resolveFolderDocs(selectedFolders)).map((e) => e.doc) : [];
+      // Union of loose selected docs + every document under the selected folders,
+      // deduplicated, keeping only those actually excludable and still searchable.
+      const byUid = new Map<string, DocumentMetadata>();
+      for (const doc of [...selectedDocs, ...folderDocs]) byUid.set(doc.identity.document_uid, doc);
+      const targets = [...byUid.values()].filter((doc) => !isTabularOnlyDoc(doc) && doc.source.retrievable !== false);
+      if (targets.length === 0) {
+        showInfo?.({ summary: t("rework.resources.toast.bulkExcludeNothing") });
+        setSelectedKeys(new Set());
+        return;
+      }
+      const done = await Promise.all(
+        targets.map((doc) =>
+          updateRetrievable({ documentUid: doc.identity.document_uid, retrievable: false })
+            .unwrap()
+            .then(() => doc.identity.document_uid)
+            .catch(() => null),
+        ),
+      );
+      // Patch any loaded page holding a just-excluded document (folder docs are
+      // off-screen, so this only touches the loose-doc rows — the rest are not
+      // rendered anyway).
+      for (const uid of done) if (uid) patchDocRetrievable(uid, false);
+      const okCount = done.filter(Boolean).length;
+      if (okCount > 0)
+        showSuccess?.({ summary: t("rework.resources.toast.bulkExcludedFromSearch", { count: okCount }) });
+      else showError?.({ summary: t("rework.resources.toast.bulkExcludeError") });
+      setSelectedKeys(new Set());
+    } catch (e: unknown) {
+      showError?.({
+        summary: t("validation.error"),
+        detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.bulkExcludeError"),
+      });
+    } finally {
+      setBulkExcluding(false);
+    }
+  };
+
   // Non-destructive and repeatable — unlike delete/exclude above, the
   // selection is left as-is afterward (a user may well want to act on the
   // same rows again right after downloading them).
@@ -1020,13 +1191,28 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const bulkDownload = async () => {
     setBulkDownloading(true);
     try {
-      await downloadManyAsZip(
-        selectedDocs.map((doc) => ({
+      // Folder-aware (#2446): resolve each selected folder's documents and zip
+      // them under their folder-relative path, preserving the tree; loose
+      // selected documents sit at the archive root. Resolved on click so a
+      // folder selection stays instant until the user actually downloads.
+      const folderDocs = selectedFolders.length > 0 ? await resolveFolderDocs(selectedFolders) : [];
+      const files = [
+        ...selectedDocs.map((doc) => ({
           filename: doc.identity.document_name || doc.identity.document_uid,
           fetchBlob: () => commands.fetchBlob(doc),
         })),
-        "resources.zip",
-      );
+        ...folderDocs.map(({ doc, relDir }) => {
+          const name = doc.identity.document_name || doc.identity.document_uid;
+          return { filename: relDir ? `${relDir}/${name}` : name, fetchBlob: () => commands.fetchBlob(doc) };
+        }),
+      ];
+      if (files.length === 0) {
+        // Folders-only selection that resolved to no documents — give feedback
+        // rather than a silently dead click after the spinner.
+        showInfo?.({ summary: t("rework.resources.toast.downloadEmpty") });
+        return;
+      }
+      await downloadManyAsZip(files, "resources.zip");
     } catch (e: unknown) {
       showError?.({
         summary: t("validation.error"),
@@ -1499,12 +1685,22 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
         }}
         toolbarActions={
-          selectedDocs.length > 0 ? (
+          hasSelection ? (
             <BulkActionsBar
-              selectedCount={selectedDocs.length}
+              selectedCount={selectedDocs.length + selectedFolders.length}
               onDelete={bulkDelete}
+              deleteLoading={bulkDeleting}
               onClearSelection={() => setSelectedKeys(new Set())}
-              searchToggle={searchToggleMode ? { mode: searchToggleMode, onClick: bulkToggleSearchable } : undefined}
+              searchToggle={
+                // A folder-containing selection can't be resolved to a single
+                // direction cheaply (#2446): offer "exclude" only, resolved on
+                // click. A file-only selection keeps the directional toggle.
+                selectedFolders.length > 0
+                  ? { mode: "exclude", onClick: () => void bulkExcludeSelection(), loading: bulkExcluding }
+                  : searchToggleMode
+                    ? { mode: searchToggleMode, onClick: bulkToggleSearchable }
+                    : undefined
+              }
               onDownload={() => void bulkDownload()}
               downloadLoading={bulkDownloading}
             />
@@ -1630,7 +1826,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               const tag = renameTarget.node.tagsHere[0];
               if (tag) await commands.renameTag(tag as unknown as TagWithItemsId, newName);
             } else {
-              await commands.renameDocument(renameTarget.doc, newName);
+              await commands.renameDocument(renameTarget.doc, newName, currentTag?.id);
             }
           }}
         />

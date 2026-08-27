@@ -89,30 +89,19 @@
 }
 
 /* Boost is a live mode, not a resting state: it steps forward instead of
-   retreating, wearing the same spectrum as the Chat button's rotating border
-   (AgentCard.module.scss) so the one "this is the AI doing more" signal reads
-   the same in both places.
+   retreating, wearing the same spectrum as the agent surfaces' rotating border
+   so the one "this is the AI doing more" signal reads the same everywhere.
 
-   design-token exception: same rationale as that border — no semantic token
-   family covers this sequence.
-
-   Two deliberate departures from the border version. It is a LINEAR gradient,
-   not conic: a conic sweep across ~40px of text reads as an arbitrary smear
-   rather than a sweep. And the border's white stops are dropped — white is
-   what makes the highlight travel around a border, but in text it is a hole,
-   invisible on the light theme. What is left is the saturated run
-   (cyan → violet → pink), which keeps the identity and stays readable in both
-   themes.
+   Two deliberate departures from the border version, both carried by the
+   `-core` stop list in styles/gradients.css. It is a LINEAR gradient, not
+   conic: a conic sweep across ~40px of text reads as an arbitrary smear rather
+   than a sweep. And the white/peach stops are gone — white is a hole in text
+   rather than a travelling highlight.
 
    The WORD still carries the state on its own, so this is reinforcement and
-   never the only signal — a colour-blind reader reads "Boost" vs "Rapide".
-
-   2026-08-21: stops saturated and moderately darkened (same hues) — the
-   original pastels were near-invisible on the light surface, and a fully
-   darkened pass sank into the dark one. These sit halfway between the two so
-   the single gradient reads on both themes. */
+   never the only signal — a colour-blind reader reads "Boost" vs "Rapide". */
 .state[data-on] {
-  background: linear-gradient(90deg, #37c9e4, #6f78fc, #db47ae);
+  background: linear-gradient(90deg, var(--gradient-spectrum-stops-core));
   background-clip: text;
   -webkit-background-clip: text;
   /* Fallback first: any engine that ignores background-clip: text keeps a

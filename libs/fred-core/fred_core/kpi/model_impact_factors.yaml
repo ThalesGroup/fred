@@ -27,9 +27,46 @@
 # OpenAI ~50%) — left at 0.0 ("not populated yet") until a real per-model
 # rate is confirmed against the provider's current pricing page.
 models:
+  # Fallback for any turn whose model_name is unlisted or not recorded at all.
+  # Set to the platform's primary model (Mistral Small); raise it if larger
+  # models dominate the untracked turns. Cost stays 0.0 (internal infra).
   default:
     cost_per_1k_input_tokens: 0.0
     cost_per_1k_output_tokens: 0.0
     cost_per_1k_cached_input_tokens: 0.0
-    co2e_grams_per_1k_tokens: 0.0
-    kwh_per_1k_tokens: 0.0
+    co2e_grams_per_1k_tokens: 0.6
+    kwh_per_1k_tokens: 0.003
+
+  # Mistral Small (24B) — the `mistral-small-latest` alias actually recorded in
+  # `dims.model_name`. ESTIMATED, not measured. Cost left at 0.0 (internal infra,
+  # no per-token billing).
+  #
+  # co2e: scaled from Mistral's own LCA of Mistral Large 2 (Carbone 4 / ADEME,
+  #   2025) — 1.14 gCO2e per 400-token request = ~2.85 gCO2e/1k tokens for a
+  #   ~123B model; Mistral reports impact scales ~linearly with size, so
+  #   × 24/123 ≈ 0.56 → 0.6. The LCA runs on Mistral's low-carbon FR/EU grid,
+  #   consistent with a French deployment. Revisit if the internal datacenter's
+  #   grid/PUE turns out higher-carbon.
+  # kwh: no first-party per-token energy is published; third-party estimates for
+  #   a ~24B model span ~0.02–1.4 Wh per 400 tokens depending on methodology
+  #   (GPU-only vs full datacenter). 0.003 kWh/1k (~1.2 Wh/400 tokens) is a
+  #   mid-range placeholder — the softest figure here, validate before relying
+  #   on it.
+  mistral-small-latest:
+    cost_per_1k_input_tokens: 0.0
+    cost_per_1k_output_tokens: 0.0
+    cost_per_1k_cached_input_tokens: 0.0
+    co2e_grams_per_1k_tokens: 0.6
+    kwh_per_1k_tokens: 0.003
+
+  # Mistral Medium (the `mistral-medium-latest` alias, Medium 3.x). ESTIMATED,
+  # and SOFTER than Small: Mistral does not disclose Medium's parameter count.
+  # It sits between Small (24B) and Large 2 (123B); we take ~2.5× Small as a
+  # rough midpoint (≈ a 60B-class dense model). Same FR grid assumption. Refine
+  # once a real size or a per-model measurement is available.
+  mistral-medium-latest:
+    cost_per_1k_input_tokens: 0.0
+    cost_per_1k_output_tokens: 0.0
+    cost_per_1k_cached_input_tokens: 0.0
+    co2e_grams_per_1k_tokens: 1.5
+    kwh_per_1k_tokens: 0.0075

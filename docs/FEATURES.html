@@ -613,7 +613,10 @@
     <p>
       <code>AudioProcessor</code> converts spoken content to timestamped Markdown transcripts.
       Video files have their audio track extracted first; the intermediate WAV is deleted on
-      completion. The Whisper model is loaded lazily on first use.
+      completion. The Whisper model is loaded lazily on first use, local cache first, so an
+      air-gapped runtime never reaches the network: the prod image bakes
+      <code>Systran/faster-whisper-base</code> into its Hugging Face hub cache at build time
+      (<code>WHISPER_MODEL_SIZE=base</code>).
     </p>
     <table>
       <thead>
@@ -622,9 +625,9 @@
       <tbody>
         <tr><td>Engine</td><td><code>faster-whisper</code> ≥ 1.1.0</td></tr>
         <tr><td>Video demux</td><td><code>PyAV</code> ≥ 14.0.0 — resamples to 16 kHz mono WAV</td></tr>
-        <tr><td>Default model</td><td><code>base</code> (configurable via <code>audio_model.whisper_model_size</code>)</td></tr>
-        <tr><td>Device</td><td><code>cpu</code> default; <code>cuda</code> supported (configurable via <code>audio_model.device</code>)</td></tr>
-        <tr><td>Language</td><td>Auto-detected; overridable via <code>audio_model.language</code></td></tr>
+        <tr><td>Model</td><td><code>base</code> — set by <code>WHISPER_MODEL_SIZE</code>, which the prod image also uses to bake the model at build time. The <code>audio_model</code> YAML block is not read by the backend today.</td></tr>
+        <tr><td>Device</td><td><code>cpu</code> — fixed</td></tr>
+        <tr><td>Language</td><td>Auto-detected; overridable per request (dictation passes a language hint)</td></tr>
         <tr><td>Output</td><td>Markdown with <code>[HH:MM:SS]</code> timestamp per segment, detected language, total duration</td></tr>
         <tr><td>Beam size</td><td>5 (Whisper default)</td></tr>
       </tbody>
@@ -1358,7 +1361,7 @@
         <tr><td>Secrets / env</td><td><code>ENV_FILE</code></td><td>Database passwords, API keys, Keycloak secrets</td></tr>
         <tr><td>Deployment config</td><td><code>CONFIG_FILE</code> (YAML)</td><td>Base URL, ingress prefix, runtime catalog sources, processing profiles, log level, metrics config</td></tr>
         <tr><td>Processing profiles</td><td><code>configuration.yaml → processing.profiles</code></td><td>PDF engine, OCR settings, chunk size, input processor registry per suffix</td></tr>
-        <tr><td>Audio config</td><td><code>configuration.yaml → audio_model</code></td><td>Whisper model size, device (cpu/cuda), language override</td></tr>
+        <tr><td>Audio / dictation</td><td><code>WHISPER_MODEL_SIZE</code> (set in <code>dockerfiles/Dockerfile-prod</code>)</td><td>Whisper model, baked into the image at build time and requested at runtime (default <code>base</code>, cpu). No runtime YAML knob.</td></tr>
       </tbody>
     </table>
 

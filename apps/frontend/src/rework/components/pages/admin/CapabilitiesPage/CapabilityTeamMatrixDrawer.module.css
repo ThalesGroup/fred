@@ -58,9 +58,18 @@
 
 .teamMain {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+
+/* Why a control on this row is unavailable (#2408) — the agent's default tool
+ * capabilities aren't usable by this team / by personal spaces yet, so the
+ * backend would 409 the grant. Warning-toned rather than retreat-grey: it is
+ * an actionable blocker, not ambient help text like `.personalSub`. */
+.blockedSub {
+  color: var(--warning);
+  font: var(--font-body-small);
 }
 
 /* The synthetic "All personal spaces" row (RFC §8.4): a class control, not a
