@@ -1308,7 +1308,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 #### Open UX issues
 
 - Not yet design-reviewed against a live stack. First functional pass only.
-- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is. Shared with the composer's `Boost` text (`ReasoningChip.module.css`), minus the white stops and peach.
+- **Gradient animation colours** — the spectrum stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes) are intentional branding colours outside the semantic token system — confirm with designer whether they should be folded into it or kept as-is. Since 2026-08-27 they live once in `styles/gradients.css` as `--gradient-spectrum-stops` (full, for borders) and `--gradient-spectrum-stops-core` (saturated run only, for gradients clipped to text), with the rotating-border recipe in the `spectrum-border` SCSS mixin. Three consumers: this Chat button, the Home page's recently-used agent tiles (same "start a conversation with this agent" affordance), and the composer's `Boost` text.
 
 #### Resolved
 
@@ -2881,6 +2881,36 @@ gate as upload/new-folder), with a confirmation dialog. Deletion cascades
 server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
+
+### `DocumentWorkspace` — bulk actions extend to selected folders (#2446, 2026-08-26)
+
+Folder rows have always rendered a selection checkbox, but ticking one did
+nothing: the contextual `BulkActionsBar` (delete / download / exclude-from-
+search) and every bulk handler read `selectedDocs` (documents only). Selecting
+a folder now drives the same bar, with each action applied **recursively to the
+folder's subtree**; a mixed selection (files + folders) shows the union, applied
+to both. The selected-count label counts every selected row.
+
+- **Delete** — one `deleteTag` per selected folder (the backend cascades to
+  sub-folders + their documents, same path as the single-folder delete) plus the
+  existing untag path for loose documents. The confirmation warns generically
+  ("… and all their content? This cannot be undone.") once folders are involved,
+  rather than recomputing a precise recursive count (that would cost one browse
+  per subtree tag — the single-folder delete keeps its live count).
+- **Download** — resolves each folder's descendant documents on click and zips
+  them under their folder-relative path, preserving the tree; loose documents sit
+  at the archive root.
+- **Exclude from search** — a folder-containing selection can't be resolved to a
+  single include/exclude direction cheaply, so it offers **exclude only**: on
+  click it resolves the subtree's documents and forces every non-tabular one
+  non-retrievable (one summary toast, not one per document). The directional
+  include/exclude toggle is unchanged for file-only selections.
+
+Descendant documents are fetched **only when the action fires**, never on
+selection, so ticking a folder box stays instant even for a large subtree; each
+heavy action (download / exclude / delete) shows an in-button spinner while it
+runs (`BulkActionsBar` gained `deleteLoading` and `searchToggle.loading`,
+mirroring the existing `downloadLoading`).
 
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 

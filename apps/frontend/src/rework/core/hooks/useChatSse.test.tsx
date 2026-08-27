@@ -386,6 +386,50 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onTurnStartedMock).not.toHaveBeenCalled();
   });
 
+  it("surfaces the backend detail (never '[object Object]') when prepare-execution rejects with an RTK Query error", async () => {
+    flushPendingWrites = async () => true;
+    // The real-world failure: `prepareExecution(...).unwrap()` rejects with a
+    // FetchBaseQueryError ({ status, data }), which is NOT an Error and has no
+    // `.message`. The old `String(err)` rendered "[object Object]" and hid the
+    // real cause (#2449).
+    prepareExecutionImpl = async () => {
+      throw { status: 422, data: { detail: "Runtime not connected for this agent." } };
+    };
+    mount();
+
+    await expect(
+      act(async () => {
+        await latest.send("hello", "session-1");
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    const message = onErrorMock.mock.calls[0][0] as string;
+    expect(message).toContain("Runtime not connected for this agent.");
+    expect(message).not.toContain("[object Object]");
+    expect(onTurnStartedMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a SerializedError's message when prepare-execution rejects with one (no status field)", async () => {
+    flushPendingWrites = async () => true;
+    // RTK Query also rejects with a bare SerializedError ({ name, message })
+    // when the mutation throws before producing a FetchBaseQueryError — also
+    // not a real Error instance, so it needs the same normalization path.
+    prepareExecutionImpl = async () => {
+      throw { name: "Error", message: "Failed to fetch" };
+    };
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    const message = onErrorMock.mock.calls[0][0] as string;
+    expect(message).toContain("Failed to fetch");
+    expect(message).not.toContain("[object Object]");
+  });
+
   it("a retry after a prepare-execution failure starts exactly one turn", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => {

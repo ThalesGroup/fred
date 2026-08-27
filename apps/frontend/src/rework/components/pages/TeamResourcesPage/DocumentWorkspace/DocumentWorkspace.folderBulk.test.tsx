@@ -13,10 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage for the toolbar swap: "Nouveau dossier"/"Ajouter des fichiers" are
-// not useful once the user is selecting rows to bulk-act on, so the bulk
-// actions bar (delete/exclude) replaces them entirely instead of the two
-// sitting side by side, for as long as at least one row is selected.
+// Folder rows drive the same contextual bulk bar as documents (#2446), with
+// actions applied recursively to the folder's subtree: delete cascades via
+// deleteTag, download resolves descendant docs and zips them under their
+// folder-relative path, exclude-from-search forces every descendant document
+// non-retrievable. Documents are fetched only when the action fires.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -28,6 +29,14 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const { deleteTagSpy, updateRetrievableSpy, downloadManyAsZipSpy } = vi.hoisted(() => ({
+  deleteTagSpy: vi.fn((_arg: { tagId: string }) => ({ unwrap: async () => ({}) })),
+  updateRetrievableSpy: vi.fn((_arg: { documentUid: string; retrievable: boolean }) => ({
+    unwrap: async () => ({}),
+  })),
+  downloadManyAsZipSpy: vi.fn(async (_files: { filename: string }[], _zipName: string) => {}),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
@@ -38,30 +47,41 @@ const doc = (uid: string, name: string) => ({
   file: { file_type: "pdf", file_size_bytes: 1024 },
   source: { date_added_to_kb: "2026-07-01T00:00:00Z" },
   processing: { stages: { raw: "done", vector: "done" } },
-  tags: { tag_ids: ["tag-cir"] },
+  tags: { tag_ids: ["tag-reports"] },
 });
 
+// Two-level tree at the corpus root: "Reports" (tag-reports) with a sub-folder
+// "2024" (tag-2024). One document lives directly under each tag.
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  // The rollup reads the team's terminal ingestion history (#2384); no
-  // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
-    data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
+    data: [
+      { id: "tag-reports", name: "Reports", path: "", type: "document", item_ids: [] },
+      { id: "tag-2024", name: "2024", path: "Reports", type: "document", item_ids: [] },
+    ],
     isLoading: false,
     refetch: () => {},
   }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
-    () => ({ unwrap: async () => ({ documents: [doc("uid-1", "Report")], total: 1 }) }),
+    ({ browseDocumentsByTagRequest }: { browseDocumentsByTagRequest: { tag_id: string } }) => ({
+      unwrap: async () => {
+        const id = browseDocumentsByTagRequest.tag_id;
+        if (id === "tag-reports") return { documents: [doc("uid-root", "RootReport")], total: 1 };
+        if (id === "tag-2024") return { documents: [doc("uid-2024", "Report2024")], total: 1 };
+        return { documents: [], total: 0 };
+      },
+    }),
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useCreateTagKnowledgeFlowV1TagsPostMutation: () => [vi.fn()],
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
+  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [deleteTagSpy],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
-    vi.fn(() => ({ unwrap: async () => ({}) })),
+    updateRetrievableSpy,
   ],
 }));
+vi.mock("../../../../../utils/downloadUtils.tsx", () => ({ downloadManyAsZip: downloadManyAsZipSpy }));
 vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [], selectAllTasks: () => [] }));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSettled", () => ({ useRefetchOnTaskSettled: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
@@ -73,10 +93,15 @@ vi.mock("../../../../../components/documents/common/useDocumentCommands", () => 
     download: async () => {},
     toggleRetrievable: async () => {},
     removeFromLibrary: async () => {},
+    bulkRemoveFromLibraryForTag: async () => {},
+    fetchBlob: async () => new Blob(),
   }),
 }));
+// Fire onConfirm synchronously so the delete action actually runs under test.
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
-  useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
+  useConfirmationDialog: () => ({
+    showConfirmationDialog: ({ onConfirm }: { onConfirm: () => void }) => onConfirm(),
+  }),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -98,67 +123,98 @@ import DocumentWorkspace from "./DocumentWorkspace";
 let container: HTMLDivElement;
 let root: Root;
 
+/** Let the on-click resolver's browse round-trips settle. */
+async function flush() {
+  await act(async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  });
+}
+
 beforeEach(async () => {
+  deleteTagSpy.mockClear();
+  updateRetrievableSpy.mockClear();
+  downloadManyAsZipSpy.mockClear();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
-
-  // Navigate into "CIR" — its documents only load once it's the current folder.
-  const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
-  if (!cir) throw new Error('"CIR" folder row not rendered');
-  await act(async () => {
-    cir.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-  });
 });
 
 afterEach(() => {
-  act(() => {
-    root.unmount();
-  });
+  act(() => root.unmount());
   container.remove();
 });
 
-function rowCheckbox(): HTMLInputElement {
-  // [0] is the header's "select all"; [1] is the one doc row in this fixture.
+/** The "Reports" folder row checkbox ([0] is the header select-all). */
+function folderCheckbox(): HTMLInputElement {
   const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
   const box = boxes[1];
-  if (!box) throw new Error("row checkbox not rendered");
+  if (!box) throw new Error("folder row checkbox not rendered");
   return box as HTMLInputElement;
 }
 
-describe("DocumentWorkspace toolbar — bulk actions replace new-folder/add-file while selecting", () => {
-  it("hides new-folder/add-file and shows bulk actions once a row is selected", () => {
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+function selectFolder() {
+  act(() => folderCheckbox().click());
+}
+
+describe("DocumentWorkspace — bulk actions on selected folders (#2446)", () => {
+  it("shows the contextual bar (with exclude-from-search) once a folder is selected", () => {
     expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
 
-    act(() => {
-      rowCheckbox().click();
-    });
+    selectFolder();
 
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).toBeNull();
     expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
     expect(
       container.querySelector('button[aria-label="rework.resources.bulkActions.excludeFromSearch"]'),
     ).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.download"]')).not.toBeNull();
   });
 
-  it("restores new-folder/add-file once the selection is cleared", () => {
-    act(() => {
-      rowCheckbox().click();
+  it("deletes the folder's tag (backend cascades to its subtree) on bulk delete", async () => {
+    selectFolder();
+    const del = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.delete"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      del.click();
     });
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).not.toBeNull();
+    await flush();
+    expect(deleteTagSpy).toHaveBeenCalledWith({ tagId: "tag-reports" });
+  });
 
-    act(() => {
-      rowCheckbox().click(); // untoggle
+  it("zips every descendant document under its folder-relative path on bulk download", async () => {
+    selectFolder();
+    const dl = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.download"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      dl.click();
     });
+    await flush();
 
-    expect(container.querySelector('button[aria-label="rework.resources.bulkActions.delete"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
+    expect(downloadManyAsZipSpy).toHaveBeenCalledTimes(1);
+    const [files, zipName] = downloadManyAsZipSpy.mock.calls[0];
+    expect(zipName).toBe("resources.zip");
+    expect(files.map((f) => f.filename).sort()).toEqual(["Reports/2024/Report2024.pdf", "Reports/RootReport.pdf"]);
+  });
+
+  it("forces every descendant document non-retrievable on bulk exclude-from-search", async () => {
+    selectFolder();
+    const excl = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.excludeFromSearch"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      excl.click();
+    });
+    await flush();
+
+    expect(updateRetrievableSpy).toHaveBeenCalledTimes(2);
+    const uids = updateRetrievableSpy.mock.calls.map((c) => c[0].documentUid).sort();
+    expect(uids).toEqual(["uid-2024", "uid-root"]);
+    for (const call of updateRetrievableSpy.mock.calls) {
+      expect(call[0].retrievable).toBe(false);
+    }
   });
 });

@@ -22,6 +22,9 @@ import styles from "./CompactAgentCard.module.scss";
 interface CompactAgentCardProps {
   instance: ManagedAgentInstanceSummary;
   teamId: string;
+  /** Display name of the agent's origin team (or the personal-space label),
+   * shown above the agent name. */
+  teamName?: string;
 }
 
 /** A stripped-down `AgentCard` for the Home "recently used agents" row: icon +
@@ -30,7 +33,7 @@ interface CompactAgentCardProps {
  * conversation (managed-chat with no `?session`, same target as AgentCard's
  * Chat button). Only ever rendered for enabled, resolvable agents, so it needs
  * no disabled/suspended state. */
-export default function CompactAgentCard({ instance, teamId }: CompactAgentCardProps) {
+export default function CompactAgentCard({ instance, teamId, teamName }: CompactAgentCardProps) {
   const { agentIconName } = useFrontendProperties();
   const iconName = resolveAgentIcon(instance, agentIconName);
 
@@ -40,6 +43,7 @@ export default function CompactAgentCard({ instance, teamId }: CompactAgentCardP
         <Icon category="outlined" type={iconName} />
       </span>
       <span className={styles.identity}>
+        {teamName && <span className={styles.team}>{teamName}</span>}
         <span className={styles.name}>{instance.display_name}</span>
         <span className={styles.role}>{instance.role}</span>
       </span>
