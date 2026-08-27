@@ -1096,9 +1096,12 @@ applications:
     job:
       enabled: false
     migration:
-      enabled: false    # Enable when knowledge-flow-backend gets Alembic migrations
-      scaleDown: true
-      backoffLimit: 3
+      # ON: knowledge-flow owns an Alembic tree (alembic_version_knowledge_flow)
+      # and creates no table at startup - it refuses to boot on an unmigrated
+      # database. The pre-install/pre-upgrade hook Job runs before the new pods.
+      enabled: true
+      scaleDown: true         # Scale deployment to 0 before migrating (downtime acceptable)
+      backoffLimit: 3         # Retry count on migration failure
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -1468,9 +1471,12 @@ applications:
     job:
       enabled: false
     migration:
-      enabled: false    # Enable when control-plane-backend gets Alembic migrations
-      scaleDown: true
-      backoffLimit: 3
+      # ON: control-plane owns an Alembic tree (alembic_version_control_plane).
+      # It also migrates the users/teammetadata tables knowledge-flow reads, so
+      # this job must succeed for knowledge-flow to boot at all.
+      enabled: true
+      scaleDown: true         # Scale deployment to 0 before migrating (downtime acceptable)
+      backoffLimit: 3         # Retry count on migration failure
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
