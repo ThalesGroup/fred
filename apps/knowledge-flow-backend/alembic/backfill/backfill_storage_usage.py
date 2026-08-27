@@ -259,15 +259,15 @@ async def update_database(session: AsyncSession, user_totals: dict[str, int], te
             # backfills storage totals, not team identity — fall back to the
             # id rather than pulling in a Keycloak lookup this script has no
             # wiring for.
-            # #2433: `visibility` must be explicit here, not left to the ORM
-            # default (now "private"). A team reaching this branch pre-exists
-            # the registry row and was behaviorally public under the old
-            # regime — letting the private default apply would make
-            # `_list_teams`' lazy backfill revoke its ReBAC `public` relation
-            # and silently hide it from the marketplace as a side effect of a
-            # storage repair (same fidelity rule as `importer.py`'s
-            # pre-visibility-bundle fallback).
-            team_row = TeamMetadataRow(id=team_id, name=team_id, current_resources_storage_size=total_size, visibility="public")
+            # #2433: `visibility` is deliberately NOT set here. This script
+            # knows a team owns content, never what discoverability its admin
+            # intended — so it takes the platform default (private) rather
+            # than publishing a team on a guess. Consequence to know before
+            # running it: a team that reaches this branch and was previously
+            # marketplace-listed loses that listing on the next `GET /teams`
+            # (`_list_teams` revokes the ReBAC `public` relation for any
+            # private team). Re-publishing it is a team_admin action.
+            team_row = TeamMetadataRow(id=team_id, name=team_id, current_resources_storage_size=total_size)
             session.add(team_row)
 
     await session.commit()

@@ -2913,20 +2913,27 @@ grant kept it readable) — by design (RFC §24.2, the creator is not
 necessarily a member), and the registry/admin surfaces they operate are not
 `can_read`-gated.
 
-**Existing teams are untouched.** Every pre-existing row keeps its stored
-value — nothing becomes private as a side effect of this rollout (the exact
-mirror of §30's rollout stance). Hiding a pre-existing team remains a
-per-team admin action. Same fidelity rule everywhere a row is materialized
-for a team that pre-dates it: a bundle exported before the `visibility`
-field existed still imports as `public` (`importer.py`), and the
-knowledge-flow storage backfill (`backfill_storage_usage.py`) states
-`visibility="public"` explicitly when it manufactures a missing registry
-row — both preserve the platform's actual pre-#2433 behavior instead of
-letting the new ORM default apply. One deliberate exception: a team
-*provisioned from a bundle's `users.json` references alone* (no
-`team_metadata` row anywhere in the bundle) goes through `create_team` and
-lands private — the bundle carries no visibility for it, so the platform
-default is the only honest choice.
+**Existing rows are untouched — no data migration.** Migration
+`0c70cb820802` moves the `server_default` only; every stored `visibility`
+keeps its value, so no team already in the registry changes state. Hiding
+one remains a per-team admin action.
+
+**Where a row is *materialized* for a team that pre-dates it, the platform
+default applies — nothing guesses a visibility.** Two paths can create a
+registry row for a team that already exists in the wild: `create_team`
+called by the bundle importer for a team referenced only from `users.json`,
+and the knowledge-flow storage backfill (`backfill_storage_usage.py`).
+Neither knows what discoverability that team's admin intended, so neither
+states one: both take the platform default and land the team private.
+Consequence to know before running the backfill on a legacy platform: a
+team it materializes that *was* marketplace-listed loses that listing on
+the next `GET /teams` (`_list_teams` revokes the ReBAC `public` relation
+for any private team), and a team admin re-publishes it deliberately.
+Publishing a team on a guess is the outcome this default exists to
+prevent. The one place that still forces `public` is `importer.py`'s
+`row.get("visibility", "public")` for a bundle exported *before the field
+existed* — there the value is not a guess but the exporting platform's
+actual behavior, since every team was unconditionally public then.
 
 **Personal spaces now say so.** `build_personal_team` states
 `visibility: "private"` explicitly (previously it inherited the schema
