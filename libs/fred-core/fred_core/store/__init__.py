@@ -12,24 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.store.base_content_store import ContentStore
+from fred_core.store.base_content_store import ContentStore, ObjectInfo
+from fred_core.store.content_url_resolver import (
+    OBJECT_PROXY_PATH,
+    ContentUrlResolver,
+    ContentUrlStrategy,
+)
 from fred_core.store.gcs_content_store import GcsContentStore
 from fred_core.store.local_content_store import LocalContentStore
 from fred_core.store.minio_content_store import MinioContentStore
+from fred_core.store.object_proxy_router import ObjectReader, build_object_proxy_router
 from fred_core.store.opensearch_mapping_validator import (
     MappingValidationError,
     ensure_index_mapping,
     validate_index_mapping,
 )
+from fred_core.store.signed_token import (
+    MissingSigningSecretError,
+    make_signed_token,
+    read_signing_secret,
+    verify_signed_token,
+)
 from fred_core.store.vector_search import VectorSearchHit
 
 __all__ = [
+    "OBJECT_PROXY_PATH",
     "ContentStore",
+    "ContentUrlResolver",
+    "ContentUrlStrategy",
     "GcsContentStore",
     "LocalContentStore",
     "MappingValidationError",
     "MinioContentStore",
+    "MissingSigningSecretError",
+    "ObjectInfo",
+    "ObjectReader",
     "VectorSearchHit",
+    "build_object_proxy_router",
     "ensure_index_mapping",
+    "make_signed_token",
+    "read_signing_secret",
     "validate_index_mapping",
+    "verify_signed_token",
 ]

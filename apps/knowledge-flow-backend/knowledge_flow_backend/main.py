@@ -38,10 +38,11 @@ from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
+from fred_core.store import build_object_proxy_router, read_signing_secret
 from prometheus_client import start_http_server
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
+from knowledge_flow_backend.application_context import CONTENT_URL_SECRET_ENV, ApplicationContext, get_configuration
 from knowledge_flow_backend.application_state import attach_app
 from knowledge_flow_backend.common.config_loader import (
     get_loaded_config_file_path,
@@ -303,6 +304,18 @@ def create_app() -> FastAPI:
         SchedulerController(router, temporal_client_provider=temporal_client_provider)
     else:
         logger.warning("%s Ingestion scheduler controller disabled via configuration.scheduler.enabled=false", LOG_PREFIX)
+
+    # CONTENT-URL-STRATEGY: the object proxy exists only where the storage backend
+    # cannot mint browser-facing presigned URLs, so `presigned` deployments keep no
+    # dormant unauthenticated route. A missing signing key stops the boot here.
+    if configuration.content_storage.url_strategy == "proxy":
+        router.include_router(
+            build_object_proxy_router(
+                reader=application_context.get_content_store(),
+                secret=read_signing_secret(CONTENT_URL_SECRET_ENV),
+            )
+        )
+        logger.info("%s Object proxy mounted (content_storage.url_strategy=proxy)", LOG_PREFIX)
 
     logger.info("%s All controllers registered.", LOG_PREFIX)
     app.include_router(router)

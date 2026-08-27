@@ -154,8 +154,19 @@ class LibraryProcessorConfig(BaseModel):
 #
 
 
+CONTENT_URL_STRATEGY_DESCRIPTION = (
+    "How browser-facing object URLs are produced (docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md). "
+    "'presigned' asks the storage backend for a real presigned URL — MinIO/S3, or GCS with a "
+    "signing service account. 'proxy' mints an application-signed URL served by this backend's "
+    "read-through object proxy, for deployments where presigning is unavailable (GCS without "
+    "iam.serviceAccounts.signBlob, local filesystem). 'proxy' requires the "
+    "KNOWLEDGE_FLOW_CONTENT_URL_SECRET signing key; startup fails clearly when it is unset."
+)
+
+
 class MinioStorageConfig(BaseModel):
     type: Literal["minio"]
+    url_strategy: Literal["presigned", "proxy"] = Field(default="presigned", description=CONTENT_URL_STRATEGY_DESCRIPTION)
     endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
     access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env)")
     secret_key: Annotated[str, WithJsonSchema({"type": "string"})] = Field(default=None, description="MinIO secret key (from MINIO_SECRET_KEY env)")  # type: ignore[assignment]
@@ -177,6 +188,7 @@ class MinioStorageConfig(BaseModel):
 
 class LocalContentStorageConfig(BaseModel):
     type: Literal["local"]
+    url_strategy: Literal["presigned", "proxy"] = Field(default="presigned", description=CONTENT_URL_STRATEGY_DESCRIPTION)
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
 
 
@@ -191,6 +203,7 @@ class GcsStorageConfig(BaseModel):
     """
 
     type: Literal["gcs"]
+    url_strategy: Literal["presigned", "proxy"] = Field(default="presigned", description=CONTENT_URL_STRATEGY_DESCRIPTION)
     bucket_name: str = Field(default="app-bucket", description="Base GCS bucket name (suffixed with -documents/-objects).")
     project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
     signing_service_account_email: Optional[str] = Field(
@@ -198,8 +211,10 @@ class GcsStorageConfig(BaseModel):
         description=(
             "Service account email used to sign V4 signed URLs for backend-internal "
             "tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON "
-            "key). Required for content_storage.type=gcs; startup fails clearly when "
-            "omitted. The Workload Identity service account must hold "
+            "key). Required when url_strategy='presigned'; startup fails clearly when "
+            "omitted. With url_strategy='proxy' the platform boots without it, but "
+            "tabular Parquet reads (which always sign internally) stay unavailable. "
+            "The Workload Identity service account must hold "
             "iam.serviceAccounts.signBlob on this account, which must have "
             "storage.objects.get on the objects bucket."
         ),

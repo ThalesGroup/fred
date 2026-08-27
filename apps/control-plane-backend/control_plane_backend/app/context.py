@@ -24,6 +24,7 @@ from fred_core.scheduler import (
 from fred_core.sql import create_async_engine_from_config
 from fred_core.store import (
     ContentStore,
+    ContentUrlResolver,
     GcsContentStore,
     LocalContentStore,
     MinioContentStore,
@@ -34,6 +35,7 @@ from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.app.content_urls import build_content_url_resolver
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
@@ -80,6 +82,7 @@ class ApplicationContext:
         self._team_metadata_store: TeamMetadataStore | None = None
         self._platform_bootstrap_store: PlatformBootstrapStore | None = None
         self._content_store: ContentStore | None = None
+        self._content_url_resolver: ContentUrlResolver | None = None
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
         self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
@@ -255,19 +258,31 @@ class ApplicationContext:
                     public_secure=cfg.public_secure,
                 )
             elif isinstance(cfg, GcsContentStorageConfig):
-                # Fail fast at startup: banner/logo images are served straight to the
-                # browser via get_presigned_url, which needs a signing SA to mint V4
-                # signed URLs via IAM signBlob (no per-feature flag to detect that
-                # usage later, so a missing email must stop the boot here rather than
-                # surfacing as an opaque runtime error on first team-banner render).
-                if not cfg.signing_service_account_email:
+                # Config guard, *not* a startup check: with url_strategy='presigned',
+                # banner/logo images are served straight to the browser via
+                # get_presigned_url, which needs a signing SA to mint V4 signed URLs
+                # via IAM signBlob. This factory is lazy, and the only eager call at
+                # startup is main.py's object-proxy mount, which sits inside the
+                # `url_strategy == "proxy"` branch — so in 'presigned' mode this raises
+                # on the *first* content-store use (the first team read), not at boot:
+                # the app comes up and then answers 500 on every GET /teams. Unusable
+                # either way, but do not describe it as a boot failure. In 'proxy' mode
+                # the mount makes construction eager, so a bad store config there does
+                # stop the boot — and no URL is ever signed by GCS, so the signing SA is
+                # genuinely unnecessary: that is the deployment this strategy exists for.
+                if (
+                    cfg.url_strategy == "presigned"
+                    and not cfg.signing_service_account_email
+                ):
                     raise ValueError(
-                        "content_storage.type=gcs requires 'signing_service_account_email' "
-                        "to sign V4 signed URLs for team banner/logo images (IAM signBlob "
-                        "under Workload Identity, no JSON key). Set it to the signing "
-                        "service account that holds storage.objects.get on the objects "
-                        "bucket and on which the Workload Identity service account has "
-                        "iam.serviceAccounts.signBlob."
+                        "content_storage.type=gcs with url_strategy='presigned' requires "
+                        "'signing_service_account_email' to sign V4 signed URLs for team "
+                        "banner/logo images (IAM signBlob under Workload Identity, no JSON "
+                        "key). Set it to the signing service account that holds "
+                        "storage.objects.get on the objects bucket and on which the Workload "
+                        "Identity service account has iam.serviceAccounts.signBlob — or set "
+                        "content_storage.url_strategy='proxy' to serve those images through "
+                        "the backend's signed object proxy instead."
                     )
                 self._content_store = GcsContentStore(
                     bucket_name=f"{cfg.bucket_name}-objects",
@@ -281,6 +296,22 @@ class ApplicationContext:
                     f"Unsupported content storage configuration: {type(cfg)}"
                 )
         return self._content_store
+
+    def get_content_url_resolver(self) -> ContentUrlResolver:
+        """Return the resolver that turns an object key into a browser-facing URL.
+
+        Why this exists:
+        - Depending on `content_storage.url_strategy`, that URL is either a real
+          presigned URL minted by the storage backend, or an application-signed URL
+          served by this backend's object proxy (CONTENT-URL-STRATEGY RFC).
+        - Callers must have authorized the user for the object first — the URL is a
+          bearer capability in both modes, exactly like a presigned URL always was.
+        """
+        if self._content_url_resolver is None:
+            self._content_url_resolver = build_content_url_resolver(
+                self.configuration, self.get_content_store()
+            )
+        return self._content_url_resolver
 
     def get_rebac_engine(self) -> RebacEngine:
         if self._rebac_engine is None:

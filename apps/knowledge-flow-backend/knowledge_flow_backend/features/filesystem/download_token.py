@@ -22,39 +22,39 @@ history is tamper-proof and expires on its own — while the file itself stays i
 space (the durable channel) and ``/fs/download`` still runs through the single ReBAC
 enforcement point.
 
-The signing key comes from ``KNOWLEDGE_FLOW_DOWNLOAD_SECRET`` (set in any real deployment); a
-clearly-labelled development fallback keeps local runs working without configuration. The key
-must be identical across replicas so a link minted by one instance verifies on another.
+This module is a thin binding over :mod:`fred_core.store.signed_token`, which is shared with
+the application-signed object proxy (``docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md``). Only the
+bound components differ — ``path|uid`` here, the object key there — so the wire format of
+already-minted links is unchanged.
+
+The signing key comes from ``KNOWLEDGE_FLOW_DOWNLOAD_SECRET``. There is no development
+fallback: a hardcoded signing key in shipped source is dangerous whatever route consumes it
+(RFC §6.2), so an unset variable raises with the file to set it in.
 """
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import logging
-import os
-import time
+
+from fred_core.store.signed_token import (
+    make_signed_token,
+    read_signing_secret,
+    verify_signed_token,
+)
 
 logger = logging.getLogger(__name__)
 
 # 10 minutes: long enough to click a link in chat, short enough to bound exposure.
 DEFAULT_DOWNLOAD_TTL_SECONDS = 600
 
-_DEV_FALLBACK = "knowledge-flow-dev-download-signing-key"  # pragma: allowlist secret  # nosec B105
+# Name of the variable, not a secret.
+DOWNLOAD_SECRET_ENV = "KNOWLEDGE_FLOW_DOWNLOAD_SECRET"  # nosec B105  # pragma: allowlist secret
 
 
-def _signing_key() -> bytes:
-    configured = os.getenv("KNOWLEDGE_FLOW_DOWNLOAD_SECRET")
-    if not configured:
-        logger.warning("KNOWLEDGE_FLOW_DOWNLOAD_SECRET is not set; using the insecure development signing key. Set it in any real deployment.")
-        configured = _DEV_FALLBACK
-    return configured.encode("utf-8")
+def _signing_key() -> str:
+    """Return the configured signing key, or raise naming the variable and the file."""
 
-
-def _signature(payload: str) -> str:
-    digest = hmac.new(_signing_key(), payload.encode("utf-8"), hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return read_signing_secret(DOWNLOAD_SECRET_ENV)
 
 
 def make_download_token(
@@ -70,9 +70,7 @@ def make_download_token(
     The token is ``{expiry}.{signature}``; the download route recomputes the signature from
     the URL path and the session uid, so neither can be altered after minting.
     """
-    issued = int(time.time()) if now is None else now
-    expiry = issued + ttl_seconds
-    return f"{expiry}.{_signature(f'{path}|{uid}|{expiry}')}"
+    return make_signed_token([path, uid], secret=_signing_key(), ttl_seconds=ttl_seconds, now=now)
 
 
 def verify_download_token(
@@ -83,15 +81,4 @@ def verify_download_token(
     now: int | None = None,
 ) -> bool:
     """Return True only if ``token`` was minted for this exact ``(path, uid)`` and is unexpired."""
-    if not token:
-        return False
-    try:
-        expiry_str, signature = token.split(".", 1)
-        expiry = int(expiry_str)
-    except (ValueError, AttributeError):
-        return False
-    current = int(time.time()) if now is None else now
-    if current > expiry:
-        return False
-    expected = _signature(f"{path}|{uid}|{expiry}")
-    return hmac.compare_digest(signature, expected)
+    return verify_signed_token(token, [path, uid], secret=_signing_key(), now=now)

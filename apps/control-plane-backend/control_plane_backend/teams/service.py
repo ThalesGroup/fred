@@ -31,7 +31,7 @@ from fred_core import (
 )
 from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
 from fred_core.scheduler import SchedulerBackend
-from fred_core.store import ContentStore
+from fred_core.store import ContentUrlResolver
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from sqlalchemy.exc import IntegrityError
 
@@ -93,6 +93,10 @@ _AVATAR_EXTENSION_BY_MIME = {
     "image/png": ".png",
     "image/webp": ".webp",
 }
+# The avatar URL is a bearer capability over one object. It is re-minted on every
+# team read, so it only has to survive the render — one hour never bought anything
+# (CONTENT-URL-STRATEGY RFC §2.5).
+AVATAR_URL_TTL = timedelta(seconds=60)
 
 
 def _utcnow() -> datetime:
@@ -1456,7 +1460,7 @@ async def _enrich_teams_with_membership(
     if not teams_metadata:
         return []
 
-    content_store = deps.get_content_store()
+    url_resolver = deps.get_content_url_resolver()
     team_ids: list[TeamId] = [metadata.id for metadata in teams_metadata]
     (
         team_admin_ids_map,
@@ -1477,7 +1481,7 @@ async def _enrich_teams_with_membership(
             is_member=user.uid in team_member_ids_map.get(metadata.id, set()),
             my_relations=my_relations_map.get(metadata.id, set()),
             admin_summaries=user_summaries,
-            content_store=content_store,
+            url_resolver=url_resolver,
             default_max_resources_storage_size=default_max_storage,
         )
         for metadata in teams_metadata
@@ -1492,7 +1496,7 @@ def _build_team_dto(
     is_member: bool,
     my_relations: set[UserTeamRelation],
     admin_summaries: dict[str, UserSummary],
-    content_store: ContentStore,
+    url_resolver: ContentUrlResolver,
     default_max_resources_storage_size: int | None,
 ) -> Team:
     """Render one `Team` DTO from metadata plus already-resolved membership.
@@ -1506,7 +1510,7 @@ def _build_team_dto(
 
     How to use it:
     - pass membership sets already resolved for this one team; the only I/O
-      performed here is the avatar's presigned URL lookup
+      performed here is the avatar's URL lookup
     """
     avatar_image_url: str | None = None
     if metadata.banner_object_storage_key:
@@ -1514,13 +1518,14 @@ def _build_team_dto(
             avatar_image_url = metadata.banner_object_storage_key
         else:
             try:
-                avatar_image_url = content_store.get_presigned_url(
+                avatar_image_url = url_resolver.url_for(
                     metadata.banner_object_storage_key,
-                    expires=timedelta(hours=1),
+                    expires=AVATAR_URL_TTL,
                 )
             except Exception as exc:
+                # Never log the URL itself — it carries a bearer capability.
                 logger.warning(
-                    "Failed to generate presigned URL for team %s avatar: %s",
+                    "Failed to generate avatar URL for team %s: %s",
                     metadata.id,
                     exc,
                 )
@@ -1684,7 +1689,7 @@ async def _build_team_with_permissions(
         is_member=user.uid in member_ids,
         my_relations=roles_by_user.get(user.uid, set()),
         admin_summaries=admin_summaries,
-        content_store=deps.get_content_store(),
+        url_resolver=deps.get_content_url_resolver(),
         default_max_resources_storage_size=deps.configuration.app.default_team_max_resources_storage_size,
     )
     # `my_relations` now rides along on the base `Team` (via `team.model_dump()`),

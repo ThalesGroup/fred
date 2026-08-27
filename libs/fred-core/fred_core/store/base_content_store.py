@@ -14,8 +14,25 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import BinaryIO, Protocol
+
+
+@dataclass(frozen=True)
+class ObjectInfo:
+    """Metadata a stored object exposes to the object proxy.
+
+    Why this exists:
+    - The read-through proxy (`fred_core.store.object_proxy_router`) needs a size
+      to answer Range requests and an ETag to let the browser revalidate. It never
+      crosses an HTTP boundary itself, so it is a plain dataclass.
+    """
+
+    key: str
+    size: int
+    content_type: str | None = None
+    etag: str | None = None
 
 
 class ContentStore(Protocol):

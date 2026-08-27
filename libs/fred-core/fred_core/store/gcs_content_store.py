@@ -17,13 +17,14 @@ from __future__ import annotations
 import io
 import logging
 from datetime import timedelta
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Optional, cast
 
 import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.cloud.exceptions import NotFound
 
 from fred_core.common.gcs_client import build_gcs_client
+from fred_core.store.base_content_store import ObjectInfo
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,47 @@ class GcsContentStore:
         logger.info(
             "[CONTENT][GCS] put object=%s bucket='%s'", object_name, self.bucket_name
         )
+
+    def stat_object(self, key: str) -> ObjectInfo:
+        """Return size/content-type/etag for `key`, for the object proxy.
+
+        Raises:
+            FileNotFoundError: object does not exist.
+        """
+
+        object_name = self._normalize_key(key)
+        try:
+            blob = self.bucket.get_blob(object_name)
+        except NotFound as exc:
+            raise FileNotFoundError(f"Object not found: {key}") from exc
+        if blob is None:
+            raise FileNotFoundError(f"Object not found: {key}")
+        return ObjectInfo(
+            key=key,
+            size=blob.size or 0,
+            content_type=blob.content_type,
+            etag=blob.etag,
+        )
+
+    def get_object_stream(
+        self, key: str, *, start: Optional[int] = None, length: Optional[int] = None
+    ) -> BinaryIO:
+        """Return a readable stream over `key`, optionally windowed to a byte range.
+
+        Raises:
+            FileNotFoundError: object does not exist.
+        """
+
+        object_name = self._normalize_key(key)
+        blob = self.bucket.blob(object_name)
+        try:
+            if length is None:
+                return cast(BinaryIO, blob.open("rb"))
+            offset = start or 0
+            window = blob.download_as_bytes(start=offset, end=offset + length - 1)
+        except NotFound as exc:
+            raise FileNotFoundError(f"Object not found: {key}") from exc
+        return io.BytesIO(window)
 
     def _mint_access_token(self) -> str:
         """Return a valid OAuth2 access token for the IAM signBlob signing call.

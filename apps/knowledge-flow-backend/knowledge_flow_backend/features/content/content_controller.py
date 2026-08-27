@@ -21,9 +21,11 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from fred_core import KeycloakUser, get_current_user
+from fred_core.store import ContentUrlResolver
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError
 
 logger = logging.getLogger(__name__)
@@ -100,34 +102,32 @@ def build_content_disposition_header(disposition_type: str, file_name: str) -> s
 
 _MEDIA_RE = re.compile(r"knowledge-flow/v1/markdown/([^/]+)/media/([^/?#\s\"']+)")
 
+# Long enough for the browser to fetch every image of one render, short enough that a
+# URL leaking through a screenshot or a copied markdown body is already dead (#1897
+# tracks making this configurable).
+MEDIA_URL_TTL = timedelta(minutes=1)
 
-def _replace_with_presigned(content: str, content_store) -> str:
-    """Replace /knowledge-flow/v1/markdown/{uid}/media/{file} URLs with 1-minute MinIO presigned URLs.
-    Falls back to the original URL if generation fails or the store is not MinIO.
+
+def _rewrite_media_urls(content: str, url_resolver: ContentUrlResolver) -> str:
+    """Rewrite in-document media references to temporary browser-fetchable URLs.
+
+    The `<img>` request carries no bearer token, so the same-origin media route
+    cannot serve it. `ContentUrlResolver` returns either a real presigned URL or an
+    application-signed proxy URL depending on `content_storage.url_strategy` — the
+    caller has already passed the ReBAC check that authorizes this document.
+
+    Never log the produced URL or the rewritten body: both carry credentials.
     """
-    from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
 
-    logger.info("[PRESIGNED] content_store type: %s", type(content_store).__name__)
-    if not isinstance(content_store, MinioStorageBackend):
-        logger.info("[PRESIGNED] not MinIO → skipping presigned URL generation")
-        return content
-
-    matches = _MEDIA_RE.findall(content)
-    logger.info("[PRESIGNED] found %d media reference(s) to replace: %s", len(matches), matches)
-
-    def make_presigned(m: re.Match) -> str:
-        uid = m.group(1)
-        filename = m.group(2)
-        object_key = f"{uid}/output/media/{filename}"
+    def replace(match: re.Match) -> str:
+        object_key = f"{match.group(1)}/output/media/{match.group(2)}"
         try:
-            url = content_store.get_presigned_url(object_key, expires=timedelta(minutes=1))
-            logger.info("[PRESIGNED] generated URL for %s: %s", object_key, url)
-            return url
+            return url_resolver.url_for(object_key, expires=MEDIA_URL_TTL)
         except Exception as e:
-            logger.warning("---------------------------------------[CONTENT] presigned URL failed for %s: %s", object_key, e)
-            return m.group(0)
+            logger.warning("[CONTENT] media URL generation failed for %s: %s", object_key, e)
+            return match.group(0)
 
-    return _MEDIA_RE.sub(make_presigned, content)
+    return _MEDIA_RE.sub(replace, content)
 
 
 class ContentController:
@@ -208,8 +208,7 @@ class ContentController:
             try:
                 logger.info(f"Retrieving full document: {document_uid}")
                 content = await self.service.get_markdown_preview(user, document_uid)
-                content = _replace_with_presigned(content, self.service.content_store)
-                logger.info("-----------------------------------------------------------------------------Markdown with presigned URLs:\n%s", content[:30])
+                content = _rewrite_media_urls(content, ApplicationContext.get_instance().get_content_url_resolver())
                 return {"content": content}
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))

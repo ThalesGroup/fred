@@ -2883,3 +2883,38 @@ Same-invariant guard on an existing route: `DELETE /users/{user_id}` now
 root's Keycloak account would freeze the `platform_admin` population the
 same irreversible way (the uid could never authenticate again while
 bootstrap stays permanently closed).
+
+## 44. Contract Notes — object URL strategy, avatar URL TTL (2026-08-10, #2318)
+
+`Team.avatar_image_url` is still "a temporary URL to the team's avatar object, or
+`null`", but *which kind* of temporary URL is now a deployment choice, and its
+lifetime is shorter:
+
+- **New config field:** `storage.content_storage.url_strategy`, on every member of
+  the discriminated union (`local` / `minio` / `gcs`), default `presigned`.
+  - `presigned` — unchanged behaviour: the storage backend mints the URL
+    (MinIO/S3, or GCS via IAM `signBlob`).
+  - `proxy` — the control-plane mints an application-signed URL
+    `{app.base_url}/objects/{key}?token=…` and streams the bytes itself. For
+    deployments where presigning is unavailable: GCS without
+    `iam.serviceAccounts.signBlob`, or local filesystem storage.
+- **Config validation narrowed, not removed:** `content_storage.type=gcs` still
+  rejects a missing `signing_service_account_email` — but only under
+  `url_strategy=presigned`. That guard is **not** a startup check: the content
+  store is built lazily, so on such a deployment the app boots normally and then
+  answers **500 on every team read** (the avatar URL is minted during the read).
+  Unusable, but not a boot failure — do not expect the pod to crash-loop. Under
+  `proxy` the signing SA is unnecessary and `CONTROL_PLANE_CONTENT_URL_SECRET` is
+  required instead; that one *is* checked at startup, when the proxy route is
+  mounted.
+- **TTL:** the avatar URL is now minted for **60 seconds** (was 1 hour). It is
+  re-minted on every team read, so it only has to survive the render. Applies to
+  both strategies.
+- **No API-surface change:** the field, its type and its consumers are untouched,
+  the proxy route is `include_in_schema=False`, and the generated frontend client
+  is byte-identical in both modes.
+
+Both URLs are time-limited bearer capabilities over one object key — deliberately
+the same security model, so the two modes are interchangeable for every consumer.
+Neither is revocable inside its TTL; the short TTL is the control. Design record:
+`docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md`.

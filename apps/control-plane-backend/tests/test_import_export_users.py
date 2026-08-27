@@ -418,6 +418,7 @@ def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDepende
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),
+        get_content_url_resolver=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=ConversationPolicyCatalog,

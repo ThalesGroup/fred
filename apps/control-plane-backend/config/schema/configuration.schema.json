@@ -181,6 +181,16 @@
           "title": "Type",
           "type": "string"
         },
+        "url_strategy": {
+          "default": "presigned",
+          "description": "How browser-facing object URLs are produced (docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md). 'presigned' asks the storage backend for a real presigned URL \u2014 MinIO/S3, or GCS with a signing service account. 'proxy' mints an application-signed URL served by this backend's read-through object proxy, for deployments where presigning is unavailable (GCS without iam.serviceAccounts.signBlob, local filesystem). 'proxy' requires the CONTROL_PLANE_CONTENT_URL_SECRET signing key; startup fails clearly when it is unset.",
+          "enum": [
+            "presigned",
+            "proxy"
+          ],
+          "title": "Url Strategy",
+          "type": "string"
+        },
         "bucket_name": {
           "default": "control-plane-content",
           "description": "Content store bucket name (suffix '-objects' is used for banner objects)",
@@ -210,7 +220,7 @@
             }
           ],
           "default": null,
-          "description": "Service account email used to sign V4 signed URLs for browser-facing banner/logo images, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
+          "description": "Service account email used to sign V4 signed URLs for browser-facing banner/logo images, via IAM signBlob under Workload Identity (no JSON key). Required when url_strategy='presigned'; startup fails clearly when omitted. Not needed with url_strategy='proxy'. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
           "title": "Signing Service Account Email"
         }
       },
@@ -409,6 +419,16 @@
           "title": "Type",
           "type": "string"
         },
+        "url_strategy": {
+          "default": "presigned",
+          "description": "How browser-facing object URLs are produced (docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md). 'presigned' asks the storage backend for a real presigned URL \u2014 MinIO/S3, or GCS with a signing service account. 'proxy' mints an application-signed URL served by this backend's read-through object proxy, for deployments where presigning is unavailable (GCS without iam.serviceAccounts.signBlob, local filesystem). 'proxy' requires the CONTROL_PLANE_CONTENT_URL_SECRET signing key; startup fails clearly when it is unset.",
+          "enum": [
+            "presigned",
+            "proxy"
+          ],
+          "title": "Url Strategy",
+          "type": "string"
+        },
         "root_path": {
           "default": "~/.fred/control-plane/content-storage",
           "description": "Local storage directory",
@@ -469,6 +489,16 @@
         "type": {
           "const": "minio",
           "title": "Type",
+          "type": "string"
+        },
+        "url_strategy": {
+          "default": "presigned",
+          "description": "How browser-facing object URLs are produced (docs/swift/rfc/CONTENT-URL-STRATEGY-RFC.md). 'presigned' asks the storage backend for a real presigned URL \u2014 MinIO/S3, or GCS with a signing service account. 'proxy' mints an application-signed URL served by this backend's read-through object proxy, for deployments where presigning is unavailable (GCS without iam.serviceAccounts.signBlob, local filesystem). 'proxy' requires the CONTROL_PLANE_CONTENT_URL_SECRET signing key; startup fails clearly when it is unset.",
+          "enum": [
+            "presigned",
+            "proxy"
+          ],
+          "title": "Url Strategy",
           "type": "string"
         },
         "endpoint": {

@@ -211,6 +211,7 @@ def _deps(
             Any, lambda: prompt_category_store or cast(Any, object())
         ),
         get_content_store=cast(Any, object),
+        get_content_url_resolver=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),

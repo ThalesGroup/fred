@@ -60,6 +60,7 @@ def _deps(rebac: _FakeRebac):
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),
+        get_content_url_resolver=cast(Any, object),
         get_session_store=cast(Any, object),
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),

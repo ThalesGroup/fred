@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import Literal
+from typing import Literal, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
@@ -21,12 +21,14 @@ from fred_core.common import read_env_bool
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware
 from fred_core.scheduler import SchedulerBackend
+from fred_core.store import ObjectReader, build_object_proxy_router, read_signing_secret
 from pydantic import BaseModel
 
 from control_plane_backend.app.container import (
     build_application_container,
     initialize_shared_stores,
 )
+from control_plane_backend.app.content_urls import CONTENT_URL_SECRET_ENV
 from control_plane_backend.app.dependencies import (
     attach_application_container,
     get_application_configuration,
@@ -378,6 +380,23 @@ def create_app() -> FastAPI:
     router.include_router(build_evaluations_router())
     router.include_router(build_import_export_router())
     router.include_router(build_kea_migration_router())  # KEA CUTOVER 2026 — delete
+
+    # CONTENT-URL-STRATEGY: the object proxy exists only where the storage backend
+    # cannot mint browser-facing presigned URLs, so `presigned` deployments keep no
+    # dormant unauthenticated route. A missing signing key stops the boot here.
+    if configuration.storage.content_storage.url_strategy == "proxy":
+        # `ContentStore` stays the 2-method write/URL contract it has always been
+        # (CONTENT-URL-STRATEGY RFC §5); the read interface the proxy needs lives in
+        # `ObjectReader`, which every fred-core content store implements (pinned by
+        # fred_core/tests/store/test_object_reader_contract.py).
+        reader = cast(ObjectReader, container.get_content_store())
+        router.include_router(
+            build_object_proxy_router(
+                reader=reader,
+                secret=read_signing_secret(CONTENT_URL_SECRET_ENV),
+            )
+        )
+        logger.info("[MAIN] Object proxy mounted (content_storage.url_strategy=proxy)")
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)
