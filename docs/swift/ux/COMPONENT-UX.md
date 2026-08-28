@@ -2545,13 +2545,6 @@ admin diagnostics.
 
 `UserMessage` + `ActionBar` (copy, optional edit). `.turn` has `position: relative`; hover shows actions. Edit action passes `onEdit` prop through to the action bar.
 
-**Exchange spacing (2026-08-28).** The thread read as one dense block: `ChatMessagesArea`'s
-lane applies a uniform `--spacing-m` gap between every turn, so a question sat as far from its
-own answer as from the next question. A user turn is what opens an exchange, so the extra room
-lives here — `.turn:not(:first-child) { margin-top: var(--spacing-2xl) }` — rather than in the
-lane's gap, which would have pushed answers away from their questions too. The first turn is
-excluded; the lane's own top padding already covers it.
-
 Copy is the same affordance as `AssistantTurn`'s (#2336): `content_copy` flips to `check` for
 2s, no toast, no colour change. A second click inside that window restarts it rather than being
 cut short by the first click's timer, and the pending revert is dropped on unmount. The payload
