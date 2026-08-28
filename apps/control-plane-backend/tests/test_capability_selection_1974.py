@@ -895,6 +895,71 @@ async def test_list_agent_templates_shows_template_when_granted(
     assert [t["template_id"] for t in resp.json()] == ["runtime-a:rags.sample.echo"]
 
 
+@pytest.mark.asyncio
+async def test_list_agent_templates_exposes_default_capability_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    The template summary must carry the template's declared
+    `default_capability_ids` through to the frontend.
+
+    Why: the agent-creation form always submits an EXPLICIT `capability_ids`
+    for a template that advertises capabilities, and an explicit `[]` means
+    "none" in `_apply_capability_selection` — which bypasses its own
+    template-default path entirely. Without this field the form has no way to
+    know what to pre-tick, so a template's declared defaults (e.g.
+    platform_ops' `platform_postgres`) silently arrived unticked on every new
+    instance.
+    """
+
+    _wire_rebac(
+        monkeypatch,
+        {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID, "demo_echo", "probe_echo"}},
+    )
+    app, _store = _setup(monkeypatch, default_capability_ids=["demo_echo"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+
+    assert resp.status_code == 200
+    (template,) = resp.json()
+    assert template["default_capability_ids"] == ["demo_echo"]
+
+
+@pytest.mark.asyncio
+async def test_list_agent_templates_default_ids_stay_unfiltered_by_can_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    `default_capability_ids` reports what the TEMPLATE declares, not what this
+    team may use — `available_capabilities` beside it is the `can_use`-filtered
+    list, and the form intersects the two.
+
+    This asymmetry is the contract: a default the team is not enabled for is
+    absent from `available_capabilities`, so it is never pre-ticked and never
+    rendered, while the declared list stays an honest description of the
+    template. Filtering both would make the field lie about the template.
+    """
+
+    # Granted the template itself, but NOT demo_echo.
+    _wire_rebac(monkeypatch, {"personal": {RAGS_SAMPLE_ECHO_TEMPLATE_ID, "probe_echo"}})
+    app, _store = _setup(monkeypatch, default_capability_ids=["demo_echo"])
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+
+    assert resp.status_code == 200
+    (template,) = resp.json()
+    assert template["default_capability_ids"] == ["demo_echo"]
+    # ...but the ungranted default is not advertised, so the form's
+    # intersection yields an empty pre-tick.
+    advertised = {cap["id"] for cap in template["available_capabilities"]}
+    assert "demo_echo" not in advertised
+    assert advertised == {"probe_echo"}
+
+
 class _FakeTemplateGrantRebac:
     """
     Combines the interfaces `grant_existing_teams_served_templates` needs:

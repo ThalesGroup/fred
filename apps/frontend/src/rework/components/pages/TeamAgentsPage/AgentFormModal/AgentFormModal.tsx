@@ -99,6 +99,38 @@ function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
 }
 
 /**
+ * The capability ids `template` advertises to THIS team.
+ *
+ * Server-side, `available_capabilities` is already filtered to what the team
+ * `can_use` (CAPAB-01), so this set doubles as the authorization boundary: an
+ * admin-gated capability the team is not enabled for is simply absent. Both
+ * the default seeding and the submit payload narrow through it, so the two
+ * cannot drift apart.
+ */
+function advertisedCapabilityIds(template: AgentTemplateSummary | undefined): Set<string> {
+  return new Set((template?.available_capabilities ?? []).map((cap) => cap.id));
+}
+
+/**
+ * The capabilities a NEW instance of `template` starts with ticked: its
+ * declared defaults, narrowed to what it advertises to this team.
+ *
+ * Because `advertisedCapabilityIds` is already `can_use`-filtered, a default
+ * the team is not enabled for is neither seeded nor rendered — there is no
+ * pre-ticked box the save would 403 on, and no second authorization signal is
+ * needed on the wire.
+ *
+ * Why this exists at all: the form always submits an explicit `capability_ids`
+ * for a template that has capabilities, and the backend reads an explicit `[]`
+ * as "none" — which bypasses its own template-default path. Seeding here is
+ * what makes a template's declared defaults actually reach a new instance.
+ */
+export function defaultCapabilitySelection(template: AgentTemplateSummary | undefined): string[] {
+  const advertised = advertisedCapabilityIds(template);
+  return (template?.default_capability_ids ?? []).filter((capabilityId) => advertised.has(capabilityId));
+}
+
+/**
  * Builds the submit payload using the selected template contract so stale
  * capability keys from previous UI versions cannot leak into create or edit
  * requests.
@@ -110,7 +142,7 @@ export function buildAgentFormSubmitPayload(
   // Only active capabilities are advertised by the template; drop selections and
   // config slices for ids the template no longer exposes, and for capabilities
   // that are not currently ticked, so deselected config never reaches the pod.
-  const availableCapabilityIds = new Set((selectedTemplate?.available_capabilities ?? []).map((cap) => cap.id));
+  const availableCapabilityIds = advertisedCapabilityIds(selectedTemplate);
   const effectiveCapabilityIds = form.selectedCapabilityIds.filter((id) => availableCapabilityIds.has(id));
   const effectiveCapabilityConfig = Object.fromEntries(
     Object.entries(form.capabilityConfigValues).filter(([id]) => effectiveCapabilityIds.includes(id)),
@@ -254,7 +286,7 @@ export default function AgentFormModal({
       reasoningEnabled: false,
       reasoningDefaultOn: false,
       tuningValues: defaultTuningValues,
-      selectedCapabilityIds: [],
+      selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
       capabilityAssetFiles: {},
       capabilityBlockingErrors: {},

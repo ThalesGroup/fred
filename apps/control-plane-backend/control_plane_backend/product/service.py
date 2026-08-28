@@ -1580,6 +1580,14 @@ async def list_agent_templates(
                     available_capabilities=filter_entries_by_usable(
                         template.available_capabilities, usable_ids
                     ),
+                    # Unfiltered on purpose: this is the template's DECLARED
+                    # default list, and `available_capabilities` above is
+                    # already narrowed to what this team `can_use`. The
+                    # agent-creation form intersects the two, so a default the
+                    # team is not enabled for is never pre-ticked (and never
+                    # rendered) — same result as filtering here, without
+                    # making the field lie about what the template declares.
+                    default_capability_ids=list(template.default_capability_ids),
                 )
             )
     return templates

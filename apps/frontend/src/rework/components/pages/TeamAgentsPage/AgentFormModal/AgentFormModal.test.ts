@@ -3,7 +3,11 @@ import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { buildAgentFormSubmitPayload, extractCapabilityConfigValues } from "./AgentFormModal";
+import {
+  buildAgentFormSubmitPayload,
+  defaultCapabilitySelection,
+  extractCapabilityConfigValues,
+} from "./AgentFormModal";
 
 function makeCapabilityTemplate(capabilityIds: string[]): AgentTemplateSummary {
   return {
@@ -26,6 +30,34 @@ const EMPTY_CAPABILITY_STATE = {
   capabilityAssetFiles: {} as Record<string, Record<string, File | undefined>>,
   capabilityBlockingErrors: {} as Record<string, string | null>,
 };
+
+describe("defaultCapabilitySelection", () => {
+  it("pre-ticks the template's declared defaults", () => {
+    const template = {
+      ...makeCapabilityTemplate(["platform_postgres", "other_tool"]),
+      default_capability_ids: ["platform_postgres"],
+    };
+
+    expect(defaultCapabilitySelection(template)).toEqual(["platform_postgres"]);
+  });
+
+  it("drops a default the template does not advertise to this team", () => {
+    // `available_capabilities` is `can_use`-filtered server-side, so an
+    // admin-gated default the team is not enabled for arrives absent from it.
+    // It must not be pre-ticked — the save would 403 on an explicit selection.
+    const template = {
+      ...makeCapabilityTemplate(["other_tool"]),
+      default_capability_ids: ["platform_postgres"],
+    };
+
+    expect(defaultCapabilitySelection(template)).toEqual([]);
+  });
+
+  it("returns nothing for a template declaring no defaults, or no template", () => {
+    expect(defaultCapabilitySelection(makeCapabilityTemplate(["other_tool"]))).toEqual([]);
+    expect(defaultCapabilitySelection(undefined)).toEqual([]);
+  });
+});
 
 describe("buildAgentFormSubmitPayload", () => {
   it("trims display name, role, description, and usage statement on create submit", () => {

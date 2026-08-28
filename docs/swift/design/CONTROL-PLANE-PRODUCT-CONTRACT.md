@@ -278,6 +278,10 @@ Two distinct concepts:
 - `display_name`, `description`, `category`
 - `tags`, `capabilities`, `team_instantiable`, `status`
 - `default_tuning_fields: list[ManagedAgentFieldSpec]` — field descriptors the frontend renders dynamically at enrollment
+- `default_capability_ids: list[str]` — **added 2026-08-28 (#2458).** The
+  capability ids the template activates by default, verbatim from the pod's
+  `definition.default_mcp_servers`. Deliberately NOT filtered by the team's
+  `can_use`, unlike `available_capabilities` beside it — see §45.
 - `mcp_servers: list[ManagedMcpServerRef]` — MCP tool references advertised by the template; `display_name` enriched from the pod's MCP catalog; `config_fields` for per-instance tool configuration declared by the tool catalog
 
 The control plane is a **pure proxy** for these values — it does not interpret them. The runtime pod is the author; the control plane aggregates and forwards.
@@ -2941,3 +2945,38 @@ default and reported `"public"`) — truthful for a space that was never
 marketplace-listed and never readable by non-members. Joining-mode UI
 consequence (already shipped in #2398): a new team's settings show the
 locked "manual only" joining state until it is made public.
+
+---
+
+## 45. Contract Notes — `AgentTemplateSummary.default_capability_ids` (2026-08-28, issue #2458)
+
+**What changed.** `GET /teams/{team_id}/agent-templates` now returns
+`default_capability_ids: list[str]` on every `AgentTemplateSummary`. Additive
+and optional — an older client ignoring it is unaffected.
+
+**Why.** The agent-creation form always submits an EXPLICIT `capability_ids`
+whenever the template advertises any capability, and an explicit `[]` means
+"select nothing" in `_apply_capability_selection` (§ capability selection;
+RFC AGENT-CAPABILITY §8.1). The template-default path there only runs for a
+`None` selection, so it was unreachable from the UI: a template's declared
+defaults were silently dropped on every new instance, and the user had to
+tick them by hand. Found on `platform_ops`, whose sole default is
+`platform_postgres` (#2458); it affected every template with defaults,
+including `general_assistant`'s `document_access`.
+
+**The filtering asymmetry — deliberate.** `available_capabilities` on the same
+payload IS narrowed to what the team `can_use` (CAPAB-01 / #1980);
+`default_capability_ids` is NOT. The field describes what the *template*
+declares, which is a static, non-secret property of a template the team was
+already granted in order to see the summary at all. The client intersects the
+two, so an admin-gated default a team is not enabled for is neither pre-ticked
+nor rendered — the intersection, not the raw list, is the authorization
+boundary. Filtering both would make the field misreport the template; filtering
+neither would pre-tick a box whose save 403s.
+
+**Applies to new instances only.** An instance enrolled before this field
+existed persisted a genuine `selected_capability_ids: []`, which is
+indistinguishable from a deliberate "no capabilities" — so
+`materialize_default_capability_selections` skips it by design (it backfills
+`None` rows only). Existing agents do not gain their template's defaults
+retroactively and must be re-ticked by hand.

@@ -2455,6 +2455,10 @@ export type AgentTemplateSummary = {
   default_tuning_fields?: ManagedAgentFieldSpec[];
   /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
+  /** Capability ids this template activates by default (RFC AGENT-CAPABILITY §2), verbatim from the pod's `definition.default_mcp_servers` — MCP-derived and native ids alike. Unlike `available_capabilities` this list is NOT filtered by the team's `can_use`: intersect the two client-side to get the defaults a team may actually activate. The agent-creation form uses it to pre-tick a new instance's capabilities so a template's declared defaults are not silently dropped by an explicit empty selection.
+    
+    Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
+  default_capability_ids?: string[];
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {

@@ -1511,6 +1511,7 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "status": "available",
             "default_tuning_fields": [],
             "available_capabilities": [],
+            "default_capability_ids": [],
         }
     ]
 
