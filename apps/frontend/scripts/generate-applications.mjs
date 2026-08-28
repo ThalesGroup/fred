@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import * as csstree from "css-tree";
-import ts from "typescript";
 
 const MANIFEST_FILENAME = "fred-app.json";
 const FRONTEND_DIRECTORY_NAME = "frontend";
@@ -187,7 +185,10 @@ function digest(value) {
     .digest("hex")}`;
 }
 
-export async function discoverApplications(applicationsDirectory = DEFAULT_PATHS.applicationsDirectory) {
+export async function discoverApplications(
+  applicationsDirectory = DEFAULT_PATHS.applicationsDirectory,
+  { validateFrontendSources = true } = {},
+) {
   if (!existsSync(applicationsDirectory)) {
     return [];
   }
@@ -228,7 +229,9 @@ export async function discoverApplications(applicationsDirectory = DEFAULT_PATHS
       throw new Error(`${manifestPath}: invalid JSON: ${detail}`);
     }
     const manifest = validateManifest(parsed, { directoryName: entry.name, source: manifestPath });
-    await validateApplicationImports(frontendDirectory);
+    if (validateFrontendSources) {
+      await validateApplicationImports(frontendDirectory);
+    }
     applications.push({ directoryName: entry.name, manifest });
   }
   return applications;
@@ -286,7 +289,7 @@ function validateModuleSpecifier(specifier, sourcePath, applicationDirectory) {
   );
 }
 
-function validateTypeScriptImports(source, sourcePath, applicationDirectory) {
+function validateTypeScriptImports(source, sourcePath, applicationDirectory, ts) {
   const sourceFile = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true);
 
   function validateNode(node) {
@@ -365,7 +368,7 @@ function validateStylesheetResource(resource, sourcePath, applicationDirectory) 
   );
 }
 
-function validateApplicationStylesheet(source, sourcePath, applicationDirectory) {
+function validateApplicationStylesheet(source, sourcePath, applicationDirectory, csstree) {
   let stylesheet;
   try {
     stylesheet = csstree.parse(source, { context: "stylesheet" });
@@ -430,25 +433,35 @@ function validateApplicationStylesheet(source, sourcePath, applicationDirectory)
   });
 }
 
-async function validateApplicationImports(applicationDirectory, currentDirectory = applicationDirectory) {
+let frontendValidationDependenciesPromise;
+
+async function loadFrontendValidationDependencies() {
+  frontendValidationDependenciesPromise ??= Promise.all([import("css-tree"), import("typescript")]).then(
+    ([csstree, typescript]) => ({ csstree, ts: typescript.default }),
+  );
+  return frontendValidationDependenciesPromise;
+}
+
+async function validateApplicationImports(applicationDirectory, currentDirectory = applicationDirectory, dependencies) {
+  const validators = dependencies ?? (await loadFrontendValidationDependencies());
   const entries = await readdir(currentDirectory, { withFileTypes: true });
   for (const entry of entries.sort((left, right) => compareStrings(left.name, right.name))) {
     const entryPath = resolve(currentDirectory, entry.name);
     assert(!entry.isSymbolicLink(), `${entryPath}: symbolic links are not allowed in an application module`);
     if (entry.isDirectory()) {
-      await validateApplicationImports(applicationDirectory, entryPath);
+      await validateApplicationImports(applicationDirectory, entryPath, validators);
       continue;
     }
     if (/\.(?:css|scss|sass|less|styl)$/i.test(entry.name)) {
       assert(entry.name.endsWith(".module.css"), `${entryPath}: application styles must use .module.css`);
       const stylesheet = await readFile(entryPath, "utf8");
-      validateApplicationStylesheet(stylesheet, entryPath, applicationDirectory);
+      validateApplicationStylesheet(stylesheet, entryPath, applicationDirectory, validators.csstree);
       continue;
     }
     if (!/\.(?:[cm]?[jt]sx?)$/.test(entry.name)) {
       continue;
     }
-    validateTypeScriptImports(await readFile(entryPath, "utf8"), entryPath, applicationDirectory);
+    validateTypeScriptImports(await readFile(entryPath, "utf8"), entryPath, applicationDirectory, validators.ts);
   }
 }
 
@@ -585,7 +598,13 @@ async function writeOrCheck(path, expected, check) {
   }
 
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, expected, "utf8");
+  const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, expected, { encoding: "utf8", flag: "wx" });
+    await rename(temporaryPath, path);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 }
 
 export async function generateApplications({
@@ -594,12 +613,20 @@ export async function generateApplications({
   runtimeOutput = DEFAULT_PATHS.runtimeOutput,
   controlPlaneOutput = DEFAULT_PATHS.controlPlaneOutput,
   check = false,
+  includeFrontend = true,
+  includeRuntime = true,
   includeControlPlane = true,
 } = {}) {
-  const applications = await discoverApplications(applicationsDirectory);
+  const applications = await discoverApplications(applicationsDirectory, {
+    validateFrontendSources: includeFrontend,
+  });
   const artifacts = buildArtifacts(applications, { applicationsDirectory, frontendOutput });
-  await writeOrCheck(frontendOutput, artifacts.frontend, check);
-  await writeOrCheck(runtimeOutput, artifacts.runtime, check);
+  if (includeFrontend) {
+    await writeOrCheck(frontendOutput, artifacts.frontend, check);
+  }
+  if (includeRuntime) {
+    await writeOrCheck(runtimeOutput, artifacts.runtime, check);
+  }
   if (includeControlPlane) {
     await writeOrCheck(controlPlaneOutput, artifacts.controlPlane, check);
   }
@@ -608,11 +635,17 @@ export async function generateApplications({
 
 async function main() {
   const args = process.argv.slice(2);
-  const unknownArgs = args.filter((arg) => arg !== "--check" && arg !== "--frontend-only");
+  const knownArgs = new Set(["--check", "--frontend-only", "--control-plane-only"]);
+  const unknownArgs = args.filter((arg) => !knownArgs.has(arg));
   assert(unknownArgs.length === 0, `unsupported arguments: ${unknownArgs.join(" ")}`);
+  const frontendOnly = args.includes("--frontend-only");
+  const controlPlaneOnly = args.includes("--control-plane-only");
+  assert(!(frontendOnly && controlPlaneOnly), "--frontend-only and --control-plane-only cannot be combined");
   await generateApplications({
     check: args.includes("--check"),
-    includeControlPlane: !args.includes("--frontend-only"),
+    includeFrontend: !controlPlaneOnly,
+    includeRuntime: !controlPlaneOnly,
+    includeControlPlane: !frontendOnly,
   });
 }
 

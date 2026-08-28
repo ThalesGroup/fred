@@ -62,12 +62,16 @@ build: check-node node_modules ## Production build (Vite/Rollup) into dist/ — 
 	npm run build
 
 .PHONY: generate-applications
-generate-applications: node_modules ## Generate the frontend registry and control-plane catalog from installed application manifests
+generate-applications: node_modules ## Generate tracked frontend application artifacts and the local Control Plane catalog
 	npm run applications:generate
 
+.PHONY: generate-control-plane-application-catalog
+generate-control-plane-application-catalog: check-node ## Generate only the local Control Plane application catalog
+	npm run applications:generate-control-plane
+
 .PHONY: check-applications
-check-applications: node_modules ## Check that installed application manifests are valid and generated catalogs are current
-	npm run applications:check-all
+check-applications: node_modules ## Check manifests and tracked frontend application artifacts
+	npm run applications:check
 
 .PHONY: helm-package
 helm-package: ## Package the frontend Helm chart into a .tgz archive
@@ -113,7 +117,7 @@ run: check-node node_modules ## Start the local Vite dev server on :5173 (HMR; p
 ##@ Code quality
 
 .PHONY: type-check
-type-check: node_modules check-applications ## Check application catalogs, then type-check with tsc (no files emitted)
+type-check: node_modules check-applications ## Check application artifacts, then type-check with tsc (no files emitted)
 	npx tsc --noEmit
 
 .PHONY: format-check

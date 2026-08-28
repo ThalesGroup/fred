@@ -111,8 +111,11 @@ to `false`.
 installation manifest. Each package keeps that manifest beside a `frontend/`
 module and an optional `backend/` service boundary. One generator derives the
 frontend registry, localized resources, runtime service contract, and packaged
-control-plane catalog. Those generated files must match the manifests in
-quality gates and must never be edited independently.
+control-plane catalog. The frontend registry and runtime service contract are
+tracked generated artifacts and must match the manifests in quality gates. The
+Control Plane catalog is Git-ignored and regenerated before Control Plane
+builds, tests, packaging, and image creation. It must never be committed or
+edited independently.
 
 The manifest declares only identity, display metadata, version compatibility,
 and `service_required`. It cannot carry an upstream address, token, credential,

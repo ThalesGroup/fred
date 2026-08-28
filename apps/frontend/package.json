@@ -19,8 +19,8 @@
     "test": "npm run applications:test && vitest run",
     "test:coverage": "npm run applications:test && vitest run --coverage",
     "applications:generate": "node scripts/generate-applications.mjs",
+    "applications:generate-control-plane": "node scripts/generate-applications.mjs --control-plane-only",
     "applications:check": "node scripts/generate-applications.mjs --check --frontend-only",
-    "applications:check-all": "node scripts/generate-applications.mjs --check",
     "applications:test": "node --test scripts/generate-applications.test.mjs scripts/application-service-proxy.test.mjs scripts/application-source-paths.test.mjs && sh tests/application-service-proxy-smoke.sh"
   },
   "dependencies": {

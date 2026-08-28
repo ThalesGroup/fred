@@ -26,6 +26,7 @@ dist/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
+apps/control-plane-backend/control_plane_backend/applications/catalog.generated.json
 
 # Ignore environment files
 **/.env

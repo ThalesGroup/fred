@@ -33,6 +33,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Setup Node.js for application catalog generation
+        if: ${{ matrix.app == 'control-plane-backend' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+
       - uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies

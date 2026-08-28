@@ -34,8 +34,9 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "build_backend"
+backend-path = ["."]
 
 [tool.setuptools.packages.find]
 include = ["control_plane_backend*"]
@@ -61,6 +62,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "ruff>=0.12.5",
+  "setuptools>=64.0",
 ]
 
 [tool.alembic]

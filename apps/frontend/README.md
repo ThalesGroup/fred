@@ -47,6 +47,12 @@ package groups its manifest and `frontend/` module with an optional `backend/`
 directory for an independently built service. The included placeholder is
 service-free and has no backend runtime.
 
+After changing an application package, run `make generate-applications` and
+commit the refreshed frontend registry and runtime service contract. The same
+command also materializes the local Control Plane catalog, but that catalog is
+ignored and must not be committed. Control Plane test, package, and image build
+paths recreate it automatically from the application manifests.
+
 Service-backed bundled applications use the same server-side service map in
 local Vite and the nginx container:
 

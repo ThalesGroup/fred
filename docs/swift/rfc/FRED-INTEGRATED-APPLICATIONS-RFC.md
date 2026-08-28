@@ -54,9 +54,12 @@ V1 includes:
   frontend's nginx container, with startup validation, upstream TLS
   verification, and container smoke coverage
 
-The immutable generated catalog is the V1 installation record. Durable
-registration tombstones, explicit same-id reactivation, and release lifecycle
-management are outside V1 and follow the deferred contract in §7.4.
+The immutable packaged catalog is the V1 installation record. It is generated
+deterministically from the versioned application manifests during Control Plane
+build and packaging, excluded from source control, and shipped with the Control
+Plane artifact. Durable registration tombstones, explicit same-id reactivation,
+and release lifecycle management are outside V1 and follow the deferred
+contract in §7.4.
 
 ## 2. Problem
 
@@ -206,7 +209,7 @@ The build derives stable i18n keys from the id, generates the frontend locale
 resources, and projects those string keys into the existing capability
 `name`/`description` fields. The shared fields do not change type.
 
-### 6.2 One source, two generated consumers
+### 6.2 One source, three generated artifacts
 
 V1 discovers packages only from this installation boundary:
 
@@ -230,12 +233,20 @@ part of the frontend registry or control-plane catalog.
 
 That explicit, allowlisted manifest set generates:
 
-1. a frontend registry with statically analyzable lazy imports; and
-2. a JSON catalog artifact packaged for control-plane.
+1. a tracked frontend registry with statically analyzable lazy imports and
+   localized resources;
+2. a tracked runtime service contract used by the frontend gateway; and
+3. a JSON catalog artifact generated into an ignored path and packaged for
+   control-plane.
 
-Both outputs carry a catalog revision for diagnostics and a normalized
-`contract_digest` per application. Neither is maintained by hand. At runtime
-Fred renders only the intersection of:
+All three carry the same catalog revision for diagnostics. The frontend
+registry and Control Plane catalog carry a normalized `contract_digest` per
+application; the runtime service contract carries the application id and
+`service_required` map needed by the gateway. None is maintained by hand. The
+frontend registry and runtime service contract are regenerated after
+application package changes. Control Plane build, test, packaging, and image
+paths recreate the ignored catalog automatically. At runtime Fred renders only
+the intersection of:
 
 - the control-plane application summary
 - the local generated module registry

@@ -191,6 +191,37 @@ describe("application manifest generation", () => {
     );
   });
 
+  test("control-plane-only generation writes no frontend artifacts", async () => {
+    const workspace = await createWorkspace();
+    await installApplication(workspace.applicationsDirectory, "example", manifest());
+
+    const artifacts = await generateApplications({
+      ...workspace,
+      includeFrontend: false,
+      includeRuntime: false,
+    });
+
+    assert.deepEqual(JSON.parse(await readFile(workspace.controlPlaneOutput, "utf8")), {
+      schema_version: "1",
+      catalog_revision: artifacts.catalogRevision,
+      items: artifacts.catalogItems,
+    });
+    await assert.rejects(readFile(workspace.frontendOutput, "utf8"), { code: "ENOENT" });
+    await assert.rejects(readFile(workspace.runtimeOutput, "utf8"), { code: "ENOENT" });
+  });
+
+  test("concurrent generation leaves complete deterministic artifacts", async () => {
+    const workspace = await createWorkspace();
+    await installApplication(workspace.applicationsDirectory, "example", manifest());
+
+    const generations = await Promise.all(Array.from({ length: 8 }, () => generateApplications(workspace)));
+
+    assert.ok(generations.every(({ controlPlane }) => controlPlane === generations[0].controlPlane));
+    assert.equal(await readFile(workspace.controlPlaneOutput, "utf8"), generations[0].controlPlane);
+    assert.equal(await readFile(workspace.frontendOutput, "utf8"), generations[0].frontend);
+    assert.equal(await readFile(workspace.runtimeOutput, "utf8"), generations[0].runtime);
+  });
+
   test("discovery requires a matching module at the installation boundary", async () => {
     const workspace = await createWorkspace();
     const directory = resolve(workspace.applicationsDirectory, "example");

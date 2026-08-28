@@ -223,6 +223,9 @@ secrets/openai-api-key.sh
 # OpenAPI specs
 openapi.json
 
+# Build-generated Control Plane application catalog
+apps/control-plane-backend/control_plane_backend/applications/catalog.generated.json
+
 # evaluation results
 /developer_tools/evaluation_results/
 

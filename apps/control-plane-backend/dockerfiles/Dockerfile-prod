@@ -1,4 +1,17 @@
 # -----------------------------------------------------------------------------
+# APPLICATION CATALOG STAGE
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/node:22.13.0 AS application-catalog
+
+WORKDIR /workspace/apps/frontend
+
+COPY apps/frontend/scripts/generate-applications.mjs ./scripts/generate-applications.mjs
+COPY apps/frontend/src/rework/components/shared/utils/Type.ts ./src/rework/components/shared/utils/Type.ts
+COPY apps/applications /workspace/apps/applications
+
+RUN node scripts/generate-applications.mjs --control-plane-only
+
+# -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
 FROM mirror.gcr.io/python:3.12.13-slim AS builder
@@ -18,8 +31,10 @@ WORKDIR /workspace/apps/control-plane-backend
 
 COPY apps/control-plane-backend/Makefile ./
 COPY apps/control-plane-backend/pyproject.toml apps/control-plane-backend/uv.lock* ./
+COPY apps/control-plane-backend/build_backend.py apps/control-plane-backend/MANIFEST.in ./
 COPY apps/control-plane-backend/README.md ./
 COPY apps/control-plane-backend/control_plane_backend ./control_plane_backend
+COPY --from=application-catalog /workspace/apps/control-plane-backend/control_plane_backend/applications/catalog.generated.json ./control_plane_backend/applications/catalog.generated.json
 COPY scripts/makefiles /workspace/scripts/makefiles
 COPY libs/fred-core /workspace/libs/fred-core
 COPY libs/fred-sdk /workspace/libs/fred-sdk
@@ -48,12 +63,16 @@ WORKDIR /app
 # `make dev` installs the local projects in editable mode, so the runtime image
 # must keep the same source roots available under `/workspace/...`.
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/pyproject.toml /workspace/apps/control-plane-backend/pyproject.toml
+COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/build_backend.py /workspace/apps/control-plane-backend/build_backend.py
+COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/MANIFEST.in /workspace/apps/control-plane-backend/MANIFEST.in
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/README.md /workspace/apps/control-plane-backend/README.md
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/control_plane_backend /workspace/apps/control-plane-backend/control_plane_backend
+COPY --from=application-catalog --chown=${USER_ID}:${GROUP_ID} /workspace/apps/control-plane-backend/control_plane_backend/applications/catalog.generated.json /workspace/apps/control-plane-backend/control_plane_backend/applications/catalog.generated.json
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 
 COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/. /app/
+COPY --from=application-catalog --chown=${USER_ID}:${GROUP_ID} /workspace/apps/control-plane-backend/control_plane_backend/applications/catalog.generated.json /app/control_plane_backend/applications/catalog.generated.json
 
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy

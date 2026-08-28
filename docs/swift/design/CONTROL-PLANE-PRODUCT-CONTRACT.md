@@ -2950,15 +2950,17 @@ installation record. The same package contains the build-time module under
 `frontend/` and may reserve `backend/` for an independently built application
 service. Generation produces a literal frontend lazy-loader registry and the
 packaged control-plane catalog with matching application version, host API
-version, per-app contract digest, and catalog revision. Control-plane never
-returns a module path or service upstream.
+version, per-app contract digest, and catalog revision. The catalog is generated
+from the versioned manifests during Control Plane build and packaging and is not
+source-controlled. Control-plane never returns a module path or service
+upstream.
 
 The typed deployment-wide `enableApplications` feature gate defaults to
 `false`. It is an availability boundary, not an authorization relation. While
 off, the team application endpoint returns a generic not-found response,
 application entries are absent from the administration catalog, application
 mutations cannot write relations, the frontend does not mount application
-pages or navigation, and `/app-services` paths return 404. Generated manifests
+pages or navigation, and `/app-services` paths return 404. Installed manifests
 and existing grants remain installed but dormant. Effective access is therefore:
 
 ```text
@@ -3017,8 +3019,9 @@ request buffering. Application services remain responsible for equal or
 smaller per-request limits, aggregate concurrency bounds, and authorization
 before consuming a request body.
 
-The V1 catalog source is the immutable generated artifact. Removing a manifest
-therefore makes it unavailable even if a grant remains. Durable tombstones,
-admin-visible stale-grant cleanup after removal, and `pending_reactivation` on
-id reappearance are deferred lifecycle requirements in the integrated
-applications RFC.
+The V1 catalog source is the immutable packaged artifact generated during each
+Control Plane build from the versioned application manifests. Removing a
+manifest therefore makes the application unavailable after rebuild even if a
+grant remains. Durable tombstones, admin-visible stale-grant cleanup after
+removal, and `pending_reactivation` on id reappearance are deferred lifecycle
+requirements in the integrated applications RFC.

@@ -16,6 +16,20 @@ include ../../scripts/makefiles/help.mk
 ENV_FILE := $(ROOT_DIR)/config/.env
 export ENV_FILE
 
+.PHONY: generate-application-catalog
+generate-application-catalog: ## Generate the ignored Control Plane application catalog from installed manifests
+	$(MAKE) -C ../frontend generate-control-plane-application-catalog
+
+.PHONY: clean-application-catalog
+clean-application-catalog:
+	rm -f control_plane_backend/applications/catalog.generated.json
+
+clean: clean-application-catalog
+
+# These targets consume application metadata directly or construct the app.
+cli run-local run-worker run-worker-prod generate-openapi code-quality test list-tests test-one \
+	check-route-security test-integration-only test-integration test-integration-postgres: generate-application-catalog
+
 ##@ Dev Helpers
 
 CONTROL_PLANE_BASE_URL ?= http://localhost:8222/control-plane/v1

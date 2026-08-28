@@ -12,9 +12,10 @@ This guide is for teams that deploy Fred under their own branding or with organi
 > `apps/applications/<application-id>/`, or an independent agent pod.
 
 If this rule is followed, future upstream merges do not conflict on Fred's
-handwritten code. Generated application catalogs may need to be regenerated
-after a merge; they are derived artifacts, not a place for manual conflict
-resolution.
+handwritten code. Tracked frontend application artifacts may need to be
+regenerated after a merge; they are derived artifacts, not a place for manual
+conflict resolution. The Control Plane application catalog is untracked and is
+generated automatically by its build, test, and packaging paths.
 
 If this rule is broken, every merge becomes a manual conflict resolution exercise. Over time the fork drifts, the team stops merging, and the fork becomes an unmaintained dead-end.
 
@@ -115,9 +116,12 @@ make generate-applications
 make check-applications
 ```
 
-Generation produces the statically allowlisted frontend registry, translations,
-runtime service contract, and packaged control-plane catalog from that one
-manifest set. Do not hand-edit those outputs. The deployment must set
+Generation refreshes the tracked statically allowlisted frontend registry,
+translations, and runtime service contract. It also materializes the local
+Control Plane catalog from the same manifest set. Commit the tracked frontend
+outputs, but never hand-edit or commit the ignored Control Plane catalog. The
+Control Plane recreates its catalog automatically before builds, tests,
+packaging, and image creation. The deployment must set
 `applications.control-plane-backend.configuration.platform.frontend.feature_flags.enableApplications`
 to `true` before the Apps surface is available. The Fred Helm chart treats that
 control-plane value as the single authoritative setting and derives the
@@ -175,15 +179,16 @@ git merge develop
 
 # Expected result: no conflicts on Fred-owned handwritten source.
 # Your contrib/ and uniquely named application directories are untouched.
-# If generated application catalogs changed upstream, regenerate them.
+# If tracked frontend application artifacts changed upstream, regenerate them.
 # Review, test, and promote to your production branch as usual.
 ```
 
 If you encounter a conflict on a handwritten source file, treat it as a bug —
 either in your fork (an override that should not exist) or in Fred (a missing
-extension point). A conflict in a generated application artifact is resolved
-by keeping the manifests/modules and rerunning `make generate-applications`,
-never by editing the generated output.
+extension point). A conflict in a tracked frontend application artifact is
+resolved by keeping the manifests/modules and rerunning
+`make generate-applications`, never by editing the generated output. The
+ignored Control Plane catalog cannot create a merge conflict.
 
 ---
 
@@ -196,4 +201,4 @@ never by editing the generated output.
 - [ ] No `.tsx`, `.ts`, `.scss`, or `.json` file from `src/` exists in your fork's overlay
 - [ ] Product UI code, if any, is isolated under `apps/applications/<application-id>/frontend/` and passes `make check-applications`
 - [ ] Agent code (Meridian only) is isolated under `contrib/<your-brand>/` and registered via Helm, not via source patches
-- [ ] `git merge develop` has no handwritten-source conflicts; generated application artifacts are regenerated when needed
+- [ ] `git merge develop` has no handwritten-source conflicts; tracked frontend application artifacts are regenerated when needed and the Control Plane catalog remains untracked

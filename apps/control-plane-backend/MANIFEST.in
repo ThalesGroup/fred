@@ -1,0 +1,2 @@
+include build_backend.py
+include control_plane_backend/applications/catalog.generated.json
