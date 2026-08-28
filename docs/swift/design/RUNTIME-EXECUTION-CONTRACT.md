@@ -4233,3 +4233,66 @@ the new dim is `term`-aggregatable on existing indexes with no migration.
 /kpi/presets/conversation_depth`) — a `terms` agg on `dims.session_id` behind an
 `exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
 one bucket.
+
+### 8.59 ✅ `knowledge.similarity_search` built-in tool ref - issue #2461 (2026-08-28)
+
+**Was**: Knowledge Flow shipped targeted similarity / comparison search in
+`POST /vector/similarity-search` (issue #1772, `DESIGN.md` §4), but a Fred agent
+could only reach it over the Text MCP server. There was no native tool ref, so
+the mode had no equivalent of `knowledge.search`'s first-order path and #1772's
+last acceptance criterion - a comparison agent calling it directly instead of
+fetching everything and filtering client-side - stayed open.
+
+**Now**: `TOOL_REF_SIMILARITY_SEARCH` (`knowledge.similarity_search`) joins the
+`fred-sdk` built-in catalog with `SimilaritySearchToolArgs` (`anchor`,
+`document_uids`, `top_k` 1-50, `rerank` default on, optional `min_score`) on the
+`TOOL_INVOKER` backend, and `FredKnowledgeSearchToolInvoker` gained
+`_invoke_similarity_search`. Ported from the `mvp/rags-support` branch, detached
+from that branch's graph-capability bridge and rags UI work.
+
+One deliberate difference from `_invoke_knowledge_search`, and one deliberate
+sameness:
+
+- **A weak hit stays citable**: `select_citable_sources(hits,
+  min_score_ratio=0.0)`. `select_citable_sources` excludes two things
+  (RAG-DATASET-DISCOVERY-RFC.md §7) and only one of them applies here.
+  Dataset-pointer chunks are still never citable - they are metadata, not
+  content, whatever the caller asked for. The score-ratio half is switched off:
+  it exists to cut corpus-wide noise relative to the best match, and the caller
+  named the target documents, so a low-scoring hit is a real comparison result.
+  Passing `min_score_ratio=0.0` rather than `tuple(hits)` is what keeps the
+  first exclusion - the distinction is easy to lose.
+- **`general_only` is honoured**, exactly as in `_invoke_knowledge_search`:
+  corpus retrieval turned off for the turn is off for every corpus tool, and
+  naming target uids does not opt back in.
+
+**Targeting is required and narrowed to `document_uids`.** An empty or non-list
+`document_uids` raises rather than widening to a corpus search - targeting is
+the whole point of the mode. Folder targets (`document_library_tags_ids`), which
+the REST contract accepts, stay MCP-only until an agent needs them. Argument
+coercion enforces the declared bounds, which nothing between the handler and
+Knowledge Flow re-checks: `top_k` over 50 clamps, at or below zero falls back to
+the default, and `bool` is excluded from both numeric fields (it is an `int`
+subclass, so `min_score: true` would otherwise become `1.0` and filter out every
+hit).
+
+**Bounded transient retry**, in `VectorSearchClient.similarity_search` only:
+`KfBaseClient._request_with_token_refresh` retries a 401 and nothing else, and no
+caller above retries either, so one dropped connection failed a whole comparison
+run - which fans out one call per anchor passage. Two jittered retries, and only
+where no work is in flight: connection errors, connect timeouts, and 5xx. A
+read/write/pool timeout is deliberately NOT retried - Knowledge Flow may still
+be reranking the first request, and re-issuing multiplies load on an
+already-slow backend rather than recovering, which this mode's fan-out then
+multiplies again. A 4xx is never retried. Scoped to this method rather than the
+shared base client so `search`/`rerank` keep their current behaviour.
+
+**Nested-payload argument reading.** Both invokers accept tool arguments either
+flat or wrapped in a `payload` key, since providers differ. The pattern
+`payload.get(key, default)` followed by an `is None` fallback silently never
+reaches the nested dict for any field with a non-None default: the default
+itself satisfies the check. `_invoke_similarity_search` applies the default
+after both lookups instead, so nested `top_k`/`rerank`/`min_score` are honoured.
+`_invoke_knowledge_search` still has the original shape (its nested `top_k` is
+dropped in favour of the default `8`) - left alone here to keep this change a
+port, worth a follow-up.

@@ -94,6 +94,7 @@ from fred_sdk.contracts.runtime import (
 from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
+    TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 from langchain_core.tools import BaseTool
@@ -877,6 +878,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         )
         self._builtins: dict[str, ToolHandler] = {
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
+            TOOL_REF_SIMILARITY_SEARCH: self._invoke_similarity_search,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
             TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
         }
@@ -981,6 +983,119 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
             sources=select_citable_sources(hits),
+        )
+
+    async def _invoke_similarity_search(
+        self, request: ToolInvocationRequest
+    ) -> ToolInvocationResult:
+        payload = request.payload
+        nested_payload = payload.get("payload")
+        nested_dict = nested_payload if isinstance(nested_payload, dict) else None
+
+        # The default is applied last, after both lookups: reading it inside
+        # `payload.get` would make any field with a non-None default (top_k,
+        # rerank) shadow its nested counterpart and never fall through.
+        def _field(key: str, default: object = None) -> object:
+            value = payload.get(key)
+            if value is None and nested_dict is not None:
+                value = nested_dict.get(key)
+            return default if value is None else value
+
+        anchor = _field("anchor")
+        if not isinstance(anchor, str) or not anchor.strip():
+            raise RuntimeError(
+                "knowledge.similarity_search requires a non-empty anchor"
+            )
+
+        document_uids = _field("document_uids")
+        if not isinstance(document_uids, list) or not document_uids:
+            raise RuntimeError(
+                "knowledge.similarity_search requires a non-empty document_uids list"
+            )
+
+        # A model can emit anything and nothing re-validates between here and
+        # Knowledge Flow. Over the declared ceiling means "as many as you can",
+        # so clamp; at or below zero means nothing coherent, so fall back to the
+        # default rather than silently return a single match. `bool` is an `int`
+        # subclass and is excluded explicitly - `min_score: true` would
+        # otherwise become 1.0 and filter out every hit.
+        top_k_raw = _field("top_k", 10)
+        top_k = (
+            min(top_k_raw, 50)
+            if isinstance(top_k_raw, int)
+            and not isinstance(top_k_raw, bool)
+            and top_k_raw > 0
+            else 10
+        )
+        rerank = bool(_field("rerank", True))
+        min_score_raw = _field("min_score")
+        min_score = (
+            float(min_score_raw)
+            if isinstance(min_score_raw, (int, float))
+            and not isinstance(min_score_raw, bool)
+            else None
+        )
+
+        # Corpus retrieval turned off for the turn means off for every corpus
+        # tool, not just `knowledge.search` - naming target uids does not opt
+        # back in.
+        if get_rag_knowledge_scope(self._binding.runtime_context) == "general_only":
+            return ToolInvocationResult(
+                tool_ref=request.tool_ref,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.JSON,
+                        data={
+                            "anchor": anchor,
+                            "hits": [],
+                            "note": "Corpus retrieval skipped in general-only mode.",
+                        },
+                    ),
+                ),
+                sources=(),
+            )
+
+        hits = await self._search_client.similarity_search(
+            anchor=anchor,
+            document_uids=[str(uid) for uid in document_uids],
+            top_k=top_k,
+            rerank=rerank,
+            min_score=min_score,
+        )
+
+        # Same LLM-visible slice as knowledge.search: citation and reasoning
+        # fields only, no URLs or operational paths the model could echo back.
+        _LLM_FIELDS = {
+            "uid",
+            "title",
+            "content",
+            "file_name",
+            "page",
+            "section",
+            "score",
+        }
+
+        def _llm_slice(hit: VectorSearchHit) -> dict[str, object]:
+            return {
+                k: v for k, v in hit.model_dump(mode="json").items() if k in _LLM_FIELDS
+            }
+
+        # Dataset-pointer chunks are still never citable (they hold metadata,
+        # not content). The score-ratio half is dropped instead: it exists to
+        # cut corpus-wide noise relative to the best match, and the caller named
+        # the target documents here, so a weak hit is a real comparison result.
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(
+                ToolContentBlock(
+                    kind=ToolContentKind.JSON,
+                    data={
+                        "anchor": anchor,
+                        "hits": [_llm_slice(hit) for hit in hits],
+                    },
+                ),
+            ),
+            sources=select_citable_sources(hits, min_score_ratio=0.0),
         )
 
     async def _invoke_traces_summarize_conversation(
