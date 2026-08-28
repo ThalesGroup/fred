@@ -1,0 +1,94 @@
+/* Generic informative top banner, see InfoBanner.tsx */
+
+/* Deliberate hardcoded color (guidelines §2.2 exception, tracked as an open
+   UX issue in COMPONENT-UX.md): the background comes from configuration
+   (`--banner-bg`, set by InfoBanner.tsx from `info_banner.color`) and is
+   outside the theme, so no design token can pair with it. The fixed dark
+   text assumes the configured color stays light, like the documented
+   #00BBDD example. */
+
+/* Collapsible wrapper for the auto-hide exit: animating grid-template-rows
+   1fr → 0fr eases an auto height down to nothing, so the app content slides
+   up smoothly instead of jumping when the banner goes. Duration must match
+   HIDE_TRANSITION_MS in InfoBanner.tsx. */
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  flex-shrink: 0;
+  transition:
+    grid-template-rows 300ms ease,
+    opacity 300ms ease;
+}
+
+.collapsing {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.collapseInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.banner {
+  --banner-text: #00222c;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+  animation: slide-in 200ms ease-out;
+  background-color: var(--banner-bg);
+  padding: var(--spacing-m) var(--spacing-xl);
+  color: var(--banner-text);
+}
+
+.message {
+  margin: 0;
+  color: var(--banner-text);
+  font: var(--font-body-medium);
+}
+
+.message strong {
+  font: var(--font-body-medium-emphasized);
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.link {
+  color: var(--banner-text);
+  font: var(--font-body-medium-emphasized);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.separator {
+  color: var(--banner-text);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner {
+    animation: none;
+  }
+
+  .collapse {
+    transition: none;
+  }
+}

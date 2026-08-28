@@ -103,3 +103,10 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
+
+/* #2398: the label column takes the row's free width, so the private-team
+ * "manual only" button must not shrink or wrap (`.btn` clips overflow). */
+.team-settings-toggle-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

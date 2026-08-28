@@ -1,0 +1,47 @@
+/*
+  The rotating spectrum border: a conic gradient painted into an element's
+  border box while a flat fill covers the padding box, with the gradient's start
+  angle animated a full turn. Used to mark "this starts a conversation with an
+  agent" (AgentCard's Chat button, the Home recent-agent tiles).
+
+  Colours and the `--angle` registration are global tokens in styles/gradients.css.
+  This partial owns the two pieces that can't be global:
+
+  - `@keyframes`, because CSS Modules rewrites every `animation-name` to a
+    per-file hash — a module can't reference a keyframe declared outside it. The
+    `@use` below drops one hashed copy into each consuming module, which is
+    correct if slightly redundant in the built CSS.
+  - the padding-box/border-box layering, which is the non-obvious part and the
+    thing worth having in one place.
+
+  Usage — the caller keeps its own rest state, because that is where the two
+  consumers genuinely differ (a bare element reserves a transparent border; a
+  Button has to neutralise its own `--btn-border` first):
+
+    @use "src/styles/spectrum-border" as *;
+
+    .thing {
+      animation: spectrum-rotate 2s linear infinite;
+      animation-play-state: paused;
+      border: 2px solid transparent;   // reserved so hover doesn't resize it
+    }
+    .thing:hover {
+      animation-play-state: running;
+      @include spectrum-border-fill;
+    }
+*/
+
+@keyframes spectrum-rotate {
+  to {
+    --angle: 360deg;
+  }
+}
+
+/* $surface is the flat colour of the element's interior. It has to be opaque:
+   the conic gradient covers the whole element and this layer is what hides it
+   everywhere except the border. */
+@mixin spectrum-border-fill($surface: var(--surface-container)) {
+  background:
+    linear-gradient(#{$surface}, #{$surface}) padding-box,
+    conic-gradient(from var(--angle), var(--gradient-spectrum-stops)) border-box;
+}

@@ -65,6 +65,7 @@ def checkpoint_config(
         configurable["checkpoint_id"] = checkpoint_id
     return cast(RunnableConfig, {"configurable": configurable})
 
+
 def checkpoint_namespace(
     *,
     agent_instance_id: str | None,
@@ -77,6 +78,7 @@ def checkpoint_namespace(
     SDK-defined agents fall back to their stable agent id.
     """
     return agent_instance_id or agent_id
+
 
 async def load_checkpoint(
     checkpointer: AsyncCheckpointReader | None,

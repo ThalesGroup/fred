@@ -13,6 +13,20 @@
   }
 }
 
+/* Full-viewport shell: the only place allowed to size against the viewport.
+   The InfoBanner renders (or not) as the first flex child; .appContent takes
+   the remaining height and everything routed below it uses height: 100%. */
+.appShell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.appContent {
+  flex: 1;
+  min-height: 0;
+}
+
 .loadingScreen {
   display: flex;
   justify-content: center;

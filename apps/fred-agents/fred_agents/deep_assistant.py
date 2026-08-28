@@ -45,9 +45,6 @@ Example:
 """
 
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-    MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
-    MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     FieldSpec,
     MCPServerRef,
@@ -104,32 +101,36 @@ class DeepAssistantDefinition(DeepAgentDefinition):
     """
 
     agent_id: str = "fred.github.deep_assistant"
-    role: str = "General-purpose deep assistant"
+    role: str = "Custom planning assistant"
     description: str = (
-        "Blank-slate planning assistant (LangGraph deep-agent runtime). "
-        "Plans multi-step tasks before executing them. Select the tools you "
-        "need at enrollment, write your own prompt."
+        "An assistant that plans before it acts: it breaks complex requests "
+        "into steps and checks its intermediate results. Choose the tools it "
+        "can use and describe its role in your own words."
     )
     description_by_lang: dict[str, str] | None = {
         "fr": (
-            "Assistant généraliste planificateur (moteur deep-agent LangGraph). "
-            "Planifie les tâches à plusieurs étapes avant de les exécuter. "
-            "Sélectionnez les outils dont vous avez besoin à l'enrôlement, "
-            "rédigez votre propre prompt."
+            "Un assistant qui planifie avant d'agir : il découpe les demandes "
+            "complexes en étapes et vérifie ses résultats intermédiaires. "
+            "Choisissez les outils qu'il peut utiliser et décrivez son rôle "
+            "avec vos propres mots."
         )
     }
     tags: tuple[str, ...] = ("general", "deep")
     system_prompt_template: str = _SYSTEM_PROMPT_EN
 
-    # Same read/query-oriented defaults as GENERAL_ASSISTANT_AGENT, minus
-    # MCP_SERVER_KNOWLEDGE_FLOW_FS — see module docstring.
+    # Same slim end-user defaults as GENERAL_ASSISTANT_AGENT (#2429): document
+    # search (the `document_access` #1906 pilot) + tabular analysis - see that
+    # template's comment for the full rationale (admin/ops servers out, #2408
+    # dependency gate). Filesystem stays excluded - see module docstring.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id="document_access"),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
-        MCPServerRef(id="mcp-web-github-readonly"),
+        # Removed from the prod defaults (#2429) - uncomment to restore (and
+        # re-import the constants from fred_sdk):
+        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
+        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
+        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
+        # MCPServerRef(id="mcp-web-github-readonly"),
     )
 
     fields: tuple[FieldSpec, ...] = (

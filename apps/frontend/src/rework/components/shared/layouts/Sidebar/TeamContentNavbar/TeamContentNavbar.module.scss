@@ -1,10 +1,16 @@
 /* The main nav panel — the second column that swaps content by mainNavBar
  * selection (team nav here, Home team list, marketplace, admin). Renamed from
- * `teamContentNavbarContainer` (#2298): it is no longer team-only. */
+ * `teamContentNavbarContainer` (#2298): it is no longer team-only.
+ *
+ * 272px (was 240px): the conversation list's meta line "<agent> · DD/MM/YY -
+ * HH:mm" is the widest content this column carries, and at 240px it left too
+ * little room for the agent name once the date is kept intact. All four panels
+ * share this width — they swap in the same grid column, so any mismatch shows
+ * up as the column jumping when switching modes. */
 .mainNavPanel {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: 272px;
   height: 100%;
   min-height: 0;
 }
@@ -19,14 +25,40 @@
   align-items: center;
   gap: var(--spacing-xs);
   background-color: var(--surface-container-high);
-  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-xs) var(--spacing-s) var(--spacing-m);
   min-height: 48px;
   color: var(--on-surface);
 }
 
-/* The three stacked labels (kicker / name / roles), gap 0. min-width: 0 lets
- * each label ellipsize instead of pushing the gear off the row. */
+/* Left column: the identity row (avatar + kicker/name) above the roles line.
+ * min-width: 0 lets the inner labels ellipsize instead of pushing the gear off
+ * the row. */
 .teamPanelHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+/* Avatar + title (kicker/name) on one row. */
+.teamPanelIdentity {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+/* Team avatar: custom image or initials tile, fixed 28×28, 4px corners. */
+.teamPanelAvatar {
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+}
+
+/* Stacked kicker / name, gap 0. */
+.teamPanelTitle {
   display: flex;
   flex-direction: column;
   gap: 0;

@@ -1,0 +1,92 @@
+.platformRolesPage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  width: 100%;
+  /* Iso with the other admin pages; the roles column's 3fr share keeps a
+     two-role holder's full-label chips on a single line at this width. */
+  max-width: 760px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  width: 100%;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.emptyMessage {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.errorMessage {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-medium);
+}
+
+.userCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.username {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.rootCrown {
+  display: inline-flex;
+  align-items: center;
+  color: var(--primary);
+  font-size: 1.125rem;
+}
+
+.rolesCell {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.grantField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.grantLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.relationChoices {
+  display: flex;
+  gap: var(--spacing-s);
+}
+
+.rootOnlyHint {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}

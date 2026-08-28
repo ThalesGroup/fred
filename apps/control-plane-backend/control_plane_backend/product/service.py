@@ -59,6 +59,8 @@ from control_plane_backend.config.models import (
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    BulkDeleteSessionRef,
+    BulkDeleteSessionsResponse,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptCategoryRequest,
@@ -69,8 +71,12 @@ from control_plane_backend.product.schemas import (
     FrontendBootstrap,
     FrontendConfig,
     FrontendUserAuthConfig,
+    InactiveSessionItem,
+    InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    MarketplacePromptDetail,
+    MarketplacePromptSummary,
     PermissionSummary,
     PromptCategorySummary,
     PromptDetail,
@@ -92,6 +98,7 @@ from control_plane_backend.prompts.category_store import (
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
+    PromptStore,
 )
 from control_plane_backend.routing_policy.service import (
     resolve_execution_routing_snapshot,
@@ -367,22 +374,21 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         and deps.team_dependencies.rebac.enabled
         and not root_bootstrap_completed
     )
-    if user_security.enabled:
-        return FrontendConfig(
-            user_auth=FrontendUserAuthConfig(
-                enabled=True,
-                realm_url=str(user_security.realm_url),
-                client_id=user_security.client_id,
-            ),
-            gcu_version=gcu_version,
-            root_bootstrap_completed=root_bootstrap_completed,
-            root_bootstrap_required=root_bootstrap_required,
+    user_auth = (
+        FrontendUserAuthConfig(
+            enabled=True,
+            realm_url=str(user_security.realm_url),
+            client_id=user_security.client_id,
         )
+        if user_security.enabled
+        else FrontendUserAuthConfig(enabled=False)
+    )
     return FrontendConfig(
-        user_auth=FrontendUserAuthConfig(enabled=False),
+        user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
+        info_banner=deps.configuration.platform.frontend.info_banner,
     )
 
 
@@ -3431,6 +3437,7 @@ def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
         text_preview=preview or None,
         created_by=record.created_by,
         version=record.version,
+        published=record.published,
         import_count=record.import_count,
         session_count=record.session_count,
         score=record.score,
@@ -3467,6 +3474,7 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
         text=record.text,
         created_by=record.created_by,
         version=record.version,
+        published=record.published,
         import_count=record.import_count,
         session_count=record.session_count,
         score=record.score,
@@ -3732,6 +3740,192 @@ async def promote_prompt(
     return _prompt_record_to_summary(created)
 
 
+# ---------------------------------------------------------------------------
+# Prompts marketplace (PROMPT-06) — publish / discover / use / import
+# ---------------------------------------------------------------------------
+
+
+async def set_prompt_published(
+    team_id: TeamId,
+    prompt_id: str,
+    published: bool,
+    deps: ProductServiceDependencies,
+) -> PromptSummary | None:
+    """Publish or unpublish one team prompt to the global marketplace.
+
+    Publishing is a live visibility flag on the team's own row (PROMPT-06): the
+    marketplace shows this same record, so later edits and the shared usage
+    counter propagate immediately. Only real team prompts are publishable —
+    personal-space prompts stay private. Returns `None` when the prompt does
+    not belong to `team_id`; raises `PromptRequestError(400)` when asked to
+    publish a personal-space prompt.
+    """
+
+    if published and is_personal_team_id(team_id):
+        raise PromptRequestError(
+            "Personal-space prompts cannot be published to the marketplace.",
+            http_status=400,
+        )
+    updated = await deps.get_prompt_store().set_published(prompt_id, team_id, published)
+    if updated is None:
+        return None
+    return _prompt_record_to_summary(updated)
+
+
+async def list_marketplace_prompts(
+    deps: ProductServiceDependencies,
+) -> list[MarketplacePromptSummary]:
+    """Return every published prompt across all teams, with the author team name.
+
+    Ordered by shared usage (most-used first). Carries only ``text_preview`` —
+    the full prompt text is fetched on demand via ``get_marketplace_prompt`` when
+    a card is opened, so the listing payload stays small however many prompts
+    are published. The author team's display name is resolved once for the whole
+    page (single batched lookup, no N+1) and used as both the card label and the
+    team filter chip; a missing team's raw id is used as a fallback so a prompt
+    is never dropped from the listing.
+    """
+
+    store = deps.get_prompt_store()
+    records = await store.list_published()
+    if not records:
+        return []
+
+    team_ids = list({r.team_id for r in records})
+    metadata = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
+
+    results: list[MarketplacePromptSummary] = []
+    for record in records:
+        summary = _prompt_record_to_summary(record)
+        meta = metadata.get(record.team_id)
+        team_name = meta.name if meta is not None else str(record.team_id)
+        results.append(
+            MarketplacePromptSummary(
+                **summary.model_dump(), team_id=record.team_id, team_name=team_name
+            )
+        )
+    return results
+
+
+async def get_marketplace_prompt(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> MarketplacePromptDetail | None:
+    """Return one published prompt with its full text and author team name.
+
+    Fetched on demand when a marketplace card is opened (the listing carries
+    only previews). Any authenticated user may read it — gated only on the
+    prompt being published. Returns ``None`` when the prompt is missing or not
+    published (the route maps this to 404).
+    """
+
+    record = await get_published_prompt(prompt_id, deps)
+    if record is None:
+        return None
+    detail = _prompt_record_to_detail(record)
+    meta = await deps.get_team_metadata_store().get_by_team_id(record.team_id)
+    team_name = meta.name if meta is not None else str(record.team_id)
+    return MarketplacePromptDetail(**detail.model_dump(), team_name=team_name)
+
+
+async def record_marketplace_prompt_use(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """Increment the shared usage counter for one published prompt.
+
+    Called when any authenticated user "uses" (copies to clipboard) a prompt
+    from the marketplace, regardless of team membership — the counter reflects
+    total, global usage. Only published prompts are counted; returns False when
+    the prompt is missing or not published (the route maps this to 404).
+    """
+
+    store = deps.get_prompt_store()
+    record = await store.get(prompt_id)
+    if record is None or not record.published:
+        return False
+    return await store.increment_session_count_global(prompt_id)
+
+
+async def get_published_prompt(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> PromptRecord | None:
+    """Return one published prompt by id, or `None` if missing/unpublished."""
+
+    record = await deps.get_prompt_store().get(prompt_id)
+    if record is None or not record.published:
+        return None
+    return record
+
+
+async def _next_imported_name(
+    store: PromptStore,
+    target_team_id: TeamId,
+    base_name: str,
+) -> str:
+    """Pick the first free ``{base}_imported-N`` name in the target team.
+
+    An imported prompt is always renamed (even on the first import) so it never
+    collides with an existing prompt: N starts at 1 and grows until the name is
+    free within the target team. The suffix is applied to a truncated base so
+    the result still fits the 255-char name limit.
+    """
+
+    existing = {r.name for r in await store.list_by_team(target_team_id, limit=1000)}
+    # Reserve room for the "_imported-N" suffix within the 255-char name column.
+    trimmed_base = base_name[:230]
+    n = 1
+    while f"{trimmed_base}_imported-{n}" in existing:
+        n += 1
+    return f"{trimmed_base}_imported-{n}"
+
+
+async def import_published_prompt_into_team(
+    user: KeycloakUser,
+    prompt_id: str,
+    target_team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> PromptSummary:
+    """Copy one published marketplace prompt (by value) into a target space.
+
+    The copy is a fresh, independent instance: new id, reset usage counter
+    (version 1, import_count 0, session_count 0, score null, unpublished) and a
+    ``_imported-N`` name so it never collides in the target team. Categories are
+    not carried over — they are team-scoped (see `promote_prompt`). Raises
+    `PromptRequestError(404)` when the prompt is missing or not published.
+    """
+
+    store = deps.get_prompt_store()
+    source = await get_published_prompt(prompt_id, deps)
+    if source is None:
+        raise PromptRequestError(
+            f"Published prompt {prompt_id!r} not found in the marketplace.",
+            http_status=404,
+        )
+    name = await _next_imported_name(store, target_team_id, source.name)
+    record = PromptRecord(
+        prompt_id=str(uuid4()),
+        team_id=target_team_id,
+        name=name,
+        description=source.description,
+        emoji=source.emoji,
+        tags=source.tags,
+        text=source.text,
+        created_by=user.uid,
+    )
+    try:
+        created = await store.create(record)
+    except PromptAlreadyExistsError:
+        # _next_imported_name already avoids collisions; a conflict here means a
+        # concurrent import raced us — surface it as a conflict rather than 500.
+        raise PromptRequestError(
+            f"Prompt name {name!r} already exists in team {target_team_id!r}.",
+            http_status=409,
+        )
+    return _prompt_record_to_summary(created)
+
+
 async def update_prompt_score(
     team_id: TeamId,
     prompt_id: str,
@@ -3938,6 +4132,114 @@ async def list_sessions(
         limit=limit,
     )
     return [_record_to_item(r) for r in records]
+
+
+# Home cleanup tool (#2298). Per-team scan cap: a user's own session count in one
+# space is small, but bound it so a runaway space can't produce an unbounded scan.
+_INACTIVE_SESSION_SCAN_LIMIT = 500
+# Bound concurrent deletes so a large selection can't saturate the DB pool or the
+# runtime erase fan-out.
+_BULK_DELETE_CONCURRENCY = 5
+
+
+def _as_aware_utc(dt: datetime) -> datetime:
+    """Treat a naive timestamp as UTC (SQLite may hand back naive datetimes)."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+async def list_inactive_sessions(
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+    *,
+    inactive_days: int,
+) -> InactiveSessionsResponse:
+    """The caller's conversations that have gone quiet, across every space they
+    belong to (personal + each team) — home dashboard cleanup tool (#2298).
+
+    "Inactive" = no activity for more than `inactive_days` (updated_at older than
+    the cutoff). Deliberately NOT period-scoped: a cleanup tool should surface
+    every stale conversation, however old, so the user can clear as much as
+    possible — the home period selector doesn't apply here. The agent display
+    name is resolved here (one batch lookup per space) so the cleanup list needs
+    no extra call.
+    """
+    now = _utcnow()
+    cutoff = now - timedelta(days=inactive_days)
+
+    teams = await list_teams_from_service(user, deps.team_dependencies)
+
+    async def _for_team(team_id: TeamId) -> list[InactiveSessionItem]:
+        sessions = await list_sessions(
+            team_id, deps, user_id=user.uid, limit=_INACTIVE_SESSION_SCAN_LIMIT
+        )
+        inactive = [
+            s
+            for s in sessions
+            if s.updated_at is not None and _as_aware_utc(s.updated_at) <= cutoff
+        ]
+        if not inactive:
+            return []
+        agents = await deps.get_agent_instance_store().list_by_team(team_id)
+        name_by_id = {a.agent_instance_id: a.display_name for a in agents}
+        return [
+            InactiveSessionItem(
+                session_id=s.session_id,
+                team_id=team_id,
+                title=s.title,
+                agent_name=(
+                    name_by_id.get(s.agent_instance_id) if s.agent_instance_id else None
+                ),
+                updated_at=s.updated_at,
+            )
+            for s in inactive
+        ]
+
+    # Scan every space concurrently — independent per-team reads.
+    per_team = await asyncio.gather(*[_for_team(team.id) for team in teams])
+    sessions = [item for group in per_team for item in group]
+    # Newest-first, so each per-space group in the dialog reads consistently.
+    sessions.sort(key=lambda s: s.updated_at or now, reverse=True)
+    return InactiveSessionsResponse(sessions=sessions)
+
+
+async def bulk_delete_sessions(
+    user: KeycloakUser,
+    refs: list[BulkDeleteSessionRef],
+    *,
+    authorization: str,
+    deps: ProductServiceDependencies,
+) -> BulkDeleteSessionsResponse:
+    """Delete several of the caller's conversations in one action (home cleanup
+    tool). Reuses the single-session governed delete primitive per item, so each
+    goes through the same deferred-erase lifecycle; ownership is enforced there,
+    so a foreign/already-gone session lands in `failed` rather than aborting the
+    batch. Concurrency is bounded (`_BULK_DELETE_CONCURRENCY`)."""
+    semaphore = asyncio.Semaphore(_BULK_DELETE_CONCURRENCY)
+
+    async def _delete(ref: BulkDeleteSessionRef) -> tuple[str, bool]:
+        async with semaphore:
+            try:
+                await delete_or_defer_session(
+                    team_id=ref.team_id,
+                    session_id=ref.session_id,
+                    user_id=user.uid,
+                    authorization=authorization,
+                    deps=deps,
+                )
+                return ref.session_id, True
+            except Exception:
+                logger.warning(
+                    "[control-plane][home] bulk delete failed for session %s in team %s",
+                    ref.session_id,
+                    ref.team_id,
+                    exc_info=True,
+                )
+                return ref.session_id, False
+
+    results = await asyncio.gather(*[_delete(ref) for ref in refs])
+    deleted = [sid for sid, ok in results if ok]
+    failed = [sid for sid, ok in results if not ok]
+    return BulkDeleteSessionsResponse(deleted=deleted, failed=failed)
 
 
 async def update_session_activity(

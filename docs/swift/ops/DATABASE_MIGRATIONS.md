@@ -143,6 +143,50 @@ then:
 `SqlCheckpointer` still self-creates its own (non-Alembic) tables — tracked
 separately.
 
+### Table ownership across trees (#2314)
+
+Several backends share one database, and the shared declarative base
+(`fred_core.models.base.Base`, "CoreBase") carries tables migrated by
+*different* trees — but every table has exactly one owning tree:
+
+| Tree (version table)                              | Owns                                                                                                             |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| knowledge-flow (`alembic_version_knowledge_flow`) | its own `Base` tables (`resource`, `kf_task_*`), and on CoreBase: `tag`, `metadata`, `document_labels` |
+| control-plane (`alembic_version_control_plane`)   | its own `Base` tables (`platformbootstrap`, `cp_task_*`, …) except `evaluation_*` (fred-evaluation's tree and database), and on CoreBase: `users`, `session`, `teammetadata` |
+| fred-runtime (`alembic_version_runtime`)          | `session_history`                                                                                                |
+
+(`sched_workflow_tasks` is created by knowledge-flow's tree, `0b9a54674eba`,
+but has no ORM model and no runtime reader or writer anywhere — it stays out
+of the declared set because an in-set table absent from every metadata would
+come out of autogenerate as a DROP. Consequence: it gets no drift protection
+from `alembic check` either. It is a deletion candidate.)
+
+Ownership is **declared, never derived**: knowledge-flow and control-plane
+export `OWNED_TABLES` from `<app>/models/table_ownership.py`, and their
+`alembic/env.py` passes that set to `make_alembic_env(owned_tables=...)`;
+fred-runtime reaches the same scoping by building a dedicated `MetaData`
+holding only `session_history`. Deriving ownership from `target_metadata` was
+the #2314 defect — both apps pass the whole of CoreBase so autogenerate can
+resolve shared models, which silently expanded "owned" to every backend's
+tables and let each tree's autogenerate propose DDL for tables another tree
+migrates. The declared set drives both Alembic filters: `include_name`
+(database side — never drop or report drift for a foreign table) and
+`include_object` (metadata side — never propose creating a shared table that
+is absent from the database).
+
+Startup applies the same boundary, with one twist: what a process *needs* is
+larger than what its tree *migrates*. Both knowledge-flow entrypoints (API
+lifespan and Temporal worker) verify `REQUIRED_TABLES` — the owned set plus
+the control-plane-owned `users`/`teammetadata` their code queries — via
+`fred_core.sql.require_tables` and refuse to boot otherwise, exactly like
+fred-runtime does for `session_history`. (Control-plane has no such boot
+guard yet.) The `create_all` over CoreBase knowledge-flow ran instead was the
+#2313 defect — in production it created `document_labels` ahead of its
+migration and wedged the migration job on `DuplicateTableError`. Recovery
+from that state: drop the prematurely created table when it holds nothing
+worth keeping (or replay the migration's backfill by hand and stamp), then
+rerun the migration job.
+
 ### Recovering a database whose `session_history` was self-created
 
 Symptom: the platform works, but `alembic upgrade head` fails with

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { CapabilityEnablementItem, FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   PERSONAL_SCOPE_ROW_ID,
   capabilityPersonalScopeChoice,
@@ -24,7 +24,10 @@ import {
   isCapabilityOnForTeam,
   isCapabilityUnused,
   isPersonalTeamId,
+  missingAgentDependenciesForPersonalSpaces,
+  missingAgentDependenciesForTeam,
   personalSpaceCount,
+  requiresTeamSettings,
   seedSettingsFromFields,
   sortTeamsForMatrix,
   teamCapabilityChoice,
@@ -393,5 +396,128 @@ describe("hasReasoningControl (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.
 
   it("shows no control when the field is absent (pre-REASON-01 pod, or a tool row)", () => {
     expect(hasReasoningControl({})).toBe(false);
+  });
+});
+
+// --- #2408: the client-side mirrors of the backend's 409 gates ---------------
+
+function item(
+  over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablementItem, "id">,
+): CapabilityEnablementItem {
+  return {
+    name: `cap.${over.id}`,
+    version: "1.0.0",
+    icon: "extension",
+    team_scope: "admin_gated",
+    default_on: false,
+    enabled_team_ids: [],
+    team_settings_fields: [],
+    kind: "tool",
+    ...over,
+  };
+}
+
+const AGENT = { kind: "agent" as const, default_capability_ids: ["dep"] };
+
+describe("requiresTeamSettings (#2408, mirrors enablement.py team_settings_has_required_fields)", () => {
+  it("is true when at least one team setting is required", () => {
+    expect(
+      requiresTeamSettings({
+        team_settings_fields: [
+          { key: "note", type: "string", title: "Note" },
+          { key: "url", type: "url", title: "URL", required: true },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("is false when every field is optional — those can still be default-on", () => {
+    expect(requiresTeamSettings({ team_settings_fields: [{ key: "note", type: "string", title: "Note" }] })).toBe(
+      false,
+    );
+  });
+
+  it("is false for a capability with no settings form at all", () => {
+    expect(requiresTeamSettings({})).toBe(false);
+  });
+});
+
+describe("missingAgentDependenciesForTeam (#2408, mirrors agent_capability_missing_dependencies)", () => {
+  it("reports a dependency the team cannot use — the exact 409 condition", () => {
+    expect(missingAgentDependenciesForTeam(AGENT, [item({ id: "dep" })], "nb")).toEqual(["dep"]);
+  });
+
+  it("accepts a dependency explicitly enabled for that team", () => {
+    expect(missingAgentDependenciesForTeam(AGENT, [item({ id: "dep", enabled_team_ids: ["nb"] })], "nb")).toEqual([]);
+  });
+
+  it("accepts a dependency the team inherits through default_on", () => {
+    expect(missingAgentDependenciesForTeam(AGENT, [item({ id: "dep", default_on: true })], "nb")).toEqual([]);
+  });
+
+  it("treats an explicit opt-out as missing even when the dependency is default_on", () => {
+    // Opt-out beats inheritance in the FGA schema, so the grant would 409.
+    const deps = [item({ id: "dep", default_on: true, disabled_team_ids: ["nb"] })];
+    expect(missingAgentDependenciesForTeam(AGENT, deps, "nb")).toEqual(["dep"]);
+  });
+
+  it("fails OPEN for a dependency absent from the catalog list", () => {
+    // It cannot be evaluated here and the backend stays the authority —
+    // blocking would forbid a grant the server may well accept.
+    expect(missingAgentDependenciesForTeam(AGENT, [], "nb")).toEqual([]);
+  });
+
+  it("is empty for a non-agent row, whatever ids it carries", () => {
+    const cap = { kind: "tool" as const, default_capability_ids: ["dep"] };
+    expect(missingAgentDependenciesForTeam(cap, [item({ id: "dep" })], "nb")).toEqual([]);
+  });
+
+  it("is empty for an agent that declares no dependency", () => {
+    expect(missingAgentDependenciesForTeam({ kind: "agent" }, [], "nb")).toEqual([]);
+  });
+
+  it("names every blocking dependency, not just the first", () => {
+    const cap = { kind: "agent" as const, default_capability_ids: ["a", "b", "c"] };
+    const deps = [item({ id: "a" }), item({ id: "b", default_on: true }), item({ id: "c" })];
+    expect(missingAgentDependenciesForTeam(cap, deps, "nb")).toEqual(["a", "c"]);
+  });
+});
+
+describe("missingAgentDependenciesForPersonalSpaces (#2408, mirrors the personal-scope gate)", () => {
+  it("accepts a dependency class-enabled for personal spaces", () => {
+    expect(missingAgentDependenciesForPersonalSpaces(AGENT, [item({ id: "dep", personal_scope: "enabled" })])).toEqual(
+      [],
+    );
+  });
+
+  it("accepts a default_on dependency personal spaces inherit", () => {
+    expect(missingAgentDependenciesForPersonalSpaces(AGENT, [item({ id: "dep", default_on: true })])).toEqual([]);
+  });
+
+  it("reports a dependency that is neither personal_on nor default_on", () => {
+    expect(missingAgentDependenciesForPersonalSpaces(AGENT, [item({ id: "dep", personal_scope: "default" })])).toEqual([
+      "dep",
+    ]);
+  });
+
+  it("treats personal_disabled as missing even when the dependency is default_on", () => {
+    // `(personal_on OR default_on) AND NOT personal_disabled` — the block wins.
+    const deps = [item({ id: "dep", default_on: true, personal_scope: "disabled" })];
+    expect(missingAgentDependenciesForPersonalSpaces(AGENT, deps)).toEqual(["dep"]);
+  });
+
+  it("ignores per-team grants — the class position is what the backend reads", () => {
+    expect(missingAgentDependenciesForPersonalSpaces(AGENT, [item({ id: "dep", enabled_team_ids: ["nb"] })])).toEqual([
+      "dep",
+    ]);
+  });
+
+  it("fails OPEN for a dependency absent from the catalog list", () => {
+    expect(missingAgentDependenciesForPersonalSpaces(AGENT, [])).toEqual([]);
+  });
+
+  it("is empty for a non-agent row", () => {
+    const cap = { kind: "model" as const, default_capability_ids: ["dep"] };
+    expect(missingAgentDependenciesForPersonalSpaces(cap, [item({ id: "dep" })])).toEqual([]);
   });
 });

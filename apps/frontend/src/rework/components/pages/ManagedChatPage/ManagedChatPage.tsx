@@ -29,11 +29,11 @@ import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/t
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
+import { conversationTokenTotals } from "./toThreadMessages";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
@@ -131,6 +131,21 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+
+  // Opening a push drawer is a statement about ONE conversation, so switching
+  // conversations closes it: the panels (capability, attachments, document
+  // scope) all read the open session, and a drawer carried across would sit
+  // there empty. A capability whose new conversation warrants its panel asks
+  // for it again through the request counter above.
+  const lastDrawerSessionId = useRef(chat.sessionId);
+  useEffect(() => {
+    if (lastDrawerSessionId.current === chat.sessionId) return;
+    // Binding the FIRST conversation of a page load is not a switch - a panel a
+    // probe just asked for must not be closed under it.
+    const wasBound = Boolean(lastDrawerSessionId.current);
+    lastDrawerSessionId.current = chat.sessionId;
+    if (wasBound) setActivePushDrawer(null);
+  }, [chat.sessionId]);
   // The model this agent's next turn will actually route to (#2387) — the
   // composer's label. Its own read rather than part of prepare-execution:
   // prepare runs on every send and is contractually free of pod-catalog
@@ -146,21 +161,7 @@ export default function ManagedChatPage() {
 
   const attachmentsCount = chat.persistedAttachments.length;
 
-  const conversationTokenUsage = useMemo(
-    () =>
-      chat.threadMessages.reduce(
-        (acc, m) => {
-          if (m.tokenUsage) {
-            acc.input_tokens += m.tokenUsage.input_tokens;
-            acc.output_tokens += m.tokenUsage.output_tokens;
-            acc.total_tokens += m.tokenUsage.total_tokens;
-          }
-          return acc;
-        },
-        { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-      ),
-    [chat.threadMessages],
-  );
+  const conversationTokens = useMemo(() => conversationTokenTotals(chat.threadMessages), [chat.threadMessages]);
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
@@ -407,8 +408,10 @@ export default function ManagedChatPage() {
               <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
             </div>
             <div className={styles.topBarRight}>
-              {conversationTokenUsage.total_tokens > 0 && (
-                <TokenUsageBadge usage={conversationTokenUsage} variant="stacked" />
+              {conversationTokens.total_tokens > 0 && (
+                <span className={styles.conversationTokens}>
+                  {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
+                </span>
               )}
               <div className={styles.topBarActions}>
                 {attachmentsCount > 0 && (

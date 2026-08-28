@@ -203,4 +203,31 @@ describe("BulkActionsBar", () => {
     ) as HTMLButtonElement;
     expect(downloadButton.disabled).toBe(false);
   });
+
+  it("disables the delete button while deleteLoading is true (folder cascade in flight, #2446)", () => {
+    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} deleteLoading />);
+
+    const deleteButton = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.delete"]',
+    ) as HTMLButtonElement;
+    expect(deleteButton.disabled).toBe(true);
+    expect(deleteButton.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("disables the exclude button while searchToggle.loading is true (folder subtree resolving, #2446)", () => {
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        searchToggle={{ mode: "exclude", onClick: vi.fn(), loading: true }}
+      />,
+    );
+
+    const excludeButton = container.querySelector(
+      'button[aria-label="rework.resources.bulkActions.excludeFromSearch"]',
+    ) as HTMLButtonElement;
+    expect(excludeButton.disabled).toBe(true);
+    expect(excludeButton.getAttribute("aria-busy")).toBe("true");
+  });
 });

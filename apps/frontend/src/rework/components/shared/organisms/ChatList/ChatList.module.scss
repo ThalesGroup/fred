@@ -21,14 +21,19 @@
   overflow-y: auto;
 }
 
-/* Sub-list header shown above each agent's conversations when grouping is on. */
+/* Sub-list header shown above each agent's conversations when grouping is on.
+ * Truncated like the inline agent name below it — a long name must not wrap the
+ * header onto a second line. */
 .groupHeader {
   margin-top: 4px;
   border-radius: var(--radius-xs);
   background-color: var(--surface-container-lowest);
   padding: var(--spacing-2xs) var(--spacing-xs) var(--spacing-2xs);
+  overflow: hidden;
   color: var(--primary);
   font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chatListPlaceholder {

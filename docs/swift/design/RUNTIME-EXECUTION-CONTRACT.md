@@ -64,7 +64,9 @@ is the current authority for implemented runtime behavior.
 > ✅ **Public-team content/execution gap closed — 2026-07-29 (issue #2146, PR #2147).**
 > TEAM-09/TEAM-10 widened `TeamPermission.CAN_READ` to include any authenticated
 > user via the `public` marketplace-discovery relation on `PUBLIC`-visibility
-> teams (the default for every team). Every pod-side authorization check that
+> teams (the default for every team at the time; new teams default to
+> `PRIVATE` since 2026-08-26, #2433 — existing rows keep their stored value).
+> Every pod-side authorization check that
 > gates real content or execution — not just team-profile discovery — must
 > therefore use `TeamPermission.CAN_USE_TEAM_AGENTS` (`team_member`-only)
 > instead. This was true at turn start (`_authorize_execution_or_raise`,
@@ -1724,7 +1726,8 @@ top-of-document callouts** — accurate for their own dates, superseded now.
 **What changed.** TEAM-09/TEAM-10 (`FRED-TEAM-CONFIG-RFC.md` §5.1.1/§5.1.2)
 deliberately widened `TeamPermission.CAN_READ` to include any authenticated
 user via the `public` marketplace-discovery relation, granted unconditionally
-on every `PUBLIC`-visibility team (the default for every team). The OpenFGA
+on every `PUBLIC`-visibility team (the default for every team at the time;
+new teams default to `PRIVATE` since 2026-08-26, #2433). The OpenFGA
 model (`schema.fga`) already anticipated this and kept `can_use_team_agents`
 strictly `team_member`-only, but three pod-side/runtime call sites written
 before that split still checked the wide `CAN_READ`, so a non-member visiting
@@ -3544,9 +3547,24 @@ reasoning — and reached the composer on the `reasoning_toggle` control's
 
 Both columns, both params, and the `ModelCatalogEntry.reasoning_effort` /
 `CapabilityCatalogEntry.model_reasoning_effort` projections that fed them are
-gone, along with their two migrations (`a7d2e9c41f38`, `c9e1f74b2a63`), deleted
-outright rather than reverted: neither had shipped in a tagged release or a
-deployed instance.
+gone. The columns are dropped at the head of the chain, by `d5c9a1b73e60`.
+
+**Correction (2026-08-20).** The two migrations that added them
+(`c9e1f74b2a63`, `a7d2e9c41f38`) were first deleted outright, on the stated
+premise that neither had shipped in a tagged release. That premise was wrong:
+`code/v2.1.35` shipped with `a7d2e9c41f38` as its control-plane head, so every
+instance on that release carries the id in `alembic_version_control_plane`.
+Deleting the file makes the id unresolvable and alembic refuses to start — it
+cannot place itself in the graph, so it cannot move forward either. Both
+migrations are restored and stay in the chain permanently; only the columns go,
+at the head, where every deployment reaches them by walking forward.
+
+The premise was checked with `git tag --contains` on the commit that introduced
+the migration, which returned nothing. On a repository that squash-merges, that
+proves nothing — the tag holds an equivalent commit with a different identity,
+so the original is never an ancestor. **Whether a migration has shipped is a
+question about the tag's tree, not its ancestry**: use `git ls-tree -r <tag> --
+<versions-dir>` and match on the revision id.
 
 Two independent reasons:
 
@@ -4079,3 +4097,181 @@ model rather than guessing one — the same fail-quiet direction
 identity, which the composer displayed as its model label — the root of this
 issue. The control now ships only what it is authoritative about (`default`,
 `effort`).
+
+### 8.57 ✅ Per-tool and per-message token badges report marginal cost, not billed totals — issue #2403 (2026-08-21)
+
+**A tool row claimed a tool had consumed 17 559 tokens when it had consumed
+none.** `ToolCallRuntimeEvent.token_usage` carried the usage of the model call
+that *decided* the tool call, and the trace UI rendered it on the tool's row
+(`toolCallTokenUsage` in `traceUtils.ts`). A tool call costs nothing by itself;
+what the row was actually displaying was the whole prompt of the deciding call.
+The final-answer badge had the mirror problem: it showed the turn total summed
+across every model call, which the conversation header already sums again —
+so the per-message figure repeated the header while being an order of magnitude
+larger than what the turn had added.
+
+Field trace of one 2-tool turn, before the fix:
+
+| model call | input | output | rendered as |
+| --- | --- | --- | --- |
+| 1 (decides tool 1) | 17 550 | 9 | tool row 1: "17 559 tokens" |
+| 2 (decides tool 2) | 19 709 (17 520 cached) | 83 | tool row 2: "19 792 tokens" |
+| 3 (final answer) | 19 942 | 64 | — |
+| turn total | 57 201 | 156 | answer badge: "57 357 tokens" |
+
+**The measurement.** Within a turn the context only grows, so the input size of
+the LAST model call is the context the turn leaves behind — no estimation, no
+tokenizer. `FinalRuntimeEvent` gains one field:
+
+| Field | Meaning |
+| --- | --- |
+| `context_tokens: int \| None` | `input_tokens` of the turn's LAST model call — the context size at turn end |
+
+`ToolCallRuntimeEvent.token_usage` is **removed**, and tool rows now carry no
+token figure at all: a tool call costs nothing by itself, so the row shows
+latency only. (An intermediate version of this work added a
+`tool_context_cost` map attributing each round's context growth per `call_id`;
+it served its diagnostic purpose — proving the tools cost ~2 300 tokens, not
+~17 500 — and was then removed along with its display as UI weight. The
+measurement is recoverable from this issue's history if a per-tool figure is
+ever wanted again.) `token_usage` on `FinalRuntimeEvent` is unchanged and still
+carries the billed total.
+
+**The conversation header sums what the messages display, not the invoice.**
+Summing billed usage there put `72 595` above two messages badged `16 871` and
+`3 136` — the same parts-versus-whole mismatch as the tool rows, one level up.
+`conversationTokenTotals` (`toThreadMessages.ts`) now adds the per-message
+figures, so the thread reconciles with its header; because each turn
+contributes `contextTokens(T) − contextTokens(T−1)`, that sum telescopes to
+`contextTokens(last) + every output` — the tokens the conversation actually
+holds. The billed total is still computed and surfaced, in the header tooltip.
+
+The per-message figure is derived, not transported:
+`new_input(T) = context_tokens(T) − context_tokens(T−1)`.
+`ChatMetadata` gains `context_tokens` (assistant-final rows) so a reloaded
+conversation recomputes identically.
+
+**The anchor is the previous `context_tokens` alone, deliberately not
+`+ output_tokens(T−1)`.** Adding the previous turn's output assumes all of it
+returns in the next prompt, and it does not: reasoning tokens are counted in
+`output_tokens` but dropped from replay (`CheckpointHygieneMiddleware` —
+"reasoning from closed turns is dropped"). That over-subtracted by however much
+the model had reasoned. Observed live: a turn whose two tool rows read `+2254`
+and `+332` displayed `2534` new input tokens — the parts exceeded the whole,
+and the implied question length was −52. Anchoring on `context_tokens` alone is
+fully observed and monotonic. The consequence is that the previous answer
+counts as output when produced and as input when re-sent; both are real costs
+at different rates, so this is not double counting.
+
+**Graph agents do not set it.** The measurement assumes one context growing
+across consecutive calls, which a graph's independent nodes do not share. Their
+badges fall back to the billed total rather than showing a number that does not
+mean what it says.
+
+**What the UI ends up showing.** Header: `Total: <sum of the message badges>`.
+Message: `↑<new input> · ↓<output>`, each arrow titled "N tokens sent" /
+"N tokens received" on hover. Tool row: label, latency, nothing else. No
+tooltip explains the accounting model — how the figure is derived is an
+implementation detail, and an earlier version that spelled it out in three
+tooltips was rejected as noise.
+
+**Consequence worth knowing:** a conversation's FIRST message still shows its
+full prompt as new, because on turn 1 the system prompt and tool schemas
+genuinely are. That makes the fixed base cost a single legible line item
+instead of noise repeated on every turn — relevant while the baseline itself
+stays large (see below).
+
+**Out of scope, measured but deliberately not changed.** The ~16 700-token
+baseline on a bare "Hello" is not history — it is the tool definitions, sent
+twice per model call:
+
+1. Every `FastApiMCP` server in `knowledge-flow-backend/main.py` sets
+   `describe_all_responses=True, describe_full_response_schema=True`, which
+   embeds each route's full JSON response schema in its tool description.
+   Measured: Tabular's 5 tools go 25 505 → 10 323 chars with the flags off,
+   Vector Search's 4 go 22 892 → 9 368; the handwritten docstrings survive
+   intact, only the generated schema dump is dropped.
+2. `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`) then re-emits
+   every tool's description into the system prompt, on top of the `tools` API
+   parameter that already carries it.
+
+Both are real reductions and neither was taken here — this change is display
+and accounting only, kept separate per the consolidation rule against bundling
+a reduction with an unrelated fix.
+
+### 8.58 ✅ `agent.turn_completed` carries `session_id` — issue #2426 (2026-08-25)
+
+**Problem.** Conversation depth (how many messages a conversation actually
+gets) is not derivable from any existing KPI row. `agent.turn_completed` is the
+one event emitted once per turn, but its dims stopped at the agent/model
+identity — with no conversation key, turns could not be grouped per session.
+
+**`agent.turn_completed` dims — one additive field.**
+
+| Field | Meaning |
+| ----- | ------- |
+| `session_id: str \| None` | The conversation the turn belongs to. `None` for a turn with no session (the same cases the ring-buffer record already tolerates). |
+
+`agent.turn_error_total`, which reuses the same dims dict, carries it too.
+
+**OpenSearch only — not a Prometheus label.** The cardinality protection is
+`PROMETHEUS_ALLOWED_LABELS` (`fred_core/kpi/prometheus_kpi_store.py`), an
+allowlist: `session_id` is absent from it, so it is stripped before Prometheus
+label resolution while the OpenSearch KPI store keeps the full dims. This is the
+established pattern, not a new one — `identity_kpi_dims`
+(`fred_runtime/react/middleware/shared.py`) emits `session_id`/`user_id`/
+`team_id` the same way. `_emit_turn_completed`'s old comment claimed the
+exclusion itself was the protection; it was rewritten to point at the allowlist.
+`exchange_id` and `user_id` are deliberately still not carried here — no query
+needs them, and per-turn tracing already has them in history rows and SSE logs.
+
+**No index-mapping change.** `dims.session_id` is already an explicit `keyword`
+in `KPI_INDEX_MAPPING` (added for the CTRLP-12 A3 erasure `update_by_query`), so
+the new dim is `term`-aggregatable on existing indexes with no migration.
+
+**Consumer.** Control-plane's `conversation_depth` KPI preset (`GET
+/kpi/presets/conversation_depth`) — a `terms` agg on `dims.session_id` behind an
+`exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
+one bucket.
+
+---
+
+### 8.59 ✅ `ui_parts` persisted on `ChatMetadata` - issue #2462 (2026-08-28)
+
+**The bug.** A conversation reloaded from history came back with its answer text
+and its source cards, and with **every capability card missing** - a filled deck,
+a written document, a link, a map. Generating a deck and pressing F5 a second
+later was enough to lose it.
+
+**Why.** `ChatMessage.parts` is a CLOSED discriminated union
+(`fred_core/history/history_schema.py`) - text, code, image_url, tool_call,
+tool_result, hitl_request, hitl_response. No `UiPart` in it, and `ChatMetadata`
+carried `sources` but nothing for chat parts. The runtime emitted them correctly
+(`FinalRuntimeEvent.ui_parts`, aggregated across every tool of the turn), the
+live SSE stream rendered them, and then nothing wrote them down.
+
+**The fix - one additive metadata field**, mirroring `sources` exactly.
+
+| Field | Meaning |
+| ----- | ------- |
+| `ChatMetadata.ui_parts: list[dict]` | The turn's chat parts, on the assistant/final row. Empty list when the turn produced none. |
+
+`agent_app.py::_write_turn_history` fills it from the `final` payload's
+`ui_parts`, keeping only object entries.
+
+**Raw objects, on purpose.** `UiPart` is an OPEN union assembled at pod boot from
+the installed capabilities (`fred_sdk.contracts.ui_part_union`), and fred-core
+sits BELOW fred-sdk - there is no closed type to validate against there. That is
+also why `MessagePart` stays closed and these parts do not live in `parts`:
+that union is closed precisely to validate storage, and opening it would mean
+accepting unvalidated dicts in the column.
+
+**Frontend.** `uiPartsOf` (`rework/utils/traceUtils.ts`) reads both carriers -
+inline `parts` for a streamed message, `metadata.ui_parts` for a stored one -
+deduplicated by identity, so a message carrying a part on both sides renders one
+card. Nothing else changed: the part-renderer registry still decides at render
+time what it can draw and skips unknown kinds.
+
+**Migration.** None. The field defaults to an empty list, so rows written before
+this change read back as "no cards" - exactly what they render today. Their parts
+are not recoverable; they were never stored.

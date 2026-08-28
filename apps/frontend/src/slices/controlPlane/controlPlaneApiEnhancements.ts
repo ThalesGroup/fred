@@ -16,6 +16,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
+    "ControlPlanePlatformRole",
   ],
   endpoints: {
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
@@ -65,6 +66,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
     },
+    // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
+      providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
+    },
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: {
+      invalidatesTags: [{ type: "ControlPlaneSession", id: "INACTIVE" }],
+    },
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
     },
@@ -91,6 +99,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     listUsersControlPlaneV1UsersGet: {
       providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],
+    },
+    // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405). The
+    // holders table is one aggregate, so a single LIST tag: every grant/revoke
+    // re-reads it — including the root badge and caller flag.
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: {
+      providesTags: [{ type: "ControlPlanePlatformRole" as const, id: "LIST" }],
+    },
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
+    },
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: {
+      invalidatesTags: [{ type: "ControlPlanePlatformRole", id: "LIST" }],
     },
     listTeamsControlPlaneV1TeamsGet: {
       providesTags: (result) =>
@@ -287,7 +307,52 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlanePrompt", id: arg.promptId },
         { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        // A deleted prompt (published or not) must also leave the community list.
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
       ],
+    },
+    // Prompts marketplace (PROMPT-06). The community listing is a live view of
+    // published team rows, so it shares the ControlPlanePrompt tag family: the
+    // shared "MARKETPLACE" id refreshes it, while per-prompt ids keep the team
+    // library and composer picker consistent when a prompt is (un)published.
+    getMarketplacePromptsControlPlaneV1MarketplacePromptsGet: {
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((prompt) => ({ type: "ControlPlanePrompt" as const, id: prompt.id })),
+              { type: "ControlPlanePrompt" as const, id: "MARKETPLACE" },
+            ]
+          : [{ type: "ControlPlanePrompt" as const, id: "MARKETPLACE" }],
+    },
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
+    },
+    postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    postUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlanePrompt", id: arg.promptId },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: "MARKETPLACE" },
+      ],
+    },
+    // Recording a use bumps the shared counter; refresh the community list so
+    // its "most-used first" ordering and counters reflect the new value.
+    postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: {
+      invalidatesTags: () => [{ type: "ControlPlanePrompt", id: "MARKETPLACE" }],
+    },
+    // Import copies the prompt (by value) into each target team's library.
+    postMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPost: {
+      invalidatesTags: (_, __, arg) =>
+        arg.marketplaceImportRequest.target_team_ids.map((teamId) => ({
+          type: "ControlPlanePrompt" as const,
+          id: `LIST-${teamId}`,
+        })),
     },
     // Team routing policy (TEAM-05, #2118).
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: {
@@ -321,6 +386,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 
 export const {
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
+  // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation: useRevokePlatformRoleMutation,
   // Batch uid → display-name resolution for audit fields (#1952).
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery: useUsersByIdsQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
@@ -352,11 +421,36 @@ export const {
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery: useMessagesOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery: useSessionsByScopeQuery,
+  // Engagement distributions (#2426) — histogram rows + a median, both fed to
+  // the Engagement section of the admin analytics page.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery: useConversationsPerUserQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery: useConversationDepthQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery: useAgentsPerUserQuery,
+  // Engagement trends (#2428) — the same three medians, recomputed per bucket
+  // over a trailing window the response carries in `window`.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery: useConversationsPerUserTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery: useConversationDepthTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery: useAgentsPerUserTrendQuery,
   useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery: useTopTeamsBySessionsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery: useAgentsTotalQuery,
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
+  // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery: useUserAgentsUsedTotalQuery,
+  // Home dashboard leaderboard — top agents / top teams (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery: useUserTopAgentsQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery: useUserTopTeamsQuery,
+  // Home dashboard — most recently used agents, newest first (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery: useUserRecentAgentsQuery,
+  // Lazy agent-instances fetch — the recent-agents preset returns only ids, so
+  // the Home tiles resolve each to its full instance across its (variable) team.
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: useLazyTeamAgentInstancesQuery,
+  // Home cleanup tool — inactive conversations across spaces + bulk delete (#2298).
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery: useMyInactiveSessionsQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation: useBulkDeleteMySessionsMutation,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,

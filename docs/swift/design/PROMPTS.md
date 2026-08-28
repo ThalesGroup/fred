@@ -69,12 +69,13 @@ Core fields:
 
 - `prompt_id`, `team_id`, `name`, `description`, `text`, `created_by`
 - `category_id`, `emoji`, `tags`
-- `version`, `import_count`, `session_count`, `score`
+- `version`, `published`, `import_count`, `session_count`, `score`
 - `avg_input_tokens`, `avg_output_tokens`
 - `created_at`, `updated_at`
 
 Prompt names are unique within one stored `team_id`. Updates replace the record
-and increment `version`.
+and increment `version`. `published` (default `false`) is the prompts-marketplace
+visibility flag — see §6.
 
 The main API surface is:
 
@@ -86,6 +87,8 @@ The main API surface is:
 - `PATCH /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/score`
 - `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/promote`
 - `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/use`
+- `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/publish`
+- `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/unpublish`
 
 **There is no platform default-prompt catalog (PROMPT-09).** Every prompt is a
 real row in the `prompt` table, owned and fully editable by its team. New teams
@@ -202,13 +205,55 @@ the union). Prompts are ordered by usage.
 Agent-form import/save/version-drift UX is not complete; it is tracked as
 `PROMPT-04` in the hardening RFC.
 
+The prompts marketplace (§6.1) adds a `MarketplacePrompts` page ("Prompts de la
+communauté"), reached from a nav item under the teams marketplace, plus a
+marketplace variant of the shared `PromptCard`.
+
+### 6.1 Prompts marketplace (PROMPT-06)
+
+Shipped 2026-08-10 (#2317). The marketplace lets a team publish its best prompts
+to the whole community, where anyone can use (copy) or import them.
+
+**Live-mirror model, not a snapshot.** Publishing sets a boolean `published`
+flag on the team's own `PromptRow` — the marketplace shows that same live
+record. Editing a published prompt propagates immediately, and the
+`session_count` usage counter is shared between origin-team usage and external
+usage (it reflects total, global usage). This intentionally diverges from the
+original `PROMPT-06` sketch, which proposed a frozen published snapshot: a
+snapshot was unnecessary here because nothing persistently references the
+published row — **use = clipboard copy** (no pointer) and **import = copy-by-value**
+(a fresh row via the `promote` primitive, with the counter reset to 0). Only
+real team prompts are publishable; personal-space prompts stay private.
+
+Endpoints:
+
+- `POST /teams/{team_id}/prompts/{prompt_id}/publish` / `.../unpublish` — flip
+  the flag; `can_update_resources` on the author team (personal-space prompt →
+  400 on publish).
+- `GET /control-plane/v1/marketplace/prompts` — every published prompt across
+  all teams, most-used first, each with the author team's display name; any
+  authenticated user (not team-scoped). Carries only `text_preview` — the
+  listing payload stays small however many prompts are published.
+- `GET /control-plane/v1/marketplace/prompts/{prompt_id}` — one published
+  prompt's full text, fetched on demand when a card is opened (for the copy
+  action); any authenticated user, published prompts only.
+- `POST /control-plane/v1/marketplace/prompts/{prompt_id}/use` — increment the
+  shared counter without requiring team membership (published prompts only).
+- `POST /control-plane/v1/marketplace/prompts/{prompt_id}/import` — copy-by-value
+  into every `target_team_ids` the caller can edit; targets are deduped and
+  imported concurrently, each authorized independently (per-target
+  `can_update_resources`, per-target result), and a name collision in a target
+  team is avoided with an `_imported-N` suffix.
+
+There is no moderation surface in v1; unpublish is available to editors of the
+author team, including directly from the marketplace (UX convenience).
+
 ## 7. Known Deferred Work
 
 The current system intentionally leaves these items outside the shipped design:
 
 - complete `AgentFormModal` prompt import, save-as-prompt, drift badges, and
   inline 422 rendering (`PROMPT-04`)
-- global prompt marketplace (`PROMPT-06`)
 - per-prompt token-cost KPI aggregation (`PROMPT-07`)
 - stronger service invariants around raw prompt lookup for promotion and
   promotion metadata copy (chat-context resolution is now scope-aware — `PROMPT-08`)

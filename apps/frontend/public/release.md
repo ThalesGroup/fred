@@ -1,3 +1,129 @@
+**v2.1.38** — 2026-08-28
+
+- **Summary**
+
+  Capability side panels now follow the conversation you are in: a launcher
+  appears only once there is something to open, and reloading a conversation
+  brings its cards back. Asking an agent to correct an existing deck no longer
+  crashes the preview.
+
+- **Improvements**
+
+  - Capability side panels offer a launcher only once they hold something to open, each with its own icon, and no longer carry a deck or a document over from a previous conversation (#2459)
+
+- **Bug Fixes**
+
+  - A conversation reloaded from history came back without its capability cards - a generated deck, a written document, a link, a map (#2462)
+  - Asking an agent to correct an existing deck crashed the slide preview (#2468)
+  - The home page greeted you with a raw account identifier instead of your first name (#2471)
+
+**v2.1.37** — 2026-08-27
+
+- **Summary**
+
+  Home is now a dashboard: one search field over every agent, team and prompt
+  you can reach, your recent agents, and your own usage. Teams can publish
+  prompts to a community marketplace. New teams start private, and a public
+  invite-only team can be asked for an invitation by mail.
+
+- **Features**
+
+  - Home opens on a tabbed dashboard: a search field over every agent, team and prompt you can reach, plus your recently used agents (#2436)
+  - Your activity tab tracks your conversations, messages and agents used over 7, 30 or 90 days, with your token footprint and a one-click cleanup of idle conversations (#2436)
+  - Teams can publish prompts to a community marketplace, where anyone can browse them, copy one, or import it into their own spaces (#2317)
+  - A Platform roles admin page grants and revokes platform admin and observer rights, with a protected primary admin and an audit trail (#2405)
+  - Analytics gains an Engagement section: conversations per user, conversation depth and agents per user, each with a median, a distribution and a trend (#2426)
+  - Folders can be selected in Resources and deleted, downloaded or excluded from search in bulk, along with everything underneath them (#2446)
+  - A public invite-only team can be asked for an invitation: its card opens a mail to the team admins, prefilled (#2453)
+
+- **Improvements**
+
+  - New teams are private by default and stay invisible outside their members until an admin publishes them (#2443)
+  - The chat composer's reasoning menu now names the answering model and the effort level in two separate sections (#2450)
+  - The two general-purpose assistants are renamed and described in plain language, and no longer need admin or ops capabilities to be enabled for a team (#2409, #2429)
+  - Local Langfuse traces can capture prompts, answers and tool payloads, off by default (#2442)
+
+- **Security**
+
+  - Routine dependency updates: aiohttp, cryptography, pyasn1 (#2401)
+
+- **Bug Fixes**
+
+  - "Most talked-to agents" called its message counts conversations, under-counted busy agents and merged two agents sharing a name into one line (#2431)
+  - A Mermaid diagram with malformed syntax showed a parse error instead of the diagram; common defects are now repaired before rendering (#2382)
+  - Enabling a capability on an agent failed with a generic error when its team lacked a required one; the blocking dependency is now named up front (#2408)
+  - Voice dictation never worked on air-gapped deployments; a small Whisper model now ships in the image (#2406)
+  - Renaming a document in Resources kept showing the old name until a reload (#2407)
+  - The agent form reopened the prompt library every time the prompt field was emptied (#2438)
+  - A chat turn that failed to start reported "[object Object]" instead of the real error (#2449)
+  - Conversation tiles in the side panel pushed the date to the far right, and the delete button shifted the tile on hover (#2448, #2402)
+  - Two agents used in the same conversation could resume from each other's saved state (#2415)
+  - Token badges charged each tool call the whole prompt; a message now shows what it actually added (#2403)
+  - A knowledge-flow upgrade could wedge its migration job on a table the service had already created at startup (#2314)
+
+- **Deployment note**
+
+  Existing teams keep their current visibility - only teams created after the
+  upgrade start private. Knowledge-flow now refuses to start until its
+  migrations have run and the tables are present, so let the migration job finish first - the chart ships
+  every migration job off by default, fred-agents included, so enable it in your
+  values or run the upgrade yourself (#2456). Chart config maps and secrets are
+  ordinary release resources again, so `helm uninstall` removes them (#2440).
+
+**v2.1.36** — 2026-08-20
+
+- **Summary**
+
+  Platform admins can now set one default chat model for everyone, with
+  per-agent overrides per team. Folder rows in Resources tell you what is
+  happening underneath them — still ingesting, how many documents failed, or
+  done. The chat composer finally names the model your question actually goes to.
+
+- **Features**
+
+  - Platform admins can set a single default chat model, and each team can
+    override it per agent using only models every runtime offers (#2365, #2380)
+  - Folder rows in Resources summarize their contents: still ingesting, how many
+    documents failed underneath — hover to see which and copy the list — or done (#2384)
+  - Deployments can show an announcement banner above every page, configured
+    centrally and optionally hiding itself after a set delay (#2400, #2395)
+  - Team role badges explain what each role grants on hover, and a Member badge
+    shows the baseline everyone holds (#2383, #2386)
+
+- **Improvements**
+
+  - Reasoning in the chat composer is now two named modes, instead of a state
+    that read as though the model itself were off (#2387, #2389)
+  - Error detail panels can be reached with the mouse to select and copy their
+    text, and no longer open past the edge of the screen (#2384)
+
+- **Security**
+
+  - Routine dependency update: sqlparse (Python) (#2390)
+
+- **Bug Fixes**
+
+  - The chat composer named the model an admin had enabled reasoning on rather
+    than the one answering; it now names the routed model and warns when your
+    team cannot use it (#2387, #2389)
+  - The Activity page listed every task twice (#2170, #2376)
+  - A workbook containing a single empty sheet failed to ingest entirely; empty
+    sheets are now reported and the rest of the workbook imports (#2392, #2393)
+  - Private teams no longer appear in the marketplace to people who are not
+    members (#2398, #2399)
+  - A team's model routing no longer reports "no models activated" when an
+    unrelated runtime is unreachable (#2380)
+  - An ingestion that failed before reaching a processing stage showed "Erreur"
+    with an empty details panel; the real message now shows (#2384)
+
+- **Deployment note**
+
+  Upgrade the agent runtime pods together with the platform: while a pod still
+  runs the previous release, team model-routing policies cannot be edited.
+  Stored routing policies are migrated in place — operation- and purpose-scoped
+  rules, which no deployment used, are dropped. The announcement banner is
+  optional and renders nothing unless configured.
+
 **v2.1.35** — 2026-08-13
 
 - **Summary**

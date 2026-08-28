@@ -1,0 +1,65 @@
+.wrap {
+  position: relative;
+}
+
+.triggerWrap {
+  position: relative;
+}
+
+/* Chevron overlaid on the right of the read-only TextInput; clicks fall through
+ * to the field below. */
+.chevron {
+  display: flex;
+  position: absolute;
+  /* Centre on the 2rem field only — TextInput also renders an empty
+   * `.information` line below, so `top: 50%` would sit too low. */
+  top: 1rem;
+  right: var(--spacing-xs);
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--on-surface-muted);
+  font-size: 1.25rem;
+}
+
+/* Listbox anchored directly below the trigger, matching its width; overlays the
+ * team list below (which never clips it — it's not a child of the scroll area).
+ * TextInput reserves a trailing `.information` line, so pull the menu up to sit
+ * right under the field box instead of under that empty line. */
+.menuAnchor {
+  position: absolute;
+  top: calc(2rem + var(--spacing-3xs));
+  right: 0;
+  left: 0;
+  z-index: 20;
+}
+
+/* Option row — mirrors MenuPopover's `.item` metrics, but with this select's own
+ * colour treatment: default rows are muted (on-surface-retreat), the picked row
+ * is full-strength (on-surface) over the neutral selected layer, and no trailing
+ * check. */
+.option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--state-on-surface-hover);
+  }
+
+  &[data-selected="true"] {
+    /* Primary-tinted 16% selected layer; text stays on-surface. */
+    background: var(--state-primary-selected);
+    color: var(--on-surface);
+  }
+}

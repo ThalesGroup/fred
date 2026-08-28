@@ -26,6 +26,8 @@ from control_plane_backend.agent_instances.store import (
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.models import (
+    InfoBanner,
+    InfoBannerLink,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
@@ -831,7 +833,9 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "is_member": True,
             "my_relations": ["team_editor"],
             "joining_mode": "invite_only",
-            "visibility": "public",
+            # #2433: a personal space is stated private explicitly — it is
+            # never marketplace-listed and unreadable to non-members.
+            "visibility": "private",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
         }
@@ -1066,6 +1070,48 @@ async def test_frontend_config_disabled_omits_oidc_client() -> None:
     assert "client_id" not in payload["user_auth"]
     # `response_model_exclude_none=True` omits the key entirely when gating is off.
     assert payload.get("gcu_version") is None
+    # No `platform.frontend.info_banner` configured → the key is omitted and
+    # the frontend renders no banner.
+    assert "info_banner" not in payload
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_exposes_configured_info_banner() -> None:
+    """The public pre-auth config carries `platform.frontend.info_banner` so
+    the global banner can render on every page — including the GCU-acceptance
+    and root-bootstrap screens, which render before the authenticated
+    `/frontend/bootstrap` can succeed."""
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.platform.frontend.info_banner = InfoBanner(
+        color="#00BBDD",
+        auto_hide_seconds=30,
+        titles={"en": "New version available"},
+        messages={
+            "en": "Access the Fred documentation & blog",
+            "fr": "Accédez à la doc",
+        },
+        links=[
+            InfoBannerLink(
+                url="https://fredk8.dev", labels={"en": "Go to the Fred blog"}
+            )
+        ],
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/config")
+
+    assert resp.status_code == 200
+    banner = resp.json()["info_banner"]
+    assert banner["color"] == "#00BBDD"
+    assert banner["auto_hide_seconds"] == 30
+    assert banner["titles"] == {"en": "New version available"}
+    assert banner["messages"]["fr"] == "Accédez à la doc"
+    assert banner["links"] == [
+        {"url": "https://fredk8.dev", "labels": {"en": "Go to the Fred blog"}}
+    ]
 
 
 @pytest.mark.asyncio
@@ -1367,7 +1413,8 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "admins": [],
         "is_member": True,
         "joining_mode": "invite_only",
-        "visibility": "public",
+        # #2433: a personal space is stated private explicitly.
+        "visibility": "private",
         "permissions": [
             "can_read",
             "can_update_resources",
@@ -5240,7 +5287,17 @@ async def test_update_team_checks_can_update_info_permission(
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
         permissions = _args[3]
         captured_permissions.append(permissions)
-        return TeamMetadata(id=TeamId("thales"), name="Thales"), "token"
+        # Explicitly PUBLIC (#2433 made the metadata default PRIVATE): this
+        # test PATCHes `joining_mode: open`, and the TEAM-10 downgrade rule
+        # would rewrite that to `invite_only` on a private team — the
+        # downgrade has its own test; this one covers permission gating and
+        # the banner-field bridge.
+        return (
+            TeamMetadata(
+                id=TeamId("thales"), name="Thales", visibility=TeamVisibility.PUBLIC
+            ),
+            "token",
+        )
 
     async def _fake_get_team_permissions_for_user(*_args, **_kwargs):
         return [TeamPermission.CAN_UPDATE_INFO]

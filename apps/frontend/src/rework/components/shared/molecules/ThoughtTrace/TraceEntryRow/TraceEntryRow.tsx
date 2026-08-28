@@ -21,11 +21,9 @@ import {
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
-  tokenUsageForEntry,
   toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
-import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import phaseStyles from "../phaseBadge.module.css";
 import styles from "./TraceEntryRow.module.css";
 
@@ -49,7 +47,6 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   const phase = phaseKeyForEntry(entry);
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
-  const tokenUsage = tokenUsageForEntry(entry);
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";
   // The turn-crash line is a solo error-channel entry (execution_error). A
@@ -112,8 +109,6 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
 
       {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}
       {secondary && !isCancelled && <span className={styles.secondary}>{secondary}</span>}
-
-      {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
     </div>
   );
 }

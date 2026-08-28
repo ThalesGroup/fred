@@ -180,6 +180,22 @@ implement authorless, untracked work.
 
 **Step 4 — Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
 
+**Keep code comments to 2-3 lines.** Say the "why" the code cannot show, then
+stop. A comment that re-narrates the decision, lists the alternatives, or
+restates what the next line does is noise the next reader has to skim past -
+and it goes stale faster than the code. When the reasoning genuinely needs
+more room, write it in the relevant compact doc and point at it from the code
+("Full rationale: COMPONENT-UX.md"). This applies to file headers too: a few
+lines on what the module is for, not an essay.
+
+**No issue numbers in code.** Not in comments, not in `describe()` names, not
+in stylesheets. `(#1234)` pins a line to a one-off decision that made sense the
+week it was taken and means nothing a year later, and it invites the paragraph
+of history that comes with it. Say what the code does and why it has to; the
+issue, the PR and the commit message are where the trail lives. Existing
+occurrences are not worth a cleanup pass of their own, but drop them from any
+line you are already rewriting.
+
 **Step 5 — Verification.** In the touched project root:
 
 ```
@@ -298,6 +314,23 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 - Never skip hooks (`--no-verify`). If a hook fails, fix the root cause.
 - Never hand-edit generated files (`openapi.json`, `runtimeOpenApi.ts`,
   `controlPlaneOpenApi.ts`). Regenerate from source and document the command used.
+
+---
+
+## Alembic migrations - keep history linear
+
+One head per backend, always. When a feature branch's new migration has
+fallen behind the base branch (`swift`) because migrations kept landing
+there, **re-parent it**: point its `down_revision` (and the `Revises:`
+docstring line) at the current base head, delete any merge revision the
+branch may have accumulated, and verify with `alembic heads` (exactly one
+head) plus a real `alembic upgrade head` before pushing. Do **not** create
+an Alembic merge revision (`alembic merge`) to reconcile heads inside a PR -
+a merge revision is a last resort, acceptable only when both divergent
+migrations are already deployed somewhere and can no longer be re-parented.
+(2026-08-24, PROMPT-06: the marketplace migration was re-parented onto the
+swift head and its empty merge revision deleted - the PR then added a single
+linear migration.)
 
 ---
 

@@ -59,6 +59,7 @@ from langchain_core.tools import BaseTool, tool
 
 from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
+from fred_runtime.common.table_hits import repair_table_hits
 from fred_runtime.runtime_support.request_context_helpers import (
     get_document_library_tags_ids,
     get_document_uids,
@@ -158,6 +159,8 @@ class KfVectorSearchToolkit:
                 include_session_scope=include_session_scope,
                 include_corpus_scope=include_corpus_scope,
             )
+
+            hits = await repair_table_hits(list(hits), client.get_document_chunks)
 
             logger.info(
                 "[KFVS][TOOL] question=%r top_k=%d hits=%d",

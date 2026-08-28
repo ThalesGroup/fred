@@ -67,6 +67,14 @@ interface InlineDrawerProps {
    * Opt-in — default panels stay flush.
    */
   floating?: boolean;
+  /**
+   * Drop the drawer's own title band for content that already has one (a
+   * capability pane naming the artefact it holds). The drawer then contributes no
+   * chrome at all, so the content MUST offer its own close affordance — `title`
+   * still names the panel, as the drawer's accessible name. `headerActions` are
+   * not rendered.
+   */
+  hideHeader?: boolean;
 }
 
 export function InlineDrawer({
@@ -80,6 +88,7 @@ export function InlineDrawer({
   resizable,
   flushBody = false,
   floating = false,
+  hideHeader = false,
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
@@ -146,7 +155,8 @@ export function InlineDrawer({
         data-floating={floating ? "true" : undefined}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
         aria-hidden={!open}
-        aria-labelledby={titleId}
+        aria-labelledby={hideHeader ? undefined : titleId}
+        aria-label={hideHeader ? title : undefined}
         style={
           {
             "--drawer-width": drawerWidth,
@@ -164,21 +174,23 @@ export function InlineDrawer({
           />
         )}
         <div className={styles.panel}>
-          <div className={styles.header}>
-            <span id={titleId} className={styles.title}>
-              {title}
-            </span>
-            <div className={styles.headerActions}>
-              {headerActions}
-              <IconButton
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "close" }}
-                aria-label="Close panel"
-                onClick={handleClose}
-              />
+          {!hideHeader && (
+            <div className={styles.header}>
+              <span id={titleId} className={styles.title}>
+                {title}
+              </span>
+              <div className={styles.headerActions}>
+                {headerActions}
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "close" }}
+                  aria-label="Close panel"
+                  onClick={handleClose}
+                />
+              </div>
             </div>
-          </div>
+          )}
           <div className={`${styles.body}${flushBody ? ` ${styles.bodyFlush}` : ""}`}>{children}</div>
         </div>
       </aside>

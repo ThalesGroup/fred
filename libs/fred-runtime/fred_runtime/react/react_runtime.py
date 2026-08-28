@@ -81,6 +81,7 @@ from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
+from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
@@ -172,6 +173,30 @@ def _format_invocation_turns(turns: tuple[ConversationTurn, ...]) -> str:
             f"User: {turn.user_message}\nAssistant{speaker}: {turn.agent_response}"
         )
     return "\n\n".join(parts)
+
+
+def _trace_input_payload(input_model: ReActInput) -> object:
+    """
+    Render the turn's input for the trace-level `input` of a tracing backend.
+
+    A turn's transcript can be long, but what identifies the turn in a trace
+    list is the message that opened it — so a single trailing user message
+    collapses to its bare text, and anything else keeps the full role/content
+    list.
+
+    Only ever called behind `tracer.captures_content` — this is content in the
+    sense of `OBSERVABILITY-AND-AUDIT.md` §7.
+    """
+
+    messages = list(input_model.messages)
+    if not messages:
+        return ""
+    last = messages[-1]
+    if last.role == ReActMessageRole.USER:
+        return last.content
+    return [
+        {"role": message.role.value, "content": message.content} for message in messages
+    ]
 
 
 def _graph_input(
@@ -268,11 +293,16 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            if self._services.tracer.captures_content:
+                span.set_io(input=_trace_input_payload(input_model))
             span_token = active_agent_span.set(span)
         try:
             result = await self._compiled_agent.ainvoke(
                 _graph_input(input_model, config),
-                config=_to_runnable_config(config,checkpoint_ns=self._checkpoint_ns,),
+                config=_to_runnable_config(
+                    config,
+                    checkpoint_ns=self._checkpoint_ns,
+                ),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -286,6 +316,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 result["messages"],
                 sanitize_tool_name=_sanitize_tool_name,
             )
+            if span is not None and self._services.tracer is not None:
+                if self._services.tracer.captures_content:
+                    span.set_io(output=final_message.content)
             return ReActOutput(final_message=final_message, transcript=transcript)
         finally:
             if span_token is not None:
@@ -309,6 +342,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            # The turn's root span carries the trace-level input/output, which
+            # is what the Langfuse trace list shows for a conversation: the
+            # question that opened the turn and the answer that closed it.
+            if self._services.tracer.captures_content:
+                span.set_io(input=_trace_input_payload(input_model))
             span_token = active_agent_span.set(span)
 
         metrics = self._services.metrics
@@ -341,6 +379,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # per-call, not cumulative (TRACE-01 follow-up: the previous
         # last-write-wins variable silently undercounted any multi-call turn).
         total_token_usage: dict[str, int] | None = None
+        # Marginal context accounting (#2403), distinct from the billed total
+        # above: `context_tokens` trails the most recent model call's input
+        # size, so at the end of the turn it is the size of the context the
+        # turn leaves behind. The chat UI diffs it against the previous turn's
+        # to show what a message genuinely added, rather than the billed sum
+        # which re-counts the history once per model call.
+        context_tokens: int | None = None
         last_finish_reason: str | None = None
         # When a whole round of tool calls fails (every call errored, no
         # success anywhere in the batch), the error is surfaced directly as the
@@ -373,11 +418,31 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # closed before the first answer delta and before the run ends.
         model_native_thought_id: str | None = None
         model_native_thought_started_at: float | None = None
+
+        def observe_model_call(call_usage: dict[str, int] | None) -> None:
+            """
+            Track the context size across the turn's model calls (#2403).
+
+            Called once per model call, in stream order, so that when the turn
+            ends `context_tokens` holds the last call's input — the context the
+            turn leaves behind. A provider that reports no input count resets
+            it to None rather than leaving a stale value: the UI treats None as
+            "unknown" and falls back to the billed total, which is honest,
+            whereas a stale anchor would silently misreport the next turn.
+            """
+
+            nonlocal context_tokens
+
+            context_tokens = (call_usage or {}).get("input_tokens")
+
         phase_timer_ctx.__enter__()
         try:
             async for raw_event in self._compiled_agent.astream(
                 _graph_input(input_model, config),
-                config=_to_runnable_config(config,checkpoint_ns=self._checkpoint_ns,),
+                config=_to_runnable_config(
+                    config,
+                    checkpoint_ns=self._checkpoint_ns,
+                ),
                 stream_mode=["messages", "updates"],
             ):
                 mode, update = _split_stream_event_mode(raw_event)
@@ -527,21 +592,18 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # response back to the LLM's synthesis.
                         round_had_tool_success = False
                         # The usage of the model call that decided to make these
-                        # tool calls — attached per-call to ToolCallRuntimeEvent
-                        # (TRACE-01) so the trace UI can show tokens per step,
-                        # AND folded into the turn's running total. When one
-                        # AIMessage requests several tools in parallel, every
-                        # one of them gets this same per-step total (it is the
-                        # cost of the one decision that produced them, not a
-                        # per-tool split — providers don't expose that
-                        # breakdown), but it is only added to the turn total
-                        # once, here, not once per parallel tool call.
+                        # tool calls, folded into the turn's billed total once
+                        # here — not once per parallel tool call. It is NOT
+                        # attached to the individual ToolCallRuntimeEvents any
+                        # more (#2403): showing a decision's whole prompt on a
+                        # tool row read as if the tool had consumed it.
                         _, tool_call_token_usage, _ = _runtime_metadata_from_message(
                             message
                         )
                         total_token_usage = _sum_token_usage(
                             total_token_usage, tool_call_token_usage
                         )
+                        observe_model_call(tool_call_token_usage)
                         for tool_call in message.tool_calls:
                             name = str(tool_call.get("name") or "")
                             call_id = str(tool_call.get("id") or "")
@@ -562,7 +624,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                                 arguments=cast(
                                     dict[str, object], tool_call.get("args") or {}
                                 ),
-                                token_usage=tool_call_token_usage,
                             )
                             sequence += 1
                         continue
@@ -576,6 +637,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         total_token_usage = _sum_token_usage(
                             total_token_usage, token_usage
                         )
+                        observe_model_call(token_usage)
                         if finish_reason is not None:
                             last_finish_reason = finish_reason
                         last_assistant_message = _from_langchain_message_adapter(
@@ -610,9 +672,26 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     ui_parts=collected_ui_parts,
                     model_name=last_model_name,
                     token_usage=total_token_usage,
+                    context_tokens=context_tokens,
                     finish_reason=last_finish_reason,
                 )
+                if span is not None and self._services.tracer is not None:
+                    # Turn-level totals, summed across every model call of the
+                    # turn — the per-call breakdown already lives on the child
+                    # generation spans.
+                    span.set_usage(
+                        model=last_model_name,
+                        usage=to_langfuse_usage(total_token_usage),
+                    )
+                    if last_finish_reason is not None:
+                        span.set_attribute("finish_reason", str(last_finish_reason))
+                    if self._services.tracer.captures_content:
+                        span.set_io(output=final_content)
         except Exception:
+            # Mark the turn failed so the trace list shows it as an error
+            # instead of a turn that merely produced no answer.
+            if span is not None:
+                span.set_attribute("status", "error")
             # Close every pending tool call / thought pair so neither the
             # tool-call row nor the thought row spins forever in the frontend.
             for call_id, thought_id in active_thought_ids.items():
@@ -799,7 +878,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             agent_instance_id=portable.baggage.get("agent_instance_id"),
             agent_id=self.definition.agent_id,
         )
-        
+
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
             binding=binding,

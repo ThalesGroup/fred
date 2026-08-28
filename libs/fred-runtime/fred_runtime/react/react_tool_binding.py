@@ -234,14 +234,23 @@ class ReActToolBinder:
                     attributes=attributes,
                     parent=active_agent_span.get(),
                 )
+                # A tool span without its arguments and result shows only that
+                # a tool ran and how long it took — not enough to tell a bad
+                # retrieval from a bad answer, which is the usual reason for
+                # opening a trace at all.
+                if self._tracer.captures_content:
+                    span.set_io(input=normalized_payload)
             try:
                 rendered_result, artifact = await spec.invoke(normalized_payload)
                 if span is not None:
                     span.set_attribute("status", "ok")
+                    if self._tracer is not None and self._tracer.captures_content:
+                        span.set_io(output=rendered_result)
                 return (rendered_result, artifact)
-            except Exception:
+            except Exception as exc:
                 if span is not None:
                     span.set_attribute("status", "error")
+                    span.set_attribute("error_type", type(exc).__name__)
                 raise
             finally:
                 if span is not None:

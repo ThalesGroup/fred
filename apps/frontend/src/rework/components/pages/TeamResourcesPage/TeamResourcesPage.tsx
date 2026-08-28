@@ -163,8 +163,12 @@ export default function TeamResourcesPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>{t("rework.resources.pageTitle")}</h1>
-          <p className={styles.subtitle}>{t("rework.resources.pageSubtitle")}</p>
+          <h1 className={styles.title}>
+            {isPersonalTeam ? t("rework.resources.pageTitlePersonal") : t("rework.resources.pageTitle")}
+          </h1>
+          <p className={styles.subtitle}>
+            {isPersonalTeam ? t("rework.resources.pageSubtitlePersonal") : t("rework.resources.pageSubtitle")}
+          </p>
         </div>
         <div className={styles.headerEnd}>
           <SettingChip

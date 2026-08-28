@@ -170,7 +170,6 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "call_id": "c1",
             "tool_name": "demo.echo",
             "arguments": {"text": "hi"},
-            "token_usage": {"input_tokens": 20, "output_tokens": 3, "total_tokens": 23},
         },
         {
             "kind": "tool_result",
@@ -183,6 +182,7 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "content": "Done.",
             "model_name": "gpt-4o",
             "token_usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            "context_tokens": 9,
             "finish_reason": "stop",
         },
     ]
@@ -213,12 +213,10 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[1].channel == Channel.tool_call
     assert messages[1].parts[0].name == "demo.echo"
     assert messages[1].rank == 1
-    # TRACE-01: usage of the model call that decided this tool call must
-    # survive into the persisted record, not just the live SSE payload —
-    # otherwise the chat trace loses its per-step token figure on reload.
-    assert messages[1].metadata.token_usage.input_tokens == 20
-    assert messages[1].metadata.token_usage.output_tokens == 3
-    assert messages[1].metadata.token_usage.total_tokens == 23
+    # #2403: a tool-call row carries no token figure at all. The former
+    # `token_usage` here was the deciding model call's whole prompt, which the
+    # trace rendered as if the tool had consumed it.
+    assert messages[1].metadata.token_usage is None
 
     # Row 2 — tool result record
     assert messages[2].role == Role.tool
@@ -232,6 +230,114 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[3].parts[0].text == "Done."
     assert messages[3].metadata.model == "gpt-4o"
     assert messages[3].rank == 3
+    # The anchor a reloaded conversation needs to recompute each turn's
+    # marginal cost the same way the live stream did (#2403).
+    assert messages[3].metadata.context_tokens == 9
+
+
+def test_write_turn_history_persists_ui_parts_of_the_turn() -> None:
+    """
+    The turn's chat parts must reach storage, on the final row's metadata.
+
+    Why this test exists:
+    - every capability card is a ``ui_part``; they used to live only in the live
+      SSE stream, so a reload showed a conversation with every card missing
+    - entries with no ``type`` cannot be dispatched by any renderer, so they must
+      not reach storage (RUNTIME-EXECUTION-CONTRACT.md §8.59)
+
+    How to use it:
+    - run via ``make test`` in fred-runtime
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    deck = {
+        "type": "ppt_preview",
+        "preview_id": "p1",
+        "title": "Q3 review",
+        "pdf_download_url": "/fs/download/p1.pdf",
+        "version": "v1",
+    }
+    payloads = [
+        {
+            "kind": "final",
+            "content": "Here is your deck.",
+            "ui_parts": [deck, "not-a-part", {"no": "type"}],
+        },
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="make me a deck",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    final = messages[-1]
+
+    assert final.metadata.ui_parts == [deck], (
+        "the final row must carry the turn's parts, entries with no type dropped"
+    )
+
+
+def test_write_turn_history_persists_a_turn_whose_only_output_is_a_card() -> None:
+    """
+    A final event with no text and no model name must still leave its row.
+
+    Why this test exists:
+    - the terminal-row guard was ``final_content or final_model``; a turn that
+      answers with a card alone wrote nothing, so the card was lost exactly as it
+      was before parts were persisted
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    card = {"type": "ppt_preview", "preview_id": "p1", "title": "Q3 review"}
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="make me a deck",
+            payloads=[{"kind": "final", "content": "", "ui_parts": [card]}],
+            history_store=store,
+        )
+    )
+
+    final = store.save.call_args.kwargs["messages"][-1]
+    assert final.metadata.ui_parts == [card]
+
+
+def test_write_turn_history_leaves_ui_parts_empty_when_the_turn_had_none() -> None:
+    """
+    A turn with no chat part must not invent one.
+
+    Why this test exists:
+    - the field defaults to an empty list; a ``None`` or a ``[None]`` reaching
+      storage would break every consumer that iterates it
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="hi",
+            payloads=[{"kind": "final", "content": "Hello."}],
+            history_store=store,
+        )
+    )
+
+    final = store.save.call_args.kwargs["messages"][-1]
+    assert final.metadata.ui_parts == []
 
 
 def test_write_turn_history_skips_save_when_no_content() -> None:

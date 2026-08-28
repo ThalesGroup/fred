@@ -71,8 +71,20 @@ export default function MarketplaceTeams() {
   // `GET /teams` intentionally includes personal spaces (it also feeds the
   // bootstrap-driven sidebar/team switcher), but the marketplace must never
   // list one, including the caller's own — see #2068.
+  //
+  // Same stance for private teams (#2398): the server already withholds the
+  // ReBAC `public` relation from them, but that filter is skipped entirely
+  // when authorization is disabled, and discoverability is this page's own
+  // product rule — so never offer a private team to a non-member here,
+  // whatever the endpoint returned. A member keeps seeing their own private
+  // teams under "your teams": they need them to navigate.
+  //
+  // #2433: require `=== "public"` rather than `!== "private"` — private is
+  // now the platform default, so a payload missing the field (version-skew
+  // backend) must err on non-disclosure, matching the `?? "private"`
+  // fallback in TeamSettingsParameters.
   const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
-  const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id));
+  const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id) && t.visibility === "public");
 
   const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search), [yourTeams, search]);
   const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search), [otherTeams, search]);

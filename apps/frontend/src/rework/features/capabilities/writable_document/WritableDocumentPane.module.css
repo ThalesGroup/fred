@@ -28,9 +28,9 @@
 .header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-xs);
   border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-xs) var(--spacing-m);
+  padding: var(--spacing-2xs) var(--spacing-s);
 }
 
 .titleGroup {
@@ -169,7 +169,7 @@
   border-bottom: 1px solid var(--outline-muted);
   border-radius: 0;
   background-color: var(--surface-container-high);
-  padding: var(--spacing-xs) var(--spacing-s);
+  padding: var(--spacing-2xs) var(--spacing-s);
   overflow-x: visible;
 }
 

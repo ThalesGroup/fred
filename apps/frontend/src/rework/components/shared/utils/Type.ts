@@ -43,6 +43,7 @@ const customIcons = ["customAgent"] as const;
  */
 export const materialIcons = [
   "add",
+  "crown",
   "remove",
   "home",
   "people",
@@ -54,6 +55,7 @@ export const materialIcons = [
   "radio_button_unchecked",
   "folder",
   "delete",
+  "delete_sweep",
   "infos",
   "person",
   "person_add",
@@ -84,6 +86,7 @@ export const materialIcons = [
   "close",
   "cloud_off",
   "edit_note",
+  "edit_document",
   "tune",
   "forum",
   "build",
@@ -97,6 +100,7 @@ export const materialIcons = [
   "error_outline",
   "warning",
   "info",
+  "lightbulb",
   "find_in_page",
   "summarize",
   "table_chart",

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
+    InfoBanner,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     UploadWarning,
@@ -139,6 +140,20 @@ class FrontendConfig(BaseModel):
             "'not completed' alone as 'must show the bootstrap page'. The "
             "frontend must gate on this field, not re-derive the ReBAC/auth "
             "predicate itself."
+        ),
+    )
+    info_banner: InfoBanner | None = Field(
+        default=None,
+        description=(
+            "Deployer-configured global announcement banner, from "
+            "`platform.frontend.info_banner`. `None` "
+            "when the deployment configures none — the frontend then renders "
+            "nothing. Deliberately on this public pre-auth surface, not the "
+            "authenticated `FrontendBootstrap`: the banner shows on every "
+            "page, including the GCU-acceptance and root-bootstrap screens, "
+            "which render before `/frontend/bootstrap` can succeed. Carries "
+            "only deployer-authored announcement content — never anything "
+            "sensitive."
         ),
     )
 
@@ -441,6 +456,43 @@ class SessionListItem(BaseModel):
     updated_at: datetime | None = None
 
 
+class InactiveSessionItem(BaseModel):
+    """One of the caller's conversations that has gone quiet — home dashboard
+    cleanup tool (#2298). Carries the resolved agent display name (unlike the
+    sidebar `SessionListItem`) so the cleanup list needs no extra lookup."""
+
+    session_id: str
+    team_id: TeamId
+    title: str | None = None
+    agent_name: str | None = None
+    updated_at: datetime | None = None
+
+
+class InactiveSessionsResponse(BaseModel):
+    sessions: list[InactiveSessionItem]
+
+
+class BulkDeleteSessionRef(BaseModel):
+    """A (session, space) pair to delete. team_id is required because a session
+    is only addressable within its team; ownership is still enforced per session
+    server-side, so a wrong pair simply fails rather than deleting anything."""
+
+    session_id: str
+    team_id: TeamId
+
+
+class BulkDeleteSessionsRequest(BaseModel):
+    sessions: list[BulkDeleteSessionRef]
+
+
+class BulkDeleteSessionsResponse(BaseModel):
+    """Partial-success report: bulk delete never aborts the whole batch on one
+    failure (a since-deleted or non-owned session just lands in `failed`)."""
+
+    deleted: list[str]
+    failed: list[str]
+
+
 class SessionAttachmentSummary(BaseModel):
     """Persisted conversation-level attachment metadata owned by control-plane."""
 
@@ -479,6 +531,7 @@ class PromptSummary(BaseModel):
     text_preview: str | None = None
     created_by: str | None = None
     version: int = 1
+    published: bool = False
     import_count: int = 0
     session_count: int = 0
     score: float | None = None
@@ -493,6 +546,32 @@ class PromptDetail(PromptSummary):
 
     team_id: TeamId
     text: str
+
+
+class MarketplacePromptSummary(PromptSummary):
+    """One published prompt card in the global prompts marketplace listing.
+
+    Extends the lightweight ``PromptSummary`` (``text_preview`` only, not the
+    full text) with the author team id and display name — the name is both the
+    card label and the team filter chip. The full prompt text is fetched on
+    demand via ``MarketplacePromptDetail`` when a card is opened, so the listing
+    payload stays small even with many published prompts. ``published`` is
+    always ``True`` here.
+    """
+
+    team_id: TeamId
+    team_name: str
+
+
+class MarketplacePromptDetail(PromptDetail):
+    """Full published prompt (with text) for the marketplace read-only view.
+
+    Fetched on demand when a marketplace card is opened, so the "copy to
+    clipboard" action has the full text without the listing carrying every
+    prompt's text. Adds the author team display name.
+    """
+
+    team_name: str
 
 
 class ContextPromptSummary(BaseModel):
@@ -518,6 +597,32 @@ class PromptPromoteRequest(BaseModel):
     """Request body for promoting (copy-by-value) one prompt to another team."""
 
     target_team_id: str = Field(..., min_length=1)
+
+
+class MarketplaceImportRequest(BaseModel):
+    """Request body for importing a published prompt into one or more teams.
+
+    Copy-by-value into every target space the caller can edit (personal space
+    or a team where the caller is editor). Each copy is a fresh instance with a
+    reset usage counter; on name collision the server appends a ``_imported-N``
+    suffix.
+    """
+
+    target_team_ids: list[str] = Field(..., min_length=1)
+
+
+class MarketplaceImportResult(BaseModel):
+    """Outcome of importing a published prompt into one target space."""
+
+    team_id: str
+    prompt: PromptSummary | None = None
+    error: str | None = None
+
+
+class MarketplaceImportResponse(BaseModel):
+    """Per-target results of a marketplace import into several teams."""
+
+    results: list[MarketplaceImportResult]
 
 
 class CreatePromptRequest(BaseModel):

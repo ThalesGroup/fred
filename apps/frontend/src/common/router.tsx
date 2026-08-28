@@ -21,6 +21,7 @@ import InformationSystemsPage from "@components/pages/admin/InformationSystemsPa
 // weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
 import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
+import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
@@ -30,6 +31,7 @@ import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
@@ -44,7 +46,6 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { Protected } from "@core/guards/Protected";
-import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
@@ -57,17 +58,6 @@ const basename = getConfig().frontend_basename;
 const ManagedChatPageRoute = () => {
   const { agentInstanceId } = useParams<{ agentInstanceId: string }>();
   return <ManagedChatPage key={agentInstanceId} />;
-};
-
-// Bare `/` should land on the canonical personal-space URL (`personal-<uid>`,
-// not the bare `"personal"` alias) so the address bar and the team selection
-// check agree from the first paint. A static `<Navigate>` here never
-// resolves the real id: CTRLP-10 residual, see
-// docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md §4.3.
-const HomeIndexRoute = () => {
-  const { activeTeam, isLoading } = useFrontendBootstrap();
-  if (isLoading) return null;
-  return <Navigate to={`/team/${activeTeam?.id ?? "personal"}/agents`} replace />;
 };
 
 // Bare `/admin` has no page of its own — land on the first page the caller
@@ -107,8 +97,11 @@ export const routes: RouteObject[] = [
     element: <MainLayout />,
     children: [
       {
+        // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
+        // in the Home nav panel; the personal-space agents page is reached from
+        // there rather than being the app's landing route.
         index: true,
-        element: <HomeIndexRoute />,
+        element: <Navigate to="/home" replace />,
       },
       {
         // Landing behind the mainNavBar Home entry (#2298). The team switcher
@@ -159,6 +152,10 @@ export const routes: RouteObject[] = [
         element: <MarketplaceTeams />,
       },
       {
+        path: "marketplace/prompts",
+        element: <MarketplacePrompts />,
+      },
+      {
         path: "admin",
         element: <AdminIndexRoute />,
       },
@@ -167,6 +164,18 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <AdminTeamsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform roles (PLATFORM-ADMIN-DELEGATION-RFC.md §3.7, #2405). Gated
+        // on the admin role like the backend's `can_administer_users`; the
+        // stricter bootstrap-root-only rules on the platform_admin relation
+        // are enforced server-side and only mirrored in the page's UI.
+        path: "admin/platform-roles",
+        element: (
+          <Protected requires="admin">
+            <PlatformRolesPage />
           </Protected>
         ),
       },

@@ -85,8 +85,16 @@ def _user_ref(user_id: str) -> RebacReference:
 
 
 class _FakeMetadataStore:
-    def __init__(self, teams: dict[str, TeamMetadata]) -> None:
+    def __init__(
+        self,
+        teams: dict[str, TeamMetadata],
+        *,
+        create_visibility: TeamVisibility = TeamVisibility.PRIVATE,
+    ) -> None:
         self._teams = dict(teams)
+        # #2433: mirrors the real store's ORM default (PRIVATE); a test that
+        # needs `create_team`'s public branch overrides it.
+        self._create_visibility = create_visibility
 
     async def get_by_team_id(
         self, team_id: TeamId, session=None
@@ -97,7 +105,9 @@ class _FakeMetadataStore:
         return next((t for t in self._teams.values() if t.name == name), None)
 
     async def create(self, team_id: TeamId, name: str, session=None) -> TeamMetadata:
-        metadata = TeamMetadata(id=team_id, name=name)
+        metadata = TeamMetadata(
+            id=team_id, name=name, visibility=self._create_visibility
+        )
         self._teams[str(team_id)] = metadata
         return metadata
 
@@ -563,9 +573,9 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     assert created.member_count == 1
     assert set(created.my_relations) == set()  # the creator isn't a member
     assert _admin_relation(str(created.id), "alice") in engine.direct_relations
-    # The only `list_relations` call left is the (unrelated) TEAM-09 public
-    # existence-check — never an organization existence-check read.
-    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.PUBLIC)]
+    # #2433: private default — no TEAM-09 grant, so zero `list_relations`
+    # calls (see test_create_team_is_private_by_default... for the rule).
+    assert engine.list_relations_calls == []
     org_relations = [
         r for r in engine.direct_relations if r.relation == RelationType.ORGANIZATION
     ]
@@ -578,6 +588,50 @@ async def test_create_team_response_includes_admins_immediately() -> None:
     ]
     assert engine.list_direct_relations_tokens == ["consistency-token"]
     assert engine.has_permissions_tokens == ["consistency-token"]
+
+
+@pytest.mark.asyncio
+async def test_create_team_is_private_by_default_and_never_granted_public() -> None:
+    """#2433: a brand-new team must start invisible to non-members — PRIVATE
+    visibility in the response, and no ReBAC `public` relation written (not
+    even transiently: a grant-then-lazy-revoke would leave the team readable
+    by anyone until the next `_list_teams` pass)."""
+    engine = CountingRebacEngine(
+        granted_permissions={OrganizationPermission.CAN_CREATE_TEAM}
+    )
+    store = _FakeMetadataStore({})
+
+    created = await create_team(
+        _user("platform-admin"),
+        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        _deps(engine, store),
+    )
+
+    assert created.visibility == TeamVisibility.PRIVATE
+    assert engine.public_team_ids == set()
+    assert engine.list_relations_calls == []  # no public existence-check read
+
+
+@pytest.mark.asyncio
+async def test_create_team_grants_public_when_metadata_is_public() -> None:
+    """#2433: the immediate TEAM-09 grant survives for a team whose created
+    metadata is PUBLIC — the grant is conditional on visibility, not removed
+    (no production path creates a public team today, but the branch is the
+    contract: grant iff discoverable)."""
+    engine = CountingRebacEngine(
+        granted_permissions={OrganizationPermission.CAN_CREATE_TEAM}
+    )
+    store = _FakeMetadataStore({}, create_visibility=TeamVisibility.PUBLIC)
+
+    created = await create_team(
+        _user("platform-admin"),
+        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        _deps(engine, store),
+    )
+
+    assert created.visibility == TeamVisibility.PUBLIC
+    assert engine.public_team_ids == {str(created.id)}
+    assert engine.list_relations_calls == [(Resource.TEAM, RelationType.PUBLIC)]
 
 
 @pytest.mark.asyncio

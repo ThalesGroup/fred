@@ -327,10 +327,14 @@
     },
     "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "conversationTokenUsage": {
-      "total_one": "Total: {{count}} token",
-      "total_other": "Total: {{count}} tokens",
-      "cached_one": "{{count}} token served from the provider's prompt cache",
-      "cached_other": "{{count}} tokens served from the provider's prompt cache"
+      "cached_one": "{{count, number}} token served from the provider's prompt cache",
+      "cached_other": "{{count, number}} tokens served from the provider's prompt cache",
+      "received_one": "{{count, number}} token received",
+      "received_other": "{{count, number}} tokens received",
+      "sent_one": "{{count, number}} token sent",
+      "sent_other": "{{count, number}} tokens sent",
+      "total_one": "Total: {{count, number}} token",
+      "total_other": "Total: {{count, number}} tokens"
     },
     "attachFiles": "Attach files",
     "attachmentChip": {
@@ -401,8 +405,11 @@
       "searchPolicyRowLabel": "Search",
       "searchPolicyTitle": "Search policy",
       "reasoningRowLabel": "Reasoning",
-      "reasoningOff": "Fast",
-      "reasoningOn": "Boost",
+      "reasoningModelsSection": "Models",
+      "reasoningEffortSection": "Effort",
+      "reasoningOff": "Low",
+      "reasoningOn": "High",
+      "reasoningOnMenu": "High (Reasoning)",
       "reasoningHint": "Turns on reasoning for in-depth questions (increases response time and token usage).",
       "selectLibraryFirst": "Select a library first.",
       "modelNotEnabledForTeam": "This model is not enabled for this team — the message will fail. Ask a platform administrator to enable it."
@@ -1098,6 +1105,8 @@
           "defaultSuspendedToast": "{{team}} now follows the platform default — {{count}} instance(s) suspended.",
           "defaultError": "Could not reset the feature to the platform default.",
           "rowControlAria": "Access for {{team}}",
+          "dependencyHint": "Requires {{deps}} to be enabled for this team first.",
+          "dependencyConflict": "This agent needs {{deps}} enabled for this team first.",
           "personal": {
             "label": "All personal spaces",
             "hint": "Applies to every user's personal space at once — past, future, and users who never log in.",
@@ -1108,9 +1117,13 @@
             "disableError": "Could not disable the feature for personal spaces.",
             "defaultToast": "Personal spaces now follow the platform default.",
             "defaultSuspendedToast": "Personal spaces now follow the platform default — {{count}} instance(s) suspended.",
-            "defaultError": "Could not reset the personal-space default."
+            "defaultError": "Could not reset the personal-space default.",
+            "dependencyHint": "Requires {{deps}} to be enabled for all personal spaces (or on by default) first.",
+            "dependencyConflict": "This agent needs {{deps}} enabled for all personal spaces (or on by default) first."
           }
         },
+        "defaultOnRequiresSettingsHint": "This feature has required team settings, so it cannot be on by default - enable it team by team instead.",
+        "defaultOnConflict": "This feature has required team settings, so it cannot be on by default. Enable it team by team instead.",
         "defaultOffReasoningToast": "Reasoning was switched off with the model. Re-enable the model, then reasoning, to bring it back.",
         "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
         "reasoningOffToast": "Reasoning disabled for this model.",
@@ -1240,7 +1253,7 @@
         },
         "topByConversations": {
           "title": "Most talked-to agents",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         },
         "total": "Total agents number"
       },
@@ -1258,6 +1271,53 @@
       "documents": {
         "deltaLabel": "Change over period",
         "total": "Uploaded documents"
+      },
+      "engagement": {
+        "agentsPerUser": {
+          "empty": "No user activity in this period.",
+          "medianLabel": "Median agents per user",
+          "title": "Agents per user",
+          "valueLabel": "Users"
+        },
+        "agentsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
+          "title": "Agents per user over time",
+          "valueLabel": "Median agents per user ({{window}})"
+        },
+        "conversationDepth": {
+          "empty": "No conversations in this period.",
+          "medianLabel": "Median messages per conversation",
+          "title": "Conversation depth",
+          "valueLabel": "Conversations"
+        },
+        "conversationDepthTrend": {
+          "empty": "Not enough conversations in this period to plot a trend.",
+          "title": "Conversation depth over time",
+          "valueLabel": "Median messages per conversation ({{window}})"
+        },
+        "conversationsPerUser": {
+          "empty": "No user activity in this period.",
+          "medianLabel": "Median conversations per user",
+          "title": "Conversations per user",
+          "valueLabel": "Users"
+        },
+        "conversationsPerUserTrend": {
+          "empty": "Not enough activity in this period to plot a trend.",
+          "title": "Conversations per user over time",
+          "valueLabel": "Median conversations per user ({{window}})"
+        },
+        "description": "Covers only users active over the selected period — anyone who started at least one conversation. Inactive users are not counted.",
+        "trendTitleWithWindow": "{{title}} ({{window}})",
+        "trendWindow": {
+          "day_one": "trailing {{count}} day",
+          "day_other": "trailing {{count}} days",
+          "hour_one": "trailing {{count}} hour",
+          "hour_other": "trailing {{count}} hours",
+          "minute_one": "trailing {{count}} minute",
+          "minute_other": "trailing {{count}} minutes",
+          "second_one": "trailing {{count}} second",
+          "second_other": "trailing {{count}} seconds"
+        }
       },
       "error": "Failed to load data.",
       "loading": "Loading...",
@@ -1283,6 +1343,7 @@
         "administration": "Platform administration",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Usage overview",
         "resources": "Resources",
         "tokenUsage": "Token usage",
@@ -1363,7 +1424,7 @@
         },
         "mostActiveAgents": {
           "title": "Most active agents",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         }
       }
     },
@@ -1441,6 +1502,33 @@
         },
         "title": "Community teams",
         "yourTeams": "Your teams"
+      },
+      "prompts": {
+        "title": "Community prompts",
+        "searchPlaceholder": "Search a prompt...",
+        "clearSearch": "Clear search",
+        "loading": "Loading prompts...",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "emptySearch": "No prompt matches this search.",
+        "import": {
+          "title": "Copy this prompt to a team",
+          "subtitle": "Select the spaces to copy “{{name}}” into.",
+          "confirm": "Copy",
+          "personalSpace": "Personal space",
+          "searchPlaceholder": "Search a team",
+          "clearSearch": "Clear search",
+          "noTeams": "No team matches.",
+          "successToast": "Prompt copied ({{count}})",
+          "errorToast": "Copy failed ({{count}})",
+          "originTeam": "Origin team"
+        },
+        "unpublish": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "“{{name}}” will disappear from the marketplace and will no longer be available to other users.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        }
       }
     },
     "helpCenter": {
@@ -1477,8 +1565,102 @@
       "searchPlaceholder": "Search a team",
       "searchClear": "Clear search",
       "yourTeams": "Your teams",
+      "sort": {
+        "aria": "Sort teams",
+        "recent": "Recently viewed",
+        "alpha": "Alphabetical"
+      },
       "pageTitle": "Home",
-      "pageSubtitle": "Select a space in the left panel to get started."
+      "pageSubtitle": "Select a space in the left panel to get started.",
+      "greeting": "Hello, what are we doing today?",
+      "greetingNamed": "Hello {{name}}, what are we doing today?",
+      "subtitle": "Access any agent, team or prompt from here.",
+      "tabs": {
+        "aria": "Home sections",
+        "quickAccess": "Quick access",
+        "activity": "Your activity",
+        "trending": "Trending"
+      },
+      "responsible": {
+        "title": "Responsible AI",
+        "footprintInfo": {
+          "aria": "How is this estimate calculated?",
+          "title": "Where does this estimate come from?",
+          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
+          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "limitsTitle": "Good to keep in mind",
+          "limit1": "It's an estimate, not an exact measurement.",
+          "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
+          "limit3": "The goal is to give an order of magnitude to raise awareness, not a precise figure.",
+          "confirm": "Got it"
+        },
+        "cleanupTool": {
+          "aria": "Clean up",
+          "confirmAll": "Delete all",
+          "confirm": "Delete ({{count}})",
+          "cancel": "Cancel",
+          "toast": "{{count}} item(s) deleted"
+        },
+        "cleanupConversations": {
+          "title": "Clean up inactive conversations",
+          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
+          "empty": "No inactive conversation to clean up."
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 most-used prompts",
+        "uses": "uses",
+        "weekDelta": "▲ {{count}} · 7d",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "periodDelta": "▲ {{count}} · {{days}}d"
+      },
+      "period": {
+        "label": "Period",
+        "days": "{{count}}d",
+        "d7": "Last 7 days",
+        "d30": "Last 30 days",
+        "d90": "Last 90 days"
+      },
+      "search": {
+        "placeholder": "Search agents, teams, prompts…",
+        "empty": "No results.",
+        "groups": {
+          "agents": "Agents",
+          "teams": "Teams",
+          "prompts": "Prompts"
+        }
+      },
+      "recentAgents": {
+        "title": "Recently used agents"
+      },
+      "topAgents": {
+        "title": "Your most-used agents",
+        "unit": "conv.",
+        "empty": "No agent used in this period."
+      },
+      "topTeams": {
+        "title": "Your activity across your teams",
+        "unit": "conv.",
+        "personalSpace": "Personal space",
+        "empty": "You are not a member of any team.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Editor",
+          "team_analyst": "Analyst",
+          "team_member": "Member"
+        }
+      },
+      "activity": {
+        "title": "Your activity",
+        "conversations": "New conversations",
+        "messages": "Messages sent",
+        "agents": "Agents used",
+        "deltaUp": "▲ {{pct}}% ({{abs}})",
+        "deltaDown": "▼ {{pct}}% ({{abs}})",
+        "deltaFlat": "flat",
+        "vsPrevious": "vs previous period",
+        "periodCaption": "over the last {{count}} days"
+      }
     },
     "mainNav": {
       "ariaLabel": "Main navigation",
@@ -1609,6 +1791,8 @@
         "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
         "deleteFolderMessageUnknownCount": "Delete \"{{name}}\" and all its content? This cannot be undone.",
         "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
+        "deleteFoldersMessage": "Delete {{count}} folder(s) and all their content? This cannot be undone.",
+        "deleteMixedMessage": "Delete {{folderCount}} folder(s) with all their content and remove {{docCount}} document(s)? This cannot be undone.",
         "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
         "shareTitle": "Copy to Team space",
@@ -1733,14 +1917,20 @@
       },
       "title": "Resources",
       "toast": {
+        "bulkExcludeError": "Could not exclude the selection from search",
+        "bulkExcludeNothing": "The selected items are already excluded from search",
+        "bulkExcludedFromSearch": "{{count}} document(s) excluded from search",
         "deleteFolderError": "Could not delete the folder",
         "deleteFolderSuccess": "Folder deleted",
+        "downloadEmpty": "The selected folders contain no documents to download",
         "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
         "processStarted": "Processing started",
         "stopIngestionError": "Could not stop the ingestion",
         "stopIngestionRequested": "Ingestion stop requested"
-      }
+      },
+      "pageTitlePersonal": "Your personal resources",
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
     },
     "save": "Save",
     "serviceNotice": {
@@ -1775,6 +1965,7 @@
           "capabilities": "Features",
           "corpusAudit": "Corpus audit",
           "migration": "Platform data",
+          "platformRoles": "Platform roles",
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams",
@@ -1797,7 +1988,8 @@
       },
       "marketplace": {
         "menu": {
-          "teams": "Teams"
+          "teams": "Teams",
+          "prompts": "Prompts"
         },
         "title": "Marketplace"
       },
@@ -1948,6 +2140,49 @@
         "copied": "Copied!"
       }
     },
+    "platformRoles": {
+      "title": "Platform roles",
+      "holders": {
+        "title": "Current role holders",
+        "empty": "No platform roles granted yet.",
+        "loading": "Loading platform roles…",
+        "error": "Platform roles could not be loaded.",
+        "rootBadge": "Primary admin",
+        "table": {
+          "user": "User",
+          "roles": "Roles"
+        }
+      },
+      "roles": {
+        "platform_admin": "Platform admin",
+        "platform_observer": "Platform observer"
+      },
+      "grant": {
+        "title": "Grant a role",
+        "userLabel": "User",
+        "userPlaceholder": "Search for a user",
+        "clearSelection": "Clear selected user",
+        "roleLabel": "Role",
+        "rootOnlyHint": "Only the primary admin can appoint or revoke platform admins.",
+        "submit": "Grant role",
+        "successSummary": "{{role}} granted to {{user}}",
+        "errors": {
+          "summary": "Could not grant the role",
+          "fallbackDetail": "An unexpected error occurred while granting the role.",
+          "forbiddenDetail": "Only the primary admin can manage platform admins.",
+          "conflictDetail": "Root bootstrap has never run on this platform."
+        }
+      },
+      "revoke": {
+        "ariaLabel": "Revoke {{role}} from {{user}}",
+        "successSummary": "{{role}} revoked from {{user}}",
+        "errors": {
+          "summary": "Could not revoke the role",
+          "fallbackDetail": "An unexpected error occurred while revoking the role.",
+          "forbiddenDetail": "This role is protected — only the primary admin can revoke platform admins, and the primary admin itself is unrevocable."
+        }
+      }
+    },
     "adminTeams": {
       "title": "Teams",
       "existingTeams": {
@@ -1977,6 +2212,10 @@
     "teamCard": {
       "join": "Join",
       "inviteOnly": "Invite only",
+      "invitationMail": {
+        "subject": "[{{site}}] Request to join the {{team}} team",
+        "body": "Hello,\n\nI would like to join the {{team}} team on {{site}}.\n\nUser details: {{user}}\n\nGo to the {{team}} team page: {{agentsUrl}}\nManage the {{team}} team members: {{membersUrl}}"
+      },
       "memberCount": "{{count}} members"
     },
     "teamRoles": {
@@ -2078,7 +2317,9 @@
           "label": "Joining mode",
           "support": "Users can join your team freely or by invitation only.",
           "open": "Open",
-          "inviteOnly": "Invite only"
+          "inviteOnly": "Invite only",
+          "manual": "Manual only",
+          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
         },
         "visibility": {
           "label": "Team visibility",
@@ -2132,7 +2373,8 @@
           "all": "All",
           "aria": "Filter by pod"
         },
-        "title": "Chat with your {{agentsNicknamePlural}}"
+        "title": "Team agents",
+        "titlePersonal": "Your personal agents"
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
@@ -2254,10 +2496,20 @@
       },
       "prompts": {
         "card": {
-          "uses": "Uses: {{count}}"
+          "uses": "Uses: {{count}}",
+          "publishedChip": "Published",
+          "menu": {
+            "edit": "Edit",
+            "duplicate": "Duplicate",
+            "publish": "Publish to marketplace",
+            "unpublish": "Remove from marketplace",
+            "delete": "Delete",
+            "import": "Copy to...",
+            "removeFromMarketplace": "Remove from marketplace"
+          }
         },
         "clearSearch": "Clear search",
-        "create": "New prompt",
+        "create": "Create prompt",
         "emptySearch": "No prompts match this search.",
         "firstCreate": "Create prompt",
         "form": {
@@ -2270,12 +2522,40 @@
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
         "searchPlaceholder": "Search prompts...",
-        "title": "Prompts",
+        "title": "Team prompts",
         "view": {
           "closeAria": "Close",
           "copiedToast": "Copied to clipboard",
           "copyAria": "Copy prompt"
-        }
+        },
+        "duplicateDialog": {
+          "title": "Duplicate this prompt",
+          "nameLabel": "New prompt name",
+          "cancel": "Cancel",
+          "confirm": "Duplicate",
+          "successToast": "Prompt duplicated",
+          "errorToast": "Failed to duplicate prompt"
+        },
+        "publishDialog": {
+          "title": "Publish this prompt to the marketplace?",
+          "message": "This prompt will become public to every user of the application. They will be able to use it and import it into their own spaces to edit it. The usage counter will also reflect uses outside your team, and any change you make will be immediately visible on the marketplace.",
+          "confirm": "Publish",
+          "successToast": "Prompt published to the marketplace",
+          "errorToast": "Failed to publish prompt"
+        },
+        "unpublishDialog": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "This prompt will disappear from the marketplace and will no longer be available to other users. Your team keeps its own copy.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        },
+        "editPublishedDialog": {
+          "title": "Save changes?",
+          "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
+          "confirm": "Save"
+        },
+        "titlePersonal": "Your personal prompts"
       }
     },
     "userSettings": {

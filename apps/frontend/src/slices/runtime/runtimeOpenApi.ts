@@ -518,7 +518,9 @@ export type RuntimeErrorEvent = {
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
-  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
   chunk_kind?: string | null;
   citation_url?: string | null;
   confidential?: boolean | null;
@@ -588,6 +590,7 @@ export type LinkPart = {
 };
 export type FinalRuntimeEvent = {
   content?: string;
+  context_tokens?: number | null;
   finish_reason?: FinishReason | null;
   kind?: "final";
   model_name?: string | null;
@@ -649,9 +652,6 @@ export type ToolCallRuntimeEvent = {
   call_id: string;
   kind?: "tool_call";
   sequence?: number;
-  token_usage?: {
-    [key: string]: number;
-  } | null;
   tool_name: string;
 };
 export type ToolResultRuntimeEvent = {
@@ -747,11 +747,15 @@ export type ChatTokenUsage = {
 };
 export type ChatMetadata = {
   agent_id?: string | null;
+  context_tokens?: number | null;
   finish_reason?: FinishReason | null;
   latency_ms?: number | null;
   model?: string | null;
   sources?: VectorSearchHit[];
   token_usage?: ChatTokenUsage | null;
+  ui_parts?: {
+    [key: string]: any;
+  }[];
   [key: string]: any;
 };
 export type CodePart = {

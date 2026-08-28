@@ -61,6 +61,31 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listPlatformRolesControlPlaneV1UsersPlatformRolesGet: build.query<
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse,
+      ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/platform-roles` }),
+    }),
+    grantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPost: build.mutation<
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse,
+      GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles`,
+        method: "POST",
+        body: queryArg.grantPlatformRoleRequest,
+      }),
+    }),
+    revokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDelete: build.mutation<
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse,
+      RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/${queryArg.userId}/platform-roles/${queryArg.relation}`,
+        method: "DELETE",
+      }),
+    }),
     deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
       DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
       DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
@@ -355,6 +380,52 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.promptPromoteRequest,
       }),
     }),
+    postPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPost: build.mutation<
+      PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiResponse,
+      PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/publish`,
+        method: "POST",
+      }),
+    }),
+    postUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPost: build.mutation<
+      PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiResponse,
+      PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/unpublish`,
+        method: "POST",
+      }),
+    }),
+    getMarketplacePromptsControlPlaneV1MarketplacePromptsGet: build.query<
+      GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiResponse,
+      GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/marketplace/prompts` }),
+    }),
+    getMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGet: build.query<
+      GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiResponse,
+      GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}` }),
+    }),
+    postMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePost: build.mutation<
+      PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse,
+      PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}/use`, method: "POST" }),
+    }),
+    postMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPost: build.mutation<
+      PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiResponse,
+      PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/marketplace/prompts/${queryArg.promptId}/import`,
+        method: "POST",
+        body: queryArg.marketplaceImportRequest,
+      }),
+    }),
     getTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGet: build.query<
       GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiResponse,
       GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiArg
@@ -413,6 +484,27 @@ const injectedRtkApi = api.injectEndpoints({
       GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
+    }),
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
+      GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/inactive-sessions`,
+        params: {
+          inactive_days: queryArg.inactiveDays,
+        },
+      }),
+    }),
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: build.mutation<
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse,
+      PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/sessions/bulk-delete`,
+        method: "POST",
+        body: queryArg.bulkDeleteSessionsRequest,
+      }),
     }),
     getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: build.query<
       GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse,
@@ -725,6 +817,84 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsConversationsPerUserGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversations_per_user`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationDepthGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversation_depth`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentsPerUserGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_per_user`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationsPerUserTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversations_per_user_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsConversationDepthTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/conversation_depth_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentsPerUserTrendGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_per_user_trend`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
       HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
       HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
@@ -783,6 +953,84 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/kpi/presets/documents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserSessionsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_sessions_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserMessagesTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_messages_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_agents_used_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTopAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserTopTeamsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_top_teams`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUserRecentAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/user_recent_agents`,
         params: {
           since: queryArg.since,
           until: queryArg.until,
@@ -1003,6 +1251,19 @@ export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse = /** status 200
 export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg = {
   ids: string[];
 };
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiResponse =
+  /** status 200 Successful Response */ PlatformRolesResponse;
+export type ListPlatformRolesControlPlaneV1UsersPlatformRolesGetApiArg = void;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiResponse = unknown;
+export type GrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostApiArg = {
+  userId: string;
+  grantPlatformRoleRequest: GrantPlatformRoleRequest;
+};
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiResponse = unknown;
+export type RevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteApiArg = {
+  userId: string;
+  relation: PlatformRoleRelation;
+};
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
@@ -1184,6 +1445,36 @@ export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost
   promptId: string;
   promptPromoteRequest: PromptPromoteRequest;
 };
+export type PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiResponse =
+  /** status 200 Successful Response */ MarketplacePromptSummary[];
+export type GetMarketplacePromptsControlPlaneV1MarketplacePromptsGetApiArg = void;
+export type GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiResponse =
+  /** status 200 Successful Response */ MarketplacePromptDetail;
+export type GetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetApiArg = {
+  promptId: string;
+};
+export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiResponse = unknown;
+export type PostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostApiArg = {
+  promptId: string;
+};
+export type PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiResponse =
+  /** status 200 Successful Response */ MarketplaceImportResponse;
+export type PostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostApiArg = {
+  promptId: string;
+  marketplaceImportRequest: MarketplaceImportRequest;
+};
 export type GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiResponse =
   /** status 200 Successful Response */ PromptCategorySummary[];
 export type GetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetApiArg = {
@@ -1223,6 +1514,16 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionListItem[];
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
+};
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
+  /** status 200 Successful Response */ InactiveSessionsResponse;
+export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
+  inactiveDays?: number;
+};
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiResponse =
+  /** status 200 Successful Response */ BulkDeleteSessionsResponse;
+export type PostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostApiArg = {
+  bulkDeleteSessionsRequest: BulkDeleteSessionsRequest;
 };
 export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
   /** status 200 Successful Response */ SessionListItem;
@@ -1446,6 +1747,66 @@ export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
   /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
   teamId?: string | null;
 };
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse =
+  /** status 200 Successful Response */ DistributionResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
 export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
 export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
@@ -1489,6 +1850,66 @@ export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
 export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserTopAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
+  teamId?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse =
+  /** status 200 Successful Response */ UserRecentAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1696,6 +2117,19 @@ export type CreateUserRequest = {
   last_name?: string | null;
   enabled?: boolean;
 };
+export type PlatformRoleRelation = "platform_admin" | "platform_observer";
+export type PlatformRoleHolder = {
+  user: UserSummary;
+  relations: PlatformRoleRelation[];
+  is_bootstrap_root?: boolean;
+};
+export type PlatformRolesResponse = {
+  holders: PlatformRoleHolder[];
+  caller_is_bootstrap_root: boolean;
+};
+export type GrantPlatformRoleRequest = {
+  relation: PlatformRoleRelation;
+};
 export type GcuVersionsType = "v1";
 export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -1839,6 +2273,30 @@ export type FrontendUserAuthConfig = {
   realm_url?: string | null;
   client_id?: string | null;
 };
+export type InfoBannerLink = {
+  /** Link target URL. */
+  url: string;
+  /** Locale → label map (e.g. {"en": "...", "fr": "..."}). */
+  labels?: {
+    [key: string]: string;
+  };
+};
+export type InfoBanner = {
+  /** Banner background CSS color. */
+  color?: string;
+  /** Seconds after which the banner hides itself, measured from app load. Omit for a persistent banner — the default. */
+  auto_hide_seconds?: number | null;
+  /** Locale → title map (e.g. {"en": "...", "fr": "..."}). */
+  titles?: {
+    [key: string]: string;
+  };
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+  /** Links rendered on the right side of the banner. */
+  links?: InfoBannerLink[];
+};
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
@@ -1846,6 +2304,8 @@ export type FrontendConfig = {
   root_bootstrap_completed: boolean;
   /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
   root_bootstrap_required: boolean;
+  /** Deployer-configured global announcement banner, from `platform.frontend.info_banner`. `None` when the deployment configures none — the frontend then renders nothing. Deliberately on this public pre-auth surface, not the authenticated `FrontendBootstrap`: the banner shows on every page, including the GCU-acceptance and root-bootstrap screens, which render before `/frontend/bootstrap` can succeed. Carries only deployer-authored announcement content — never anything sensitive. */
+  info_banner?: InfoBanner | null;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -2139,6 +2599,7 @@ export type PromptSummary = {
   text_preview?: string | null;
   created_by?: string | null;
   version?: number;
+  published?: boolean;
   import_count?: number;
   session_count?: number;
   score?: number | null;
@@ -2175,6 +2636,7 @@ export type PromptDetail = {
   text_preview?: string | null;
   created_by?: string | null;
   version?: number;
+  published?: boolean;
   import_count?: number;
   session_count?: number;
   score?: number | null;
@@ -2198,6 +2660,60 @@ export type PromptScoreUpdateRequest = {
 };
 export type PromptPromoteRequest = {
   target_team_id: string;
+};
+export type MarketplacePromptSummary = {
+  id: string;
+  name: string;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  team_id: string;
+  team_name: string;
+};
+export type MarketplacePromptDetail = {
+  id: string;
+  name: string;
+  description?: string | null;
+  category_id?: string | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  created_by?: string | null;
+  version?: number;
+  published?: boolean;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  team_id: string;
+  text: string;
+  team_name: string;
+};
+export type MarketplaceImportResult = {
+  team_id: string;
+  prompt?: PromptSummary | null;
+  error?: string | null;
+};
+export type MarketplaceImportResponse = {
+  results: MarketplaceImportResult[];
+};
+export type MarketplaceImportRequest = {
+  target_team_ids: string[];
 };
 export type PromptCategorySummary = {
   id: string;
@@ -2308,6 +2824,27 @@ export type CreateSessionRequest = {
   session_id: string;
   agent_instance_id?: string | null;
   title?: string | null;
+};
+export type InactiveSessionItem = {
+  session_id: string;
+  team_id: string;
+  title?: string | null;
+  agent_name?: string | null;
+  updated_at?: string | null;
+};
+export type InactiveSessionsResponse = {
+  sessions: InactiveSessionItem[];
+};
+export type BulkDeleteSessionsResponse = {
+  deleted: string[];
+  failed: string[];
+};
+export type BulkDeleteSessionRef = {
+  session_id: string;
+  team_id: string;
+};
+export type BulkDeleteSessionsRequest = {
+  sessions: BulkDeleteSessionRef[];
 };
 export type UpdateSessionRequest = {
   /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */
@@ -2423,6 +2960,8 @@ export type CapabilityEnablementItem = {
   team_settings_fields?: FieldSpec[];
   /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). */
   kind?: "tool" | "agent" | "model";
+  /** For a `kind="agent"` row: the template's default tool/MCP capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). Enabling the agent for a team 409s unless each of these is already usable by that team - exposed so the admin UI can disable the grant up front and explain why (GitHub #2408). Always empty for `kind="tool"`/`"model"`. */
+  default_capability_ids?: string[];
   /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
   suspended_instances?: number;
   /** Instances selecting this capability whose runtime pod was unreachable, so their health is UNKNOWN rather than broken. Kept separate from `suspended_instances`: the reconciliation sweep skips an unreachable pod rather than suspending on a transient outage (#1975, RFC §3.9), and this count reports the same way. */
@@ -2677,6 +3216,7 @@ export type TimeSeriesResponse = {
   since: string;
   until: string;
   interval: string;
+  window?: string | null;
 };
 export type ScalarResponse = {
   value: number;
@@ -2692,6 +3232,12 @@ export type LabelValuePoint = {
 };
 export type LabelValueResponse = {
   rows: LabelValuePoint[];
+  since: string;
+  until: string;
+};
+export type DistributionResponse = {
+  rows: LabelValuePoint[];
+  median?: number | null;
   since: string;
   until: string;
 };
@@ -2714,6 +3260,28 @@ export type MultiSeriesTimeSeriesResponse = {
   since: string;
   until: string;
   interval: string;
+};
+export type UserTopAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  value: number;
+};
+export type UserTopAgentsResponse = {
+  rows: UserTopAgentRow[];
+  since: string;
+  until: string;
+};
+export type UserRecentAgentRow = {
+  agent_instance_id: string;
+  agent_name: string;
+  team_id?: string | null;
+  last_used: string;
+};
+export type UserRecentAgentsResponse = {
+  rows: UserRecentAgentRow[];
+  since: string;
+  until: string;
 };
 export type TeamStorageRow = {
   team_id: string;
@@ -2895,6 +3463,10 @@ export const {
   useCreateUserControlPlaneV1UsersPostMutation,
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
   useLazyGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
+  useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useLazyListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery,
+  useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation,
+  useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
@@ -2944,6 +3516,14 @@ export const {
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
+  usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
+  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
+  useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  useLazyGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
+  useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
+  useLazyGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
+  usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
+  usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation,
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   useLazyGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
   usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation,
@@ -2954,6 +3534,9 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
@@ -3002,6 +3585,18 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
   useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
@@ -3012,6 +3607,18 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,

@@ -13,10 +13,12 @@
  * limitations under the License.
  */
 
+/* 272px: kept in sync with the other nav panels (see TeamContentNavbar) — they
+ * swap in the same grid column, a mismatch makes the column jump. */
 .panel {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: 272px;
   height: 100%;
   min-height: 0;
 }
@@ -37,9 +39,13 @@
 
 .teamListHeader {
   display: flex;
+  position: relative;
+  justify-content: space-between;
   align-items: center;
-  padding: 0 var(--spacing-m);
-  height: 32px;
+  /* Trailing inset tightened (m → s) so the search IconButton sits flush with
+   * the row below it, while the label keeps its `m` inset on the left. */
+  padding: 0 var(--spacing-s) 0 var(--spacing-m);
+  height: 48px;
 }
 
 .teamListHeaderLabel {
@@ -47,7 +53,31 @@
   font: var(--font-body-small);
 }
 
-.teamSearch {
+/* The search field is revealed on demand: it overlays the whole header row
+ * (label + button) rather than occupying its own line, so opening it doesn't
+ * shift the list. Opaque background = the sidebar's own, to mask what's under
+ * it. Horizontal inset matches the search row's former padding. */
+.searchOverlay {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  align-items: center;
+  background: var(--surface-container-low);
+  padding: 0 var(--spacing-s);
+  height: 100%;
+
+  /* The field (32px) is shorter than the header (48px): flex-center it
+   * vertically and let it grow to the full inset width horizontally. */
+  > * {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* Sort dropdown — same horizontal inset and width as the search field above. */
+.teamSort {
   padding: 0 var(--spacing-s) var(--spacing-xs);
 }
 

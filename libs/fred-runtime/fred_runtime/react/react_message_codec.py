@@ -204,7 +204,11 @@ def final_assistant_message(
     raise RuntimeError("ReAct execution completed without an assistant message.")
 
 
-def to_runnable_config(config: ExecutionConfig,*,checkpoint_ns: str | None = None,) -> Mapping[str, object] | None:
+def to_runnable_config(
+    config: ExecutionConfig,
+    *,
+    checkpoint_ns: str | None = None,
+) -> Mapping[str, object] | None:
     """
     Convert Fred execution config to LangChain runnable config.
 

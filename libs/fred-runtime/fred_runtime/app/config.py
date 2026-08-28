@@ -211,6 +211,43 @@ class LangfuseObservabilityConfig(BaseModel):
 
     host: str = "http://localhost:3001"
 
+    capture_content: bool = False
+    """
+    Send prompts, model answers, and tool payloads to Langfuse.
+
+    **Off by default, and it must stay off outside a developer's own machine.**
+    `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §7 excludes content —
+    prompts, tool arguments/results, documents — from every observability
+    stream; content lives only in the product's own storage under the product's
+    own access control. Turning this on deliberately breaks that rule for a
+    local Langfuse, which is the only setting where it is legitimate: debugging
+    an agent's reasoning, or checking what a model actually received.
+
+    Enabling it in a shared or production deployment exports user conversations
+    to a system that does not enforce Fred's authorization model. Do not.
+
+    The env var `LANGFUSE_CAPTURE_CONTENT` overrides this field, so a developer
+    can flip it per-run without editing configuration.yaml.
+    """
+
+    max_content_chars: int = 100_000
+    """
+    Total character budget per exported payload when `capture_content` is on.
+
+    This is a budget for the payload as a whole, not a per-string cap. A ReAct
+    turn's transcript grows with every tool round and every model call
+    re-exports all of it, so capping each string alone would still leave the
+    payload unbounded in the number of strings. Truncated payloads carry a
+    `…[truncated N chars]` marker so a reader never mistakes a cut payload for
+    a complete one, and the budget is spent most-recent-first so a verbose
+    system prompt cannot blank out the actual question and answer.
+
+    Override per-run with `LANGFUSE_MAX_CONTENT_CHARS`. That env var is the only
+    working knob when the pod reaches Langfuse through `build_default_tracer`
+    (credentials present but `tracer` not set to `langfuse`), since that path
+    never reads this file.
+    """
+
 
 class PodObservabilityConfig(BaseModel):
     """

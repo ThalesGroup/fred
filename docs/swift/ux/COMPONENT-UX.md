@@ -138,13 +138,43 @@ Renders a toggle button ("Pick from library"). When open, shows all available `C
 items (personal + team scope pooled by `GetContextPromptsEarly`) reusing the exact same `PromptCard`
 organism and `FilterChips` category filter bar as the team prompt library page (`PromptsPage`), for
 visual consistency between the two prompt-browsing surfaces (PROMPT-09 follow-up). `canManage` is
-always `false` here (no hover-edit pencil — picking, not managing) and the card's click handler is
+always `false` here (no more-menu — picking, not managing) and the card's click handler is
 rewired to `onSelect(id)` instead of opening the read-only view dialog. Categories come from
 `GetTeamPromptCategories` scoped to the current team; a pooled prompt whose `category_id` doesn't
 match any of those (e.g. a personal-scope prompt's own category) falls into the "Sans catégorie"
 bucket rather than crashing or mismatching. The scope badge ("personal"/"team") the old plain-grid
 version showed per card is gone — `PromptCard` doesn't render one, and reusing "the exact same card"
 was the explicit ask.
+
+---
+
+### `PromptCard` variants + `MarketplacePrompts` (PROMPT-06, #2317)
+
+**Location:** `src/rework/components/shared/organisms/PromptCard/PromptCard.tsx`,
+`src/rework/components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx`
+**Status:** `Functional`
+
+`PromptCard` gained a `variant` prop (`"team"` | `"marketplace"`). The former
+hover-edit pencil is now an always-visible **more-menu** (`IconButtonMenu`,
+`more_vert`), mirroring `AgentCard`:
+
+- **team** variant (team library): Edit / Duplicate / Publish|Unpublish / Delete,
+  and a bottom-right `storefront` "Published" chip (success-container tokens)
+  when the prompt is on the marketplace. Publish, unpublish, and saving an edit
+  to a published prompt each go through a confirmation dialog (the spec's
+  warnings). Duplicate reuses a prompt-flavoured fork of `DuplicateAgentDialog`.
+- **marketplace** variant: the header shows the **author team name** in place of
+  the category (each team has its own categories); the more-menu is Import
+  (+ Remove from marketplace for editors of the author team). Clicking the card
+  opens the read-only view whose only action is copy-to-clipboard — which records
+  a marketplace "use" toward the shared counter.
+
+`MarketplacePrompts` ("Prompts de la communauté") reuses the `MarketplaceTeams`
+header pattern (`h1` + `SearchInput`) and `FilterChips` (one chip per author
+team). Reached from a nav item under the teams marketplace (`MarketplaceNavbar`,
+`description` icon) at `/marketplace/prompts`. Import opens `ImportPromptDialog`:
+a multi-select of the personal space + every editable team, with an `xs`
+`SearchInput` filter.
 
 #### Open UX issues
 
@@ -232,7 +262,11 @@ but is a hole in text, invisible on the light theme) — leaving cyan → violet
 pink. A solid `--primary` sits underneath as the fallback for engines that
 ignore `background-clip: text`, and `forced-colors` drops the gradient for the
 system palette. The WORD carries the state either way, so colour is
-reinforcement, never the only signal.
+reinforcement, never the only signal. 2026-08-21: the shared stops were
+saturated and moderately darkened (same hues) in both places — the original
+pastels were near-invisible on the light surface, a fully darkened pass sank
+into the dark one; the retained stops sit halfway between, so the single
+gradient reads on both themes.
 
 Deliberately NOT a low/medium/high picker — a same-day effort picker was
 withdrawn (providers 400 on values they don't support,
@@ -1224,6 +1258,35 @@ UUID-prefix fallback from the open issue above) — same shape as
 
 ---
 
+### `ChatList` meta line and nav panel width (2026-08-20)
+
+**Location:**
+`src/rework/components/shared/organisms/ChatList/ChatListItem/ChatListItem.tsx`,
+`src/rework/components/shared/organisms/ChatList/ChatList.module.scss`,
+`Sidebar/{TeamContentNavbar,HomeNavPanel,MarketplaceNavbar,AdminNavbar}` stylesheets
+**Status:** `Functional`
+
+The conversation row's second line (`<agent name> · DD/MM/YY - HH:mm`) wrapped
+onto a second line whenever the agent name was long, colliding with the next
+row and making the list unreadable. Two changes:
+
+- The meta line is now a nowrap flex row where **only the agent name flexes**
+  (`flex: 1 1 auto; min-width: 0; text-overflow: ellipsis`, full name in
+  `title`); the separator and the date are `flex: 0 0 auto`, so the date and
+  time always render whole. Same ellipsis treatment on `.groupHeader`, the
+  per-agent sub-list header shown when grouping is on.
+- Vertical column alignment (2026-08-21): the agent name **grows** to fill the
+  row, so its box is the same width on every line — short names leave a gap,
+  long names ellipsize — and the `·` separator and date start at the same x
+  everywhere. The date also uses `font-variant-numeric: tabular-nums`, so the
+  fixed `DD/MM/YY - HH:mm` format always renders at the same width regardless
+  of which digits it contains.
+- All four nav panels went **240px → 272px**. They swap into the same sidebar
+  grid column, so the width must stay identical across them or the column
+  jumps when switching between Home / team / marketplace / admin.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
@@ -1245,7 +1308,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 #### Open UX issues
 
 - Not yet design-reviewed against a live stack. First functional pass only.
-- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#65e0f6`, `#9299ff`, `#e1c39c`, `#d665b4`). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is.
+- **Gradient animation colours** — the spectrum stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes) are intentional branding colours outside the semantic token system — confirm with designer whether they should be folded into it or kept as-is. Since 2026-08-27 they live once in `styles/gradients.css` as `--gradient-spectrum-stops` (full, for borders) and `--gradient-spectrum-stops-core` (saturated run only, for gradients clipped to text), with the rotating-border recipe in the `spectrum-border` SCSS mixin. Three consumers: this Chat button, the Home page's recently-used agent tiles (same "start a conversation with this agent" affordance), and the composer's `Boost` text.
 
 #### Resolved
 
@@ -1266,7 +1329,8 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only` | No button; muted label (`on-surface-retreat`) |
+| `invite_only`, team is `public`, at least one admin has an email | "Join" button (`mail` icon) - opens the user's mail client on a `mailto:` prefilled for the team admins (#2453, see below) |
+| `invite_only`, any other case | No button; muted label (`on-surface-retreat`) |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -1279,6 +1343,99 @@ system to route requests to team admins was never built) and `closed` (a
 second muted label, indistinguishable in practice from `invite_only`) were
 dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
+**Ask for an invitation (#2453, 2026-08-27).** A public invite-only team is
+discoverable but not joinable, and the muted label alone left the visitor with
+no next step. The card restores the pre-TEAM-09 escape hatch: a `mailto:`
+addressed to every team admin whose `UserSummary.email` resolved, prefilled
+with the subject, the caller's identity, and two links: the team's agents page
+for context (what `main` sent) plus a deep link to its members page, where the
+recipients - the admins - actually add the sender by hand. The wording is the
+pre-TEAM-09 one (`rework.teamCard.invitationMail.*`) plus that second line, and
+now lives in the locale files instead of hardcoded French as it did then.
+
+The button reuses the `join` label - it is the same intent, and a second,
+longer label wrapped the card's footer onto two lines; the `mail` icon and the
+draft that opens are what distinguish it from the instant `open` join.
+
+Two guards decide whether the button replaces the label:
+
+- **public only.** A private team keeps the label: the UI does not offer a
+  non-member a private team's admin addresses. This is a product rule about
+  what the card *proposes*, not a disclosure guarantee - `GET /teams` puts
+  `admins` (email included) in the payload for every team it returns, and
+  `MarketplaceTeams` records that private teams reach the client at all when
+  authorization is disabled. Withholding them from the wire is a server-side
+  question, still open. `TeamCard` checks `visibility` itself rather than
+  trusting `MarketplaceTeams`' filter: it is a shared component, and the check
+  is `=== "public"` so a payload with no `visibility` fails closed (#2433).
+- **a reachable address.** `admins` falls back to a bare `UserSummary(id=...)`
+  when the Keycloak lookup returns nothing, so an admin list can render with no
+  email at all. With no recipient there is nothing to open, so the label stays
+  rather than producing an empty `mailto:`.
+
+Mechanics worth keeping: the draft opens with `window.open(..., "_blank",
+"noopener,noreferrer")` rather than a `location.href` assignment, so a webmail
+registered as the `mailto:` handler opens beside the app instead of replacing
+it (a native client takes over the throwaway tab and the browser drops it);
+`noopener` makes `window.open` return `null` by spec, so there is nothing to
+test for a fallback - the click is the user gesture popup blockers key off.
+Recipients are comma-separated (RFC 6068) and
+percent-encoded, since the addresses come from a directory sync and nothing
+guarantees they are URL-safe; `URLSearchParams`' `+` is rewritten to `%20` or
+mail clients render it literally in the subject; the team link prepends the
+router basename (`normalizeBasename`, shared with `buildDocumentViewerPath`)
+because a mailed URL inherits nothing from the router; and the identity line
+degrades to whichever of `name` / `preferred_username` Keycloak returned.
+
+No server-side request flow is involved: this is a client-side mail draft, the
+same as before TEAM-09. Nothing routes an invitation request through the API.
+
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge and squashed the avatars into ellipses on the way. Three
+changes, none of them resizing an avatar: the button never shrinks (it must
+keep its whole label), `AvatarGroup` gained a `max` prop (default 4, so its
+other consumer is unchanged) and the card drops to `max={2}` whenever a button
+shares the footer, and an avatar is now `flex-shrink: 0` - a fixed-size circle
+should clip, never deform. `.teamCardAdmins` does that clipping as a last
+resort for an unusually long translation; the row runs right-to-left, so the
+overflow falls off the left and the "+N" badge stays visible.
+
+Two `AvatarGroup` fixes came out of the same pass, and apply everywhere it is
+used. The "+N" badge now goes through the same `Tooltip` wrapper as the other
+avatars: `.userAvatarContainer > *` puts the 2px ring on the direct child, so
+under the global `box-sizing: border-box` a bare badge paid for that ring out
+of its own 2rem while a wrapped avatar grew by it - the badge rendered 4px
+smaller than its neighbours. That wrapper also gives the badge a tooltip
+listing the hidden names, one per line (a `content` tooltip, so it owns its own
+padding).
+
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge. The button never shrinks (it must keep its whole label) and
+the avatar row is the half that gives up width - `AvatarGroup` gained a `max`
+prop (default 4, so its other consumer is unchanged) and the card drops to
+`max={2}` whenever a button shares the footer, collapsing the rest into "+N".
+`.teamCardAdmins` clips as a last resort for an unusually long translation; the
+avatars run right-to-left, so the overflow falls off the left and the badge
+stays visible.
+
+---
+
+### `MarketplaceTeams` — what the discover section may list (#2398)
+
+**Location:** `src/rework/components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx`
+**Status:** `Functional`
+
+`GET /teams` is a general-purpose listing, not a marketplace feed: the page
+decides on its own what is discoverable, and drops from the "discover"
+(non-member) bucket every team that is a personal space (#2068) or whose
+`visibility` is `private` (#2398). The server already withholds the ReBAC
+`public` relation from a private team, but that filter is skipped entirely
+when authorization is disabled — so the page never relies on it. A team the
+caller *is* a member of stays listed under "your teams" whatever its
+visibility: members need it to navigate.
+
 ---
 
 ### `TeamSettingsParameters` — visibility + joining-mode controls
@@ -1289,7 +1446,8 @@ dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 Two stacked rows (`.team-settings-toggle-row`, label left / control right)
 share one `form-section` (`.team-settings-toggles`, `flex-direction: column`,
 `gap: var(--spacing-s)`): **visibility** (`public`/`private`) on top,
-**joining mode** below it. Both are `ButtonGroup`s (`variant="radio"`,
+**joining mode** below it (a `ButtonGroup` only while the team is public —
+see the #2398 note below). Both are `ButtonGroup`s (`variant="radio"`,
 `size="small"`, plain group-level `color="secondary"` — no per-item color,
 same pattern as the theme/language pickers in `UserSettingsPage.tsx`).
 Selecting an option PATCHes immediately (no separate save step), mirroring
@@ -1307,17 +1465,31 @@ plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
-(`public`/`private`, default `public`) gating marketplace discoverability
-— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
-mechanism. A `private` team can never be `open`: while
-`visibility === "private"`, every item in the joining-mode `ButtonGroup`
-below carries `disabled` (the whole group reads as inert, not just the
-`open` option) — enforced this way rather than only disabling `open`
-because the server may have just silently downgraded a stored `open` to
-`invite_only` the moment visibility flipped, and a half-disabled group
-would misrepresent that as still a live choice. No client-side write of
-`joining_mode` ever accompanies a visibility PATCH — the resulting
-`joining_mode`, if it changes, comes back from the server on refetch.
+(`public`/`private`; default `public` at the time — new teams default to
+`private` since 2026-08-26, #2433) gating marketplace discoverability
+— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30/§44 for the full ReBAC
+mechanism. No client-side write of `joining_mode` ever accompanies a
+visibility PATCH — the resulting `joining_mode`, if it changes, comes back
+from the server on refetch.
+
+**Joining mode while private — one disabled button, no toggle (#2398,
+2026-08-20).** A `private` team can never be `open`, and the product has no
+invitation flow at all (there is no invite endpoint — a team admin adds
+members by hand from `TeamSettingsMembers`). So while
+`visibility === "private"` the joining-mode row renders no `ButtonGroup`:
+the control slot holds a single **disabled** `Button` (`secondary` /
+`outlined` / `small`, `lock` icon) reading "Manual only", and the row's
+support line switches to the `privateSupport` copy ("a private team is not
+listed on the marketplace: its members are added manually by a team
+admin"). One inert, locked control states the fact; the original 2026-07-26
+treatment kept the whole group mounted with every item `disabled`, and a
+greyed-out *two-state* toggle still reads as a live choice — while "Invite
+only" named a mechanism that does not exist. Plain muted text was tried
+first and read as too weak for the row (it also wrapped onto two lines),
+hence a real button shape. `.team-settings-toggle-action` carries the
+`flex-shrink: 0` + `white-space: nowrap` the row needs: the label column
+takes the free width and `.btn` clips its own overflow. The group returns
+unchanged the moment visibility goes back to `public`.
 
 **`ButtonGroupItem` — `:disabled` visual state (2026-07-26).** The atom
 previously had no disabled styling at all — a `disabled` item was
@@ -1327,12 +1499,14 @@ identical to an enabled one. Added `&:disabled` with `pointer-events: none`
 `:hover`/`:active` rules individually) plus, scoped to
 `.stateLayer:not([data-selected="true"])` only, a transparent background
 and `on-surface-muted` label color. Scoping to the unselected sub-case
-matters: the joining-mode group's disabled-while-private state always has
-one selected item (`invite_only`, forced) and one not (`open`) — the
-selected item keeps its normal filled selected-color styling, only the
-unselected `open` option reads as muted/transparent. Generic addition to
-the shared atom (any future disabled+unselected item elsewhere gets the
-same treatment for free), not special-cased to this one call site.
+mattered for the original driving call site — the joining-mode group's
+disabled-while-private state, which always had one selected item
+(`invite_only`, forced) and one not (`open`): the selected item kept its
+normal filled selected-color styling, only the unselected `open` option
+read as muted/transparent. That call site is gone since #2398 (see above),
+but the rule was a generic addition to the shared atom, never special-cased
+to it — any disabled+unselected item elsewhere still gets the treatment for
+free.
 
 **`ButtonGroup` — pill `backgroundColor` override (2026-07-26).** Gained an
 optional `backgroundColor` prop (default `var(--surface-container)`,
@@ -2787,6 +2961,36 @@ server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
 
+### `DocumentWorkspace` — bulk actions extend to selected folders (#2446, 2026-08-26)
+
+Folder rows have always rendered a selection checkbox, but ticking one did
+nothing: the contextual `BulkActionsBar` (delete / download / exclude-from-
+search) and every bulk handler read `selectedDocs` (documents only). Selecting
+a folder now drives the same bar, with each action applied **recursively to the
+folder's subtree**; a mixed selection (files + folders) shows the union, applied
+to both. The selected-count label counts every selected row.
+
+- **Delete** — one `deleteTag` per selected folder (the backend cascades to
+  sub-folders + their documents, same path as the single-folder delete) plus the
+  existing untag path for loose documents. The confirmation warns generically
+  ("… and all their content? This cannot be undone.") once folders are involved,
+  rather than recomputing a precise recursive count (that would cost one browse
+  per subtree tag — the single-folder delete keeps its live count).
+- **Download** — resolves each folder's descendant documents on click and zips
+  them under their folder-relative path, preserving the tree; loose documents sit
+  at the archive root.
+- **Exclude from search** — a folder-containing selection can't be resolved to a
+  single include/exclude direction cheaply, so it offers **exclude only**: on
+  click it resolves the subtree's documents and forces every non-tabular one
+  non-retrievable (one summary toast, not one per document). The directional
+  include/exclude toggle is unchanged for file-only selections.
+
+Descendant documents are fetched **only when the action fires**, never on
+selection, so ticking a folder box stays instant even for a large subtree; each
+heavy action (download / exclude / delete) shows an in-button spinner while it
+runs (`BulkActionsBar` gained `deleteLoading` and `searchToggle.loading`,
+mirroring the existing `downloadLoading`).
+
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
 Three drop surfaces, all behind the same `canUpdateResources` gate as the
@@ -3233,6 +3437,41 @@ clears the binding back to "Using pod default".
 
 ---
 
+## Global info banner (2026-08-19)
+
+### `InfoBanner`
+
+**Location:** `src/rework/components/shared/molecules/InfoBanner/`
+**Status:** `Functional`
+
+Full-width, non-dismissable announcement banner mounted once at
+the app root (`src/app/App.tsx`), above the GCU/bootstrap guards, so it shows
+on every page — pre-auth ones included — and pushes the app content down
+instead of overlaying it (the app shell is now a `100vh` flex column; routed
+pages size with `height: 100%`, never `100vh` — see
+`FRONTEND_CODING_GUIDELINES.md` §2.5). Entirely config-driven from
+`platform.frontend.info_banner` (public pre-auth `/frontend/config`): without
+the config block, nothing renders — there is no default banner. Persistent
+by default; the optional `auto_hide_seconds` removes it that many seconds
+after app load with a 300ms eased collapse (opacity + `grid-template-rows`
+1fr→0fr, so the content below slides up instead of jumping; snaps under
+`prefers-reduced-motion`, and the banner is aria-hidden as soon as the exit
+starts). Background
+color comes from configuration via the `--banner-bg` custom property
+(deliberate token exception, comment in the module CSS); title/message/link
+labels are locale maps resolved with `en` fallback; links open in a new tab,
+separated by a `·`, and only http(s)/relative URLs are rendered.
+`role="status"` + `aria-live="polite"`.
+
+#### Open UX issues
+
+- **Fixed dark text over a configured background.** `--banner-text: #00222c`
+  assumes the configured color stays light (like the documented `#00BBDD`
+  example); a dark configured color would fail contrast. Revisit only if a
+  deployment actually needs a dark banner.
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._
@@ -3306,3 +3545,97 @@ ops-authored `model_display_name`, then prettifies the real model `name`, then
 falls back to splitting the capability id. The `name` step matters because
 `model_capability_id` normalizes non-id-safe characters — derived from the id,
 `mistral:latest` would read "Mistral Latest".
+
+### `PlatformRolesPage` (`/admin/platform-roles`, 2026-08-21, #2405)
+
+**Status:** `Functional`
+
+Admin-sidebar entry "Platform roles" (`admin_panel_settings` icon), gated
+`Protected requires="admin"`. Layout mirrors `AdminTeamsPage` (760px column,
+uppercase section titles): a holders table then a grant form. (A dedicated
+root card above the table was tried on 2026-08-21 and removed the same day
+— the pinned first row with its badge is prominence enough.)
+
+- **Holders table** — one row per user holding `platform_admin` /
+  `platform_observer`; roles render as full-label `Chip`s kept on **one
+  line** (developer decision 2026-08-21: full labels, same line, page width
+  staying at the 760px admin default — the roles column takes `3fr` vs the
+  user column's `2fr` and the cell is `nowrap`, so a two-role holder never
+  stacks). The remove affordance
+  follows the backend rules (PLATFORM-ADMIN-DELEGATION-RFC.md §3): observer
+  chips are removable by any platform admin, admin chips only when
+  `caller_is_bootstrap_root`, and never on the bootstrap root's own row. The
+  root row is **pinned first** (backend sort) and carries a small filled
+  **crown icon** in `--primary` next to the name (tooltip + aria-label
+  "Admin principal"/"Primary admin" — a text badge was tried 2026-08-21 and
+  replaced by the crown the same day). Product wording is "primary admin";
+  "bootstrap root" stays a backend/docs term.
+- **Grant form** — `Autocomplete` over the admin user list, then a two-button
+  segmented choice (observer/admin). The admin option renders **disabled**
+  (not hidden) for non-root callers, with a persistent hint line explaining
+  the root-only rule — the restriction stays discoverable instead of the
+  option silently missing.
+- All affordances are display-only mirrors; every action is re-checked
+  server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
+
+---
+
+### Capability side-panel launcher rail (2026-08-28)
+
+**Location:** `src/rework/features/capabilities/CapabilitySidePanelHost.tsx`,
+`src/rework/features/capabilities/<id>/plugin.ts`
+
+**Status:** `Functional`
+
+The floating rail on the chat page's right edge, one small icon button per side panel
+a session's active capabilities declare. Two changes (#2459):
+
+- **A launcher appears only once its panel has something to show.** The rail used to
+  render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`
+  put two buttons onto empty panels from the first message. Each plugin now answers for
+  the open conversation through a `useHasContent` hook on its `sidePanels` spec
+  (ppt_filler: a deck was rendered; writable_document: the list API or a live snapshot
+  holds a document); a panel that omits the hook stays always-on. The rail is invisible
+  chrome until the agent actually produces something.
+- **Each panel carries its own glyph** instead of the `edit_note` the host hardcoded for
+  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `edit_document`
+  (a new entry in `materialIcons`, the page-with-a-pencil glyph) - each the one that
+  capability's own card and pane header already carry, so the launcher reads as the
+  thing it opens. The whole writable_document surface moved off `edit_note` to
+  `edit_document` in the same pass (2026-08-28). Colour stays the rail's neutral
+  `on-surface-retreat`: the launchers sit in the same floating-chrome band as the trace
+  and attachments buttons, and tinting only these two would break that band.
+- **The rail dropped to 68px from the top** (2026-08-28). Its 48px offset was computed
+  against a one-line top bar; the bar now stacks a 24px title over a 20px agent name, so
+  the first launcher sat on the band.
+- **The rail retires entirely while a panel is open** (2026-08-28). It is absolutely
+  positioned against the whole slot, drawer included, so with a panel open it landed on
+  that drawer's own close button. Moving the remaining launchers into the drawer's
+  `headerActions` was tried the same day and dropped: closing the open panel to reach
+  another one is cheap, and one home for the launchers beats two (developer decision).
+- **The drawer's own title band is gone for both panes** (2026-08-28). A pane that
+  names the artefact it holds does not also need the drawer naming the panel above
+  it - two title rows said the same thing twice and ate the top of the column. A
+  panel declares `ownsHeader: true` on its `sidePanels` spec; the host then passes
+  `InlineDrawer`'s new `hideHeader` (the drawer keeps `title` as its accessible
+  name) plus `flushBody`, and the pane renders its own close button. `demo_echo`,
+  which has no header of its own, keeps the drawer's.
+- **Switching conversations closes any open push drawer** (2026-08-28). Opening one
+  is a statement about one conversation and every panel reads the open session, so
+  a drawer carried across sat there empty. A capability whose new conversation
+  warrants its panel asks for it again through the open-request counter.
+- **Both panes' header bands were trimmed** (2026-08-28) - `PptPreviewPane` and
+  `WritableDocumentPane` share the same title + actions row, padded down from
+  `8px/16px` to `4px/12px`; the editor toolbar under it lost the same 4px. Two
+  stacked bands (the drawer's own header, then the pane's) were eating the top of
+  the panel. The download controls keep `size="small"`: those components are shared
+  with the chat cards, where the smaller tier would have broken alignment.
+
+Both capability slices now stamp the conversation their state belongs to, so a deck or a
+document from a previous conversation can no longer light a launcher up on a fresh chat.
+The writable_document editor applies the same scoping to its TAB STRIP (2026-08-28): its
+document set merges the API list with the live snapshots, and the snapshots outlive the
+conversation that produced them (the slice only drops them when the next conversation
+upserts one of its own). A conversation whose documents all come from the API never
+upserts, so the previous conversation's document showed up as an extra tab - someone
+else's document, in an editor that autosaves.

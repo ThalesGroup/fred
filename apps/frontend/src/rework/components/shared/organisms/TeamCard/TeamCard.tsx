@@ -25,6 +25,8 @@ import { useFrontendBootstrap } from "src/hooks/useFrontendBootstrap";
 import Button from "@shared/atoms/Button/Button.tsx";
 import React from "react";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
+import { getConfig } from "src/common/config";
+import { normalizeBasename } from "../../../../utils/documentViewerUtils";
 
 export interface TeamCardProps {
   team: Team;
@@ -36,11 +38,12 @@ export interface TeamCardProps {
 }
 
 export default function TeamCard({ team, withDescription, onJoined }: TeamCardProps) {
-  const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
+  const { defaultTeamAvatarFile, defaultPersonalAvatarFile, siteTitle, siteSubtitle } = useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
   const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
   const userFullName = KeyCloakService.GetUserFullName();
+  const username = KeyCloakService.GetUserName();
 
   // A configured default avatar replaces initials; without one, the card keeps
   // the name-derived coloured initials. The personal space renders round, teams
@@ -59,6 +62,46 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
     } catch (error) {
       console.error("Join team error:", error);
     }
+  };
+
+  // A public invite-only team gets a prefilled mail to its admins
+  // instead of a dead-end label. Public only (never hand a non-member a
+  // private team's addresses), and only when one resolved - nobody to write
+  // to otherwise. Full rationale: COMPONENT-UX.md `TeamCard`.
+  const canJoinDirectly = !team.is_member && team.joining_mode === "open";
+  const isInviteOnlyOutsider = !team.is_member && team.joining_mode === "invite_only";
+  const adminEmails = (team.admins ?? [])
+    .map((admin) => admin.email)
+    .filter((email): email is string => Boolean(email));
+  const canRequestInvitation = isInviteOnlyOutsider && team.visibility === "public" && adminEmails.length > 0;
+
+  const handleRequestInvitation = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    const site = [siteTitle, siteSubtitle].filter(Boolean).join(" ");
+    // Keycloak omits `name` / `preferred_username` on some accounts.
+    const user = [userFullName, username && `(${username})`].filter(Boolean).join(" ");
+    // Two links: the team page for context, and the members page where the
+    // recipients - its admins - actually add the sender. A mailed link
+    // inherits no router basename.
+    const teamPath = `${window.location.origin}${normalizeBasename(getConfig().frontend_basename)}/team/${team.id}`;
+    // Comma-separated and encoded per RFC 6068 - the addresses come from a
+    // directory sync, so nothing guarantees they are URL-safe.
+    const recipients = adminEmails.map(encodeURIComponent).join(",");
+    const params = new URLSearchParams({
+      subject: t("rework.teamCard.invitationMail.subject", { site, team: team.name }),
+      body: t("rework.teamCard.invitationMail.body", {
+        site,
+        team: team.name,
+        user,
+        agentsUrl: `${teamPath}/agents`,
+        membersUrl: `${teamPath}/settings/members`,
+      }),
+    });
+    // `+` back to %20 or mail clients render it literally in the subject.
+    const href = `mailto:${recipients}?${params.toString().replace(/\+/g, "%20")}`;
+    // A new tab: a webmail registered for mailto: would otherwise replace the
+    // app. `noopener` makes window.open return null, so no fallback to test.
+    window.open(href, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -102,9 +145,15 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
         </div>
         {withDescription && <div className={styles.teamCardDescription}>{team.description}</div>}
         <div className={styles.teamCardFooter}>
-          <AvatarGroup avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))} />
-          {!team.is_member && team.joining_mode === "open" && (
+          <div className={styles.teamCardAdmins}>
+            <AvatarGroup
+              avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))}
+              max={canJoinDirectly || canRequestInvitation ? 2 : 4}
+            />
+          </div>
+          {canJoinDirectly && (
             <Button
+              className={styles.teamCardJoinAction}
               color={"primary"}
               variant={"outlined"}
               size={"medium"}
@@ -115,7 +164,19 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               {t("rework.teamCard.join")}
             </Button>
           )}
-          {!team.is_member && team.joining_mode === "invite_only" && (
+          {canRequestInvitation && (
+            <Button
+              className={styles.teamCardJoinAction}
+              color={"primary"}
+              variant={"outlined"}
+              size={"medium"}
+              icon={{ category: "outlined", type: "mail" }}
+              onClick={handleRequestInvitation}
+            >
+              {t("rework.teamCard.join")}
+            </Button>
+          )}
+          {isInviteOnlyOutsider && !canRequestInvitation && (
             <span className={styles.teamJoiningLabel}>{t("rework.teamCard.inviteOnly")}</span>
           )}
         </div>

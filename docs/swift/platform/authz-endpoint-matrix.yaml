@@ -106,7 +106,37 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/agents_per_user
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/agents_per_user_trend
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/agents_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/conversation_depth
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/conversation_depth_trend
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/conversations_per_user
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/conversations_per_user_trend
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
@@ -166,6 +196,26 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
+    path: /control-plane/v1/kpi/presets/user_agents_used_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_messages_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_recent_agents
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_sessions_total
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/kpi/presets/user_token_usage_by_agent
     review_status: pending_review
     required_permission: pending_review
@@ -180,8 +230,28 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_top_agents
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/user_top_teams
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
     method: POST
     path: /control-plane/v1/lifecycle/run-once
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/me/inactive-sessions
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/me/sessions/bulk-delete
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
@@ -413,6 +483,36 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/publish
+    review_status: pending_review
+    required_permission: can_update_resources (team_editor of the author team)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/unpublish
+    review_status: pending_review
+    required_permission: can_update_resources (team_editor of the author team)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/prompts
+    review_status: external_or_public
+    required_permission: authenticated (any user; lists only published prompts)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/marketplace/prompts/{prompt_id}
+    review_status: external_or_public
+    required_permission: authenticated (any user; published prompts only)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/marketplace/prompts/{prompt_id}/use
+    review_status: external_or_public
+    required_permission: authenticated (any user; published prompts only)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/marketplace/prompts/{prompt_id}/import
+    review_status: pending_review
+    required_permission: can_update_resources (checked per target team)
+  - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/prompt-categories
     review_status: pending_review
@@ -494,6 +594,25 @@ operations:
     path: /control-plane/v1/users/by-ids
     review_status: approved
     required_permission: authenticated_user
+  # Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
+  # can_administer_users gates all three; the platform_admin relation is
+  # additionally guarded service-side: grant/revoke root-only, root never
+  # revocable (platformbootstrap.completed_by).
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/users/platform-roles
+    review_status: approved
+    required_permission: can_administer_users
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/users/{user_id}/platform-roles
+    review_status: approved
+    required_permission: can_administer_users # + bootstrap-root-only for platform_admin
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/users/{user_id}/platform-roles/{relation}
+    review_status: approved
+    required_permission: can_administer_users # + bootstrap-root-only, root unrevocable, for platform_admin
   - service: control-plane
     method: POST
     path: /control-plane/v1/users
@@ -1160,6 +1279,11 @@ operations:
     path: /knowledge-flow/v1/vector/rerank
     review_status: pending_review
     required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/vector/document-chunks
+    review_status: approved
+    required_permission: document.read
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/vector/search

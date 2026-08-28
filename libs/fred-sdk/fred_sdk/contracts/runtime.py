@@ -194,10 +194,11 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     tool_name: str = Field(..., min_length=1)
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
-    # Usage of the model call that decided to make this tool call — the
-    # runtime's per-call `usage_metadata`, captured just before this event is
-    # emitted. None when the provider didn't report usage for that call.
-    token_usage: dict[str, int] | None = None
+    # NOTE (#2403): this event carries no token usage on purpose. It used to
+    # carry the usage of the model call that DECIDED the call, which the trace
+    # UI rendered on the tool row — reading as if the tool had consumed the
+    # whole prompt (17.5k tokens for a call that consumes none). A tool call
+    # costs nothing by itself, so the row shows latency only.
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):
@@ -310,7 +311,16 @@ class FinalRuntimeEvent(RuntimeEventBase):
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
     model_name: str | None = None
+    # Billed usage, summed across every model call of the turn. This is what
+    # the provider charges: a ReAct turn re-sends the whole context on each
+    # call, so the same history is legitimately counted once per call.
     token_usage: dict[str, int] | None = None
+    # Size of the context at the end of the turn — the `input_tokens` of the
+    # turn's LAST model call (#2403). Together with the previous turn's value
+    # this yields what a turn genuinely ADDED, as opposed to what it was
+    # billed: `new_input(T) = context_tokens(T) - (context_tokens(T-1) +
+    # output_tokens(T-1))`. None when no model call reported an input count.
+    context_tokens: int | None = None
     finish_reason: FinishReason | None = None
 
     # Same tolerant coercion as `ChatMetadata.finish_reason` (fred-core): a raw

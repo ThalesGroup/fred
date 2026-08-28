@@ -178,6 +178,10 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
+  - `info_banner` — **added 2026-08-19** — optional deployer-configured
+    global announcement banner (`platform.frontend.info_banner`), rendered
+    full-width above the app on every page. Omitted/`null` → nothing
+    rendered. See §42 for why it is pre-auth.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -618,13 +622,17 @@ Control-plane  (target state)
 Freeze prompt management as a first-class control-plane contract separate from
 managed agent instances:
 
-- `PromptSummary`
+- `PromptSummary` (includes `published: bool`, PROMPT-06)
 - `PromptDetail`
 - `CreatePromptRequest`
 - `UpdatePromptRequest`
 - `PromptCategorySummary`
 - `CreatePromptCategoryRequest`
 - `UpdatePromptCategoryRequest`
+- `MarketplacePromptSummary` (PROMPT-06 — `PromptSummary` + `team_id` +
+  author `team_name`; preview only, no full text)
+- `MarketplacePromptDetail` (PROMPT-06 — `PromptDetail` + `team_name`; full text)
+- `MarketplaceImportRequest` / `MarketplaceImportResponse` (PROMPT-06)
 
 Rules:
 
@@ -640,12 +648,22 @@ Rules:
   is no platform-wide category taxonomy and no platform default-prompt
   catalog; see §32 for the full contract change
 
-The global prompt marketplace is a follow-up control-plane surface:
+The global prompt marketplace shipped 2026-08-10 (PROMPT-06, #2317) as a
+**live visibility flag**, not a snapshot (this supersedes the earlier
+snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
 
-- publishing must create a separate published snapshot, not mutate team prompt
-  ownership in place
-- agent instances and team prompt records must not point at mutable global
-  marketplace rows
+- publishing sets `PromptRow.published` on the team's own row — the marketplace
+  shows that live record, so edits and the shared `session_count` usage counter
+  propagate immediately; publishing never changes team ownership
+- nothing persistently references the published row: *use* is a clipboard copy,
+  *import* is copy-by-value (a fresh row via `promote`, counter reset to 0), so
+  no agent instance or team prompt record ever points at a marketplace row
+- only real team prompts are publishable; personal-space prompts stay private
+- endpoints: `POST .../prompts/{id}/publish` and `.../unpublish`
+  (`can_update_resources` on the author team), `GET /marketplace/prompts`
+  (any authenticated user), `POST /marketplace/prompts/{id}/use` (open, published
+  only), `POST /marketplace/prompts/{id}/import` (per-target
+  `can_update_resources`, `_imported-N` naming)
 
 ### 3.7 Feedback
 
@@ -807,7 +825,8 @@ The following remain outside the first Phase 3a implementation slice:
 - managed runtime endpoint resolution payloads exposed to the frontend
 - runtime history migration details beyond linking to `fred-runtime`
 - frontend SSE transport migration
-- global prompt marketplace publication / moderation surface
+- prompt marketplace **moderation** surface (publication itself shipped
+  2026-08-10, PROMPT-06 — see §39; only moderation remains deferred)
 - removal of legacy `agentic-backend` code paths
 - feedback CRUD and full MCP server administration surface
 
@@ -1258,7 +1277,7 @@ another of the caller's teams no longer appears (and can no longer be saved,
 
 | Method + path | Request | Response | Effect |
 | --- | --- | --- | --- |
-| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs). |
+| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs), `default_capability_ids` (2026-08-25, see below). |
 | `PUT /admin/capabilities/{capability_id}/teams/{team_id}` | `EnableTeamCapabilityRequest` (`settings`) | `TeamCapabilityEnablementResult` | Enable-with-settings: validates `settings` against `team_settings_fields`, writes the settings row then the `enabled` tuple. |
 | `DELETE /admin/capabilities/{capability_id}/teams/{team_id}` | — | `TeamCapabilityEnablementResult` (`suspended_instances`) | Revoke: deletes the `enabled` tuple (writes a `disabled` opt-out for a default-on cap), reconciles dependent instances → suspension. |
 | `PUT /admin/capabilities/{capability_id}/default-on` | `SetCapabilityDefaultOnRequest` (`default_on`) | `CapabilityDefaultOnResult` (`suspended_instances`) | Toggle the platform-wide `default_on` marker; turning it off revokes inherited access team-by-team and may suspend instances. |
@@ -1407,6 +1426,46 @@ ReBAC is already active for a team, the platform_admin must toggle
 default-on for the desired model(s) in the same deploy window ReBAC
 enforcement reaches that team, or that team's chat fails closed until the
 toggle is flipped — a deploy-runbook step, not a code gap.
+
+**2026-08-25 — the enablement 409s become visible before the click (GitHub
+#2408).** Activating some capabilities from the admin dashboard failed with a
+bare HTTP 409: the gates were enforced server-side but invisible to the UI,
+which offered the action anyway and then showed a generic "could not enable"
+toast. One field added, no route, exception, or error-shape change.
+
+`GET /admin/capabilities` items gain **`default_capability_ids: list[str]`** —
+a verbatim projection of `CapabilityCatalogEntry.default_capability_ids`
+(itself added by the 2026-07-19 `depends_on` entry above), empty for
+`kind="tool"`/`kind="model"` by construction, following the tagged-union rule
+stated for the other per-kind fields. This is the missing half of the
+2026-07-19 gate: the write path already 409'd
+(`AgentCapabilityDependencyNotSatisfied`) when an agent's default tool
+capabilities were not usable by the target team, but the list contract carried
+no way for the dashboard to know it.
+
+Client-side consequences (`CapabilitiesPage.tsx`,
+`CapabilityTeamMatrixDrawer.tsx`, predicates in `capabilityEnablement.ts`):
+the drawer disables "Enable" and names the blocking dependencies for a team
+that cannot use them; the personal-space class row does the same against the
+org-level personal-access rule (`(personal_on OR default_on) AND NOT
+personal_disabled`); the default-on Switch is disabled for a capability with a
+required team setting (`DefaultOnNotAllowed`), while turning it OFF stays
+possible. The predicates **fail open** on a dependency id absent from the list
+— the backend remains the sole authority, and the client gate is a
+better-error affordance, never an enforcement point. Residual 409s (stale
+client, concurrent admin) are mapped through `normalizeApiError` to an
+explanatory toast detail instead of being swallowed.
+
+**Error contract unchanged.** These routes still answer a plain-string
+`detail` and no `error_code`; the per-endpoint 409 semantics are unambiguous
+on their own, so the frontend disambiguates by which mutation failed plus its
+own locally-computed reason.
+
+**Known caveat (accepted).** With ReBAC disabled, `usable_capability_ids`
+returns `None` and the backend applies no dependency scoping at all, but the
+client predicate still reads the (empty) grant lists and can render an agent
+row as blocked. The team matrix is already decorative in that mode, so the
+mismatch is cosmetic and not worth a second code path.
 
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 
@@ -1902,7 +1961,9 @@ while `visibility === private`, so the invalid combination is unreachable
 from the UI in the first place; the server-side downgrade is the
 authoritative backstop.
 
-**Default and migration.** `PUBLIC` for both new and pre-existing teams
+**Default and migration.** *(Superseded 2026-08-26 — new teams default to
+`PRIVATE` since #2433, see §44; accurate for its own date below.)*
+`PUBLIC` for both new and pre-existing teams
 (migration `8092a626d4d0`, `server_default='public'`) — preserves every
 team's current unconditional marketplace presence exactly; nothing becomes
 private as a side effect of this rollout. A bundle exported before this
@@ -2501,7 +2562,56 @@ The frontend uploads the image through an in-app square crop editor that
 exports a bounded 512×512 WebP, so avatars are small regardless of the source
 image (a backend image-resize safety net remains a follow-up).
 
-## 39. Contract Notes — runtime chat-input policy projection (2026-08-12, issue #2253)
+---
+
+## 39. Contract Notes — PROMPT-06, prompts marketplace (2026-08-10, #2317)
+
+The global prompts marketplace ("Prompts de la communauté") shipped as a **live
+visibility flag**, not a published snapshot. This is a deliberate change from
+the original PROMPT-06 sketch (which proposed a separate frozen snapshot); the
+snapshot machinery was unnecessary because nothing persistently references a
+published row. Durable design: `docs/swift/design/PROMPTS.md` §6.1.
+
+**Model.** New `PromptRow.published: bool` (default `false`; migration
+`0dd1e72106af`, `server_default false`), surfaced on `PromptSummary` /
+`PromptDetail`. Publishing shows the team's own live row on the marketplace:
+edits propagate immediately and `session_count` is shared between origin-team
+and external usage (total, global usage). Import resets the counter (copy-by-value).
+
+**New types.** `MarketplacePromptSummary` (= `PromptSummary` + `team_id` +
+`team_name`; preview only, no full text), `MarketplacePromptDetail`
+(= `PromptDetail` + `team_name`; full text), `MarketplaceImportRequest
+{ target_team_ids }`, `MarketplaceImportResponse { results: [{ team_id,
+prompt?, error? }] }`.
+
+**Endpoints.**
+
+- `POST /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/publish` and
+  `.../unpublish` — flip the flag; `can_update_resources` on the author team.
+  Publishing a personal-space prompt is rejected (400).
+- `GET /control-plane/v1/marketplace/prompts` — every published prompt across
+  all teams, `session_count` DESC, each with `team_name`, **preview text only**
+  (the listing payload stays small however many prompts are published). Any
+  authenticated user; **not team-scoped** (the first prompt read that
+  intentionally bypasses team membership, gated only on the `published` flag).
+- `GET /control-plane/v1/marketplace/prompts/{prompt_id}` — one published
+  prompt's full text (`MarketplacePromptDetail`), fetched on demand when a card
+  is opened. Any authenticated user; published prompts only (else 404).
+- `POST /control-plane/v1/marketplace/prompts/{prompt_id}/use` — increment the
+  shared counter without team membership; published prompts only (else 404).
+- `POST /control-plane/v1/marketplace/prompts/{prompt_id}/import` — copy-by-value
+  into each `target_team_ids` the caller can edit. Targets are deduped and
+  imported **concurrently**; each is authorized independently
+  (`can_update_resources`), and an unauthorized/unknown target yields a
+  per-target `error` rather than failing the whole request. Name collisions in a
+  target team are avoided with an `_imported-N` suffix.
+
+**Deferred:** no moderation surface in v1. Unpublish is available to editors of
+the author team, including directly from the marketplace (UX convenience).
+
+---
+
+## 40. Contract Notes — runtime chat-input policy projection (2026-08-12, issue #2253)
 
 `ExecutionPreparation.max_chat_input_chars: int | null` is an optional,
 read-only projection of the selected runtime pod's deployment policy. Runtime
@@ -2701,3 +2811,133 @@ enablement by design (§40's ReBAC exemption).
 surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
+
+## 42. Contract Notes — global info banner (2026-08-19)
+
+`FrontendConfig` (§3.1.1) gains one optional field, `info_banner`
+(`InfoBanner`: `color` + `titles`/`messages` locale maps + `links: [{url,
+labels}]` + `auto_hide_seconds`), sourced from control-plane deployment
+config `platform.frontend.info_banner`. When set, the frontend renders one
+full-width, non-dismissable announcement banner (`InfoBanner`, mounted once
+at the app root) above the app content on **every** page, resolving texts
+from the active i18next locale with `en` fallback and pushing content down
+instead of overlaying it. Persistent by default; the optional
+`auto_hide_seconds` (integer > 0) makes the banner remove itself that many
+seconds after app load. `null`/omitted → nothing rendered — the shipped
+default: `values.yaml` (prod) and `configuration*.yaml` (dev) carry only
+commented-out example blocks.
+
+Boundary rationale (§3.1.1 vs §23): unlike `upload_warning` (post-auth
+surfaces only), the banner's whole point is to show on every page — the
+GCU-acceptance and root-bootstrap screens included, which render *before*
+the authenticated `/frontend/bootstrap` can succeed. So it follows the
+`gcu_version` precedent, not the `upload_warning` one: a pre-auth field on
+the public surface. It carries only deployer-authored announcement content
+— never secrets or per-user state — keeping §3.1.1's "no second bootstrap
+payload" rule intact. One deliberate scope note: on auth-enabled
+deployments the login page itself is Keycloak-hosted (`login-required`
+redirects away before the SPA renders), so the banner cannot cover the
+login screen — pre-auth here means "before the authenticated bootstrap",
+not "on the IdP's page".
+
+## 43. Contract Notes — platform-role management, root-protected (2026-08-21, issue #2405)
+
+Three routes give the product its first surface to grant/revoke the two
+org-level platform roles (until now written only by root bootstrap, the
+kea→swift migration, and the bundle importer):
+
+- `GET /users/platform-roles` — every `platform_admin` / `platform_observer`
+  holder, as `PlatformRolesResponse`: per-holder `UserSummary` + `relations`
+  + `is_bootstrap_root`, plus a top-level `caller_is_bootstrap_root` display
+  flag for the admin UI (the backend guards never rely on it).
+- `POST /users/{user_id}/platform-roles` — body
+  `{relation: platform_admin | platform_observer}`; 204, idempotent
+  (`add_relation` ignores duplicates); 404 when Keycloak affirmatively does
+  not know the target uid (a typo'd uid must not become a live tuple for
+  whoever ever authenticates with that sub — skipped when Keycloak M2M is
+  disabled, where existence cannot be verified).
+- `DELETE /users/{user_id}/platform-roles/{relation}` — 204; 404 if the
+  target does not hold the relation **as a direct tuple**.
+
+Direct tuples only: `schema.fga` defines `platform_observer: [user] or
+platform_admin`, so this surface reads via the direct-tuple primitives
+(`list_direct_relations` / `has_direct_relation`), never expanded reads
+(ListUsers) — an admin's computed observer membership is neither listed as a
+holder entry nor revocable (no tuple exists to delete; the expanded read
+would have 204'd a silent no-op). Revocations emit `authz.relation.revoked`
+to the audit stream with `actor_uid`, symmetric to `add_relation`'s
+`authz.relation.granted`.
+
+All three gate on `can_administer_users`. The `platform_admin` relation
+carries two additional service-layer rules (PLATFORM-ADMIN-DELEGATION-RFC.md
+§3 — "root-managed admins, delegated observers"): granting **and** revoking
+it require the caller to be the bootstrap root (the uid in
+`platformbootstrap.completed_by`, the anchor §27's teardown already
+preserves) — 403 otherwise; and a DELETE may never target that uid — 403
+for every caller, the root itself included, because bootstrap never reopens.
+If bootstrap never ran (row absent), both `platform_admin` routes return 409
+— run `POST /bootstrap/platform-admin` first, which is still open in that
+state by definition. `platform_observer` carries none of these
+restrictions. No new ReBAC relation, no schema change, no DB migration.
+
+Same-invariant guard on an existing route: `DELETE /users/{user_id}` now
+403s when the target uid is `platformbootstrap.completed_by` — deleting the
+root's Keycloak account would freeze the `platform_admin` population the
+same irreversible way (the uid could never authenticate again while
+bootstrap stays permanently closed).
+
+## 44. Contract Notes — new teams are private by default (2026-08-26, issue #2433)
+
+**Supersedes §30's "Default and migration" paragraph.** `Team.visibility`
+now defaults to **`private`**: a brand-new team starts invisible to
+non-members (no marketplace listing, `GET /teams/{id}` 403s for them) until
+a team admin deliberately flips it to public in the team settings. §30's
+mechanism is unchanged — only the starting value flipped.
+
+**Where the default lives.** `TeamMetadataStore.create` inserts only
+`(id, name)`, so the governing default is the ORM column default
+(`TeamMetadataRow.visibility`, fred-core), mirrored by the `TeamMetadata`
+and `Team` Pydantic defaults so the OpenAPI spec agrees. Migration
+`0c70cb820802` aligns the DB `server_default` for raw-SQL inserts only.
+
+**`create_team` grants nothing.** The immediate TEAM-09 `public`-relation
+grant at creation is now conditional on the created metadata's visibility —
+for a default (private) team no ReBAC `public` tuple is ever written, not
+even transiently (a grant-then-lazy-revoke would leave the team readable by
+anyone until the next `_list_teams` pass). The idempotent
+grant/revoke backfill in `_list_teams` (§30) is unchanged and remains the
+backstop. Corollary for the creator: a platform_admin who creates a team
+without naming themselves in `initial_team_admin_ids` holds no `can_read`
+on it once `create_team` returns (previously the unconditional `public`
+grant kept it readable) — by design (RFC §24.2, the creator is not
+necessarily a member), and the registry/admin surfaces they operate are not
+`can_read`-gated.
+
+**Existing rows are untouched — no data migration.** Migration
+`0c70cb820802` moves the `server_default` only; every stored `visibility`
+keeps its value, so no team already in the registry changes state. Hiding
+one remains a per-team admin action.
+
+**Where a row is *materialized* for a team that pre-dates it, the platform
+default applies — nothing guesses a visibility.** Two paths can create a
+registry row for a team that already exists in the wild: `create_team`
+called by the bundle importer for a team referenced only from `users.json`,
+and the knowledge-flow storage backfill (`backfill_storage_usage.py`).
+Neither knows what discoverability that team's admin intended, so neither
+states one: both take the platform default and land the team private.
+Consequence to know before running the backfill on a legacy platform: a
+team it materializes that *was* marketplace-listed loses that listing on
+the next `GET /teams` (`_list_teams` revokes the ReBAC `public` relation
+for any private team), and a team admin re-publishes it deliberately.
+Publishing a team on a guess is the outcome this default exists to
+prevent. The one place that still forces `public` is `importer.py`'s
+`row.get("visibility", "public")` for a bundle exported *before the field
+existed* — there the value is not a guess but the exporting platform's
+actual behavior, since every team was unconditionally public then.
+
+**Personal spaces now say so.** `build_personal_team` states
+`visibility: "private"` explicitly (previously it inherited the schema
+default and reported `"public"`) — truthful for a space that was never
+marketplace-listed and never readable by non-members. Joining-mode UI
+consequence (already shipped in #2398): a new team's settings show the
+locked "manual only" joining state until it is made public.

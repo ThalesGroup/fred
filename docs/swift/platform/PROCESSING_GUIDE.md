@@ -165,6 +165,17 @@ Additional runtime/model dependencies:
 
 - Keep tiktoken/crossencoder pre-download steps in image build when running without internet
 
+7. Audio transcription and chat dictation need no extra offline setup
+
+- The Whisper model (`Systran/faster-whisper-base`) is pre-baked into the
+  knowledge-flow prod image Hugging Face hub cache at build time
+  (`WHISPER_MODEL_SIZE=base` in `dockerfiles/Dockerfile-prod`)
+- `AudioProcessor` requests the same `WHISPER_MODEL_SIZE` at runtime and loads it
+  with `local_files_only=True` first, so an air-gapped runtime
+  (`HF_HUB_OFFLINE=1`) never reaches the network for a model it already has
+- The hub-download fallback only runs when that local load fails; under
+  `HF_HUB_OFFLINE=1` it fails fast rather than hanging on the network
+
 ---
 
 ## 8) Recommended Configuration Snippets

@@ -81,7 +81,11 @@ policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml
 
 platform:
-  # # Banner shown on upload surfaces (document upload drawer, chat attachments).
+  # # upload_warning: banner shown on upload surfaces (document upload drawer,
+  # # chat attachments). info_banner: full-width announcement banner shown
+  # # above the app content on every page (including pre-auth pages),
+  # # non-dismissable — persistent by default, or auto-hidden after
+  # # auto_hide_seconds. Omit either block to show nothing.
   # frontend:
   #   upload_warning:
   #     severity: warning
@@ -91,6 +95,20 @@ platform:
   frontend:
     feature_flags:
       enableInformationSystems: true # local dev — live-testing the rags SI UI (#2307)
+  #   info_banner:
+  #     color: "#00BBDD"
+  #     auto_hide_seconds: 30 # omit for a persistent banner (the default)
+  #     titles:
+  #       en: "New version available"
+  #       fr: "Nouvelle version disponible"
+  #     messages:
+  #       en: "Access the Fred documentation & blog"
+  #       fr: "Accédez à la documentation et au blog de Fred."
+  #     links:
+  #       - url: "https://fredk8.dev"
+  #         labels:
+  #           en: "Go to the Fred blog"
+  #           fr: "Accéder au blog de Fred"
   # Runtime pod references only. Managed agent instance enrollment is DB-backed.
   knowledge_flow_base_url: http://127.0.0.1:8111/knowledge-flow/v1
   runtime_catalog_sources:
