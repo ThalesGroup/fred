@@ -25,6 +25,7 @@ import {
   isCapabilityUnused,
   isPersonalTeamId,
   missingAgentDependenciesForPersonalSpaces,
+  missingAgentDependenciesForPlatform,
   missingAgentDependenciesForTeam,
   personalSpaceCount,
   requiresTeamSettings,
@@ -480,6 +481,50 @@ describe("missingAgentDependenciesForTeam (#2408, mirrors agent_capability_missi
     const cap = { kind: "agent" as const, default_capability_ids: ["a", "b", "c"] };
     const deps = [item({ id: "a" }), item({ id: "b", default_on: true }), item({ id: "c" })];
     expect(missingAgentDependenciesForTeam(cap, deps, "nb")).toEqual(["a", "c"]);
+  });
+});
+
+describe("missingAgentDependenciesForPlatform (#2470, mirrors the default-on gate)", () => {
+  it("accepts a dependency that is itself default_on", () => {
+    expect(missingAgentDependenciesForPlatform(AGENT, [item({ id: "dep", default_on: true })])).toEqual([]);
+  });
+
+  it("reports a dependency that is not default_on", () => {
+    expect(missingAgentDependenciesForPlatform(AGENT, [item({ id: "dep" })])).toEqual(["dep"]);
+  });
+
+  it("rejects a dependency merely granted to the teams that exist today", () => {
+    // Stricter than the team gate on purpose: default-on reaches every team
+    // present AND future, so tomorrow's team would inherit an unusable
+    // template. Only the dependency being default-on itself satisfies it.
+    expect(missingAgentDependenciesForPlatform(AGENT, [item({ id: "dep", enabled_team_ids: ["nb", "ops"] })])).toEqual([
+      "dep",
+    ]);
+  });
+
+  it("rejects a dependency that only has personal-class access", () => {
+    expect(missingAgentDependenciesForPlatform(AGENT, [item({ id: "dep", personal_scope: "enabled" })])).toEqual([
+      "dep",
+    ]);
+  });
+
+  it("fails OPEN for a dependency absent from the catalog list", () => {
+    expect(missingAgentDependenciesForPlatform(AGENT, [])).toEqual([]);
+  });
+
+  it("is empty for a non-agent row, whatever ids it carries", () => {
+    const cap = { kind: "tool" as const, default_capability_ids: ["dep"] };
+    expect(missingAgentDependenciesForPlatform(cap, [item({ id: "dep" })])).toEqual([]);
+  });
+
+  it("is empty for an agent that declares no dependency", () => {
+    expect(missingAgentDependenciesForPlatform({ kind: "agent" }, [])).toEqual([]);
+  });
+
+  it("names every blocking dependency, not just the first", () => {
+    const cap = { kind: "agent" as const, default_capability_ids: ["a", "b", "c"] };
+    const deps = [item({ id: "a" }), item({ id: "b", default_on: true }), item({ id: "c" })];
+    expect(missingAgentDependenciesForPlatform(cap, deps)).toEqual(["a", "c"]);
   });
 });
 

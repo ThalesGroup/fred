@@ -1138,7 +1138,18 @@
         "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
         "reasoningOffToast": "Reasoning disabled for this model.",
         "reasoningOnToast": "Reasoning enabled for this model.",
-        "reasoningToggleError": "Could not change this model's reasoning setting."
+        "reasoningToggleError": "Could not change this model's reasoning setting.",
+        "grantAllConfirm": {
+          "title": "Enable required features too?",
+          "messageTeam": "{{agent}} needs {{deps}} to work. This team cannot use it yet, so enabling the agent alone would leave it non-functional.",
+          "messagePersonal": "{{agent}} needs {{deps}} to work. Personal spaces cannot use it yet, so enabling the agent alone would leave it non-functional.",
+          "messagePlatform": "{{agent}} needs {{deps}} to work. It is not on by default, so every team would inherit an agent it cannot use.",
+          "confirm": "Enable all",
+          "cancel": "Cancel",
+          "depFailed": "Could not enable {{dep}} — {{agent}} was left unchanged.",
+          "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
+          "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
+        }
       },
       "platformModelBindings": {
         "openButton": "Platform model binding",

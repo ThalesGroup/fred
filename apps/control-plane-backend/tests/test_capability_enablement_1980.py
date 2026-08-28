@@ -40,7 +40,9 @@ from control_plane_backend.capabilities.enablement import (
     DefaultOnNotAllowed,
     disable_capability_for_team,
     enable_capability_for_team,
+    has_org_relation,
     reset_capability_for_team,
+    set_capability_default_on,
     set_capability_personal_scope,
     suspend_dependent_instances,
     validate_team_settings,
@@ -642,6 +644,181 @@ async def test_personal_scope_enabled_rejects_agent_capability_missing_tool_depe
             catalog_entry=sql_expert,
             scope="enabled",
         )
+
+
+@pytest.mark.asyncio
+async def test_default_on_rejects_agent_capability_whose_dependency_is_not_default_on() -> (
+    None
+):
+    """2026-08-28, GitHub #2470: the platform-wide switch is the third face of
+    the `depends_on` gate, and was the one with no check at all.
+
+    Turning a `kind="agent"` template default-on hands it to EVERY team at
+    once, so a dependency that is not itself default-on leaves every one of
+    them inheriting a template it cannot use — the same live bug fix A
+    addressed per-team, only platform-wide and silent.
+    """
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    with pytest.raises(AgentCapabilityDependencyNotSatisfied):
+        await set_capability_default_on(
+            rebac=rebac,
+            agent_instance_store=store,
+            catalog_entry=sql_expert,
+            on=True,
+            updated_by="admin",
+        )
+
+    # Rejected before any write — not even the capability anchor.
+    assert rebac.tuples == set()
+
+
+@pytest.mark.asyncio
+async def test_default_on_rejects_when_dependency_is_only_team_enabled() -> None:
+    """A dependency enabled for the teams that exist TODAY is not enough:
+    default-on also reaches every team created tomorrow, which would inherit
+    the template with no grant on the dependency. Only the dependency being
+    default-on itself satisfies the platform-wide gate."""
+
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    store = _FakeAgentInstanceStore([])
+    tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=tool_entry,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+
+    with pytest.raises(AgentCapabilityDependencyNotSatisfied):
+        await set_capability_default_on(
+            rebac=rebac,
+            agent_instance_store=store,
+            catalog_entry=sql_expert,
+            on=True,
+            updated_by="admin",
+        )
+
+
+@pytest.mark.asyncio
+async def test_default_on_allows_agent_capability_once_dependency_is_default_on() -> (
+    None
+):
+    """The "grant all" order the admin UI performs: dependency default-on
+    first, then the template — which must then succeed."""
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=tool_entry,
+        on=True,
+        updated_by="admin",
+    )
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=sql_expert,
+        on=True,
+        updated_by="admin",
+    )
+
+    assert await has_org_relation(
+        rebac, SQL_EXPERT_TEMPLATE_ID, RelationType.DEFAULT_ON
+    )
+
+
+@pytest.mark.asyncio
+async def test_default_off_is_never_blocked_by_the_dependency_gate() -> None:
+    """The gate guards the ON direction only. A template already default-on
+    whose dependency was revoked afterwards must still be turnable OFF —
+    otherwise the admin is trapped in exactly the broken state #2470 exists to
+    prevent."""
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=tool_entry,
+        on=True,
+        updated_by="admin",
+    )
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=sql_expert,
+        on=True,
+        updated_by="admin",
+    )
+    # The dependency goes away underneath the template.
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=tool_entry,
+        on=False,
+        updated_by="admin",
+    )
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=sql_expert,
+        on=False,
+        updated_by="admin",
+    )
+    assert not await has_org_relation(
+        rebac, SQL_EXPERT_TEMPLATE_ID, RelationType.DEFAULT_ON
+    )
+
+
+@pytest.mark.asyncio
+async def test_default_on_gate_ignores_tool_capabilities() -> None:
+    """`kind="tool"` entries have no `default_capability_ids` by construction —
+    the gate must not add a round trip, nor a refusal, for them."""
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=_entry("corp_drive"),
+        on=True,
+        updated_by="admin",
+    )
+    assert await has_org_relation(rebac, "corp_drive", RelationType.DEFAULT_ON)
 
 
 @pytest.mark.asyncio

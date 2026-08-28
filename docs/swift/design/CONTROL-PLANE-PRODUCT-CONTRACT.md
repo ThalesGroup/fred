@@ -1471,6 +1471,62 @@ client predicate still reads the (empty) grant lists and can render an agent
 row as blocked. The team matrix is already decorative in that mode, so the
 mismatch is cosmetic and not worth a second code path.
 
+**2026-08-28 — the `depends_on` gate reaches the platform-wide switch, and the
+UI offers to satisfy it (GitHub #2470).** Three write paths grant a
+`kind="agent"` capability; only two of them enforced the 2026-07-19 gate.
+`PUT /admin/capabilities/{capability_id}/default-on` had **no dependency check
+at all** — so turning an agent template default-on handed it to *every* team
+while its `default_capability_ids` stayed ungranted, enrolling a
+non-functional agent platform-wide with no error at any point. Surfaced by the
+`platform_ops` template (#2458), the first shipped template that declares a
+dependency.
+
+**Behaviour change on an existing route.** `PUT .../default-on` with
+`default_on: true` now 409s (`AgentCapabilityDependencyNotSatisfied`, the same
+exception the other two paths raise) when the entry is `kind="agent"` and any
+id in its `default_capability_ids` is not **itself `default_on`**. Turning
+default-on **off** is never gated — a template already on whose dependency was
+revoked afterwards must stay switchable off, or the admin is trapped in the
+very state this prevents. No new field, exception type, or error shape; the
+route's error contract is unchanged (plain-string `detail`, no `error_code`).
+
+`default_on` is the only satisfying marker here, deliberately stricter than
+the personal-scope rule (`(personal_on OR default_on) AND NOT
+personal_disabled`): default-on reaches every team *present and future*, so a
+dependency merely granted to the teams that exist today would still leave
+tomorrow's team inheriting a template it cannot use.
+
+Client-side consequences (`CapabilitiesPage.tsx`,
+`CapabilityTeamMatrixDrawer.tsx`, `missingAgentDependenciesForPlatform` in
+`capabilityEnablement.ts`): the 2026-08-25 entry's disabled "Enable" segment
+is **replaced by an "Enable all" confirmation** on all three paths. The
+segment stays clickable (a disabled segment is also keyboard-dead, which left
+the admin with no in-place way forward); clicking it names the missing
+dependencies and offers to grant them **at the same scope** as the template —
+per team, personal-class, or default-on — before granting the template itself.
+There is deliberately no "enable the template anyway": all three paths now
+refuse it consistently. `selectChoice`/`submitEnable`/`onToggleDefault` remain
+what keep an ungated grant off the wire, so the client gate is still a
+better-error affordance and never an enforcement point.
+
+**Not transactional, and ordered on purpose.** "Enable all" issues one write
+per dependency and then the template, sequentially. A dependency that fails
+aborts the sequence *before* the template, so a partial failure always leaves
+"dependency granted, template not" — never the inverse, which is the broken
+state being fixed. The failing dependency is named in the error toast.
+
+**Two consequences of that ordering, both deliberate.** (1) The client-side
+#2408 pre-check in `submitEnable` is **skipped** for the final template write
+of an "Enable all" run: `allCapabilities` comes from the RTK Query cache,
+which has not refetched at that instant, so the pre-check would still see the
+just-granted dependencies as missing and refuse the write the admin confirmed.
+The backend re-checks either way, so nothing is weakened — the client gate
+remains a better-error affordance, never an enforcement point. (2) When the
+template itself declares `team_settings_fields`, the team-row flow grants the
+dependencies and then **opens the settings form** rather than enabling
+outright; the dialog says so up front, since the run stops there until the
+form is saved.
+
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 
 **New endpoint:** `GET /teams/{team_id}/candidate-members?query=<string>` →
