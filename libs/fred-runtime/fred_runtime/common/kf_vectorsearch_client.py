@@ -120,6 +120,31 @@ class VectorSearchClient(KfBaseClient):
             return []
         return _HITS.validate_python(raw)
 
+    async def get_document_chunks(
+        self,
+        *,
+        document_uid: str,
+        limit: int,
+    ) -> List[VectorSearchHit]:
+        """Fetch a document's chunks in chunk_index order, capped at `limit`.
+
+        Bypasses similarity ranking, so a table that spans more chunks than the
+        search top_k comes back whole.
+        """
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path="/vector/document-chunks",
+            phase_name="kf_vector_document_chunks",
+            params={"document_uid": document_uid, "limit": limit},
+        )
+        r.raise_for_status()
+
+        raw = r.json()
+        if not isinstance(raw, list):
+            logger.warning("Unexpected document-chunks payload type: %s", type(raw))
+            return []
+        return _HITS.validate_python(raw)
+
     async def rerank(
         self,
         *,

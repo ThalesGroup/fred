@@ -15,7 +15,7 @@
 import logging
 from typing import List, Literal, Union
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
 from fred_core import (
     DocumentPermission,
@@ -205,6 +205,33 @@ class VectorSearchController:
             dummy_hit = VectorSearchHit(content="This is a test document chunk.", uid="test-doc-001", title="Dummy Test Document", score=0.99, rank=1, type="test")
 
             return [dummy_hit]
+
+        @router.get(
+            "/vector/document-chunks",
+            tags=["Vector Search"],
+            summary="Fetch a document's chunks in index order",
+            description=(
+                "Returns a document's stored chunks sorted by chunk_index, capped at `limit`. "
+                "A direct store fetch with no similarity ranking, so a whole table comes back "
+                "intact. Requires READ on the document."
+            ),
+            response_model=List[VectorSearchHit],
+            operation_id="get_document_chunks_ordered",
+            status_code=status.HTTP_200_OK,
+        )
+        async def get_document_chunks_ordered(
+            document_uid: str,
+            limit: int = Query(default=200, ge=1, le=1000),
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            rebac = get_rebac_engine()
+            await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+            async with phase_timer(self.kpi, "vector_document_chunks"):
+                return await self.service.get_document_chunks_ordered(
+                    user=user,
+                    document_uid=document_uid,
+                    limit=limit,
+                )
 
         @router.post(
             "/vector/rerank",

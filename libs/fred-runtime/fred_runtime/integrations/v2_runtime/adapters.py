@@ -850,6 +850,66 @@ class _TraceAggregate(TypedDict):
     max_ms: int
 
 
+# A table chunk is a header row followed by a Markdown separator row. Matching on
+# the separator rather than a leading "|" also catches tables written without one.
+_TABLE_SEPARATOR_CHARS = set("|-: \t")
+
+# Ceilings for the whole-table fetch below. A table is worth completing, but not
+# at the cost of an unbounded prompt: one document per call, capped in chunks.
+_TABLE_EXPANSION_MIN_HITS = 2
+_TABLE_EXPANSION_MAX_CHUNKS = 40
+
+
+def _restore_document_order(hits: list[VectorSearchHit]) -> list[VectorSearchHit]:
+    """Group hits per document and put each document's chunks back in index order.
+
+    Similarity ranking interleaves chunks, which reads as a shuffled table. Documents
+    keep their relative ranking: whichever scored best stays first.
+    """
+    per_doc: dict[str, list[VectorSearchHit]] = {}
+    for hit in hits:
+        per_doc.setdefault(hit.uid, []).append(hit)
+    ordered: list[VectorSearchHit] = []
+    for chunks in per_doc.values():
+        chunks.sort(key=lambda h: (h.chunk_index is None, h.chunk_index or 0))
+        ordered.extend(chunks)
+    return ordered
+
+
+def _strip_repeated_table_headers(hits: list[VectorSearchHit]) -> list[VectorSearchHit]:
+    """Drop the header the splitter repeats on every table chunk, except the first.
+
+    Each chunk carries the header so it stands alone, but a run of them reads to the
+    model as separate tables. Only strips when the previous chunk of the same document
+    was also a table chunk, so the run keeps exactly one header.
+    """
+    out: list[VectorSearchHit] = []
+    prev_uid: str | None = None
+    prev_was_table = False
+    for hit in hits:
+        span = _table_header_span(hit.content)
+        if span and prev_was_table and hit.uid == prev_uid:
+            body = "\n".join(hit.content.split("\n")[span:]).lstrip("\n")
+            hit = hit.model_copy(update={"content": body})
+        out.append(hit)
+        prev_uid = hit.uid
+        prev_was_table = bool(span)
+    return out
+
+
+def _table_header_span(content: str) -> int:
+    """Length in lines of the leading table header, or 0 when this is not a table chunk."""
+    lines = content.split("\n", 2)
+    if len(lines) < 2 or "|" not in lines[0]:
+        return 0
+    separator = lines[1].strip()
+    if "|" not in separator or "-" not in separator:
+        return 0
+    if set(separator) - _TABLE_SEPARATOR_CHARS:
+        return 0
+    return 2
+
+
 class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
     """
     First concrete Fred-side tool invoker for v2 agents.
@@ -889,6 +949,49 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 return await result
             return result
         raise RuntimeError(f"Unsupported Fred tool ref: {request.tool_ref!r}")
+
+    async def _complete_truncated_table(
+        self, hits: list[VectorSearchHit]
+    ) -> list[VectorSearchHit]:
+        """Refetch a whole table when top_k clearly cut one short.
+
+        Several table chunks from one document means similarity ranking returned a
+        slice of a table, and a sliced table answers row questions wrong. Refetch that
+        document's chunks in index order instead. Best-effort: on any failure the
+        original hits stand.
+        """
+        counts: dict[str, int] = {}
+        for hit in hits:
+            if _table_header_span(hit.content):
+                counts[hit.uid] = counts.get(hit.uid, 0) + 1
+        if not counts:
+            return hits
+        uid, table_hits = max(counts.items(), key=lambda kv: kv[1])
+        if table_hits < _TABLE_EXPANSION_MIN_HITS:
+            return hits
+
+        try:
+            chunks = await self._search_client.get_document_chunks(
+                document_uid=uid, limit=_TABLE_EXPANSION_MAX_CHUNKS
+            )
+        except Exception:
+            logger.warning(
+                "[KNOWLEDGE_SEARCH] table completion failed for uid=%s",
+                uid,
+                exc_info=True,
+            )
+            return hits
+
+        already = sum(1 for hit in hits if hit.uid == uid)
+        if len(chunks) <= already:
+            return hits
+        logger.info(
+            "[KNOWLEDGE_SEARCH] table completion uid=%s chunks=%d->%d",
+            uid,
+            already,
+            len(chunks),
+        )
+        return [hit for hit in hits if hit.uid != uid] + chunks
 
     async def _invoke_knowledge_search(
         self, request: ToolInvocationRequest
@@ -943,6 +1046,10 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             include_session_scope=include_session_scope,
             include_corpus_scope=include_corpus_scope,
         )
+
+        hits = await self._complete_truncated_table(hits)
+        hits = _restore_document_order(hits)
+        hits = _strip_repeated_table_headers(hits)
 
         # Only expose the fields the LLM needs for citation and reasoning.
         # URL and operational fields are excluded to prevent the model from

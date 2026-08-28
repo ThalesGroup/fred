@@ -118,6 +118,20 @@ def _merge_corpus_scope_hits(*hit_groups: List[VectorSearchHit], top_k: int) -> 
     return sorted(merged_by_key.values(), key=lambda h: h.score or 0.0, reverse=True)[:top_k]
 
 
+def _coerce_chunk_index(raw: Any) -> Optional[int]:
+    """Stores return chunk_index as int, float or string depending on the backend."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    if isinstance(raw, str):
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    return None
+
+
 class VectorSearchService:
     """
     Fred — Vector Search Service (policy-driven).
@@ -311,6 +325,7 @@ class VectorSearchService:
             # metrics & provenance
             score=score,
             rank=rank,
+            chunk_index=_coerce_chunk_index(md.get("chunk_index")),
             embedding_model=str(md.get("embedding_model") or "unknown_model"),
             vector_index=md.get("vector_index") or "unknown_index",
             token_count=md.get("token_count"),
@@ -926,3 +941,47 @@ class VectorSearchService:
                 actor=self._kpi_actor(user=None),
             )
             return reranked_documents
+
+    async def get_document_chunks_ordered(
+        self,
+        *,
+        user: KeycloakUser,
+        document_uid: str,
+        limit: int,
+    ) -> List[VectorSearchHit]:
+        """Return a document's stored chunks in chunk_index order, capped at `limit`.
+
+        A direct store fetch, not a search: similarity ranking cannot guarantee that
+        every row of a large table comes back, so callers that need a whole table ask
+        for the document itself.
+
+        The ReBAC READ check belongs to the caller, as for every other route on
+        this controller.
+        """
+        try:
+            raw_chunks = await asyncio.to_thread(self.vector_store.get_chunks_for_document, document_uid)
+        except NotImplementedError:
+            logger.warning("[VECTOR][DOC_CHUNKS] store %s cannot fetch chunks by document", type(self.vector_store).__name__)
+            return []
+        if not raw_chunks:
+            return []
+
+        raw_chunks.sort(key=lambda c: _coerce_chunk_index((c.get("metadata") or {}).get("chunk_index")) or 0)
+        truncated = len(raw_chunks) > limit
+        hits = [
+            await self._to_hit(
+                Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}),
+                score=0.0,
+                rank=rank,
+                user=user,
+            )
+            for rank, entry in enumerate(raw_chunks[:limit])
+        ]
+        logger.info(
+            "[VECTOR][DOC_CHUNKS] document_uid=%s returned=%d of %d truncated=%s",
+            document_uid,
+            len(hits),
+            len(raw_chunks),
+            truncated,
+        )
+        return hits
