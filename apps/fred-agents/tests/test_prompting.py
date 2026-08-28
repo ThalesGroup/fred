@@ -1,4 +1,5 @@
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
+from fred_agents.platform_ops import PLATFORM_OPS_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
@@ -32,6 +33,7 @@ def test_base_agents_do_not_bake_global_base_prompt_contract() -> None:
         REACT_RAG_MCP_AGENT.system_prompt_template,
         SENTINEL_AGENT.system_prompt_template,
         SQL_EXPERT_AGENT.system_prompt_template,
+        PLATFORM_OPS_AGENT.system_prompt_template,
     )
 
     for prompt in prompts:
