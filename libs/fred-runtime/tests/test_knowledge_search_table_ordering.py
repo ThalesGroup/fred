@@ -272,3 +272,102 @@ async def test_a_failing_refetch_leaves_the_original_hits(
 
     contents = [hit["content"] for hit in result.blocks[0].data["hits"]]
     assert contents == [f"{HEADER}\n| a | 1 |", "| c | 3 |"]
+
+
+OTHER_HEADER = "| country | code |\n| --- | --- |"
+
+
+def test_a_second_distinct_table_keeps_its_own_header():
+    """Stripping on adjacency alone would reattribute these rows to the first table."""
+    hits = [
+        _hit("d1", f"{HEADER}\n| a | 1 |"),
+        _hit("d1", f"{OTHER_HEADER}\n| FR | 33 |"),
+    ]
+
+    out = adapters_module._strip_repeated_table_headers(hits)
+
+    assert out[1].content == f"{OTHER_HEADER}\n| FR | 33 |"
+
+
+@pytest.mark.asyncio
+async def test_contiguous_table_chunks_are_not_refetched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two adjacent chunks are a complete slice; there is nothing to complete."""
+    search_hits = [
+        _hit("d1", f"{HEADER}\n| a | 1 |", chunk_index=4),
+        _hit("d1", f"{HEADER}\n| b | 2 |", chunk_index=5),
+    ]
+    client_cls, calls = _client_returning(search_hits, [])
+
+    await _invoke(monkeypatch, client_cls)
+
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_document_larger_than_the_cap_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A head-truncated refetch would drop the chunks that actually matched."""
+    search_hits = [
+        _hit("d1", f"{HEADER}\n| a | 1 |", chunk_index=60),
+        _hit("d1", f"{HEADER}\n| c | 3 |", chunk_index=62),
+    ]
+    fetched = [
+        _hit("d1", f"{HEADER}\n| r{i} | {i} |", chunk_index=i)
+        for i in range(adapters_module._TABLE_EXPANSION_MAX_CHUNKS)
+    ]
+    client_cls, _ = _client_returning(search_hits, fetched)
+
+    result = await _invoke(monkeypatch, client_cls)
+
+    contents = [hit["content"] for hit in result.blocks[0].data["hits"]]
+    assert contents == [f"{HEADER}\n| a | 1 |", "| c | 3 |"]
+
+
+@pytest.mark.asyncio
+async def test_refetched_chunks_keep_the_document_as_a_citable_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fetch carries no score of its own, so it inherits the document's best."""
+    search_hits = [
+        _hit("d2", "unrelated prose", chunk_index=0, score=0.8),
+        _hit("d1", f"{HEADER}\n| a | 1 |", chunk_index=0, score=0.9),
+        _hit("d1", f"{HEADER}\n| c | 3 |", chunk_index=2, score=0.85),
+    ]
+    fetched = [
+        _hit("d1", f"{HEADER}\n| {row} | {i} |", chunk_index=i, score=0.0)
+        for i, row in enumerate("abc")
+    ]
+    client_cls, _ = _client_returning(search_hits, fetched)
+
+    result = await _invoke(monkeypatch, client_cls)
+
+    assert "d1" in {source.uid for source in result.sources}
+
+
+@pytest.mark.asyncio
+async def test_the_completed_document_keeps_its_rank(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Appending the fetch at the end would demote the one document the fix serves."""
+    search_hits = [
+        _hit("d1", f"{HEADER}\n| a | 1 |", chunk_index=0, score=0.95),
+        _hit("d1", f"{HEADER}\n| c | 3 |", chunk_index=2, score=0.94),
+        _hit("d2", "unrelated prose", chunk_index=0, score=0.5),
+    ]
+    fetched = [
+        _hit("d1", f"{HEADER}\n| {row} | {i} |", chunk_index=i)
+        for i, row in enumerate("abc")
+    ]
+    client_cls, _ = _client_returning(search_hits, fetched)
+
+    result = await _invoke(monkeypatch, client_cls)
+
+    assert [hit["uid"] for hit in result.blocks[0].data["hits"]] == [
+        "d1",
+        "d1",
+        "d1",
+        "d2",
+    ]

@@ -19,6 +19,7 @@ The three ingestion modes share the same chunker (``SemanticSplitter``), so
 covering it here covers all three.
 """
 
+from fred_core.store.vector_search import MARKDOWN_TABLE_CHUNK_KIND
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import (
@@ -29,11 +30,11 @@ SMALL_TABLE = "| col1 | col2 | col3 |\n| --- | --- | --- |\n| a | b | c |\n| d |
 
 
 def _table_chunks(chunks):
-    return [c for c in chunks if c.metadata.get("block_type") == "markdown_table"]
+    return [c for c in chunks if c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND]
 
 
 def _non_table_chunks(chunks):
-    return [c for c in chunks if c.metadata.get("block_type") != "markdown_table"]
+    return [c for c in chunks if c.metadata.get("chunk_kind") != MARKDOWN_TABLE_CHUNK_KIND]
 
 
 def test_small_table_remains_in_one_chunk():
@@ -44,7 +45,7 @@ def test_small_table_remains_in_one_chunk():
     tables = _table_chunks(chunks)
     assert len(tables) == 1
     assert tables[0].page_content.strip() == SMALL_TABLE.strip()
-    assert tables[0].metadata.get("is_table") is True
+    assert tables[0].metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND
     assert tables[0].metadata.get("table_id")  # id was assigned
 
 
@@ -193,7 +194,7 @@ def test_chunk_order_text_before_table_then_text_after():
     chunks = splitter.split(Document(page_content=text))
 
     # Locate the single table chunk and check its position in the list.
-    table_positions = [i for i, c in enumerate(chunks) if c.metadata.get("block_type") == "markdown_table"]
+    table_positions = [i for i, c in enumerate(chunks) if c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND]
     assert len(table_positions) == 1, "Expected exactly one table chunk"
     table_pos = table_positions[0]
 
@@ -214,7 +215,7 @@ def test_chunk_order_multiple_tables_interleaved_text():
     text = f"# Doc\n\n{SMALL_TABLE}\nMiddle prose.\n\n{SMALL_TABLE}\nTrailing prose.\n"
     chunks = splitter.split(Document(page_content=text))
 
-    table_positions = [i for i, c in enumerate(chunks) if c.metadata.get("block_type") == "markdown_table"]
+    table_positions = [i for i, c in enumerate(chunks) if c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND]
     assert len(table_positions) == 2, "Expected two table chunks"
 
     middle_positions = [i for i, c in enumerate(chunks) if "Middle prose." in c.page_content]
@@ -233,7 +234,7 @@ def test_heading_paragraph_table_paragraph_document_order():
     text = f"# Title\n\nIntroduction paragraph.\n\n{SMALL_TABLE}\nConclusion paragraph.\n"
     chunks = splitter.split(Document(page_content=text))
 
-    table_idx = next((i for i, c in enumerate(chunks) if c.metadata.get("block_type") == "markdown_table"), None)
+    table_idx = next((i for i, c in enumerate(chunks) if c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND), None)
     assert table_idx is not None
 
     intro_idx = next((i for i, c in enumerate(chunks) if "Introduction paragraph." in c.page_content), None)
@@ -254,7 +255,7 @@ def test_table_followed_by_list_preserves_order():
     text = f"# List after table\n\n{SMALL_TABLE}\n- item one\n- item two\n- item three\n"
     chunks = splitter.split(Document(page_content=text))
 
-    table_idx = next((i for i, c in enumerate(chunks) if c.metadata.get("block_type") == "markdown_table"), None)
+    table_idx = next((i for i, c in enumerate(chunks) if c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND), None)
     assert table_idx is not None
 
     list_idx = next((i for i, c in enumerate(chunks) if "item one" in c.page_content), None)
@@ -270,7 +271,7 @@ def test_large_table_crossing_chunk_boundary_order_with_surrounding_text():
     text = f"Header prose.\n\n{big_table}\nFooter prose.\n"
     chunks = splitter.split(Document(page_content=text))
 
-    table_indices = [i for i, c in enumerate(chunks) if c.metadata.get("block_type") == "markdown_table"]
+    table_indices = [i for i, c in enumerate(chunks) if c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND]
     assert len(table_indices) > 1, "Large table must split into multiple parts"
 
     header_idx = next((i for i, c in enumerate(chunks) if "Header prose." in c.page_content), None)
@@ -354,7 +355,7 @@ def test_200_row_table_with_intro_text_preserves_document_order():
     doc = Document(page_content=intro + _build_200_row_table())
     chunks = splitter.split(doc)
 
-    table_indices = [i for i, c in enumerate(chunks) if c.metadata.get("block_type") == "markdown_table"]
+    table_indices = [i for i, c in enumerate(chunks) if c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND]
     intro_indices = [i for i, c in enumerate(chunks) if "Large Configuration Reference" in c.page_content]
 
     assert table_indices, "Table chunks must exist"
@@ -370,5 +371,36 @@ def test_preserve_tables_false_leaves_plain_markdown_tables_unannotated():
     splitter = SemanticSplitter(chunk_size=1500, chunk_overlap=0, preserve_tables=False)
     chunks = splitter.split(Document(page_content=SMALL_TABLE))
 
-    assert not any(c.metadata.get("block_type") == "markdown_table" for c in chunks)
+    assert not any(c.metadata.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND for c in chunks)
     assert not any("TABLE_START" in c.page_content for c in chunks)
+
+
+def test_table_chunk_kind_survives_metadata_sanitisation():
+    """chunk_kind is the persisted vocabulary; the table_* keys are splitter-local."""
+    from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import (
+        sanitize_chunk_metadata,
+    )
+
+    splitter = SemanticSplitter(chunk_size=1500, chunk_overlap=0)
+    table = _table_chunks(splitter.split(Document(page_content=SMALL_TABLE)))[0]
+
+    kept, _ = sanitize_chunk_metadata(table.metadata)
+
+    assert kept.get("chunk_kind") == MARKDOWN_TABLE_CHUNK_KIND
+
+
+def test_fragments_around_a_table_get_distinct_anchors():
+    """Copying the parent anchor would deep-link intro and outro at the same span."""
+    splitter = SemanticSplitter(chunk_size=1500, chunk_overlap=0)
+    text = f"Intro paragraph.\n{SMALL_TABLE}\nOutro paragraph.\n"
+    chunks = splitter.split(Document(page_content=text))
+
+    intro = next(c for c in chunks if "Intro paragraph." in c.page_content)
+    outro = next(c for c in chunks if "Outro paragraph." in c.page_content)
+
+    spans = [(c.metadata.get("char_start"), c.metadata.get("char_end")) for c in (intro, outro)]
+    assert all(start is not None for start, _ in spans)
+    assert spans[0] != spans[1]
+    assert spans[0][1] <= spans[1][0]
+    for chunk, (start, end) in zip((intro, outro), spans):
+        assert end - start == len(chunk.page_content)

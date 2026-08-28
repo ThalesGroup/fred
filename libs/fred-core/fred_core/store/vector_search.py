@@ -25,6 +25,10 @@ from pydantic import BaseModel, Field
 # and readers (document_access, knowledge.search) agree on the pointer value.
 DATASET_POINTER_CHUNK_KIND = "dataset_pointer"
 
+# A chunk holding one Markdown table, or one row-boundary slice of a large one.
+# Header and separator are repeated on every slice, so each chunk stands alone.
+MARKDOWN_TABLE_CHUNK_KIND = "markdown_table"
+
 # Default for `select_citable_sources`'s `min_score_ratio` — a hit scoring
 # below half the best hit's score in the same search call is treated as noise
 # relative to the strongest match, not a citable basis for an answer. Callers
@@ -47,7 +51,8 @@ class VectorSearchHit(BaseModel):
         description=(
             "content (default, real ingested prose/data) or "
             f"'{DATASET_POINTER_CHUNK_KIND}' (a discovery pointer to a structured "
-            "dataset, never citable as a source)."
+            f"dataset, never citable as a source) or '{MARKDOWN_TABLE_CHUNK_KIND}' "
+            "(a Markdown table kept whole or split on row boundaries)."
         ),
     )
 

@@ -16,6 +16,7 @@ import logging
 import re
 from typing import List, Tuple
 
+from fred_core.store.vector_search import MARKDOWN_TABLE_CHUNK_KIND
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
@@ -63,6 +64,20 @@ def _build_ws_tolerant_pattern(needle: str) -> str:
     return "".join(parts)
 
 
+def _fragment_metadata(parent: dict, offset: int, length: int) -> dict:
+    """Metadata for a slice of a chunk, with the anchor narrowed to that slice.
+
+    Splitting a chunk around a table placeholder yields several fragments; copying the
+    parent anchor verbatim would deep-link them all at the same wrong span.
+    """
+    metadata = dict(parent or {})
+    start = metadata.get("char_start")
+    if isinstance(start, int):
+        metadata["char_start"] = start + offset
+        metadata["char_end"] = start + offset + length
+    return metadata
+
+
 class SemanticSplitter(BaseTextSplitter):
     def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 150, preserve_tables: bool = True):
         """
@@ -106,6 +121,7 @@ class SemanticSplitter(BaseTextSplitter):
         auto_idx = 0
         in_fence = False
         fence_token: str | None = None
+        annotated = False
 
         while i < len(lines):
             line = lines[i]
@@ -140,6 +156,12 @@ class SemanticSplitter(BaseTextSplitter):
                     i += 1
                 continue
 
+            # A 4-space indent is an indented code block, not a table.
+            if line[:4] == "    ":
+                out.append(line)
+                i += 1
+                continue
+
             # Pipe table: a pipe-row immediately followed by a separator row.
             if i + 1 < len(lines) and _is_pipe_row(line) and _is_pipe_separator(lines[i + 1]):
                 start = i
@@ -152,12 +174,17 @@ class SemanticSplitter(BaseTextSplitter):
                     out.append(table_md)
                     out.append("<!-- TABLE_END -->")
                     auto_idx += 1
+                    annotated = True
                 continue
 
             out.append(line)
             i += 1
 
-        # Preserve a single trailing newline if the original text had one.
+        # Rebuilding through splitlines() would normalise CRLF and the exotic line
+        # breaks it splits on, shifting every char offset. Only pay that when a table
+        # was actually wrapped.
+        if not annotated:
+            return text
         result = "\n".join(out)
         if text.endswith("\n") and not result.endswith("\n"):
             result += "\n"
@@ -196,7 +223,10 @@ class SemanticSplitter(BaseTextSplitter):
 
         Preserves the table header + separator row in **every** chunk and stamps
         metadata so consumers can re-stitch the table or filter on
-        ``block_type=='markdown_table'``. Row order is preserved.
+        ``chunk_kind == MARKDOWN_TABLE_CHUNK_KIND``. Row order is preserved.
+
+        The ``table_*`` and ``row_*`` keys are splitter-local: metadata
+        sanitisation drops them, only ``chunk_kind`` is persisted.
 
         Args:
             table_md (str): The Markdown string of the full table.
@@ -211,8 +241,7 @@ class SemanticSplitter(BaseTextSplitter):
                 Document(
                     page_content=table_md,
                     metadata={
-                        "is_table": True,
-                        "block_type": "markdown_table",
+                        "chunk_kind": MARKDOWN_TABLE_CHUNK_KIND,
                         "table_id": table_id,
                         "table_chunk_id": 0,
                         "table_part": 0,
@@ -239,8 +268,7 @@ class SemanticSplitter(BaseTextSplitter):
                 Document(
                     page_content=f"{header}\n{chr(10).join(current_rows)}",
                     metadata={
-                        "is_table": True,
-                        "block_type": "markdown_table",
+                        "chunk_kind": MARKDOWN_TABLE_CHUNK_KIND,
                         "table_id": table_id,
                         "table_chunk_id": chunk_index,
                         "table_part": chunk_index,
@@ -377,12 +405,14 @@ class SemanticSplitter(BaseTextSplitter):
 
             prev_end = 0
             for m in _placeholder_re.finditer(chunk_text):
-                before = chunk_text[prev_end : m.start()].strip()
+                raw_before = chunk_text[prev_end : m.start()]
+                before = raw_before.strip()
                 if before:
+                    offset = prev_end + len(raw_before) - len(raw_before.lstrip())
                     final_chunks.append(
                         Document(
                             page_content=before,
-                            metadata=dict(chunk.metadata or {}),
+                            metadata=_fragment_metadata(chunk.metadata, offset, len(before)),
                         )
                     )
 
@@ -394,8 +424,7 @@ class SemanticSplitter(BaseTextSplitter):
                             Document(
                                 page_content=table_md,
                                 metadata={
-                                    "is_table": True,
-                                    "block_type": "markdown_table",
+                                    "chunk_kind": MARKDOWN_TABLE_CHUNK_KIND,
                                     "table_id": table_id,
                                     "table_chunk_id": 0,
                                     "table_part": 0,
@@ -407,12 +436,14 @@ class SemanticSplitter(BaseTextSplitter):
 
                 prev_end = m.end()
 
-            tail = chunk_text[prev_end:].strip()
+            raw_tail = chunk_text[prev_end:]
+            tail = raw_tail.strip()
             if tail:
+                offset = prev_end + len(raw_tail) - len(raw_tail.lstrip())
                 final_chunks.append(
                     Document(
                         page_content=tail,
-                        metadata=dict(chunk.metadata or {}),
+                        metadata=_fragment_metadata(chunk.metadata, offset, len(tail)),
                     )
                 )
 

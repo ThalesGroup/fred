@@ -39,7 +39,7 @@ class VectorSearchClient(KfBaseClient):
     def __init__(self, agent: KnowledgeFlowAgentContext):
         super().__init__(
             agent=agent,
-            allowed_methods=frozenset({"POST"}),
+            allowed_methods=frozenset({"GET", "POST"}),
         )
 
     async def search(

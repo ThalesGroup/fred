@@ -257,7 +257,14 @@ class VectorSearchService:
                 logger.debug("Could not resolve tag id=%s: %s", tid, e)
         return names, full_paths
 
-    async def _to_hit(self, doc: Document, score: float, rank: int, user: KeycloakUser) -> VectorSearchHit:
+    async def _to_hit(
+        self,
+        doc: Document,
+        score: float,
+        rank: int,
+        user: KeycloakUser,
+        tags_meta: tuple[list[str], list[str]] | None = None,
+    ) -> VectorSearchHit:
         """
         Convert a LangChain Document + score into a VectorSearchHit UI DTO.
         Rationale:
@@ -267,7 +274,7 @@ class VectorSearchService:
 
         # Pull both ids and names (UI displays names; filters might use ids)
         tag_ids = md.get("tag_ids") or []
-        tag_names, tag_full_paths = await self._tags_meta_from_ids(tag_ids, user)
+        tag_names, tag_full_paths = tags_meta if tags_meta is not None else await self._tags_meta_from_ids(tag_ids, user)
         uid = md.get("document_uid") or "Unknown"
         vf = md.get("viewer_fragment")
         preview_url = f"/documents/{uid}"
@@ -957,6 +964,11 @@ class VectorSearchService:
 
         The ReBAC READ check belongs to the caller, as for every other route on
         this controller.
+
+        Known cost: `limit` bounds the response, not the store read - every backend's
+        `get_chunks_for_document` fetches the whole document (OpenSearch caps at 10k)
+        and the slice happens here. Pushing the bound into the stores is a separate
+        change; this route is no worse than the existing callers of that method.
         """
         try:
             raw_chunks = await asyncio.to_thread(self.vector_store.get_chunks_for_document, document_uid)
@@ -966,17 +978,31 @@ class VectorSearchService:
         if not raw_chunks:
             return []
 
-        raw_chunks.sort(key=lambda c: _coerce_chunk_index((c.get("metadata") or {}).get("chunk_index")) or 0)
+        def _order(chunk: dict) -> tuple[bool, int]:
+            # None last, matching the runtime adapter: an unindexed legacy chunk
+            # degrades to the end rather than jumping ahead of chunk 0.
+            index = _coerce_chunk_index((chunk.get("metadata") or {}).get("chunk_index"))
+            return (index is None, index or 0)
+
+        raw_chunks.sort(key=_order)
         truncated = len(raw_chunks) > limit
-        hits = [
-            await self._to_hit(
-                Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}),
-                score=0.0,
-                rank=rank,
-                user=user,
+
+        tags_cache: dict[tuple[str, ...], tuple[list[str], list[str]]] = {}
+        hits: List[VectorSearchHit] = []
+        for rank, entry in enumerate(raw_chunks[:limit]):
+            metadata = entry.get("metadata") or {}
+            tag_ids = tuple(metadata.get("tag_ids") or [])
+            if tag_ids not in tags_cache:
+                tags_cache[tag_ids] = await self._tags_meta_from_ids(list(tag_ids), user)
+            hits.append(
+                await self._to_hit(
+                    Document(page_content=entry.get("text") or "", metadata=metadata),
+                    score=0.0,
+                    rank=rank,
+                    user=user,
+                    tags_meta=tags_cache[tag_ids],
+                )
             )
-            for rank, entry in enumerate(raw_chunks[:limit])
-        ]
         logger.info(
             "[VECTOR][DOC_CHUNKS] document_uid=%s returned=%d of %d truncated=%s",
             document_uid,
