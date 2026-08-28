@@ -35,6 +35,7 @@ export type TeamCapabilities = {
   canAdministerAdmins: boolean;
   canReadConversations: boolean;
   canUseTeamAgents: boolean;
+  canAccessFiles: boolean;
   canRunEvaluations: boolean;
   canManageEvaluationCorpus: boolean;
   canReadConversationsForEvaluation: boolean;
@@ -59,6 +60,7 @@ const PERMISSION_TO_FLAG: Record<TeamPermission, keyof TeamCapabilities> = {
   can_administer_admins: "canAdministerAdmins",
   can_read_conversations: "canReadConversations",
   can_use_team_agents: "canUseTeamAgents",
+  can_access_files: "canAccessFiles",
   can_run_evaluations: "canRunEvaluations",
   can_manage_evaluation_corpus: "canManageEvaluationCorpus",
   can_read_conversations_for_evaluation: "canReadConversationsForEvaluation",

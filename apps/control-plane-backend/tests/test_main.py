@@ -1419,6 +1419,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
             "can_read",
             "can_update_resources",
             "can_update_agents",
+            "can_access_files",
         ],
         "my_relations": ["team_editor"],
         "max_resources_storage_size": 5368709120,
@@ -1440,6 +1441,7 @@ async def test_user_details_reuses_shared_personal_team_contract() -> None:
         "can_read",
         "can_update_resources",
         "can_update_agents",
+        "can_access_files",
     ]
 
 

@@ -129,6 +129,11 @@ type team
     # -> must be member; deliberately excludes `public` (unlike can_read)
     define can_use_team_agents: team_member
 
+    # Can enter the team's filesystem box (/teams/{id}/... in the virtual FS)
+    # -> must be member; reusing `can_read` would turn "listed in the
+    # marketplace" into "may read this team's files" for every PUBLIC team
+    define can_access_files: team_member
+
     # Team-scoped evaluation capabilities (RFC §6.2/§3.2). team_admin may run
     # evaluations directly (RFC §24.6: team_admin may also grant team_analyst
     # without separate platform approval); team_editor has no evaluation

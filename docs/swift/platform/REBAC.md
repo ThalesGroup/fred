@@ -176,7 +176,8 @@ uid is embedded in the team id), so it is provisioned automatically instead:
   tuple — `user:<uid> team_editor team:personal-<uid>` — the first time its
   own owner touches anything about their personal team. `team_editor`
   reproduces control-plane's synthetic `build_personal_team` DTO permission
-  set (`can_read`, `can_update_resources`, `can_update_agents`) exactly.
+  set (`can_read`, `can_update_resources`, `can_update_agents`,
+  `can_access_files`) exactly.
 - `RebacEngine.add_relation` — the one audited chokepoint every relation write
   funnels through, collaborative or personal — refuses any tuple naming a
   personal team except that owner self-grant and the structural
