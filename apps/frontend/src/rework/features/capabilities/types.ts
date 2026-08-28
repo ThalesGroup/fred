@@ -68,6 +68,13 @@ export interface CapabilitySidePanelSpec {
    * capability going in or out of a session never shifts hook order.
    */
   useHasContent?: () => boolean;
+  /**
+   * This panel renders its own title band (and its own close button, from the
+   * `onClose` it receives), so the host drops the drawer's. Two stacked title
+   * rows - the drawer naming the panel, the pane naming the artefact - said the
+   * same thing twice and ate the top of the column.
+   */
+  ownsHeader?: boolean;
 }
 
 /** The RAG-scope closed set (RuntimeContext `search_rag_scope`, RFC §3.3). */

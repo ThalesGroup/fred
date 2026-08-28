@@ -32,6 +32,11 @@ export const pptFillerCapability: CapabilityUiPlugin = {
   // Keyed by the backend manifest's SidePanelSpec.widget. `slideshow` is what
   // fileIconSpec gives a .pptx, so a deck reads the same in chat and Resources.
   sidePanels: {
-    ppt_preview_pane: { Component: PptPreviewPane, icon: "slideshow", useHasContent: useHasPptPreview },
+    ppt_preview_pane: {
+      Component: PptPreviewPane,
+      icon: "slideshow",
+      useHasContent: useHasPptPreview,
+      ownsHeader: true,
+    },
   },
 };

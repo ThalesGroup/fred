@@ -3613,6 +3613,17 @@ a session's active capabilities declare. Two changes (#2459):
   that drawer's own close button. Moving the remaining launchers into the drawer's
   `headerActions` was tried the same day and dropped: closing the open panel to reach
   another one is cheap, and one home for the launchers beats two (developer decision).
+- **The drawer's own title band is gone for both panes** (2026-08-28). A pane that
+  names the artefact it holds does not also need the drawer naming the panel above
+  it - two title rows said the same thing twice and ate the top of the column. A
+  panel declares `ownsHeader: true` on its `sidePanels` spec; the host then passes
+  `InlineDrawer`'s new `hideHeader` (the drawer keeps `title` as its accessible
+  name) plus `flushBody`, and the pane renders its own close button. `demo_echo`,
+  which has no header of its own, keeps the drawer's.
+- **Switching conversations closes any open push drawer** (2026-08-28). Opening one
+  is a statement about one conversation and every panel reads the open session, so
+  a drawer carried across sat there empty. A capability whose new conversation
+  warrants its panel asks for it again through the open-request counter.
 - **Both panes' header bands were trimmed** (2026-08-28) - `PptPreviewPane` and
   `WritableDocumentPane` share the same title + actions row, padded down from
   `8px/16px` to `4px/12px`; the editor toolbar under it lost the same 4px. Two

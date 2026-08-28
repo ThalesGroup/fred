@@ -53,6 +53,7 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import type { CapabilitySidePanelProps } from "../types";
 import { useWritableDocuments } from "./useWritableDocuments";
 import WritableDocumentDownloadButton from "./WritableDocumentDownloadButton";
@@ -61,7 +62,7 @@ import styles from "./WritableDocumentPane.module.css";
 const isDarkTheme = () =>
   typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
 
-export function WritableDocumentPane(_props: CapabilitySidePanelProps) {
+export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session") ?? "";
@@ -92,6 +93,18 @@ export function WritableDocumentPane(_props: CapabilitySidePanelProps) {
             title={selected.title}
           />
         )}
+        <IconButton
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "close" }}
+          aria-label="Close panel"
+          // Blur first: closing flips aria-hidden on the drawer, which the browser
+          // blocks while a descendant still holds focus (InlineDrawer does the same).
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onClose();
+          }}
+        />
       </div>
 
       {!sessionId && <div className={styles.empty}>{t("capability.writable_document.noSession")}</div>}

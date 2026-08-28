@@ -115,6 +115,9 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
             open={active !== null}
             onClose={() => onActiveKeyChange(null)}
             title={active ? titleOf(active) : ""}
+            // A pane with its own header owns the whole column, insets included.
+            hideHeader={active?.ownsHeader ?? false}
+            flushBody={active?.ownsHeader ?? false}
             layout="push"
             // One shared width across every capability panel (writable-document
             // editor, PPT preview, …) — the same behaviour the legacy chat's

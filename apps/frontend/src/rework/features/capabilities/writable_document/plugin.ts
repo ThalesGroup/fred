@@ -34,6 +34,7 @@ export const writableDocumentCapability: CapabilityUiPlugin = {
       Component: WritableDocumentPane,
       icon: "edit_document",
       useHasContent: useHasWritableDocuments,
+      ownsHeader: true,
     },
   },
   // A conversation that already holds documents re-opens straight in the editor.

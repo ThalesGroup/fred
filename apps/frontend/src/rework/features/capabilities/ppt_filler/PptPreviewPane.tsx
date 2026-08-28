@@ -35,6 +35,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import type { CapabilitySidePanelProps } from "../types";
 import { useSessionPptPreview } from "./useSessionPptPreview";
 import { usePptPreview } from "./usePptPreview";
@@ -50,7 +51,7 @@ const NO_PREVIEW_KEY = "none";
 // `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
 const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
-export function PptPreviewPane(_props: CapabilitySidePanelProps) {
+export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
   const current = useSessionPptPreview();
   const { objectUrl, isLoading, error } = usePptPreview(current);
@@ -161,6 +162,18 @@ export function PptPreviewPane(_props: CapabilitySidePanelProps) {
         {current?.pptx_download_url && (
           <PptxDownloadButton href={current.pptx_download_url} fileName={current.file_name} />
         )}
+        <IconButton
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "close" }}
+          aria-label="Close panel"
+          // Blur first: closing flips aria-hidden on the drawer, which the browser
+          // blocks while a descendant still holds focus (InlineDrawer does the same).
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onClose();
+          }}
+        />
       </div>
 
       <div className={styles.body} ref={contentRef}>

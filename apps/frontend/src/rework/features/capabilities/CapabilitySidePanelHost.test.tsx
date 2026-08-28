@@ -38,20 +38,38 @@ vi.mock("@shared/atoms/IconButton/IconButton", () => ({
 }));
 
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer", () => ({
-  InlineDrawer: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
-    open ? <div data-drawer>{children}</div> : null,
+  // Mirrors the real drawer closely enough for what the tests assert: its own
+  // title band, unless the panel says it renders one itself.
+  InlineDrawer: ({
+    open,
+    title,
+    hideHeader,
+    children,
+  }: {
+    open: boolean;
+    title: string;
+    hideHeader?: boolean;
+    children: React.ReactNode;
+  }) =>
+    open ? (
+      <div data-drawer>
+        {!hideHeader && <div data-drawer-title>{title}</div>}
+        {children}
+      </div>
+    ) : null,
 }));
 
 function StubPanel(_props: CapabilitySidePanelProps) {
   return <div data-panel />;
 }
 
-const entry = (capabilityId: string, icon: string, useHasContent?: () => boolean) => ({
+const entry = (capabilityId: string, icon: string, useHasContent?: () => boolean, ownsHeader = false) => ({
   capabilityId,
   widget: `${capabilityId}_pane`,
   Component: StubPanel,
   icon,
   useHasContent,
+  ownsHeader,
 });
 
 const render = (activeKey: string | null = null) =>
@@ -92,6 +110,20 @@ describe("CapabilitySidePanelHost launcher rail", () => {
 
     expect(html).toContain('data-icon="slideshow"');
     expect(html).toContain('data-icon="edit_document"');
+  });
+
+  it("drops the drawer's own title band for a panel that renders one", () => {
+    // Two stacked title rows - the drawer naming the panel, the pane naming the
+    // artefact - said the same thing twice and ate the top of the column.
+    state.entries = [entry("writable_document", "edit_document", () => true, true)];
+
+    expect(render("writable_document:writable_document_pane")).not.toContain("data-drawer-title");
+  });
+
+  it("keeps the drawer's title band for a panel that has no header of its own", () => {
+    state.entries = [entry("demo_echo", "edit_note", undefined, false)];
+
+    expect(render("demo_echo:demo_echo_pane")).toContain("data-drawer-title");
   });
 
   it("retires the whole rail while a panel is open, other panels included", () => {
