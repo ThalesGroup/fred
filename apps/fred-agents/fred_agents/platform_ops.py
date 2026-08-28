@@ -43,9 +43,31 @@ from fred_sdk import (
     UIHints,
     load_agent_prompt_markdown,
 )
-from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
+from fred_sdk.contracts.models import (
+    ReActAgentDefinition,
+    ReActPolicy,
+    ToolSelectionPolicy,
+)
 
-from fred_agents.tool_pacing import REASONING_SAFE_TOOL_SELECTION
+#: This agent's own per-turn tool-call cap, deliberately higher than the shared
+#: `fred_agents.tool_pacing.MAX_TOOL_CALLS_PER_TURN` (12) the conversational
+#: agents use.
+#:
+#: An ops agent is meant to work UNATTENDED: an operator asks "why did X fail at
+#: 14:00?" and walks away, and the agent should complete the investigation in one
+#: turn — list tables, query several of them, cross-check, then answer. As this
+#: family grows past Postgres (logs, code search, cluster state) a single honest
+#: investigation crosses several services, and each of those is a tool call.
+#:
+#: 12 is sized for a chat turn that orients and answers. Capping an unattended
+#: investigation at that number is worse than it looks: `exit_behavior="continue"`
+#: means the agent does not fail when it runs out — it silently stops getting
+#: tool results and answers from whatever partial evidence it has. On a
+#: diagnostic agent that is the dangerous failure, because a confident answer
+#: built on half the data is exactly what an operator will act on.
+#:
+#: 30 keeps a real runaway bounded while leaving room for the multi-service case.
+PLATFORM_OPS_TOOL_SELECTION = ToolSelectionPolicy(max_tool_calls_per_turn=30)
 
 _SYSTEM_PROMPT = load_agent_prompt_markdown(
     package="fred_agents.platform_ops",
@@ -87,6 +109,9 @@ class PlatformOpsReActDefinition(ReActAgentDefinition):
         MCPServerRef(id="platform_postgres"),
     )
 
+    reasoning_enabled: bool = True
+    reasoning_default_on: bool = True
+
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(
             key="prompts.system",
@@ -111,8 +136,7 @@ class PlatformOpsReActDefinition(ReActAgentDefinition):
     def policy(self) -> ReActPolicy:
         return ReActPolicy(
             system_prompt_template=self.system_prompt_template,
-            # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
-            tool_selection=REASONING_SAFE_TOOL_SELECTION,
+            tool_selection=PLATFORM_OPS_TOOL_SELECTION,
             guardrails=(
                 GuardrailDefinition(
                     guardrail_id="ground_on_schema",
