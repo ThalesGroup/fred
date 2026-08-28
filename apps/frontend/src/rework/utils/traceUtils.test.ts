@@ -11,6 +11,7 @@ import {
   isCancelledByUser,
   isTraceChannel,
   isFinalChannel,
+  uiPartsOf,
   isSummarizeDocumentTool,
   parseToolResultContent,
   primaryTextForEntry,
@@ -127,6 +128,44 @@ describe("textOf", () => {
 });
 
 // ── formatLatencyMs ───────────────────────────────────────────────────────────
+
+describe("uiPartsOf", () => {
+  // A capability part: not a member of the closed `MessagePart` union, which is
+  // the whole point - the renderer registry resolves it by `type` at render time.
+  const deck = { type: "ppt_preview", preview_id: "p1", title: "Q3 review" } as unknown as ChatMessage["parts"][number];
+
+  it("reads the parts a streamed message carries inline", () => {
+    expect(uiPartsOf(msg({ parts: [{ type: "text", text: "hi" }, deck] }))).toEqual([deck]);
+  });
+
+  it("reads the parts a STORED message carries on its metadata", () => {
+    // The whole reason a reloaded conversation kept its text and lost every
+    // capability card: `MessagePart` is closed, so storage puts them here.
+    expect(uiPartsOf(msg({ parts: [{ type: "text", text: "hi" }], metadata: { ui_parts: [deck] } }))).toEqual([deck]);
+  });
+
+  it("renders a part carried on both sides once, whatever its key order", () => {
+    // The stored copy comes back from a JSON column, so its keys need not be in
+    // the order the streamed one had.
+    const reordered = { title: "Q3 review", preview_id: "p1", type: "ppt_preview" };
+    expect(uiPartsOf(msg({ parts: [deck], metadata: { ui_parts: [reordered] } }))).toEqual([deck]);
+  });
+
+  it("drops a stored part whose kind collides with a message-body part", () => {
+    // The inline branch filters those out; the stored one must agree, or the same
+    // turn renders differently before and after a reload.
+    expect(uiPartsOf(msg({ metadata: { ui_parts: [{ type: "code", code: "x" }] } }))).toEqual([]);
+  });
+
+  it("keeps a stored part of a kind this build does not know", () => {
+    const future = { type: "kind_from_the_future", payload: 1 };
+    expect(uiPartsOf(msg({ metadata: { ui_parts: [future] } }))).toEqual([future]);
+  });
+
+  it("is empty for a message with neither", () => {
+    expect(uiPartsOf(msg({ parts: [{ type: "text", text: "hi" }] }))).toEqual([]);
+  });
+});
 
 describe("formatLatencyMs", () => {
   it("returns empty string for null", () => {
