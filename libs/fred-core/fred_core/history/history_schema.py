@@ -394,6 +394,10 @@ class ChatMetadata(BaseModel):
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
     sources: List[VectorSearchHit] = Field(default_factory=list)
+    # Assistant-final rows: the turn's chat parts, so a reloaded conversation
+    # renders the same cards the live stream did. Raw objects because `UiPart` is
+    # open. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.59.
+    ui_parts: List[Dict[str, Any]] = Field(default_factory=list)
 
     @field_validator("finish_reason", mode="before")
     @classmethod
@@ -464,6 +468,7 @@ def make_assistant_final(
     model: Optional[str] = None,
     usage: Optional[ChatTokenUsage] = None,
     sources: Optional[List[VectorSearchHit]] = None,
+    ui_parts: Optional[List[Dict[str, Any]]] = None,
     finish_reason: Optional[str] = None,
     context_tokens: Optional[int] = None,
 ) -> ChatMessage:
@@ -488,6 +493,7 @@ def make_assistant_final(
             context_tokens=context_tokens,
             finish_reason=coerce_finish_reason(finish_reason),
             sources=sources or [],
+            ui_parts=ui_parts or [],
         ),
     )
 

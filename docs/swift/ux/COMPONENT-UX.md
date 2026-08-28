@@ -3577,3 +3577,65 @@ root card above the table was tried on 2026-08-21 and removed the same day
   option silently missing.
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
+
+---
+
+### Capability side-panel launcher rail (2026-08-28)
+
+**Location:** `src/rework/features/capabilities/CapabilitySidePanelHost.tsx`,
+`src/rework/features/capabilities/<id>/plugin.ts`
+
+**Status:** `Functional`
+
+The floating rail on the chat page's right edge, one small icon button per side panel
+a session's active capabilities declare. Two changes (#2459):
+
+- **A launcher appears only once its panel has something to show.** The rail used to
+  render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`
+  put two buttons onto empty panels from the first message. Each plugin now answers for
+  the open conversation through a `useHasContent` hook on its `sidePanels` spec
+  (ppt_filler: a deck was rendered; writable_document: the list API or a live snapshot
+  holds a document); a panel that omits the hook stays always-on. The rail is invisible
+  chrome until the agent actually produces something.
+- **Each panel carries its own glyph** instead of the `edit_note` the host hardcoded for
+  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `edit_document`
+  (a new entry in `materialIcons`, the page-with-a-pencil glyph) - each the one that
+  capability's own card and pane header already carry, so the launcher reads as the
+  thing it opens. The whole writable_document surface moved off `edit_note` to
+  `edit_document` in the same pass (2026-08-28). Colour stays the rail's neutral
+  `on-surface-retreat`: the launchers sit in the same floating-chrome band as the trace
+  and attachments buttons, and tinting only these two would break that band.
+- **The rail dropped to 68px from the top** (2026-08-28). Its 48px offset was computed
+  against a one-line top bar; the bar now stacks a 24px title over a 20px agent name, so
+  the first launcher sat on the band.
+- **The rail retires entirely while a panel is open** (2026-08-28). It is absolutely
+  positioned against the whole slot, drawer included, so with a panel open it landed on
+  that drawer's own close button. Moving the remaining launchers into the drawer's
+  `headerActions` was tried the same day and dropped: closing the open panel to reach
+  another one is cheap, and one home for the launchers beats two (developer decision).
+- **The drawer's own title band is gone for both panes** (2026-08-28). A pane that
+  names the artefact it holds does not also need the drawer naming the panel above
+  it - two title rows said the same thing twice and ate the top of the column. A
+  panel declares `ownsHeader: true` on its `sidePanels` spec; the host then passes
+  `InlineDrawer`'s new `hideHeader` (the drawer keeps `title` as its accessible
+  name) plus `flushBody`, and the pane renders its own close button. `demo_echo`,
+  which has no header of its own, keeps the drawer's.
+- **Switching conversations closes any open push drawer** (2026-08-28). Opening one
+  is a statement about one conversation and every panel reads the open session, so
+  a drawer carried across sat there empty. A capability whose new conversation
+  warrants its panel asks for it again through the open-request counter.
+- **Both panes' header bands were trimmed** (2026-08-28) - `PptPreviewPane` and
+  `WritableDocumentPane` share the same title + actions row, padded down from
+  `8px/16px` to `4px/12px`; the editor toolbar under it lost the same 4px. Two
+  stacked bands (the drawer's own header, then the pane's) were eating the top of
+  the panel. The download controls keep `size="small"`: those components are shared
+  with the chat cards, where the smaller tier would have broken alignment.
+
+Both capability slices now stamp the conversation their state belongs to, so a deck or a
+document from a previous conversation can no longer light a launcher up on a fresh chat.
+The writable_document editor applies the same scoping to its TAB STRIP (2026-08-28): its
+document set merges the API list with the live snapshots, and the snapshots outlive the
+conversation that produced them (the slice only drops them when the next conversation
+upserts one of its own). A conversation whose documents all come from the API never
+upserts, so the previous conversation's document showed up as an extra tab - someone
+else's document, in an editor that autosaves.

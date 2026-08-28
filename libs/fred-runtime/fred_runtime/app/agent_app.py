@@ -2214,6 +2214,7 @@ async def _write_turn_history(
     # 2. Map runtime events to messages
     final_content = ""
     final_sources: list[VectorSearchHit] = []
+    final_ui_parts: list[dict[str, Any]] = []
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
@@ -2355,6 +2356,14 @@ async def _write_turn_history(
                 for s in raw_sources
                 if isinstance(s, dict)
             ]
+            # The turn's chat parts, aggregated across every tool by the runtime.
+            # `type` is the discriminator the renderer dispatches on; without it
+            # the entry is dead weight in every history row.
+            final_ui_parts = [
+                p
+                for p in (payload.get("ui_parts") or [])
+                if isinstance(p, dict) and isinstance(p.get("type"), str)
+            ]
             tu = payload.get("token_usage")
             if tu:
                 final_token_usage = ChatTokenUsage(
@@ -2378,8 +2387,10 @@ async def _write_turn_history(
         if "".join(block.text):
             messages.append(_thought_row(block, thought_id=thought_id))
 
-    # 3. Terminal assistant message (from FinalRuntimeEvent)
-    if final_content or final_model:
+    # 3. Terminal assistant message (from FinalRuntimeEvent). A turn whose only
+    # output is a card (no text, no model name) still has to leave a row, or the
+    # card it produced is lost exactly as before ui_parts were persisted.
+    if final_content or final_model or final_ui_parts:
         messages.append(
             make_assistant_final(
                 session_id,
@@ -2389,6 +2400,7 @@ async def _write_turn_history(
                 model=final_model,
                 usage=final_token_usage,
                 sources=final_sources if final_sources else None,
+                ui_parts=final_ui_parts,
                 finish_reason=final_finish_reason,
                 context_tokens=final_context_tokens,
             )

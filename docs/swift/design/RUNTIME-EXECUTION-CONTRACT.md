@@ -4234,8 +4234,49 @@ the new dim is `term`-aggregatable on existing indexes with no migration.
 `exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
 one bucket.
 
+---
 
-### 8.59 ✅ `document_similarity` capability + `DocumentSimilarityPort` - issue #2461 (2026-08-28)
+### 8.59 ✅ `ui_parts` persisted on `ChatMetadata` - issue #2462 (2026-08-28)
+
+**The bug.** A conversation reloaded from history came back with its answer text
+and its source cards, and with **every capability card missing** - a filled deck,
+a written document, a link, a map. Generating a deck and pressing F5 a second
+later was enough to lose it.
+
+**Why.** `ChatMessage.parts` is a CLOSED discriminated union
+(`fred_core/history/history_schema.py`) - text, code, image_url, tool_call,
+tool_result, hitl_request, hitl_response. No `UiPart` in it, and `ChatMetadata`
+carried `sources` but nothing for chat parts. The runtime emitted them correctly
+(`FinalRuntimeEvent.ui_parts`, aggregated across every tool of the turn), the
+live SSE stream rendered them, and then nothing wrote them down.
+
+**The fix - one additive metadata field**, mirroring `sources` exactly.
+
+| Field | Meaning |
+| ----- | ------- |
+| `ChatMetadata.ui_parts: list[dict]` | The turn's chat parts, on the assistant/final row. Empty list when the turn produced none. |
+
+`agent_app.py::_write_turn_history` fills it from the `final` payload's
+`ui_parts`, keeping only object entries.
+
+**Raw objects, on purpose.** `UiPart` is an OPEN union assembled at pod boot from
+the installed capabilities (`fred_sdk.contracts.ui_part_union`), and fred-core
+sits BELOW fred-sdk - there is no closed type to validate against there. That is
+also why `MessagePart` stays closed and these parts do not live in `parts`:
+that union is closed precisely to validate storage, and opening it would mean
+accepting unvalidated dicts in the column.
+
+**Frontend.** `uiPartsOf` (`rework/utils/traceUtils.ts`) reads both carriers -
+inline `parts` for a streamed message, `metadata.ui_parts` for a stored one -
+deduplicated by identity, so a message carrying a part on both sides renders one
+card. Nothing else changed: the part-renderer registry still decides at render
+time what it can draw and skips unknown kinds.
+
+**Migration.** None. The field defaults to an empty list, so rows written before
+this change read back as "no cards" - exactly what they render today. Their parts
+are not recoverable; they were never stored.
+
+### 8.60 ✅ `document_similarity` capability + `DocumentSimilarityPort` - issue #2461 (2026-08-28)
 
 **Was**: Knowledge Flow shipped targeted similarity / comparison search in
 `POST /vector/similarity-search` (issue #1772, `DESIGN.md` §4), but a Fred agent

@@ -751,6 +751,9 @@ export type ChatMetadata = {
   model?: string | null;
   sources?: VectorSearchHit[];
   token_usage?: ChatTokenUsage | null;
+  ui_parts?: {
+    [key: string]: any;
+  }[];
   [key: string]: any;
 };
 export type CodePart = {
