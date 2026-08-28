@@ -93,6 +93,10 @@ export const selectWritableDocumentsById = (
   state: WritableDocumentRootState,
 ): Record<string, WritableDocumentPartData> => state.writableDocument.liveById;
 
+/** The conversation the live snapshots belong to, or null. */
+export const selectWritableDocumentSessionId = (state: WritableDocumentRootState): string | null =>
+  state.writableDocument.sessionId;
+
 /** The document_id the pane should show, or null. */
 export const selectWritableDocumentSelectedId = (state: WritableDocumentRootState): string | null =>
   state.writableDocument.selectedId;

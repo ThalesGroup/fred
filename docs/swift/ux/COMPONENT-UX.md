@@ -3577,3 +3577,35 @@ root card above the table was tried on 2026-08-21 and removed the same day
   option silently missing.
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
+
+---
+
+### Capability side-panel launcher rail (2026-08-28)
+
+**Location:** `src/rework/features/capabilities/CapabilitySidePanelHost.tsx`,
+`src/rework/features/capabilities/<id>/plugin.ts`
+
+**Status:** `Functional`
+
+The floating rail on the chat page's right edge, one small icon button per side panel
+a session's active capabilities declare. Two changes (#2459):
+
+- **A launcher appears only once its panel has something to show.** The rail used to
+  render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`
+  put two buttons onto empty panels from the first message. Each plugin now answers for
+  the open conversation through a `useHasContent` hook on its `sidePanels` spec
+  (ppt_filler: a deck was rendered; writable_document: the list API or a live snapshot
+  holds a document); a panel that omits the hook stays always-on. The rail is invisible
+  chrome until the agent actually produces something.
+- **Each panel carries its own glyph** instead of the `edit_note` the host hardcoded for
+  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `edit_note` — each
+  one the glyph that capability's own chat card already uses for "open this", so the
+  launcher and the card read as one affordance. Colour stays the rail's neutral
+  `on-surface-retreat`: the launchers sit in the same floating-chrome band as the trace
+  and attachments buttons, and tinting only these two would break that band.
+- **The rail dropped to 68px from the top** (2026-08-28). Its 48px offset was computed
+  against a one-line top bar; the bar now stacks a 24px title over a 20px agent name, so
+  the first launcher sat on the band.
+
+Both capability slices now stamp the conversation their state belongs to, so a deck or a
+document from a previous conversation can no longer light a launcher up on a fresh chat.

@@ -15,8 +15,8 @@
 // PptPreviewPane
 // --------------
 // The ppt_filler capability's side panel (CapabilitySidePanel) — a read-only pane
-// that renders the filled deck as a PDF. It reads the "current" preview from the
-// slice (set by a card's Open button / auto-open), fetches the bytes with the live
+// that renders the filled deck as a PDF. It reads the deck the OPEN conversation
+// registered (every rendered card registers one), fetches the bytes with the live
 // bearer (usePptPreview), and draws every page vertically with react-pdf.
 //
 // pdf.js worker rule (this exact bug was fought before — see the Kea `pdfWorker.ts`
@@ -33,11 +33,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
-import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { CapabilitySidePanelProps } from "../types";
-import { selectCurrentPreview } from "./pptPreviewSlice";
+import { useSessionPptPreview } from "./useSessionPptPreview";
 import { usePptPreview } from "./usePptPreview";
 import PptxDownloadButton from "./PptxDownloadButton";
 import styles from "./PptPreviewPane.module.css";
@@ -50,7 +49,7 @@ const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.
 
 export function PptPreviewPane(_props: CapabilitySidePanelProps) {
   const { t } = useTranslation();
-  const current = useSelector(selectCurrentPreview);
+  const current = useSessionPptPreview();
   const { objectUrl, isLoading, error } = usePptPreview(current);
 
   const [numPages, setNumPages] = useState<number | null>(null);

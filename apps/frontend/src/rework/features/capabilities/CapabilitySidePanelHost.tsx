@@ -20,6 +20,11 @@
 // toggles a single `InlineDrawer layout="push"` that reflows the main column.
 // Which panels appear is driven entirely by the session's
 // `selected_capability_ids`, resolved through the one plugin index.
+//
+// A launcher is only offered once its panel has something to show: the plugin's
+// `useHasContent` hook answers for the open conversation, so a fresh chat with
+// ppt_filler and writable_document active shows no chrome at all until the agent
+// actually produces a deck or a document.
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -43,6 +48,28 @@ interface CapabilitySidePanelHostProps {
 }
 
 const entryKey = (entry: SidePanelEntry): string => `${entry.capabilityId}:${entry.widget}`;
+
+const alwaysHasContent = () => true;
+
+/**
+ * One panel's launcher. It is its own component so each `useHasContent` runs in a
+ * stable hook slot — mapping the hooks inline would reorder them the moment a
+ * session gains or loses a capability.
+ */
+function PanelLauncher({ entry, label, onOpen }: { entry: SidePanelEntry; label: string; onOpen: () => void }) {
+  const useHasContent = entry.useHasContent ?? alwaysHasContent;
+  if (!useHasContent()) return null;
+
+  return (
+    <IconButton
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: entry.icon }}
+      aria-label={label}
+      onClick={onOpen}
+    />
+  );
+}
 
 export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyChange }: CapabilitySidePanelHostProps) {
   const { t } = useTranslation();
@@ -72,14 +99,7 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
               const key = entryKey(entry);
               if (key === activeKey) return null; // launcher hides while its panel is open
               return (
-                <IconButton
-                  key={key}
-                  variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "edit_note" }}
-                  aria-label={titleOf(entry)}
-                  onClick={() => onActiveKeyChange(key)}
-                />
+                <PanelLauncher key={key} entry={entry} label={titleOf(entry)} onOpen={() => onActiveKeyChange(key)} />
               );
             })}
           </div>

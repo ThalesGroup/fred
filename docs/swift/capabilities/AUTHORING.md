@@ -233,6 +233,32 @@ fall back to a generic capability icon in the admin catalog.
 
 ---
 
+## Ships a side panel? Declare its launcher (#2459)
+
+A side panel is declared in the capability's frontend plugin
+(`apps/frontend/src/rework/features/capabilities/<id>/plugin.ts`), keyed by the
+manifest's `SidePanelSpec.widget`. The value is a spec, not a bare component:
+
+```ts
+sidePanels: {
+  ppt_preview_pane: { Component: PptPreviewPane, icon: "slideshow", useHasContent: useHasPptPreview },
+},
+```
+
+- `icon` — the glyph of the panel's launcher in the chat page's floating rail, from
+  the same `materialIcons` set as the manifest icon above. Pick the glyph the
+  capability's own chat card already uses for the same action, so the launcher and
+  the card read as one affordance (`slideshow` for the ppt_filler preview,
+  `edit_note` for the writable_document editor).
+- `useHasContent` — a hook answering "does this panel have anything to show for the
+  OPEN conversation?". Omit it and the launcher is always offered; a capability that
+  produces something on demand should implement it, or every session that merely
+  ACTIVATES the capability gets a button onto an empty panel. Scope the answer to the
+  conversation in the URL (`?session=`) — capability slices are global, so state from
+  a previous conversation otherwise lights the launcher up on a fresh chat.
+
+---
+
 ## Ships a router? Regenerate its API slice (#1979)
 
 A capability whose manifest declares a `router` gets its own OpenAPI doc and its own

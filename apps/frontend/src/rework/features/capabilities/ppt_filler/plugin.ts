@@ -21,6 +21,7 @@ import type { CapabilityUiPlugin } from "../types";
 import { PptFillerConfigForm } from "./PptFillerConfigForm";
 import { PptPreviewCardRenderer } from "./PptPreviewCardRenderer";
 import { PptPreviewPane } from "./PptPreviewPane";
+import { useHasPptPreview } from "./useSessionPptPreview";
 
 export const pptFillerCapability: CapabilityUiPlugin = {
   id: "ppt_filler",
@@ -28,6 +29,9 @@ export const pptFillerCapability: CapabilityUiPlugin = {
   partRenderers: { ppt_preview: PptPreviewCardRenderer },
   // Keyed by the backend FieldSpec's `ui.widget` (RFC §9 item 4).
   configWidgets: { ppt_filler_template: PptFillerConfigForm },
-  // Keyed by the backend manifest's SidePanelSpec.widget (#1979).
-  sidePanels: { ppt_preview_pane: PptPreviewPane },
+  // Keyed by the backend manifest's SidePanelSpec.widget (#1979). `slideshow` is
+  // what fileIconSpec already gives a .pptx, so a deck reads the same everywhere.
+  sidePanels: {
+    ppt_preview_pane: { Component: PptPreviewPane, icon: "slideshow", useHasContent: useHasPptPreview },
+  },
 };
