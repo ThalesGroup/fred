@@ -239,11 +239,28 @@ const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
   "hitl_response",
 ]);
 
-/** All chat parts (ui_parts) carried on a message, unknown kinds included. */
+/**
+ * All chat parts (ui_parts) carried on a message, unknown kinds included.
+ *
+ * Two carriers, because the live stream and the stored history differ. A
+ * streamed message carries its parts inline in `parts`; the stored one carries
+ * them on `metadata.ui_parts`, since `MessagePart` is a CLOSED union and the
+ * `UiPart` one is open (capabilities extend it at pod boot) - the same split
+ * `sources` already lives with. Reading both is what makes a reloaded
+ * conversation render the same cards the live turn did.
+ *
+ * Deduplicated by identity: a message that somehow carries a part on both sides
+ * must not render the card twice.
+ */
 export function uiPartsOf(msg: ChatMessage): RawUiPart[] {
-  return (msg.parts ?? []).filter(
+  const inline = (msg.parts ?? []).filter(
     (p) => typeof p?.type === "string" && !MESSAGE_PART_TYPES.has(p.type),
   ) as unknown as RawUiPart[];
+  const stored = (msg.metadata?.ui_parts ?? []) as unknown as RawUiPart[];
+  if (stored.length === 0) return inline;
+
+  const seen = new Set(inline.map((p) => JSON.stringify(p)));
+  return [...inline, ...stored.filter((p) => typeof p?.type === "string" && !seen.has(JSON.stringify(p)))];
 }
 
 export function formatLatencyMs(ms: number | null): string {

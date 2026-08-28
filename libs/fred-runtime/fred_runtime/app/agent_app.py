@@ -2205,6 +2205,7 @@ async def _write_turn_history(
     # 2. Map runtime events to messages
     final_content = ""
     final_sources: list[VectorSearchHit] = []
+    final_ui_parts: list[dict[str, Any]] = []
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
@@ -2346,6 +2347,13 @@ async def _write_turn_history(
                 for s in raw_sources
                 if isinstance(s, dict)
             ]
+            # The turn's chat parts, aggregated across every tool by the runtime
+            # (`FinalRuntimeEvent.ui_parts`). Stored raw: the `UiPart` union is
+            # assembled at pod boot from the installed capabilities, so there is
+            # no closed type to validate against here.
+            final_ui_parts = [
+                p for p in (payload.get("ui_parts") or []) if isinstance(p, dict)
+            ]
             tu = payload.get("token_usage")
             if tu:
                 final_token_usage = ChatTokenUsage(
@@ -2380,6 +2388,7 @@ async def _write_turn_history(
                 model=final_model,
                 usage=final_token_usage,
                 sources=final_sources if final_sources else None,
+                ui_parts=final_ui_parts if final_ui_parts else None,
                 finish_reason=final_finish_reason,
                 context_tokens=final_context_tokens,
             )

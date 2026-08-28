@@ -235,6 +235,85 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[3].metadata.context_tokens == 9
 
 
+def test_write_turn_history_persists_ui_parts_of_the_turn() -> None:
+    """
+    The turn's chat parts must reach storage, on the final row's metadata.
+
+    Why this test exists:
+    - every capability card (a filled deck, a written document, a link) is a
+      ``ui_part``. They used to live only in the live SSE stream, so a page
+      reload showed a conversation with every card missing while its sources
+      came back - ``sources`` was on the metadata and ``ui_parts`` was nowhere.
+    - they cannot ride ``parts``: that union is CLOSED for storage validation,
+      while ``UiPart`` is assembled at pod boot from the installed capabilities.
+      Raw objects on the metadata, exactly like ``sources``.
+
+    How to use it:
+    - run via ``make test`` in fred-runtime
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    deck = {
+        "type": "ppt_preview",
+        "preview_id": "p1",
+        "title": "Q3 review",
+        "pdf_download_url": "/fs/download/p1.pdf",
+        "version": "v1",
+    }
+    payloads = [
+        {
+            "kind": "final",
+            "content": "Here is your deck.",
+            "ui_parts": [deck, "not-a-part"],
+        },
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="make me a deck",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    final = messages[-1]
+
+    assert final.metadata.ui_parts == [deck], (
+        "the final row must carry the turn's parts, non-object entries dropped"
+    )
+
+
+def test_write_turn_history_leaves_ui_parts_empty_when_the_turn_had_none() -> None:
+    """
+    A turn with no chat part must not invent one.
+
+    Why this test exists:
+    - the field defaults to an empty list; a ``None`` or a ``[None]`` reaching
+      storage would break every consumer that iterates it
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="hi",
+            payloads=[{"kind": "final", "content": "Hello."}],
+            history_store=store,
+        )
+    )
+
+    final = store.save.call_args.kwargs["messages"][-1]
+    assert final.metadata.ui_parts == []
+
+
 def test_write_turn_history_skips_save_when_no_content() -> None:
     """
     _write_turn_history must not call save() when there is no request message
