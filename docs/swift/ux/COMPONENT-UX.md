@@ -3633,3 +3633,9 @@ a session's active capabilities declare. Two changes (#2459):
 
 Both capability slices now stamp the conversation their state belongs to, so a deck or a
 document from a previous conversation can no longer light a launcher up on a fresh chat.
+The writable_document editor applies the same scoping to its TAB STRIP (2026-08-28): its
+document set merges the API list with the live snapshots, and the snapshots outlive the
+conversation that produced them (the slice only drops them when the next conversation
+upserts one of its own). A conversation whose documents all come from the API never
+upserts, so the previous conversation's document showed up as an extra tab - someone
+else's document, in an editor that autosaves.

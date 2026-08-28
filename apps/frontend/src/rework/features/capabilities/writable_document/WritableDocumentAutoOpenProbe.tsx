@@ -43,7 +43,9 @@ export function WritableDocumentAutoOpenProbe() {
   const sessionId = searchParams.get("session") ?? "";
 
   const routed = useCapabilityRouted(CAPABILITY_ID);
-  const { data: listed } = useListWritableDocumentsQuery(
+  // `currentData`: `data` would answer with the conversation just left, and this
+  // probe evaluates ONCE per conversation-open - a wrong first answer sticks.
+  const { currentData: listed } = useListWritableDocumentsQuery(
     { sessionId },
     { skip: !sessionId || !routed, refetchOnMountOrArgChange: true },
   );

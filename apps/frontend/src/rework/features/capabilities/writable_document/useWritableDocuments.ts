@@ -46,6 +46,7 @@ import {
   selectWritableDocument,
   selectWritableDocumentsById,
   selectWritableDocumentSelectedId,
+  selectWritableDocumentSessionId,
 } from "./writableDocumentSlice";
 import { tsMs } from "./writableDocumentUtils";
 
@@ -88,10 +89,14 @@ const responseToView = (r: WritableDocumentResponse): WritableDocumentView => ({
 export function useWritableDocuments(sessionId: string | undefined): UseWritableDocuments {
   const dispatch = useDispatch();
   const liveById = useSelector(selectWritableDocumentsById);
+  const liveSessionId = useSelector(selectWritableDocumentSessionId);
   const selectedId = useSelector(selectWritableDocumentSelectedId);
 
   const routed = useCapabilityRouted(CAPABILITY_ID);
-  const { data: listed, refetch } = useListWritableDocumentsQuery(
+  // `currentData`, not `data`: `data` keeps the last resolved list across an arg
+  // change, so on a conversation switch the editor would show the documents of the
+  // one just left until the new request lands.
+  const { currentData: listed, refetch } = useListWritableDocumentsQuery(
     { sessionId: sessionId || "" },
     { skip: !sessionId || !routed, refetchOnMountOrArgChange: true },
   );
@@ -107,7 +112,14 @@ export function useWritableDocuments(sessionId: string | undefined): UseWritable
   // kept in a ref so onEditDocument can stamp localBaseTs without extra re-renders.
   const authTsRef = useRef<Record<string, number>>({});
 
-  const liveDocs = useMemo(() => Object.values(liveById).map(partToView), [liveById]);
+  // Live snapshots outlive the conversation that produced them: the slice only
+  // drops them when the NEXT conversation upserts one. A conversation whose
+  // documents all come from the API list never upserts, so without this guard the
+  // previous conversation's documents show up as extra tabs in the editor.
+  const liveDocs = useMemo(
+    () => (liveSessionId !== null && liveSessionId === sessionId ? Object.values(liveById).map(partToView) : []),
+    [liveById, liveSessionId, sessionId],
+  );
 
   // Track the newest authoritative updated_at per document (stream + API, no local edits).
   useEffect(() => {
