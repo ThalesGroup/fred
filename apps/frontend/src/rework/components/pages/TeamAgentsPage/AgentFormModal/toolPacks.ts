@@ -100,11 +100,14 @@ export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
-// Document-reading pair (DOCREAD-01): two independent backend capabilities that
-// the Simple view groups under one "Lecture de documents" pack, while the
-// Advanced view keeps each toggle separate.
+// Independent backend capabilities that the Simple view groups under one
+// document-work pack, while the Advanced view keeps each toggle separate. What
+// they have in common is the unit they operate on: a document the agent has
+// already identified by uid — read it, extract from it, compare it — as opposed
+// to the corpus-wide discovery the team-resources pack covers.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
+export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 
 /** `document_access` config field keys the resource packs compute. */
 export const DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY = "search_attachments_only";
@@ -151,10 +154,12 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         documentAccessIntent: "attachments",
       },
       {
-        // DOCREAD-01: one Simple-view card grouping the two independent
-        // document-reading capabilities (verbatim read + exhaustive extraction).
-        // Plain pack — enabling it selects both ids; the Advanced view still
-        // toggles each on its own.
+        // One Simple-view card grouping the capabilities that work on documents
+        // the agent already identified: verbatim read, exhaustive extraction,
+        // and targeted comparison. Plain pack — enabling it selects all three
+        // ids; the Advanced view still toggles each on its own. The `id` stays
+        // `document_reading` (UI-only, but it is what the pack's copy keys and
+        // any muscle memory are attached to).
         id: "document_reading",
         kind: "capabilities",
         icon: "article",
@@ -163,8 +168,9 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         includes: [
           { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
           { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
+          { capabilityId: CAP_DOCUMENT_SIMILARITY, labelKey: "capability.document_similarity.name" },
         ],
-        enablesCapabilityIds: [CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT],
+        enablesCapabilityIds: [CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT, CAP_DOCUMENT_SIMILARITY],
       },
     ],
   },

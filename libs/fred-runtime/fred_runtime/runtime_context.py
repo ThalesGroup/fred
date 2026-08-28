@@ -82,6 +82,14 @@ class RuntimeTimeouts:
     # routinely exceeds the default read timeout for large PDFs. Not part of
     # `as_httpx_timeout_config()` — applied per-request by KfDocumentClient.
     summarize_read: float = 300.0
+    # Per-request read override for targeted similarity search: Knowledge Flow
+    # retrieves a candidate pool of up to 100 chunks and cross-encodes all of
+    # them in one request, so it is the heaviest read on the vector path. It
+    # also cannot be retried (re-issuing would double the load on a backend
+    # that is already slow), which makes a generous ceiling the only defence.
+    # Not part of `as_httpx_timeout_config()` — applied per-request by
+    # VectorSearchClient.
+    similarity_read: float = 90.0
 
     def as_httpx_timeout_config(self) -> dict[str, float | None]:
         """

@@ -28,10 +28,6 @@ Why this module exists:
 Exact built-in list today:
 - `knowledge.search`: Fred's native RAG retrieval tool. It searches the current
   libraries, corpus, and session attachments and returns grounded snippets.
-- `knowledge.similarity_search`: targeted comparison search. Ranks the passages
-  most similar to an anchor text, restricted to an explicit set of document
-  uids - a comparison primitive (document-to-document), not a corpus-wide
-  question-answering search like `knowledge.search`.
 - `traces.summarize_conversation`: observability tool that summarizes the recent
   execution trace of one Fred conversation.
 - `geo.render_points`: UI helper that turns latitude/longitude points into a map
@@ -70,7 +66,6 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
-TOOL_REF_SIMILARITY_SEARCH = "knowledge.similarity_search"
 TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
 TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
 TOOL_REF_ARTIFACTS_PUBLISH_TEXT = "artifacts.publish_text"
@@ -87,7 +82,7 @@ class BuiltinToolBackend(str, Enum):
       conditionals spread across the codebase
 
     Current mapping:
-    - `TOOL_INVOKER`: `knowledge.search`, `knowledge.similarity_search`,
+    - `TOOL_INVOKER`: `knowledge.search`,
       `traces.summarize_conversation`, `geo.render_points`
     - `WORKSPACE_WRITE`: `artifacts.publish_text`
     - `WORKSPACE_READ`: `resources.fetch_text`
@@ -109,36 +104,6 @@ class KnowledgeSearchToolArgs(BaseModel):
         ge=1,
         le=20,
         description="Maximum number of retrieved snippets to return.",
-    )
-
-
-class SimilaritySearchToolArgs(BaseModel):
-    anchor: str = Field(
-        ...,
-        min_length=1,
-        description="Passage to find similar content for (a chunk of text, not a question).",
-    )
-    document_uids: list[str] = Field(
-        ...,
-        min_length=1,
-        description=(
-            "Explicit document uids to search within. Required - this is a "
-            "targeted comparison primitive, not a corpus-wide search."
-        ),
-    )
-    top_k: int = Field(
-        default=10,
-        ge=1,
-        le=50,
-        description="Maximum number of matches to return, best-first.",
-    )
-    rerank: bool = Field(
-        default=True,
-        description="Re-rank the best-first results with the cross-encoder.",
-    )
-    min_score: float | None = Field(
-        default=None,
-        description="Drop matches scoring below this relevance threshold.",
     )
 
 
@@ -265,7 +230,6 @@ class BuiltinToolSpec:
 
     Exact tools described by this catalog today:
     - `knowledge.search`: native Fred retrieval / RAG tool
-    - `knowledge.similarity_search`: targeted document-to-document comparison
     - `traces.summarize_conversation`: conversation trace summary tool
     - `geo.render_points`: map-rendering helper
     - `artifacts.publish_text`: text artifact publishing helper
@@ -294,16 +258,6 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         default_description=(
             "Search the selected document libraries and session attachments and "
             "return grounded snippets."
-        ),
-    ),
-    TOOL_REF_SIMILARITY_SEARCH: BuiltinToolSpec(
-        tool_ref=TOOL_REF_SIMILARITY_SEARCH,
-        args_schema=SimilaritySearchToolArgs,
-        backend=BuiltinToolBackend.TOOL_INVOKER,
-        default_description=(
-            "Find the passages most similar to an anchor text, restricted to an "
-            "explicit set of target documents (document-to-document comparison, "
-            "not corpus-wide search)."
         ),
     ),
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: BuiltinToolSpec(

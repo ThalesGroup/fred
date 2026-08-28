@@ -410,17 +410,15 @@ request/conversation (chosen once); this mode takes its target from the call
 - **MCP** — auto-exposed by the Text MCP server via
   `include_tags=["Vector Search"]`; agents see `similarity_search` with no
   extra wiring.
-- **Native built-in tool ref** - `knowledge.similarity_search`
-  (`TOOL_REF_SIMILARITY_SEARCH`, `fred_sdk.support.builtins`), the non-MCP
-  path an agent declares in `declared_tool_refs`, executed by
-  `FredKnowledgeSearchToolInvoker._invoke_similarity_search`. Targeting is
-  narrowed to `document_uids` here: folder targets stay MCP-only until an
-  agent actually needs them. A weak hit stays citable, unlike under
-  `knowledge.search` - the caller named the targets, so there is no
-  corpus-wide noise to filter out - though dataset-pointer chunks never are.
-  The client retries connection failures and 5xx (bounded, jittered) but not
-  read timeouts, which would double the load on an already-slow backend. See
-  `RUNTIME-EXECUTION-CONTRACT.md` §8.59.
+- **Capability** - `document_similarity`, the first-order path, sitting on the
+  typed `RuntimeServices.document_similarity` port and offering the agent one
+  tool, `find_similar_passages`. Targeting is narrowed to `document_uids`
+  here: folder targets stay MCP-only until an agent needs them. The uids come
+  from the model per call, so the adapter bounds them by the session binding
+  and refuses to widen when that intersection is empty. A weak hit stays
+  citable, unlike under corpus search - the caller named the targets, so there
+  is no corpus-wide noise to filter out - though dataset-pointer chunks never
+  are. See `RUNTIME-EXECUTION-CONTRACT.md` §8.59.
 - Implementation is a thin orchestration over existing primitives, no new
   search machinery: targeted `search(...)` (ReBAC-filtered candidate pool) →
   `rerank_documents(...)` (cross-encoder, best-first) → `top_k` → optional

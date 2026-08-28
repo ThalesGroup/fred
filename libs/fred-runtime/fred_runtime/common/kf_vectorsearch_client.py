@@ -25,6 +25,7 @@ from fred_core.store.vector_search import VectorSearchHit
 from pydantic import TypeAdapter
 
 from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
+from fred_runtime.runtime_context import get_runtime_context
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +40,19 @@ _HITS = TypeAdapter(List[VectorSearchHit])
 _TRANSIENT_RETRIES = 2
 _RETRY_BASE_DELAY_S = 0.5
 
-#: A read/write/pool timeout means Knowledge Flow may still be working on the
+#: A read or write timeout means Knowledge Flow may still be working on the
 #: first request - this mode reranks a candidate pool with a cross-encoder and
 #: fans out one call per anchor passage, so re-issuing multiplies load on an
-#: already-slow backend instead of recovering. Only failures where no work is
-#: in flight (connection setup) or where the server already gave up (5xx) are
-#: worth retrying.
-_NON_RETRYABLE_TIMEOUTS = (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)
+#: already-slow backend instead of recovering. A POOL timeout is not in this
+#: set: it means no connection was ever acquired, so nothing is in flight and
+#: nothing was sent - exactly the transient contention the fan-out makes likely.
+_NON_RETRYABLE_TIMEOUTS = (httpx.ReadTimeout, httpx.WriteTimeout)
+
+#: Only statuses that mean "this instance could not serve you" are retried. A
+#: plain 500 is not: Knowledge Flow's controller wraps every unexpected
+#: exception in one, so a deterministic backend fault would otherwise cost three
+#: full pool-and-rerank round trips per anchor passage before failing anyway.
+_RETRYABLE_STATUS_CODES = frozenset({502, 503, 504})
 
 
 async def _with_transient_retry(request):
@@ -54,11 +61,11 @@ async def _with_transient_retry(request):
         try:
             return await request()
         except (httpx.TransportError, httpx.HTTPStatusError) as exc:
-            is_5xx = (
+            retryable_status = (
                 isinstance(exc, httpx.HTTPStatusError)
-                and exc.response.status_code >= 500
+                and exc.response.status_code in _RETRYABLE_STATUS_CODES
             )
-            retryable = is_5xx or (
+            retryable = retryable_status or (
                 isinstance(exc, httpx.TransportError)
                 and not isinstance(exc, _NON_RETRYABLE_TIMEOUTS)
             )
@@ -209,12 +216,15 @@ class VectorSearchClient(KfBaseClient):
         if min_score is not None:
             payload["min_score"] = min_score
 
+        read_timeout = float(get_runtime_context().config.timeouts.similarity_read)
+
         async def _do_request() -> httpx.Response:
             return await self._request_with_token_refresh(
                 method="POST",
                 path="/vector/similarity-search",
                 phase_name="kf_vector_similarity_search",
                 json=payload,
+                read_timeout=read_timeout,
             )
 
         r = await _with_transient_retry(_do_request)

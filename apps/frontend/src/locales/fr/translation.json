@@ -231,6 +231,24 @@
         }
       }
     },
+    "document_similarity": {
+      "name": "Comparer des documents",
+      "description": "Capacité à trouver les passages les plus proches d'un passage donné, à l'intérieur de documents précis.",
+      "fields": {
+        "default_top_k": {
+          "title": "Résultats par appel",
+          "description": "Nombre de correspondances renvoyées par défaut par l'outil find_similar_passages, les meilleures d'abord. L'agent peut en demander moins ou plus, jusqu'à 50."
+        },
+        "rerank": {
+          "title": "Réordonner les correspondances",
+          "description": "Réordonne les passages candidats avec le cross-encoder avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
+        },
+        "min_score": {
+          "title": "Pertinence minimale",
+          "description": "Écarte les correspondances sous ce seuil de pertinence (0 à 1). Laisser vide pour renvoyer toutes les correspondances, même faibles - utile quand « rien ne correspond » est justement la réponse."
+        }
+      }
+    },
     "writable_document": {
       "name": "Générer un document texte (Word)",
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
@@ -2407,8 +2425,8 @@
               "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
             },
             "documentReading": {
-              "title": "Lecture de documents",
-              "description": "Permet à l'agent de lire un document mot à mot et d'en extraire des informations de façon exhaustive."
+              "title": "Travail sur documents",
+              "description": "Permet à l'agent de lire un document mot à mot, d'en extraire des informations de façon exhaustive et de le comparer à un autre document."
             },
             "wordDocument": {
               "title": "Générer un document Word",

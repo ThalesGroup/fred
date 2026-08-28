@@ -45,12 +45,15 @@ const WORD = packById("word_document");
 const PPT = packById("powerpoint_document");
 const REASONING = packById("reasoning");
 
+const DOCUMENT_READING = packById("document_reading");
+
 const ALL_IDS: ReadonlySet<string> = new Set([
   CAP_DOCUMENT_ACCESS,
   CAP_DOCUMENT_SUMMARIZE,
   CAP_TABULAR,
   CAP_WRITABLE_DOCUMENT,
   CAP_PPT_FILLER,
+  ...DOCUMENT_READING.enablesCapabilityIds,
 ]);
 
 function empty(): CapabilitySelectionState {
@@ -70,8 +73,8 @@ describe("resource packs — document_access truth table", () => {
     expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining([CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE]));
     expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
     expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(false);
-    expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(true);
-    expect(derivePackChecked(ATTACHMENTS, s)).toBe(false);
+    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(true);
+    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(false);
   });
 
   it("attachments only → no corpus, attach on, attachments-only scope", () => {
@@ -81,8 +84,8 @@ describe("resource packs — document_access truth table", () => {
     expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR);
     expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(true);
     expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(true);
-    expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(false);
-    expect(derivePackChecked(ATTACHMENTS, s)).toBe(true);
+    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(false);
+    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(true);
   });
 
   it("both on → corpus + attach, corpus scope wins over attachments-only", () => {
@@ -90,8 +93,8 @@ describe("resource packs — document_access truth table", () => {
     s = applyPackToggle(ATTACHMENTS, true, s, ALL_IDS);
     expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
     expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(true);
-    expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(true);
-    expect(derivePackChecked(ATTACHMENTS, s)).toBe(true);
+    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(true);
+    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(true);
   });
 
   it("both off → document_access removed entirely", () => {
@@ -99,8 +102,8 @@ describe("resource packs — document_access truth table", () => {
     expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_ACCESS);
     expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR);
     expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SUMMARIZE);
-    expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(false);
-    expect(derivePackChecked(ATTACHMENTS, s)).toBe(false);
+    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(false);
+    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(false);
   });
 });
 
@@ -135,7 +138,7 @@ describe("admin availability — activate available, ignore the rest", () => {
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
     expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE);
     expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR); // admin-disabled, skipped
-    expect(derivePackChecked(TEAM_RESOURCES, s)).toBe(true);
+    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(true);
   });
 });
 
@@ -159,7 +162,7 @@ describe("plain packs (word / ppt) and reasoning", () => {
   it("word/ppt toggle just add/remove their capability id", () => {
     let s = applyPackToggle(WORD, true, empty(), ALL_IDS);
     expect(s.selectedCapabilityIds).toEqual([CAP_WRITABLE_DOCUMENT]);
-    expect(derivePackChecked(WORD, s)).toBe(true);
+    expect(derivePackChecked(WORD, s, ALL_IDS)).toBe(true);
     s = applyPackToggle(PPT, true, s, ALL_IDS);
     expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining([CAP_WRITABLE_DOCUMENT, CAP_PPT_FILLER]));
     s = applyPackToggle(WORD, false, s, ALL_IDS);
@@ -169,7 +172,7 @@ describe("plain packs (word / ppt) and reasoning", () => {
   it("reasoning pack toggles the reasoningEnabled field", () => {
     const on = applyPackToggle(REASONING, true, empty(), ALL_IDS);
     expect(on.reasoningEnabled).toBe(true);
-    expect(derivePackChecked(REASONING, on)).toBe(true);
+    expect(derivePackChecked(REASONING, on, ALL_IDS)).toBe(true);
     const off = applyPackToggle(REASONING, false, on, ALL_IDS);
     expect(off.reasoningEnabled).toBe(false);
   });
@@ -183,5 +186,37 @@ describe("plain packs (word / ppt) and reasoning", () => {
     s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS);
     expect(s.selectedCapabilityIds).toContain(CAP_WRITABLE_DOCUMENT); // untouched
     expect(s.reasoningEnabled).toBe(true);
+  });
+});
+
+// --- partial admin availability -------------------------------------------
+
+describe("plain packs — partial admin availability", () => {
+  it("stays on when only the admin-enabled members are selectable", () => {
+    // The upgrade case: a new capability joins an existing pack and no team has
+    // it enabled yet. Before availability was part of the derivation, the switch
+    // flipped on, failed to add the unavailable member, and read back as off.
+    const partial: ReadonlySet<string> = new Set(DOCUMENT_READING.enablesCapabilityIds.slice(0, -1));
+
+    const s = applyPackToggle(DOCUMENT_READING, true, empty(), partial);
+
+    expect(derivePackChecked(DOCUMENT_READING, s, partial)).toBe(true);
+    expect(s.selectedCapabilityIds).toEqual([...partial]);
+  });
+
+  it("is off when nothing in the pack is admin-enabled", () => {
+    const none: ReadonlySet<string> = new Set<string>();
+
+    const s = applyPackToggle(DOCUMENT_READING, true, empty(), none);
+
+    expect(derivePackChecked(DOCUMENT_READING, s, none)).toBe(false);
+  });
+
+  it("turning it off still clears every member, available or not", () => {
+    const on = applyPackToggle(DOCUMENT_READING, true, empty(), ALL_IDS);
+
+    const off = applyPackToggle(DOCUMENT_READING, false, on, ALL_IDS);
+
+    expect(off.selectedCapabilityIds).toEqual([]);
   });
 });

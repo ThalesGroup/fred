@@ -4234,65 +4234,116 @@ the new dim is `term`-aggregatable on existing indexes with no migration.
 `exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
 one bucket.
 
-### 8.59 ✅ `knowledge.similarity_search` built-in tool ref - issue #2461 (2026-08-28)
+
+### 8.59 ✅ `document_similarity` capability + `DocumentSimilarityPort` - issue #2461 (2026-08-28)
 
 **Was**: Knowledge Flow shipped targeted similarity / comparison search in
 `POST /vector/similarity-search` (issue #1772, `DESIGN.md` §4), but a Fred agent
-could only reach it over the Text MCP server. There was no native tool ref, so
-the mode had no equivalent of `knowledge.search`'s first-order path and #1772's
-last acceptance criterion - a comparison agent calling it directly instead of
-fetching everything and filtering client-side - stayed open.
+could only reach it over the Text MCP server. There was no first-order path, so
+#1772's last acceptance criterion - a comparison agent calling it directly
+instead of fetching everything and filtering client-side - stayed open.
 
-**Now**: `TOOL_REF_SIMILARITY_SEARCH` (`knowledge.similarity_search`) joins the
-`fred-sdk` built-in catalog with `SimilaritySearchToolArgs` (`anchor`,
-`document_uids`, `top_k` 1-50, `rerank` default on, optional `min_score`) on the
-`TOOL_INVOKER` backend, and `FredKnowledgeSearchToolInvoker` gained
-`_invoke_similarity_search`. Ported from the `mvp/rags-support` branch, detached
-from that branch's graph-capability bridge and rags UI work.
+**Now**: a real capability, `document_similarity`, registered through the
+`fred.capabilities` entry point alongside its `document_access` /
+`document_summarize` / `document_verbatim` / `document_extract` siblings and
+`ADMIN_GATED` like them. One tool, `find_similar_passages(anchor,
+document_uids, top_k)`, reaching Knowledge Flow through a new typed port,
+`RuntimeServices.document_similarity` (`DocumentSimilarityPort.find_similar`),
+behind `DocumentSimilarityAdapter`. `VectorSearchClient.similarity_search`
+carries the wire call.
 
-One deliberate difference from `_invoke_knowledge_search`, and one deliberate
-sameness:
+**Why a capability and not a built-in tool ref.** The first cut of this issue
+ported the `mvp/rags-support` shape verbatim: a `knowledge.similarity_search`
+entry in the `fred-sdk` built-in catalog, next to `knowledge.search`. That was
+withdrawn before merge. `capabilities/document_access/capability.py` already
+documents the built-in surface as back-compat whose retirement is a follow-up,
+so adding to it would have meant shipping a new tool onto a surface with a
+scheduled end, and a second, differently-scoped comparison path the moment
+anyone wired both. The capability path also buys what the built-in cannot
+express: per-instance config, admin gating, and team scoping.
 
-- **A weak hit stays citable**: `select_citable_sources(hits,
-  min_score_ratio=0.0)`. `select_citable_sources` excludes two things
-  (RAG-DATASET-DISCOVERY-RFC.md §7) and only one of them applies here.
-  Dataset-pointer chunks are still never citable - they are metadata, not
-  content, whatever the caller asked for. The score-ratio half is switched off:
-  it exists to cut corpus-wide noise relative to the best match, and the caller
-  named the target documents, so a low-scoring hit is a real comparison result.
-  Passing `min_score_ratio=0.0` rather than `tuple(hits)` is what keeps the
-  first exclusion - the distinction is easy to lose.
-- **`general_only` is honoured**, exactly as in `_invoke_knowledge_search`:
-  corpus retrieval turned off for the turn is off for every corpus tool, and
-  naming target uids does not opt back in.
+**Why its own port rather than a method on `DocumentSearchPort`.** Two reasons,
+one structural and one about safety. Structural: every document feature here
+already has its own optional port (`document_tree`, `document_summarize`,
+`document_markdown`, `document_extraction`), and adding an abstract method to a
+published SDK ABC breaks every out-of-tree implementor. Safety: the two ports
+enforce different things. Under `search(...)` the document uids come from the
+capability's stored config, so narrowing them against the session binding is a
+formality. Under `find_similar(...)` they come from the MODEL, on the call - so
+that seam is the only thing between an LLM-named uid and a document the user
+never put in this conversation. It returns `DocumentSearchResult` rather than a
+near-identical twin: both modes produce ranked `VectorSearchHit`s.
 
-**Targeting is required and narrowed to `document_uids`.** An empty or non-list
-`document_uids` raises rather than widening to a corpus search - targeting is
-the whole point of the mode. Folder targets (`document_library_tags_ids`), which
-the REST contract accepts, stay MCP-only until an agent needs them. Argument
-coercion enforces the declared bounds, which nothing between the handler and
-Knowledge Flow re-checks: `top_k` over 50 clamps, at or below zero falls back to
-the default, and `bool` is excluded from both numeric fields (it is an `int`
-subclass, so `min_score: true` would otherwise become `1.0` and filter out every
-hit).
+**Three deliberate behaviours**, each pinned by a test:
+
+- **An empty target never widens, and never reads as "no matches".** Targeting
+  is the point of the mode. A missing, empty, or non-list `document_uids` is
+  answered as an `is_error` artifact and never reaches the port. If narrowing
+  against the session binding empties the set, the adapter raises the new
+  `DocumentScopeRefusedError` rather than calling Knowledge Flow with an empty
+  target list (which downstream reads as "no targeting") - and rather than
+  returning no hits, which the model cannot tell apart from a genuine no-match
+  and would report as "nothing in that document resembles this passage" about a
+  document it never searched. The capability renders that refusal as its own
+  `is_error` result naming the out-of-scope uids, not through
+  `document_tool_failure` - nothing failed downstream, so the transport wording
+  would be a lie.
+- **A weak match stays citable**: `select_citable_sources(hits,
+  min_score_ratio=0.0)`. That helper excludes two things
+  (RAG-DATASET-DISCOVERY-RFC.md §7) and only one applies here. Dataset-pointer
+  chunks are still never citable - metadata, not content. The score-ratio half
+  is switched off: it cuts corpus-wide noise relative to the best match, and the
+  caller named these documents, so a weak match is a real finding about them,
+  often the interesting one. Passing `min_score_ratio=0.0` rather than
+  `tuple(hits)` is what keeps the first exclusion - an easy distinction to lose.
+- **`general_only` is honoured**, as in `_invoke_knowledge_search`: corpus
+  retrieval turned off for the turn is off for every corpus tool, and naming
+  target uids does not opt back in.
 
 **Bounded transient retry**, in `VectorSearchClient.similarity_search` only:
-`KfBaseClient._request_with_token_refresh` retries a 401 and nothing else, and no
-caller above retries either, so one dropped connection failed a whole comparison
-run - which fans out one call per anchor passage. Two jittered retries, and only
-where no work is in flight: connection errors, connect timeouts, and 5xx. A
-read/write/pool timeout is deliberately NOT retried - Knowledge Flow may still
-be reranking the first request, and re-issuing multiplies load on an
-already-slow backend rather than recovering, which this mode's fan-out then
-multiplies again. A 4xx is never retried. Scoped to this method rather than the
-shared base client so `search`/`rerank` keep their current behaviour.
+`KfBaseClient._request_with_token_refresh` retries a 401 and nothing else, and
+no caller above retries either, so one dropped connection failed a whole
+comparison run - which fans out one call per anchor passage. Two jittered
+retries, scoped to this method rather than the shared base client so
+`search`/`rerank` keep their behaviour. What is retried is drawn tightly around
+one question - could the work already be in flight, and would re-issuing help?
 
-**Nested-payload argument reading.** Both invokers accept tool arguments either
-flat or wrapped in a `payload` key, since providers differ. The pattern
-`payload.get(key, default)` followed by an `is None` fallback silently never
-reaches the nested dict for any field with a non-None default: the default
-itself satisfies the check. `_invoke_similarity_search` applies the default
-after both lookups instead, so nested `top_k`/`rerank`/`min_score` are honoured.
-`_invoke_knowledge_search` still has the original shape (its nested `top_k` is
-dropped in favour of the default `8`) - left alone here to keep this change a
-port, worth a follow-up.
+- retried: connection errors, connect timeouts, **pool timeouts** (no
+  connection was ever acquired, so nothing was sent), and 502/503/504;
+- not retried: read and write timeouts - Knowledge Flow may still be reranking
+  the first request, so re-issuing multiplies load on an already-slow backend
+  rather than recovering, which the fan-out then multiplies again;
+- not retried: a plain 500, and no 4xx. Knowledge Flow's controller wraps every
+  unexpected exception in a 500, so retrying one buys three full
+  pool-and-rerank round trips before failing anyway.
+
+**Its own read timeout**, `RuntimeTimeouts.similarity_read` (default 90s,
+mirroring the `summarize_read` precedent and applied per-request the same way).
+Knowledge Flow retrieves a candidate pool of up to 100 chunks and cross-encodes
+all of them inside one request, making this the heaviest read on the vector
+path; the shared 30s default is what a plain `search` is sized for. It is also
+the one failure the retry above deliberately will not recover from, which makes
+a generous ceiling the only defence.
+
+**The tool points the model at the corpus, not at attachments.** Knowledge Flow
+runs this mode with `include_session_scope=False` ("comparison is over the
+corpus targets, not chat attachments"), so a file attached to the conversation
+is not searchable here and its uid would return zero hits. The tool docstring
+says so explicitly, because the sibling document tools DO accept attachment
+uids and a model that carried that habit over would read the empty result as
+"nothing matches".
+
+**Frontend.** The Simple-view pack previously called "Document reading"
+(`toolPacks.ts`, id `document_reading`, kept) now carries all three
+uid-targeted document capabilities and is retitled "Working with documents" /
+"Travail sur documents". Corpus-wide discovery stays in the team-resources pack.
+
+Adding a third id exposed a latent bug in `derivePackChecked`, which required
+EVERY id in a pack to be selected while `applyPackToggle` only ever adds ids the
+admin enabled: a pack containing anything unavailable to the team could not be
+switched on at all - flip it, the missing member is never added, the derived
+state reads false again - while switching it off still stripped the rest. That
+was reachable before (an admin enabling only part of a pack) but would have hit
+every existing team the moment an `ADMIN_GATED` capability joined an existing
+pack. `derivePackChecked` now takes `availableIds` and derives from the members
+the team can actually select.

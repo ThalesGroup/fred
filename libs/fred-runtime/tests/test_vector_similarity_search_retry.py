@@ -65,7 +65,7 @@ class _Attempts:
 
 
 async def test_succeeds_first_try_without_retrying() -> None:
-    attempts = _Attempts(failures=0, exc=_http_error(500))
+    attempts = _Attempts(failures=0, exc=_http_error(503))
 
     assert await _with_transient_retry(attempts) == "ok"
     assert attempts.calls == 1
@@ -73,8 +73,15 @@ async def test_succeeds_first_try_without_retrying() -> None:
 
 @pytest.mark.parametrize(
     "exc",
-    [httpx.ConnectError("dropped"), httpx.ConnectTimeout("slow"), _http_error(503)],
-    ids=["connect_error", "connect_timeout", "server_error"],
+    [
+        httpx.ConnectError("dropped"),
+        httpx.ConnectTimeout("slow"),
+        # No connection was ever acquired, so nothing was sent - the transient
+        # contention the per-passage fan-out makes likely.
+        httpx.PoolTimeout("busy"),
+        _http_error(503),
+    ],
+    ids=["connect_error", "connect_timeout", "pool_timeout", "service_unavailable"],
 )
 async def test_recovers_from_a_transient_failure(exc: Exception) -> None:
     attempts = _Attempts(failures=1, exc=exc)
@@ -85,8 +92,8 @@ async def test_recovers_from_a_transient_failure(exc: Exception) -> None:
 
 @pytest.mark.parametrize(
     "exc",
-    [httpx.ReadTimeout("slow"), httpx.WriteTimeout("slow"), httpx.PoolTimeout("slow")],
-    ids=["read_timeout", "write_timeout", "pool_timeout"],
+    [httpx.ReadTimeout("slow"), httpx.WriteTimeout("slow")],
+    ids=["read_timeout", "write_timeout"],
 )
 async def test_does_not_retry_once_work_is_already_in_flight(exc: Exception) -> None:
     """Knowledge Flow may still be reranking the first request; re-issuing
@@ -94,6 +101,16 @@ async def test_does_not_retry_once_work_is_already_in_flight(exc: Exception) -> 
     attempts = _Attempts(failures=99, exc=exc)
 
     with pytest.raises(httpx.TimeoutException):
+        await _with_transient_retry(attempts)
+    assert attempts.calls == 1
+
+
+async def test_does_not_retry_a_plain_500() -> None:
+    """KF wraps every unexpected exception in a 500, so retrying one buys three
+    full pool-and-rerank round trips before failing anyway."""
+    attempts = _Attempts(failures=99, exc=_http_error(500))
+
+    with pytest.raises(httpx.HTTPStatusError):
         await _with_transient_retry(attempts)
     assert attempts.calls == 1
 
