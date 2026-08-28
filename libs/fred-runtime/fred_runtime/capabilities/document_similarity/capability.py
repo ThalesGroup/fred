@@ -16,26 +16,10 @@
 `DocumentSimilarityCapability` — find the passages most similar to an anchor
 passage, inside documents named on the call.
 
-Why it is its own capability and not a second tool on `document_access`:
-- the two answer different questions. `document_access` searches to ANSWER
-  ("what does the corpus say about X?"), scope fixed once per conversation.
-  This one COMPARES ("for this passage, what is the closest passage in that
-  document?"), re-aimed per call. Same distinction the RFC drew when
-  `document_summarize` was split out - separately selectable, so a comparison
-  agent can take the comparison primitive without the corpus Q&A tool.
-- it sits on its own port (`RuntimeServices.document_similarity`), because its
-  targeting comes from the model rather than from the conversation, and that
-  changes what the adapter has to enforce.
-
-Doctrine (RFC AGENT-CAPABILITY §3.5, §3.8, §10), same as its siblings:
-- the platform is reached ONLY through the typed port; the per-turn binding and
-  the raw access token NEVER enter `CapabilityContext`;
-- the tool signature exposes ONLY LLM arguments; config reaches the tool through
-  the closure, never the schema;
-- document uids are internal working identifiers - the tool docstring tells the
-  model never to repeat them to the end user.
-
-Read-only, so no HITL gate. `ADMIN_GATED` by the class default.
+Separate from `document_access` because it COMPARES rather than answers, and
+sits on its own port: its targeting comes from the model per call, not from
+the conversation. Read-only, so no HITL gate; `ADMIN_GATED` by class default.
+Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.60.
 """
 
 from __future__ import annotations
@@ -239,10 +223,8 @@ class DocumentSimilarityCapability(
                     "out of scope."
                 )
             except Exception as exc:
-                # Same contract as the sibling document tools: degrade to an
-                # `is_error` artifact rather than raising, or the default
-                # ToolNode handler re-raises and the whole turn dies with an
-                # empty error detail.
+                # Degrade rather than raise: the default ToolNode handler
+                # re-raises, killing the turn with an empty error detail.
                 return document_tool_failure(
                     tool_ref=DOCUMENT_SIMILARITY_TOOL_REF,
                     action="find similar passages",
@@ -264,12 +246,9 @@ class DocumentSimilarityCapability(
                     for hit in hits
                 ],
             }
-            # `sources` keeps the dataset-pointer exclusion (metadata, never
-            # citable) but switches off the score-ratio one: that filter drops
-            # hits that are noise relative to the best match, which is the right
-            # call for a corpus-wide search and the wrong one here - the caller
-            # named these documents, so a weak match is a real finding about
-            # them, often the interesting one ("nothing in B really matches").
+            # Keeps the dataset-pointer exclusion, drops the score-ratio one:
+            # the caller named these documents, so a weak match is a real
+            # finding, not corpus noise (RUNTIME-EXECUTION-CONTRACT.md §8.60).
             artifact = ToolInvocationResult(
                 tool_ref=DOCUMENT_SIMILARITY_TOOL_REF,
                 blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=content),),

@@ -100,11 +100,9 @@ export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
-// Independent backend capabilities that the Simple view groups under one
-// document-work pack, while the Advanced view keeps each toggle separate. What
-// they have in common is the unit they operate on: a document the agent has
-// already identified by uid — read it, extract from it, compare it — as opposed
-// to the corpus-wide discovery the team-resources pack covers.
+// Grouped under one Simple-view pack by the unit they operate on: a document
+// the agent already identified by uid — read it, extract from it, compare it —
+// as opposed to the corpus-wide discovery the team-resources pack covers.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
 export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
@@ -154,12 +152,9 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         documentAccessIntent: "attachments",
       },
       {
-        // One Simple-view card grouping the capabilities that work on documents
-        // the agent already identified: verbatim read, exhaustive extraction,
-        // and targeted comparison. Plain pack — enabling it selects all three
-        // ids; the Advanced view still toggles each on its own. The `id` stays
-        // `document_reading` (UI-only, but it is what the pack's copy keys and
-        // any muscle memory are attached to).
+        // Enabling this selects all three ids; the Advanced view still toggles
+        // each on its own. The `id` stays `document_reading` even though the
+        // pack outgrew the name — it is what the copy keys hang off.
         id: "document_reading",
         kind: "capabilities",
         icon: "article",

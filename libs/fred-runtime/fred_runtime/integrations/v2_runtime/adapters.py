@@ -1337,11 +1337,9 @@ class DocumentSimilarityAdapter(DocumentSimilarityPort):
             get_document_uids(runtime_context), document_uids
         )
         if not effective_uids:
-            # Every requested uid fell outside the session binding's scope, so
-            # nothing was searched. Raising rather than returning no hits: an
-            # empty result here is indistinguishable from a genuine no-match,
-            # and the model would report "nothing resembles this passage" about
-            # a document it never actually looked at.
+            # Raising, not returning no hits: an empty result is
+            # indistinguishable from a genuine no-match, and the model would
+            # report "nothing resembles this" about a document never searched.
             raise DocumentScopeRefusedError(
                 "none of the requested documents are in scope for this conversation",
                 requested_uids=document_uids,

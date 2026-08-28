@@ -113,11 +113,8 @@ export function derivePackChecked(
   if (pack.documentAccessIntent === "corpus") return corpusOn(state);
   if (pack.documentAccessIntent === "attachments") return attachmentsOn(state);
   // Plain packs: on when every id the team can ACTUALLY select is selected.
-  // Availability has to be part of this: `applyPackToggle` only ever adds ids
-  // the admin enabled, so requiring the full list would leave the switch stuck
-  // off — flip it on, one unavailable member never gets added, and the derived
-  // state reads false again. That is every team the day a new capability joins
-  // an existing pack, and every team whose admin enabled only part of one.
+  // Requiring the full list would leave the switch stuck off whenever a member
+  // is not admin-enabled — `applyPackToggle` never adds those.
   const selectable = pack.enablesCapabilityIds.filter((id) => availableIds.has(id));
   return selectable.length > 0 && selectable.every((id) => state.selectedCapabilityIds.includes(id));
 }

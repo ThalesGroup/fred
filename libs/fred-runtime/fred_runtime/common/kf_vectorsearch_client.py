@@ -31,27 +31,20 @@ logger = logging.getLogger(__name__)
 
 _HITS = TypeAdapter(List[VectorSearchHit])
 
-#: Bounded retry for transient failures (connection errors, 5xx) on the
-#: similarity-search path. `KfBaseClient._request_with_token_refresh` only
-#: retries a 401 (token refresh); nothing upstream retries a flaky backend
-#: response, so a single dropped connection currently fails the whole call.
-#: Scoped here rather than in the shared base client so existing callers
-#: (`search`, `rerank`) are untouched - generalize once proven.
+#: Bounded retry for the similarity-search path only: nothing above it retries,
+#: so one dropped connection failed a whole comparison run. Scoped here so
+#: `search`/`rerank` keep their behaviour (RUNTIME-EXECUTION-CONTRACT.md §8.60).
 _TRANSIENT_RETRIES = 2
 _RETRY_BASE_DELAY_S = 0.5
 
-#: A read or write timeout means Knowledge Flow may still be working on the
-#: first request - this mode reranks a candidate pool with a cross-encoder and
-#: fans out one call per anchor passage, so re-issuing multiplies load on an
-#: already-slow backend instead of recovering. A POOL timeout is not in this
-#: set: it means no connection was ever acquired, so nothing is in flight and
-#: nothing was sent - exactly the transient contention the fan-out makes likely.
+#: Work may still be in flight, so re-issuing multiplies load on an already-slow
+#: backend instead of recovering. A POOL timeout is deliberately absent: it means
+#: no connection was acquired, so nothing was sent.
 _NON_RETRYABLE_TIMEOUTS = (httpx.ReadTimeout, httpx.WriteTimeout)
 
-#: Only statuses that mean "this instance could not serve you" are retried. A
-#: plain 500 is not: Knowledge Flow's controller wraps every unexpected
-#: exception in one, so a deterministic backend fault would otherwise cost three
-#: full pool-and-rerank round trips per anchor passage before failing anyway.
+#: Only "this instance could not serve you". Not a plain 500: KF wraps every
+#: unexpected exception in one, so retrying a deterministic fault costs three
+#: pool-and-rerank round trips before failing anyway.
 _RETRYABLE_STATUS_CODES = frozenset({502, 503, 504})
 
 
