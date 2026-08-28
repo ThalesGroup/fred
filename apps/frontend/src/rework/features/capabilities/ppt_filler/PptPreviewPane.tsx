@@ -89,6 +89,14 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   // effect below terminates the exact instance this run created.
   const workerRef = useRef<Worker | null>(null);
   useMemo(() => {
+    if (!objectUrl) {
+      // Nothing to load this round (no deck, or a re-fill in flight). Releasing
+      // the port is what lets the outgoing worker's cleanup see itself orphaned
+      // and terminate at once, instead of lingering until the pane unmounts.
+      pdfjs.GlobalWorkerOptions.workerPort = null;
+      workerRef.current = null;
+      return;
+    }
     if (typeof Worker === "undefined") {
       pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
       workerRef.current = null;
