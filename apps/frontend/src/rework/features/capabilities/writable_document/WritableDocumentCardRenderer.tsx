@@ -89,7 +89,7 @@ export function WritableDocumentCardRenderer({ part }: UiPartRendererProps) {
     <div className={styles.card} role="note" aria-label={t("capability.writable_document.card.aria")}>
       <div className={styles.header}>
         <span className={styles.icon} aria-hidden>
-          <Icon category="outlined" type="edit_note" />
+          <Icon category="outlined" type="edit_document" />
         </span>
         <span className={styles.title} title={title}>
           {title}
@@ -104,7 +104,7 @@ export function WritableDocumentCardRenderer({ part }: UiPartRendererProps) {
           color="primary"
           variant="text"
           size="small"
-          icon={{ category: "outlined", type: "edit_note" }}
+          icon={{ category: "outlined", type: "edit_document" }}
           onClick={openPane}
         >
           {t("capability.writable_document.card.open")}

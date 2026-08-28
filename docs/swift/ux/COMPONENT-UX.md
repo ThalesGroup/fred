@@ -3598,19 +3598,21 @@ a session's active capabilities declare. Two changes (#2459):
   holds a document); a panel that omits the hook stays always-on. The rail is invisible
   chrome until the agent actually produces something.
 - **Each panel carries its own glyph** instead of the `edit_note` the host hardcoded for
-  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `article` - the
-  same icons `fileIconSpec.ts` gives a `.pptx` and a `.docx` in Resources, so a file
-  type reads the same across the app. Colour stays the rail's neutral
+  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `edit_document`
+  (a new entry in `materialIcons`, the page-with-a-pencil glyph) - each the one that
+  capability's own card and pane header already carry, so the launcher reads as the
+  thing it opens. The whole writable_document surface moved off `edit_note` to
+  `edit_document` in the same pass (2026-08-28). Colour stays the rail's neutral
   `on-surface-retreat`: the launchers sit in the same floating-chrome band as the trace
   and attachments buttons, and tinting only these two would break that band.
 - **The rail dropped to 68px from the top** (2026-08-28). Its 48px offset was computed
   against a one-line top bar; the bar now stacks a 24px title over a 20px agent name, so
   the first launcher sat on the band.
-- **The rail only floats while every panel is closed** (2026-08-28). It is absolutely
+- **The rail retires entirely while a panel is open** (2026-08-28). It is absolutely
   positioned against the whole slot, drawer included, so with a panel open it landed on
-  that drawer's own close button. Open, the remaining launchers render as the
-  `InlineDrawer`'s `headerActions` instead - no overlap, and switching panels stays one
-  click.
+  that drawer's own close button. Moving the remaining launchers into the drawer's
+  `headerActions` was tried the same day and dropped: closing the open panel to reach
+  another one is cheap, and one home for the launchers beats two (developer decision).
 - **Both panes' header bands were trimmed** (2026-08-28) - `PptPreviewPane` and
   `WritableDocumentPane` share the same title + actions row, padded down from
   `8px/16px` to `4px/12px`; the editor toolbar under it lost the same 4px. Two

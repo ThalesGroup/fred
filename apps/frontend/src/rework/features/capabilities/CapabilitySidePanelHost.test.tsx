@@ -38,21 +38,8 @@ vi.mock("@shared/atoms/IconButton/IconButton", () => ({
 }));
 
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer", () => ({
-  InlineDrawer: ({
-    open,
-    headerActions,
-    children,
-  }: {
-    open: boolean;
-    headerActions?: React.ReactNode;
-    children: React.ReactNode;
-  }) =>
-    open ? (
-      <div data-drawer>
-        <header>{headerActions}</header>
-        {children}
-      </div>
-    ) : null,
+  InlineDrawer: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
+    open ? <div data-drawer>{children}</div> : null,
 }));
 
 function StubPanel(_props: CapabilitySidePanelProps) {
@@ -97,25 +84,24 @@ describe("CapabilitySidePanelHost launcher rail", () => {
   });
 
   it("gives each panel its own glyph", () => {
-    state.entries = [entry("ppt_filler", "slideshow", () => true), entry("writable_document", "article", () => true)];
+    state.entries = [
+      entry("ppt_filler", "slideshow", () => true),
+      entry("writable_document", "edit_document", () => true),
+    ];
     const html = render();
 
     expect(html).toContain('data-icon="slideshow"');
-    expect(html).toContain('data-icon="article"');
+    expect(html).toContain('data-icon="edit_document"');
   });
 
-  it("hides a launcher while its own panel is open", () => {
-    state.entries = [entry("ppt_filler", "slideshow", () => true)];
-    expect(render("ppt_filler:ppt_filler_pane")).not.toContain("<button");
-  });
+  it("retires the whole rail while a panel is open, other panels included", () => {
+    // It floats over the right edge of the slot, drawer included, so it would land
+    // on the drawer's own close button. Closing the open panel brings it back.
+    state.entries = [
+      entry("ppt_filler", "slideshow", () => true),
+      entry("writable_document", "edit_document", () => true),
+    ];
 
-  it("moves the other launchers into the open drawer's header, off the rail", () => {
-    state.entries = [entry("ppt_filler", "slideshow", () => true), entry("writable_document", "article", () => true)];
-    const html = render("writable_document:writable_document_pane");
-
-    // In the drawer header, and ONLY there - the rail would float on the drawer's
-    // own close button. (CSS-module class names are hashed, so count the buttons.)
-    expect(html).toContain('<header><button data-icon="slideshow"');
-    expect(html.match(/<button/g)).toHaveLength(1);
+    expect(render("writable_document:writable_document_pane")).not.toContain("<button");
   });
 });

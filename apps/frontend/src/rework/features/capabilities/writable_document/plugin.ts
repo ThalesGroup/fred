@@ -27,12 +27,12 @@ export const writableDocumentCapability: CapabilityUiPlugin = {
   id: "writable_document",
   // Keyed by the backend chat part's `type` discriminator (#1977).
   partRenderers: { writable_document: WritableDocumentCardRenderer },
-  // Keyed by the backend manifest's SidePanelSpec.widget. `article` is what
-  // fileIconSpec gives a .docx, so a document reads the same in chat and Resources.
+  // Keyed by the backend manifest's SidePanelSpec.widget. `edit_document` is the
+  // glyph the whole writable_document surface uses - card, Open button, pane header.
   sidePanels: {
     writable_document_pane: {
       Component: WritableDocumentPane,
-      icon: "article",
+      icon: "edit_document",
       useHasContent: useHasWritableDocuments,
     },
   },

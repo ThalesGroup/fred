@@ -81,7 +81,7 @@ export function WritableDocumentPane(_props: CapabilitySidePanelProps) {
     <div className={styles.pane}>
       <div className={styles.header}>
         <div className={styles.titleGroup}>
-          <Icon category="outlined" type="edit_note" />
+          <Icon category="outlined" type="edit_document" />
           <span className={styles.title}>{selected?.title || untitled}</span>
         </div>
         {isSaving && <span className={styles.saving}>{t("capability.writable_document.saving")}</span>}

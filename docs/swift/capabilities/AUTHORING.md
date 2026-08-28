@@ -246,10 +246,10 @@ sidePanels: {
 ```
 
 - `icon` - the glyph of the panel's launcher in the chat page's floating rail, from
-  the same `materialIcons` set as the manifest icon above. Pick what
-  `apps/frontend/src/rework/utils/fileIconSpec.ts` already gives the artefact the
-  panel holds (`slideshow` for a deck, `article` for a document) so a file type
-  reads the same in the chat as in Resources.
+  the same `materialIcons` set as the manifest icon above. Reuse the glyph the
+  capability's own chat card and pane header already carry, so the launcher reads as
+  the same thing they open (`slideshow` for the ppt_filler deck, `edit_document` for
+  the writable_document editor).
 - `useHasContent` - a hook answering "does this panel have anything to show for the
   OPEN conversation?". Omit it and the launcher is always offered; a capability that
   produces something on demand should implement it, or every session that merely
