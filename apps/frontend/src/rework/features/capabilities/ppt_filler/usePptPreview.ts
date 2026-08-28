@@ -65,6 +65,9 @@ export function usePptPreview(preview: PptPreviewPartData | null): UsePptPreview
 
     let cancelled = false;
     let created: string | null = null;
+    // The previous run's cleanup revoked its URL; keeping it in state would hand
+    // react-pdf a dead blob for the length of the re-fetch.
+    setObjectUrl(null);
     setIsLoading(true);
     setError(null);
 

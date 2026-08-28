@@ -26,10 +26,10 @@
 // once, and only if the page has been open for >5s (history replay happens in the
 // first moments after load; a live fill happens well after).
 //
-// Every mount still REGISTERS the deck (`setPreview`), replay included: that is
-// what tells the pane's launcher this conversation produced something, without
-// popping the panel open. It registers under the conversation the card was mounted
-// for (`useMountSessionId`), never the one the user just switched to.
+// Every mount REGISTERS the deck, replay included: that is what tells the pane's
+// launcher this conversation produced something. Registering never moves what the
+// pane shows - only an explicit open does, because the pane keys its pdf.js worker
+// on that value.
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
@@ -40,7 +40,7 @@ import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
 import { useMountSessionId } from "../useOpenSessionId";
 import type { UiPartRendererProps } from "../types";
 import type { PptPreviewPartData } from "./types";
-import { setPreview } from "./pptPreviewSlice";
+import { openPreview, registerPreview } from "./pptPreviewSlice";
 import PptxDownloadButton from "./PptxDownloadButton";
 import styles from "./PptPreviewCardRenderer.module.css";
 
@@ -60,7 +60,7 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
   // Opening = register the deck AND signal the page to open the ppt_filler
   // side-panel column (the page owns the single-push-drawer state).
   const openPane = (data: PptPreviewPartData) => {
-    dispatch(setPreview({ sessionId, preview: data }));
+    dispatch(openPreview({ sessionId, preview: data }));
     dispatch(requestSidePanelOpen({ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }));
   };
 
@@ -70,8 +70,8 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
     // Mark seen regardless, so a history-replay mount never auto-opens later and a
     // live fill only pops the panel the first time its part arrives.
     seenKeys.add(key);
+    dispatch(registerPreview({ sessionId, preview }));
     if (firstSighting && Date.now() - pageLoadedAt > AUTO_OPEN_MIN_AGE_MS) openPane(preview);
-    else dispatch(setPreview({ sessionId, preview }));
     // Intentionally keyed on the deck identity and conversation; `preview`/`dispatch`
     // are stable per that identity for this heuristic.
     // eslint-disable-next-line react-hooks/exhaustive-deps

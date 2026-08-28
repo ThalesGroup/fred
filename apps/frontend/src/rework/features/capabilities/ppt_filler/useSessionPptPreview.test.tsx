@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The registered deck is global state but belongs to ONE conversation. Without
-// the session stamp a deck filled in a previous conversation would light the
-// launcher up on a brand-new chat, which is the whole thing this scoping exists
-// to prevent.
+// Two things this state has to get right: the deck belongs to ONE conversation
+// (without the stamp, a deck filled earlier lights the launcher up on a brand-new
+// chat), and what the pane shows moves only on an explicit open - the pane keys
+// its pdf.js worker on it, and that lifecycle does not survive a churning value.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { pptPreviewSlice, setPreview, type PptPreviewState } from "./pptPreviewSlice";
+import { openPreview, pptPreviewSlice, registerPreview, type PptPreviewState } from "./pptPreviewSlice";
 import type { PptPreviewPartData } from "./types";
 
 const state = vi.hoisted(() => ({ session: "", ppt: null as unknown }));
@@ -32,7 +32,7 @@ vi.mock("react-redux", () => ({
   useSelector: (selector: (s: { pptPreview: unknown }) => unknown) => selector({ pptPreview: state.ppt }),
 }));
 
-const { useSessionPptPreview } = await import("./useSessionPptPreview");
+const { useHasPptPreview, useSessionPptPreview } = await import("./useSessionPptPreview");
 
 const deck: PptPreviewPartData = {
   type: "ppt_preview",
@@ -42,9 +42,14 @@ const deck: PptPreviewPartData = {
   version: "v1",
 };
 
+const other: PptPreviewPartData = { ...deck, preview_id: "deck-2", title: "Kickoff", version: "v9" };
+
 /** The slice's own reducer builds the state, so the test can't drift from it. */
-function sliceState(sessionId: string): PptPreviewState {
-  return pptPreviewSlice.reducer(undefined, setPreview({ sessionId, preview: deck }));
+function sliceState(sessionId: string, ...actions: { type: string; payload: unknown }[]): PptPreviewState {
+  return actions.reduce(
+    (state, action) => pptPreviewSlice.reducer(state, action as never),
+    pptPreviewSlice.reducer(undefined, registerPreview({ sessionId, preview: deck })),
+  );
 }
 
 function read(openSession: string, ppt: PptPreviewState): PptPreviewPartData | null {
@@ -53,6 +58,18 @@ function read(openSession: string, ppt: PptPreviewState): PptPreviewPartData | n
   state.ppt = ppt;
   function Probe() {
     seen = useSessionPptPreview();
+    return null;
+  }
+  renderToStaticMarkup(<Probe />);
+  return seen;
+}
+
+function hasDeck(openSession: string, ppt: PptPreviewState): boolean {
+  let seen = false;
+  state.session = openSession;
+  state.ppt = ppt;
+  function Probe() {
+    seen = useHasPptPreview();
     return null;
   }
   renderToStaticMarkup(<Probe />);
@@ -70,5 +87,33 @@ describe("useSessionPptPreview", () => {
 
   it("returns nothing while no conversation is open", () => {
     expect(read("", sliceState("s1"))).toBeNull();
+  });
+
+  it("does not move the pane when another card registers its deck", () => {
+    // Registering is what lights the launcher up; moving the pane on it would
+    // rebuild the pdf.js worker under a document that is still loading.
+    const state = sliceState("s1", registerPreview({ sessionId: "s1", preview: other }));
+
+    expect(read("s1", state)).toEqual(deck);
+  });
+
+  it("moves the pane on an explicit open", () => {
+    const state = sliceState("s1", openPreview({ sessionId: "s1", preview: other }));
+
+    expect(read("s1", state)).toEqual(other);
+  });
+});
+
+describe("useHasPptPreview", () => {
+  it("is true once the open conversation has produced a deck", () => {
+    expect(hasDeck("s1", sliceState("s1"))).toBe(true);
+  });
+
+  it("ignores a deck produced by another conversation", () => {
+    expect(hasDeck("s2", sliceState("s1"))).toBe(false);
+  });
+
+  it("is false before any deck", () => {
+    expect(hasDeck("s1", pptPreviewSlice.reducer(undefined, { type: "init" }))).toBe(false);
   });
 });
