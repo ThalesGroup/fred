@@ -77,6 +77,61 @@ platform-admin preference.
 When implementing behavior (for example purge delays), read from policy config and apply.
 Do not embed retention windows or team-specific rules in code.
 
+## Platform Feature Gates
+
+Platform-wide staged features use typed boolean fields under
+`platform.frontend.feature_flags`. Each feature has its own flag, and a missing
+value is treated as `false`; one unfinished feature must never enable another.
+Control-plane owns the value and publishes it through the authenticated
+frontend bootstrap.
+
+Frontend code consumes these fields through the shared feature-flag hook and
+gate rather than repeating bootstrap lookups. A feature with backend routes or
+gateway paths must also fail closed at those boundaries. Hiding a frontend
+control is not authorization, so the normal permission checks still apply when
+the feature is enabled.
+
+`enableApplications` is the bundled-applications gate and defaults to `false`.
+While it is off, application routes, catalogs, administration controls, and
+`/app-services` gateway paths are unavailable. Installed manifests and existing
+team grants remain intact so enabling the flag does not require rebuilding Fred
+or recreating entitlements.
+
+The control-plane field is the single authoritative deployment setting. The
+Fred Helm chart derives the frontend container's
+`FRONTEND_ENABLE_APPLICATIONS` value from it so the backend and gateway cannot
+be configured independently through chart values. The environment variable is
+still accepted directly for local Vite and standalone-container parity, where
+the operator must keep it aligned with the control-plane field; it also defaults
+to `false`.
+
+## Bundled Application Configuration
+
+`apps/applications/<application-id>/fred-app.json` is a non-secret, build-time
+installation manifest. Each package keeps that manifest beside a `frontend/`
+module and an optional `backend/` service boundary. One generator derives the
+frontend registry, localized resources, runtime service contract, and packaged
+control-plane catalog. Those generated files must match the manifests in
+quality gates and must never be edited independently.
+
+The manifest declares only identity, display metadata, version compatibility,
+and `service_required`. It cannot carry an upstream address, token, credential,
+arbitrary header, raw HTML, or executable module URL.
+
+The `frontend/` directory is compiled into Fred's frontend image. A backend is
+an independently built application service and is needed only when the manifest
+and deployment require it. The included placeholder sets `service_required` to
+`false`; its `backend/` directory contains no runtime implementation.
+
+Deployment owns the server-side application service map through
+`FRONTEND_APPLICATION_UPSTREAMS_JSON`, a JSON object whose keys are installed
+application ids and whose values are HTTP(S) upstream roots. Container startup
+rejects unknown ids, unsafe URLs, and a missing mapping for any
+`service_required` application. A service-free or optional application may
+have no mapping; Fred still starts and its service path returns a generic 503.
+Unknown `/app-services/<id>/...` paths return 404. The mapping is routing
+configuration, not a secrets channel.
+
 ## When Adding A New Backend
 
 Use the same startup contract immediately:

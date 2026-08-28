@@ -162,6 +162,12 @@
           "title": "Enableelecwarfare",
           "type": "boolean"
         },
+        "enableApplications": {
+          "default": false,
+          "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application capability administration, and the frontend Apps experience stay disabled.",
+          "title": "Enableapplications",
+          "type": "boolean"
+        },
         "enableAllResourceSpaces": {
           "default": false,
           "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",

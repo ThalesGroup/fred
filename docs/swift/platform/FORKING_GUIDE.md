@@ -6,10 +6,15 @@ This guide is for teams that deploy Fred under their own branding or with organi
 
 ## The cardinal rule
 
-> **A fork must never modify a source code file.**
-> Only files under `apps/frontend/public/contrib/<your-brand>/` may be fork-specific.
+> **A fork must not modify Fred's handwritten source code.** Fork-specific
+> work belongs in a supported extension boundary: static content under
+> `apps/frontend/public/contrib/<your-brand>/`, a bundled application under
+> `apps/applications/<application-id>/`, or an independent agent pod.
 
-If this rule is followed, every future `git merge develop` from the open source repository is conflict-free on all code files — forever. Conflicts become structurally impossible.
+If this rule is followed, future upstream merges do not conflict on Fred's
+handwritten code. Generated application catalogs may need to be regenerated
+after a merge; they are derived artifacts, not a place for manual conflict
+resolution.
 
 If this rule is broken, every merge becomes a manual conflict resolution exercise. Over time the fork drifts, the team stops merging, and the fork becomes an unmaintained dead-end.
 
@@ -63,7 +68,71 @@ apps/frontend/public/contrib/acme/
 
 These files are committed in your fork's git repository. The open source repository never touches the `contrib/` directory. Your files are never in conflict.
 
-Do not put anything else in your fork's `src/` tree. If you find yourself needing to modify a `.tsx`, `.ts`, `.scss`, or translation `.json` file, stop — this is a signal that the open source codebase is missing a configuration or extension point. Open an issue or a pull request upstream instead.
+Do not put anything fork-specific in the frontend `src/` tree. If you need a
+product page, use the bundled application boundary below. If that boundary is
+insufficient and you still need to modify Fred-owned `.tsx`, `.ts`, `.scss`,
+or translation `.json` files, stop — the host is missing an extension point.
+
+---
+
+## Bundled product applications
+
+A trusted, team-scoped product page is installed as one isolated directory:
+
+```text
+apps/applications/<application-id>/
+├── fred-app.json
+├── frontend/
+│   ├── index.tsx
+│   └── Application.module.css
+└── backend/
+    └── README.md
+```
+
+The manifest supplies the stable id, semantic version, localized name and
+description, supported icon, host API version, module key, and whether the app
+needs a same-origin backend service. It contains no upstream URL, token,
+credential, raw HTML, or executable module location.
+
+The `frontend/` module is compiled into Fred's frontend image. It imports React,
+its own local files, and
+`@fred/application-host` only. Fred supplies the selected collaborative team,
+relative navigation, locale, authorized application summary, and a constrained
+authenticated request function. The app does not import Fred's private store,
+Keycloak object, generated shared clients, or `src/` components.
+
+The `backend/` directory is reserved for an optional, independently built
+application service. A service-free application keeps `service_required` set to
+`false` and needs no backend runtime or upstream mapping. The included
+`apps/applications/example/` package demonstrates that service-free shape; its
+backend directory contains documentation only.
+
+After adding or changing a manifest, run:
+
+```bash
+cd apps/frontend
+make generate-applications
+make check-applications
+```
+
+Generation produces the statically allowlisted frontend registry, translations,
+runtime service contract, and packaged control-plane catalog from that one
+manifest set. Do not hand-edit those outputs. The deployment must set
+`applications.control-plane-backend.configuration.platform.frontend.feature_flags.enableApplications`
+to `true` before the Apps surface is available. The Fred Helm chart treats that
+control-plane value as the single authoritative setting and derives the
+frontend gateway's `FRONTEND_ENABLE_APPLICATIONS` value from it; do not add a
+second chart setting for the frontend container. A platform administrator then
+enables `app__<application-id>` for collaborative teams through the Capabilities
+page. Personal spaces are outside V1.
+
+For a service-backed application, deployment supplies the application-id to
+upstream mapping through the documented frontend environment setting. The
+browser sees only `/app-services/<application-id>/teams/<team-id>/...`; the service
+must independently validate the bearer, team membership, active installation,
+and application entitlement. A bundled application still ships with Fred's
+frontend image, so changing it rebuilds that image; independently deployed UI
+modules are not yet a supported extension boundary.
 
 ---
 
@@ -98,18 +167,23 @@ If your fork still has agent code inside `agentic-backend/`, the migration path 
 
 ## Merge workflow for fork maintainers
 
-Once your fork follows the rules above, the full synchronisation workflow is:
+Once your fork follows the rules above, the synchronisation workflow is:
 
 ```bash
 # On your fork's integration branch
 git merge develop
 
-# Expected result: no conflicts on any source file.
-# Your contrib/ files are untouched.
+# Expected result: no conflicts on Fred-owned handwritten source.
+# Your contrib/ and uniquely named application directories are untouched.
+# If generated application catalogs changed upstream, regenerate them.
 # Review, test, and promote to your production branch as usual.
 ```
 
-If you encounter a conflict on a source file, treat it as a bug — either in your fork (a code override that should not exist) or in the open source codebase (a missing extension point). Do not resolve it silently; fix the root cause.
+If you encounter a conflict on a handwritten source file, treat it as a bug —
+either in your fork (an override that should not exist) or in Fred (a missing
+extension point). A conflict in a generated application artifact is resolved
+by keeping the manifests/modules and rerunning `make generate-applications`,
+never by editing the generated output.
 
 ---
 
@@ -120,5 +194,6 @@ If you encounter a conflict on a source file, treat it as a bug — either in yo
 - [ ] Privacy notice is in `apps/frontend/public/contrib/<your-brand>/gdpr.md`
 - [ ] Brand release notes (if any) are in `apps/frontend/public/contrib/<your-brand>/release.md`
 - [ ] No `.tsx`, `.ts`, `.scss`, or `.json` file from `src/` exists in your fork's overlay
+- [ ] Product UI code, if any, is isolated under `apps/applications/<application-id>/frontend/` and passes `make check-applications`
 - [ ] Agent code (Meridian only) is isolated under `contrib/<your-brand>/` and registered via Helm, not via source patches
-- [ ] `git merge develop` runs with zero conflicts
+- [ ] `git merge develop` has no handwritten-source conflicts; generated application artifacts are regenerated when needed

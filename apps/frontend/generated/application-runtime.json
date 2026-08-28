@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "catalog_revision": "sha256:1d084ac7d440ef17c68beb6b57015b7e6124569eba042a14615022949030b7d8",
+  "applications": [
+    {
+      "id": "example",
+      "service_required": false
+    }
+  ]
+}

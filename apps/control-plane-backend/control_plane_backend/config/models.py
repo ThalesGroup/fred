@@ -68,6 +68,14 @@ class FrontendFeatureFlags(BaseModel):
 
     enableK8Features: bool = False
     enableElecWarfare: bool = False
+    enableApplications: bool = Field(
+        default=False,
+        description=(
+            "Enable Fred's integrated Apps surface deployment-wide. When false, "
+            "application discovery, application capability administration, and "
+            "the frontend Apps experience stay disabled."
+        ),
+    )
     enableAllResourceSpaces: bool = Field(
         default=False,
         description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe.",

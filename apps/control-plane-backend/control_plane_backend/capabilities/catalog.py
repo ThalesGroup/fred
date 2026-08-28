@@ -27,10 +27,12 @@ import re
 
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
     CAPABILITY_ID_PATTERN,
     MODEL_CAPABILITY_NAMESPACE_PREFIX,
 )
 
+from control_plane_backend.app.feature_flags import is_feature_enabled
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
 logger = logging.getLogger(__name__)
@@ -154,6 +156,28 @@ async def aggregate_capability_catalog(
                     MODEL_CAPABILITY_NAMESPACE_PREFIX,
                 )
                 continue
+            if entry.kind == "app":
+                # Product applications are projected only from the generated
+                # control-plane artifact. A runtime pod must never inject an
+                # application row into the product catalog.
+                logger.error(
+                    "[capability-catalog] refusing pod-advertised app capability "
+                    "id %r from %s",
+                    entry.id,
+                    source.base_url,
+                )
+                continue
+            if entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+                logger.error(
+                    "[capability-catalog] refusing kind=%r capability id %r "
+                    'from %s: the %r prefix is reserved for kind="app" '
+                    "control-plane projections",
+                    entry.kind,
+                    entry.id,
+                    source.base_url,
+                    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+                )
+                continue
             existing = catalog.get(entry.id)
             if (
                 existing is not None
@@ -184,6 +208,20 @@ async def aggregate_capability_catalog(
                     }
                 )
             catalog[entry.id] = entry
+    # Applications are control-plane projections generated from the same
+    # manifests as the frontend loader registry. Inject them after the pod
+    # loop so runtime outages cannot remove installed application rows from
+    # the platform-admin entitlement surface. The Applications feature gate controls
+    # only this projection; the pod-side app/app__ quarantine above remains
+    # active even while Apps is disabled so runtimes can never claim the
+    # reserved product-application namespace.
+    if is_feature_enabled(deps.configuration, "enableApplications"):
+        from control_plane_backend.applications.catalog import (
+            load_generated_application_catalog,
+        )
+
+        for app in load_generated_application_catalog().items:
+            catalog[app.capability_id] = app.capability_entry()
     return catalog
 
 

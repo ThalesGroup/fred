@@ -133,6 +133,8 @@ These variables are important but are not Fred-owned switches in the same sense 
 | `VITE_BACKEND_URL_KNOWLEDGE`     | frontend runtime config               | Knowledge-flow URL override in frontend.                                                                                         |
 | `VITE_BACKEND_URL_CONTROL_PLANE` | frontend runtime config               | Control-plane URL override in frontend.                                                                                          |
 | `VITE_WEBSOCKET_URL`             | frontend runtime config               | Websocket URL override in frontend.                                                                                              |
+| `FRONTEND_ENABLE_APPLICATIONS`   | derived frontend server runtime config | Strict `true`/`false` switch for `/app-services`; defaults to `false`. The Fred Helm chart derives it from control-plane `platform.frontend.feature_flags.enableApplications`, which remains the one authoritative deployment setting. Set it directly only for local or standalone-container parity. |
+| `FRONTEND_APPLICATION_UPSTREAMS_JSON` | frontend server runtime config    | Server-side JSON map from installed application id to HTTP(S) service root; never exposed as browser configuration.              |
 
 ### 3.2 Declared But Not Currently Consumed In Active Runtime Code
 

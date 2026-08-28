@@ -1032,10 +1032,12 @@
           "tool": "Capacités",
           "agent": "Agents",
           "model": "Modèles",
+          "app": "Apps",
           "aria": "Filtrer par type de fonctionnalité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
+        "emptyApps": "Aucune application n'est encore installée sur cette plateforme.",
         "col": {
           "capability": "Fonctionnalité",
           "enabledTeams": "Équipes activées",
@@ -1073,6 +1075,8 @@
         "defaultOffConfirm": {
           "title": "Désactiver l'activation par défaut ?",
           "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette fonctionnalité.",
+          "appTitle": "Désactiver l'application par défaut ?",
+          "appMessage": "Désactiver l'activation par défaut retire l'accès hérité à l'application pour toutes les équipes. Les autorisations explicites restent inchangées.",
           "confirm": "Désactiver",
           "cancel": "Annuler",
           "impact": "Cela suspendra {{count}} agent(s) actuellement fonctionnel(s).",
@@ -1991,6 +1995,7 @@
       "team": {
         "marketplace": "Marketplace",
         "menu": {
+          "apps": "Apps",
           "resources": "Ressources"
         },
         "teamLabel": "Equipe",
@@ -2941,10 +2946,26 @@
     "chatContextPreviewTitle": "Aperçu du contexte de conversation"
   },
   "teamAppsPage": {
-    "headerInfoTooltip": "Seuls les propriétaires de l'équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
+    "headerInfoTooltip": "Les applications sont disponibles uniquement pour les membres autorisés de l'équipe.",
     "headerSubtitle": "Apps de l'équipe",
-    "noAppDescription": "Les propriétaires de l'équipe n'ont configuré aucune application pour ce groupe pour le moment.",
-    "noAppTitle": "Aucune app"
+    "title": "Applications",
+    "subtitle": "Applications disponibles pour cette équipe.",
+    "loading": "Chargement des applications…",
+    "loadError": "Impossible de charger les applications.",
+    "localUnavailable": "Indisponible dans cette version de Fred",
+    "noAppDescription": "Aucune application n'est disponible pour cette équipe.",
+    "noAppTitle": "Aucune app",
+    "host": {
+      "catalog-loading": "Chargement de l'application…",
+      "unavailable": "Cette application n'est pas disponible.",
+      "missing-module": "Cette application n'est pas installée dans cette version de Fred.",
+      "registration-id-mismatch": "L'enregistrement local de cette application est invalide.",
+      "unsupported-host-version": "Cette application nécessite une version incompatible de l'hôte Fred.",
+      "version-mismatch": "Cette application est temporairement indisponible pendant la mise à jour de Fred.",
+      "contract-mismatch": "Cette application est temporairement indisponible pendant la mise à jour de Fred.",
+      "module-load": "Impossible de charger le module de l'application.",
+      "render": "L'application s'est arrêtée de manière inattendue. Fred reste disponible."
+    }
   },
   "unauthorized": {
     "message": "Vous n'êtes pas autorisé à voir cette page.",

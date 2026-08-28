@@ -2941,3 +2941,84 @@ default and reported `"public"`) — truthful for a space that was never
 marketplace-listed and never readable by non-members. Joining-mode UI
 consequence (already shipped in #2398): a new team's settings show the
 locked "manual only" joining state until it is made public.
+
+## 45. Contract Notes — bundled team applications
+
+Fred has one generic V1 host for trusted, build-time product applications. A
+versioned `apps/applications/<application-id>/fred-app.json` is the only authored
+installation record. The same package contains the build-time module under
+`frontend/` and may reserve `backend/` for an independently built application
+service. Generation produces a literal frontend lazy-loader registry and the
+packaged control-plane catalog with matching application version, host API
+version, per-app contract digest, and catalog revision. Control-plane never
+returns a module path or service upstream.
+
+The typed deployment-wide `enableApplications` feature gate defaults to
+`false`. It is an availability boundary, not an authorization relation. While
+off, the team application endpoint returns a generic not-found response,
+application entries are absent from the administration catalog, application
+mutations cannot write relations, the frontend does not mount application
+pages or navigation, and `/app-services` paths return 404. Generated manifests
+and existing grants remain installed but dormant. Effective access is therefore:
+
+```text
+enableApplications
+AND user can_use_team_applications on team:<team_id>
+AND team:<team_id> can_use capability:app__<app_id>
+AND frontend registration matches the catalog contract
+```
+
+Applications reuse capability enablement for coarse admission. A manifest id
+`<application-id>` derives capability id `app__<application-id>`; `app__` is
+reserved for catalog `kind="app"`. The discriminator exists only on the
+JSON-safe `CapabilityCatalogEntry` and admin wire model: runtime
+`CapabilityManifest` continues to accept `tool | agent | model` only. Every
+installed application is `admin_gated`; installation alone grants no team
+access.
+
+Existing platform-admin capability routes remain the only enablement writers.
+Application rows support default-on and collaborative-team controls, but have
+no personal-space control or generic team-settings JSON. App changes do not
+enter agent dependency, impact, health, suspension, revival, reasoning, or
+model-binding paths. Attempts to grant an app to a personal team are rejected;
+revocation remains available to clean up a stale personal tuple.
+
+The team discovery contract is:
+
+```text
+GET /control-plane/v1/teams/{team_id}/applications
+  -> ApplicationList {
+       schema_version: "1",
+       catalog_revision: string,
+       items: ApplicationSummary[]
+     }
+```
+
+`ApplicationSummary` carries `id`, `version`, generated i18n `name` and
+`description` keys, validated `icon`, `host_api_version`, and
+`contract_digest`. The service canonicalizes the team id and checks the user's
+`can_use_team_applications` permission before team or application metadata. A
+collaborative team then sees only installed items for which that team has
+`capability#can_use`. Personal teams return an empty list. With ReBAC disabled,
+all installed items are returned for collaborative teams.
+
+The bundled frontend supplies two generic routes,
+`/team/:teamId/apps` and `/team/:teamId/apps/:appId/*`. It resolves the
+authorized response before inspecting the static registry, verifies the
+id/version/host-version/digest tuple, and contains module-load and render
+failures per app. The injected request adapter derives
+`/app-services/<app-id>/teams/<team-id>/...`, owns token refresh and one 401
+retry, and rejects absolute, traversing, or protected-header inputs. No app
+receives Fred's store, Keycloak object, or raw token.
+
+The frontend gateway applies a deployment-owned client body budget to the
+application-service namespace (10 MiB by default) and disables intermediary
+request buffering. Application services remain responsible for equal or
+smaller per-request limits, aggregate concurrency bounds, and authorization
+before consuming a request body.
+
+The V1 catalog source is the immutable generated artifact. Removing a manifest
+therefore makes it unavailable even if a grant remains. Durable tombstones,
+admin-visible stale-grant cleanup after removal, and `pending_reactivation` on
+id reappearance are deferred lifecycle requirements in the integrated
+applications RFC.

@@ -14,18 +14,48 @@
 
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { transformWithEsbuild } from "vite";
+import { mergeConfig, transformWithEsbuild, type Plugin } from "vite";
 import svgr from "@svgr/rollup";
 import path from "path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { visualizer } from "rollup-plugin-visualizer";
+import {
+  loadApplicationServiceProxyConfig,
+  parseApplicationServicesEnabled,
+} from "./scripts/application-service-proxy.mjs";
+import { discoverApplicationFrontendDirectories } from "./scripts/application-source-paths.mjs";
+
+const applicationsDirectory = path.resolve(__dirname, "../applications");
+
+function applicationServiceFailClosedPlugin(
+  classifyRequest: (requestUrl: string) => "proxy" | 404 | 503 | null,
+): Plugin {
+  return {
+    name: "fred-application-services-fail-closed",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const classification = classifyRequest(request.url ?? "");
+        if (classification === null || classification === "proxy") {
+          next();
+          return;
+        }
+        response.statusCode = classification;
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.end(classification === 404 ? "Not found" : "Application service unavailable");
+      });
+    },
+  };
+}
 
 // https://vitejs.dev/config/
-export default defineConfig({
+const baseConfig = defineConfig({
   server: {
     host: "0.0.0.0",
     port: parseInt(process.env.VITE_PORT || "5173"),
     allowedHosts: (process.env.VITE_ALLOWED_HOSTS || "").split(",").filter(Boolean),
+    fs: {
+      allow: [path.resolve(__dirname), ...discoverApplicationFrontendDirectories(applicationsDirectory)],
+    },
     proxy: {
       "/agentic": { target: process.env.VITE_BACKEND_URL || "http://localhost:8000", ws: true },
       "/fred": process.env.VITE_BACKEND_URL_FRED_AGENTS || "http://localhost:8000",
@@ -39,6 +69,7 @@ export default defineConfig({
     alias: {
       src: path.resolve(__dirname, "./src"),
     },
+    dedupe: ["react", "react-dom"],
   },
   plugins: [
     {
@@ -101,4 +132,23 @@ export default defineConfig({
       exclude: ["src/rework/**/*.test.ts", "src/rework/**/*.test.tsx", "src/rework/types/**"],
     },
   },
+});
+
+export default defineConfig(({ command, mode }) => {
+  const applicationServices = loadApplicationServiceProxyConfig({
+    contractPath: path.resolve(__dirname, "./generated/application-runtime.json"),
+    mappingsJson: process.env.FRONTEND_APPLICATION_UPSTREAMS_JSON ?? "{}",
+    requireRequiredMappings: command === "serve" && mode !== "test",
+    enabled: parseApplicationServicesEnabled(process.env.FRONTEND_ENABLE_APPLICATIONS),
+  });
+
+  return mergeConfig(baseConfig, {
+    server: { proxy: applicationServices.proxy },
+    resolve: {
+      alias: {
+        "@fred/application-host": path.resolve(__dirname, "./src/rework/features/applications/applicationHost.ts"),
+      },
+    },
+    plugins: [applicationServiceFailClosedPlugin(applicationServices.classifyRequest)],
+  });
 });

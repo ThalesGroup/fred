@@ -62,6 +62,15 @@ from fred_sdk.contracts.models import FieldSpec
 from test_main import _FakeAgentInstanceStore, _make_record
 
 
+def _installed_app_capability_ids() -> set[str]:
+    """Application projections are always present beside pod projections."""
+    from control_plane_backend.applications.catalog import (
+        load_generated_application_catalog,
+    )
+
+    return {item.capability_id for item in load_generated_application_catalog().items}
+
+
 class _NoReasoningEnabledStore:
     """No model has its reasoning switched on — the REASON-01 §5.6 default.
     The reasoning toggle's own behaviour lives in test_model_reasoning_toggle.py."""
@@ -956,18 +965,21 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
 
     catalog = await aggregate_capability_catalog(deps)
 
-    assert set(catalog) == {"doc_access"}
+    assert set(catalog) == {"doc_access"} | _installed_app_capability_ids()
 
 
 @pytest.mark.asyncio
@@ -1035,11 +1047,14 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
@@ -1047,7 +1062,15 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     catalog = await aggregate_capability_catalog(deps)
 
     sentinel_id = product_service.template_capability_id("runtime-a", "sentinel")
-    assert set(catalog) == {"doc_access", sentinel_id, "model__openai__gpt-5.1"}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            sentinel_id,
+            "model__openai__gpt-5.1",
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[sentinel_id].kind == "agent"
     assert catalog["doc_access"].kind == "tool"
     assert catalog["model__openai__gpt-5.1"].kind == "model"
@@ -1106,11 +1129,14 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
@@ -1119,7 +1145,14 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
 
     # The tool entry is refused; the real agent entry (fetched second) wins
     # the id, never overwritten — the collision this prefix exists to prevent.
-    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            colliding_tool_id,
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[colliding_tool_id].kind == "agent"
 
 
@@ -1173,18 +1206,28 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
 
     catalog = await aggregate_capability_catalog(deps)
 
-    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            colliding_tool_id,
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[colliding_tool_id].kind == "model"
 
 
@@ -1244,6 +1287,9 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
@@ -1251,7 +1297,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
                     SimpleNamespace(
                         enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
                     ),
-                ]
+                ],
             )
         )
     )

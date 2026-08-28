@@ -42,6 +42,35 @@ make docker-run \
   FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222
 ```
 
+Application packages live under `apps/applications/<application-id>/`. Each
+package groups its manifest and `frontend/` module with an optional `backend/`
+directory for an independently built service. The included placeholder is
+service-free and has no backend runtime.
+
+Service-backed bundled applications use the same server-side service map in
+local Vite and the nginx container:
+
+```bash
+FRONTEND_ENABLE_APPLICATIONS=true \
+FRONTEND_APPLICATION_UPSTREAMS_JSON='{"application-id":"http://application-service:8080"}' \
+make run
+```
+
+The keys must be installed application ids. Trailing upstream slashes are
+normalized, unknown ids are rejected, and every manifest with
+`service_required: true` must have one mapping. Service-free applications need
+no entry. The map is consumed only by the development server or container and
+is never returned to browser code. The control-plane process must also have
+`platform.frontend.feature_flags.enableApplications: true`; the environment
+variable above opens only the local frontend gateway. Both sides default to
+`false` and fail closed when omitted.
+
+The application gateway accepts a positive nginx size in
+`FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE`, defaults it to `10m`, and streams
+request bodies to the selected service without nginx request buffering. Each
+application service must still enforce its own, equal or smaller, request-body
+and concurrency limits.
+
 You can force the mode with:
 
 ```bash

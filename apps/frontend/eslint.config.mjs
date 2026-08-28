@@ -10,7 +10,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   {
-    files: ["src/**/*.ts", "src/**/*.tsx"],
+    files: ["src/**/*.ts", "src/**/*.tsx", "../applications/*/frontend/**/*.ts", "../applications/*/frontend/**/*.tsx"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

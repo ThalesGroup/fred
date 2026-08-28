@@ -42,6 +42,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
+    // The team application catalog is another projection of capability
+    // enablement. Reusing the LIST tag makes a local admin toggle remove or add
+    // an open app immediately; focus + bounded polling cover other sessions.
+    getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
       invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
     },
@@ -467,6 +473,8 @@ export const {
   useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation: useResetPlatformRebacMutation,
   // Admin capabilities dashboard (CAPAB-01 / #1981).
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
+  // Team-scoped native applications catalog.
+  useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery: useTeamApplicationsQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:
     useEnableTeamCapabilityMutation,
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation:

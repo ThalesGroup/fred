@@ -14,11 +14,75 @@ set -eu
 # FRONTEND_DNS_RESOLVER overrides the resolver nginx uses for optional
 # upstreams (default: the container's own nameserver, from /etc/resolv.conf,
 # falling back to Docker's embedded DNS 127.0.0.11).
+# FRONTEND_ENABLE_APPLICATIONS is the deployment-wide application gateway
+# switch. It accepts only true or false and defaults to the fail-closed state.
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
 : "${FRONTEND_EVALUATION_UPSTREAM:=http://fred-evaluation-backend}"
 : "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
+: "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE:=10m}"
+: "${FRONTEND_APPLICATION_RUNTIME_CONTRACT:=/etc/fred/application-runtime.json}"
+: "${FRONTEND_NGINX_CONFIG:=/etc/nginx/conf.d/fred.conf}"
+: "${FRONTEND_ENABLE_APPLICATIONS:=false}"
+if [ -z "${FRONTEND_APPLICATION_UPSTREAMS_JSON:-}" ]; then
+    FRONTEND_APPLICATION_UPSTREAMS_JSON='{}'
+fi
+
+fail_application_configuration() {
+    echo "Invalid application service configuration: $1" >&2
+    exit 1
+}
+
+case "${FRONTEND_ENABLE_APPLICATIONS}" in
+    true | false) ;;
+    *) fail_application_configuration "FRONTEND_ENABLE_APPLICATIONS must be either true or false" ;;
+esac
+
+if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
+    if ! printf '%s' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}" | grep -Eq '^[1-9][0-9]*[kKmMgG]?$'; then
+        fail_application_configuration "FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE must be a positive nginx size"
+    fi
+    if ! command -v jq >/dev/null 2>&1; then
+        fail_application_configuration "jq is required to validate application service mappings"
+    fi
+    if [ ! -r "${FRONTEND_APPLICATION_RUNTIME_CONTRACT}" ]; then
+        fail_application_configuration "runtime contract is not readable"
+    fi
+    if ! jq -e '
+        type == "object" and
+        .schema_version == "1" and
+        (.catalog_revision | type == "string" and test("^sha256:[a-f0-9]{64}$")) and
+        (.applications | type == "array") and
+        (all(.applications[];
+            type == "object" and
+            ((keys | sort) == ["id", "service_required"]) and
+            (.id | type == "string" and test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
+            (.service_required | type == "boolean")
+        )) and
+        ([.applications[].id] | length == (unique | length))
+    ' "${FRONTEND_APPLICATION_RUNTIME_CONTRACT}" >/dev/null 2>&1; then
+        fail_application_configuration "runtime contract is invalid"
+    fi
+    if ! printf '%s' "${FRONTEND_APPLICATION_UPSTREAMS_JSON}" | jq -e '
+        type == "object" and
+        (all(to_entries[];
+            (.key | test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
+            (.value | type == "string") and
+            (.value | test("^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\\[[0-9A-Fa-f:]+\\])(?::(?:[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[A-Za-z0-9._~!&()*+,=:@/-]*)?$")) and
+            (.value | test("(?:^|/)\\.{1,2}(?:/|$)") | not)
+        ))
+    ' >/dev/null 2>&1; then
+        fail_application_configuration "FRONTEND_APPLICATION_UPSTREAMS_JSON must map application ids to safe HTTP(S) URLs"
+    fi
+    if ! jq -e --argjson mappings "${FRONTEND_APPLICATION_UPSTREAMS_JSON}" '
+        . as $contract |
+        (all($mappings | keys[]; . as $mapping_id | any($contract.applications[]; .id == $mapping_id))) and
+        (all($contract.applications[] | select(.service_required); .id as $required_id | $mappings | has($required_id)))
+    ' "${FRONTEND_APPLICATION_RUNTIME_CONTRACT}" >/dev/null 2>&1; then
+        fail_application_configuration "every service_required app needs exactly one mapping and mappings must reference installed ids"
+    fi
+fi
 
 # fred-agent-evaluator is optional: some platforms don't deploy it, so
 # FRONTEND_EVALUATION_UPSTREAM's hostname may not resolve. A literal
@@ -32,7 +96,63 @@ if [ -z "${FRONTEND_DNS_RESOLVER:-}" ]; then
 fi
 : "${FRONTEND_DNS_RESOLVER:=127.0.0.11}"
 
-cat > /etc/nginx/conf.d/fred.conf <<EOF
+{
+if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
+printf 'map $uri $fred_application_id {\n'
+printf '    default "";\n'
+printf '    ~^/app-services/(?<fred_application_id_from_uri>[a-z][a-z0-9-]*)(?:/|$) $fred_application_id_from_uri;\n'
+printf '}\n\n'
+
+printf 'map $fred_application_id $fred_application_installed {\n'
+printf '    default 0;\n'
+jq -r '.applications | sort_by(.id)[] | .id' "${FRONTEND_APPLICATION_RUNTIME_CONTRACT}" |
+    while IFS= read -r application_id; do
+        printf '    "%s" 1;\n' "${application_id}"
+    done
+printf '}\n\n'
+
+printf 'map $fred_application_id $fred_application_upstream {\n'
+printf '    default "";\n'
+printf '%s' "${FRONTEND_APPLICATION_UPSTREAMS_JSON}" |
+    jq -r 'to_entries | sort_by(.key)[] | "\(.key)|\(.value | sub("/+$"; ""))"' |
+    while IFS='|' read -r application_id application_upstream; do
+        printf '    "%s" "%s";\n' "${application_id}" "${application_upstream}"
+    done
+printf '}\n\n'
+
+printf 'map $fred_application_id $fred_application_upstream_authority {\n'
+printf '    default "";\n'
+printf '%s' "${FRONTEND_APPLICATION_UPSTREAMS_JSON}" |
+    jq -r '
+        def url_parts:
+            capture("^https?://(?<host>\\[[0-9A-Fa-f:]+\\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::(?<port>[0-9]+))?(?:/|$)");
+        to_entries | sort_by(.key)[] |
+        .value as $url |
+        ($url | url_parts) as $parts |
+        ($parts.host + (if ($parts.port // "") == "" then "" else ":" + $parts.port end)) as $authority |
+        "\(.key)|\($authority)"
+    ' |
+    while IFS='|' read -r application_id application_authority; do
+        printf '    "%s" "%s";\n' "${application_id}" "${application_authority}"
+    done
+printf '}\n\n'
+
+printf 'map $fred_application_id $fred_application_upstream_server_name {\n'
+printf '    default "";\n'
+printf '%s' "${FRONTEND_APPLICATION_UPSTREAMS_JSON}" |
+    jq -r '
+        def url_host:
+            capture("^https?://(?<host>\\[[0-9A-Fa-f:]+\\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[0-9]+)?(?:/|$)").host;
+        to_entries | sort_by(.key)[] |
+        "\(.key)|\(.value | url_host | ltrimstr("[") | rtrimstr("]"))"
+    ' |
+    while IFS='|' read -r application_id application_server_name; do
+        printf '    "%s" "%s";\n' "${application_id}" "${application_server_name}"
+    done
+printf '}\n\n'
+fi
+
+cat <<EOF
 server {
     listen 8080;
     server_name localhost;
@@ -81,14 +201,65 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
+EOF
 
+if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
+cat <<'EOF'
+    location = /app-services {
+        return 404;
+    }
+
+    location ~ ^/app-services/[a-z][a-z0-9-]*(?<fred_application_path>/.*)$ {
+        if ($fred_application_installed = 0) {
+            return 404;
+        }
+        if ($fred_application_upstream = "") {
+            return 503;
+        }
+EOF
+printf '        client_max_body_size %s;\n' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}"
+cat <<'EOF'
+        proxy_request_buffering off;
+        proxy_pass $fred_application_upstream$fred_application_path$is_args$args;
+        proxy_http_version 1.1;
+        proxy_set_header Host $fred_application_upstream_authority;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $fred_application_upstream_server_name;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 5;
+        proxy_buffering off;
+        proxy_read_timeout 3600;
+        proxy_send_timeout 3600;
+    }
+
+    location /app-services/ {
+        return 404;
+    }
+EOF
+else
+cat <<'EOF'
+    location = /app-services {
+        return 404;
+    }
+
+    location ^~ /app-services/ {
+        return 404;
+    }
+EOF
+fi
+
+cat <<'EOF'
     location / {
-        try_files \$uri /index.html;
+        try_files $uri /index.html;
     }
 
     # Ensure ES module workers (.mjs) are served with a JS MIME type.
-    location ~ \.mjs\$ {
-        try_files \$uri =404;
+    location ~ \.mjs$ {
+        try_files $uri =404;
         default_type application/javascript;
         types {
             application/javascript                           mjs;
@@ -96,5 +267,6 @@ server {
     }
 }
 EOF
+} > "${FRONTEND_NGINX_CONFIG}"
 
 exec nginx -g 'daemon off;'

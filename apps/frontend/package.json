@@ -11,13 +11,17 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run applications:check && tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "format": "prettier --check .",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "typecheck": "npm run applications:check && tsc --noEmit",
+    "lint": "eslint --config eslint.config.mjs --no-error-on-unmatched-pattern \"src/**/*.{ts,tsx}\" \"../applications/*/frontend/**/*.{ts,tsx}\"",
+    "format": "prettier --config .prettierrc --ignore-path .prettierignore --ignore-path .gitignore --check . ../applications",
+    "test": "npm run applications:test && vitest run",
+    "test:coverage": "npm run applications:test && vitest run --coverage",
+    "applications:generate": "node scripts/generate-applications.mjs",
+    "applications:check": "node scripts/generate-applications.mjs --check --frontend-only",
+    "applications:check-all": "node scripts/generate-applications.mjs --check",
+    "applications:test": "node --test scripts/generate-applications.test.mjs scripts/application-service-proxy.test.mjs scripts/application-source-paths.test.mjs && sh tests/application-service-proxy-smoke.sh"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.6",
@@ -64,6 +68,7 @@
     "@typescript-eslint/parser": "8.65.0",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^4.1.7",
+    "css-tree": "2.3.1",
     "dayjs": "^1.11.13",
     "eslint": "^10.0.1",
     "eslint-plugin-react-hooks": "7.1.1",

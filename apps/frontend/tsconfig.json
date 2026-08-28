@@ -20,6 +20,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "allowSyntheticDefaultImports": true,
+    "typeRoots": ["./node_modules/@types"],
 
     "baseUrl": ".",
     "paths": {
@@ -29,9 +30,10 @@
       "@hooks/*": ["src/rework/core/hooks/*"],
       "@models/*": ["src/rework/core/models/*"],
       "@assets/*": ["src/assets/*"],
-      "@rework/*": ["src/rework/*"]
+      "@rework/*": ["src/rework/*"],
+      "@fred/application-host": ["src/rework/features/applications/applicationHost.ts"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "../applications/*/frontend"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

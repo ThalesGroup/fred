@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "id": "example",
+  "version": "1.0.0",
+  "display_name": {
+    "en": "Placeholder App",
+    "fr": "Application temporaire"
+  },
+  "description": {
+    "en": "A placeholder for the Fred application host."
+  },
+  "icon": "extension",
+  "host_api_version": "1",
+  "module_key": "example",
+  "service_required": false
+}

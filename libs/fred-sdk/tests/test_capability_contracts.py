@@ -364,6 +364,21 @@ def test_catalog_entry_carries_execution_models() -> None:
     assert CapabilityCatalogEntry.model_validate_json(entry.model_dump_json()) == entry
 
 
+def test_application_kind_is_wire_only_not_runtime_authorable() -> None:
+    entry = CapabilityCatalogEntry(
+        id="app__example",
+        version="1.0.0",
+        name="applications.example.name",
+        description="applications.example.description",
+        icon="extension",
+        kind="app",
+    )
+    assert entry.kind == "app"
+
+    with pytest.raises(ValidationError):
+        _manifest(id="app__example", kind="app")
+
+
 def test_manifest_rejects_blank_id() -> None:
     with pytest.raises(ValidationError):
         _manifest(id="")

@@ -1,0 +1,7 @@
+.page {
+  display: grid;
+  gap: var(--spacing-m);
+  background: var(--surface-main);
+  padding: var(--spacing-xl);
+  color: var(--on-surface);
+}

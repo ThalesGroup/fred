@@ -46,6 +46,35 @@ package inside `src/rework/`. Use existing design system atoms:
 MUI is only permitted in the legacy `src/components/` tree, which is being
 retired.
 
+### Trusted application-module boundary
+
+Bundled product applications are the one supported frontend extension outside
+`src/`:
+
+```text
+apps/applications/<application-id>/
+├── fred-app.json
+├── frontend/
+│   ├── index.tsx
+│   └── Application.module.css
+└── backend/
+    └── README.md
+```
+
+An application is trusted native code, but it is not part of Fred's private
+component tree. TypeScript under `frontend/` may import React, local frontend
+files within its own application package, and the public
+`@fred/application-host` facade only. It must not import `src/`, `@rework/*`,
+`@shared/*`, generated API slices, the Redux store, Keycloak, `backend/`, or
+another application's files. The manifest generator and frontend quality gate
+enforce this boundary. The optional `backend/` directory belongs to an
+independently built service and is not part of the frontend build.
+
+Application styling uses local CSS Modules and Fred's documented CSS custom
+properties. It follows the color, token, accessibility, and no-global-selector
+rules below. Application-owned API clients must be built on the injected
+`context.request`; they must not receive or read a bearer token from Fred.
+
 ---
 
 ## 2. CSS Rules — Non-Negotiable
