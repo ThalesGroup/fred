@@ -20,6 +20,16 @@
 // toggles a single `InlineDrawer layout="push"` that reflows the main column.
 // Which panels appear is driven entirely by the session's
 // `selected_capability_ids`, resolved through the one plugin index.
+//
+// A launcher is only offered once its panel has something to show: the plugin's
+// `useHasContent` hook answers for the open conversation, so a fresh chat with
+// ppt_filler and writable_document active shows no chrome at all until the agent
+// actually produces a deck or a document.
+//
+// The rail shows only while every panel is closed. It floats over the right edge
+// of the whole slot, drawer included, so with a panel open it would land on that
+// drawer's own close button - and closing the open panel to reach another one is
+// cheap enough not to be worth a second home for the launchers.
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -44,6 +54,28 @@ interface CapabilitySidePanelHostProps {
 
 const entryKey = (entry: SidePanelEntry): string => `${entry.capabilityId}:${entry.widget}`;
 
+const alwaysHasContent = () => true;
+
+/**
+ * One panel's launcher. It is its own component so each `useHasContent` runs in a
+ * stable hook slot - mapping the hooks inline would reorder them the moment a
+ * session gains or loses a capability.
+ */
+function PanelLauncher({ entry, label, onOpen }: { entry: SidePanelEntry; label: string; onOpen: () => void }) {
+  const useHasContent = entry.useHasContent ?? alwaysHasContent;
+  if (!useHasContent()) return null;
+
+  return (
+    <IconButton
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: entry.icon }}
+      aria-label={label}
+      onClick={onOpen}
+    />
+  );
+}
+
 export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyChange }: CapabilitySidePanelHostProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
@@ -67,26 +99,25 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
       ))}
       {entries.length > 0 && (
         <>
-          <div className={styles.rail}>
-            {entries.map((entry) => {
-              const key = entryKey(entry);
-              if (key === activeKey) return null; // launcher hides while its panel is open
-              return (
-                <IconButton
-                  key={key}
-                  variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "edit_note" }}
-                  aria-label={titleOf(entry)}
-                  onClick={() => onActiveKeyChange(key)}
+          {active === null && (
+            <div className={styles.rail}>
+              {entries.map((entry) => (
+                <PanelLauncher
+                  key={entryKey(entry)}
+                  entry={entry}
+                  label={titleOf(entry)}
+                  onOpen={() => onActiveKeyChange(entryKey(entry))}
                 />
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
           <InlineDrawer
             open={active !== null}
             onClose={() => onActiveKeyChange(null)}
             title={active ? titleOf(active) : ""}
+            // A pane with its own header owns the whole column, insets included.
+            hideHeader={active?.ownsHeader ?? false}
+            flushBody={active?.ownsHeader ?? false}
             layout="push"
             // One shared width across every capability panel (writable-document
             // editor, PPT preview, …) — the same behaviour the legacy chat's

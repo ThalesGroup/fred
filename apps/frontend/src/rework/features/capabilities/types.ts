@@ -20,6 +20,7 @@
 // skipped so a frontend build older than a pod never crashes on new parts.
 
 import type { ComponentType } from "react";
+import type { IconType } from "@shared/utils/Type";
 import type { RawUiPart } from "@rework/types/parts";
 import type { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
@@ -53,6 +54,28 @@ export type CapabilitySessionProbe = ComponentType<{ capabilityId: string }>;
  * right column when its owning capability is active in the session.
  */
 export type CapabilitySidePanel = ComponentType<CapabilitySidePanelProps>;
+
+/** One side panel's declaration: what to mount, and how to launch it. */
+export interface CapabilitySidePanelSpec {
+  /** The component mounted in the reserved right column. */
+  Component: CapabilitySidePanel;
+  /** Glyph of the panel's launcher in the floating rail. */
+  icon: IconType;
+  /**
+   * Does this panel have anything to show for the OPEN conversation? A false
+   * answer hides the launcher - a button onto an empty panel is noise. Omitted
+   * means "always offer it". Called from the launcher's own component, so a
+   * capability going in or out of a session never shifts hook order.
+   */
+  useHasContent?: () => boolean;
+  /**
+   * This panel renders its own title band (and its own close button, from the
+   * `onClose` it receives), so the host drops the drawer's. Two stacked title
+   * rows - the drawer naming the panel, the pane naming the artefact - said the
+   * same thing twice and ate the top of the column.
+   */
+  ownsHeader?: boolean;
+}
 
 /** The RAG-scope closed set (RuntimeContext `search_rag_scope`, RFC §3.3). */
 export type RagScopeName = "corpus_only" | "hybrid" | "general_only";
@@ -179,7 +202,7 @@ export interface CapabilityUiPlugin {
    * right column; unknown widget ids never occur here (the plugin IS the
    * declaration) but the host skips capabilities with no plugin entry.
    */
-  sidePanels?: Record<string, CapabilitySidePanel>;
+  sidePanels?: Record<string, CapabilitySidePanelSpec>;
   /**
    * Headless session probes (#1905 auto-open), mounted by the side-panel host
    * for every ACTIVE capability whether or not its panel is open. The one
