@@ -34,8 +34,10 @@ How to use:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import json
+from collections.abc import Mapping, MutableMapping, Sequence
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from langchain_core.messages import AIMessage, BaseMessage
 
@@ -186,6 +188,234 @@ def serialize_messages(
         if isinstance(message, BaseMessage)
     )
     return payload
+
+
+#: Argument schemas rendered once per schema class, not once per model call.
+#:
+#: `BaseModel.model_json_schema()` rebuilds the JSON schema on every call —
+#: ~0.4 ms per schema, so ~2 ms for an agent bound to five pydantic-schema
+#: tools. That is synchronous CPU on the event loop, repeated on every model
+#: call of every turn, for a result that cannot differ: the same agent binding
+#: hands the same schema classes to every call.
+#:
+#: This path covers tools whose `args_schema` is a pydantic **class** — Fred's
+#: built-ins and capability tools. MCP tools do not reach it:
+#: `langchain_mcp_adapters` sets `args_schema=tool.inputSchema`, a plain dict,
+#: which `serialize_tools` copies directly.
+#:
+#: Keyed weakly so an agent reload that builds fresh schema classes does not pin
+#: the old ones in memory.
+_JSON_SCHEMA_CACHE: MutableMapping[type, str | None] = WeakKeyDictionary()
+
+
+def _render_schema(args_schema: object) -> str | None:
+    """Render one argument schema to its JSON text, or None if it will not render."""
+
+    render = getattr(args_schema, "model_json_schema", None)
+    if not callable(render):
+        return None
+    try:
+        rendered = render()
+    except Exception:
+        # A schema that will not render must not break the turn: tracing is
+        # never allowed to fail the request it is observing.
+        return None
+    return _schema_to_json(rendered) if isinstance(rendered, dict) else None
+
+
+def _schema_to_json(schema: Mapping[str, Any]) -> str | None:
+    """
+    Render an argument schema as one JSON string rather than a nested structure.
+
+    Why a string and not the dict: `_truncate_payload` bounds a trace payload by
+    spending a character budget over the strings it walks, but it emits strings
+    of 64 characters or less verbatim even past the budget and never walks dict
+    *keys* at all. A JSON schema is almost entirely short strings and keys, so
+    left nested it escapes the cap — measured at 47x a 100-character budget.
+    One string per schema is a single truncatable unit, so the existing budget
+    applies to tools exactly as it already applies to message content.
+    """
+
+    try:
+        return json.dumps(schema, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return None
+
+
+def _json_schema_of(args_schema: object) -> str | None:
+    """Render one tool's argument schema, memoized per schema class."""
+
+    if not isinstance(args_schema, type):
+        # An instance, not a class: `type(args_schema)` would collide with every
+        # other instance of the same class, so render without caching.
+        return _render_schema(args_schema)
+    try:
+        return _JSON_SCHEMA_CACHE[args_schema]
+    except (KeyError, TypeError):
+        # TypeError: a schema class that cannot be weak-referenced — render it
+        # every time rather than refusing to trace it.
+        pass
+
+    schema = _render_schema(args_schema)
+    try:
+        _JSON_SCHEMA_CACHE[args_schema] = schema
+    except TypeError:
+        # Same non-weak-referenceable schema class as above: it cannot be cached,
+        # so return the rendered schema uncached rather than refusing to trace it.
+        pass
+    return schema
+
+
+def serialize_tools(tools: Sequence[object]) -> list[dict[str, Any]]:
+    """
+    Render the bound tool definitions as they reach the provider.
+
+    Why this exists:
+    - the `tools` request parameter carries each tool's name, description and
+      **argument schema**, and the argument schema exists in no other channel:
+      the system prompt names arguments in prose at best, and never their types
+      or which ones are required. A trace that captures only messages therefore
+      omits the contract the model actually generates tool calls against.
+
+    `ModelRequest.tools` is `list[BaseTool | dict]`: LangChain tools arrive as
+    objects, provider-native tool dicts pass through as-is. Both are normalized
+    to the `{name, description, parameters}` shape the provider receives, so a
+    reader compares like with like whatever the tool source.
+
+    `parameters` is JSON **text**, not a nested structure — see `_schema_to_json`
+    for why that is what keeps the payload inside the content budget.
+
+    Example:
+    - `serialize_tools(request.tools)`
+    """
+
+    payload: list[dict[str, Any]] = []
+    for tool in tools:
+        if isinstance(tool, Mapping):
+            # Provider-native dict — already the wire shape. `function` is the
+            # OpenAI envelope; anything else is the tool object itself.
+            function = tool.get("function")
+            source = function if isinstance(function, Mapping) else tool
+            entry = {key: value for key, value in source.items() if key != "parameters"}
+            parameters = source.get("parameters")
+            if isinstance(parameters, Mapping):
+                entry["parameters"] = _schema_to_json(parameters)
+            payload.append(entry)
+            continue
+
+        name = getattr(tool, "name", None)
+        if name is None:
+            continue
+        entry = {
+            "name": name,
+            "description": getattr(tool, "description", "") or "",
+        }
+        args_schema = getattr(tool, "args_schema", None)
+        if isinstance(args_schema, Mapping):
+            entry["parameters"] = _schema_to_json(args_schema)
+        elif args_schema is not None:
+            entry["parameters"] = _json_schema_of(args_schema)
+        payload.append(entry)
+    return payload
+
+
+def serialize_model_request(
+    messages: Sequence[BaseMessage],
+    *,
+    system_prompt: str | None = None,
+    tools: Sequence[object] | None = None,
+) -> object:
+    """
+    Render one model call's full request payload — messages **and** tools.
+
+    Why this exists:
+    - `serialize_messages` captures `system_prompt` + `messages`, which is only
+      part of what leaves for the provider. The `tools` parameter is a sibling
+      field of the same HTTP request and, on a tool-bound agent, a large share
+      of it. Capturing messages alone makes a trace look complete while hiding
+      the argument schemas the model is actually generating against.
+
+    Shape: with tools, `{"messages": [...], "tools": [...]}` — the provider's
+    own request shape. Without tools, the bare message list, unchanged, so
+    agents that bind no tool keep exactly today's payload and today's chat
+    rendering.
+
+    `messages` is placed first on purpose. `_truncate_payload` walks a mapping
+    in insertion order, so the transcript claims the content budget before the
+    tool definitions do — preserving the property that a long turn drops tool
+    boilerplate rather than the question and the answer.
+
+    Example:
+    - `serialize_model_request(request.messages, system_prompt=request.system_prompt, tools=request.tools)`
+    """
+
+    payload = serialize_messages(messages, system_prompt=system_prompt)
+    if not tools:
+        return payload
+    return {"messages": payload, "tools": serialize_tools(tools)}
+
+
+#: Character-count keys recorded as span **attributes**, never as usage details.
+#:
+#: Two measurements on a live Langfuse 4.7 settled this, in order:
+#: 1. As `input_chars` in `usage_details`, the server summed the characters into
+#:    `usage.input` — 157 944 "TOKENS" reported for 32 155 tokens plus 125 789
+#:    characters. Corrupted the token total outright.
+#: 2. Renamed under this prefix, the totals stayed correct, but the UI grouped
+#:    the three counts into one "Other usage 119 778" line beside "Input usage
+#:    32 155", under the panel's single TOKENS unit — reading as extra tokens.
+#:
+#: Every usage key is a quantity in one unit, so no naming makes a character
+#: count belong there. Attributes carry no unit and are not aggregated, which is
+#: also where `LoggingTracer` has always put payload sizes.
+CHAR_USAGE_KEYS = ("chars_system", "chars_tools", "chars_messages")
+
+
+def model_request_char_sizes(
+    messages: Sequence[BaseMessage],
+    *,
+    system_prompt: str | None = None,
+    tools: Sequence[object] | None = None,
+) -> dict[str, int]:
+    """
+    Measure what one model call sends, in characters, split by request field.
+
+    Why this exists:
+    - a trace reports tokens, which are provider-specific and opaque: nothing in
+      it says whether 32 000 tokens are a long conversation or a large tool
+      catalogue. The character split answers that directly, and it is the only
+      way to compare a payload against the source files it was built from.
+    - characters are a **size**, not content (`OBSERVABILITY-AND-AUDIT.md` §7 —
+      "`LoggingTracer` records payload *sizes* only"), so unlike the payload
+      itself this may be recorded whether or not content capture is on. That
+      matters: it is the one volume signal that survives with capture disabled.
+
+    `chars_tools` measures the serialized tool definitions — names, descriptions
+    and argument schemas, the part that carries the volume. It is not the exact
+    provider wire size: each provider adds its own envelope, worth a few hundred
+    characters against tens of thousands here.
+
+    Example:
+    - `model_request_char_sizes(request.messages, system_prompt=..., tools=request.tools)`
+    """
+
+    sizes = {
+        "chars_system": len(system_prompt or ""),
+        "chars_messages": sum(
+            len(_content_to_text(getattr(message, "content", "")))
+            for message in messages
+            if isinstance(message, BaseMessage)
+        ),
+        "chars_tools": 0,
+    }
+    if tools:
+        sizes["chars_tools"] = sum(
+            len(str(entry.get("name") or ""))
+            + len(str(entry.get("description") or ""))
+            + len(str(entry.get("parameters") or ""))
+            for entry in serialize_tools(tools)
+        )
+    return sizes
 
 
 def serialize_model_output(messages: Sequence[BaseMessage]) -> object:

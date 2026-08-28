@@ -1308,7 +1308,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 #### Open UX issues
 
 - Not yet design-reviewed against a live stack. First functional pass only.
-- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is. Shared with the composer's `Boost` text (`ReasoningChip.module.css`), minus the white stops and peach.
+- **Gradient animation colours** — the spectrum stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes) are intentional branding colours outside the semantic token system — confirm with designer whether they should be folded into it or kept as-is. Since 2026-08-27 they live once in `styles/gradients.css` as `--gradient-spectrum-stops` (full, for borders) and `--gradient-spectrum-stops-core` (saturated run only, for gradients clipped to text), with the rotating-border recipe in the `spectrum-border` SCSS mixin. Three consumers: this Chat button, the Home page's recently-used agent tiles (same "start a conversation with this agent" affordance), and the composer's `Boost` text.
 
 #### Resolved
 
@@ -1329,7 +1329,8 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only` | No button; muted label (`on-surface-retreat`) |
+| `invite_only`, team is `public`, at least one admin has an email | "Join" button (`mail` icon) - opens the user's mail client on a `mailto:` prefilled for the team admins (#2453, see below) |
+| `invite_only`, any other case | No button; muted label (`on-surface-retreat`) |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -1341,6 +1342,83 @@ so keeping both would duplicate the signal.
 system to route requests to team admins was never built) and `closed` (a
 second muted label, indistinguishable in practice from `invite_only`) were
 dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
+
+**Ask for an invitation (#2453, 2026-08-27).** A public invite-only team is
+discoverable but not joinable, and the muted label alone left the visitor with
+no next step. The card restores the pre-TEAM-09 escape hatch: a `mailto:`
+addressed to every team admin whose `UserSummary.email` resolved, prefilled
+with the subject, the caller's identity, and two links: the team's agents page
+for context (what `main` sent) plus a deep link to its members page, where the
+recipients - the admins - actually add the sender by hand. The wording is the
+pre-TEAM-09 one (`rework.teamCard.invitationMail.*`) plus that second line, and
+now lives in the locale files instead of hardcoded French as it did then.
+
+The button reuses the `join` label - it is the same intent, and a second,
+longer label wrapped the card's footer onto two lines; the `mail` icon and the
+draft that opens are what distinguish it from the instant `open` join.
+
+Two guards decide whether the button replaces the label:
+
+- **public only.** A private team keeps the label: the UI does not offer a
+  non-member a private team's admin addresses. This is a product rule about
+  what the card *proposes*, not a disclosure guarantee - `GET /teams` puts
+  `admins` (email included) in the payload for every team it returns, and
+  `MarketplaceTeams` records that private teams reach the client at all when
+  authorization is disabled. Withholding them from the wire is a server-side
+  question, still open. `TeamCard` checks `visibility` itself rather than
+  trusting `MarketplaceTeams`' filter: it is a shared component, and the check
+  is `=== "public"` so a payload with no `visibility` fails closed (#2433).
+- **a reachable address.** `admins` falls back to a bare `UserSummary(id=...)`
+  when the Keycloak lookup returns nothing, so an admin list can render with no
+  email at all. With no recipient there is nothing to open, so the label stays
+  rather than producing an empty `mailto:`.
+
+Mechanics worth keeping: the draft opens with `window.open(..., "_blank",
+"noopener,noreferrer")` rather than a `location.href` assignment, so a webmail
+registered as the `mailto:` handler opens beside the app instead of replacing
+it (a native client takes over the throwaway tab and the browser drops it);
+`noopener` makes `window.open` return `null` by spec, so there is nothing to
+test for a fallback - the click is the user gesture popup blockers key off.
+Recipients are comma-separated (RFC 6068) and
+percent-encoded, since the addresses come from a directory sync and nothing
+guarantees they are URL-safe; `URLSearchParams`' `+` is rewritten to `%20` or
+mail clients render it literally in the subject; the team link prepends the
+router basename (`normalizeBasename`, shared with `buildDocumentViewerPath`)
+because a mailed URL inherits nothing from the router; and the identity line
+degrades to whichever of `name` / `preferred_username` Keycloak returned.
+
+No server-side request flow is involved: this is a client-side mail draft, the
+same as before TEAM-09. Nothing routes an invitation request through the API.
+
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge and squashed the avatars into ellipses on the way. Three
+changes, none of them resizing an avatar: the button never shrinks (it must
+keep its whole label), `AvatarGroup` gained a `max` prop (default 4, so its
+other consumer is unchanged) and the card drops to `max={2}` whenever a button
+shares the footer, and an avatar is now `flex-shrink: 0` - a fixed-size circle
+should clip, never deform. `.teamCardAdmins` does that clipping as a last
+resort for an unusually long translation; the row runs right-to-left, so the
+overflow falls off the left and the "+N" badge stays visible.
+
+Two `AvatarGroup` fixes came out of the same pass, and apply everywhere it is
+used. The "+N" badge now goes through the same `Tooltip` wrapper as the other
+avatars: `.userAvatarContainer > *` puts the 2px ring on the direct child, so
+under the global `box-sizing: border-box` a bare badge paid for that ring out
+of its own 2rem while a wrapped avatar grew by it - the badge rendered 4px
+smaller than its neighbours. That wrapper also gives the badge a tooltip
+listing the hidden names, one per line (a `content` tooltip, so it owns its own
+padding).
+
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge. The button never shrinks (it must keep its whole label) and
+the avatar row is the half that gives up width - `AvatarGroup` gained a `max`
+prop (default 4, so its other consumer is unchanged) and the card drops to
+`max={2}` whenever a button shares the footer, collapsing the rest into "+N".
+`.teamCardAdmins` clips as a last resort for an unusually long translation; the
+avatars run right-to-left, so the overflow falls off the left and the badge
+stays visible.
 
 ---
 
@@ -1387,8 +1465,9 @@ plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
-(`public`/`private`, default `public`) gating marketplace discoverability
-— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
+(`public`/`private`; default `public` at the time — new teams default to
+`private` since 2026-08-26, #2433) gating marketplace discoverability
+— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30/§44 for the full ReBAC
 mechanism. No client-side write of `joining_mode` ever accompanies a
 visibility PATCH — the resulting `joining_mode`, if it changes, comes back
 from the server on refetch.
@@ -2881,6 +2960,36 @@ gate as upload/new-folder), with a confirmation dialog. Deletion cascades
 server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
+
+### `DocumentWorkspace` — bulk actions extend to selected folders (#2446, 2026-08-26)
+
+Folder rows have always rendered a selection checkbox, but ticking one did
+nothing: the contextual `BulkActionsBar` (delete / download / exclude-from-
+search) and every bulk handler read `selectedDocs` (documents only). Selecting
+a folder now drives the same bar, with each action applied **recursively to the
+folder's subtree**; a mixed selection (files + folders) shows the union, applied
+to both. The selected-count label counts every selected row.
+
+- **Delete** — one `deleteTag` per selected folder (the backend cascades to
+  sub-folders + their documents, same path as the single-folder delete) plus the
+  existing untag path for loose documents. The confirmation warns generically
+  ("… and all their content? This cannot be undone.") once folders are involved,
+  rather than recomputing a precise recursive count (that would cost one browse
+  per subtree tag — the single-folder delete keeps its live count).
+- **Download** — resolves each folder's descendant documents on click and zips
+  them under their folder-relative path, preserving the tree; loose documents sit
+  at the archive root.
+- **Exclude from search** — a folder-containing selection can't be resolved to a
+  single include/exclude direction cheaply, so it offers **exclude only**: on
+  click it resolves the subtree's documents and forces every non-tabular one
+  non-retrievable (one summary toast, not one per document). The directional
+  include/exclude toggle is unchanged for file-only selections.
+
+Descendant documents are fetched **only when the action fires**, never on
+selection, so ticking a folder box stays instant even for a large subtree; each
+heavy action (download / exclude / delete) shows an in-button spinner while it
+runs (`BulkActionsBar` gained `deleteLoading` and `searchToggle.loading`,
+mirroring the existing `downloadLoading`).
 
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 

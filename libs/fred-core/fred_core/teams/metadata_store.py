@@ -104,7 +104,9 @@ class TeamMetadata(BaseModel):
     name: str
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
-    visibility: TeamVisibility = TeamVisibility.PUBLIC
+    # Private by default (#2433) — mirrors `TeamMetadataRow.visibility`, the
+    # column default that actually applies on `create()`.
+    visibility: TeamVisibility = TeamVisibility.PRIVATE
     banner_object_storage_key: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None

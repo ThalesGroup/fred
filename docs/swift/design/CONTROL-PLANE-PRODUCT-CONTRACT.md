@@ -1277,7 +1277,7 @@ another of the caller's teams no longer appears (and can no longer be saved,
 
 | Method + path | Request | Response | Effect |
 | --- | --- | --- | --- |
-| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs). |
+| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs), `default_capability_ids` (2026-08-25, see below). |
 | `PUT /admin/capabilities/{capability_id}/teams/{team_id}` | `EnableTeamCapabilityRequest` (`settings`) | `TeamCapabilityEnablementResult` | Enable-with-settings: validates `settings` against `team_settings_fields`, writes the settings row then the `enabled` tuple. |
 | `DELETE /admin/capabilities/{capability_id}/teams/{team_id}` | — | `TeamCapabilityEnablementResult` (`suspended_instances`) | Revoke: deletes the `enabled` tuple (writes a `disabled` opt-out for a default-on cap), reconciles dependent instances → suspension. |
 | `PUT /admin/capabilities/{capability_id}/default-on` | `SetCapabilityDefaultOnRequest` (`default_on`) | `CapabilityDefaultOnResult` (`suspended_instances`) | Toggle the platform-wide `default_on` marker; turning it off revokes inherited access team-by-team and may suspend instances. |
@@ -1426,6 +1426,46 @@ ReBAC is already active for a team, the platform_admin must toggle
 default-on for the desired model(s) in the same deploy window ReBAC
 enforcement reaches that team, or that team's chat fails closed until the
 toggle is flipped — a deploy-runbook step, not a code gap.
+
+**2026-08-25 — the enablement 409s become visible before the click (GitHub
+#2408).** Activating some capabilities from the admin dashboard failed with a
+bare HTTP 409: the gates were enforced server-side but invisible to the UI,
+which offered the action anyway and then showed a generic "could not enable"
+toast. One field added, no route, exception, or error-shape change.
+
+`GET /admin/capabilities` items gain **`default_capability_ids: list[str]`** —
+a verbatim projection of `CapabilityCatalogEntry.default_capability_ids`
+(itself added by the 2026-07-19 `depends_on` entry above), empty for
+`kind="tool"`/`kind="model"` by construction, following the tagged-union rule
+stated for the other per-kind fields. This is the missing half of the
+2026-07-19 gate: the write path already 409'd
+(`AgentCapabilityDependencyNotSatisfied`) when an agent's default tool
+capabilities were not usable by the target team, but the list contract carried
+no way for the dashboard to know it.
+
+Client-side consequences (`CapabilitiesPage.tsx`,
+`CapabilityTeamMatrixDrawer.tsx`, predicates in `capabilityEnablement.ts`):
+the drawer disables "Enable" and names the blocking dependencies for a team
+that cannot use them; the personal-space class row does the same against the
+org-level personal-access rule (`(personal_on OR default_on) AND NOT
+personal_disabled`); the default-on Switch is disabled for a capability with a
+required team setting (`DefaultOnNotAllowed`), while turning it OFF stays
+possible. The predicates **fail open** on a dependency id absent from the list
+— the backend remains the sole authority, and the client gate is a
+better-error affordance, never an enforcement point. Residual 409s (stale
+client, concurrent admin) are mapped through `normalizeApiError` to an
+explanatory toast detail instead of being swallowed.
+
+**Error contract unchanged.** These routes still answer a plain-string
+`detail` and no `error_code`; the per-endpoint 409 semantics are unambiguous
+on their own, so the frontend disambiguates by which mutation failed plus its
+own locally-computed reason.
+
+**Known caveat (accepted).** With ReBAC disabled, `usable_capability_ids`
+returns `None` and the backend applies no dependency scoping at all, but the
+client predicate still reads the (empty) grant lists and can render an agent
+row as blocked. The team matrix is already decorative in that mode, so the
+mismatch is cosmetic and not worth a second code path.
 
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 
@@ -1921,7 +1961,9 @@ while `visibility === private`, so the invalid combination is unreachable
 from the UI in the first place; the server-side downgrade is the
 authoritative backstop.
 
-**Default and migration.** `PUBLIC` for both new and pre-existing teams
+**Default and migration.** *(Superseded 2026-08-26 — new teams default to
+`PRIVATE` since #2433, see §44; accurate for its own date below.)*
+`PUBLIC` for both new and pre-existing teams
 (migration `8092a626d4d0`, `server_default='public'`) — preserves every
 team's current unconditional marketplace presence exactly; nothing becomes
 private as a side effect of this rollout. A bundle exported before this
@@ -2843,3 +2885,59 @@ Same-invariant guard on an existing route: `DELETE /users/{user_id}` now
 root's Keycloak account would freeze the `platform_admin` population the
 same irreversible way (the uid could never authenticate again while
 bootstrap stays permanently closed).
+
+## 44. Contract Notes — new teams are private by default (2026-08-26, issue #2433)
+
+**Supersedes §30's "Default and migration" paragraph.** `Team.visibility`
+now defaults to **`private`**: a brand-new team starts invisible to
+non-members (no marketplace listing, `GET /teams/{id}` 403s for them) until
+a team admin deliberately flips it to public in the team settings. §30's
+mechanism is unchanged — only the starting value flipped.
+
+**Where the default lives.** `TeamMetadataStore.create` inserts only
+`(id, name)`, so the governing default is the ORM column default
+(`TeamMetadataRow.visibility`, fred-core), mirrored by the `TeamMetadata`
+and `Team` Pydantic defaults so the OpenAPI spec agrees. Migration
+`0c70cb820802` aligns the DB `server_default` for raw-SQL inserts only.
+
+**`create_team` grants nothing.** The immediate TEAM-09 `public`-relation
+grant at creation is now conditional on the created metadata's visibility —
+for a default (private) team no ReBAC `public` tuple is ever written, not
+even transiently (a grant-then-lazy-revoke would leave the team readable by
+anyone until the next `_list_teams` pass). The idempotent
+grant/revoke backfill in `_list_teams` (§30) is unchanged and remains the
+backstop. Corollary for the creator: a platform_admin who creates a team
+without naming themselves in `initial_team_admin_ids` holds no `can_read`
+on it once `create_team` returns (previously the unconditional `public`
+grant kept it readable) — by design (RFC §24.2, the creator is not
+necessarily a member), and the registry/admin surfaces they operate are not
+`can_read`-gated.
+
+**Existing rows are untouched — no data migration.** Migration
+`0c70cb820802` moves the `server_default` only; every stored `visibility`
+keeps its value, so no team already in the registry changes state. Hiding
+one remains a per-team admin action.
+
+**Where a row is *materialized* for a team that pre-dates it, the platform
+default applies — nothing guesses a visibility.** Two paths can create a
+registry row for a team that already exists in the wild: `create_team`
+called by the bundle importer for a team referenced only from `users.json`,
+and the knowledge-flow storage backfill (`backfill_storage_usage.py`).
+Neither knows what discoverability that team's admin intended, so neither
+states one: both take the platform default and land the team private.
+Consequence to know before running the backfill on a legacy platform: a
+team it materializes that *was* marketplace-listed loses that listing on
+the next `GET /teams` (`_list_teams` revokes the ReBAC `public` relation
+for any private team), and a team admin re-publishes it deliberately.
+Publishing a team on a guess is the outcome this default exists to
+prevent. The one place that still forces `public` is `importer.py`'s
+`row.get("visibility", "public")` for a bundle exported *before the field
+existed* — there the value is not a guess but the exporting platform's
+actual behavior, since every team was unconditionally public then.
+
+**Personal spaces now say so.** `build_personal_team` states
+`visibility: "private"` explicitly (previously it inherited the schema
+default and reported `"public"`) — truthful for a space that was never
+marketplace-listed and never readable by non-members. Joining-mode UI
+consequence (already shipped in #2398): a new team's settings show the
+locked "manual only" joining state until it is made public.

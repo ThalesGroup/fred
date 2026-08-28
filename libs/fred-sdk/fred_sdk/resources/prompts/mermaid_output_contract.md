@@ -44,6 +44,8 @@ When you include Mermaid diagrams, follow these rules strictly so the diagram al
 7. Keep node IDs simple and stable:
 - Letters, numbers, and underscores only (for example `API_1`, `LB2`, `DB_MAIN`)
 - Do not use accents, spaces, hyphens, dots, or emojis in IDs
+- Always reference a node by its ID, never by its label text
+- Wrong: `A --> LLM Azure` (label text used as an endpoint); right: declare `LLM_AZURE["LLM Azure"]` on its own line, then reference `A --> LLM_AZURE`
 
 8. Use only the safest edge syntax:
 - `A --> B`
@@ -87,6 +89,7 @@ When you include Mermaid diagrams, follow these rules strictly so the diagram al
 - No subgraph line contains brackets or quoted labels
 - No line inside the Mermaid fence starts with triple backticks
 - Every node label with special characters is quoted
+- Every edge endpoint is a node ID, never label text containing spaces
 - No label contains emojis
 - No label contains escaped quotes
 - No label contains raw HTML

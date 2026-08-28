@@ -2705,3 +2705,62 @@ async def test_aggregate_list_derives_personal_scope(
         deps=deps,  # type: ignore[arg-type]
     )
     assert result.items[0].personal_scope == expected
+
+
+@pytest.mark.asyncio
+async def test_aggregate_list_surfaces_agent_default_capability_ids(
+    monkeypatch,
+) -> None:
+    """#2408: the `depends_on` gate must be visible to the admin UI.
+
+    `PUT /admin/capabilities/{id}/teams/{team_id}` 409s for a `kind="agent"`
+    entry whose `default_capability_ids` aren't all usable by the team (RFC
+    §8.6). The list contract used to hide those ids, so the dashboard offered
+    "Enable" and took the 409 blind. Projected verbatim here, and empty for a
+    tool row — the per-kind emptiness IS the contract (`CapabilityCatalogEntry`
+    is a tagged union in practice).
+    """
+
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _FakeRebac()
+
+    async def _fake_catalog(_deps):
+        return {
+            "sentinel": _entry(
+                "sentinel",
+                kind="agent",
+                default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+            ),
+            "mcp-knowledge-flow-mcp-tabular": _entry("mcp-knowledge-flow-mcp-tabular"),
+        }
+
+    async def _fake_count(_team_deps):
+        return 3
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    monkeypatch.setattr(
+        capability_service, "count_all_collaborative_teams", _fake_count
+    )
+    monkeypatch.setattr(capability_service, "count_all_personal_spaces", _fake_count)
+
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=rebac),
+        get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
+        get_model_reasoning_store=_NoReasoningEnabledStore,
+    )
+    result = await capability_service.list_capability_enablement(
+        user=SimpleNamespace(uid="admin"),  # type: ignore[arg-type]
+        deps=deps,  # type: ignore[arg-type]
+    )
+
+    by_id = {item.id: item for item in result.items}
+    assert by_id["sentinel"].default_capability_ids == [
+        "mcp-knowledge-flow-mcp-tabular"
+    ]
+    # A tool has no defaults by construction — the UI must not gate on it.
+    assert by_id["mcp-knowledge-flow-mcp-tabular"].default_capability_ids == []

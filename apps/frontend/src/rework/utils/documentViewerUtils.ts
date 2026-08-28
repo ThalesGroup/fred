@@ -107,7 +107,19 @@ export function isTabularFile(fileName: string | null | undefined): boolean {
   return lower.endsWith(".csv") || lower.endsWith(".tsv");
 }
 
-function normalizeBasename(basename: string): string {
+/**
+ * Strip the React Router basename down to a prefix that concatenates cleanly.
+ *
+ * Why this function exists:
+ * - links built outside the router (a plain anchor, a URL mailed to someone)
+ *   do not inherit the basename, so they must prepend it by hand
+ * - "/" and a trailing slash both have to collapse to "" / no trailing slash,
+ *   otherwise the concatenated path doubles the separator
+ *
+ * How to use it:
+ * - `${normalizeBasename(getConfig().frontend_basename)}/team/${id}/agents`
+ */
+export function normalizeBasename(basename: string): string {
   if (basename === "/") return "";
   return basename.endsWith("/") ? basename.slice(0, -1) : basename;
 }

@@ -22,6 +22,7 @@ Available response types (`presets/common.py`) and their frontend molecule:
 - `TimeSeriesResponse` — time-bucketed metric → `TimeSeriesLineChart`
 - `ScalarResponse` — single integer for a time range → `KpiStatCard`
 - `LabelValueResponse` — label+count pairs → `BarChart` (many items) or `PieChart` (2–5 items)
+- `DistributionResponse` — fixed histogram buckets + median → `HistogramChart` (+ `KpiStatCard` for the median); build the buckets/median with `presets/distribution_utils.py`, never inline
 
 If the shape doesn't fit, define a new Pydantic model in `common.py` and a matching molecule under `apps/frontend/src/rework/components/shared/molecules/`.
 
@@ -117,6 +118,7 @@ Edit `apps/frontend/src/rework/components/pages/admin/AnalyticsPage/AnalyticsPag
 | `ScalarResponse`               | `KpiStatCard`         | `label`, `value`, `isLoading`, `isError`                               |
 | `LabelValueResponse` (2–5)     | `PieChart`            | `rows`, `emptyMessage`, `isLoading`, `isError`                         |
 | `LabelValueResponse` (many)    | `BarChart`            | `rows`, `valueLabel`, `emptyMessage`, `isLoading`, `isError`           |
+| `DistributionResponse`         | `HistogramChart`      | `rows`, `valueLabel`, `emptyMessage`, `isLoading`, `isError` (median → a companion `KpiStatCard` with `unavailable` when null) |
 
 Use `compactFirst` on `<KpiRow>` when the first child is a `KpiStatCard`, `compactLast` when the last is.
 

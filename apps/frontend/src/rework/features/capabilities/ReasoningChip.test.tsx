@@ -265,16 +265,18 @@ describe("ReasoningChip (REASON-01 level 4, mockup text button)", () => {
   // #2387 — the state reads as two modes, not on/off. "Désactivé" beside a model
   // name read as though the MODEL were off; nothing tied the word to reasoning.
 
-  it("marks the active mode so colour reinforces the word", () => {
+  it("shows the effort word for both modes, uniformly styled with no per-mode marker", () => {
+    // The gradient "boost" accent was dropped: the effort word is plain
+    // on-surface-retreat text in both modes, so neither carries a data-on hook.
     const on = render([reasoningControl({ default: false })], true, false, effectiveModel({ name: "gpt-4.1" }));
-    expect(on).toContain("data-on");
     expect(on).toContain("chatbot.composerSettings.reasoningOn");
+    expect(on).not.toContain("data-on");
+    // The menu-only parenthetical never leaks into the closed chip.
+    expect(on).not.toContain("chatbot.composerSettings.reasoningOnMenu");
 
     const off = render([reasoningControl({ default: false })], false, false, effectiveModel({ name: "gpt-4.1" }));
-    // The resting mode carries no marker — and still says which mode it is,
-    // so the accent is reinforcement and never the only signal.
-    expect(off).not.toContain("data-on");
     expect(off).toContain("chatbot.composerSettings.reasoningOff");
+    expect(off).not.toContain("data-on");
   });
 
   it("ties the state to reasoning in the accessible name", () => {

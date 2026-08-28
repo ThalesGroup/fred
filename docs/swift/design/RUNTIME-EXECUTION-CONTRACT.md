@@ -64,7 +64,9 @@ is the current authority for implemented runtime behavior.
 > ✅ **Public-team content/execution gap closed — 2026-07-29 (issue #2146, PR #2147).**
 > TEAM-09/TEAM-10 widened `TeamPermission.CAN_READ` to include any authenticated
 > user via the `public` marketplace-discovery relation on `PUBLIC`-visibility
-> teams (the default for every team). Every pod-side authorization check that
+> teams (the default for every team at the time; new teams default to
+> `PRIVATE` since 2026-08-26, #2433 — existing rows keep their stored value).
+> Every pod-side authorization check that
 > gates real content or execution — not just team-profile discovery — must
 > therefore use `TeamPermission.CAN_USE_TEAM_AGENTS` (`team_member`-only)
 > instead. This was true at turn start (`_authorize_execution_or_raise`,
@@ -1724,7 +1726,8 @@ top-of-document callouts** — accurate for their own dates, superseded now.
 **What changed.** TEAM-09/TEAM-10 (`FRED-TEAM-CONFIG-RFC.md` §5.1.1/§5.1.2)
 deliberately widened `TeamPermission.CAN_READ` to include any authenticated
 user via the `public` marketplace-discovery relation, granted unconditionally
-on every `PUBLIC`-visibility team (the default for every team). The OpenFGA
+on every `PUBLIC`-visibility team (the default for every team at the time;
+new teams default to `PRIVATE` since 2026-08-26, #2433). The OpenFGA
 model (`schema.fga`) already anticipated this and kept `can_use_team_agents`
 strictly `team_member`-only, but three pod-side/runtime call sites written
 before that split still checked the wide `CAN_READ`, so a non-member visiting
@@ -4195,3 +4198,38 @@ twice per model call:
 Both are real reductions and neither was taken here — this change is display
 and accounting only, kept separate per the consolidation rule against bundling
 a reduction with an unrelated fix.
+
+### 8.58 ✅ `agent.turn_completed` carries `session_id` — issue #2426 (2026-08-25)
+
+**Problem.** Conversation depth (how many messages a conversation actually
+gets) is not derivable from any existing KPI row. `agent.turn_completed` is the
+one event emitted once per turn, but its dims stopped at the agent/model
+identity — with no conversation key, turns could not be grouped per session.
+
+**`agent.turn_completed` dims — one additive field.**
+
+| Field | Meaning |
+| ----- | ------- |
+| `session_id: str \| None` | The conversation the turn belongs to. `None` for a turn with no session (the same cases the ring-buffer record already tolerates). |
+
+`agent.turn_error_total`, which reuses the same dims dict, carries it too.
+
+**OpenSearch only — not a Prometheus label.** The cardinality protection is
+`PROMETHEUS_ALLOWED_LABELS` (`fred_core/kpi/prometheus_kpi_store.py`), an
+allowlist: `session_id` is absent from it, so it is stripped before Prometheus
+label resolution while the OpenSearch KPI store keeps the full dims. This is the
+established pattern, not a new one — `identity_kpi_dims`
+(`fred_runtime/react/middleware/shared.py`) emits `session_id`/`user_id`/
+`team_id` the same way. `_emit_turn_completed`'s old comment claimed the
+exclusion itself was the protection; it was rewritten to point at the allowlist.
+`exchange_id` and `user_id` are deliberately still not carried here — no query
+needs them, and per-turn tracing already has them in history rows and SSE logs.
+
+**No index-mapping change.** `dims.session_id` is already an explicit `keyword`
+in `KPI_INDEX_MAPPING` (added for the CTRLP-12 A3 erasure `update_by_query`), so
+the new dim is `term`-aggregatable on existing indexes with no migration.
+
+**Consumer.** Control-plane's `conversation_depth` KPI preset (`GET
+/kpi/presets/conversation_depth`) — a `terms` agg on `dims.session_id` behind an
+`exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
+one bucket.

@@ -15,7 +15,7 @@
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import type { ComponentSize } from "@shared/utils/Type.ts";
-import { useRef } from "react";
+import { useRef, type FocusEventHandler } from "react";
 import styles from "./SearchInput.module.scss";
 
 export interface SearchInputProps {
@@ -25,6 +25,9 @@ export interface SearchInputProps {
   ariaLabel?: string;
   clearAriaLabel?: string;
   autoFocus?: boolean;
+  /** Forwarded to the underlying input — e.g. for an auto-collapsing search
+   * field that closes when it loses focus. */
+  onBlur?: FocusEventHandler<HTMLInputElement>;
   size?: ComponentSize;
 }
 
@@ -38,6 +41,7 @@ export default function SearchInput({
   ariaLabel,
   clearAriaLabel,
   autoFocus = false,
+  onBlur,
   size,
 }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +61,7 @@ export default function SearchInput({
         compact
         size={size}
         autoFocus={autoFocus}
+        onBlur={onBlur}
         icon={{ category: "outlined", type: "search" }}
         value={value}
         onChange={(e) => onChange(e.target.value)}

@@ -17,8 +17,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import { materialIcons, type MaterialIconType } from "@shared/utils/Type.ts";
-import { guessAgentIcon } from "@shared/utils/agentIcon.ts";
+import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -84,13 +83,7 @@ export default function AgentCard({
       : t("rework.agentCard.activate");
   // Best-effort keyword guess from the agent's own identity, falling back to
   // the site's configured default icon when nothing matches (#2076 follow-up).
-  // `agentIconName` is an untyped site-config string; guessAgentIcon's
-  // fallback must be a real MaterialIconType, so it's validated the same way
-  // `toIconType` does, narrowed to the material (non-custom) subset.
-  const defaultIcon: MaterialIconType = (materialIcons as readonly string[]).includes(agentIconName)
-    ? (agentIconName as MaterialIconType)
-    : "smart_toy";
-  const iconName = guessAgentIcon(instance.display_name, instance.role, instance.description ?? "", defaultIcon);
+  const iconName = resolveAgentIcon(instance, agentIconName);
 
   const createdByName = instance.created_by
     ? userDisplayName(instance.created_by, auditUserById?.get(instance.created_by))

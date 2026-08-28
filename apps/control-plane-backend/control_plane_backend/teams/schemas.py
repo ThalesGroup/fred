@@ -149,7 +149,9 @@ class Team(BaseModel):
     my_relations: list[UserTeamRelation] = Field(default_factory=list)
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
-    visibility: TeamVisibility = TeamVisibility.PUBLIC
+    # Private by default (#2433) — kept in lockstep with `TeamMetadata` /
+    # `TeamMetadataRow` in fred-core so the OpenAPI default tells the truth.
+    visibility: TeamVisibility = TeamVisibility.PRIVATE
     avatar_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None

@@ -68,6 +68,11 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         """Mark the test context as shut down without closing real shared resources."""
         observed["shutdown_called"] = True
 
+    async def fake_require_tables(engine, tables, *, component, migrate_command, version_table) -> None:
+        """Record the #2314 startup schema guard call without touching a database."""
+        observed["require_tables"] = (engine, set(tables), component, version_table)
+
+    monkeypatch.setattr(main_worker_module, "require_tables", fake_require_tables)
     monkeypatch.setattr(main_worker_module, "load_configuration", lambda: config)
     monkeypatch.setattr(main_worker_module, "get_loaded_env_file_path", lambda: "/tmp/test.env")
     monkeypatch.setattr(main_worker_module, "get_loaded_config_file_path", lambda: "/tmp/test.yaml")
@@ -90,6 +95,16 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         ApplicationContext.reset_instance()
 
     prom_cfg = config.observability.kpi.prometheus
+    # #2314: the worker must run the startup schema guard (on its engine, with
+    # the full required set) before polling Temporal.
+    from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
+
+    assert observed["require_tables"] == (
+        engine_sentinel,
+        set(REQUIRED_TABLES),
+        "knowledge-flow-worker",
+        "alembic_version_knowledge_flow",
+    )
     assert observed["metrics_server"] == (prom_cfg.port, prom_cfg.address)
     assert observed["process_kpi"] == (10.0, writer_sentinel)
     assert observed["sql_pool_kpi"] == (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres")

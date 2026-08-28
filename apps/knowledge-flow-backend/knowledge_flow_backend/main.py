@@ -38,6 +38,7 @@ from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
+from fred_core.sql import require_tables
 from prometheus_client import start_http_server
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -79,6 +80,7 @@ from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
+from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -132,17 +134,18 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        from fred_core.models.base import Base as CoreBase
-
-        # #2170: the task tables are no longer among these. They are
-        # `kf_task_run`/`kf_task_event_log` on knowledge-flow's own `Base`, created
-        # by Alembic (`c8f2d5b13ea6`) and by nothing else — so the registration
-        # import that used to sit here would now be a no-op.
-        # This unfiltered `create_all` over the *shared* CoreBase is itself the
-        # defect tracked in #2313, consolidated into #2314; removing it is that
-        # issue's acceptance criterion, deliberately not bundled here.
-        async with application_context.get_pg_async_engine().begin() as conn:
-            await conn.run_sync(CoreBase.metadata.create_all)
+        # #2314 (closes the #2313 defect): startup creates NO tables — DDL is
+        # owned by the Alembic trees alone (see models/table_ownership.py and
+        # DATABASE_MIGRATIONS.md §"Table ownership across trees"). A
+        # deployment that skipped migration jobs must fail here, at boot,
+        # with the fix command — not mid-request as an UndefinedTableError.
+        await require_tables(
+            application_context.get_pg_async_engine(),
+            sorted(REQUIRED_TABLES),
+            component="knowledge-flow",
+            migrate_command="make db-upgrade (apps/knowledge-flow-backend)",
+            version_table="alembic_version_knowledge_flow",
+        )
 
         # SIGUSR1/SIGUSR2 manual triggers + optional periodic gc.collect()+
         # malloc_trim() mitigation (fred_core.diagnostics, ISSUE-010).

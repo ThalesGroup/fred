@@ -170,6 +170,10 @@
  * the taller tiers: 8px edge padding, 8px icon→text gap, body-medium text. */
 .input[data-size="xs"] {
   input {
+    /* Thinner focus ring on this very compact tier — a 2px outline reads too
+     * heavy at 32px. Invisible until focus (the outline colour is transparent
+     * at rest). */
+    outline-width: 1px;
     padding-left: var(--spacing-xs);
     height: 2rem;
     font: var(--font-body-medium);

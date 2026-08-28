@@ -83,10 +83,27 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* The card is a fixed 290px: without a gap the two halves touch as soon as
+   * a team has a few admins. */
+  gap: var(--spacing-s);
   margin-top: auto;
 }
 
+/* The avatars are the elastic half of the footer: the button keeps its whole
+ * label, the row clips instead. AvatarGroup's `max` collapses the tail
+ * first, so this only bites on an unusually long translation - and the row runs
+ * right-to-left, so what falls off the left is never the "+N" badge. */
+.teamCardAdmins {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.teamCardJoinAction {
+  flex-shrink: 0;
+}
+
 .teamJoiningLabel {
+  flex-shrink: 0;
   /* Escape-hatch margin (see design system guidance): this offset applies
    * only to the label-only (invite-only) state — the sibling join button in
    * the same footer slot must stay flush with the card's padding edge, so

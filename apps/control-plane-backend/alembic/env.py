@@ -2,26 +2,15 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
-import control_plane_backend.models.agent_instance_models  # noqa: F401
-import control_plane_backend.models.bootstrap_models  # noqa: F401 — registers platformbootstrap with Base
-import control_plane_backend.models.capability_settings_models  # noqa: F401
-import control_plane_backend.models.model_reasoning_models  # noqa: F401
-import control_plane_backend.models.platform_model_binding_models  # noqa: F401 — registers platform_model_binding with Base
-import control_plane_backend.models.prompt_models  # noqa: F401
-import control_plane_backend.models.purge_queue_models  # noqa: F401
-import control_plane_backend.models.routing_policy_models  # noqa: F401
-import control_plane_backend.models.session_attachment_models  # noqa: F401
-import control_plane_backend.models.session_metadata_models  # noqa: F401
-import control_plane_backend.models.task_models  # noqa: F401 — registers cp_task_run / cp_task_event_log with Base
 import fred_core.documents.document_models  # noqa: F401 — registers metadata table with CoreBase
 import fred_core.teams.team_metatada_models  # noqa: F401
 from alembic import context
 from control_plane_backend.config.loader import load_configuration
 
-# Import Base and every ORM model so they all register with Base.metadata
-# before autogenerate inspects it.  These imports must stay here (not in
-# control_plane_backend/models/__init__.py) to avoid circular imports at runtime.
+# Importing table_ownership registers every CP ORM model with Base.metadata
+# before autogenerate inspects it, and carries the declared owned-table set.
 from control_plane_backend.models.base import Base
+from control_plane_backend.models.table_ownership import OWNED_TABLES
 from fred_core.models.base import Base as CoreBase
 from fred_core.sql import make_alembic_env
 from fred_core.users.user_models import UserRow  # noqa: F401
@@ -34,11 +23,15 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    # Both metadata objects so autogenerate sees CPB tables (incl. its own
-    # cp_task_* pair, #2170) and the shared fred-core tables.
+    # Both metadata objects so autogenerate resolves CPB tables (incl. its own
+    # cp_task_* pair, #2170) and the shared fred-core tables it references.
+    # CoreBase also carries tables OTHER trees migrate (tag, metadata,
+    # document_labels, session_history) — owned_tables is what keeps this
+    # tree's autogenerate and `alembic check` off them (#2314).
     target_metadata=[Base.metadata, CoreBase.metadata],
     get_postgres_config=lambda: load_configuration().storage.postgres,
     version_table="alembic_version_control_plane",
+    owned_tables=OWNED_TABLES,
 )
 
 if context.is_offline_mode():
