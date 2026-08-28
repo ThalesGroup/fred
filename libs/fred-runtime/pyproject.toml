@@ -90,7 +90,10 @@ include = ["fred_runtime*"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra"
-markers = ["integration: marks tests that require external services"]
+markers = [
+  "integration: marks tests that require external services",
+  "integration_postgres: integration tests that specifically need a real PostgreSQL — docker-compose.integration.yml only provisions OpenFGA, so `make test-integration` excludes this subset by default",
+]
 testpaths = ["tests"]
 
 [tool.coverage.run]

@@ -24,7 +24,10 @@ function StubPanel(_props: CapabilitySidePanelProps) {
 }
 
 describe("sidePanelRegistry (#1979)", () => {
-  const withPanel: CapabilityUiPlugin = { id: "demo_echo", sidePanels: { demo_notes: StubPanel } };
+  const withPanel: CapabilityUiPlugin = {
+    id: "demo_echo",
+    sidePanels: { demo_notes: { Component: StubPanel, icon: "edit_note" } },
+  };
   const withoutPanel: CapabilityUiPlugin = { id: "plain", partRenderers: {} };
 
   it("resolves the panels an active capability contributes", () => {
@@ -32,7 +35,23 @@ describe("sidePanelRegistry (#1979)", () => {
     const entries = sidePanelsForCapabilities(["demo_echo"], registry);
 
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ capabilityId: "demo_echo", widget: "demo_notes", Component: StubPanel });
+    expect(entries[0]).toMatchObject({
+      capabilityId: "demo_echo",
+      widget: "demo_notes",
+      Component: StubPanel,
+      icon: "edit_note",
+    });
+  });
+
+  it("carries the plugin's launcher-visibility hook to the host", () => {
+    const useHasContent = () => false;
+    const gated: CapabilityUiPlugin = {
+      id: "gated",
+      sidePanels: { gated_panel: { Component: StubPanel, icon: "slideshow", useHasContent } },
+    };
+    const entries = sidePanelsForCapabilities(["gated"], buildSidePanelRegistry([gated]));
+
+    expect(entries[0].useHasContent).toBe(useHasContent);
   });
 
   it("skips capabilities that declare no side panel", () => {
@@ -46,7 +65,10 @@ describe("sidePanelRegistry (#1979)", () => {
   });
 
   it("preserves the order the capabilities are supplied", () => {
-    const other: CapabilityUiPlugin = { id: "other", sidePanels: { other_panel: StubPanel } };
+    const other: CapabilityUiPlugin = {
+      id: "other",
+      sidePanels: { other_panel: { Component: StubPanel, icon: "edit_note" } },
+    };
     const registry = buildSidePanelRegistry([withPanel, other]);
     const entries = sidePanelsForCapabilities(["other", "demo_echo"], registry);
 

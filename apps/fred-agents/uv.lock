@@ -553,6 +553,7 @@ name = "fred-agents"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "fred-capability-platform-ops" },
     { name = "fred-capability-ppt-filler" },
     { name = "fred-capability-writable-document" },
     { name = "fred-core" },
@@ -590,6 +591,7 @@ requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
+    { name = "fred-capability-platform-ops", editable = "../../libs/fred-capability-platform-ops" },
     { name = "fred-capability-ppt-filler", editable = "../../libs/fred-capability-ppt-filler" },
     { name = "fred-capability-writable-document", editable = "../../libs/fred-capability-writable-document" },
     { name = "fred-core", editable = "../../libs/fred-core" },
@@ -609,6 +611,49 @@ dev = [
     { name = "bandit", specifier = ">=1.8.6" },
     { name = "basedpyright", specifier = "==1.31.0" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "pytest-socket", specifier = ">=0.7.0" },
+    { name = "ruff", specifier = ">=0.12.5" },
+]
+
+[[package]]
+name = "fred-capability-platform-ops"
+version = "0.1.0"
+source = { editable = "../../libs/fred-capability-platform-ops" }
+dependencies = [
+    { name = "fred-core" },
+    { name = "fred-sdk" },
+    { name = "langchain" },
+    { name = "langchain-core" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
+    { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
+    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
+    { name = "fred-core", editable = "../../libs/fred-core" },
+    { name = "fred-sdk", editable = "../../libs/fred-sdk" },
+    { name = "langchain", specifier = ">=0.3.0" },
+    { name = "langchain-core", specifier = ">=0.3.0" },
+    { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
+    { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", specifier = ">=1.8.6" },
+    { name = "basedpyright", specifier = "==1.31.0" },
+    { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "fred-runtime", editable = "../../libs/fred-runtime" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", specifier = ">=6.2.1" },

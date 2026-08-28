@@ -23,6 +23,7 @@ import { DemoNotesPanel } from "./DemoNotesPanel";
 export const demoEchoCapability: CapabilityUiPlugin = {
   id: "demo_echo",
   partRenderers: { demo_card: DemoCardPartRenderer },
-  // Side panel keyed by the backend manifest's SidePanelSpec.widget (#1979).
-  sidePanels: { demo_notes: DemoNotesPanel },
+  // Side panel keyed by the backend manifest's SidePanelSpec.widget.
+  // No `useHasContent`: the demo panel is always worth offering.
+  sidePanels: { demo_notes: { Component: DemoNotesPanel, icon: "edit_note" } },
 };

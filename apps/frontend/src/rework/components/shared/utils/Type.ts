@@ -86,6 +86,7 @@ export const materialIcons = [
   "close",
   "cloud_off",
   "edit_note",
+  "edit_document",
   "tune",
   "forum",
   "build",

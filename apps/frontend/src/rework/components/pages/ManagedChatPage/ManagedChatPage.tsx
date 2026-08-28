@@ -131,6 +131,21 @@ export default function ManagedChatPage() {
   const isAdmin = isPersonalTeam || canAdministerAdmins;
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+
+  // Opening a push drawer is a statement about ONE conversation, so switching
+  // conversations closes it: the panels (capability, attachments, document
+  // scope) all read the open session, and a drawer carried across would sit
+  // there empty. A capability whose new conversation warrants its panel asks
+  // for it again through the request counter above.
+  const lastDrawerSessionId = useRef(chat.sessionId);
+  useEffect(() => {
+    if (lastDrawerSessionId.current === chat.sessionId) return;
+    // Binding the FIRST conversation of a page load is not a switch - a panel a
+    // probe just asked for must not be closed under it.
+    const wasBound = Boolean(lastDrawerSessionId.current);
+    lastDrawerSessionId.current = chat.sessionId;
+    if (wasBound) setActivePushDrawer(null);
+  }, [chat.sessionId]);
   // The model this agent's next turn will actually route to (#2387) — the
   // composer's label. Its own read rather than part of prepare-execution:
   // prepare runs on every send and is contractually free of pod-catalog
