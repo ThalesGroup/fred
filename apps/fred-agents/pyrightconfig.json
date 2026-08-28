@@ -10,7 +10,6 @@
     "../../libs/fred-sdk",
     "../../libs/fred-runtime",
     "../../libs/fred-capability-writable-document",
-    "../../libs/fred-capability-ppt-filler",
-    "../../libs/fred-capability-platform-ops"
+    "../../libs/fred-capability-ppt-filler"
   ]
 }

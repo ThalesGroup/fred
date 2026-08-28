@@ -31,17 +31,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import (
-    Annotated,
-    Any,
-    Final,
-    Generic,
-    List,
-    Literal,
-    Protocol,
-    TypeAlias,
-    TypeVar,
-)
+from typing import Annotated, Any, Generic, List, Literal, Protocol, TypeAlias, TypeVar
 
 from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
@@ -1035,83 +1025,6 @@ class DocumentExtractionPort(ABC):
         """
 
 
-# Shared timeout band for `PlatformSqlPort.execute_read` (OPSCAP-01-PG). The
-# capability's config FieldSpec and the runtime adapter's server-side clamp
-# must read the same bounds (one shared source, never two derived views) —
-# the adapter still re-clamps because IT is the enforcement point.
-PLATFORM_SQL_TIMEOUT_DEFAULT_S: Final = 15.0
-PLATFORM_SQL_TIMEOUT_MIN_S: Final = 1.0
-PLATFORM_SQL_TIMEOUT_MAX_S: Final = 120.0
-
-
-class SqlQueryResult(FrozenModel):
-    """Typed result of one read-only platform SQL query (OPSCAP-01-PG).
-
-    `rows` are positional tuples aligned with `columns` (column names appear
-    once, never per row); the adapter caps rows server-side and sets
-    `row_limit_hit` when more rows existed than were returned.
-    """
-
-    columns: tuple[str, ...] = ()
-    rows: tuple[tuple[Any, ...], ...] = ()
-    row_limit_hit: bool = False
-
-
-class PlatformSqlPortError(Exception):
-    """
-    Typed execution failure raised by platform SQL port adapters.
-
-    Same doctrine as `DocumentPortCallError`: a failing SQL tool must surface
-    a clean `is_error` tool result carrying the server's own message (so the
-    agent can fix its query) without the capability importing the driver
-    stack. Adapters map driver/server errors onto this exception and keep the
-    message topology-free — the server's syntax/column/timeout text only,
-    never a DSN, host, or driver repr.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        timed_out: bool = False,
-        sqlstate: str | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.timed_out = timed_out
-        self.sqlstate = sqlstate
-
-
-class PlatformSqlPort(ABC):
-    """
-    Capability-safe read-only SQL over the platform database (OPSCAP-01-PG).
-
-    Deliberately generic: nothing Postgres-, pool-, or policy-specific in the
-    contract — all enforcement (single statement by construction, READ ONLY
-    transaction, session-level read-only default, row cap, timeout clamp)
-    lives in the runtime adapter, reusable by any future capability wanting
-    read-only platform SQL and re-implementable against another backend. Same
-    doctrine as `DocumentSearchPort`: the port takes the SQL text and scope
-    parameters only — never a caller-supplied context, identity, credential,
-    or DSN; the pod's own database credentials stay private to the adapter.
-    """
-
-    @abstractmethod
-    async def execute_read(
-        self,
-        sql: str,
-        *,
-        timeout_s: float | None = None,
-    ) -> SqlQueryResult:
-        """
-        Execute exactly one read-only SQL statement and return its rows
-        (adapter-capped, `row_limit_hit` set when more existed). `timeout_s`
-        is clamped by the adapter to its allowed band; `None` means the
-        adapter default. Raises `PlatformSqlPortError` on any server/driver
-        failure (syntax error, rejected write, statement-timeout cancel),
-        carrying the server's message so the agent can self-correct.
-        """
-
-
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1177,12 +1090,6 @@ class RuntimeServices:
     # `document_extract` capability's single-call path. Same doctrine/optionality
     # as the other document ports.
     document_extraction: DocumentExtractionPort | None = None
-    # Read-only SQL over the platform database (OPSCAP-01-PG): powers the
-    # `platform_postgres` capability. Tier B — the adapter reuses the pod's own
-    # `storage.postgres` credentials on a dedicated small pool; read-only is
-    # enforced server-side in the adapter, never here. Appended after
-    # `document_extraction` for the same positional-safety reason noted above.
-    platform_sql: PlatformSqlPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

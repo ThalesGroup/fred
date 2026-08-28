@@ -32,7 +32,6 @@ from fred_agents.comparison import COMPARISON_AGENT
 from fred_agents.deep_assistant import DEEP_ASSISTANT_AGENT
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.mindmap import MINDMAP_AGENT
-from fred_agents.platform_ops import PLATFORM_OPS_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
 from fred_agents.self_test import SELF_TEST_AGENT
@@ -66,11 +65,6 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
                                library picker, search policy, and RAG scope in
                                the Tools tab. Operator sets the name at
                                enrollment time.
-    - fred.github.platform_ops  Read-only admin-ops ReAct template. Defaults to
-                               the `platform_postgres` capability (read-only SQL
-                               over the platform database). ADMIN_GATED like
-                               every template; the capability is server-enforced
-                               read-only.
     - fred.dt.mindmap.graph     Graph agent that turns grounded transcript
                                material into a structured `mindmap-json`
                                payload for frontend visualization.
@@ -93,7 +87,6 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         MINDMAP_AGENT.agent_id: MINDMAP_AGENT,
         COMPARISON_AGENT.agent_id: COMPARISON_AGENT,
         SQL_EXPERT_AGENT.agent_id: SQL_EXPERT_AGENT,
-        PLATFORM_OPS_AGENT.agent_id: PLATFORM_OPS_AGENT,
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
         SELF_TEST_AGENT.agent_id: SELF_TEST_AGENT,
     }

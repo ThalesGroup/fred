@@ -822,10 +822,6 @@ def _build_runtime_services(
         document_summarize=document_summarize,
         document_markdown=document_markdown,
         document_extraction=document_extraction,
-        # Read-only platform SQL (OPSCAP-01-PG): pod-lifetime adapter (like
-        # checkpointer/kpi_writer, NOT per-turn) — read-only enforcement,
-        # row cap and timeout clamp all live server-side in the adapter.
-        platform_sql=runtime_config.platform_sql,
     )
 
 
@@ -4794,11 +4790,9 @@ def create_agent_app(
         # 5. bootstrap_observability — global tracer + metrics provider
         # 6. attach_pod_container — container in app.state before any request
         # 7. initialize_sql    — async, may take time
-        # 8. initialize_platform_sql — dedicated read-only SQL adapter, after
-        #    initialize_sql proved the Postgres config (OPSCAP-01-PG)
-        # 9. start_metrics_exporter — prometheus thread, after KPI writer exists
-        # 10. start_kpi_tasks  — asyncio tasks, after SQL engine is known
-        # 11. set_runtime_context — wires all built parts into the global config
+        # 8. start_metrics_exporter — prometheus thread, after KPI writer exists
+        # 9. start_kpi_tasks   — asyncio tasks, after SQL engine is known
+        # 10. set_runtime_context — wires all built parts into the global config
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
@@ -4835,7 +4829,6 @@ def create_agent_app(
         )
         chat_factory = _build_chat_model_factory(config)
         await container.initialize_sql()
-        container.initialize_platform_sql()
         container.start_metrics_exporter()
         await container.start_kpi_tasks()
         checkpointer = container.get_checkpointer()
@@ -4862,7 +4855,6 @@ def create_agent_app(
                         security.profile if security is not None else None
                     ),
                     kpi_writer=container.get_kpi_writer(),
-                    platform_sql=container.get_platform_sql(),
                 )
             )
         )

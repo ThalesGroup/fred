@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from fred_runtime.app.config import AgentPodConfig
 
 if TYPE_CHECKING:
-    from fred_runtime.app.platform_sql import PlatformSqlAdapter
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +112,8 @@ class PodApplicationContext:
     1. initialize_kpi_writer()          — sync, fast; needed by bootstrap_observability
     2. initialize_control_plane_client() — sync, fast; no network until first call
     3. initialize_sql()                 — async; may take time on first start
-    4. initialize_platform_sql()        — sync, lazy engine; Postgres-only (OPSCAP-01-PG)
-    5. start_metrics_exporter()         — sync; starts prometheus thread if configured
-    6. start_kpi_tasks()                — async; starts background asyncio tasks
+    4. start_metrics_exporter()         — sync; starts prometheus thread if configured
+    5. start_kpi_tasks()                — async; starts background asyncio tasks
     """
 
     def __init__(self, configuration: AgentPodConfig) -> None:
@@ -123,7 +122,6 @@ class PodApplicationContext:
         self._checkpointer: object | None = None
         self._history_store: HistoryStorePort | None = None
         self._kpi_writer: BaseKPIWriter | None = None
-        self._platform_sql: PlatformSqlAdapter | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
         self._metrics_exporter: tuple[object, ...] | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
@@ -232,28 +230,6 @@ class PodApplicationContext:
             engine.dialect.name,
         )
 
-    def initialize_platform_sql(self) -> None:
-        """Build the dedicated read-only platform SQL adapter (OPSCAP-01-PG).
-
-        Called after initialize_sql(): the shared engine has already proven
-        the Postgres config reachable and migrated, so no second boot ping is
-        needed here — the dedicated engine stays lazy until the first
-        `platform_postgres` tool call. Postgres-only: on the SQLite dev
-        escape hatch the factory returns None (and logs why), leaving the
-        `platform_sql` runtime service unset so the capability's missing-port
-        guard fails loud instead of pretending SQLite can enforce read-only.
-        """
-        from fred_runtime.app.platform_sql import build_platform_sql_adapter
-
-        self._platform_sql = build_platform_sql_adapter(
-            self.configuration.storage.postgres
-        )
-        if self._platform_sql is not None:
-            logger.info(
-                "[fred-runtime] platform SQL adapter ready (dedicated pool, "
-                "read-only enforced server-side)"
-            )
-
     def start_metrics_exporter(self) -> None:
         """Start the Prometheus scrape endpoint when configured."""
         prom_cfg = self.configuration.observability.kpi.prometheus
@@ -304,9 +280,6 @@ class PodApplicationContext:
     def get_history_store(self) -> HistoryStorePort | None:
         return self._history_store
 
-    def get_platform_sql(self) -> PlatformSqlAdapter | None:
-        return self._platform_sql
-
     def get_control_plane_http_client(self) -> httpx.AsyncClient:
         if self._control_plane_http_client is None:
             raise RuntimeError(
@@ -336,9 +309,6 @@ class PodApplicationContext:
         if self._sql_engine is not None:
             await self._sql_engine.dispose()
             logger.info("[fred-runtime] SQL engine disposed")
-        if self._platform_sql is not None:
-            await self._platform_sql.dispose()
-            logger.info("[fred-runtime] platform SQL engine disposed")
         if self._control_plane_http_client is not None:
             await self._control_plane_http_client.aclose()
         self._stop_metrics_exporter()

@@ -310,16 +310,6 @@
           "title": "Aperçu de la présentation"
         }
       }
-    },
-    "platform_postgres": {
-      "name": "Base de données plateforme (SQL lecture seule)",
-      "description": "Capacité d'administration : répondre aux questions d'exploitation par des requêtes SQL en lecture seule sur la base Postgres de la plateforme.",
-      "fields": {
-        "statement_timeout_s": {
-          "title": "Délai maximal d'exécution (secondes)",
-          "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
-        }
-      }
     }
   },
   "chatbot": {

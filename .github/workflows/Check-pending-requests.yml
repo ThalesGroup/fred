@@ -22,7 +22,6 @@ jobs:
       fred-sdk: ${{ steps.changes.outputs.fred-sdk }}
       fred-runtime: ${{ steps.changes.outputs.fred-runtime }}
       fred-agents: ${{ steps.changes.outputs.fred-agents }}
-      platform-ops: ${{ steps.changes.outputs.platform-ops }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,18 +51,16 @@ jobs:
               - 'libs/fred-runtime/**'
             fred-agents:
               - 'apps/fred-agents/**'
-            platform-ops:
-              - 'libs/fred-capability-platform-ops/**'
 
   # Job to run code quality checks on the entire repository
   code-quality:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.platform-ops == 'true'
+    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-agents == 'true'
     strategy:
       fail-fast: false
       matrix:
-        directory: [apps/knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents, libs/fred-capability-platform-ops]
+        directory: [apps/knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents]
         check:
           - lint
           - format
@@ -90,9 +87,6 @@ jobs:
           # Fred Agents runs when fred-agents, fred-runtime, or fred-sdk changes
           - directory: apps/fred-agents
             condition: needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
-          # Platform-ops capability runs when it, fred-runtime, or fred-sdk changes
-          - directory: libs/fred-capability-platform-ops
-            condition: needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
     name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
 
     steps:
@@ -118,7 +112,7 @@ jobs:
   backend-tests:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.platform-ops == 'true'
+    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-agents == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -153,11 +147,6 @@ jobs:
             unit-target: test
             needs-pandoc: false
             should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
-          - name: fred-capability-platform-ops
-            directory: libs/fred-capability-platform-ops
-            unit-target: test
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
     name: Backend Tests - ${{ matrix.name }}
 
     steps:
