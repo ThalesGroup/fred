@@ -4374,17 +4374,22 @@ says so explicitly, because the sibling document tools DO accept attachment
 uids and a model that carried that habit over would read the empty result as
 "nothing matches".
 
-**Frontend.** The Simple-view pack previously called "Document reading"
-(`toolPacks.ts`, id `document_reading`, kept) now carries all three
-uid-targeted document capabilities and is retitled "Working with documents" /
-"Travail sur documents". Corpus-wide discovery stays in the team-resources pack.
+**Frontend.** It rides the **team-resources** pack (`toolPacks.ts`), corpus-only,
+not the document-reading one. Two reasons, and the first is what settles it: the
+tool takes document uids it cannot produce, and `document_access` - the pack's
+uid source, through `list_document_tree` and the `uid` on every search hit -
+lives here. A document-reading pack that carried it alone would hand an agent
+three uid-taking tools and no way to obtain one. Second, it belongs here anyway:
+Knowledge Flow runs this mode over the corpus with `include_session_scope=False`,
+so it is a search mode, not a reading tool, and it contributes nothing to an
+attachments-only agent - hence `add(CAP_DOCUMENT_SIMILARITY, nextCorpus)` in
+`withResourceState`, which is what actually selects the pack's capabilities
+(`enablesCapabilityIds` documents an intent pack, it does not drive it).
 
-Adding a third id exposed a latent bug in `derivePackChecked`, which required
-EVERY id in a pack to be selected while `applyPackToggle` only ever adds ids the
-admin enabled: a pack containing anything unavailable to the team could not be
-switched on at all - flip it, the missing member is never added, the derived
-state reads false again - while switching it off still stripped the rest. That
-was reachable before (an admin enabling only part of a pack) but would have hit
-every existing team the moment an `ADMIN_GATED` capability joined an existing
-pack. `derivePackChecked` now takes `availableIds` and derives from the members
-the team can actually select.
+Fixed alongside, and independent of this capability: `derivePackChecked`
+required EVERY id in a pack to be selected while `applyPackToggle` only ever
+adds ids the admin enabled, so a plain pack containing anything unavailable to
+the team could not be switched on at all - flip it, the missing member is never
+added, the derived state reads false again - while switching it off still
+stripped the rest. It now takes `availableIds` and derives from the members the
+team can actually select.

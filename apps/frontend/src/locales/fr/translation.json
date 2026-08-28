@@ -2425,8 +2425,8 @@
               "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
             },
             "documentReading": {
-              "title": "Travail sur documents",
-              "description": "Permet à l'agent de lire un document mot à mot, d'en extraire des informations de façon exhaustive et de le comparer à un autre document."
+              "title": "Lecture de documents",
+              "description": "Permet à l'agent de lire un document mot à mot et d'en extraire des informations de façon exhaustive."
             },
             "wordDocument": {
               "title": "Générer un document Word",

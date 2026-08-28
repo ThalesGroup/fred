@@ -27,6 +27,7 @@
 
 import {
   CAP_DOCUMENT_ACCESS,
+  CAP_DOCUMENT_SIMILARITY,
   CAP_DOCUMENT_SUMMARIZE,
   CAP_TABULAR,
   DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
@@ -45,7 +46,12 @@ export interface CapabilitySelectionState {
 /** Capabilities governed by the two resource packs in Simple view. Recomputed
  *  as a set from (corpus, attachments) so shared `document_summarize` is never
  *  dropped while still required by the other pack. */
-const RESOURCE_PACK_CAPABILITIES = new Set<string>([CAP_DOCUMENT_ACCESS, CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE]);
+const RESOURCE_PACK_CAPABILITIES = new Set<string>([
+  CAP_DOCUMENT_ACCESS,
+  CAP_TABULAR,
+  CAP_DOCUMENT_SUMMARIZE,
+  CAP_DOCUMENT_SIMILARITY,
+]);
 
 function documentAccessSelected(state: CapabilitySelectionState): boolean {
   return state.selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS);
@@ -87,6 +93,9 @@ function withResourceState(
   add(CAP_TABULAR, nextCorpus);
   // Summarize is shared by both resource packs: on when either is on.
   add(CAP_DOCUMENT_SUMMARIZE, nextCorpus || nextAttachments);
+  // Corpus only: Knowledge Flow never searches the conversation's attachments
+  // in this mode, so it would contribute nothing to an attachments-only agent.
+  add(CAP_DOCUMENT_SIMILARITY, nextCorpus);
 
   const capabilityConfigValues = { ...state.capabilityConfigValues };
   if ((nextCorpus || nextAttachments) && availableIds.has(CAP_DOCUMENT_ACCESS)) {

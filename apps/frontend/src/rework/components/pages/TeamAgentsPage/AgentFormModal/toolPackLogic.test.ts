@@ -21,6 +21,7 @@ import {
 } from "./toolPackLogic";
 import {
   CAP_DOCUMENT_ACCESS,
+  CAP_DOCUMENT_SIMILARITY,
   CAP_DOCUMENT_SUMMARIZE,
   CAP_PPT_FILLER,
   CAP_TABULAR,
@@ -50,6 +51,7 @@ const DOCUMENT_READING = packById("document_reading");
 const ALL_IDS: ReadonlySet<string> = new Set([
   CAP_DOCUMENT_ACCESS,
   CAP_DOCUMENT_SUMMARIZE,
+  CAP_DOCUMENT_SIMILARITY,
   CAP_TABULAR,
   CAP_WRITABLE_DOCUMENT,
   CAP_PPT_FILLER,
@@ -218,5 +220,39 @@ describe("plain packs — partial admin availability", () => {
     const off = applyPackToggle(DOCUMENT_READING, false, on, ALL_IDS);
 
     expect(off.selectedCapabilityIds).toEqual([]);
+  });
+});
+
+// --- similarity search rides the corpus pack ------------------------------
+
+describe("document_similarity — corpus-scoped resource capability", () => {
+  it("comes with the team-resources pack, alongside its uid source", () => {
+    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
+
+    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SIMILARITY);
+    // document_access is what gives the model a document uid to aim at.
+    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
+  });
+
+  it("stays off for an attachments-only agent", () => {
+    // Knowledge Flow never searches session attachments in this mode, so the
+    // tool could only ever return nothing.
+    const s = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
+
+    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
+  });
+
+  it("is dropped when the team-resources pack is turned off", () => {
+    const on = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
+
+    const off = applyPackToggle(TEAM_RESOURCES, false, on, ALL_IDS);
+
+    expect(off.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
+  });
+
+  it("is not pulled in by the document-reading pack", () => {
+    const s = applyPackToggle(DOCUMENT_READING, true, empty(), ALL_IDS);
+
+    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
   });
 });
