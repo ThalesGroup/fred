@@ -29,7 +29,12 @@ import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.common.structures import AgentSettingsLike
-from fred_sdk.contracts.context import RuntimeContext
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    PortableContext,
+    PortableEnvironment,
+    RuntimeContext,
+)
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 
 
@@ -51,6 +56,19 @@ class _FakeAgent:
 
     async def refresh_user_access_token(self) -> str:
         return "token"
+
+
+def _binding() -> BoundRuntimeContext:
+    return BoundRuntimeContext(
+        runtime_context=RuntimeContext(session_id="s-1", team_id="team-1"),
+        portable_context=PortableContext(
+            request_id="request-1",
+            correlation_id="correlation-1",
+            actor="u-1",
+            tenant="team-1",
+            environment=PortableEnvironment.DEV,
+        ),
+    )
 
 
 HEADER = "| name | default |\n| --- | --- |"
@@ -119,8 +137,6 @@ async def test_document_search_port_repairs_table_hits(
 ) -> None:
     client = _FakeClient()
     monkeypatch.setattr(adapters_module, "VectorSearchClient", lambda **_kw: client)
-
-    from tests.test_knowledge_search_tool_invoker_sources import _binding, _FakeSettings
 
     adapter = adapters_module.DocumentSearchAdapter(
         binding=_binding(), settings=_FakeSettings()

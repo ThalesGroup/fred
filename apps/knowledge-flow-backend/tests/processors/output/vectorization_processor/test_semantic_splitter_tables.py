@@ -287,8 +287,6 @@ def test_large_table_crossing_chunk_boundary_order_with_surrounding_text():
 # Large production table (200 rows)
 # ---------------------------------------------------------------------------
 
-_200_ROW_TABLE_COLS = 9  # matches large-table-test_pd1.md schema
-
 
 def _build_200_row_table() -> str:
     """Reproduce the shape of large-table-test_pd1.md (200 rows, 9 cols,

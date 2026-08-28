@@ -61,18 +61,37 @@ def table_header_span(content: str) -> int:
 
 
 def restore_document_order(hits: list[VectorSearchHit]) -> list[VectorSearchHit]:
-    """Group hits per document and put each document's chunks back in index order.
+    """Put a table document's chunks back in index order, leaving the rest alone.
 
-    Similarity ranking interleaves chunks, which reads as a shuffled table. Documents
-    keep their relative ranking: whichever scored best stays first.
+    Similarity ranking interleaves a table's chunks, which reads as a shuffled table,
+    and the header de-duplication below needs a document's chunks adjacent and in
+    order to tell one table's run from the next.
+
+    Only documents that actually contain a table chunk are regrouped. Reordering
+    every document would demote the single best-scoring hit of an ordinary prose
+    answer behind weak chunks of the same document, for no benefit - a table-free
+    hit set is returned exactly as it came in. A regrouped document takes the
+    position of its first hit, so cross-document ranking is preserved.
     """
-    per_doc: dict[str, list[VectorSearchHit]] = {}
+    table_docs = {hit.uid for hit in hits if table_header_span(hit.content)}
+    if not table_docs:
+        return hits
+
+    per_doc: dict[str, list[VectorSearchHit]] = {uid: [] for uid in table_docs}
     for hit in hits:
-        per_doc.setdefault(hit.uid, []).append(hit)
-    ordered: list[VectorSearchHit] = []
+        if hit.uid in table_docs:
+            per_doc[hit.uid].append(hit)
     for chunks in per_doc.values():
         chunks.sort(key=lambda h: (h.chunk_index is None, h.chunk_index or 0))
-        ordered.extend(chunks)
+
+    ordered: list[VectorSearchHit] = []
+    emitted: set[str] = set()
+    for hit in hits:
+        if hit.uid not in table_docs:
+            ordered.append(hit)
+        elif hit.uid not in emitted:
+            emitted.add(hit.uid)
+            ordered.extend(per_doc[hit.uid])
     return ordered
 
 

@@ -55,7 +55,7 @@ class _FakeService:
 def _build_client(monkeypatch, rebac: _FakeRebac) -> tuple[TestClient, _FakeService]:
     service = _FakeService()
     monkeypatch.setattr(controller_module, "VectorSearchService", lambda: service)
-    monkeypatch.setattr(controller_module, "get_kpi_writer", lambda: NoOpKPIWriter())
+    monkeypatch.setattr(controller_module, "get_kpi_writer", NoOpKPIWriter)
     monkeypatch.setattr(controller_module, "get_rebac_engine", lambda: rebac)
 
     router = APIRouter()

@@ -83,21 +83,21 @@ def test_header_span_rejects_single_line():
 
 def test_chunks_of_one_document_are_reordered_by_index():
     hits = [
-        _hit("d1", "third", chunk_index=3),
-        _hit("d1", "first", chunk_index=1),
-        _hit("d1", "second", chunk_index=2),
+        _hit("d1", f"{HEADER}\n| third | 3 |", chunk_index=3),
+        _hit("d1", f"{HEADER}\n| first | 1 |", chunk_index=1),
+        _hit("d1", f"{HEADER}\n| second | 2 |", chunk_index=2),
     ]
 
     ordered = table_hits.restore_document_order(hits)
 
-    assert [h.content for h in ordered] == ["first", "second", "third"]
+    assert [h.chunk_index for h in ordered] == [1, 2, 3]
 
 
 def test_documents_keep_their_relative_ranking():
     hits = [
-        _hit("d2", "b", chunk_index=5),
-        _hit("d1", "a", chunk_index=1),
-        _hit("d2", "a", chunk_index=1),
+        _hit("d2", f"{HEADER}\n| b | 5 |", chunk_index=5),
+        _hit("d1", f"{HEADER}\n| a | 1 |", chunk_index=1),
+        _hit("d2", f"{HEADER}\n| a | 1 |", chunk_index=1),
     ]
 
     ordered = table_hits.restore_document_order(hits)
@@ -107,11 +107,14 @@ def test_documents_keep_their_relative_ranking():
 
 def test_chunks_without_index_sort_last():
     """Documents indexed before chunk_index existed degrade, they do not jump the queue."""
-    hits = [_hit("d1", "legacy"), _hit("d1", "indexed", chunk_index=2)]
+    hits = [
+        _hit("d1", f"{HEADER}\n| legacy | x |"),
+        _hit("d1", f"{HEADER}\n| indexed | 2 |", chunk_index=2),
+    ]
 
     ordered = table_hits.restore_document_order(hits)
 
-    assert [h.content for h in ordered] == ["indexed", "legacy"]
+    assert [h.chunk_index for h in ordered] == [2, None]
 
 
 # --------------------------------------------------------------------------- #
@@ -368,4 +371,36 @@ async def test_the_completed_document_keeps_its_rank(
         "d1",
         "d1",
         "d2",
+    ]
+
+
+def test_a_table_free_hit_set_is_returned_untouched():
+    """Ordinary prose RAG must not be reordered: the best hit stays first."""
+    hits = [
+        _hit("docA", "most relevant prose", chunk_index=7, score=0.91),
+        _hit("docB", "other document", chunk_index=2, score=0.88),
+        _hit("docA", "weak intro", chunk_index=1, score=0.40),
+        _hit("docC", "third document", chunk_index=5, score=0.35),
+    ]
+
+    out = table_hits.restore_document_order(list(hits))
+
+    assert [(h.uid, h.chunk_index) for h in out] == [
+        (h.uid, h.chunk_index) for h in hits
+    ]
+
+
+def test_a_prose_document_keeps_its_place_while_a_table_document_is_grouped():
+    hits = [
+        _hit("prose", "unrelated paragraph", chunk_index=9, score=0.95),
+        _hit("tbl", f"{HEADER}\n| c | 3 |", chunk_index=3, score=0.90),
+        _hit("tbl", f"{HEADER}\n| a | 1 |", chunk_index=1, score=0.50),
+    ]
+
+    out = table_hits.restore_document_order(list(hits))
+
+    assert [(h.uid, h.chunk_index) for h in out] == [
+        ("prose", 9),
+        ("tbl", 1),
+        ("tbl", 3),
     ]
