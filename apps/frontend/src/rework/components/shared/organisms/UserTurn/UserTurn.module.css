@@ -2,7 +2,7 @@
    the lane's uniform gap: consecutive exchanges separate while a question stays
    close to its own answer. Not on the first, which has the lane's top padding. */
 .turn:not(:first-child) {
-  margin-top: var(--spacing-l);
+  margin-top: var(--spacing-2xl);
 }
 
 .turn {

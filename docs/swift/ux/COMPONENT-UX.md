@@ -2548,7 +2548,7 @@ admin diagnostics.
 **Exchange spacing (2026-08-28).** The thread read as one dense block: `ChatMessagesArea`'s
 lane applies a uniform `--spacing-m` gap between every turn, so a question sat as far from its
 own answer as from the next question. A user turn is what opens an exchange, so the extra room
-lives here — `.turn:not(:first-child) { margin-top: var(--spacing-l) }` — rather than in the
+lives here — `.turn:not(:first-child) { margin-top: var(--spacing-2xl) }` — rather than in the
 lane's gap, which would have pushed answers away from their questions too. The first turn is
 excluded; the lane's own top padding already covers it.
 
