@@ -2459,6 +2459,10 @@ export type AgentTemplateSummary = {
     
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
   default_capability_ids?: string[];
+  /** Does this template offer per-question reasoning (REASON-01 level 3)? Verbatim from the pod's `default_tuning`. The agent-creation form pre-ticks its Reasoning card from it, as `default_capability_ids` pre-ticks capabilities — a seed the operator can untick, never a lock. False for pods predating #2473. */
+  reasoning_enabled?: boolean;
+  /** Does this template start new conversations with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Verbatim from the pod's `default_tuning`; only meaningful alongside `reasoning_enabled`. False for pods predating #2473. */
+  reasoning_default_on?: boolean;
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {

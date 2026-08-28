@@ -2322,6 +2322,47 @@ change only: `AgentTuning.reasoning_enabled`/`reasoning_default_on` remain
 plain agent properties (no `ConfigModel`, no `TurnOptionsModel`, no
 middleware), enforced at the single `build_for_chat` point as before.
 
+### Addendum — a template declares its reasoning defaults (2026-08-28, #2473)
+
+Both reasoning fields were settable **per agent instance only**: whoever filled
+in the creation form decided them, and a template had no way to say "this
+agent's job needs reasoning". Amendment B's own title says "let an agent
+**author** preselect reasoning ON", but the author had no surface to do it from
+— the SDK's `AgentTuning` did not even declare `reasoning_default_on`. #2473
+closes that gap.
+
+| Field | On | Meaning |
+| ----- | -- | ------- |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentDefinition` (fred-sdk) | What a template DECLARES; both default `False` |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentTuning` / pod `default_tuning` | How the declaration reaches control-plane — `_definition_to_agent_tuning` now projects both |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentTemplateSummary` | What the agent-creation form reads to pre-tick its Reasoning card |
+
+**A seed, not a gate — the same contract Amendment B set.** The form pre-ticks
+from the template exactly as `default_capability_ids` pre-ticks capabilities
+(#1974); the operator may untick either before saving, and enrollment keeps
+overwriting both from the request, so the form stays authoritative once shown.
+
+**The pre-tick is unconditional, and that is deliberate.** It does not consult
+`reasoning_enabled_model_ids`. This copies existing behaviour rather than adding
+any: the form's Reasoning card is already rendered unconditionally and the form
+has never read the platform gate. Levels 1-2 stay enforced live on the send path
+(`_platform_reasoning_control`, `build_for_chat`), so a declared `True` on a
+deployment where no model has its reasoning enabled is simply inert — no
+descriptor emitted — precisely as a hand-ticked `True` is today, and the control
+reappears if an admin later enables a model. Suppressing the pre-tick instead
+would make it vanish according to platform state invisible from that form, which
+is the confusion §8's absent-not-inert rule exists to prevent.
+
+**No migration.** `ManagedAgentTuning` already carried both fields with `False`
+defaults, so stored rows and pods predating #2473 deserialize unchanged and
+report both `False`. Only NEW instances of a declaring template are affected;
+existing instances do not gain their template's reasoning defaults retroactively
+(the same boundary `materialize_default_capability_selections` draws for
+capabilities).
+
+First adopter: `platform_ops` (#2458) declares both `True` — a diagnostic agent
+whose turns are inherently multi-step.
+
 ---
 
 ## 34. Contract Notes — `prepare_execution` session ownership check (2026-07-31)

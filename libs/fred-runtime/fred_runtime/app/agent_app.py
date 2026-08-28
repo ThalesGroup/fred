@@ -507,6 +507,13 @@ def _definition_to_agent_tuning(
         description=definition.description,
         tags=list(definition.tags),
         fields=list(definition.fields),
+        # REASON-01 level 3 + Amendment B (#2473). Projected so a template can
+        # seed the agent form's Reasoning card, the same way
+        # `default_mcp_servers` seeds the capability ticks. Both stayed False
+        # here until #2473, which is why a template could not express "this
+        # agent's job needs reasoning" at all.
+        reasoning_enabled=definition.reasoning_enabled,
+        reasoning_default_on=definition.reasoning_default_on,
     )
 
 

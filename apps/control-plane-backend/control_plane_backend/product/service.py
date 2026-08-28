@@ -1588,6 +1588,14 @@ async def list_agent_templates(
                     # rendered) — same result as filtering here, without
                     # making the field lie about what the template declares.
                     default_capability_ids=list(template.default_capability_ids),
+                    # REASON-01 level 3 + Amendment B (#2473), read off the
+                    # pod's `default_tuning`. Unfiltered by platform state on
+                    # purpose: this is what the template DECLARES. Levels 1-2
+                    # are send-path gates (`_platform_reasoning_control`), so a
+                    # declared True on a deployment with no reasoning-enabled
+                    # model simply never produces a composer control.
+                    reasoning_enabled=template.default_tuning.reasoning_enabled,
+                    reasoning_default_on=template.default_tuning.reasoning_default_on,
                 )
             )
     return templates

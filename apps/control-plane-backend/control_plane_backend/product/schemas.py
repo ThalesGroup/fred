@@ -213,6 +213,26 @@ class AgentTemplateSummary(BaseModel):
             "by hand."
         ),
     )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Does this template offer per-question reasoning (REASON-01 level "
+            "3)? Verbatim from the pod's `default_tuning`. The agent-creation "
+            "form pre-ticks its Reasoning card from it, as "
+            "`default_capability_ids` pre-ticks capabilities — a seed the "
+            "operator can untick, never a lock. False for pods predating "
+            "#2473."
+        ),
+    )
+    reasoning_default_on: bool = Field(
+        default=False,
+        description=(
+            "Does this template start new conversations with the composer's "
+            "reasoning toggle already ON (REASON-01 Amendment B)? Verbatim "
+            "from the pod's `default_tuning`; only meaningful alongside "
+            "`reasoning_enabled`. False for pods predating #2473."
+        ),
+    )
 
 
 class ManagedAgentInstanceSummary(BaseModel):

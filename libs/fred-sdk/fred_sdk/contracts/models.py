@@ -305,6 +305,17 @@ class AgentTuning(BaseModel):
             "to have enabled the model's reasoning (level 2, a ceiling)."
         ),
     )
+    reasoning_default_on: bool = Field(
+        default=False,
+        description=(
+            "Does a NEW conversation start with the composer's reasoning "
+            "toggle already ON (REASON-01 Amendment B)? Seeds `params.default` "
+            "on the emitted `reasoning_toggle` control — where the switch "
+            "starts, never where it stays. Inert unless `reasoning_enabled`; "
+            "kept rather than reset so withdrawing and restoring the offer "
+            "does not lose the author's choice."
+        ),
+    )
 
     # The MCP tuning trio (mcp_servers / selected_mcp_server_ids /
     # mcp_config_values) was retired at Tier 1 (#1978, RFC §3.8): an MCP server
@@ -978,6 +989,23 @@ class AgentDefinition(FrozenModel, ABC):
             "Keyed by FieldSpec.key. Read via context.tuning_values in graph steps "
             "or via definition.tuning_values in react prompting. "
             "Populated by _apply_runtime_tuning; do not set manually in agent definitions."
+        ),
+    )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Does this template offer per-question reasoning (REASON-01 level "
+            "3)? Seeds the agent form's Reasoning card — a default the "
+            "operator can untick, never a lock. Levels 1-2 still gate whether "
+            "reasoning actually runs."
+        ),
+    )
+    reasoning_default_on: bool = Field(
+        default=False,
+        description=(
+            "Do new conversations start with the composer's reasoning toggle "
+            "already ON (REASON-01 Amendment B)? Inert unless "
+            "`reasoning_enabled` is also True."
         ),
     )
     execution_category: ExecutionCategory

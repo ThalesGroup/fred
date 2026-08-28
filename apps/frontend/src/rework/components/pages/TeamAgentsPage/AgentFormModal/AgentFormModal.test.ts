@@ -6,6 +6,7 @@ import type {
 import {
   buildAgentFormSubmitPayload,
   defaultCapabilitySelection,
+  defaultReasoningSelection,
   extractCapabilityConfigValues,
 } from "./AgentFormModal";
 
@@ -30,6 +31,51 @@ const EMPTY_CAPABILITY_STATE = {
   capabilityAssetFiles: {} as Record<string, Record<string, File | undefined>>,
   capabilityBlockingErrors: {} as Record<string, string | null>,
 };
+
+describe("defaultReasoningSelection", () => {
+  it("seeds both fields from the template's declared defaults", () => {
+    // #2473: platform_ops declares both, so a new instance opens with the
+    // Reasoning card ticked and its nested "start in Boost" switch on.
+    const template = {
+      ...makeCapabilityTemplate([]),
+      reasoning_enabled: true,
+      reasoning_default_on: true,
+    } as AgentTemplateSummary;
+
+    expect(defaultReasoningSelection(template)).toEqual({
+      reasoningEnabled: true,
+      reasoningDefaultOn: true,
+    });
+  });
+
+  it("seeds the offer without the default-on switch", () => {
+    // The two are independent: a template may offer reasoning while still
+    // leaving new conversations starting in Rapide.
+    const template = {
+      ...makeCapabilityTemplate([]),
+      reasoning_enabled: true,
+      reasoning_default_on: false,
+    } as AgentTemplateSummary;
+
+    expect(defaultReasoningSelection(template)).toEqual({
+      reasoningEnabled: true,
+      reasoningDefaultOn: false,
+    });
+  });
+
+  it("defaults to off for a template that declares neither, and for none", () => {
+    // The pre-#2473 behaviour, and what an older pod's payload yields — the
+    // form must not invent a reasoning offer no template asked for.
+    expect(defaultReasoningSelection(makeCapabilityTemplate([]))).toEqual({
+      reasoningEnabled: false,
+      reasoningDefaultOn: false,
+    });
+    expect(defaultReasoningSelection(undefined)).toEqual({
+      reasoningEnabled: false,
+      reasoningDefaultOn: false,
+    });
+  });
+});
 
 describe("defaultCapabilitySelection", () => {
   it("pre-ticks the template's declared defaults", () => {
