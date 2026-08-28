@@ -109,6 +109,7 @@ from fred_runtime.common.kf_workspace_client import (
 )
 from fred_runtime.common.mcp_runtime import MCPRuntime
 from fred_runtime.common.structures import AgentSettingsLike
+from fred_runtime.common.table_hits import repair_table_hits
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
     get_document_library_tags_ids,
@@ -850,69 +851,6 @@ class _TraceAggregate(TypedDict):
     max_ms: int
 
 
-# A table chunk is a header row followed by a Markdown separator row. Matching on
-# the separator rather than a leading "|" also catches tables written without one.
-_TABLE_SEPARATOR_CHARS = set("|-: \t")
-
-# Ceiling for the whole-table fetch below. A table is worth completing, but not at
-# the cost of an unbounded prompt: one document per call, capped in chunks. When a
-# document does not fit under the cap the fetch is abandoned rather than truncated -
-# the document's first N chunks are not the ones that matched the query.
-_TABLE_EXPANSION_MAX_CHUNKS = 40
-
-
-def _restore_document_order(hits: list[VectorSearchHit]) -> list[VectorSearchHit]:
-    """Group hits per document and put each document's chunks back in index order.
-
-    Similarity ranking interleaves chunks, which reads as a shuffled table. Documents
-    keep their relative ranking: whichever scored best stays first.
-    """
-    per_doc: dict[str, list[VectorSearchHit]] = {}
-    for hit in hits:
-        per_doc.setdefault(hit.uid, []).append(hit)
-    ordered: list[VectorSearchHit] = []
-    for chunks in per_doc.values():
-        chunks.sort(key=lambda h: (h.chunk_index is None, h.chunk_index or 0))
-        ordered.extend(chunks)
-    return ordered
-
-
-def _strip_repeated_table_headers(hits: list[VectorSearchHit]) -> list[VectorSearchHit]:
-    """Drop the header the splitter repeats on every table chunk, except the first.
-
-    Each chunk carries the header so it stands alone, but a run of them reads to the
-    model as separate tables. Strips only when the previous chunk of the same document
-    opened with the very same header, so a run of one table keeps exactly one header
-    and a second, different table in the document keeps its own.
-    """
-    out: list[VectorSearchHit] = []
-    prev_uid: str | None = None
-    prev_header: str | None = None
-    for hit in hits:
-        span = _table_header_span(hit.content)
-        header = "\n".join(hit.content.split("\n")[:span]) if span else None
-        if span and hit.uid == prev_uid and header == prev_header:
-            body = "\n".join(hit.content.split("\n")[span:]).lstrip("\n")
-            hit = hit.model_copy(update={"content": body})
-        out.append(hit)
-        prev_uid = hit.uid
-        prev_header = header
-    return out
-
-
-def _table_header_span(content: str) -> int:
-    """Length in lines of the leading table header, or 0 when this is not a table chunk."""
-    lines = content.split("\n", 2)
-    if len(lines) < 2 or "|" not in lines[0]:
-        return 0
-    separator = lines[1].strip()
-    if "|" not in separator or "-" not in separator:
-        return 0
-    if set(separator) - _TABLE_SEPARATOR_CHARS:
-        return 0
-    return 2
-
-
 class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
     """
     First concrete Fred-side tool invoker for v2 agents.
@@ -952,71 +890,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 return await result
             return result
         raise RuntimeError(f"Unsupported Fred tool ref: {request.tool_ref!r}")
-
-    async def _complete_truncated_table(
-        self, hits: list[VectorSearchHit]
-    ) -> list[VectorSearchHit]:
-        """Refetch a whole table when top_k demonstrably cut one short.
-
-        Table chunks from one document at non-contiguous indices mean similarity
-        ranking returned a slice with a hole in it, and a sliced table answers row
-        questions wrong. Two adjacent chunks, or two separate small tables, are
-        complete already and are left alone.
-
-        Best-effort: on a failure, or on a document too large for the cap, the
-        original hits stand - the document's first N chunks are not the ones that
-        matched the query, so a truncated refetch would be worse than none.
-        """
-        indices: dict[str, list[int]] = {}
-        for hit in hits:
-            if _table_header_span(hit.content) and hit.chunk_index is not None:
-                indices.setdefault(hit.uid, []).append(hit.chunk_index)
-        gapped = {
-            uid: idx
-            for uid, idx in indices.items()
-            if len(idx) >= 2 and max(idx) - min(idx) + 1 > len(idx)
-        }
-        if not gapped:
-            return hits
-        uid = max(gapped, key=lambda u: len(gapped[u]))
-
-        try:
-            chunks = await self._search_client.get_document_chunks(
-                document_uid=uid, limit=_TABLE_EXPANSION_MAX_CHUNKS
-            )
-        except Exception:
-            logger.warning(
-                "[KNOWLEDGE_SEARCH] table completion failed for uid=%s",
-                uid,
-                exc_info=True,
-            )
-            return hits
-
-        original = [hit for hit in hits if hit.uid == uid]
-        if len(chunks) <= len(original) or len(chunks) >= _TABLE_EXPANSION_MAX_CHUNKS:
-            logger.info(
-                "[KNOWLEDGE_SEARCH] table completion skipped uid=%s fetched=%d had=%d cap=%d",
-                uid,
-                len(chunks),
-                len(original),
-                _TABLE_EXPANSION_MAX_CHUNKS,
-            )
-            return hits
-
-        # The fetch has no similarity score of its own. Carry the document's best
-        # score over, or citation selection would drop the very table being answered
-        # from, and splice in place so the document keeps its rank.
-        best = max(hit.score for hit in original)
-        chunks = [chunk.model_copy(update={"score": best}) for chunk in chunks]
-        at = next(i for i, hit in enumerate(hits) if hit.uid == uid)
-        rest = [hit for hit in hits if hit.uid != uid]
-        logger.info(
-            "[KNOWLEDGE_SEARCH] table completion uid=%s chunks=%d->%d",
-            uid,
-            len(original),
-            len(chunks),
-        )
-        return rest[:at] + chunks + rest[at:]
 
     async def _invoke_knowledge_search(
         self, request: ToolInvocationRequest
@@ -1072,9 +945,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             include_corpus_scope=include_corpus_scope,
         )
 
-        hits = await self._complete_truncated_table(hits)
-        hits = _restore_document_order(hits)
-        hits = _strip_repeated_table_headers(hits)
+        hits = await repair_table_hits(hits, self._search_client.get_document_chunks)
 
         # Only expose the fields the LLM needs for citation and reasoning.
         # URL and operational fields are excluded to prevent the model from
@@ -1410,6 +1281,9 @@ class DocumentSearchAdapter(DocumentSearchPort):
             # so a 401 degraded to "the service call failed" instead of naming
             # the status. The capability never imports the HTTP stack itself.
             raise _wrap_document_port_error(exc) from exc
+        hits = await repair_table_hits(
+            list(hits), self._search_client.get_document_chunks
+        )
         return DocumentSearchResult(hits=tuple(hits))
 
 

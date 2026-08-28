@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+import fred_runtime.common.table_hits as table_hits
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
@@ -59,23 +60,20 @@ def _hit(
 
 
 def test_header_span_detects_table_with_leading_pipe():
-    assert adapters_module._table_header_span(f"{HEADER}\n| a | 1 |") == 2
+    assert table_hits.table_header_span(f"{HEADER}\n| a | 1 |") == 2
 
 
 def test_header_span_detects_table_without_leading_pipe():
     """The splitter accepts these, so the dedup must recognise them too."""
-    assert adapters_module._table_header_span(f"{NO_LEADING_PIPE}\na | 1") == 2
+    assert table_hits.table_header_span(f"{NO_LEADING_PIPE}\na | 1") == 2
 
 
 def test_header_span_rejects_prose_containing_pipes():
-    assert (
-        adapters_module._table_header_span("use a | b to pipe\nthen read the result")
-        == 0
-    )
+    assert table_hits.table_header_span("use a | b to pipe\nthen read the result") == 0
 
 
 def test_header_span_rejects_single_line():
-    assert adapters_module._table_header_span("| name | default |") == 0
+    assert table_hits.table_header_span("| name | default |") == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -90,7 +88,7 @@ def test_chunks_of_one_document_are_reordered_by_index():
         _hit("d1", "second", chunk_index=2),
     ]
 
-    ordered = adapters_module._restore_document_order(hits)
+    ordered = table_hits.restore_document_order(hits)
 
     assert [h.content for h in ordered] == ["first", "second", "third"]
 
@@ -102,7 +100,7 @@ def test_documents_keep_their_relative_ranking():
         _hit("d2", "a", chunk_index=1),
     ]
 
-    ordered = adapters_module._restore_document_order(hits)
+    ordered = table_hits.restore_document_order(hits)
 
     assert [h.uid for h in ordered] == ["d2", "d2", "d1"]
 
@@ -111,7 +109,7 @@ def test_chunks_without_index_sort_last():
     """Documents indexed before chunk_index existed degrade, they do not jump the queue."""
     hits = [_hit("d1", "legacy"), _hit("d1", "indexed", chunk_index=2)]
 
-    ordered = adapters_module._restore_document_order(hits)
+    ordered = table_hits.restore_document_order(hits)
 
     assert [h.content for h in ordered] == ["indexed", "legacy"]
 
@@ -128,7 +126,7 @@ def test_only_the_first_chunk_of_a_table_run_keeps_its_header():
         _hit("d1", f"{HEADER}\n| c | 3 |"),
     ]
 
-    out = adapters_module._strip_repeated_table_headers(hits)
+    out = table_hits.strip_repeated_table_headers(hits)
 
     assert out[0].content == f"{HEADER}\n| a | 1 |"
     assert out[1].content == "| b | 2 |"
@@ -138,7 +136,7 @@ def test_only_the_first_chunk_of_a_table_run_keeps_its_header():
 def test_first_table_chunk_keeps_its_header_after_an_intro_chunk():
     hits = [_hit("d1", "Intro paragraph."), _hit("d1", f"{HEADER}\n| a | 1 |")]
 
-    out = adapters_module._strip_repeated_table_headers(hits)
+    out = table_hits.strip_repeated_table_headers(hits)
 
     assert out[1].content == f"{HEADER}\n| a | 1 |"
 
@@ -146,7 +144,7 @@ def test_first_table_chunk_keeps_its_header_after_an_intro_chunk():
 def test_headers_are_not_stripped_across_documents():
     hits = [_hit("d1", f"{HEADER}\n| a | 1 |"), _hit("d2", f"{HEADER}\n| b | 2 |")]
 
-    out = adapters_module._strip_repeated_table_headers(hits)
+    out = table_hits.strip_repeated_table_headers(hits)
 
     assert out[1].content == f"{HEADER}\n| b | 2 |"
 
@@ -228,7 +226,7 @@ async def test_truncated_table_is_refetched_whole_with_a_bounded_limit(
     result = await _invoke(monkeypatch, client_cls)
 
     assert calls == [
-        {"document_uid": "d1", "limit": adapters_module._TABLE_EXPANSION_MAX_CHUNKS}
+        {"document_uid": "d1", "limit": table_hits.TABLE_EXPANSION_MAX_CHUNKS}
     ]
     contents = [hit["content"] for hit in result.blocks[0].data["hits"]]
     assert contents == [f"{HEADER}\n| a | 0 |", "| b | 1 |", "| c | 2 |"]
@@ -284,7 +282,7 @@ def test_a_second_distinct_table_keeps_its_own_header():
         _hit("d1", f"{OTHER_HEADER}\n| FR | 33 |"),
     ]
 
-    out = adapters_module._strip_repeated_table_headers(hits)
+    out = table_hits.strip_repeated_table_headers(hits)
 
     assert out[1].content == f"{OTHER_HEADER}\n| FR | 33 |"
 
@@ -316,7 +314,7 @@ async def test_a_document_larger_than_the_cap_is_left_alone(
     ]
     fetched = [
         _hit("d1", f"{HEADER}\n| r{i} | {i} |", chunk_index=i)
-        for i in range(adapters_module._TABLE_EXPANSION_MAX_CHUNKS)
+        for i in range(table_hits.TABLE_EXPANSION_MAX_CHUNKS)
     ]
     client_cls, _ = _client_returning(search_hits, fetched)
 
