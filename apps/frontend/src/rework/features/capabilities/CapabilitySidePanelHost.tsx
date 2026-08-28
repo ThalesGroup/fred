@@ -25,6 +25,10 @@
 // `useHasContent` hook answers for the open conversation, so a fresh chat with
 // ppt_filler and writable_document active shows no chrome at all until the agent
 // actually produces a deck or a document.
+//
+// The launchers live in the floating rail only while every panel is closed; with
+// one open they move into that drawer's header, where the rail would otherwise
+// float on top of the drawer's own close button.
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -87,6 +91,19 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
   const titleOf = (entry: SidePanelEntry): string =>
     t(`capability.${entry.capabilityId}.panel.${entry.widget}.title`, { defaultValue: entry.widget });
 
+  // Every panel but the open one; each decides for itself whether it has
+  // anything to launch onto (PanelLauncher).
+  const launchers = entries
+    .filter((entry) => entryKey(entry) !== activeKey)
+    .map((entry) => (
+      <PanelLauncher
+        key={entryKey(entry)}
+        entry={entry}
+        label={titleOf(entry)}
+        onOpen={() => onActiveKeyChange(entryKey(entry))}
+      />
+    ));
+
   return (
     <>
       {probes.map(({ capabilityId, Probe }, index) => (
@@ -94,19 +111,16 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
       ))}
       {entries.length > 0 && (
         <>
-          <div className={styles.rail}>
-            {entries.map((entry) => {
-              const key = entryKey(entry);
-              if (key === activeKey) return null; // launcher hides while its panel is open
-              return (
-                <PanelLauncher key={key} entry={entry} label={titleOf(entry)} onOpen={() => onActiveKeyChange(key)} />
-              );
-            })}
-          </div>
+          {/* The rail floats over the right edge of the whole slot, drawer
+              included, so while a panel is open it would land on that panel's
+              own close button. Open, the other launchers move into the drawer's
+              header instead — switching panels stays one click. */}
+          {active === null && <div className={styles.rail}>{launchers}</div>}
           <InlineDrawer
             open={active !== null}
             onClose={() => onActiveKeyChange(null)}
             title={active ? titleOf(active) : ""}
+            headerActions={active !== null ? launchers : undefined}
             layout="push"
             // One shared width across every capability panel (writable-document
             // editor, PPT preview, …) — the same behaviour the legacy chat's

@@ -38,8 +38,21 @@ vi.mock("@shared/atoms/IconButton/IconButton", () => ({
 }));
 
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer", () => ({
-  InlineDrawer: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
-    open ? <div data-drawer>{children}</div> : null,
+  InlineDrawer: ({
+    open,
+    headerActions,
+    children,
+  }: {
+    open: boolean;
+    headerActions?: React.ReactNode;
+    children: React.ReactNode;
+  }) =>
+    open ? (
+      <div data-drawer>
+        <header>{headerActions}</header>
+        {children}
+      </div>
+    ) : null,
 }));
 
 function StubPanel(_props: CapabilitySidePanelProps) {
@@ -94,5 +107,14 @@ describe("CapabilitySidePanelHost launcher rail", () => {
   it("hides a launcher while its own panel is open", () => {
     state.entries = [entry("ppt_filler", "slideshow", () => true)];
     expect(render("ppt_filler:ppt_filler_pane")).not.toContain("<button");
+  });
+
+  it("moves the other launchers into the open drawer's header, off the rail", () => {
+    state.entries = [entry("ppt_filler", "slideshow", () => true), entry("writable_document", "edit_note", () => true)];
+    const html = render("writable_document:writable_document_pane");
+
+    // The rail would float over the drawer's own close button.
+    expect(html).not.toContain('class="rail"');
+    expect(html).toContain('<header><button data-icon="slideshow"');
   });
 });

@@ -27,9 +27,9 @@
 .header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-xs);
   border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-xs) var(--spacing-m);
+  padding: var(--spacing-2xs) var(--spacing-s);
 }
 
 .titleGroup {

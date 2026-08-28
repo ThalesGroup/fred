@@ -88,7 +88,7 @@ export default function WritableDocumentDownloadButton({
       iconButton={{
         color: "on-surface",
         variant: "icon",
-        size: "small",
+        size: "2xs",
         icon: { category: "outlined", type: "download" },
         disabled: isDownloading,
         "aria-label": downloadLabel,

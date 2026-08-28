@@ -3606,6 +3606,16 @@ a session's active capabilities declare. Two changes (#2459):
 - **The rail dropped to 68px from the top** (2026-08-28). Its 48px offset was computed
   against a one-line top bar; the bar now stacks a 24px title over a 20px agent name, so
   the first launcher sat on the band.
+- **The rail only floats while every panel is closed** (2026-08-28). It is absolutely
+  positioned against the whole slot, drawer included, so with a panel open it landed on
+  that drawer's own close button. Open, the remaining launchers render as the
+  `InlineDrawer`'s `headerActions` instead — no overlap, and switching panels stays one
+  click.
+- **Both panes' header bands were trimmed** (2026-08-28) — `PptPreviewPane` and
+  `WritableDocumentPane` share the same title + actions row, padded down from
+  `8px/16px` to `4px/12px` with their download control on the 24px `2xs` tier
+  (`small` before); the editor toolbar under it lost the same 4px. Two stacked bands
+  (the drawer's own header, then the pane's) were eating the top of the panel.
 
 Both capability slices now stamp the conversation their state belongs to, so a deck or a
 document from a previous conversation can no longer light a launcher up on a fresh chat.
