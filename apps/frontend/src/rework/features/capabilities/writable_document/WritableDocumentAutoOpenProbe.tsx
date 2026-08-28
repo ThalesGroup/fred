@@ -33,6 +33,7 @@ import { useEffect, useRef } from "react";
 import { useDispatch } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
+import { useCapabilityRouted } from "../useCapabilityRouted";
 import { useListWritableDocumentsQuery } from "./api/writableDocumentCapabilityOpenApi";
 import { CAPABILITY_ID } from "./api/writableDocumentCapabilityApi";
 
@@ -41,9 +42,10 @@ export function WritableDocumentAutoOpenProbe() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session") ?? "";
 
+  const routed = useCapabilityRouted(CAPABILITY_ID);
   const { data: listed } = useListWritableDocumentsQuery(
     { sessionId },
-    { skip: !sessionId, refetchOnMountOrArgChange: true },
+    { skip: !sessionId || !routed, refetchOnMountOrArgChange: true },
   );
 
   // Last session already evaluated — switching back re-evaluates (a re-open).

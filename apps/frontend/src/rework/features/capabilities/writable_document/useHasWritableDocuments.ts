@@ -25,15 +25,18 @@
 
 import { useSelector } from "react-redux";
 import { useListWritableDocumentsQuery } from "./api/writableDocumentCapabilityOpenApi";
+import { CAPABILITY_ID } from "./api/writableDocumentCapabilityApi";
+import { useCapabilityRouted } from "../useCapabilityRouted";
 import { useOpenSessionId } from "../useOpenSessionId";
 import { selectWritableDocumentSessionId, selectWritableDocumentsById } from "./writableDocumentSlice";
 
 export function useHasWritableDocuments(): boolean {
   const sessionId = useOpenSessionId();
+  const routed = useCapabilityRouted(CAPABILITY_ID);
   // `currentData`, not `data`: RTK Query keeps the last resolved result across an
   // arg change, so on a switch out of a conversation WITH documents `data` would
   // keep the launcher lit on the new one until the request lands.
-  const { currentData: listed } = useListWritableDocumentsQuery({ sessionId }, { skip: !sessionId });
+  const { currentData: listed } = useListWritableDocumentsQuery({ sessionId }, { skip: !sessionId || !routed });
   const liveById = useSelector(selectWritableDocumentsById);
   const liveSessionId = useSelector(selectWritableDocumentSessionId);
 

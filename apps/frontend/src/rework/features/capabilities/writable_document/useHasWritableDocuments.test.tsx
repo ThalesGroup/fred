@@ -30,6 +30,8 @@ const state = vi.hoisted(() => ({
   // a previous conversation is expressible, the way RTK Query's `data` exposes one.
   listedFor: "",
   listed: undefined as unknown,
+  // Whether the catalog/prep answer that carries the pod's base URL has landed.
+  routed: true,
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -37,7 +39,11 @@ vi.mock("react-router-dom", () => ({
 }));
 
 vi.mock("react-redux", () => ({
-  useSelector: (selector: (s: { writableDocument: unknown }) => unknown) => selector({ writableDocument: state.doc }),
+  useSelector: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      writableDocument: state.doc,
+      capabilityRouting: { baseUrls: state.routed ? { writable_document: "https://pod" } : {} },
+    }),
 }));
 
 vi.mock("./api/writableDocumentCapabilityOpenApi", () => ({
@@ -62,12 +68,19 @@ function sliceState(sessionId: string | null, docs: WritableDocumentPartData[]):
   };
 }
 
-function read(openSession: string, doc: WritableDocumentState, listed: unknown, listedFor = openSession): boolean {
+function read(
+  openSession: string,
+  doc: WritableDocumentState,
+  listed: unknown,
+  listedFor = openSession,
+  routed = true,
+): boolean {
   let seen = false;
   state.session = openSession;
   state.doc = doc;
   state.listed = listed;
   state.listedFor = listedFor;
+  state.routed = routed;
   function Probe() {
     seen = useHasWritableDocuments();
     return null;
@@ -101,6 +114,13 @@ describe("useHasWritableDocuments", () => {
 
   it("ignores the list answer still held from the conversation just left", () => {
     expect(read("s2", empty, [{ document_id: "d1" }], "s1")).toBe(false);
+  });
+
+  it("holds the query until the capability's pod base URL is known", () => {
+    // Fired before it lands, the query fails on args that never change again and
+    // the launcher stays dark for the whole page load (hard reload only - a
+    // client-side navigation finds routing already in the store).
+    expect(read("s1", empty, [{ document_id: "d1" }], "s1", false)).toBe(false);
   });
 
   it("is false while no conversation is open", () => {

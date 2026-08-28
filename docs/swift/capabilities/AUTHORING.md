@@ -276,6 +276,23 @@ cd apps/frontend && make update-<id>-capability-api    # e.g. update-demo-echo-c
 The generated slice + dumped schema are `.prettierignore`d (see `apps/frontend/Makefile`
 and `apps/frontend/.prettierignore`). Never hand-edit them.
 
+**Skip every query until the capability is routed.** `createCapabilityBaseQuery`
+resolves the pod's base URL from `capabilityRoutingSlice` at request time and fails
+loudly when it is not there yet. On a hard page load that answer lands after the
+first render, so a query fired too early gets its failure cached against args that
+never change again - the capability then looks empty for the whole page load, while a
+client-side navigation into the same page works (routing is already in the store).
+Guard every hook on the capability's own API:
+
+```ts
+const routed = useCapabilityRouted(CAPABILITY_ID);
+const { currentData } = useListThingsQuery({ sessionId }, { skip: !sessionId || !routed });
+```
+
+Prefer `currentData` over `data` for anything scoped to the open conversation: `data`
+deliberately keeps the last resolved result across an arg change, so on a session
+switch it answers for the conversation the user just left.
+
 ---
 
 ## Testing expectations

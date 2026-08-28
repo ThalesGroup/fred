@@ -39,6 +39,8 @@ import {
   useUpdateWritableDocumentMutation,
   type WritableDocumentResponse,
 } from "./api/writableDocumentCapabilityOpenApi";
+import { CAPABILITY_ID } from "./api/writableDocumentCapabilityApi";
+import { useCapabilityRouted } from "../useCapabilityRouted";
 import type { WritableDocumentPartData } from "./types";
 import {
   selectWritableDocument,
@@ -88,9 +90,10 @@ export function useWritableDocuments(sessionId: string | undefined): UseWritable
   const liveById = useSelector(selectWritableDocumentsById);
   const selectedId = useSelector(selectWritableDocumentSelectedId);
 
+  const routed = useCapabilityRouted(CAPABILITY_ID);
   const { data: listed, refetch } = useListWritableDocumentsQuery(
     { sessionId: sessionId || "" },
-    { skip: !sessionId, refetchOnMountOrArgChange: true },
+    { skip: !sessionId || !routed, refetchOnMountOrArgChange: true },
   );
   const [updateDocument] = useUpdateWritableDocumentMutation();
 
