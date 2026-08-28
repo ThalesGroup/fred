@@ -240,13 +240,10 @@ def test_write_turn_history_persists_ui_parts_of_the_turn() -> None:
     The turn's chat parts must reach storage, on the final row's metadata.
 
     Why this test exists:
-    - every capability card (a filled deck, a written document, a link) is a
-      ``ui_part``. They used to live only in the live SSE stream, so a page
-      reload showed a conversation with every card missing while its sources
-      came back - ``sources`` was on the metadata and ``ui_parts`` was nowhere.
-    - they cannot ride ``parts``: that union is CLOSED for storage validation,
-      while ``UiPart`` is assembled at pod boot from the installed capabilities.
-      Raw objects on the metadata, exactly like ``sources``.
+    - every capability card is a ``ui_part``; they used to live only in the live
+      SSE stream, so a reload showed a conversation with every card missing
+    - entries with no ``type`` cannot be dispatched by any renderer, so they must
+      not reach storage (RUNTIME-EXECUTION-CONTRACT.md §8.59)
 
     How to use it:
     - run via ``make test`` in fred-runtime
@@ -266,7 +263,7 @@ def test_write_turn_history_persists_ui_parts_of_the_turn() -> None:
         {
             "kind": "final",
             "content": "Here is your deck.",
-            "ui_parts": [deck, "not-a-part"],
+            "ui_parts": [deck, "not-a-part", {"no": "type"}],
         },
     ]
 
@@ -284,8 +281,37 @@ def test_write_turn_history_persists_ui_parts_of_the_turn() -> None:
     final = messages[-1]
 
     assert final.metadata.ui_parts == [deck], (
-        "the final row must carry the turn's parts, non-object entries dropped"
+        "the final row must carry the turn's parts, entries with no type dropped"
     )
+
+
+def test_write_turn_history_persists_a_turn_whose_only_output_is_a_card() -> None:
+    """
+    A final event with no text and no model name must still leave its row.
+
+    Why this test exists:
+    - the terminal-row guard was ``final_content or final_model``; a turn that
+      answers with a card alone wrote nothing, so the card was lost exactly as it
+      was before parts were persisted
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    card = {"type": "ppt_preview", "preview_id": "p1", "title": "Q3 review"}
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="make me a deck",
+            payloads=[{"kind": "final", "content": "", "ui_parts": [card]}],
+            history_store=store,
+        )
+    )
+
+    final = store.save.call_args.kwargs["messages"][-1]
+    assert final.metadata.ui_parts == [card]
 
 
 def test_write_turn_history_leaves_ui_parts_empty_when_the_turn_had_none() -> None:

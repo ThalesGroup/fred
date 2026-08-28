@@ -239,28 +239,35 @@ const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
   "hitl_response",
 ]);
 
+/** Key-order-independent identity, so the same part from two carriers matches. */
+function canonicalPart(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalPart).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalPart(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+const isUiPart = (p: { type?: unknown } | undefined): boolean =>
+  typeof p?.type === "string" && !MESSAGE_PART_TYPES.has(p.type);
+
 /**
  * All chat parts (ui_parts) carried on a message, unknown kinds included.
  *
- * Two carriers, because the live stream and the stored history differ. A
- * streamed message carries its parts inline in `parts`; the stored one carries
- * them on `metadata.ui_parts`, since `MessagePart` is a CLOSED union and the
- * `UiPart` one is open (capabilities extend it at pod boot) - the same split
- * `sources` already lives with. Reading both is what makes a reloaded
- * conversation render the same cards the live turn did.
- *
- * Deduplicated by identity: a message that somehow carries a part on both sides
- * must not render the card twice.
+ * Two carriers: a streamed message holds them inline in `parts`, a stored one on
+ * `metadata.ui_parts`. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.59.
  */
 export function uiPartsOf(msg: ChatMessage): RawUiPart[] {
-  const inline = (msg.parts ?? []).filter(
-    (p) => typeof p?.type === "string" && !MESSAGE_PART_TYPES.has(p.type),
-  ) as unknown as RawUiPart[];
-  const stored = (msg.metadata?.ui_parts ?? []) as unknown as RawUiPart[];
+  const inline = (msg.parts ?? []).filter(isUiPart) as unknown as RawUiPart[];
+  const stored = ((msg.metadata?.ui_parts ?? []) as unknown as RawUiPart[]).filter(isUiPart);
+  // The common cases by far, and the only ones a session ever hits today: a turn
+  // is either streaming or replayed, never both. Skips the canonical keying.
   if (stored.length === 0) return inline;
+  if (inline.length === 0) return stored;
 
-  const seen = new Set(inline.map((p) => JSON.stringify(p)));
-  return [...inline, ...stored.filter((p) => typeof p?.type === "string" && !seen.has(JSON.stringify(p)))];
+  const seen = new Set(inline.map(canonicalPart));
+  return [...inline, ...stored.filter((p) => !seen.has(canonicalPart(p)))];
 }
 
 export function formatLatencyMs(ms: number | null): string {

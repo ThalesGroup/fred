@@ -394,13 +394,9 @@ class ChatMetadata(BaseModel):
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
     sources: List[VectorSearchHit] = Field(default_factory=list)
-    # Assistant-final rows: the turn's chat parts (link, geo, and every part a
-    # capability contributes), so a reloaded conversation renders the same cards
-    # the live stream did. Kept as raw objects on purpose: `UiPart` is an OPEN
-    # union assembled at pod boot from the installed capabilities
-    # (fred_sdk.contracts.ui_part_union), and fred-core sits BELOW fred-sdk, so
-    # there is no closed type here to validate against — the same reason
-    # `MessagePart` stays closed and these do not live in `parts`.
+    # Assistant-final rows: the turn's chat parts, so a reloaded conversation
+    # renders the same cards the live stream did. Raw objects because `UiPart` is
+    # open. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.59.
     ui_parts: List[Dict[str, Any]] = Field(default_factory=list)
 
     @field_validator("finish_reason", mode="before")

@@ -144,8 +144,17 @@ describe("uiPartsOf", () => {
     expect(uiPartsOf(msg({ parts: [{ type: "text", text: "hi" }], metadata: { ui_parts: [deck] } }))).toEqual([deck]);
   });
 
-  it("renders a part carried on both sides once", () => {
-    expect(uiPartsOf(msg({ parts: [deck], metadata: { ui_parts: [deck] } }))).toEqual([deck]);
+  it("renders a part carried on both sides once, whatever its key order", () => {
+    // The stored copy comes back from a JSON column, so its keys need not be in
+    // the order the streamed one had.
+    const reordered = { title: "Q3 review", preview_id: "p1", type: "ppt_preview" };
+    expect(uiPartsOf(msg({ parts: [deck], metadata: { ui_parts: [reordered] } }))).toEqual([deck]);
+  });
+
+  it("drops a stored part whose kind collides with a message-body part", () => {
+    // The inline branch filters those out; the stored one must agree, or the same
+    // turn renders differently before and after a reload.
+    expect(uiPartsOf(msg({ metadata: { ui_parts: [{ type: "code", code: "x" }] } }))).toEqual([]);
   });
 
   it("keeps a stored part of a kind this build does not know", () => {
