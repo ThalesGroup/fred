@@ -26,6 +26,7 @@ COPY libs/fred-runtime /workspace/libs/fred-runtime
 COPY libs/fred-sdk /workspace/libs/fred-sdk
 COPY libs/fred-capability-writable-document /workspace/libs/fred-capability-writable-document
 COPY libs/fred-capability-ppt-filler /workspace/libs/fred-capability-ppt-filler
+COPY libs/fred-capability-platform-ops /workspace/libs/fred-capability-platform-ops
 
 RUN make dev VENV=/app/venv TARGET=/app/target
 
@@ -57,6 +58,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-runtime /workspace/libs/fred-runti
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-writable-document /workspace/libs/fred-capability-writable-document
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-ppt-filler /workspace/libs/fred-capability-ppt-filler
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-platform-ops /workspace/libs/fred-capability-platform-ops
 
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy

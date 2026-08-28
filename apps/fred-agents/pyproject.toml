@@ -14,6 +14,7 @@ dependencies = [
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
   "fred-capability-writable-document>=0.1.0",
   "fred-capability-ppt-filler>=0.1.0",
+  "fred-capability-platform-ops>=0.1.0",
   "uvicorn>=0.35",
 ]
 
@@ -51,6 +52,7 @@ fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 fred-runtime = { path = "../../libs/fred-runtime", editable = true }
 fred-capability-writable-document = { path = "../../libs/fred-capability-writable-document", editable = true }
 fred-capability-ppt-filler = { path = "../../libs/fred-capability-ppt-filler", editable = true }
+fred-capability-platform-ops = { path = "../../libs/fred-capability-platform-ops", editable = true }
 
 [dependency-groups]
 dev = [
