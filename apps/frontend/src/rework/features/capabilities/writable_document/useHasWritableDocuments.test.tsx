@@ -23,7 +23,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { WritableDocumentState } from "./writableDocumentSlice";
 import type { WritableDocumentPartData } from "./types";
 
-const state = vi.hoisted(() => ({ session: "", doc: null as unknown, listed: undefined as unknown }));
+const state = vi.hoisted(() => ({
+  session: "",
+  doc: null as unknown,
+  // What the query resolved for, and what it resolved to - so a stale answer from
+  // a previous conversation is expressible, the way RTK Query's `data` exposes one.
+  listedFor: "",
+  listed: undefined as unknown,
+}));
 
 vi.mock("react-router-dom", () => ({
   useSearchParams: () => [new URLSearchParams(state.session ? `session=${state.session}` : "")],
@@ -34,8 +41,12 @@ vi.mock("react-redux", () => ({
 }));
 
 vi.mock("./api/writableDocumentCapabilityOpenApi", () => ({
-  useListWritableDocumentsQuery: (_args: unknown, opts: { skip: boolean }) => ({
+  // `data` keeps the last resolved result across an arg change; `currentData` is
+  // undefined until the answer belongs to the CURRENT args. Modelling both is what
+  // makes the stale-conversation case below fail on the wrong one.
+  useListWritableDocumentsQuery: (args: { sessionId: string }, opts: { skip: boolean }) => ({
     data: opts.skip ? undefined : state.listed,
+    currentData: opts.skip || state.listedFor !== args.sessionId ? undefined : state.listed,
   }),
 }));
 
@@ -51,11 +62,12 @@ function sliceState(sessionId: string | null, docs: WritableDocumentPartData[]):
   };
 }
 
-function read(openSession: string, doc: WritableDocumentState, listed: unknown): boolean {
+function read(openSession: string, doc: WritableDocumentState, listed: unknown, listedFor = openSession): boolean {
   let seen = false;
   state.session = openSession;
   state.doc = doc;
   state.listed = listed;
+  state.listedFor = listedFor;
   function Probe() {
     seen = useHasWritableDocuments();
     return null;
@@ -85,6 +97,10 @@ describe("useHasWritableDocuments", () => {
 
   it("is false while the list answer has not arrived", () => {
     expect(read("s1", empty, undefined)).toBe(false);
+  });
+
+  it("ignores the list answer still held from the conversation just left", () => {
+    expect(read("s2", empty, [{ document_id: "d1" }], "s1")).toBe(false);
   });
 
   it("is false while no conversation is open", () => {

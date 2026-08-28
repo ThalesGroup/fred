@@ -30,11 +30,11 @@
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
-import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import Button from "@shared/atoms/Button/Button";
 import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
+import { useMountSessionId } from "../useOpenSessionId";
 import type { UiPartRendererProps } from "../types";
 import type { WritableDocumentPartData } from "./types";
 import { selectWritableDocument, upsertFromPart } from "./writableDocumentSlice";
@@ -50,8 +50,7 @@ const AUTO_OPEN_MIN_AGE_MS = 5000;
 export function WritableDocumentCardRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const [searchParams] = useSearchParams();
-  const sessionId = searchParams.get("session") ?? "";
+  const sessionId = useMountSessionId();
   const doc = part as unknown as WritableDocumentPartData;
 
   const key = `${doc.document_id}:${doc.updated_at}`;

@@ -18,7 +18,7 @@
  * right edge; each button opens one capability panel.
  * top clears ManagedChatPage's .topBar band, which is two lines tall (8px
  * padding + a 24px title line + a 20px agent-name line + 8px padding = 60px),
- * plus a breathing gap — a 48px offset sat on the band. */
+ * plus a breathing gap - a 48px offset sat on the band. */
 .rail {
   display: flex;
   position: absolute;

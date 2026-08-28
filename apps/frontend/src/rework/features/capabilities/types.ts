@@ -63,7 +63,7 @@ export interface CapabilitySidePanelSpec {
   icon: IconType;
   /**
    * Does this panel have anything to show for the OPEN conversation? A false
-   * answer hides the launcher — a button onto an empty panel is noise. Omitted
+   * answer hides the launcher - a button onto an empty panel is noise. Omitted
    * means "always offer it". Called from the launcher's own component, so a
    * capability going in or out of a session never shifts hook order.
    */

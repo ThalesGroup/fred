@@ -14,7 +14,7 @@
 
 // The launcher rail: what the user sees before opening anything. A session can
 // activate several document-producing capabilities from the start, so a launcher
-// that appears on declaration alone points at an empty panel — the plugin's
+// that appears on declaration alone points at an empty panel - the plugin's
 // `useHasContent` is what turns it on, and its glyph is what tells two of them
 // apart.
 
@@ -97,11 +97,11 @@ describe("CapabilitySidePanelHost launcher rail", () => {
   });
 
   it("gives each panel its own glyph", () => {
-    state.entries = [entry("ppt_filler", "slideshow", () => true), entry("writable_document", "edit_note", () => true)];
+    state.entries = [entry("ppt_filler", "slideshow", () => true), entry("writable_document", "article", () => true)];
     const html = render();
 
     expect(html).toContain('data-icon="slideshow"');
-    expect(html).toContain('data-icon="edit_note"');
+    expect(html).toContain('data-icon="article"');
   });
 
   it("hides a launcher while its own panel is open", () => {
@@ -110,11 +110,12 @@ describe("CapabilitySidePanelHost launcher rail", () => {
   });
 
   it("moves the other launchers into the open drawer's header, off the rail", () => {
-    state.entries = [entry("ppt_filler", "slideshow", () => true), entry("writable_document", "edit_note", () => true)];
+    state.entries = [entry("ppt_filler", "slideshow", () => true), entry("writable_document", "article", () => true)];
     const html = render("writable_document:writable_document_pane");
 
-    // The rail would float over the drawer's own close button.
-    expect(html).not.toContain('class="rail"');
+    // In the drawer header, and ONLY there - the rail would float on the drawer's
+    // own close button. (CSS-module class names are hashed, so count the buttons.)
     expect(html).toContain('<header><button data-icon="slideshow"');
+    expect(html.match(/<button/g)).toHaveLength(1);
   });
 });

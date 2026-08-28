@@ -15,24 +15,27 @@
 // The deck the OPEN conversation produced, or null.
 //
 // The slice keeps the last registered deck globally; scoping it to the open
-// conversation (URL `?session=`, the rework convention) is what keeps a deck from
-// a previous conversation out of the pane — and, more visibly, keeps the panel's
-// launcher dark on a conversation that never produced one.
+// conversation is what keeps a deck from a previous conversation out of the pane -
+// and, more visibly, keeps the panel's launcher dark on a conversation that never
+// produced one.
+//
+// Unlike writable_document, ppt_filler has no list endpoint to ask: the slice, fed
+// by every rendered `ppt_preview` card, IS the "this conversation produced a deck"
+// signal, so the launcher appears once the cards have rendered.
 
 import { useSelector } from "react-redux";
-import { useSearchParams } from "react-router-dom";
+import { useOpenSessionId } from "../useOpenSessionId";
 import { selectCurrentPreview, selectPptPreviewSessionId } from "./pptPreviewSlice";
 import type { PptPreviewPartData } from "./types";
 
 export function useSessionPptPreview(): PptPreviewPartData | null {
-  const [searchParams] = useSearchParams();
-  const sessionId = searchParams.get("session") ?? "";
+  const sessionId = useOpenSessionId();
   const current = useSelector(selectCurrentPreview);
   const previewSessionId = useSelector(selectPptPreviewSessionId);
   return sessionId !== "" && previewSessionId === sessionId ? current : null;
 }
 
-/** Launcher visibility for the ppt_filler side panel — see `CapabilitySidePanelSpec`. */
+/** Launcher visibility for the ppt_filler side panel - see `CapabilitySidePanelSpec`. */
 export function useHasPptPreview(): boolean {
   return useSessionPptPreview() !== null;
 }

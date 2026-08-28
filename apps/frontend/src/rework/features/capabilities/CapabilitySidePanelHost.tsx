@@ -57,7 +57,7 @@ const alwaysHasContent = () => true;
 
 /**
  * One panel's launcher. It is its own component so each `useHasContent` runs in a
- * stable hook slot — mapping the hooks inline would reorder them the moment a
+ * stable hook slot - mapping the hooks inline would reorder them the moment a
  * session gains or loses a capability.
  */
 function PanelLauncher({ entry, label, onOpen }: { entry: SidePanelEntry; label: string; onOpen: () => void }) {
@@ -114,7 +114,7 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
           {/* The rail floats over the right edge of the whole slot, drawer
               included, so while a panel is open it would land on that panel's
               own close button. Open, the other launchers move into the drawer's
-              header instead — switching panels stays one click. */}
+              header instead - switching panels stays one click. */}
           {active === null && <div className={styles.rail}>{launchers}</div>}
           <InlineDrawer
             open={active !== null}

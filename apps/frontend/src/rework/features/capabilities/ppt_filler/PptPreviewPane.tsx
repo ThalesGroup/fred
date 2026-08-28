@@ -43,6 +43,9 @@ import styles from "./PptPreviewPane.module.css";
 
 const PDF_SCALE = 0.95;
 
+/** react-pdf remount key when this conversation has no deck. */
+const NO_PREVIEW_KEY = "none";
+
 // Resolved by Vite to the bundled pdf.js worker asset. Kept as a URL (not a
 // `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
 const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
@@ -73,13 +76,19 @@ export function PptPreviewPane(_props: CapabilitySidePanelProps) {
 
   // A re-fill (or switching decks) changes this key → react-pdf remounts the
   // <Document> and we provision a fresh worker for it.
-  const remountKey = current ? `${current.preview_id}:${current.version}` : "none";
+  const remountKey = current ? `${current.preview_id}:${current.version}` : NO_PREVIEW_KEY;
 
   // Provision a fresh worker for THIS remount before the child <Document> reads
   // GlobalWorkerOptions (useMemo runs during render, ahead of child effects). The
   // effect below terminates the exact instance this run created.
   const workerRef = useRef<Worker | null>(null);
   useMemo(() => {
+    // No deck for this conversation: the body renders the empty state, no
+    // <Document> reads the port, so a worker here would only wait to be killed.
+    if (remountKey === NO_PREVIEW_KEY) {
+      workerRef.current = null;
+      return;
+    }
     if (typeof Worker === "undefined") {
       pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
       workerRef.current = null;

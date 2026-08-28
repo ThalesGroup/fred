@@ -47,8 +47,8 @@ export const pptPreviewSlice = createSlice({
   reducers: {
     /**
      * Register the deck a rendered `ppt_preview` card refers to, stamped with the
-     * conversation it came from. Every card mount writes here — history replay
-     * included — so the pane and its launcher know a conversation produced a deck
+     * conversation it came from. Every card mount writes here - history replay
+     * included - so the pane and its launcher know a conversation produced a deck
      * without the card having to open anything.
      */
     setPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {

@@ -3598,9 +3598,9 @@ a session's active capabilities declare. Two changes (#2459):
   holds a document); a panel that omits the hook stays always-on. The rail is invisible
   chrome until the agent actually produces something.
 - **Each panel carries its own glyph** instead of the `edit_note` the host hardcoded for
-  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `edit_note` — each
-  one the glyph that capability's own chat card already uses for "open this", so the
-  launcher and the card read as one affordance. Colour stays the rail's neutral
+  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `article` - the
+  same icons `fileIconSpec.ts` gives a `.pptx` and a `.docx` in Resources, so a file
+  type reads the same across the app. Colour stays the rail's neutral
   `on-surface-retreat`: the launchers sit in the same floating-chrome band as the trace
   and attachments buttons, and tinting only these two would break that band.
 - **The rail dropped to 68px from the top** (2026-08-28). Its 48px offset was computed
@@ -3609,13 +3609,14 @@ a session's active capabilities declare. Two changes (#2459):
 - **The rail only floats while every panel is closed** (2026-08-28). It is absolutely
   positioned against the whole slot, drawer included, so with a panel open it landed on
   that drawer's own close button. Open, the remaining launchers render as the
-  `InlineDrawer`'s `headerActions` instead — no overlap, and switching panels stays one
+  `InlineDrawer`'s `headerActions` instead - no overlap, and switching panels stays one
   click.
-- **Both panes' header bands were trimmed** (2026-08-28) — `PptPreviewPane` and
+- **Both panes' header bands were trimmed** (2026-08-28) - `PptPreviewPane` and
   `WritableDocumentPane` share the same title + actions row, padded down from
-  `8px/16px` to `4px/12px` with their download control on the 24px `2xs` tier
-  (`small` before); the editor toolbar under it lost the same 4px. Two stacked bands
-  (the drawer's own header, then the pane's) were eating the top of the panel.
+  `8px/16px` to `4px/12px`; the editor toolbar under it lost the same 4px. Two
+  stacked bands (the drawer's own header, then the pane's) were eating the top of
+  the panel. The download controls keep `size="small"`: those components are shared
+  with the chat cards, where the smaller tier would have broken alignment.
 
 Both capability slices now stamp the conversation their state belongs to, so a deck or a
 document from a previous conversation can no longer light a launcher up on a fresh chat.

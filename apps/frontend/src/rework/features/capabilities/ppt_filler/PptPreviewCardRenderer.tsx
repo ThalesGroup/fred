@@ -28,15 +28,16 @@
 //
 // Every mount still REGISTERS the deck (`setPreview`), replay included: that is
 // what tells the pane's launcher this conversation produced something, without
-// popping the panel open.
+// popping the panel open. It registers under the conversation the card was mounted
+// for (`useMountSessionId`), never the one the user just switched to.
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
-import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import Button from "@shared/atoms/Button/Button";
 import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
+import { useMountSessionId } from "../useOpenSessionId";
 import type { UiPartRendererProps } from "../types";
 import type { PptPreviewPartData } from "./types";
 import { setPreview } from "./pptPreviewSlice";
@@ -51,8 +52,7 @@ const AUTO_OPEN_MIN_AGE_MS = 5000;
 export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const [searchParams] = useSearchParams();
-  const sessionId = searchParams.get("session") ?? "";
+  const sessionId = useMountSessionId();
   const preview = part as unknown as PptPreviewPartData;
 
   const key = `${preview.preview_id}:${preview.version}`;

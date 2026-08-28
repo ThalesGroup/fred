@@ -29,8 +29,8 @@ export const pptFillerCapability: CapabilityUiPlugin = {
   partRenderers: { ppt_preview: PptPreviewCardRenderer },
   // Keyed by the backend FieldSpec's `ui.widget` (RFC §9 item 4).
   configWidgets: { ppt_filler_template: PptFillerConfigForm },
-  // Keyed by the backend manifest's SidePanelSpec.widget (#1979). `slideshow` is
-  // what fileIconSpec already gives a .pptx, so a deck reads the same everywhere.
+  // Keyed by the backend manifest's SidePanelSpec.widget. `slideshow` is what
+  // fileIconSpec gives a .pptx, so a deck reads the same in chat and Resources.
   sidePanels: {
     ppt_preview_pane: { Component: PptPreviewPane, icon: "slideshow", useHasContent: useHasPptPreview },
   },

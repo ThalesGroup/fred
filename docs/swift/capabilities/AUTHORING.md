@@ -245,17 +245,21 @@ sidePanels: {
 },
 ```
 
-- `icon` — the glyph of the panel's launcher in the chat page's floating rail, from
-  the same `materialIcons` set as the manifest icon above. Pick the glyph the
-  capability's own chat card already uses for the same action, so the launcher and
-  the card read as one affordance (`slideshow` for the ppt_filler preview,
-  `edit_note` for the writable_document editor).
-- `useHasContent` — a hook answering "does this panel have anything to show for the
+- `icon` - the glyph of the panel's launcher in the chat page's floating rail, from
+  the same `materialIcons` set as the manifest icon above. Pick what
+  `apps/frontend/src/rework/utils/fileIconSpec.ts` already gives the artefact the
+  panel holds (`slideshow` for a deck, `article` for a document) so a file type
+  reads the same in the chat as in Resources.
+- `useHasContent` - a hook answering "does this panel have anything to show for the
   OPEN conversation?". Omit it and the launcher is always offered; a capability that
   produces something on demand should implement it, or every session that merely
   ACTIVATES the capability gets a button onto an empty panel. Scope the answer to the
-  conversation in the URL (`?session=`) — capability slices are global, so state from
-  a previous conversation otherwise lights the launcher up on a fresh chat.
+  conversation in the URL - capability slices are global, so state from a previous
+  conversation otherwise lights the launcher up on a fresh chat. Read the id with
+  `useOpenSessionId()` (`features/capabilities/useOpenSessionId.ts`), and answer from
+  the capability's own list endpoint when it has one: `writable_document` does, so its
+  launcher is right as soon as the conversation loads, while `ppt_filler` has to wait
+  for its chat cards to render and register their deck.
 
 ---
 

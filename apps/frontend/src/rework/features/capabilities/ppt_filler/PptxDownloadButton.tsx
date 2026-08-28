@@ -60,7 +60,7 @@ export default function PptxDownloadButton({
     <Tooltip text={label}>
       <IconButton
         variant="icon"
-        size="2xs"
+        size="small"
         icon={{ category: "outlined", type: "download" }}
         onClick={handleDownload}
         disabled={isDownloading}
