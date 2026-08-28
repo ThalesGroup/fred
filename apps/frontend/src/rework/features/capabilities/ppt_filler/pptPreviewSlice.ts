@@ -27,10 +27,16 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { PptPreviewPartData } from "./types";
 
 export interface PptPreviewState {
-  /** The conversation `current` belongs to; a write from another one replaces it. */
+  /** The conversation this state belongs to; a write from another one replaces it. */
   sessionId: string | null;
-  /** The deck the side panel should render, or null before any deck exists. */
+  /**
+   * The deck the pane renders. Only an explicit open moves it: the pane keys its
+   * pdf.js worker on this value, and that lifecycle does not survive a value that
+   * churns with re-renders.
+   */
   current: PptPreviewPartData | null;
+  /** This conversation produced at least one deck (drives the launcher). */
+  produced: boolean;
 }
 
 // Local root-state shape — avoids a circular import with common/store.tsx. The
@@ -39,33 +45,51 @@ interface PptPreviewRootState {
   pptPreview: PptPreviewState;
 }
 
-const initialState: PptPreviewState = { sessionId: null, current: null };
+const initialState: PptPreviewState = { sessionId: null, current: null, produced: false };
+
+/** A write from another conversation starts that conversation's state from scratch. */
+function rebase(state: PptPreviewState, sessionId: string): void {
+  if (state.sessionId === sessionId) return;
+  state.sessionId = sessionId;
+  state.current = null;
+  state.produced = false;
+}
 
 export const pptPreviewSlice = createSlice({
   name: "pptPreview",
   initialState,
   reducers: {
     /**
-     * Register the deck a rendered `ppt_preview` card refers to, stamped with the
-     * conversation it came from. Every card mount writes here - history replay
-     * included - so the pane and its launcher know a conversation produced a deck
-     * without the card having to open anything.
+     * Every rendered card registers its deck, history replay included: that is how
+     * the launcher knows this conversation produced one. It seeds `current` only
+     * while the pane has nothing, so later re-renders cannot move what it shows.
      */
-    setPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {
-      state.sessionId = action.payload.sessionId;
+    registerPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {
+      rebase(state, action.payload.sessionId);
+      state.produced = true;
+      if (state.current === null) state.current = action.payload.preview;
+    },
+
+    /** Show this deck in the pane - a card's Open button, or a live fill. */
+    openPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {
+      rebase(state, action.payload.sessionId);
+      state.produced = true;
       state.current = action.payload.preview;
     },
   },
 });
 
-export const { setPreview } = pptPreviewSlice.actions;
+export const { registerPreview, openPreview } = pptPreviewSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
-/** The registered deck, whichever conversation it came from (scope with the hook). */
+/** The deck the pane should render, whichever conversation it came from. */
 export const selectCurrentPreview = (state: PptPreviewRootState): PptPreviewPartData | null => state.pptPreview.current;
 
-/** The conversation the registered deck belongs to, or null. */
+/** Did the registered conversation produce a deck at all? */
+export const selectPptPreviewProduced = (state: PptPreviewRootState): boolean => state.pptPreview.produced;
+
+/** The conversation this state belongs to, or null. */
 export const selectPptPreviewSessionId = (state: PptPreviewRootState): string | null => state.pptPreview.sessionId;
 
 export default pptPreviewSlice.reducer;
