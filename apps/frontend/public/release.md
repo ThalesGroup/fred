@@ -1,3 +1,22 @@
+**v2.1.38** — 2026-08-28
+
+- **Summary**
+
+  Capability side panels now follow the conversation you are in: a launcher
+  appears only once there is something to open, and reloading a conversation
+  brings its cards back. Asking an agent to correct an existing deck no longer
+  crashes the preview.
+
+- **Improvements**
+
+  - Capability side panels offer a launcher only once they hold something to open, each with its own icon, and no longer carry a deck or a document over from a previous conversation (#2459)
+
+- **Bug Fixes**
+
+  - A conversation reloaded from history came back without its capability cards - a generated deck, a written document, a link, a map (#2462)
+  - Asking an agent to correct an existing deck crashed the slide preview (#2468)
+  - The home page greeted you with a raw account identifier instead of your first name (#2471)
+
 **v2.1.37** — 2026-08-27
 
 - **Summary**
