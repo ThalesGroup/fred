@@ -97,6 +97,10 @@ export interface ToolPackSection {
 //     rather than in scattered string literals; also consumed by toolPackLogic. ---
 export const CAP_DOCUMENT_ACCESS = "document_access";
 export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
+// A corpus search mode, not a reading tool: Knowledge Flow runs it over the
+// corpus targets and never the conversation's attachments. It also needs a uid
+// source, which this pack's document_access provides.
+export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
@@ -132,10 +136,12 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
           { capabilityId: CAP_DOCUMENT_ACCESS, labelKey: "capability.document_access.name" },
           { capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" },
           { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
+          { capabilityId: CAP_DOCUMENT_SIMILARITY, labelKey: "capability.document_similarity.name" },
         ],
         // document_access is handled via documentAccessIntent (computed config);
-        // the rest are plain on/off.
-        enablesCapabilityIds: [CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE],
+        // the rest are corpus-only, and `withResourceState` is what actually
+        // selects them — this list documents the pack, it does not drive it.
+        enablesCapabilityIds: [CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_SIMILARITY],
         documentAccessIntent: "corpus",
       },
       {

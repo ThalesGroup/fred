@@ -77,8 +77,10 @@ from fred_sdk.contracts.runtime import (
     DocumentMarkdownResult,
     DocumentPortCallError,
     DocumentRawContent,
+    DocumentScopeRefusedError,
     DocumentSearchPort,
     DocumentSearchResult,
+    DocumentSimilarityPort,
     DocumentSummarizePort,
     DocumentSummaryResult,
     DocumentTreePort,
@@ -1284,6 +1286,85 @@ class DocumentSearchAdapter(DocumentSearchPort):
         hits = await repair_table_hits(
             list(hits), self._search_client.get_document_chunks
         )
+        return DocumentSearchResult(hits=tuple(hits))
+
+
+class DocumentSimilarityAdapter(DocumentSimilarityPort):
+    """
+    Runtime adapter behind `RuntimeServices.document_similarity`
+    (KF-SIMILARITY-SEARCH).
+
+    Same private-binding doctrine as `DocumentSearchAdapter`: the binding and
+    access token stay inside the shim/client and never cross into
+    `CapabilityContext`; the capability passes scope PARAMETERS only.
+
+    The scope seam differs in one way that matters. Under `search(...)` the
+    document uids come from the capability's own config, so narrowing them is a
+    formality. Here they come from the MODEL, on the call - so this seam is the
+    only thing standing between an LLM-named uid and a document outside the
+    conversation's scope. Knowledge Flow's per-document ReBAC still gates real
+    authorization, but that would leave the agent reading documents the user
+    did not put in this conversation. An intersection that comes back empty
+    therefore returns no hits rather than calling Knowledge Flow untargeted,
+    which is what an empty target list would mean downstream.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._search_client = VectorSearchClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+
+    async def find_similar(
+        self,
+        anchor: str,
+        *,
+        document_uids: Sequence[str],
+        top_k: int = 10,
+        rerank: bool = True,
+        min_score: float | None = None,
+    ) -> DocumentSearchResult:
+        runtime_context = self._binding.runtime_context
+        # Corpus retrieval turned off for the turn is off for every corpus tool;
+        # naming target uids does not opt back in.
+        if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return DocumentSearchResult(hits=())
+
+        if not document_uids:
+            return DocumentSearchResult(hits=())
+
+        effective_uids = _narrow_scope_ids(
+            get_document_uids(runtime_context), document_uids
+        )
+        if not effective_uids:
+            # Raising, not returning no hits: an empty result is
+            # indistinguishable from a genuine no-match, and the model would
+            # report "nothing resembles this" about a document never searched.
+            raise DocumentScopeRefusedError(
+                "none of the requested documents are in scope for this conversation",
+                requested_uids=document_uids,
+            )
+
+        top_k = top_k if isinstance(top_k, int) and top_k > 0 else 10
+
+        try:
+            hits = await self._search_client.similarity_search(
+                anchor=anchor,
+                document_uids=effective_uids,
+                top_k=top_k,
+                rerank=rerank,
+                min_score=min_score,
+            )
+        except Exception as exc:
+            # Same SDK-typed mapping the other document adapters apply, so the
+            # capability can render an `is_error` result without importing httpx.
+            raise _wrap_document_port_error(exc) from exc
         return DocumentSearchResult(hits=tuple(hits))
 
 

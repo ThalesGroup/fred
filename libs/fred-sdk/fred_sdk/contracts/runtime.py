@@ -688,6 +688,52 @@ class DocumentSearchPort(ABC):
         """
 
 
+class DocumentSimilarityPort(ABC):
+    """
+    Capability-safe targeted similarity / comparison search (KF-SIMILARITY-SEARCH).
+
+    The comparison counterpart of `DocumentSearchPort`: instead of answering a
+    question from wherever the corpus scope allows, it ranks the passages most
+    similar to an ANCHOR passage, restricted to documents named ON THE CALL.
+    That difference - where targeting lives - is the whole point. Conversational
+    search fixes its scope once per conversation; this is re-aimed per query,
+    which is what document-to-document comparison needs ("for THIS passage, find
+    the closest passage IN THAT document").
+
+    Same doctrine as `DocumentSearchPort` (RFC AGENT-CAPABILITY §3.8, §10):
+    scope parameters only, never a caller-supplied context, identity, or access
+    token - auth and identity come solely from the adapter's privately-captured
+    per-turn binding, and Knowledge Flow's per-document ReBAC is the real
+    authorization gate. The adapter still bounds `document_uids` by the session
+    binding's own scope, so naming a uid cannot widen past the conversation.
+
+    Returns `DocumentSearchResult` rather than a near-identical twin: the result
+    of both modes is the same thing - ranked `VectorSearchHit`s a capability
+    feeds to the model and rides on its tool artifact's `sources`.
+    """
+
+    @abstractmethod
+    async def find_similar(
+        self,
+        anchor: str,
+        *,
+        document_uids: Sequence[str],
+        top_k: int = 10,
+        rerank: bool = True,
+        min_score: float | None = None,
+    ) -> DocumentSearchResult:
+        """
+        Rank the passages most similar to `anchor` within `document_uids`,
+        best-first.
+
+        `document_uids` is REQUIRED and must be non-empty: an untargeted call is
+        a caller bug, not an invitation to search the whole corpus. `rerank`
+        runs the cross-encoder over the candidate pool; `min_score` drops
+        matches below a relevance threshold. Raises `DocumentPortCallError` on
+        transport failure.
+        """
+
+
 class AgentAssetPort(ABC):
     """
     Capability-safe storage for one agent instance's configuration assets
@@ -837,6 +883,28 @@ class DocumentPortCallError(Exception):
         super().__init__(message)
         self.timed_out = timed_out
         self.status_code = status_code
+
+
+class DocumentScopeRefusedError(Exception):
+    """
+    Raised by a document port adapter when EVERY document the caller named lies
+    outside the conversation's scope, so nothing was searched.
+
+    Why this is not just an empty result: a comparison tool that answers "no
+    matches" when it never looked is worse than one that errors. The model has
+    no way to tell the two apart, reports "nothing in that document resembles
+    this passage", and the user believes it. Distinct from
+    `DocumentPortCallError` because nothing failed downstream - naming it that
+    would put a transport story ("the service returned...") on a scope decision
+    the adapter made locally.
+
+    `requested_uids` is what the model asked for, so the capability can tell it
+    which documents it may not reach.
+    """
+
+    def __init__(self, message: str, *, requested_uids: Sequence[str] = ()) -> None:
+        super().__init__(message)
+        self.requested_uids = tuple(requested_uids)
 
 
 class DocumentTreePort(ABC):
@@ -1090,6 +1158,11 @@ class RuntimeServices:
     # `document_extract` capability's single-call path. Same doctrine/optionality
     # as the other document ports.
     document_extraction: DocumentExtractionPort | None = None
+    # Targeted similarity / comparison search (KF-SIMILARITY-SEARCH): powers the
+    # `document_similarity` capability. Separate from `document_search` because
+    # targeting lives on the call rather than the conversation - see the port's
+    # docstring. Same doctrine/optionality as the other document ports.
+    document_similarity: DocumentSimilarityPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

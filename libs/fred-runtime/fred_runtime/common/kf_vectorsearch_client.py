@@ -14,18 +14,68 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 from typing import Any, Dict, List, Optional, Sequence
 
+import httpx
 from fred_core.common import OwnerFilter
 from fred_core.store.vector_search import VectorSearchHit
 from pydantic import TypeAdapter
 
 from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
+from fred_runtime.runtime_context import get_runtime_context
 
 logger = logging.getLogger(__name__)
 
 _HITS = TypeAdapter(List[VectorSearchHit])
+
+#: Bounded retry for the similarity-search path only: nothing above it retries,
+#: so one dropped connection failed a whole comparison run. Scoped here so
+#: `search`/`rerank` keep their behaviour (RUNTIME-EXECUTION-CONTRACT.md §8.60).
+_TRANSIENT_RETRIES = 2
+_RETRY_BASE_DELAY_S = 0.5
+
+#: Work may still be in flight, so re-issuing multiplies load on an already-slow
+#: backend instead of recovering. A POOL timeout is deliberately absent: it means
+#: no connection was acquired, so nothing was sent.
+_NON_RETRYABLE_TIMEOUTS = (httpx.ReadTimeout, httpx.WriteTimeout)
+
+#: Only "this instance could not serve you". Not a plain 500: KF wraps every
+#: unexpected exception in one, so retrying a deterministic fault costs three
+#: pool-and-rerank round trips before failing anyway.
+_RETRYABLE_STATUS_CODES = frozenset({502, 503, 504})
+
+
+async def _with_transient_retry(request):
+    attempt = 0
+    while True:
+        try:
+            return await request()
+        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+            retryable_status = (
+                isinstance(exc, httpx.HTTPStatusError)
+                and exc.response.status_code in _RETRYABLE_STATUS_CODES
+            )
+            retryable = retryable_status or (
+                isinstance(exc, httpx.TransportError)
+                and not isinstance(exc, _NON_RETRYABLE_TIMEOUTS)
+            )
+            if not retryable or attempt >= _TRANSIENT_RETRIES:
+                raise
+            delay = (
+                _RETRY_BASE_DELAY_S * (2**attempt) + random.random() * 0.25  # nosec B311
+            )
+            logger.warning(
+                "[VECTOR][RETRY] attempt=%d/%d after %r, retrying in %.2fs",
+                attempt + 1,
+                _TRANSIENT_RETRIES,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            attempt += 1
 
 
 class VectorSearchClient(KfBaseClient):
@@ -142,6 +192,65 @@ class VectorSearchClient(KfBaseClient):
         raw = r.json()
         if not isinstance(raw, list):
             logger.warning("Unexpected document-chunks payload type: %s", type(raw))
+            return []
+        return _HITS.validate_python(raw)
+
+    async def similarity_search(
+        self,
+        *,
+        anchor: str,
+        document_uids: Sequence[str],
+        top_k: int = 10,
+        rerank: bool = True,
+        min_score: Optional[float] = None,
+    ) -> List[VectorSearchHit]:
+        """
+        Targeted document-to-document comparison search.
+
+        Unlike `search`, targeting is required: this ranks the passages most
+        similar to `anchor`, restricted to `document_uids`. Retries transient
+        connection/5xx failures (bounded, jittered) - this path has no upstream
+        retry otherwise.
+
+        Wire format (matches controller):
+          POST /vector/similarity-search
+          {
+            "anchor": str,
+            "document_uids": [str],
+            "top_k": int,
+            "rerank": bool,
+            "min_score": float?
+          }
+        """
+        if not document_uids:
+            raise ValueError("similarity_search requires at least one document uid")
+
+        payload: Dict[str, Any] = {
+            "anchor": anchor,
+            "document_uids": list(document_uids),
+            "top_k": top_k,
+            "rerank": rerank,
+        }
+        if min_score is not None:
+            payload["min_score"] = min_score
+
+        read_timeout = float(get_runtime_context().config.timeouts.similarity_read)
+
+        async def _do_request() -> httpx.Response:
+            return await self._request_with_token_refresh(
+                method="POST",
+                path="/vector/similarity-search",
+                phase_name="kf_vector_similarity_search",
+                json=payload,
+                read_timeout=read_timeout,
+            )
+
+        r = await _with_transient_retry(_do_request)
+        r.raise_for_status()
+
+        raw = r.json()
+        if not isinstance(raw, list):
+            logger.warning("Unexpected similarity search payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)
 

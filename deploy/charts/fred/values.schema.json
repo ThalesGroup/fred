@@ -1176,6 +1176,11 @@
                           "default": 300.0,
                           "title": "Summarize Read",
                           "type": "number"
+                        },
+                        "similarity_read": {
+                          "default": 90.0,
+                          "title": "Similarity Read",
+                          "type": "number"
                         }
                       },
                       "title": "RuntimeTimeouts",
