@@ -518,7 +518,9 @@ export type RuntimeErrorEvent = {
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
-  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
   chunk_kind?: string | null;
   citation_url?: string | null;
   confidential?: boolean | null;
@@ -751,6 +753,9 @@ export type ChatMetadata = {
   model?: string | null;
   sources?: VectorSearchHit[];
   token_usage?: ChatTokenUsage | null;
+  ui_parts?: {
+    [key: string]: any;
+  }[];
   [key: string]: any;
 };
 export type CodePart = {

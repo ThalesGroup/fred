@@ -180,6 +180,22 @@ implement authorless, untracked work.
 
 **Step 4 — Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
 
+**Keep code comments to 2-3 lines.** Say the "why" the code cannot show, then
+stop. A comment that re-narrates the decision, lists the alternatives, or
+restates what the next line does is noise the next reader has to skim past -
+and it goes stale faster than the code. When the reasoning genuinely needs
+more room, write it in the relevant compact doc and point at it from the code
+("Full rationale: COMPONENT-UX.md"). This applies to file headers too: a few
+lines on what the module is for, not an essay.
+
+**No issue numbers in code.** Not in comments, not in `describe()` names, not
+in stylesheets. `(#1234)` pins a line to a one-off decision that made sense the
+week it was taken and means nothing a year later, and it invites the paragraph
+of history that comes with it. Say what the code does and why it has to; the
+issue, the PR and the commit message are where the trail lives. Existing
+occurrences are not worth a cleanup pass of their own, but drop them from any
+line you are already rewriting.
+
 **Step 5 — Verification.** In the touched project root:
 
 ```

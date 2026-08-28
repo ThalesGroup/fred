@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import HomeSearch from "./HomeSearch/HomeSearch.tsx";
 import ActivityKpis from "./ActivityKpis/ActivityKpis.tsx";
 import RecentAgents from "./RecentAgents/RecentAgents.tsx";
@@ -36,12 +36,10 @@ const PERIODS: HomePeriod[] = [7, 30, 90];
  */
 export default function HomePage() {
   const { t } = useTranslation();
-  const { bootstrap } = useFrontendBootstrap();
-  const user = bootstrap?.current_user;
-  const rawFirstName = user?.first_name || user?.username || undefined;
-  // Capitalize the leading letter for the greeting (usernames often arrive
-  // lower-cased); the rest is left as-is so "jean-Marie" keeps its casing.
-  const firstName = rawFirstName ? rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1) : undefined;
+  // Same source as the chat welcome: the `given_name` claim. The bootstrap
+  // payload has no first name and its `username` is an opaque identifier on
+  // real realms, so no name here means the unnamed greeting, never an id.
+  const firstName = KeyCloakService.GetUserGivenName() || undefined;
 
   // Default to 30 days (index 1 in PERIODS) — a fuller picture than 7 on landing.
   const [periodIndex, setPeriodIndex] = useState(1);

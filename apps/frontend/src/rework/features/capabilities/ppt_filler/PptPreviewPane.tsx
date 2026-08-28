@@ -77,16 +77,23 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
 
   // A re-fill (or switching decks) changes this key → react-pdf remounts the
   // <Document> and we provision a fresh worker for it.
-  const remountKey = current ? `${current.preview_id}:${current.version}` : NO_PREVIEW_KEY;
+  //
+  // The blob URL is part of it because pdf.js caches one PDFWorker per PORT: a
+  // second `getDocument` on a port whose worker is still tearing down throws
+  // "PDFWorker.fromPort - the worker is being destroyed". Keying on the deck alone
+  // let a new `file` reuse the port of the load it replaces, which is exactly that.
+  const remountKey = current ? `${current.preview_id}:${current.version}:${objectUrl ?? ""}` : NO_PREVIEW_KEY;
 
   // Provision a fresh worker for THIS remount before the child <Document> reads
   // GlobalWorkerOptions (useMemo runs during render, ahead of child effects). The
   // effect below terminates the exact instance this run created.
   const workerRef = useRef<Worker | null>(null);
   useMemo(() => {
-    // No deck for this conversation: the body renders the empty state, no
-    // <Document> reads the port, so a worker here would only wait to be killed.
-    if (remountKey === NO_PREVIEW_KEY) {
+    if (!objectUrl) {
+      // Nothing to load this round (no deck, or a re-fill in flight). Releasing
+      // the port is what lets the outgoing worker's cleanup see itself orphaned
+      // and terminate at once, instead of lingering until the pane unmounts.
+      pdfjs.GlobalWorkerOptions.workerPort = null;
       workerRef.current = null;
       return;
     }

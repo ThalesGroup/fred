@@ -25,7 +25,7 @@
 
 import { useSelector } from "react-redux";
 import { useOpenSessionId } from "../useOpenSessionId";
-import { selectCurrentPreview, selectPptPreviewSessionId } from "./pptPreviewSlice";
+import { selectCurrentPreview, selectPptPreviewProduced, selectPptPreviewSessionId } from "./pptPreviewSlice";
 import type { PptPreviewPartData } from "./types";
 
 export function useSessionPptPreview(): PptPreviewPartData | null {
@@ -37,5 +37,8 @@ export function useSessionPptPreview(): PptPreviewPartData | null {
 
 /** Launcher visibility for the ppt_filler side panel - see `CapabilitySidePanelSpec`. */
 export function useHasPptPreview(): boolean {
-  return useSessionPptPreview() !== null;
+  const sessionId = useOpenSessionId();
+  const produced = useSelector(selectPptPreviewProduced);
+  const previewSessionId = useSelector(selectPptPreviewSessionId);
+  return produced && sessionId !== "" && previewSessionId === sessionId;
 }
