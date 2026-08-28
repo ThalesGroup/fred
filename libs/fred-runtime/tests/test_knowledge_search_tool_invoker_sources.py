@@ -62,6 +62,10 @@ class _FakeSearchClientWithNoise:
             ),
         ]
 
+    async def get_document_chunks(self, **_kwargs: object) -> list[VectorSearchHit]:
+        """Part of the VectorSearchClient surface; no truncated table in these fixtures."""
+        return []
+
 
 def _binding() -> BoundRuntimeContext:
     return BoundRuntimeContext(

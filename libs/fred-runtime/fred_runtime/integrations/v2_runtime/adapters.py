@@ -109,6 +109,7 @@ from fred_runtime.common.kf_workspace_client import (
 )
 from fred_runtime.common.mcp_runtime import MCPRuntime
 from fred_runtime.common.structures import AgentSettingsLike
+from fred_runtime.common.table_hits import repair_table_hits
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
     get_document_library_tags_ids,
@@ -944,6 +945,8 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             include_corpus_scope=include_corpus_scope,
         )
 
+        hits = await repair_table_hits(hits, self._search_client.get_document_chunks)
+
         # Only expose the fields the LLM needs for citation and reasoning.
         # URL and operational fields are excluded to prevent the model from
         # reproducing broken or internal paths in its reply.
@@ -1278,6 +1281,9 @@ class DocumentSearchAdapter(DocumentSearchPort):
             # so a 401 degraded to "the service call failed" instead of naming
             # the status. The capability never imports the HTTP stack itself.
             raise _wrap_document_port_error(exc) from exc
+        hits = await repair_table_hits(
+            list(hits), self._search_client.get_document_chunks
+        )
         return DocumentSearchResult(hits=tuple(hits))
 
 

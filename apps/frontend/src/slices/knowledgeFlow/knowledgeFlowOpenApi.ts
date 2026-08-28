@@ -414,6 +414,15 @@ const injectedRtkApi = api.injectEndpoints({
     testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/vector/test`, method: "POST" }),
     }),
+    getDocumentChunksOrdered: build.query<GetDocumentChunksOrderedApiResponse, GetDocumentChunksOrderedApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/document-chunks`,
+        params: {
+          document_uid: queryArg.documentUid,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
     rerankDocuments: build.mutation<RerankDocumentsApiResponse, RerankDocumentsApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/rerank`, method: "POST", body: queryArg.rerankRequest }),
     }),
@@ -1241,6 +1250,11 @@ export type GetVisualEvidenceArtifactApiArg = {
 };
 export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type TestPostSuccessApiArg = void;
+export type GetDocumentChunksOrderedApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type GetDocumentChunksOrderedApiArg = {
+  documentUid: string;
+  limit?: number;
+};
 export type RerankDocumentsApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type RerankDocumentsApiArg = {
   rerankRequest: RerankRequest;
@@ -2104,7 +2118,7 @@ export type VectorSearchHit = {
   slide_id?: number | null;
   has_visual_evidence?: boolean | null;
   slide_image_uri?: string | null;
-  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
   chunk_kind?: string | null;
   /** Document UID */
   uid: string;
@@ -2132,6 +2146,8 @@ export type VectorSearchHit = {
   /** Similarity score from vector search */
   score: number;
   rank?: number | null;
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
   embedding_model?: string | null;
   vector_index?: string | null;
   token_count?: number | null;
@@ -2642,6 +2658,8 @@ export const {
   useGetVisualEvidenceArtifactQuery,
   useLazyGetVisualEvidenceArtifactQuery,
   useTestPostSuccessMutation,
+  useGetDocumentChunksOrderedQuery,
+  useLazyGetDocumentChunksOrderedQuery,
   useRerankDocumentsMutation,
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
