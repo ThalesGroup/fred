@@ -146,12 +146,12 @@ def test_react_resume_probes_the_unnamespaced_checkpoint_first() -> None:
     assert _resume_checkpoint_namespaces(request) == ("", "instance-123")
 
 
-def test_graph_resume_probes_the_agent_namespace_first() -> None:
+def test_graph_resume_probes_only_the_agent_namespace() -> None:
     """
     The hand-rolled Graph runtime writes through `aput` itself, so its
-    per-agent namespace does reach storage — a `checkpoint_id`-carrying resume
-    looks there first, keeping `""` only as a fallback for a Graph pause that
-    never stamped a checkpoint_id.
+    per-agent namespace does reach storage — and its executor reads nowhere
+    else. A `checkpoint_id`-carrying resume must not be waved past the gate on
+    an unnamespaced checkpoint it would then fail to load mid-stream.
     """
 
     request = RuntimeExecuteRequest(
@@ -161,11 +161,11 @@ def test_graph_resume_probes_the_agent_namespace_first() -> None:
         resume_payload={"choice_id": "proceed"},
     )
 
-    assert _resume_checkpoint_namespaces(request) == ("instance-123", "")
+    assert _resume_checkpoint_namespaces(request) == ("instance-123",)
 
 
-def test_resume_namespaces_deduplicate_for_a_template_agent() -> None:
-    """A namespace equal to `""` must not be probed twice."""
+def test_resume_namespaces_fall_back_to_the_template_agent_id() -> None:
+    """An unmanaged (template) agent has no instance id to namespace on."""
 
     request = RuntimeExecuteRequest(
         agent_id="react.agent",

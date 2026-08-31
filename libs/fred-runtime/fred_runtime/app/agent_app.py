@@ -1896,19 +1896,24 @@ def _resume_checkpoint_namespaces(request: RuntimeExecuteRequest) -> tuple[str, 
     storage under the per-agent namespace.
 
     This gate runs before the target agent is resolved, so it cannot know
-    which runtime it is talking to. It orders the two candidates by the
-    request's own resume identifier — `checkpoint_id` is Graph V2's,
-    `interrupt_id` is ReAct V2's (mutually exclusive by contract) — and keeps
-    the other as a fallback, because a Graph pause can legitimately carry no
-    `checkpoint_id` (`graph_runtime.py` only stamps one when it has it).
+    which runtime it is talking to — it goes by the request's own resume
+    identifier instead (`checkpoint_id` is Graph V2's, `interrupt_id` is ReAct
+    V2's, mutually exclusive by contract).
     """
 
     agent_ns = checkpoint_namespace(
         agent_instance_id=request.agent_instance_id,
         agent_id=request.agent_id or request.agent_instance_id or "",
     )
-    ordered = ("", agent_ns) if request.checkpoint_id is None else (agent_ns, "")
-    return tuple(dict.fromkeys(ordered))
+    if request.checkpoint_id is not None:
+        # Graph V2, whose executor reads its own namespace and nowhere else.
+        # Probing "" as well would wave a pre-namespacing pause past this gate
+        # only to have it die mid-stream, where a 409 can no longer be sent.
+        return (agent_ns,)
+    # ReAct V2 — always unnamespaced. `agent_ns` stays as a fallback for a
+    # Graph pause that never stamped a checkpoint_id (`graph_runtime.py` only
+    # stamps one when it has it); nothing is ever stored there for ReAct.
+    return ("", agent_ns)
 
 
 async def _validate_session_checkpoint_access(

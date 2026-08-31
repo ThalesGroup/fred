@@ -4416,9 +4416,12 @@ namespace is real.
   a `checkpoint_ns` (it was inert), and the HITL claim keys on `""`.
 - `_resume_checkpoint_namespaces` picks the candidate namespace from the
   request's own resume identifier - `checkpoint_id` is Graph V2's,
-  `interrupt_id` is ReAct V2's - and keeps the other as a fallback, since a
-  Graph pause can legitimately carry no `checkpoint_id`. The gate runs
-  before target resolution, so it cannot know the runtime kind directly.
+  `interrupt_id` is ReAct V2's. A `checkpoint_id` resume probes the agent
+  namespace only, since the Graph executor reads nowhere else and a gate
+  that waved it through would fail mid-stream, past the point a 409 can be
+  sent. An `interrupt_id` resume probes `""` first, keeping the agent
+  namespace for a Graph pause that never stamped a `checkpoint_id`. The gate
+  runs before target resolution, so it cannot know the runtime kind directly.
 - `test_langgraph_resets_root_checkpoint_namespace` pins the LangGraph
   behaviour: a version bump that changed it fails a test instead of
   silently moving live checkpoints out of the gate's reach.
