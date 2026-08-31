@@ -26,6 +26,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
 import { downloadFile } from "../../../utils/downloadUtils";
 import { useLazyDownloadRawContentBlobQuery } from "../../../slices/knowledgeFlow/knowledgeFlowApi.blob";
+import { collectDescendantTags, rewriteTagUnderFolder, type TagNode } from "../../../shared/utils/tagTree";
 
 type DocumentRefreshers = {
   refetchTags?: () => Promise<any>;
@@ -204,22 +205,29 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [fetchBlob, showError],
   );
   // Corpus folder rename (RFC §13.8) — reuses the existing tag-update path
-  // (`PUT /tags/{tag_id}`) already used elsewhere in this hook, no new
-  // endpoint. `refresh` re-derives the tag tree so the renamed node's new
-  // path/name shows up without a manual reload.
-  const renameTag = useCallback(
-    async (tag: TagWithItemsId, newName: string) => {
+  // (`PUT /tags/{tag_id}`), no new endpoint. A folder is a path PREFIX, not a
+  // single tag: renaming it must rewrite the leading segment of EVERY tag
+  // at-or-under the node (the tag ending there AND every descendant), else the
+  // descendants keep the old path and re-materialize the old folder — the rename
+  // then appears to do nothing. `refresh` re-derives the tag tree afterward.
+  const renameFolder = useCallback(
+    async (node: TagNode, newName: string) => {
+      const oldFull = node.full;
+      const cut = oldFull.lastIndexOf("/");
+      const parentPath = cut >= 0 ? oldFull.slice(0, cut) : "";
+      const newFull = parentPath ? `${parentPath}/${newName}` : newName;
+      const tags = collectDescendantTags(node);
       try {
-        await updateTag({
-          tagId: tag.id,
-          tagUpdate: {
-            name: newName,
-            path: tag.path,
-            description: tag.description,
-            type: tag.type,
-            item_ids: tag.item_ids,
-          },
-        }).unwrap();
+        // Independent per-id updates (each carries its final name/path), so order
+        // does not matter; a mid-way failure leaves a partial rename the user can
+        // retry (no folder-rename transaction exists server-side).
+        for (const tag of tags) {
+          const { name, path } = rewriteTagUnderFolder(tag, oldFull, newFull);
+          await updateTag({
+            tagId: tag.id,
+            tagUpdate: { name, path, description: tag.description, type: tag.type, item_ids: tag.item_ids },
+          }).unwrap();
+        }
         await refresh();
       } catch (e: any) {
         showError?.({
@@ -288,7 +296,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     toggleRetrievable,
     removeFromLibrary,
     bulkRemoveFromLibraryForTag,
-    renameTag,
+    renameFolder,
     renameDocument,
     mutateLabels,
     preview,
