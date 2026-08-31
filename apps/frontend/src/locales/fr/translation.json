@@ -290,6 +290,9 @@
       "close": "Fermer le panneau",
       "download": "Télécharger .html",
       "openInNewTab": "Ouvrir dans un nouvel onglet",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "resetZoom": "Réinitialiser le zoom",
       "empty": "Aucun artefact pour l'instant. Demandez à l'assistant de créer une page ou un composant.",
       "card": {
         "aria": "Artefact HTML",

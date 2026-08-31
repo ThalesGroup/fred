@@ -79,9 +79,31 @@ function headInjection(css: string): string {
  * (the sandbox blocks script but not subresource fetches). A full document's own
  * <html>/<head>/<body> tags are ignored by the parser inside our body, but its
  * meaningful content still renders — now under our already-active CSP.
+ *
+ * `zoom` (default 1) applies a browser-like zoom to the PREVIEW only, via the CSS
+ * `zoom` property so content actually reflows (a wide fixed-width page shrinks to
+ * fit when zoomed out, unlike a purely visual transform). Download / open-in-new-tab
+ * pass no zoom, so the exported document is always 100%. `zoom` is a clamped number
+ * from the viewer's own controls, never user text — no injection surface.
  */
-export function composeHtmlDocument(html: string, css: string): string {
-  return `<!doctype html><html><head>${headInjection(css)}</head><body>${html}</body></html>`;
+export function composeHtmlDocument(html: string, css: string, zoom = 1): string {
+  const zoomStyle = zoom !== 1 ? `<style>html{zoom:${zoom}}</style>` : "";
+  return `<!doctype html><html><head>${headInjection(css)}${zoomStyle}</head><body>${html}</body></html>`;
+}
+
+// Discrete zoom stops for the viewer's zoom controls (100% = 1, the default).
+export const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
+
+/** The next stop below `z` (clamped at the smallest). */
+export function zoomOut(z: number): number {
+  const lower = [...ZOOM_LEVELS].reverse().find((level) => level < z);
+  return lower ?? ZOOM_LEVELS[0];
+}
+
+/** The next stop above `z` (clamped at the largest). */
+export function zoomIn(z: number): number {
+  const higher = ZOOM_LEVELS.find((level) => level > z);
+  return higher ?? ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
 }
 
 /** A safe download filename derived from the artifact title (always ends in .html). */

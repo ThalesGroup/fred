@@ -157,6 +157,8 @@ export const materialIcons = [
   "category",
   "notes",
   "open_in_new",
+  "zoom_in",
+  "zoom_out",
   "drive_file_rename_outline",
   "search_off",
   "arrow_upward",

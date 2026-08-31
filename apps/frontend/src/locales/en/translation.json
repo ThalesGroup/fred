@@ -290,6 +290,9 @@
       "close": "Close panel",
       "download": "Download .html",
       "openInNewTab": "Open in a new tab",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "resetZoom": "Reset zoom",
       "empty": "No artifact yet. Ask the assistant to build a page or component.",
       "card": {
         "aria": "HTML artifact",

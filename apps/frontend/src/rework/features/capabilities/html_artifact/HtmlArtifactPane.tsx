@@ -42,7 +42,7 @@ import {
   selectHtmlArtifactSessionId,
   selectHtmlArtifactsById,
 } from "./htmlArtifactSlice";
-import { composeHtmlDocument, openHtmlArtifactInNewTab } from "./htmlArtifactDocument";
+import { composeHtmlDocument, openHtmlArtifactInNewTab, zoomIn, zoomOut, ZOOM_LEVELS } from "./htmlArtifactDocument";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
 import styles from "./HtmlArtifactPane.module.css";
 
@@ -56,6 +56,9 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   const byId = useSelector(selectHtmlArtifactsById);
   const selectedId = useSelector(selectHtmlArtifactSelectedId);
   const [tab, setTab] = useState<ViewTab>("preview");
+  // Browser-like zoom for the Preview (reflows content via CSS `zoom`), so a wide
+  // page can be shrunk to fit. Download / open-in-new-tab stay at 100%.
+  const [zoom, setZoom] = useState(1);
 
   // Only surface artifacts belonging to the conversation currently open.
   const artifacts = useMemo(
@@ -70,9 +73,12 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
     [artifacts, selectedId],
   );
 
-  // The composed, CSP-carrying document for the Preview iframe (recomputed only
-  // when the selected artifact's markup changes).
-  const composed = useMemo(() => (selected ? composeHtmlDocument(selected.html, selected.css) : ""), [selected]);
+  // The composed, CSP-carrying document for the Preview iframe (recomputed when the
+  // selected artifact's markup OR the zoom changes; the iframe remounts on the key).
+  const composed = useMemo(
+    () => (selected ? composeHtmlDocument(selected.html, selected.css, zoom) : ""),
+    [selected, zoom],
+  );
 
   const untitled = t("capability.html_artifact.untitled", { defaultValue: "HTML artifact" });
 
@@ -157,14 +163,43 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
 
           <div className={styles.body}>
             {tab === "preview" && (
-              <iframe
-                key={`${selected.artifact_id}:${selected.version}`}
-                className={styles.previewFrame}
-                title={selected.title || untitled}
-                sandbox=""
-                referrerPolicy="no-referrer"
-                srcDoc={composed}
-              />
+              <div className={styles.previewPane}>
+                <div className={styles.zoomBar}>
+                  <Tooltip text={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}>
+                    <IconButton
+                      variant="icon"
+                      size="small"
+                      icon={{ category: "outlined", type: "zoom_out" }}
+                      onClick={() => setZoom(zoomOut)}
+                      disabled={zoom <= ZOOM_LEVELS[0]}
+                      aria-label={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}
+                    />
+                  </Tooltip>
+                  <Tooltip text={t("capability.html_artifact.resetZoom", { defaultValue: "Reset zoom" })}>
+                    <button className={styles.zoomLabel} onClick={() => setZoom(1)}>
+                      {Math.round(zoom * 100)}%
+                    </button>
+                  </Tooltip>
+                  <Tooltip text={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}>
+                    <IconButton
+                      variant="icon"
+                      size="small"
+                      icon={{ category: "outlined", type: "zoom_in" }}
+                      onClick={() => setZoom(zoomIn)}
+                      disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+                      aria-label={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}
+                    />
+                  </Tooltip>
+                </div>
+                <iframe
+                  key={`${selected.artifact_id}:${selected.version}:${zoom}`}
+                  className={styles.previewFrame}
+                  title={selected.title || untitled}
+                  sandbox=""
+                  referrerPolicy="no-referrer"
+                  srcDoc={composed}
+                />
+              </div>
             )}
             {tab === "html" && (
               <div className={styles.source}>

@@ -103,14 +103,51 @@
   overflow: hidden;
 }
 
-/* Preview: the sandboxed iframe fills the body on a plain white page background so
+/* Preview tab: a fixed zoom bar above the sandboxed iframe, which fills the rest. */
+.previewPane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.zoomBar {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+}
+
+.zoomLabel {
+  appearance: none;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-3xs) var(--spacing-2xs);
+  min-width: 3.25rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.zoomLabel:hover {
+  background-color: var(--state-on-surface-hover);
+  color: var(--on-surface);
+}
+
+/* The sandboxed iframe fills the remaining space on a plain white page background so
  * the rendered artifact reads as a real web page regardless of the app theme. */
 .previewFrame {
   display: block;
+  flex: 1;
   border: none;
   background-color: #ffffff;
   width: 100%;
-  height: 100%;
+  min-height: 0;
 }
 
 /* Source tabs (HTML / CSS): the CodeBlock scrolls within the body. */

@@ -17,7 +17,7 @@
 // document and a bare fragment must compose to a valid single document.
 
 import { describe, expect, it } from "vitest";
-import { artifactFileName, composeHtmlDocument } from "./htmlArtifactDocument";
+import { artifactFileName, composeHtmlDocument, zoomIn, zoomOut, ZOOM_LEVELS } from "./htmlArtifactDocument";
 
 const CSP = "Content-Security-Policy";
 
@@ -99,6 +99,26 @@ describe("composeHtmlDocument", () => {
     const authorCloseIdx = out.lastIndexOf("</style>");
     expect(metaIdx).toBeGreaterThan(-1);
     expect(metaIdx).toBeLessThan(authorCloseIdx);
+  });
+});
+
+describe("composeHtmlDocument zoom", () => {
+  it("injects a CSS zoom rule only when zoom !== 1", () => {
+    expect(composeHtmlDocument("<div>x</div>", "", 0.5)).toContain("zoom:0.5");
+    expect(composeHtmlDocument("<div>x</div>", "")).not.toContain("zoom:");
+    expect(composeHtmlDocument("<div>x</div>", "", 1)).not.toContain("zoom:");
+  });
+});
+
+describe("zoom stepping", () => {
+  it("steps down and clamps at the smallest level", () => {
+    expect(zoomOut(1)).toBe(0.9);
+    expect(zoomOut(ZOOM_LEVELS[0])).toBe(ZOOM_LEVELS[0]);
+  });
+
+  it("steps up and clamps at the largest level", () => {
+    expect(zoomIn(1)).toBe(1.1);
+    expect(zoomIn(ZOOM_LEVELS[ZOOM_LEVELS.length - 1])).toBe(ZOOM_LEVELS[ZOOM_LEVELS.length - 1]);
   });
 });
 
