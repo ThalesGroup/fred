@@ -289,6 +289,7 @@
       "untitled": "HTML artifact",
       "close": "Close panel",
       "download": "Download .html",
+      "openInNewTab": "Open in a new tab",
       "empty": "No artifact yet. Ask the assistant to build a page or component.",
       "card": {
         "aria": "HTML artifact",

@@ -156,6 +156,7 @@ export const materialIcons = [
   "history",
   "category",
   "notes",
+  "open_in_new",
   "drive_file_rename_outline",
   "search_off",
   "arrow_upward",

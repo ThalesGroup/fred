@@ -32,6 +32,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
 import type { CapabilitySidePanelProps } from "../types";
 import { useOpenSessionId } from "../useOpenSessionId";
@@ -41,7 +42,7 @@ import {
   selectHtmlArtifactSessionId,
   selectHtmlArtifactsById,
 } from "./htmlArtifactSlice";
-import { composeHtmlDocument } from "./htmlArtifactDocument";
+import { composeHtmlDocument, openHtmlArtifactInNewTab } from "./htmlArtifactDocument";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
 import styles from "./HtmlArtifactPane.module.css";
 
@@ -88,6 +89,17 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
           <Icon category="outlined" type="code" />
           <span className={styles.title}>{selected?.title || untitled}</span>
         </div>
+        {selected && (
+          <Tooltip text={t("capability.html_artifact.openInNewTab", { defaultValue: "Open in a new tab" })}>
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "open_in_new" }}
+              onClick={() => openHtmlArtifactInNewTab(selected.html, selected.css)}
+              aria-label={t("capability.html_artifact.openInNewTab", { defaultValue: "Open in a new tab" })}
+            />
+          </Tooltip>
+        )}
         {selected && <HtmlArtifactDownloadButton html={selected.html} css={selected.css} title={selected.title} />}
         <IconButton
           variant="icon"

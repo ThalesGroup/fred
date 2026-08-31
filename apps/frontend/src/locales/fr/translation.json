@@ -289,6 +289,7 @@
       "untitled": "Artefact HTML",
       "close": "Fermer le panneau",
       "download": "Télécharger .html",
+      "openInNewTab": "Ouvrir dans un nouvel onglet",
       "empty": "Aucun artefact pour l'instant. Demandez à l'assistant de créer une page ou un composant.",
       "card": {
         "aria": "Artefact HTML",

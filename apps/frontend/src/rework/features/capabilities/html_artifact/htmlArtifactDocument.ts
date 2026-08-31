@@ -44,10 +44,27 @@ function neutralizeStyleClose(css: string): string {
   return css.replace(/<\/(style)/gi, "<\\/$1");
 }
 
+// Make the layout use the viewport width (the panel), so responsive content fits.
+const VIEWPORT_META = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+
+// Base "fit-to-width" stylesheet. The Preview iframe is sandboxed WITHOUT
+// allow-same-origin, so the app cannot read the content's natural width to
+// auto-scale it — instead we constrain the common overflow sources so agent
+// markup fits the (often narrow) panel: media capped to 100%, long words/URLs
+// wrapped, code/tables kept from pushing the page wide. It is emitted BEFORE the
+// author's <style>, so intentional author rules still win (no !important).
+const FIT_STYLE =
+  "<style>" +
+  "html{box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}" +
+  "html,body{margin:0}body{padding:12px;overflow-wrap:break-word;word-break:break-word}" +
+  "img,svg,video,canvas{max-width:100%;height:auto}" +
+  "table{max-width:100%}pre{max-width:100%;overflow-x:auto}" +
+  "</style>";
+
 /** Head content that opens every composed document, BEFORE any author markup. */
 function headInjection(css: string): string {
-  const style = css ? `<style>${neutralizeStyleClose(css)}</style>` : "";
-  return `<meta charset="utf-8">${CSP_META}${style}`;
+  const authorStyle = css ? `<style>${neutralizeStyleClose(css)}</style>` : "";
+  return `<meta charset="utf-8">${VIEWPORT_META}${CSP_META}${FIT_STYLE}${authorStyle}`;
 }
 
 /**
@@ -96,4 +113,23 @@ export function downloadHtmlArtifact(html: string, css: string, title: string): 
   // Defer the revoke: revoking synchronously right after click() can cancel the
   // download in some browsers (the blob is freed before the save reads it).
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/**
+ * Open the composed document full-size in a new browser tab — the escape hatch for
+ * content too wide for the side panel.
+ *
+ * The tab loads a blob: URL of the SAME composed document (CSP `default-src 'none'`
+ * → still no script, no network egress, inert HTML/CSS), opened with `noopener` so
+ * it cannot reach `window.opener`. The blob is same-origin with the app, but the
+ * CSP keeps it inert, so there is no script path to app storage. A `data:` URL
+ * would get an opaque origin but is blocked from top-level navigation by browsers.
+ */
+export function openHtmlArtifactInNewTab(html: string, css: string): void {
+  const doc = composeHtmlDocument(html, css);
+  const blob = new Blob([doc], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  // Keep the URL alive long enough for the new tab to load, then free it.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

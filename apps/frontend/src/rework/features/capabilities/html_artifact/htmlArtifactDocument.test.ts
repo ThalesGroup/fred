@@ -47,12 +47,23 @@ describe("composeHtmlDocument", () => {
     expect(out).toContain("<body><p>hello</p></body>");
   });
 
-  it("injects author CSS as a <style> when present, and omits it when empty", () => {
+  it("injects the author CSS as its own <style> only when present", () => {
     const withCss = composeHtmlDocument("<div>x</div>", "div { color: red; }");
     expect(withCss).toContain("<style>div { color: red; }</style>");
+    // Two <style> tags: the base fit stylesheet + the author's.
+    expect((withCss.match(/<style>/g) ?? []).length).toBe(2);
 
     const noCss = composeHtmlDocument("<div>x</div>", "");
-    expect(noCss).not.toContain("<style>");
+    expect(noCss).not.toContain("color: red");
+    // Only the base fit stylesheet, no author <style>.
+    expect((noCss.match(/<style>/g) ?? []).length).toBe(1);
+  });
+
+  it("injects a viewport meta and a fit-to-width base stylesheet", () => {
+    const out = composeHtmlDocument("<div>x</div>", "");
+    expect(out).toContain('name="viewport"');
+    // Media/tables are capped to the panel width so content fits the viewer.
+    expect(out).toContain("max-width:100%");
   });
 
   it("never emits an app-URL <base> or form-action (CSP forbids both)", () => {
@@ -79,14 +90,15 @@ describe("composeHtmlDocument", () => {
     const out = composeHtmlDocument("<div>x</div>", '</style><meta http-equiv="refresh" content="0;url=http://evil">');
     // The attacker's `</style` is neutralized (backslash inserted) ...
     expect(out).toContain("<\\/style");
-    // ... so only the ONE legitimate closing tag survives (not the injected one).
-    expect((out.match(/<\/style>/gi) ?? []).length).toBe(1);
-    // ... and the injected <meta> stays INSIDE the (inert) style element, before
-    // that single real close — never in HTML context.
+    // ... so only the legitimate closes survive (base fit style + author style =
+    // 2), not a third from the injected one.
+    expect((out.match(/<\/style>/gi) ?? []).length).toBe(2);
+    // ... and the injected <meta> stays INSIDE the (inert) author style element,
+    // before its closing tag (the LAST </style>) — never in HTML context.
     const metaIdx = out.indexOf("http-equiv");
-    const closeIdx = out.search(/<\/style>/i);
+    const authorCloseIdx = out.lastIndexOf("</style>");
     expect(metaIdx).toBeGreaterThan(-1);
-    expect(metaIdx).toBeLessThan(closeIdx);
+    expect(metaIdx).toBeLessThan(authorCloseIdx);
   });
 });
 
