@@ -58,6 +58,10 @@ document_summarize = "fred_runtime.capabilities.document_summarize:DocumentSumma
 # auto-discovered — do NOT register manually.
 document_verbatim = "fred_runtime.capabilities.document_verbatim:DocumentVerbatimCapability"
 document_extract = "fred_runtime.capabilities.document_extract:DocumentExtractCapability"
+# Targeted document-to-document comparison on the `document_similarity`
+# port - the comparison counterpart of document_access's search. Admin-gated,
+# auto-discovered - do NOT register manually.
+document_similarity = "fred_runtime.capabilities.document_similarity:DocumentSimilarityCapability"
 # Exhaustive, paginated business-label resolution on the shared
 # DocumentTreePort.list_by_label — deliberately kept out of document_access
 # (DEFAULT_ON) so no existing agent's tool set changes; a team admin opts in

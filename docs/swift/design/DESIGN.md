@@ -410,6 +410,15 @@ request/conversation (chosen once); this mode takes its target from the call
 - **MCP** — auto-exposed by the Text MCP server via
   `include_tags=["Vector Search"]`; agents see `similarity_search` with no
   extra wiring.
+- **Capability** - `document_similarity`, the first-order path, sitting on the
+  typed `RuntimeServices.document_similarity` port and offering the agent one
+  tool, `find_similar_passages`. Targeting is narrowed to `document_uids`
+  here: folder targets stay MCP-only until an agent needs them. The uids come
+  from the model per call, so the adapter bounds them by the session binding
+  and refuses to widen when that intersection is empty. A weak hit stays
+  citable, unlike under corpus search - the caller named the targets, so there
+  is no corpus-wide noise to filter out - though dataset-pointer chunks never
+  are. See `RUNTIME-EXECUTION-CONTRACT.md` §8.59.
 - Implementation is a thin orchestration over existing primitives, no new
   search machinery: targeted `search(...)` (ReBAC-filtered candidate pool) →
   `rerank_documents(...)` (cross-encoder, best-first) → `top_k` → optional

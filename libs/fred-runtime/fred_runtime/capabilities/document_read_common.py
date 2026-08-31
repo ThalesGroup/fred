@@ -20,6 +20,13 @@ port and differ only in tool intent and how the pagination footer is worded, so
 the config model, length resolution, error shaping, and page-to-tool-result
 formatting live here once.
 
+`document_tool_failure` has outgrown that pair - `document_similarity` uses it
+too, since the error shaping is about the document ports in general, not about
+paginated reading. It stays here rather than moving to a new module: two other
+capabilities (`document_access`, `document_summarize`) still carry their own
+private copies, and folding all four into one home is a cleanup of its own, not
+something to smuggle into a feature change.
+
 Doctrine (RFC §3.5, §3.8, §10), identical to `document_summarize`:
 - the capability reaches the platform ONLY through the typed
   `RuntimeServices.document_markdown` port; the per-turn binding and the raw

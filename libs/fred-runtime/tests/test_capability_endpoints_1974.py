@@ -234,6 +234,7 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
             "document_access",
             "document_extract",
             "document_label_search",
+            "document_similarity",
             "document_summarize",
             "document_verbatim",
         ]

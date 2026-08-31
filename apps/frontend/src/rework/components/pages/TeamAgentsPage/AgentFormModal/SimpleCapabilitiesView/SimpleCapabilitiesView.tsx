@@ -74,7 +74,7 @@ export function SimpleCapabilitiesView({
                   <ToolPackCard
                     key={pack.id}
                     pack={pack}
-                    checked={derivePackChecked(pack, selection)}
+                    checked={derivePackChecked(pack, selection, availableIds)}
                     disabled={disabled}
                     availableIds={availableIds}
                     activeIds={activeIds}
