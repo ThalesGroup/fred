@@ -278,6 +278,28 @@
         "plainText": "Plain text"
       }
     },
+    "html_artifact": {
+      "name": "Generate a web page (HTML/CSS)",
+      "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
+      "panel": {
+        "html_artifact_pane": {
+          "title": "HTML artifact"
+        }
+      },
+      "untitled": "HTML artifact",
+      "close": "Close panel",
+      "download": "Download .html",
+      "empty": "No artifact yet. Ask the assistant to build a page or component.",
+      "card": {
+        "aria": "HTML artifact",
+        "open": "Open preview"
+      },
+      "tabs": {
+        "preview": "Preview",
+        "html": "HTML",
+        "css": "CSS"
+      }
+    },
     "ppt_filler": {
       "name": "Fill a PowerPoint file",
       "description": "Ability to fill a PPT file from a detailed template.",

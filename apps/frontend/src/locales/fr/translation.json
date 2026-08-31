@@ -278,6 +278,28 @@
         "plainText": "Texte brut"
       }
     },
+    "html_artifact": {
+      "name": "Générer une page web (HTML/CSS)",
+      "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat.",
+      "panel": {
+        "html_artifact_pane": {
+          "title": "Artefact HTML"
+        }
+      },
+      "untitled": "Artefact HTML",
+      "close": "Fermer le panneau",
+      "download": "Télécharger .html",
+      "empty": "Aucun artefact pour l'instant. Demandez à l'assistant de créer une page ou un composant.",
+      "card": {
+        "aria": "Artefact HTML",
+        "open": "Ouvrir l'aperçu"
+      },
+      "tabs": {
+        "preview": "Aperçu",
+        "html": "HTML",
+        "css": "CSS"
+      }
+    },
     "ppt_filler": {
       "name": "Remplir un fichier PowerPoint",
       "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé.",

@@ -156,10 +156,14 @@ hand-editing of the `UiPart` union or the part-renderer/side-panel registries
 (they extend at boot / by declaration).
 
 **Composition** (Preview + Download): the `html` and `css` are combined into one
-document — inject `<style>{css}</style>` into the document `<head>` (wrapping a
-bare fragment in a minimal `<html><head></head><body>…</body></html>` shell when
-`html` is not already a full document). The same composed string feeds both the
-iframe `srcdoc` and the download blob.
+document — the author markup (fragment OR full document) is ALWAYS placed inside
+OUR shell's `<body>`, with our head (charset + CSP `<meta>` + author `<style>`)
+first: `<!doctype html><html><head>…CSP…</head><body>{html}</body></html>`. We
+never splice into an author-provided `<head>`/`<html>`, so the CSP meta is always
+the first thing the parser reaches and therefore governs EVERY author subresource
+(a meta CSP only applies to content parsed after it — see §4.7). The same composed
+string feeds both the iframe `srcdoc` and the download blob. Author CSS is
+neutralized against a `</style>` breakout before it enters the `<style>` element.
 
 ### 4.7 Security — the sandbox (the load-bearing part)
 
@@ -255,10 +259,10 @@ this is an extension, not a rewrite.
    tokens); 256 KB is the engineering equivalent (§4.4). Over-cap → `is_error`.
 2. **Fragment vs full document — accept both.** The `html` argument may be a
    complete document (`<!doctype html>…`) or a bare fragment (e.g. one
-   `<div>…</div>`). The render/download composition (§4.6) injects CSS + CSP into
-   the existing `<head>` for a full document, and wraps a fragment in a minimal
-   `<html><head>…</head><body>{fragment}</body></html>` shell first. The agent
-   need not know which it produced.
+   `<div>…</div>`). The render/download composition (§4.6) ALWAYS wraps the author
+   markup inside our own shell body with our CSP-first head — it never splices into
+   an author-provided `<head>`/`<html>` (a security requirement: the CSP meta must
+   precede all author markup, §4.7). The agent need not know which it produced.
 3. **Syntax highlighting — reuse the existing `CodeBlock` molecule**
    (`react-syntax-highlighter`, already a dependency). No new dependency (§4.6).
 4. **Icon — `code`** (already in the `materialIcons` list, §7).
