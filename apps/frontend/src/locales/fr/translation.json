@@ -2458,6 +2458,10 @@
               "title": "Remplir un document PowerPoint",
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
             },
+            "webPage": {
+              "title": "Générer une page web (HTML/CSS)",
+              "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat."
+            },
             "reasoning": {
               "title": "Raisonnement",
               "description": "Accès au mode \"raisonnement\" dans les options du chat."

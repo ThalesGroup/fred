@@ -2458,6 +2458,10 @@
               "title": "Fill in a PowerPoint document",
               "description": "Ability to fill a PPT file from a detailed template."
             },
+            "webPage": {
+              "title": "Generate a web page (HTML/CSS)",
+              "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
+            },
             "reasoning": {
               "title": "Reasoning",
               "description": "Access to \"reasoning\" mode in the chat options."
