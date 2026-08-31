@@ -158,6 +158,7 @@ from ..integrations.v2_runtime.adapters import (
     DocumentFolderAdapter,
     DocumentMarkdownAdapter,
     DocumentSearchAdapter,
+    DocumentSimilarityAdapter,
     DocumentSummarizeAdapter,
     DocumentTreeAdapter,
     FredKnowledgeSearchToolInvoker,
@@ -761,6 +762,13 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    # Targeted similarity / comparison search: powers document_similarity. Its
+    # own adapter rather than a second method on the search one, because its
+    # targeting comes from the model per call, not from the conversation.
+    document_similarity = DocumentSimilarityAdapter(
+        binding=binding,
+        settings=settings,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
@@ -829,6 +837,7 @@ def _build_runtime_services(
         document_summarize=document_summarize,
         document_markdown=document_markdown,
         document_extraction=document_extraction,
+        document_similarity=document_similarity,
         # Read-only platform SQL (OPSCAP-01-PG): pod-lifetime adapter (like
         # checkpointer/kpi_writer, NOT per-turn) — read-only enforcement,
         # row cap and timeout clamp all live server-side in the adapter.

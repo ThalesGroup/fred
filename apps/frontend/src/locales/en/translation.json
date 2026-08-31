@@ -231,6 +231,24 @@
         }
       }
     },
+    "document_similarity": {
+      "name": "Compare documents",
+      "description": "Ability to find the passages most similar to a given passage, inside specific documents.",
+      "fields": {
+        "default_top_k": {
+          "title": "Matches per call",
+          "description": "How many matches the find_similar_passages tool returns by default, best-first. The agent can ask for fewer or more, up to 50."
+        },
+        "rerank": {
+          "title": "Re-rank matches",
+          "description": "Re-order candidate passages with the cross-encoder before returning them. More accurate, slightly slower. Recommended."
+        },
+        "min_score": {
+          "title": "Minimum relevance",
+          "description": "Drop matches scoring below this relevance threshold (0 to 1). Leave empty to return every match, however weak - useful when 'nothing matches' is itself the answer."
+        }
+      }
+    },
     "writable_document": {
       "name": "Generate a text document (Word)",
       "description": "Ability to edit and generate a downloadable text document.",

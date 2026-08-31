@@ -10,6 +10,7 @@
 .claude/settings.local.json
 .claude/todos.json
 .claude/memory/
+.claude/worktrees/
 .claude/skills/front-end-ux-ui/
 .vscode/*
 !.vscode/launch.json
