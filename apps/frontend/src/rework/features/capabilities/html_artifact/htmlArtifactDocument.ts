@@ -13,15 +13,27 @@
 // limitations under the License.
 
 // Compose an agent-produced (untrusted) html + css into ONE self-contained
-// document for the Preview iframe (`srcdoc`) and the download blob.
-//
-// SECURITY (HTML-ARTIFACT-CAPABILITY-RFC.md §4.7): the markup is untrusted LLM
-// output. The primary control is the iframe's `sandbox=""` (no `allow-scripts`,
-// no `allow-same-origin`) applied where the iframe is mounted — no script runs and
-// the frame is an opaque origin with no access to the app. This module adds
-// defense-in-depth: it ALWAYS injects a restrictive CSP `<meta>` into the composed
-// document head, so even absent the sandbox no external resource can load and no
-// script can run. The two controls are independent by design.
+// document for the Preview iframe (`srcdoc`), the download blob, and the new-tab
+// shell. The markup is untrusted LLM output; NO output path may run script.
+// Three independent layers enforce that — content sanitization (A, here), the
+// frame `sandbox=""` (B, Preview + newTabDocument), and a CSP `<meta>` (C). Full
+// rationale and the verification suite: HTML-ARTIFACT-CAPABILITY-RFC.md §4.7.
+
+import DOMPurify, { type Config } from "dompurify";
+
+// Layer A — strip every script-bearing construct from the author HTML. DOMPurify's
+// defaults drop <script>, on* handlers and javascript:/unknown-protocol URLs; we
+// also forbid the egress/nested-content tags the static viewer never needs.
+// FORCE_BODY keeps a root-level inline <style>; RETURN_TRUSTED_TYPE:false → string.
+const SANITIZE_CONFIG: Config = {
+  FORCE_BODY: true,
+  FORBID_TAGS: ["script", "iframe", "object", "embed", "base", "meta", "link"],
+  RETURN_TRUSTED_TYPE: false,
+};
+
+function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, SANITIZE_CONFIG);
+}
 
 // `default-src 'none'` blocks everything not explicitly allowed (scripts, fetch,
 // frames, remote images/fonts/styles); `style-src 'unsafe-inline'` is required for
@@ -71,14 +83,14 @@ function headInjection(css: string): string {
  * Compose the artifact into one self-contained HTML document string.
  *
  * The author markup (a bare fragment OR a full `<!doctype html>…` document) is
- * ALWAYS placed inside OUR shell's <body>, never spliced into an author-provided
- * <head>/<html>. This guarantees our CSP <meta> is the FIRST thing the parser
- * reaches, so it governs EVERY author subresource — a meta CSP only applies to
- * content parsed after it, so any `<link>`/`<img>` an author put before their own
- * <head> would otherwise fetch from the network before the policy took effect
- * (the sandbox blocks script but not subresource fetches). A full document's own
- * <html>/<head>/<body> tags are ignored by the parser inside our body, but its
- * meaningful content still renders — now under our already-active CSP.
+ * first SANITIZED (Layer A), then ALWAYS placed inside OUR shell's <body>, never
+ * spliced into an author-provided <head>/<html>. This guarantees our CSP <meta>
+ * is the FIRST thing the parser reaches, so it governs EVERY author subresource —
+ * a meta CSP only applies to content parsed after it, so any `<img>` an author
+ * put before their own <head> would otherwise fetch from the network before the
+ * policy took effect. Sanitization drops head-only tags (<title>) and the
+ * forbidden set (<script>/<link>/…); a full document's remaining meaningful body
+ * content still renders — now under our already-active CSP.
  *
  * `zoom` (default 1) applies a browser-like zoom to the PREVIEW only, via the CSS
  * `zoom` property so content actually reflows (a wide fixed-width page shrinks to
@@ -88,7 +100,8 @@ function headInjection(css: string): string {
  */
 export function composeHtmlDocument(html: string, css: string, zoom = 1): string {
   const zoomStyle = zoom !== 1 ? `<style>html{zoom:${zoom}}</style>` : "";
-  return `<!doctype html><html><head>${headInjection(css)}${zoomStyle}</head><body>${html}</body></html>`;
+  const safeHtml = sanitizeHtml(html);
+  return `<!doctype html><html><head>${headInjection(css)}${zoomStyle}</head><body>${safeHtml}</body></html>`;
 }
 
 // Discrete zoom stops for the viewer's zoom controls (100% = 1, the default).
@@ -137,19 +150,43 @@ export function downloadHtmlArtifact(html: string, css: string, title: string): 
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+// Escape a document so it can ride safely inside a double-quoted `srcdoc="…"`
+// attribute: `"` (would end the attribute) and `&` (would start an entity) MUST
+// be escaped; `<`/`>` are escaped too so the value can never be misparsed. The
+// browser reverses these entities when it parses srcdoc, yielding the exact doc.
+function escapeForSrcdoc(doc: string): string {
+  return doc.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// The new tab's TOP document — trusted, author-free, its only body a sandboxed
+// iframe. Keeping the artifact one level down in `sandbox=""` restores the
+// browser-enforced no-script guarantee (Layer B) even though a blob: URL is
+// same-origin with the app: the only same-origin document is this shell, which
+// carries no author markup.
+const NEW_TAB_SHELL_STYLE =
+  "<style>html,body{margin:0;height:100%}iframe{display:block;border:0;width:100%;height:100%}</style>";
+
 /**
- * Open the composed document full-size in a new browser tab — the escape hatch for
- * content too wide for the side panel.
- *
- * The tab loads a blob: URL of the SAME composed document (CSP `default-src 'none'`
- * → still no script, no network egress, inert HTML/CSS), opened with `noopener` so
- * it cannot reach `window.opener`. The blob is same-origin with the app, but the
- * CSP keeps it inert, so there is no script path to app storage. A `data:` URL
- * would get an opaque origin but is blocked from top-level navigation by browsers.
+ * The self-contained document opened in a new browser tab: the sanitized+CSP
+ * composed artifact (Layers A & C) wrapped in a trusted shell whose sandboxed
+ * iframe hosts it (Layer B). Exported for unit testing; `openHtmlArtifactInNewTab`
+ * is the side-effecting caller.
+ */
+export function newTabDocument(html: string, css: string): string {
+  const composed = composeHtmlDocument(html, css);
+  return (
+    `<!doctype html><html><head><meta charset="utf-8">${NEW_TAB_SHELL_STYLE}</head>` +
+    `<body><iframe sandbox="" referrerpolicy="no-referrer" srcdoc="${escapeForSrcdoc(composed)}"></iframe></body></html>`
+  );
+}
+
+/**
+ * Open the artifact full-size in a new browser tab — the escape hatch for content
+ * too wide for the side panel. Loads a blob: URL of the sandboxed-shell document
+ * (`newTabDocument`), opened with `noopener` so it cannot reach `window.opener`.
  */
 export function openHtmlArtifactInNewTab(html: string, css: string): void {
-  const doc = composeHtmlDocument(html, css);
-  const blob = new Blob([doc], { type: "text/html" });
+  const blob = new Blob([newTabDocument(html, css)], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener,noreferrer");
   // Keep the URL alive long enough for the new tab to load, then free it.

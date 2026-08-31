@@ -1,3 +1,9 @@
+// @vitest-environment jsdom
+//
+// DOMPurify (composeHtmlDocument's sanitizer) needs a full, browser-faithful DOM;
+// happy-dom's is too partial and strips all tags to text, so these tests would
+// pass trivially and prove nothing. jsdom is DOMPurify's reference environment.
+//
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +23,14 @@
 // document and a bare fragment must compose to a valid single document.
 
 import { describe, expect, it } from "vitest";
-import { artifactFileName, composeHtmlDocument, zoomIn, zoomOut, ZOOM_LEVELS } from "./htmlArtifactDocument";
+import {
+  artifactFileName,
+  composeHtmlDocument,
+  newTabDocument,
+  zoomIn,
+  zoomOut,
+  ZOOM_LEVELS,
+} from "./htmlArtifactDocument";
 
 const CSP = "Content-Security-Policy";
 
@@ -29,10 +42,14 @@ describe("composeHtmlDocument", () => {
   });
 
   it("always injects the CSP meta — full document with <head>", () => {
-    const out = composeHtmlDocument("<!doctype html><html><head><title>t</title></head><body>x</body></html>", "");
+    const out = composeHtmlDocument(
+      "<!doctype html><html><head><title>t</title></head><body><p>body-text</p></body></html>",
+      "",
+    );
     expect(out).toContain(CSP);
-    // The original head content is preserved alongside the injected CSP.
-    expect(out).toContain("<title>t</title>");
+    // Sanitization keeps the meaningful body content (a stray inert <title>
+    // node may survive in the body, but no script/handler does — see below).
+    expect(out).toContain("body-text");
   });
 
   it("always injects the CSP meta — full document WITHOUT <head>", () => {
@@ -72,17 +89,31 @@ describe("composeHtmlDocument", () => {
     expect(out).toContain("form-action 'none'");
   });
 
-  it("places the CSP before any author subresource in a full document (egress fix)", () => {
-    // An author <link>/<img> emitted BEFORE the author's own <head> must still be
-    // governed by our CSP — i.e. our meta must appear first in the composed output.
-    const doc =
-      '<html><link rel="stylesheet" href="https://attacker.example/leak.css"><head></head><body>x</body></html>';
+  it("places the CSP before any surviving author subresource (egress ordering)", () => {
+    // An <img> survives sanitization (it is presentational); its external fetch
+    // must still be governed by our CSP, so the meta must appear BEFORE it.
+    const doc = '<html><img src="https://attacker.example/leak.png"><head></head><body>x</body></html>';
     const out = composeHtmlDocument(doc, "");
     const cspIdx = out.indexOf("Content-Security-Policy");
-    const linkIdx = out.indexOf("attacker.example");
+    const imgIdx = out.indexOf("attacker.example");
     expect(cspIdx).toBeGreaterThan(-1);
-    expect(linkIdx).toBeGreaterThan(-1);
-    expect(cspIdx).toBeLessThan(linkIdx);
+    expect(imgIdx).toBeGreaterThan(-1);
+    expect(cspIdx).toBeLessThan(imgIdx);
+  });
+
+  it("strips egress / navigation tags outright (<link>, <base>, <meta>)", () => {
+    const doc =
+      '<link rel="stylesheet" href="https://attacker.example/leak.css">' +
+      '<base href="https://attacker.example/">' +
+      '<meta http-equiv="refresh" content="0;url=https://attacker.example">' +
+      "<p>ok</p>";
+    const out = composeHtmlDocument(doc, "");
+    expect(out).toContain("<p>ok</p>");
+    // None of the author's egress/navigation tags survive to the body.
+    expect(out).not.toContain("attacker.example");
+    expect(out.toLowerCase()).not.toContain("<link");
+    expect(out.toLowerCase()).not.toContain("<base");
+    expect(out.toLowerCase()).not.toContain("refresh");
   });
 
   it("neutralizes a </style> breakout in the CSS", () => {
@@ -99,6 +130,79 @@ describe("composeHtmlDocument", () => {
     const authorCloseIdx = out.lastIndexOf("</style>");
     expect(metaIdx).toBeGreaterThan(-1);
     expect(metaIdx).toBeLessThan(authorCloseIdx);
+  });
+});
+
+// Layer A — the sanitizer removes every script-bearing construct at the single
+// composition chokepoint, so no output path carries executable JS in its markup.
+// Each payload plants the marker `__pwn`; a clean composition contains neither the
+// marker nor any script/handler/URL that would have run it.
+describe("composeHtmlDocument strips executable JS (RFC §4.7 Layer A)", () => {
+  const VECTORS: [label: string, payload: string][] = [
+    ["<script> tag", "<script>window.__pwn=1</script>"],
+    ["img onerror", '<img src=x onerror="window.__pwn=1">'],
+    ["svg onload", '<svg onload="window.__pwn=1"></svg>'],
+    ["svg <script>", "<svg><script>window.__pwn=1</script></svg>"],
+    ["javascript: href", '<a href="javascript:window.__pwn=1">x</a>'],
+    ["inline onclick", '<div onclick="window.__pwn=1">x</div>'],
+    ["iframe js src", '<iframe src="javascript:window.__pwn=1"></iframe>'],
+    ["object data", '<object data="data:text/html,<script>window.__pwn=1</script>"></object>'],
+    ["embed", '<embed src="data:text/html,window.__pwn=1">'],
+    ["vbscript: href", '<a href="vbscript:window.__pwn=1">x</a>'],
+    ["formaction js", '<form><button formaction="javascript:window.__pwn=1">go</button></form>'],
+    ["mutation xss", '<noscript><p title="</noscript><img src=x onerror=window.__pwn=1>">'],
+    ["body onload", '<body onload="window.__pwn=1"><p>x</p></body>'],
+  ];
+
+  it.each(VECTORS)("neutralizes %s", (_label, payload) => {
+    const out = composeHtmlDocument(payload, "");
+    expect(out.toLowerCase()).not.toContain("<script");
+    expect(out).not.toContain("__pwn");
+    expect(out.toLowerCase()).not.toContain("javascript:");
+    expect(out.toLowerCase()).not.toContain("vbscript:");
+    // No `on…=` event-handler attribute survives (our own head markup has none).
+    expect(out).not.toMatch(/\son[a-z]+\s*=/i);
+  });
+
+  it("keeps legitimate static markup and inline <style>", () => {
+    const out = composeHtmlDocument(
+      '<section class="card"><h1>Title</h1><style>.card{color:red}</style></section>',
+      "",
+    );
+    expect(out).toContain("<h1>Title</h1>");
+    expect(out).toContain(".card{color:red}");
+  });
+});
+
+// Layer B — the new tab's TOP document is a trusted, author-free shell whose only
+// body is a sandboxed iframe; the artifact rides escaped inside its srcdoc.
+describe("newTabDocument (RFC §4.7 Layer B — sandboxed shell)", () => {
+  it('hosts the artifact in a sandbox="" iframe with the content escaped in srcdoc', () => {
+    const out = newTabDocument("<h1>hi</h1>", "");
+    expect(out).toContain('<iframe sandbox=""');
+    // The composed document rides escaped inside srcdoc — its markup never parses
+    // at the shell's (author-free, same-origin) top level.
+    expect(out).toContain("&lt;h1&gt;hi&lt;/h1&gt;");
+    expect(out).not.toContain("<h1>hi</h1>");
+  });
+
+  it("never enables scripts or same-origin on the shell iframe", () => {
+    const out = newTabDocument("<p>x</p>", "");
+    expect(out).not.toContain("allow-scripts");
+    expect(out).not.toContain("allow-same-origin");
+  });
+
+  it("escapes double quotes so author content cannot break out of srcdoc", () => {
+    const out = newTabDocument('<a title="x">"</a>', "");
+    // Every author/content double-quote is entity-escaped; the only raw quotes
+    // left are the shell's own attribute delimiters.
+    expect(out).toContain("&quot;");
+  });
+
+  it("passes a JS payload through inert — no script survives even one level down", () => {
+    const out = newTabDocument('<img src=x onerror="window.__pwn=1">', "");
+    expect(out).not.toContain("__pwn");
+    expect(out.toLowerCase()).not.toContain("onerror");
   });
 });
 

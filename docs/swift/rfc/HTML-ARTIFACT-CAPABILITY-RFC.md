@@ -165,25 +165,61 @@ the first thing the parser reaches and therefore governs EVERY author subresourc
 string feeds both the iframe `srcdoc` and the download blob. Author CSS is
 neutralized against a `</style>` breakout before it enters the `<style>` element.
 
-### 4.7 Security — the sandbox (the load-bearing part)
+### 4.7 Security — no JS on any output path (the load-bearing part)
 
-The markup is untrusted LLM output. The preview MUST NOT be able to run script,
-reach the network, touch the app origin, or navigate the top frame.
+The markup is untrusted LLM output. NO output path — in-app preview, downloaded
+`.html`, or new browser tab — may run script, reach the network, touch the app
+origin, or navigate the top frame. Three **independent** layers enforce this, so
+it takes more than one failure to matter (`htmlArtifactDocument.ts`):
 
-- **`<iframe sandbox>` WITHOUT `allow-scripts` and WITHOUT `allow-same-origin`.**
-  No JS runs (covers inline handlers, `<script>`, `javascript:` URLs); the frame
-  is an opaque origin with no access to `window.parent`, cookies, or storage.
-- **`srcdoc`** (never `src` to an app URL) so the content is inert document text,
-  same-document, no navigation to app routes.
-- **A restrictive CSP `<meta http-equiv>` injected into the composed head:**
-  `default-src 'none'; style-src 'unsafe-inline'; img-src data:;
-  font-src data:; base-uri 'none'; form-action 'none'`. No external fetch, no
-  remote images/fonts/styles, images only as `data:` URIs. (`'unsafe-inline'` for
-  styles is required for author CSS and is safe with scripts disabled.)
-- **`sandbox` also omits `allow-top-navigation` and `allow-popups`** — a link can
-  render but cannot navigate the app or open windows.
-- Defense in depth: the two controls are independent (sandbox blocks script even
-  if a CSP is bypassed; CSP blocks egress even if a sandbox flag regresses).
+**Layer A — content sanitization (travels with the artifact).** The single
+composition chokepoint (`composeHtmlDocument`) runs the author HTML through
+**DOMPurify** (already a repo dependency — no new runtime dep) before it is placed
+in the body. This strips every script-bearing construct from the markup *itself*,
+so even a downloaded file opened by double-click carries no executable JS,
+independent of whatever renders it. DOMPurify parses with the real browser DOM
+(handling mutation-XSS and parser differentials a regex cannot); its defaults drop
+`<script>`, `on*` handlers, and `javascript:`/unknown-protocol URLs, and we also
+`FORBID_TAGS` the egress/nested-content set (`iframe`, `object`, `embed`, `base`,
+`meta`, `link`). Author CSS is separately neutralized against a `</style>`
+breakout before it enters the `<style>` element.
+
+**Layer B — frame sandbox (browser-enforced, unbypassable by content).**
+- **Preview:** `<iframe sandbox="">` — empty attribute → ALL restrictions on, so
+  no `allow-scripts` (no JS at all: inline handlers, `<script>`, `javascript:`)
+  and no `allow-same-origin` (opaque origin, no `window.parent`/cookies/storage).
+  `srcdoc` (never `src` to an app URL) keeps the content inert same-document text;
+  `allow-top-navigation`/`allow-popups` are omitted too.
+- **New tab:** the tab's TOP document is a trusted, author-free shell whose only
+  body is that same `sandbox=""` iframe (`newTabDocument`), so the browser-enforced
+  guarantee holds there too — even though a `blob:` URL is same-origin with the app,
+  the only same-origin document carries no author markup. Opened `noopener`.
+
+**Layer C — CSP (independent egress/script backstop).** A restrictive
+`<meta http-equiv>` in every composed document:
+`default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:;
+base-uri 'none'; form-action 'none'`. No external fetch, images/fonts only as
+`data:`; `'unsafe-inline'` is styles-only and safe with scripts disabled. It is
+emitted FIRST in the head (author markup always goes in our body, never spliced
+into an author `<head>`), so it governs every author subresource — a meta CSP only
+applies to content parsed after it.
+
+The layers are independent by design: A removes JS from the markup, B stops the
+frame from executing any that survived, C blocks script/egress even absent the
+sandbox. Any one of the three alone already prevents script execution in the
+preview.
+
+**Verification** (§10): `htmlArtifactDocument.test.ts` runs a table of known
+injection vectors (script tag, `on*` handlers, `javascript:`/`vbscript:` URLs,
+`object`/`embed`/`base`/`meta refresh`, SVG script/onload, mutation-XSS) through
+`composeHtmlDocument` and asserts none survive, plus the sandboxed-shell shape;
+`HtmlArtifactPane.sandbox.test.tsx` renders the pane and asserts the preview
+iframes are `sandbox=""` with no `allow-scripts`/`allow-same-origin` (a
+regression guard). These run under **jsdom** (a test-only devDependency —
+happy-dom's partial DOM silently breaks DOMPurify, so the tests would pass
+without proving anything). A real-browser execution canary (Playwright) was
+scoped out to avoid adding e2e infra the repo does not have; the sandbox is a
+browser primitive already guaranteed without it.
 
 This is a **security-sensitive change** and must go through `/security-review`
 before merge (§10).
