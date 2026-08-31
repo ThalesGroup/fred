@@ -103,22 +103,15 @@
   overflow: hidden;
 }
 
-/* Preview tab: a fixed zoom bar above the sandboxed iframe, which fills the rest. */
-.previewPane {
+/* Zoom controls live at the far right of the view-tab row (Preview / HTML / CSS). */
+.zoomCluster {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
-.zoomBar {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
   align-items: center;
-  gap: var(--spacing-2xs);
-  border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-2xs) var(--spacing-xs);
+  align-self: center;
+  gap: var(--spacing-3xs);
+  margin-bottom: var(--spacing-2xs);
+  margin-left: auto;
+  padding-left: var(--spacing-xs);
 }
 
 .zoomLabel {
@@ -139,15 +132,36 @@
   color: var(--on-surface);
 }
 
-/* The sandboxed iframe fills the remaining space on a plain white page background so
- * the rendered artifact reads as a real web page regardless of the app theme. */
+/* Preview: two stacked sandboxed iframes (double-buffer). The front one is visible;
+ * a zoom/markup change loads the new document into the hidden back one, revealed on
+ * load (see the pane) so the reload never flashes the blank white background. */
+.previewFrameWrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .previewFrame {
   display: block;
-  flex: 1;
+  position: absolute;
+  inset: 0;
   border: none;
+  /* Plain white page background so the artifact reads as a real web page whatever
+   * the app theme; hidden until painted, so this white is never seen mid-swap. */
   background-color: #ffffff;
   width: 100%;
-  min-height: 0;
+  height: 100%;
+}
+
+.frameFront {
+  opacity: 1;
+  z-index: 1;
+}
+
+.frameBack {
+  opacity: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 
 /* Source tabs (HTML / CSS): the CodeBlock scrolls within the body. */

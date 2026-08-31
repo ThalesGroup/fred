@@ -27,7 +27,7 @@
 // no external resource can load even if a sandbox flag ever regressed. `srcDoc`
 // (never `src`) keeps the content inert same-document text.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -74,11 +74,41 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   );
 
   // The composed, CSP-carrying document for the Preview iframe (recomputed when the
-  // selected artifact's markup OR the zoom changes; the iframe remounts on the key).
+  // selected artifact's markup OR the zoom changes).
   const composed = useMemo(
     () => (selected ? composeHtmlDocument(selected.html, selected.css, zoom) : ""),
     [selected, zoom],
   );
+
+  // Double-buffer the Preview so a zoom / markup change never flashes the iframe's
+  // blank white background: the newly composed document loads into the HIDDEN back
+  // buffer and is revealed only once it has painted (onLoad); the front buffer keeps
+  // the previous frame visible until then. Each iframe keeps a STABLE key, so only
+  // the back one ever reloads — an iframe cannot be re-zoomed without a reload
+  // (sandboxed, no allow-scripts), so this hides that reload instead of avoiding it.
+  const [buffers, setBuffers] = useState<[string, string]>(["", ""]);
+  const [front, setFront] = useState<0 | 1>(0);
+  const pendingRef = useRef<0 | 1 | null>(null);
+
+  useEffect(() => {
+    if (!composed || buffers[front] === composed) return;
+    const back: 0 | 1 = front === 0 ? 1 : 0;
+    if (buffers[back] === composed) return; // already loading into the back buffer
+    pendingRef.current = back;
+    setBuffers((b) => {
+      const next: [string, string] = [b[0], b[1]];
+      next[back] = composed;
+      return next;
+    });
+  }, [composed, front, buffers]);
+
+  const handleFrameLoad = (idx: 0 | 1) => {
+    // Reveal the back buffer only once the doc we asked it to load has painted.
+    if (pendingRef.current === idx && buffers[idx] === composed) {
+      pendingRef.current = null;
+      setFront(idx);
+    }
+  };
 
   const untitled = t("capability.html_artifact.untitled", { defaultValue: "HTML artifact" });
 
@@ -159,46 +189,51 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
                 {v.label}
               </button>
             ))}
+            {tab === "preview" && (
+              <div className={styles.zoomCluster}>
+                <Tooltip text={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}>
+                  <IconButton
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "zoom_out" }}
+                    onClick={() => setZoom(zoomOut)}
+                    disabled={zoom <= ZOOM_LEVELS[0]}
+                    aria-label={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}
+                  />
+                </Tooltip>
+                <Tooltip text={t("capability.html_artifact.resetZoom", { defaultValue: "Reset zoom" })}>
+                  <button className={styles.zoomLabel} onClick={() => setZoom(1)}>
+                    {Math.round(zoom * 100)}%
+                  </button>
+                </Tooltip>
+                <Tooltip text={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}>
+                  <IconButton
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "zoom_in" }}
+                    onClick={() => setZoom(zoomIn)}
+                    disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+                    aria-label={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}
+                  />
+                </Tooltip>
+              </div>
+            )}
           </div>
 
           <div className={styles.body}>
             {tab === "preview" && (
-              <div className={styles.previewPane}>
-                <div className={styles.zoomBar}>
-                  <Tooltip text={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}>
-                    <IconButton
-                      variant="icon"
-                      size="small"
-                      icon={{ category: "outlined", type: "zoom_out" }}
-                      onClick={() => setZoom(zoomOut)}
-                      disabled={zoom <= ZOOM_LEVELS[0]}
-                      aria-label={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}
-                    />
-                  </Tooltip>
-                  <Tooltip text={t("capability.html_artifact.resetZoom", { defaultValue: "Reset zoom" })}>
-                    <button className={styles.zoomLabel} onClick={() => setZoom(1)}>
-                      {Math.round(zoom * 100)}%
-                    </button>
-                  </Tooltip>
-                  <Tooltip text={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}>
-                    <IconButton
-                      variant="icon"
-                      size="small"
-                      icon={{ category: "outlined", type: "zoom_in" }}
-                      onClick={() => setZoom(zoomIn)}
-                      disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
-                      aria-label={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}
-                    />
-                  </Tooltip>
-                </div>
-                <iframe
-                  key={`${selected.artifact_id}:${selected.version}:${zoom}`}
-                  className={styles.previewFrame}
-                  title={selected.title || untitled}
-                  sandbox=""
-                  referrerPolicy="no-referrer"
-                  srcDoc={composed}
-                />
+              <div className={styles.previewFrameWrap}>
+                {([0, 1] as const).map((i) => (
+                  <iframe
+                    key={i}
+                    srcDoc={buffers[i]}
+                    className={`${styles.previewFrame} ${front === i ? styles.frameFront : styles.frameBack}`}
+                    title={selected.title || untitled}
+                    sandbox=""
+                    referrerPolicy="no-referrer"
+                    onLoad={() => handleFrameLoad(i)}
+                  />
+                ))}
               </div>
             )}
             {tab === "html" && (
