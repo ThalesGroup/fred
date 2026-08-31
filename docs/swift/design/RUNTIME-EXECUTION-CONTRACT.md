@@ -4430,4 +4430,4 @@ namespace is real.
 goal of #2415. `checkpoint_ns` cannot deliver it for a root graph - the only
 LangGraph-native lever is `thread_id`, which touches
 `checkpoint_thread_owner`, per-user erasure, and session deletion. Tracked
-separately; ReAct agents currently share the session's checkpoint thread.
+in issue #2481; ReAct agents currently share the session's checkpoint thread.
