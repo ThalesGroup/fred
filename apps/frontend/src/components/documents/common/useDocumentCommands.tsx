@@ -24,8 +24,7 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
-import { downloadFile } from "../../../utils/downloadUtils";
-import { useLazyDownloadRawContentBlobQuery } from "../../../slices/knowledgeFlow/knowledgeFlowApi.blob";
+import { downloadFile, fetchAuthedBlob } from "../../../utils/downloadUtils";
 import { collectDescendantTags, rewriteTagUnderFolder, type TagNode } from "../../../shared/utils/tagTree";
 
 type DocumentRefreshers = {
@@ -48,7 +47,6 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();
   const [mutateLabelsMutation] = useMutateDocumentLabelsMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
-  const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const refresh = useCallback(
     async (tagId?: string) => {
@@ -185,9 +183,14 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   // directly: zipping N documents needs every blob before any of them can
   // be saved, so it can't go through `download`'s fetch+save-immediately
   // shape.
+  // Plain authed fetch, NOT an RTK Query lazy trigger: the lazy hook has a single
+  // subscription, so firing it concurrently for N documents (a bulk zip download)
+  // drops all but the last request and the whole download fails. A direct fetch
+  // per document is independent — the same path FilesystemWorkspace already uses.
   const fetchBlob = useCallback(
-    (doc: DocumentMetadata) => triggerDownloadBlob({ documentUid: doc.identity.document_uid }).unwrap(),
-    [triggerDownloadBlob],
+    (doc: DocumentMetadata) =>
+      fetchAuthedBlob(`/knowledge-flow/v1/raw_content/${encodeURIComponent(doc.identity.document_uid)}`),
+    [],
   );
   const download = useCallback(
     async (doc: DocumentMetadata) => {
