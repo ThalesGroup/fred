@@ -179,8 +179,7 @@ These are appropriate when the SDK can provide most runtime behavior and the aut
 - description,
 - tools,
 - options,
-- bounded instructions,
-- guardrails.
+- bounded instructions.
 
 ### 7.2 Workflow / Graph agents
 

@@ -3259,3 +3259,99 @@ else changes. Anything that would only work same-origin is a defect against
 this contract. Durable installed/tombstoned registration, admin-visible
 stale-grant cleanup after removal, and `pending_reactivation` on id
 reappearance remain deferred lifecycle requirements.
+
+## 47. Contract Notes — platform prompt and platform instructions (2026-08-28, renamed and extended 2026-08-31)
+
+**What it is.** One org-admin-editable text that becomes the **first block** of
+every agent's system prompt on the deployment, ahead of each agent's own
+template. Runtime side, block ordering and trust boundary:
+`RUNTIME-EXECUTION-CONTRACT.md` §8.68.
+
+**Endpoints.**
+
+| Method | Path | Permission |
+| ------ | ---- | ---------- |
+| GET | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
+| PUT | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
+
+Same shared org-admin gate as the platform model-binding trio (§40). Both are
+registered in `authz-endpoint-matrix.yaml`.
+
+**No DELETE, on purpose.** Unlike a `(provider, name)` model binding, a text
+field has a natural "off" value, and `""` is it. Keeping `DELETE` would give
+two ways to say "nothing" with two different meanings:
+
+- **row absent** → `is_default: true` → the pod's `config/platform_prompt.json`
+  applies;
+- **row present, `text: ""`** → `is_default: false` → **no block at all**, and
+  the pod default is deliberately *not* restored.
+
+`PlatformPrompt.is_default` exists so the admin UI can tell the two apart, and
+conflating them would silently reinstate the default for an admin who meant to
+switch the block off.
+
+**Write shape.** `SetPlatformPromptRequest` replaces the text wholesale,
+`extra="forbid"`, capped at 20 000 characters at request parsing — the text is
+re-sent on every model call of every agent, so an unbounded field would be
+permanent context for the whole platform. `updated_by`/`updated_at` are echoed
+back; updates overwrite rather than version (same as §40).
+
+**Delivery to the runtime.** `resolve_platform_prompt_text` is called on the
+per-turn `ManagedAgentRuntimeBinding` path and takes **no** `user` argument:
+this is a platform assertion resolved server-side, exactly like
+`resolve_platform_chat_model_binding`. It reaches the pod on
+`ManagedAgentRuntimeBinding.platform_prompt` → `BoundRuntimeContext.platform_prompt`
+and is readable from no client-forwarded field.
+
+**Amendment (2026-08-31) — GET fetches the pod default, resolve does not.**
+`GET /admin/platform/prompt` on a deployment with no row returns the pod's own
+default with `is_default: true`, not `""`. It previously returned an empty
+string, which made the admin page show a blank editor on a fresh deployment and
+imply no platform prompt was in force when one was.
+
+Both this route and `/admin/platform/instructions` now read the agent pod's
+`config/platform_prompt.json` over `GET /agents/platform-prompt`
+(`fetch_pod_platform_prompt_file`), because that file lives with the pod that
+composes it and control-plane runs in a different container — the same fetch
+shape `/agents/models-catalog` already uses. First reachable source wins; the
+editor therefore opens on exactly what agents receive.
+
+Both responses carry **`source_unavailable`**, true when no pod answered. `text`
+is then empty for lack of an answer rather than because the block is empty, and
+the UI must say so: it shows a warning instead of the text and disables Save,
+since persisting the empty editor would suppress the platform prompt as though
+an admin had chosen to. `source_unavailable` is always false when a row exists —
+a stored value needs no pod.
+
+`resolve_platform_prompt_text` keeps returning `None` for an absent row. The
+asymmetry is deliberate: GET *describes the deployment to a human*, resolve
+*carries an admin decision to the runtime*. Substituting the default there would
+send the pod a value it already has on disk and would erase the `None` vs `""`
+distinction that lets an admin suppress the block. `is_default: true` also keeps
+Save enabled on an untouched default, since adopting it verbatim writes a row
+and is a real state change.
+
+**Amendment (2026-08-31).** Renamed from "master prompt", and paired with a
+read-only sibling.
+
+| Method | Path | Permission |
+| ------ | ---- | ---------- |
+| GET | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` |
+| PUT | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` |
+| GET | `/control-plane/v1/admin/platform/instructions` | `can_manage_platform` |
+
+`/admin/platform/instructions` returns `PlatformInstructions` — the markdown
+shipped in the `platform_instructions` field of the pod's
+`config/platform_prompt.json`, the same file whose `platform_prompt` field seeds
+the editable block, which
+the runtime renders as the block immediately under the platform prompt for
+every agent. **Read-only on purpose**: an admin can rewrite the platform prompt
+wholesale, and the tool-usage discipline every agent depends on must not be
+rewritable with it. There is no row, no `updated_by`, no PUT and no DELETE; it
+changes only with a deployment. It is gated like its editable sibling — it
+reveals nothing secret, but one permission for the whole `/admin/platform/`
+surface is easier to reason about than two.
+
+Both are read by the same admin page, which renders the instructions verbatim
+under the editor with no input control, in the same order the runtime composes
+them.

@@ -614,13 +614,13 @@ class DocumentAccessCapability(
             question: str,
             top_k: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Search the selected document libraries using semantic similarity (RAG).
+            """Search the selected document libraries using semantic similarity
+            (RAG) — call this BEFORE answering any factual, technical, or
+            domain-specific question.
 
-            Call this tool BEFORE answering any factual, technical, or
-            domain-specific question — the corpus may hold more specific or more
-            recent information than you already know. Skip it only for purely
-            conversational exchanges (greetings, thanks, clarifying what was just
-            said).
+            The corpus may hold more specific or more recent information than
+            you already know. Skip this tool only for purely conversational
+            exchanges (greetings, thanks, clarifying what was just said).
 
             Covers prose/text documents. If a hit describes a structured/tabular
             dataset (a "dataset pointer"), do not answer from it directly — pivot

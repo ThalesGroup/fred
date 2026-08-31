@@ -2039,7 +2039,8 @@
           "platformRoles": "Platform roles",
           "selftest": "Self-test",
           "tasks": "Activity",
-          "teams": "Teams"
+          "teams": "Teams",
+          "platformPrompt": "Platform global prompt"
         },
         "title": "Administration spaces"
       },
@@ -2999,6 +3000,35 @@
           "errors": "Errors"
         }
       }
+    },
+    "platformPrompt": {
+      "title": "Platform global prompt",
+      "subtitle": "The personality and standardised instructions of this platform. It is the first block of every agent's system prompt, before each agent's own instructions.",
+      "editor": {
+        "title": "Global prompt",
+        "badge": "Editable",
+        "subtitle": "Your platform's personality and its own standards. Sent first, ahead of everything else, on every call of every agent."
+      },
+      "field": {
+        "label": "Prompt text",
+        "explanation": "Keep it short: every character here is permanent context."
+      },
+      "save": "Save",
+      "saving": "Saving...",
+      "reset": "Discard changes",
+      "suppressed": "The platform prompt is saved as empty, so no platform-prompt block is sent. This is not the same as never having saved one.",
+      "lastUpdated": "Last updated by {{who}} on {{when}}.",
+      "unknownAuthor": "an unknown user",
+      "saved": "Platform prompt saved.",
+      "saveFailed": "Could not save the platform prompt.",
+      "instructions": {
+        "title": "Platform operating instructions",
+        "badge": "Read-only",
+        "subtitle": "Shipped with the platform and rendered immediately after your prompt, for every agent. It can only change with a deployment.",
+        "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
+        "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
+      },
+      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
     }
   },
   "runtime": {

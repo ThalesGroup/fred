@@ -834,9 +834,20 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         system_prompt = _compose_system_prompt(
             system_prompt,
             binding=binding,
-            definition=self.definition,
             agent_id=self.definition.agent_id,
-            tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
+            tool_suffix=_build_runtime_tool_prompt_suffix(
+                bound_tools,
+                mcp_prompt_groups=(
+                    self._capability_block.mcp_prompt_groups
+                    if self._capability_block is not None
+                    else ()
+                ),
+                capability_tools=(
+                    self._capability_block.tools
+                    if self._capability_block is not None
+                    else ()
+                ),
+            ),
         )
         logger.debug(
             "[LLM][SYSTEM PROMPT] agent=%s total_len=%d",

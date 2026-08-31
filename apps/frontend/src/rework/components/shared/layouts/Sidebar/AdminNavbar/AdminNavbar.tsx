@@ -60,6 +60,13 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.sidebar.admin.menu.platformPrompt"),
+      icon: { category: "outlined", type: "auto_awesome", filled: false },
+      linkProps: { to: "/admin/platform-prompt" },
+      visible: canAdmin,
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.capabilities"),
       icon: { category: "outlined", type: "tune", filled: false },
       linkProps: { to: "/admin/capabilities" },

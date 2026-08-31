@@ -125,7 +125,6 @@ class DeepAgentRuntime(ReActRuntime):
         system_prompt = _compose_system_prompt(
             system_prompt,
             binding=binding,
-            definition=self.definition,
             agent_id=self.definition.agent_id,
             tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
             runtime_suffixes=(

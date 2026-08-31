@@ -57,6 +57,8 @@ from fred_sdk.support.builtins import (
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
+
 from .react_tool_rendering import (
     normalize_runtime_provider_artifact,
     render_tool_result,
@@ -120,6 +122,10 @@ class FredRuntimeToolSpec:
     invoke: RuntimeToolInvoke
     trace_span_name: str = "tool.invoke"
     build_trace_attributes: RuntimeToolTraceAttrs = field(default=lambda payload: {})
+    # Originating MCP catalog server id, `None` for built-in/registered/declared
+    # tools (never MCP-sourced). Lets the ReAct prompt group its tool listing
+    # by server (#2455) — see `MCP_SERVER_ID_METADATA_KEY` in `mcp_utils.py`.
+    mcp_server_id: str | None = None
 
 
 class ReActRuntimeToolResolver:
@@ -506,6 +512,13 @@ class ReActRuntimeToolResolver:
         - `spec = self._resolve_runtime_provider_tool(...)`
         """
 
+        metadata = getattr(runtime_tool, "metadata", None)
+        mcp_server_id = (
+            metadata.get(MCP_SERVER_ID_METADATA_KEY)
+            if isinstance(metadata, dict)
+            else None
+        )
+
         async def _invoke(
             payload: dict[str, object],
         ) -> tuple[str, ToolInvocationResult | None]:
@@ -529,6 +542,7 @@ class ReActRuntimeToolResolver:
             tool_ref=tool_name,
             invoke=_invoke,
             trace_span_name="v2.react.runtime_tool",
+            mcp_server_id=mcp_server_id,
         )
 
     def _claim_runtime_name(

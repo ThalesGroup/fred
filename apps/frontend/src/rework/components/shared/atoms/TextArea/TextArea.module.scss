@@ -74,6 +74,15 @@
   text-wrap: nowrap;
 }
 
+/* The counter is the one thing on this row that must stay readable, so it
+ * never shrinks or wraps — `.hint` above already gives up space by
+ * ellipsizing. Without this, a long explanation in a narrow field pushed
+ * "0 / 20000" onto a second line. */
+.maxLength {
+  flex: none;
+  white-space: nowrap;
+}
+
 .error .information {
   color: var(--error);
 }

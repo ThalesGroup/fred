@@ -24,9 +24,11 @@ from any real capability (document_access/document_summarize included), to
 show the bug and its fix are general to `assembly.py`, not specific to one
 capability pairing.
 
-`_McpInstructionsMiddleware` (`fred_runtime/capabilities/mcp.py`) hit this
-exact bug first and fixed it by keying `.name` on the MCP server id;
-`ToolCarrierMiddleware` (`fred-sdk`) was never given the same treatment.
+`_McpInstructionsMiddleware` (`fred_runtime/capabilities/mcp.py`, removed
+2026-08-27 by #2455 — `agent_instructions` delivery moved off per-model-call
+middleware entirely) hit this exact bug first and fixed it by keying `.name`
+on the MCP server id; `ToolCarrierMiddleware` (`fred-sdk`) was never given the
+same treatment.
 """
 
 from __future__ import annotations

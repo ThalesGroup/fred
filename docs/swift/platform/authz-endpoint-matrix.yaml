@@ -683,6 +683,21 @@ operations:
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
     required_permission: can_manage_platform # organization_authz.require_manage_any. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/prompt
+    review_status: approved
+    required_permission: can_manage_platform # platform-wide platform prompt — organization_authz.require_manage_any (organization#can_manage_platform), same shared gate as the model-bindings trio above. is_default=true when no row was ever saved.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/prompt
+    review_status: approved
+    required_permission: can_manage_platform # organization_authz.require_manage_any. Writes the FIRST block of every agent's system prompt platform-wide, so this gate is the only thing between an actor and prepending text ahead of every agent on the deployment. Body length-capped by SetPlatformPromptRequest (max_length) at parsing, before authz runs. Saving "" suppresses the block; there is no DELETE (row absence means "never set", which is a distinct state).
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/instructions
+    review_status: approved
+    required_permission: can_manage_platform # organization_authz.require_manage_any, same gate as its editable sibling above. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.
 
   - service: knowledge-flow
     method: GET

@@ -260,10 +260,12 @@ def thread_reasoning_within_open_turn(
     The open turn is everything after the last `HumanMessage` — the same
     boundary `trim_to_human_boundary` uses.
 
-    NOT wired into `CheckpointHygieneMiddleware` yet: whether re-homed reasoning
-    suppresses the duplicate calls the way verbatim replay did (p = 0.034,
-    §C.6) is an open measurement. A `thinking` block is privileged context; a
-    `text` block is ordinary assistant speech, and the effect may not transport.
+    Wired into `CheckpointHygieneMiddleware.awrap_model_call`
+    (`checkpoint_hygiene.py`), before the size-budget trim so a re-homed
+    reasoning trace is counted. Re-homed reasoning does suppress the
+    duplicate calls the way verbatim replay did: measured 9/12 turns with
+    duplicates without this, 0/12 with it (p = 1.7e-4) — see
+    `RUNTIME-EXECUTION-CONTRACT.md` §8.37.
     """
 
     last_human = -1

@@ -834,6 +834,7 @@ applications:
         - id: "mcp-knowledge-flow-mcp-text"
           name: "mcp.servers.search_documents.name"
           description: "mcp.servers.search_documents.description"
+          prompt_group_title: "document search"
           # MIGR-03.03: inprocess provider (not a remote MCP endpoint) so the search
           # tool returns typed VectorSearchHit sources and the chat Sources panel
           # renders — restoring kea's behaviour.
@@ -913,6 +914,7 @@ applications:
         - id: "mcp-knowledge-flow-mcp-tabular"
           name: "mcp.servers.tabular.name"
           description: "mcp.servers.tabular.description"
+          prompt_group_title: "tabular action"
           transport: "streamable_http"
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
           sse_read_timeout: 2000
@@ -922,6 +924,7 @@ applications:
         - id: "mcp-knowledge-flow-opensearch-ops"
           name: "mcp.servers.search_opensearch.name"
           description: "mcp.servers.search_opensearch.description"
+          prompt_group_title: "OpenSearch operations"
           transport: "streamable_http"
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
           sse_read_timeout: 2000
@@ -931,6 +934,7 @@ applications:
         - id: "mcp-knowledge-flow-fs"
           name: "mcp.servers.filesystem.name"
           description: "mcp.servers.filesystem.description"
+          prompt_group_title: "filesystem access"
           transport: "streamable_http"
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
           sse_read_timeout: 2000
@@ -940,6 +944,7 @@ applications:
         - id: "mcp-knowledge-flow-corpus"
           name: "mcp.servers.corpus.name"
           description: "mcp.servers.corpus.description"
+          prompt_group_title: "corpus management"
           transport: "streamable_http"
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
           sse_read_timeout: 2000
@@ -949,6 +954,7 @@ applications:
         - id: "mcp-web-github-readonly"
           name: "mcp.servers.web_github_readonly.name"
           description: "mcp.servers.web_github_readonly.description"
+          prompt_group_title: "GitHub read-only access"
           enabled: true
           transport: "inprocess"
           provider: "web_github_readonly"

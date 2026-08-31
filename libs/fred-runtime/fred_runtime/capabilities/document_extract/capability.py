@@ -105,7 +105,8 @@ class DocumentExtractCapability(
             document_uid: str,
             what_to_extract: str,
         ) -> tuple[str, ToolInvocationResult]:
-            """Exhaustively extract information from a document — nothing omitted.
+            """Exhaustively extract information from a document, nothing omitted —
+            use instead of summarize_document whenever an item could be missed.
 
             Use this when the user wants a COMPLETE, nothing-missed answer over a
             whole document — e.g. "list ALL the requirements in this spec",

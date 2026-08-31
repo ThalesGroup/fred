@@ -75,6 +75,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /workspace/libs/fred-runtime/ale
 # are mounted at /app/config, while the default catalogs can ship in-image.
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/models_catalog.yaml /app/config/models_catalog.yaml
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/mcp_catalog.yaml /app/config/mcp_catalog.yaml
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/platform_prompt.json /app/config/platform_prompt.json
 
 USER ${USER_NAME}
 
