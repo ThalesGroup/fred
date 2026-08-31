@@ -31,9 +31,10 @@
 // drawer's own close button - and closing the open panel to reach another one is
 // cheap enough not to be worth a second home for the launchers.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { sessionProbesForCapabilities } from "./sessionProbeRegistry";
 import { sidePanelsForCapabilities, type SidePanelEntry } from "./sidePanelRegistry";
@@ -66,13 +67,15 @@ function PanelLauncher({ entry, label, onOpen }: { entry: SidePanelEntry; label:
   if (!useHasContent()) return null;
 
   return (
-    <IconButton
-      variant="icon"
-      size="small"
-      icon={{ category: "outlined", type: entry.icon }}
-      aria-label={label}
-      onClick={onOpen}
-    />
+    <Tooltip text={label} placement="left">
+      <IconButton
+        variant="icon"
+        size="small"
+        icon={{ category: "outlined", type: entry.icon }}
+        aria-label={label}
+        onClick={onOpen}
+      />
+    </Tooltip>
   );
 }
 
@@ -80,17 +83,34 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
   const probes = useMemo(() => sessionProbesForCapabilities(capabilityIds), [capabilityIds]);
+  const active = entries.find((entry) => entryKey(entry) === activeKey) ?? null;
+
+  // Keep the closing panel mounted through the drawer's close animation (250ms)
+  // so its content fades out with the panel instead of vanishing the instant the
+  // launcher is dismissed: `active` drives open/close, `rendered` lags it on the
+  // way down.
+  const [rendered, setRendered] = useState<SidePanelEntry | null>(active);
+  useEffect(() => {
+    if (active) {
+      setRendered(active);
+      return;
+    }
+    const timer = setTimeout(() => setRendered(null), 250);
+    return () => clearTimeout(timer);
+  }, [active]);
 
   // No active capability contributes a panel or a probe — the slot stays inert
   // (zero chrome). Probes mount even while every panel is closed: they are the
   // "observe the opened conversation" path (#1905 auto-open).
   if (entries.length === 0 && probes.length === 0) return null;
-
-  const active = entries.find((entry) => entryKey(entry) === activeKey) ?? null;
   // Each panel's launcher/drawer title resolves against the plugin's i18n keys;
   // a missing translation falls back to the widget id (never a blank label).
   const titleOf = (entry: SidePanelEntry): string =>
     t(`capability.${entry.capabilityId}.panel.${entry.widget}.title`, { defaultValue: entry.widget });
+  // The rail button says which viewer it opens ("HTML/CSS viewer", …); it falls
+  // back to the panel title when a capability declares no dedicated launcher label.
+  const launcherLabelOf = (entry: SidePanelEntry): string =>
+    t(`capability.${entry.capabilityId}.panel.${entry.widget}.launcher`, { defaultValue: titleOf(entry) });
 
   return (
     <>
@@ -105,7 +125,7 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
                 <PanelLauncher
                   key={entryKey(entry)}
                   entry={entry}
-                  label={titleOf(entry)}
+                  label={launcherLabelOf(entry)}
                   onOpen={() => onActiveKeyChange(entryKey(entry))}
                 />
               ))}
@@ -114,17 +134,19 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
           <InlineDrawer
             open={active !== null}
             onClose={() => onActiveKeyChange(null)}
-            title={active ? titleOf(active) : ""}
+            title={rendered ? titleOf(rendered) : ""}
             // A pane with its own header owns the whole column, insets included.
-            hideHeader={active?.ownsHeader ?? false}
-            flushBody={active?.ownsHeader ?? false}
+            hideHeader={rendered?.ownsHeader ?? false}
+            flushBody={rendered?.ownsHeader ?? false}
             layout="push"
             // One shared width across every capability panel (writable-document
             // editor, PPT preview, …) — the same behaviour the legacy chat's
             // ResizablePaneShell had with its single persisted pane width.
             resizable={{ persistKey: "capability-side-panel" }}
           >
-            {active && <active.Component capabilityId={active.capabilityId} onClose={() => onActiveKeyChange(null)} />}
+            {rendered && (
+              <rendered.Component capabilityId={rendered.capabilityId} onClose={() => onActiveKeyChange(null)} />
+            )}
           </InlineDrawer>
         </>
       )}

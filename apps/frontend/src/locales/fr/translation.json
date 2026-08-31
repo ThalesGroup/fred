@@ -254,7 +254,8 @@
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
       "panel": {
         "writable_document_pane": {
-          "title": "Document"
+          "title": "Document",
+          "launcher": "Viewer texte"
         }
       },
       "untitled": "Document",
@@ -283,7 +284,8 @@
       "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat.",
       "panel": {
         "html_artifact_pane": {
-          "title": "Artefact HTML"
+          "title": "Artefact HTML",
+          "launcher": "Viewer HTML/CSS"
         }
       },
       "untitled": "Artefact HTML",
@@ -351,7 +353,8 @@
       },
       "panel": {
         "ppt_preview_pane": {
-          "title": "Aperçu de la présentation"
+          "title": "Aperçu de la présentation",
+          "launcher": "Viewer PPT"
         }
       }
     }

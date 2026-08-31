@@ -137,6 +137,9 @@
  * load (see the pane) so the reload never flashes the blank white background. */
 .previewFrameWrap {
   position: relative;
+  /* Shown while both frames are still hidden (first open, before paint), so the
+   * gap reads as the pane's surface rather than a white flash. */
+  background-color: var(--surface-container);
   width: 100%;
   height: 100%;
 }

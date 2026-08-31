@@ -254,7 +254,8 @@
       "description": "Ability to edit and generate a downloadable text document.",
       "panel": {
         "writable_document_pane": {
-          "title": "Document"
+          "title": "Document",
+          "launcher": "Text viewer"
         }
       },
       "untitled": "Document",
@@ -283,7 +284,8 @@
       "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
       "panel": {
         "html_artifact_pane": {
-          "title": "HTML artifact"
+          "title": "HTML artifact",
+          "launcher": "HTML/CSS viewer"
         }
       },
       "untitled": "HTML artifact",
@@ -351,7 +353,8 @@
       },
       "panel": {
         "ppt_preview_pane": {
-          "title": "Presentation preview"
+          "title": "Presentation preview",
+          "launcher": "PPT viewer"
         }
       }
     }
