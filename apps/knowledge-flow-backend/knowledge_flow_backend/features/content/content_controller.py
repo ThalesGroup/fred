@@ -239,6 +239,8 @@ class ContentController:
                     content=stream,
                     media_type=content_type,
                     headers={"Content-Disposition": build_content_disposition_header("attachment", file_name)},
+                    # Release the store stream (MinIO connection) after sending.
+                    background=BackgroundTask(getattr(stream, "close", lambda: None)),
                 )
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
@@ -271,6 +273,11 @@ class ContentController:
                 content=stream,
                 media_type=media_type,
                 headers={"Content-Disposition": build_content_disposition_header("attachment", file_name)},
+                # Close the store stream after sending: for MinIO it releases the
+                # urllib3 connection back to the pool (get_content wraps it in
+                # _ResponseRaw). Without this every download leaks a connection and
+                # the pool is exhausted — concurrent downloads then fail.
+                background=BackgroundTask(getattr(stream, "close", lambda: None)),
             )
 
         @router.get(
@@ -293,6 +300,8 @@ class ContentController:
                     content=stream,
                     media_type=content_type,
                     headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+                    # Release the store stream (MinIO connection) after sending.
+                    background=BackgroundTask(getattr(stream, "close", lambda: None)),
                 )
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
