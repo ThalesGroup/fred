@@ -1,3 +1,39 @@
+**v2.1.39** — 2026-09-01
+
+- **Summary**
+
+  Agents can now build a web page and show it live beside the chat, saved as
+  HTML, PDF or PNG. A new ops agent answers questions about the platform's own
+  database in read-only SQL, and agents can find passages similar to a document
+  you point them at.
+
+- **Features**
+
+  - Agents can produce a web page (HTML/CSS) rendered live in a sandboxed viewer beside the chat, with zoom, fit-to-width, copy and download as HTML, PDF or PNG (#2478)
+  - A new "Platform ops" agent template answers questions about the platform database with read-only SQL, grounded on the real schema (#2458)
+  - Agents can find passages across the corpus similar to a document you name, for targeted document-to-document comparison (#2461)
+
+- **Improvements**
+
+  - Capability viewers now span the full page height and push the conversation aside instead of floating over it, with the launcher rail in its own column (#2485)
+  - Home focuses the search field on load and shows real team avatars in its results (#2484)
+  - An agent template can declare the capabilities and reasoning settings a new agent starts with, so enrolling one takes no extra clicks (#1974, #2473)
+  - An agent template that needs other capabilities can be enabled in one click: the admin page grants the missing ones, then the template - for a team, for personal spaces, or platform-wide (#2470)
+  - Conversation tiles in the side panel are spaced apart instead of touching edge to edge (#2461)
+
+- **Bug Fixes**
+
+  - Large Markdown tables came back shuffled and cut off, so agents answered row questions wrong; a document's table is now returned whole and in order (#1645)
+  - Renaming a folder in Resources did nothing - the old name came straight back (#2483)
+  - Downloading several files at once from Resources failed, or produced a zip where all but one file were empty (#2483)
+  - An agent waiting on your confirmation failed to resume, with a conflict error (#2479)
+
+- **Deployment note**
+
+  Additive - no action needed. The new capabilities are admin-gated and stay off
+  until enabled for a team; the platform ops agent reads the platform database
+  read-only, through the pod's existing credentials.
+
 **v2.1.38** — 2026-08-28
 
 - **Summary**
