@@ -63,6 +63,11 @@ http {
     server {
         listen 8080;
         client_body_in_single_buffer on;
+        # Redirect under the path it was reached by, so the gateway's rewrite of
+        # the Location has a browser-facing prefix to get wrong.
+        location ~ /redirect-probe$ {
+            return 301 http://$http_host$uri/moved/;
+        }
         location / {
             proxy_pass http://127.0.0.1:8081;
             add_header X-Smoke-Request-Uri $request_uri always;
@@ -166,7 +171,7 @@ wait_for_shell() {
 
 registrations() {
     ui_upstream=$1
-    printf '[{"app_id":"optional-app","ui_upstream":"http://%s:8080"},{"app_id":"required-app","ui_upstream":"%s","service_upstream":"http://%s:8080/base///","service_required":true}]' \
+    printf '[{"app_id":"optional-app","ui_upstream":"http://%s:8080"},{"app_id":"required-app","ui_upstream":"%s","service_upstream":"http://%s:8080","service_required":true}]' \
         "${upstream}" "${ui_upstream}" "${upstream}"
 }
 
@@ -205,6 +210,116 @@ for ui_path in "/apps/required-app/" "/apps/required-app/assets/entry.mjs?v=1"; 
     grep -i -F "X-Smoke-Host: ${upstream}:8080" "${test_directory}/ui-headers" >/dev/null
 done
 
+# A percent-encoded CR or LF must stay percent-encoded in the upstream request
+# line. Decoding it there lets any client append headers, and whole extra
+# requests, to the connection the gateway opened on its behalf.
+smuggle_status=$(curl -sS \
+    -D "${test_directory}/smuggle-headers" \
+    -o /dev/null \
+    -w '%{http_code}' \
+    "http://127.0.0.1:${frontend_port}/apps/required-app/x%0D%0AX-Injected:%20yes%0D%0A")
+[ "${smuggle_status}" = "204" ]
+grep -i -F 'X-Smoke-Request-Uri: /apps/required-app/x%0D%0AX-Injected:%20yes%0D%0A' \
+    "${test_directory}/smuggle-headers" >/dev/null
+# Anchored: the echoed request URI itself contains the header name.
+if grep -i '^X-Injected:' "${test_directory}/smuggle-headers" >/dev/null; then
+    echo "Application gateway let a request path inject an upstream header" >&2
+    exit 1
+fi
+
+# A decoded LF must not stop the UI leg normalizing. Without it the rewrite
+# cannot match, nginx falls back to forwarding the raw request URI, and the
+# dot segments it had already resolved reach the application unresolved.
+normalized_status=$(curl -sS \
+    -D "${test_directory}/normalized-headers" \
+    -o /dev/null \
+    -w '%{http_code}' \
+    "http://127.0.0.1:${frontend_port}/apps/required-app/a/%2e%2e/b%0Ac")
+[ "${normalized_status}" = "204" ]
+if ! grep -i -F 'X-Smoke-Request-Uri: /apps/required-app/b%0Ac' \
+    "${test_directory}/normalized-headers" >/dev/null; then
+    echo "Application gateway did not normalize a path carrying a decoded LF" >&2
+    grep -i '^X-Smoke-Request-Uri:' "${test_directory}/normalized-headers" >&2
+    exit 1
+fi
+
+# Neither leg may shorten the path it forwards. A trailing LF sits exactly where
+# an unanchored $ ends a match, so a rewrite that does not cross it hands the
+# application a path one character shorter than the client asked for.
+for trailing_case in \
+    "/apps/required-app/x%0A /apps/required-app/x%0A" \
+    "/app-services/required-app/teams/team-a/x%0A /teams/team-a/x%0A"; do
+    trailing_path=${trailing_case% *}
+    expected_uri=${trailing_case#* }
+    curl -sS -D "${test_directory}/trailing-headers" -o /dev/null \
+        "http://127.0.0.1:${frontend_port}${trailing_path}" >/dev/null
+    if ! grep -i -F "X-Smoke-Request-Uri: ${expected_uri}" \
+        "${test_directory}/trailing-headers" >/dev/null; then
+        echo "Application gateway altered the path of ${trailing_path}" >&2
+        grep -i '^X-Smoke-Request-Uri:' "${test_directory}/trailing-headers" >&2
+        exit 1
+    fi
+done
+
+# The service leg decodes a bare CR even where a CRLF pair is refused.
+service_smuggle_status=$(curl -sS \
+    -D "${test_directory}/service-smuggle-headers" \
+    -o /dev/null \
+    -w '%{http_code}' \
+    "http://127.0.0.1:${frontend_port}/app-services/required-app/teams/team-a/x%0DX-Injected:%20yes")
+[ "${service_smuggle_status}" = "204" ]
+grep -i -F 'X-Smoke-Request-Uri: /teams/team-a/x%0DX-Injected:%20yes' \
+    "${test_directory}/service-smuggle-headers" >/dev/null
+if grep -i '^X-Injected:' "${test_directory}/service-smuggle-headers" >/dev/null; then
+    echo "Application gateway let a service request path inject an upstream header" >&2
+    exit 1
+fi
+
+# The application service is the only thing that can authorize a team scope, so
+# the path it validates must be the path it decodes: one round of decoding here
+# would hand it a prefix that parses differently than it reads.
+double_encoded_status=$(curl -sS \
+    -D "${test_directory}/double-encoded-headers" \
+    -o /dev/null \
+    -w '%{http_code}' \
+    "http://127.0.0.1:${frontend_port}/app-services/required-app/teams/team-a/%252e%252e%252fteams/team-b/secret")
+[ "${double_encoded_status}" = "204" ]
+grep -i -F 'X-Smoke-Request-Uri: /teams/team-a/%252e%252e%252fteams/team-b/secret' \
+    "${test_directory}/double-encoded-headers" >/dev/null
+
+# A redirect from either leg must land back on the browser-facing prefix and
+# must not name the upstream the gateway dialled. The whole path is asserted,
+# not a substring: a proxy_redirect that lost the application id still leaves
+# "/moved/" intact while sending every redirect to a 404.
+assert_redirect() {
+    request_path=$1
+    expected_location=$2
+    redirect_status=$(curl -sS \
+        -D "${test_directory}/redirect-headers" \
+        -o /dev/null \
+        -w '%{http_code}' \
+        "http://127.0.0.1:${frontend_port}${request_path}")
+    [ "${redirect_status}" = "301" ]
+    # The origin is nginx's own absolute_redirect rewrite and carries the
+    # container's listen port, not the mapped one; only the path is pinned.
+    if ! grep -iE \
+        "^Location:[[:space:]]*(https?://[^/]*)?${expected_location}[[:space:]]*$" \
+        "${test_directory}/redirect-headers" >/dev/null; then
+        echo "Application gateway did not redirect ${request_path} to ${expected_location}" >&2
+        grep -i '^Location:' "${test_directory}/redirect-headers" >&2
+        exit 1
+    fi
+    if grep -i -F "${upstream}:8080" "${test_directory}/redirect-headers" >/dev/null; then
+        echo "Application gateway leaked its upstream authority in a redirect" >&2
+        exit 1
+    fi
+}
+
+assert_redirect "/apps/required-app/redirect-probe" \
+    "/apps/required-app/redirect-probe/moved/"
+assert_redirect "/app-services/required-app/teams/team-a/redirect-probe" \
+    "/app-services/required-app/teams/team-a/redirect-probe/moved/"
+
 unknown_ui_status=$(curl -sS -o /dev/null -w '%{http_code}' \
     "http://127.0.0.1:${frontend_port}/apps/unknown-app/index.html")
 [ "${unknown_ui_status}" = "404" ]
@@ -218,7 +333,7 @@ status=$(curl -sS \
     -w '%{http_code}' \
     "http://127.0.0.1:${frontend_port}/app-services/required-app/teams/team-a/items/one?view=full")
 [ "${status}" = "204" ]
-grep -i -F "X-Smoke-Request-Uri: /base/teams/team-a/items/one?view=full" \
+grep -i -F "X-Smoke-Request-Uri: /teams/team-a/items/one?view=full" \
     "${test_directory}/headers" >/dev/null
 grep -i -F "X-Smoke-Host: ${upstream}:8080" "${test_directory}/headers" >/dev/null
 
@@ -233,7 +348,7 @@ post_status=$(curl -sS \
     -w '%{http_code}' \
     "http://127.0.0.1:${frontend_port}/app-services/required-app/teams/team-a/commands")
 [ "${post_status}" = "204" ]
-grep -i -F 'X-Smoke-Request-Uri: /base/teams/team-a/commands' \
+grep -i -F 'X-Smoke-Request-Uri: /teams/team-a/commands' \
     "${test_directory}/post-headers" >/dev/null
 grep -i -F 'X-Smoke-Method: POST' "${test_directory}/post-headers" >/dev/null
 grep -i -F 'X-Smoke-Authorization: Bearer placeholder-token' \

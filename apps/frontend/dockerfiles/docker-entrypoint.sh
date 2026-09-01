@@ -54,15 +54,23 @@ if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
         fail_application_configuration "jq is required to validate application registrations"
     fi
     if ! printf '%s' "${FRONTEND_APPLICATIONS_JSON}" | jq -e '
+        # Origin only. nginx forwards the client path verbatim to a proxy_pass
+        # that carries no URI part, so a base path here would silently replace
+        # the whole request path instead of prefixing it.
         def safe_url:
             type == "string" and
-            test("^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\\[[0-9A-Fa-f:]+\\])(?::(?:[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[A-Za-z0-9._~!&()*+,=:@/-]*)?$") and
-            (test("(?:^|/)\\.{1,2}(?:/|$)") | not);
+            test("^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\\[[0-9A-Fa-f:]+\\])(?::(?:[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/*\\z");
         type == "array" and
         (all(.[];
             type == "object" and
             ((keys - ["app_id", "service_required", "service_upstream", "ui_upstream"]) | length == 0) and
-            (.app_id | type == "string" and test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
+            # \z, not $: $ also matches before a trailing newline, and such an
+            # id lands in the maps below as an empty key answering for every
+            # unregistered id. The four names are map-block directives, which
+            # nginx reads as syntax wherever a key was meant.
+            (.app_id | type == "string" and
+                test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\\z") and
+                (IN("default", "hostnames", "include", "volatile") | not)) and
             (.ui_upstream | safe_url) and
             (.service_upstream == null or (.service_upstream | safe_url)) and
             ((.service_required // false) | type == "boolean") and
@@ -208,9 +216,14 @@ printf '        client_max_body_size %s;\n' "${FRONTEND_APPLICATION_CLIENT_MAX_B
 cat <<'EOF'
         # The whole /apps/<id> prefix is kept upstream so the absolute asset URLs
         # the fork baked into its bundle keep resolving through this location.
-        proxy_pass $fred_application_ui_upstream$uri$is_args$args;
+        # nginx re-escapes the normalized URI only for a proxy_pass with no URI
+        # part, and only once a rewrite has marked the URI changed. (?s) because
+        # a decoded LF in $uri is the case this exists for, and . must cross it.
+        rewrite ^(?s)(.*)$ $1 break;
+        proxy_pass $fred_application_ui_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $fred_application_ui_authority;
+        proxy_redirect $fred_application_ui_upstream/ /;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -225,7 +238,7 @@ cat <<'EOF'
         return 404;
     }
 
-    location ~ ^/app-services/[a-z][a-z0-9-]*(?<fred_application_path>/.*)$ {
+    location ~ ^/app-services/[a-z][a-z0-9-]*(?:/.*)$ {
         if ($fred_application_installed = 0) {
             return 404;
         }
@@ -236,9 +249,13 @@ EOF
 printf '        client_max_body_size %s;\n' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}"
 cat <<'EOF'
         proxy_request_buffering off;
-        proxy_pass $fred_application_upstream$fred_application_path$is_args$args;
+        # Both guards above read the id map before this rewrite changes $uri,
+        # which is what keeps $fred_application_id pinned for the redirect below.
+        rewrite ^(?s)/app-services/[a-z][a-z0-9-]*(/.*)$ $1 break;
+        proxy_pass $fred_application_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $fred_application_upstream_authority;
+        proxy_redirect $fred_application_upstream/ /app-services/$fred_application_id/;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

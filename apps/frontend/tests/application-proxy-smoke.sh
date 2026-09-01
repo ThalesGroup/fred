@@ -29,8 +29,8 @@ chmod +x "${TEST_DIR}/bin/nginx"
 
 REGISTRATIONS='[
   {"app_id":"optional-app","ui_upstream":"http://optional-ui.invalid///"},
-  {"app_id":"required-app","ui_upstream":"https://required-ui.invalid:8443/ui///",
-   "service_upstream":"https://required-api.invalid:8443/root///","service_required":true}
+  {"app_id":"required-app","ui_upstream":"https://required-ui.invalid:8443///",
+   "service_upstream":"https://required-api.invalid:8443///","service_required":true}
 ]'
 
 run_entrypoint() {
@@ -121,10 +121,10 @@ run_entrypoint "${config}" '[]' 'true'
 run_entrypoint "${config}" "${REGISTRATIONS}" 'true'
 
 # Both legs of every registration reach nginx, with normalized upstream roots.
-assert_contains "${config}" '"required-app" "https://required-api.invalid:8443/root";'
+assert_contains "${config}" '"required-app" "https://required-api.invalid:8443";'
 assert_contains "${config}" '"required-app" "required-api.invalid:8443";'
 assert_contains "${config}" '"required-app" "required-api.invalid";'
-assert_contains "${config}" '"required-app" "https://required-ui.invalid:8443/ui";'
+assert_contains "${config}" '"required-app" "https://required-ui.invalid:8443";'
 assert_contains "${config}" '"optional-app" "http://optional-ui.invalid";'
 assert_contains "${config}" '"required-app" 1;'
 assert_contains "${config}" '"optional-app" 1;'
@@ -133,13 +133,21 @@ assert_contains "${config}" 'default 0;'
 # A plain-prefix /apps/ location would lose the app bundle's own .mjs assets to
 # the regex location further down the file, so the ^~ modifier is load-bearing.
 assert_contains "${config}" 'location ^~ /apps/ {'
-assert_contains "${config}" 'proxy_pass $fred_application_ui_upstream$uri$is_args$args;'
+# A proxy_pass carrying a URI part interpolates its variables raw, so a CR or
+# LF decoded into $uri would land in the upstream request line. The rewrite is
+# what makes the pathless form re-escape the normalized URI instead.
+assert_contains "${config}" 'rewrite ^(?s)(.*)$ $1 break;'
+assert_contains "${config}" 'proxy_pass $fred_application_ui_upstream;'
+assert_contains "${config}" 'proxy_redirect $fred_application_ui_upstream/ /;'
 assert_contains "${config}" 'proxy_set_header Host $fred_application_ui_authority;'
 assert_contains "${config}" 'proxy_ssl_name $fred_application_ui_server_name;'
 
 assert_contains "${config}" 'return 404;'
 assert_contains "${config}" 'return 503;'
-assert_contains "${config}" 'proxy_pass $fred_application_upstream$fred_application_path$is_args$args;'
+assert_contains "${config}" 'rewrite ^(?s)/app-services/[a-z][a-z0-9-]*(/.*)$ $1 break;'
+assert_contains "${config}" 'proxy_pass $fred_application_upstream;'
+assert_contains "${config}" 'proxy_redirect $fred_application_upstream/ /app-services/$fred_application_id/;'
+assert_not_contains "${config}" 'fred_application_path'
 assert_contains "${config}" 'client_max_body_size 10m;'
 assert_contains "${config}" 'proxy_request_buffering off;'
 assert_contains "${config}" 'proxy_set_header Host $fred_application_upstream_authority;'
@@ -164,6 +172,16 @@ assert_rejected "Object instead of registration list" \
     '{"app":"http://ui.invalid"}'
 assert_rejected "Non-boolean service_required" \
     '[{"app_id":"app","ui_upstream":"http://ui.invalid","service_required":"true"}]'
+# A trailing newline survives an unanchored $ and reaches the id maps as an
+# empty key, which then answers for every unregistered application id.
+assert_rejected "Application id with a trailing newline" \
+    '[{"app_id":"acme\n","ui_upstream":"http://ui.invalid"}]'
+# An id spelled like a map-block directive is emitted as nginx syntax rather
+# than as a map key.
+for reserved_word in default hostnames include volatile; do
+    assert_rejected "Application id shadowing the nginx map keyword ${reserved_word}" \
+        "[{\"app_id\":\"${reserved_word}\",\"ui_upstream\":\"http://ui.invalid\"}]"
+done
 
 for unsafe in \
     'file:///tmp/service' \
@@ -171,7 +189,8 @@ for unsafe in \
     'http://service.invalid/$unsafe' \
     'http://service.invalid:99999' \
     'http://service.invalid/root/../private' \
-    'http://service.invalid/%2e%2e/private'; do
+    'http://service.invalid/%2e%2e/private' \
+    'http://service.invalid/base'; do
     assert_rejected "Unsafe ui_upstream ${unsafe}" \
         "[{\"app_id\":\"app\",\"ui_upstream\":\"${unsafe}\"}]"
     assert_rejected "Unsafe service_upstream ${unsafe}" \
