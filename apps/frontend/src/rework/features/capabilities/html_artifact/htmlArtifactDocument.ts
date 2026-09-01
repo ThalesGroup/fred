@@ -67,7 +67,10 @@ const VIEWPORT_META = '<meta name="viewport" content="width=device-width, initia
 // author's <style>, so intentional author rules still win (no !important).
 const FIT_STYLE =
   "<style>" +
-  "html{box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}" +
+  "html{box-sizing:border-box}" +
+  // print-color-adjust:exact so backgrounds/colors survive print-to-PDF (browsers
+  // drop them by default); harmless on screen, only affects the print rendering.
+  "*,*::before,*::after{box-sizing:inherit;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
   "html,body{margin:0}body{padding:12px;overflow-wrap:break-word;word-break:break-word}" +
   "img,svg,video,canvas{max-width:100%;height:auto}" +
   "table{max-width:100%}pre{max-width:100%;overflow-x:auto}" +
@@ -119,15 +122,15 @@ export function zoomIn(z: number): number {
   return higher ?? ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
 }
 
-/** A safe download filename derived from the artifact title (always ends in .html). */
-export function artifactFileName(title: string): string {
+/** A safe download filename derived from the artifact title (defaults to .html). */
+export function artifactFileName(title: string, ext = "html"): string {
   const base = (title || "artifact")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
-  return `${base || "artifact"}.html`;
+  return `${base || "artifact"}.${ext}`;
 }
 
 /**

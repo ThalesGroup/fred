@@ -138,14 +138,25 @@ mirroring the `writable_document` plugin:
   auto-opens the panel on a live render (same heuristic/probe pattern already used
   by the two shipped capabilities).
 - **Side panel** `HtmlArtifactPane` — opens right of the chat. **This is the one
-  net-new UI primitive.** Tabbed, all **read-only**:
-  - **Preview** — a sandboxed `<iframe srcdoc={composed} sandbox="...">` (§4.7).
-  - **HTML** — the `html` source, syntax-highlighted, not editable. Reuses the
-    existing `CodeBlock` molecule (`react-syntax-highlighter`, already a frontend
-    dependency) — no new dependency (§9.3 resolved).
-  - **CSS** — the `css` source, via the same `CodeBlock`, not editable.
-  - **Download** — the composed self-contained `.html` (CSS inlined), via the
-    existing authed/blob download pattern.
+  net-new UI primitive.** **Read-only.** Shipped as a tabbed pane (Preview / HTML /
+  CSS); **as of 2026-09-01 the source tabs were dropped** — the pane always shows
+  the Preview and the source stays reachable via Download / open-in-new-tab. The
+  code editor `CodeBlock` is no longer used here (the §9.3 "no new dependency"
+  point is moot). A single controls bar carries the multi-artifact switcher tabs
+  (max-width 6rem, full title on hover) on the left and the zoom controls on the
+  right.
+  - **Preview** — a sandboxed `<iframe srcdoc={composed} sandbox="...">` (§4.7),
+    double-buffered so a re-render/zoom never flashes the blank frame (see
+    `previewBuffers.nextBufferAction`).
+  - **Download** — a format menu (2026-09-01): **HTML** (composed self-contained
+    file, CSS inlined), plus **PNG** and **PDF** built from the SAME faithful
+    render — the artifact is laid out off-screen, its DOM serialized, and rasterized
+    through an `<svg><foreignObject>` loaded as an `<img>` (secure static mode: no
+    scripts, no external loads). PNG is that canvas; PDF wraps the canvas JPEG in a
+    hand-assembled one-page document (no PDF library). Both capture the real
+    background and add none of the browser print chrome. (Print-to-PDF was tried
+    first and dropped: browsers omit backgrounds and inject header/footer/margins.)
+    All paths render the same sanitized + CSP-locked document, so no author script runs.
 - **Slice** `htmlArtifactSlice` — the cross-component bus (a card deep in the
   thread drives the far-away panel), newest-`version`-wins per `artifact_id`.
   Mirrors `writableDocumentSlice`.

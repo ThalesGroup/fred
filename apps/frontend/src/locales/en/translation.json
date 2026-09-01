@@ -290,8 +290,16 @@
       },
       "untitled": "HTML artifact",
       "close": "Close panel",
-      "download": "Download .html",
+      "download": "Download",
+      "downloadHtml": "HTML",
+      "downloadPdf": "PDF",
+      "downloadPng": "PNG",
       "openInNewTab": "Open in a new tab",
+      "copy": "Copy to clipboard",
+      "copied": "Copied to clipboard",
+      "copyFailed": "Could not copy.",
+      "exportFailed": "Could not export the {{format}}.",
+      "fitWidth": "Fit width",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "resetZoom": "Reset zoom",
@@ -299,11 +307,6 @@
       "card": {
         "aria": "HTML artifact",
         "open": "Open preview"
-      },
-      "tabs": {
-        "preview": "Preview",
-        "html": "HTML",
-        "css": "CSS"
       }
     },
     "ppt_filler": {

@@ -96,6 +96,7 @@ export const materialIcons = [
   "check_box_outline_blank",
   "star",
   "content_copy",
+  "fit_width",
   "error",
   "error_outline",
   "warning",

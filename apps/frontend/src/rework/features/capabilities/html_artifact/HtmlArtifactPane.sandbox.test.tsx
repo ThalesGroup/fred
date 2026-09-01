@@ -61,6 +61,14 @@ vi.mock("@shared/atoms/Tooltip/Tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("@shared/molecules/CodeBlock/CodeBlock", () => ({ CodeBlock: () => null }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({
+    showSuccess: () => undefined,
+    showError: () => undefined,
+    showInfo: () => undefined,
+    showWarn: () => undefined,
+  }),
+}));
 vi.mock("./HtmlArtifactDownloadButton", () => ({ default: () => null }));
 
 const { HtmlArtifactPane } = await import("./HtmlArtifactPane");

@@ -14,11 +14,11 @@
 
 // HtmlArtifactPane — the html_artifact capability's side panel (CapabilitySidePanel).
 //
-// A dedicated viewer opening right of the chat, READ-ONLY (v1), with three tabs:
-//  - Preview: the artifact rendered in a SANDBOXED iframe (see below);
-//  - HTML / CSS: the source, syntax-highlighted (the shared CodeBlock).
-// When the session holds several artifacts, a switcher strip above the tabs picks
-// one. The markup rides inline on the chat part (no fetch); the slice is the source.
+// A dedicated viewer opening right of the chat, READ-ONLY (v1): the artifact
+// rendered in a SANDBOXED iframe (see below), with a zoom control in the bar.
+// When the session holds several artifacts, a switcher strip in that bar picks
+// one (source is reachable via Download / open-in-new-tab). The markup rides
+// inline on the chat part (no fetch); the slice is the source.
 //
 // SECURITY (RFC §4.7): the Preview iframe is `sandbox=""` — the empty attribute
 // enables ALL sandbox restrictions, so NO script runs (no `allow-scripts`) and the
@@ -33,7 +33,6 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
-import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
 import type { CapabilitySidePanelProps } from "../types";
 import { useOpenSessionId } from "../useOpenSessionId";
 import {
@@ -42,23 +41,25 @@ import {
   selectHtmlArtifactSessionId,
   selectHtmlArtifactsById,
 } from "./htmlArtifactSlice";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { composeHtmlDocument, openHtmlArtifactInNewTab, zoomIn, zoomOut, ZOOM_LEVELS } from "./htmlArtifactDocument";
+import { nextBufferAction } from "./previewBuffers";
+import { measureArtifactWidth } from "./htmlArtifactExport";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
 import styles from "./HtmlArtifactPane.module.css";
-
-type ViewTab = "preview" | "html" | "css";
 
 export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const { showSuccess, showError } = useToast();
   const openSessionId = useOpenSessionId();
   const sliceSessionId = useSelector(selectHtmlArtifactSessionId);
   const byId = useSelector(selectHtmlArtifactsById);
   const selectedId = useSelector(selectHtmlArtifactSelectedId);
-  const [tab, setTab] = useState<ViewTab>("preview");
   // Browser-like zoom for the Preview (reflows content via CSS `zoom`), so a wide
   // page can be shrunk to fit. Download / open-in-new-tab stay at 100%.
   const [zoom, setZoom] = useState(1);
+  const previewWrapRef = useRef<HTMLDivElement>(null);
 
   // Only surface artifacts belonging to the conversation currently open.
   const artifacts = useMemo(
@@ -88,28 +89,38 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   // (sandboxed, no allow-scripts), so this hides that reload instead of avoiding it.
   const [buffers, setBuffers] = useState<[string, string]>(["", ""]);
   const [front, setFront] = useState<0 | 1>(0);
-  const pendingRef = useRef<0 | 1 | null>(null);
+  // What each buffer has actually painted. Switching back to an already-seen
+  // document doesn't reload the iframe (same srcDoc), so no onLoad fires — we must
+  // recognise "already painted here" and flip to it directly, or the pane freezes.
+  const paintedRef = useRef<[string, string]>(["", ""]);
   // On the very first open there is no prior frame to hold, so the empty front
   // iframe would flash its white background before the artifact paints. Keep both
   // frames hidden (the pane's own surface shows through) until that first paint.
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
-    if (!composed || buffers[front] === composed) return;
-    const back: 0 | 1 = front === 0 ? 1 : 0;
-    if (buffers[back] === composed) return; // already loading into the back buffer
-    pendingRef.current = back;
-    setBuffers((b) => {
-      const next: [string, string] = [b[0], b[1]];
-      next[back] = composed;
-      return next;
-    });
+    const action = nextBufferAction(composed, buffers, paintedRef.current, front);
+    if (action.kind === "flip") {
+      setFront(action.to);
+      setRevealed(true);
+    } else if (action.kind === "load") {
+      // This buffer is about to reload, so its previously-painted content is void:
+      // clear it now, or a quick switch back to that old doc would flip to this
+      // buffer mid-load (showing the new doc) instead of reloading the old one.
+      paintedRef.current[action.into] = "";
+      setBuffers((b) => {
+        const next: [string, string] = [b[0], b[1]];
+        next[action.into] = composed;
+        return next;
+      });
+    }
   }, [composed, front, buffers]);
 
   const handleFrameLoad = (idx: 0 | 1) => {
-    // Reveal the back buffer only once the doc we asked it to load has painted.
-    if (pendingRef.current === idx && buffers[idx] === composed) {
-      pendingRef.current = null;
+    paintedRef.current[idx] = buffers[idx];
+    // Reveal the freshly loaded buffer only once the doc we asked it to load has
+    // painted AND it is still the current target (a fast switch may have moved on).
+    if (buffers[idx] === composed && front !== idx) {
       setFront(idx);
       setRevealed(true);
     }
@@ -117,11 +128,31 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
 
   const untitled = t("capability.html_artifact.untitled", { defaultValue: "HTML artifact" });
 
-  const viewTabs: { id: ViewTab; label: string }[] = [
-    { id: "preview", label: t("capability.html_artifact.tabs.preview", { defaultValue: "Preview" }) },
-    { id: "html", label: t("capability.html_artifact.tabs.html", { defaultValue: "HTML" }) },
-    { id: "css", label: t("capability.html_artifact.tabs.css", { defaultValue: "CSS" }) },
-  ];
+  const copyMarkup = async () => {
+    if (!selected) return;
+    try {
+      await navigator.clipboard.writeText(composeHtmlDocument(selected.html, selected.css));
+      showSuccess({ summary: t("capability.html_artifact.copied", { defaultValue: "Copied to clipboard" }) });
+    } catch {
+      showError({ summary: t("capability.html_artifact.copyFailed", { defaultValue: "Could not copy." }) });
+    }
+  };
+
+  // Fit width: measure the artifact's laid-out width in the panel (via a transient
+  // frame — the live preview is opaque) and set the zoom so overflow shrinks to fit;
+  // content that already fits resets to 100%.
+  const fitToWidth = async () => {
+    const wrap = previewWrapRef.current;
+    if (!selected || !wrap) return;
+    const available = wrap.clientWidth;
+    if (available <= 0) return;
+    try {
+      const content = await measureArtifactWidth(selected.html, selected.css, available);
+      setZoom(content > available ? Math.max(available / content, ZOOM_LEVELS[0]) : 1);
+    } catch {
+      /* leave the zoom unchanged */
+    }
+  };
 
   return (
     <div className={styles.pane}>
@@ -130,6 +161,17 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
           <Icon category="outlined" type="code" />
           <span className={styles.title}>{selected?.title || untitled}</span>
         </div>
+        {selected && (
+          <Tooltip text={t("capability.html_artifact.copy", { defaultValue: "Copy to clipboard" })}>
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "content_copy" }}
+              onClick={() => void copyMarkup()}
+              aria-label={t("capability.html_artifact.copy", { defaultValue: "Copy to clipboard" })}
+            />
+          </Tooltip>
+        )}
         {selected && (
           <Tooltip text={t("capability.html_artifact.openInNewTab", { defaultValue: "Open in a new tab" })}>
             <IconButton
@@ -166,91 +208,75 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
 
       {selected && (
         <>
-          {artifacts.length > 1 && (
-            <div className={`${styles.tabs} ${styles.switcher}`} role="tablist" aria-label="Artifacts">
-              {artifacts.map((a) => (
-                <button
-                  key={a.artifact_id}
-                  role="tab"
-                  aria-selected={a.artifact_id === selected.artifact_id}
-                  className={`${styles.tab} ${a.artifact_id === selected.artifact_id ? styles.tabActive : ""}`}
-                  onClick={() => dispatch(selectHtmlArtifact(a.artifact_id))}
-                >
-                  {a.title || untitled}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className={styles.tabs} role="tablist" aria-label="View">
-            {viewTabs.map((v) => (
-              <button
-                key={v.id}
-                role="tab"
-                aria-selected={tab === v.id}
-                className={`${styles.tab} ${tab === v.id ? styles.tabActive : ""}`}
-                onClick={() => setTab(v.id)}
-              >
-                {v.label}
-              </button>
-            ))}
-            {tab === "preview" && (
-              <div className={styles.zoomCluster}>
-                <Tooltip text={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}>
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "zoom_out" }}
-                    onClick={() => setZoom(zoomOut)}
-                    disabled={zoom <= ZOOM_LEVELS[0]}
-                    aria-label={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}
-                  />
-                </Tooltip>
-                <Tooltip text={t("capability.html_artifact.resetZoom", { defaultValue: "Reset zoom" })}>
-                  <button className={styles.zoomLabel} onClick={() => setZoom(1)}>
-                    {Math.round(zoom * 100)}%
-                  </button>
-                </Tooltip>
-                <Tooltip text={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}>
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "zoom_in" }}
-                    onClick={() => setZoom(zoomIn)}
-                    disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
-                    aria-label={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}
-                  />
-                </Tooltip>
-              </div>
-            )}
-          </div>
-
-          <div className={styles.body}>
-            {tab === "preview" && (
-              <div className={styles.previewFrameWrap}>
-                {([0, 1] as const).map((i) => (
-                  <iframe
-                    key={i}
-                    srcDoc={buffers[i]}
-                    className={`${styles.previewFrame} ${revealed && front === i ? styles.frameFront : styles.frameBack}`}
-                    title={selected.title || untitled}
-                    sandbox=""
-                    referrerPolicy="no-referrer"
-                    onLoad={() => handleFrameLoad(i)}
-                  />
+          <div className={styles.controlsBar}>
+            {artifacts.length > 1 && (
+              <div className={styles.artifactTabs} role="tablist" aria-label="Artifacts">
+                {artifacts.map((a) => (
+                  <Tooltip key={a.artifact_id} text={a.title || untitled} placement="top">
+                    <button
+                      role="tab"
+                      aria-selected={a.artifact_id === selected.artifact_id}
+                      className={`${styles.tab} ${a.artifact_id === selected.artifact_id ? styles.tabActive : ""}`}
+                      onClick={() => dispatch(selectHtmlArtifact(a.artifact_id))}
+                    >
+                      {a.title || untitled}
+                    </button>
+                  </Tooltip>
                 ))}
               </div>
             )}
-            {tab === "html" && (
-              <div className={styles.source}>
-                <CodeBlock code={selected.html} language="html" />
-              </div>
-            )}
-            {tab === "css" && (
-              <div className={styles.source}>
-                <CodeBlock code={selected.css} language="css" />
-              </div>
-            )}
+            <div className={styles.zoomCluster}>
+              <Tooltip text={t("capability.html_artifact.fitWidth", { defaultValue: "Fit width" })}>
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "fit_width" }}
+                  onClick={() => void fitToWidth()}
+                  aria-label={t("capability.html_artifact.fitWidth", { defaultValue: "Fit width" })}
+                />
+              </Tooltip>
+              <Tooltip text={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}>
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "zoom_out" }}
+                  onClick={() => setZoom(zoomOut)}
+                  disabled={zoom <= ZOOM_LEVELS[0]}
+                  aria-label={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}
+                />
+              </Tooltip>
+              <Tooltip text={t("capability.html_artifact.resetZoom", { defaultValue: "Reset zoom" })}>
+                <button className={styles.zoomLabel} onClick={() => setZoom(1)}>
+                  {Math.round(zoom * 100)}%
+                </button>
+              </Tooltip>
+              <Tooltip text={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}>
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "zoom_in" }}
+                  onClick={() => setZoom(zoomIn)}
+                  disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+                  aria-label={t("capability.html_artifact.zoomIn", { defaultValue: "Zoom in" })}
+                />
+              </Tooltip>
+            </div>
+          </div>
+
+          <div className={styles.body}>
+            <div ref={previewWrapRef} className={styles.previewFrameWrap}>
+              {([0, 1] as const).map((i) => (
+                <iframe
+                  key={i}
+                  srcDoc={buffers[i]}
+                  className={`${styles.previewFrame} ${revealed && front === i ? styles.frameFront : styles.frameBack}`}
+                  title={selected.title || untitled}
+                  sandbox=""
+                  referrerPolicy="no-referrer"
+                  onLoad={() => handleFrameLoad(i)}
+                />
+              ))}
+            </div>
           </div>
         </>
       )}
