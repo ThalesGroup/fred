@@ -2398,7 +2398,9 @@ Opt-in **floating-card** variant (`floating` prop, push layout, 2026-08-06): the
 into a card inset from every edge — single `outline-muted` 1px border, `--radius-m` (16px)
 corners, subtle `--shadow-s` — dropping the flush edge border and the header divider. Width stays
 fixed during the open animation so content doesn't reflow. First consumer: the document-scope
-panel (see "Document-scope side panel"). Default panels stay flush.
+panel (see "Document-scope side panel"). Default push panels stay flush: full page height, square
+corners, a 1px `outline-muted` left divider, no top/bottom inset (2026-09-01 — previously a
+`--radius-m` rounded card with a small top/bottom margin and a transparent left edge).
 
 #### Open UX issues
 
