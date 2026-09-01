@@ -22,12 +22,9 @@ Why this module exists:
   `general_assistant` (all KF MCP servers by default), which was confusing
 
 Key design:
-- declares a slim, end-user default set in `default_mcp_servers` (document
-  search + tabular analysis, #2429); admin/ops servers are added per instance
-  via the control-plane agent form, never by default
-- all defaults are active by default (selected_capability_ids = null → the
-  template's default capabilities, #1978, #1988); each is a capability the
-  operator unchecks in the Tools tab when not needed
+- declares NO default capabilities: a new instance starts with nothing ticked
+  and the operator adds what it needs in the agent form's Tools tab (see the
+  comment on `default_mcp_servers` for why the former end-user pair went away)
 - one `prompts.system` field lets operators specialise the role without creating
   a new agent template
 - system prompt handles both the tool-equipped and no-tool cases
@@ -35,14 +32,13 @@ Key design:
 How to use it:
 - import `GENERAL_ASSISTANT_AGENT` and register it first in the pod registry
   so that `fred-agents-cli` selects it as the default agent on connect
-- operators create a named instance and deselect tools they don't need
+- operators create a named instance and select the tools it needs
 
 Example:
 - `from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT`
 """
 
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     FieldSpec,
     MCPServerRef,
     UIHints,
@@ -128,34 +124,26 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     tags: tuple[str, ...] = ("general", "react")
     system_prompt_template: str = _SYSTEM_PROMPT
 
-    # End-user capabilities only (#2429): document search and tabular analysis.
-    # Admin/ops servers (corpus administration, OpenSearch and Prometheus
-    # monitoring, GitHub read-only) are too technical for the production
-    # deployments this blank-slate template lands on, and each default also
-    # feeds the #2408 dependency gate - enabling this agent for a team requires
-    # every listed server to be usable by that team. Operators who need one of
-    # the removed servers add it per instance via the control-plane agent form.
+    # No default capabilities: a blank slate really is blank. The operator
+    # ticks what this instance needs in the agent form's Tools tab.
     #
-    # Document search: `document_access` (native, #1906 pilot) rather than the
-    # legacy inprocess `mcp-knowledge-flow-mcp-text` - the forward path under
-    # live A/B evaluation against `react_rag_mcp`, which stays on the legacy
-    # capability on purpose as the comparison baseline. Do not select both on
-    # one instance (duplicate vector-search tool, see
-    # `document_access/capability.py`'s module docstring).
+    # Why empty rather than the former end-user pair (`document_access` +
+    # tabular, #2429): every default feeds the #2408 dependency gate, so
+    # enabling this template for a team required every listed server to be
+    # usable by that team first - a needless admission hurdle for the one
+    # template meant to be the universal starting point. Defaults now reach
+    # new instances pre-ticked, which made carrying any at all a decision to
+    # take deliberately rather than by inheritance.
     #
-    # Filesystem (`mcp-knowledge-flow-fs`) is deliberately excluded: the /fs
-    # boundary is not agent/team-scoped yet (AGENT-FILESYSTEM-HARDENING-RFC F1,
-    # #2334) - same stance as `deep_assistant`. Do not re-add until that lands.
-    default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id="document_access"),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
-        # Removed from the prod defaults (#2429) - uncomment to restore (and
-        # re-import the constants from fred_sdk):
-        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
-        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
-        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
-        # MCPServerRef(id="mcp-web-github-readonly"),
-    )
+    # If you re-add one, mind two constraints that outlive this list:
+    # - `document_access` (native, #1906) and the legacy inprocess
+    #   `mcp-knowledge-flow-mcp-text` must never be selected together on one
+    #   instance - duplicate vector-search tool, see
+    #   `document_access/capability.py`'s module docstring.
+    # - Filesystem (`mcp-knowledge-flow-fs`) stays out until the /fs boundary
+    #   is agent/team-scoped (AGENT-FILESYSTEM-HARDENING-RFC F1, #2334) - same
+    #   stance as `deep_assistant`.
+    default_mcp_servers: tuple[MCPServerRef, ...] = ()
 
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(

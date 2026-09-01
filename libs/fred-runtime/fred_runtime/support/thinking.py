@@ -43,7 +43,9 @@ How to use:
 - `content_to_text(content)` — render message content as text, dropping reasoning
 - `strip_reasoning_from_history(messages)` — sanitise assistant messages before replay
 - `thread_reasoning_within_open_turn(messages)` — same, but keeping the current
-  turn's reasoning as text (candidate fix for reasoning drift; not yet wired)
+  turn's reasoning as text. This is the #1780 reasoning-drift fix and it IS
+  wired: `CheckpointHygieneMiddleware` calls it on every ReAct turn (the
+  docstring said "not yet wired" long after it shipped).
 """
 
 from __future__ import annotations

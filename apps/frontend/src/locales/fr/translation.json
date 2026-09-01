@@ -357,6 +357,16 @@
           "launcher": "Viewer PPT"
         }
       }
+    },
+    "platform_postgres": {
+      "name": "Base de données plateforme (SQL lecture seule)",
+      "description": "Capacité d'administration : répondre aux questions d'exploitation par des requêtes SQL en lecture seule sur la base Postgres de la plateforme.",
+      "fields": {
+        "statement_timeout_s": {
+          "title": "Délai maximal d'exécution (secondes)",
+          "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
+        }
+      }
     }
   },
   "chatbot": {
@@ -1175,7 +1185,18 @@
         "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement — mais désactiver le modèle éteint son raisonnement.",
         "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
         "reasoningOnToast": "Raisonnement activé pour ce modèle.",
-        "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle."
+        "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle.",
+        "grantAllConfirm": {
+          "title": "Activer aussi les fonctionnalités requises ?",
+          "messageTeam": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette équipe ne peut pas encore l'utiliser : activer l'agent seul le laisserait inopérant.",
+          "messagePersonal": "{{agent}} a besoin de {{deps}} pour fonctionner. Les espaces personnels ne peuvent pas encore l'utiliser : activer l'agent seul le laisserait inopérant.",
+          "messagePlatform": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette fonctionnalité n'est pas activée par défaut : chaque équipe hériterait donc d'un agent inutilisable.",
+          "confirm": "Tout activer",
+          "cancel": "Annuler",
+          "depFailed": "Impossible d'activer {{dep}} — {{agent}} n'a pas été modifié.",
+          "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
+          "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
+        }
       },
       "platformModelBindings": {
         "openButton": "Liaison de modèle plateforme",

@@ -4277,6 +4277,8 @@ time what it can draw and skips unknown kinds.
 this change read back as "no cards" - exactly what they render today. Their parts
 are not recoverable; they were never stored.
 
+---
+
 ### 8.60 ✅ `document_similarity` capability + `DocumentSimilarityPort` - issue #2461 (2026-08-28)
 
 **Was**: Knowledge Flow shipped targeted similarity / comparison search in
@@ -4431,3 +4433,39 @@ goal of #2415. `checkpoint_ns` cannot deliver it for a root graph - the only
 LangGraph-native lever is `thread_id`, which touches
 `checkpoint_thread_owner`, per-user erasure, and session deletion. Tracked
 in issue #2481; ReAct agents currently share the session's checkpoint thread.
+
+---
+
+### 8.62 ✅ `AgentDefinition` declares its reasoning defaults; `default_tuning` carries them — issue #2473 (2026-08-28)
+
+**Additive SDK surface.** `AgentDefinition` gains two declarable fields,
+`reasoning_enabled` and `reasoning_default_on` (both default `False`), and
+`AgentTuning` gains `reasoning_default_on` beside the `reasoning_enabled` it
+already had. `_definition_to_agent_tuning` (`app/agent_app.py`) now projects
+both onto the `default_tuning` a pod advertises on `/pod/v1/agents/templates`;
+it previously projected only `role`/`description`/`tags`/`fields`, which pinned
+both fields `False` on the wire regardless of what a definition declared.
+
+**Why the pod side matters.** REASON-01 level 3 is an agent property, and
+Amendment B's `reasoning_default_on` seeds where the composer's toggle starts.
+Both were reachable only per instance, through the agent-creation form — so a
+template could not express "this agent's job needs reasoning". The wire already
+carried `default_tuning` as a full `AgentTuning`, so no new transport was
+needed; the projection was the whole gap.
+
+**No runtime behaviour change.** These fields are declaration only. Nothing in
+the execution path reads them: reasoning is still turned off at the single
+`RoutedChatModelFactory.build_for_chat` point (§8.48), against
+`RuntimeContext.reasoning` (level 4) and `reasoning_enabled_model_ids` (level
+2). A template declaring `reasoning_enabled=True` on a deployment where no model
+has its reasoning enabled produces no composer control and no reasoning turn.
+
+**Rolling upgrade.** Both models default the fields to `False`, so a pod
+predating #2473 advertises a `default_tuning` without the keys and a newer
+control-plane reads both as `False` — never inventing an offer no template
+declared. Consumer side and the seed-not-gate semantics:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33 addendum (2026-08-28).
+
+**Adopter.** `fred_agents.platform_ops` declares both `True` — a diagnostic
+agent whose turns are inherently multi-step.
+

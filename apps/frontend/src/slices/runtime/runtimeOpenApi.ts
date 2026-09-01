@@ -987,6 +987,8 @@ export type AgentTuning = {
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
+  /** Does a NEW conversation start with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control — where the switch starts, never where it stays. Inert unless `reasoning_enabled`; kept rather than reset so withdrawing and restoring the offer does not lose the author's choice. */
+  reasoning_default_on?: boolean;
   /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
     
     True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
