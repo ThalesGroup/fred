@@ -43,6 +43,10 @@ Proves, in one continuous run:
   E. a targeted resume with B's own id executes B's tool exactly once
   F. a resume with no interrupt_id at all fails closed (codec-level)
 
+A second test pins WHERE that pending interrupt is stored: LangGraph
+discards a root graph's `checkpoint_ns`, so the resume gate must read
+unnamespaced or find nothing.
+
 Does NOT use fake pending-write dictionaries for any of this — every
 interrupt and every resume goes through the real compiled graph and the
 real checkpointer.
@@ -53,9 +57,14 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+from fred_runtime.app.agent_app import _pending_react_v2_interrupt_ids
 from fred_runtime.react.react_message_codec import graph_input_from_react_input
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
+from fred_runtime.runtime_support.checkpoints import (
+    AsyncCheckpointReader,
+    load_checkpoint,
+)
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -296,5 +305,83 @@ async def test_hitl_resume_identity_model_against_real_langgraph_and_sql_checkpo
                 ),
                 sanitize_tool_name=lambda name: name,
             )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_paused_checkpoint_is_stored_unnamespaced_whatever_the_config_asks(
+    tmp_path,
+) -> None:
+    """
+    A per-agent `checkpoint_ns` on a root graph never reaches storage, so the
+    resume gate must not look for one.
+
+    Driven through the real tool loop and a real `FredSqlCheckpointer`, with
+    the namespaced config the ReAct executor used to build: LangGraph resets
+    `checkpoint_ns` to `""` (`pregel/_loop.py::PregelLoop.__init__`), the
+    paused checkpoint and its `__interrupt__` write land there, and a read at
+    the per-agent namespace finds nothing at all — which is what turned every
+    ReAct V2 HITL resume into a 409.
+    """
+
+    @tool
+    def update_ticket(ticket_id: str) -> str:
+        """Update one ticket (approval-gated)."""
+
+        return f"updated {ticket_id}"
+
+    model = _RecordingModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[_tool_call("update_ticket", {"ticket_id": "INC-1"}, "c-1")],
+            )
+        ]
+    )
+
+    db_path = tmp_path / "hitl_namespace.sqlite3"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+    try:
+        checkpointer = FredSqlCheckpointer(engine, prefix="v2_")
+        reader = cast(AsyncCheckpointReader, checkpointer)
+        agent: Any = build_tool_loop_compiled_react_agent(
+            model=model,
+            tools=[update_ticket],
+            system_prompt="You update tickets.",
+            binding=_binding(),
+            approval_policy=ToolApprovalPolicy(
+                enabled=True, always_require_tools=("update_ticket",)
+            ),
+            checkpointer=cast(Checkpointer, checkpointer),
+            definition=cast(ReActAgentDefinition, _FakeDefinition()),
+            available_tool_names={"update_ticket"},
+        )
+        thread_id = "t-namespace-integration"
+        agent_ns = "instance-namespace-integration"
+
+        updates: list[dict[str, Any]] = []
+        async for mode, update in agent.astream(
+            {"messages": [HumanMessage(content="update INC-1")]},
+            config={
+                "configurable": {"thread_id": thread_id, "checkpoint_ns": agent_ns}
+            },
+            stream_mode=["messages", "updates"],
+        ):
+            if mode == "updates" and isinstance(update, dict):
+                updates.append(update)
+
+        interrupt = _interrupt_object(_find_interrupt_update(updates))
+
+        assert (
+            await load_checkpoint(reader, thread_id=thread_id, checkpoint_ns=agent_ns)
+            is None
+        )
+        loaded = await load_checkpoint(reader, thread_id=thread_id)
+        assert loaded is not None
+        _, pending_writes = loaded
+        assert _pending_react_v2_interrupt_ids(pending_writes) == frozenset(
+            {interrupt.id}
+        )
     finally:
         await engine.dispose()

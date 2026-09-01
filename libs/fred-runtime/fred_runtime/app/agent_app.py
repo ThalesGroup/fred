@@ -1884,6 +1884,38 @@ def _pending_react_v2_interrupt_ids(
     return frozenset(ids)
 
 
+def _resume_checkpoint_namespaces(request: RuntimeExecuteRequest) -> tuple[str, ...]:
+    """
+    Checkpoint namespaces a resume-capable request may target, best first.
+
+    ReAct V2 checkpoints are ALWAYS stored unnamespaced, whatever the runtime
+    configures: LangGraph resets `checkpoint_ns` to `""` for every root-graph
+    run (`pregel/_loop.py::PregelLoop.__init__`, pinned by
+    `test_langgraph_resets_root_checkpoint_namespace`). Only the hand-rolled
+    Graph runtime, which writes through `aput` itself, actually reaches
+    storage under the per-agent namespace.
+
+    This gate runs before the target agent is resolved, so it cannot know
+    which runtime it is talking to — it goes by the request's own resume
+    identifier instead (`checkpoint_id` is Graph V2's, `interrupt_id` is ReAct
+    V2's, mutually exclusive by contract).
+    """
+
+    agent_ns = checkpoint_namespace(
+        agent_instance_id=request.agent_instance_id,
+        agent_id=request.agent_id or request.agent_instance_id or "",
+    )
+    if request.checkpoint_id is not None:
+        # Graph V2, whose executor reads its own namespace and nowhere else.
+        # Probing "" as well would wave a pre-namespacing pause past this gate
+        # only to have it die mid-stream, where a 409 can no longer be sent.
+        return (agent_ns,)
+    # ReAct V2 — always unnamespaced. `agent_ns` stays as a fallback for a
+    # Graph pause that never stamped a checkpoint_id (`graph_runtime.py` only
+    # stamps one when it has it); nothing is ever stored there for ReAct.
+    return ("", agent_ns)
+
+
 async def _validate_session_checkpoint_access(
     request: RuntimeExecuteRequest,
 ) -> None:
@@ -1960,37 +1992,36 @@ async def _validate_session_checkpoint_access(
     if checkpointer is None:
         return
 
-    checkpoint_ns = checkpoint_namespace(
-        agent_instance_id=request.agent_instance_id,
-        agent_id=request.agent_id or request.agent_instance_id or "",
-    )
-
-    loaded = await load_checkpoint(
-        checkpointer,
-        thread_id=session_id,
-        checkpoint_id=request.checkpoint_id,
-        checkpoint_ns=checkpoint_ns,
-    )
-    if (
-        loaded is None
-        and request.resume_payload is not None
-        and request.checkpoint_id is not None
-    ):
-        # The exact-id lookup above is the only path the legacy Graph runtime
-        # ever needs (its checkpoint_id is real). Retry against the thread's
-        # latest checkpoint only once that has failed, on a genuine resume
-        # attempt. ReAct V2 never populates checkpoint_id at all, so its
-        # requests already resolve to "latest checkpoint" on the primary
-        # lookup above (checkpoint_id=None) and never reach this branch —
-        # kept for the legacy Graph runtime's own unknown-checkpoint_id
-        # recovery path (a clean "does not match pending" 409 instead of a
-        # blunt "unknown checkpoint" one), preserving its exact prior
-        # behavior.
+    loaded = None
+    for checkpoint_ns in _resume_checkpoint_namespaces(request):
         loaded = await load_checkpoint(
             checkpointer,
             thread_id=session_id,
+            checkpoint_id=request.checkpoint_id,
             checkpoint_ns=checkpoint_ns,
         )
+        if (
+            loaded is None
+            and request.resume_payload is not None
+            and request.checkpoint_id is not None
+        ):
+            # The exact-id lookup above is the only path the legacy Graph
+            # runtime ever needs (its checkpoint_id is real). Retry against the
+            # thread's latest checkpoint only once that has failed, on a
+            # genuine resume attempt. ReAct V2 never populates checkpoint_id at
+            # all, so its requests already resolve to "latest checkpoint" on
+            # the primary lookup above (checkpoint_id=None) and never reach
+            # this branch — kept for the legacy Graph runtime's own
+            # unknown-checkpoint_id recovery path (a clean "does not match
+            # pending" 409 instead of a blunt "unknown checkpoint" one),
+            # preserving its exact prior behavior.
+            loaded = await load_checkpoint(
+                checkpointer,
+                thread_id=session_id,
+                checkpoint_ns=checkpoint_ns,
+            )
+        if loaded is not None:
+            break
 
     if loaded is None:
         detail = (
@@ -3487,14 +3518,14 @@ async def _iterate_runtime_event_payloads(
             # docstring for the full claimed → started lifecycle and the
             # guarantees it does and does not provide.
             hitl_claim: _HitlResumeClaim | None = None
-            hitl_checkpoint_ns = checkpoint_namespace(
-                agent_instance_id=portable_context.baggage.get("agent_instance_id"),
-                agent_id=definition.agent_id,
-            )
             if request.resume_payload is not None and request.interrupt_id:
                 hitl_claim = await _claim_hitl_resume_before_invocation(
                     session_id=ctx.get("session_id"),
-                    checkpoint_ns=hitl_checkpoint_ns,
+                    # Unnamespaced: this branch is ReAct-only, and LangGraph
+                    # stores every root-graph checkpoint at ns "" whatever the
+                    # runtime configures — the claim must key on the same
+                    # occurrence the early gate validated.
+                    checkpoint_ns="",
                     interrupt_id=request.interrupt_id,
                 )
 
