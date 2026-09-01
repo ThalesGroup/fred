@@ -61,10 +61,10 @@ CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
 MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
 
 # Reserved id prefix for control-plane-projected product applications
-# (FRED-INTEGRATED-APPLICATIONS-RFC.md §6.1/§7.1). Applications reuse the
-# capability tuple model for coarse team admission, but are not runtime
-# capabilities: ``CapabilityManifest.kind`` deliberately does not admit
-# ``"app"``. Only the JSON-safe ``CapabilityCatalogEntry`` below does.
+# (CONTROL-PLANE-PRODUCT-CONTRACT.md, "team applications are
+# runtime-registered, frame-hosted UIs"). Applications reuse the capability
+# tuple model for coarse team admission but are not runtime capabilities, so
+# only the JSON-safe `CapabilityCatalogEntry` admits `kind="app"`.
 APPLICATION_CAPABILITY_NAMESPACE_PREFIX = "app__"
 
 
@@ -360,7 +360,7 @@ class CapabilityCatalogEntry(BaseModel):
     # or "model" (pod-advertised projection of one models_catalog.yaml
     # (provider, name) pair, OBSERV-02 v3, RFC §8.7) — see
     # `CapabilityManifest.kind`. "app" is a control-plane-side projection of
-    # an installed product application; no CapabilityManifest of kind "app"
+    # a registered product application; no CapabilityManifest of kind "app"
     # is authorable.
     kind: Literal["tool", "agent", "model", "app"] = "tool"
     # See `CapabilityManifest.execution_models` (CAPAB-02). Advertised so a
