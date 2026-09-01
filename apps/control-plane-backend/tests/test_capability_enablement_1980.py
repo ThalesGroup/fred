@@ -2998,3 +2998,54 @@ async def test_aggregate_list_surfaces_agent_default_capability_ids(
     ]
     # A tool has no defaults by construction — the UI must not gate on it.
     assert by_id["mcp-knowledge-flow-mcp-tabular"].default_capability_ids == []
+
+
+@pytest.mark.asyncio
+async def test_disable_without_agent_store_writes_no_tuples() -> None:
+    """The store a revoke suspends dependents with is resolved before the tuple
+    writes: refusing afterwards would leave access revoked and the dependents
+    that relied on it still running."""
+
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await disable_capability_for_team(
+            rebac=rebac,
+            settings_store=None,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            team_id="team-a",
+        )
+
+    assert rebac.write_log == []
+
+
+@pytest.mark.asyncio
+async def test_reset_without_agent_store_writes_no_tuples() -> None:
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await reset_capability_for_team(
+            rebac=rebac,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            team_id="team-a",
+            default_on=False,
+        )
+
+    assert rebac.write_log == []
+
+
+@pytest.mark.asyncio
+async def test_default_off_without_agent_store_writes_no_tuples() -> None:
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await enablement.set_capability_default_on(
+            rebac=rebac,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            on=False,
+        )
+
+    assert rebac.write_log == []

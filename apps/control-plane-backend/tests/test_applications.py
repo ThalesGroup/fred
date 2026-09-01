@@ -30,6 +30,7 @@ from control_plane_backend.applications.catalog import (
     ConfiguredApplicationCatalogSource,
 )
 from control_plane_backend.applications.service import list_team_applications
+from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.capabilities.api import router as capabilities_router
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
@@ -726,8 +727,6 @@ async def test_app_personal_tuple_cleanup_remains_available() -> None:
 async def test_app_disable_canonicalizes_personal_alias_for_legacy_cleanup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from control_plane_backend.capabilities import service as capability_service
-
     rebac = _TupleRebac()
     app = _app_entry()
     canonical_team_id = personal_team_id("user-a")
@@ -786,3 +785,83 @@ async def test_app_default_off_and_personal_scope_never_touch_agent_store() -> N
             catalog_entry=_app_entry(),
             scope="default",
         )
+
+
+def _parked_deps(rebac: object) -> Any:
+    return cast(
+        Any,
+        SimpleNamespace(
+            configuration=_feature_configuration(
+                enable_applications=True,
+                application_sources=[_source("example", enabled=False)],
+            ),
+            team_dependencies=SimpleNamespace(rebac=rebac),
+            get_kpi_writer=lambda: None,
+        ),
+    )
+
+
+def _app_grant(team_id: str, relation: RelationType) -> Relation:
+    return Relation(
+        subject=RebacReference(Resource.TEAM, team_id),
+        relation=relation,
+        resource=RebacReference(Resource.CAPABILITY, "app__example"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_parked_application_grant_stays_revocable() -> None:
+    """Parking withdraws an application from the catalog but keeps its gateway
+    routes and its grants alive. Blocking the revoke as well would strand every
+    grant, and un-parking would restore access with no admin action."""
+
+    rebac = _TupleRebac()
+    rebac.relations.add(_app_grant("team-a", RelationType.ENABLED))
+
+    result = await capability_service.disable_team_capability(
+        user=_user(),
+        capability_id="app__example",
+        team_id=TeamId("team-a"),
+        deps=_parked_deps(rebac),
+    )
+
+    assert result.enabled is False
+    assert _app_grant("team-a", RelationType.ENABLED) not in rebac.relations
+    assert _app_grant("team-a", RelationType.DISABLED) in rebac.relations
+
+
+@pytest.mark.asyncio
+async def test_parked_application_grant_stays_resettable() -> None:
+    rebac = _TupleRebac()
+    rebac.relations.add(_app_grant("team-a", RelationType.ENABLED))
+
+    await capability_service.reset_team_capability(
+        user=_user(),
+        capability_id="app__example",
+        team_id=TeamId("team-a"),
+        deps=_parked_deps(rebac),
+    )
+
+    assert not any(
+        relation.subject.type is Resource.TEAM for relation in rebac.relations
+    )
+
+
+@pytest.mark.asyncio
+async def test_parked_application_cannot_be_granted() -> None:
+    """The revoke direction opens for a parked app; the grant direction does not."""
+
+    rebac = _TupleRebac()
+
+    with pytest.raises(CapabilityNotFound):
+        await capability_service.enable_team_capability(
+            user=_user(),
+            capability_id="app__example",
+            team_id=TeamId("team-a"),
+            settings={},
+            deps=_parked_deps(rebac),
+        )
+
+    assert not any(
+        relation.relation is RelationType.ENABLED for relation in rebac.relations
+    )
