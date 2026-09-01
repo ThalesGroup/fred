@@ -115,6 +115,14 @@
   font-size: 1.125rem;
 }
 
+.rowAvatar {
+  flex-shrink: 0;
+  border-radius: var(--radius-s);
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+}
+
 .rowText {
   display: flex;
   flex-direction: column;
