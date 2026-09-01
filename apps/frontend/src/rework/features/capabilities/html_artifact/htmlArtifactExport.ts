@@ -103,6 +103,32 @@ async function renderArtifactToCanvas(html: string, css: string): Promise<HTMLCa
   }
 }
 
+/**
+ * Measure the artifact's laid-out content width at a given container width — the
+ * `scrollWidth` includes anything overflowing (a fixed-width layout wider than the
+ * panel). The live preview is `sandbox=""` (unreadable), so we lay the composed
+ * document out in a transient off-screen `allow-same-origin` frame just to measure.
+ * The caller turns this into a "fit width" zoom (containerWidth / contentWidth).
+ */
+export async function measureArtifactWidth(html: string, css: string, containerWidth: number): Promise<number> {
+  const composed = composeHtmlDocument(html, css);
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("sandbox", "allow-same-origin");
+  iframe.setAttribute("referrerpolicy", "no-referrer");
+  iframe.style.cssText = `position:fixed;left:-99999px;top:0;width:${containerWidth}px;height:10px;border:0`;
+  iframe.srcdoc = composed;
+  document.body.appendChild(iframe);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      iframe.addEventListener("load", () => resolve(), { once: true });
+      iframe.addEventListener("error", () => reject(new Error("artifact failed to render")), { once: true });
+    });
+    return iframe.contentDocument?.documentElement.scrollWidth ?? containerWidth;
+  } finally {
+    iframe.remove();
+  }
+}
+
 /** Rasterize the artifact and download it as a PNG. */
 export async function downloadHtmlArtifactPng(html: string, css: string, title: string): Promise<void> {
   const canvas = await renderArtifactToCanvas(html, css);

@@ -41,14 +41,17 @@ import {
   selectHtmlArtifactSessionId,
   selectHtmlArtifactsById,
 } from "./htmlArtifactSlice";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { composeHtmlDocument, openHtmlArtifactInNewTab, zoomIn, zoomOut, ZOOM_LEVELS } from "./htmlArtifactDocument";
 import { nextBufferAction } from "./previewBuffers";
+import { measureArtifactWidth } from "./htmlArtifactExport";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
 import styles from "./HtmlArtifactPane.module.css";
 
 export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const { showSuccess, showError } = useToast();
   const openSessionId = useOpenSessionId();
   const sliceSessionId = useSelector(selectHtmlArtifactSessionId);
   const byId = useSelector(selectHtmlArtifactsById);
@@ -56,6 +59,7 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   // Browser-like zoom for the Preview (reflows content via CSS `zoom`), so a wide
   // page can be shrunk to fit. Download / open-in-new-tab stay at 100%.
   const [zoom, setZoom] = useState(1);
+  const previewWrapRef = useRef<HTMLDivElement>(null);
 
   // Only surface artifacts belonging to the conversation currently open.
   const artifacts = useMemo(
@@ -124,6 +128,32 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
 
   const untitled = t("capability.html_artifact.untitled", { defaultValue: "HTML artifact" });
 
+  const copyMarkup = async () => {
+    if (!selected) return;
+    try {
+      await navigator.clipboard.writeText(composeHtmlDocument(selected.html, selected.css));
+      showSuccess({ summary: t("capability.html_artifact.copied", { defaultValue: "Copied to clipboard" }) });
+    } catch {
+      showError({ summary: t("capability.html_artifact.copyFailed", { defaultValue: "Could not copy." }) });
+    }
+  };
+
+  // Fit width: measure the artifact's laid-out width in the panel (via a transient
+  // frame — the live preview is opaque) and set the zoom so overflow shrinks to fit;
+  // content that already fits resets to 100%.
+  const fitToWidth = async () => {
+    const wrap = previewWrapRef.current;
+    if (!selected || !wrap) return;
+    const available = wrap.clientWidth;
+    if (available <= 0) return;
+    try {
+      const content = await measureArtifactWidth(selected.html, selected.css, available);
+      setZoom(content > available ? Math.max(available / content, ZOOM_LEVELS[0]) : 1);
+    } catch {
+      /* leave the zoom unchanged */
+    }
+  };
+
   return (
     <div className={styles.pane}>
       <div className={styles.header}>
@@ -131,6 +161,17 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
           <Icon category="outlined" type="code" />
           <span className={styles.title}>{selected?.title || untitled}</span>
         </div>
+        {selected && (
+          <Tooltip text={t("capability.html_artifact.copy", { defaultValue: "Copy to clipboard" })}>
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "content_copy" }}
+              onClick={() => void copyMarkup()}
+              aria-label={t("capability.html_artifact.copy", { defaultValue: "Copy to clipboard" })}
+            />
+          </Tooltip>
+        )}
         {selected && (
           <Tooltip text={t("capability.html_artifact.openInNewTab", { defaultValue: "Open in a new tab" })}>
             <IconButton
@@ -185,6 +226,15 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
               </div>
             )}
             <div className={styles.zoomCluster}>
+              <Tooltip text={t("capability.html_artifact.fitWidth", { defaultValue: "Fit width" })}>
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "fit_width" }}
+                  onClick={() => void fitToWidth()}
+                  aria-label={t("capability.html_artifact.fitWidth", { defaultValue: "Fit width" })}
+                />
+              </Tooltip>
               <Tooltip text={t("capability.html_artifact.zoomOut", { defaultValue: "Zoom out" })}>
                 <IconButton
                   variant="icon"
@@ -214,7 +264,7 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
           </div>
 
           <div className={styles.body}>
-            <div className={styles.previewFrameWrap}>
+            <div ref={previewWrapRef} className={styles.previewFrameWrap}>
               {([0, 1] as const).map((i) => (
                 <iframe
                   key={i}

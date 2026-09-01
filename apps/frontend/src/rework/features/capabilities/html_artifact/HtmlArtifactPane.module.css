@@ -91,7 +91,7 @@
   white-space: nowrap;
 }
 
-.tab:hover {
+.tab:not(.tabActive):hover {
   color: var(--on-surface);
 }
 
