@@ -58,18 +58,22 @@
   text-align: center;
 }
 
-/* Both tab strips (artifact switcher + Preview/HTML/CSS) share this look. */
-.tabs {
+/* Controls bar: the artifact switcher tabs (scrollable) on the left, zoom on the
+   right. Always shown while an artifact is selected. */
+.controlsBar {
   display: flex;
-  gap: var(--spacing-2xs);
+  align-items: stretch;
   border-bottom: 1px solid var(--outline-muted);
+  background-color: var(--surface-container-low);
   padding: var(--spacing-2xs) var(--spacing-xs) 0;
-  overflow-x: auto;
 }
 
-/* The artifact switcher sits above the view tabs; keep it visually secondary. */
-.switcher {
-  background-color: var(--surface-container-low);
+/* One tab per artifact; scrolls horizontally so the zoom cluster keeps its place. */
+.artifactTabs {
+  display: flex;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .tab {
@@ -79,7 +83,7 @@
   border-bottom: 2px solid transparent;
   background: transparent;
   padding: var(--spacing-xs) var(--spacing-s);
-  max-width: 14rem;
+  max-width: 6rem;
   overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
@@ -103,7 +107,7 @@
   overflow: hidden;
 }
 
-/* Zoom controls live at the far right of the view-tab row (Preview / HTML / CSS). */
+/* Zoom controls live at the far right of the controls bar. */
 .zoomCluster {
   display: flex;
   align-items: center;
@@ -165,11 +169,4 @@
   opacity: 0;
   z-index: 0;
   pointer-events: none;
-}
-
-/* Source tabs (HTML / CSS): the CodeBlock scrolls within the body. */
-.source {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
 }
