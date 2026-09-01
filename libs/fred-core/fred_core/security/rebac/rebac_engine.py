@@ -158,6 +158,10 @@ class TeamPermission(str, Enum):
     # AUTHZ-05 review item 1b: `team_member`-only, unlike CAN_READ (which
     # also admits `public`) — gates seeing/using the team's agents.
     CAN_USE_TEAM_AGENTS = "can_use_team_agents"
+    # Product applications are collaborative-team-only in V1. Keep this
+    # separate from CAN_READ (which admits public non-members) and from the
+    # agent-specific permission above.
+    CAN_USE_TEAM_APPLICATIONS = "can_use_team_applications"
 
     # Team-scoped evaluation capabilities (RFC §6.2/§3.2).
     CAN_RUN_EVALUATIONS = "can_run_evaluations"

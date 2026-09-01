@@ -36,6 +36,9 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     StoredCapabilityConfig,
 )
+from fred_sdk.contracts.capability.manifest import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_sdk.contracts.models import TeamScopePolicy
 from pydantic import ValidationError
 
@@ -241,6 +244,27 @@ class _RuntimeTemplatePayload:
             and raw_max_chat_input_chars > 0
             else None
         )
+        parsed_capabilities = [
+            CapabilityCatalogEntry.model_validate(entry)
+            for entry in data.get("available_capabilities", [])
+            if isinstance(entry, dict)
+        ]
+        quarantined_capability_ids = {
+            entry.id
+            for entry in parsed_capabilities
+            if entry.kind == "app"
+            or entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+        }
+        if quarantined_capability_ids:
+            logger.warning(
+                "Ignoring product-application entries advertised by an agent runtime: %s",
+                sorted(quarantined_capability_ids),
+            )
+        available_capabilities = [
+            entry
+            for entry in parsed_capabilities
+            if entry.id not in quarantined_capability_ids
+        ]
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -250,11 +274,7 @@ class _RuntimeTemplatePayload:
             default_tuning=tuning,
             # Pod-installed capabilities (#1974) — the same SDK wire model the
             # pod serializes, never a hand-declared parallel copy.
-            available_capabilities=[
-                CapabilityCatalogEntry.model_validate(entry)
-                for entry in data.get("available_capabilities", [])
-                if isinstance(entry, dict)
-            ],
+            available_capabilities=available_capabilities,
             # Ids of `definition.default_mcp_servers` (the servers activated when
             # `selected_capability_ids is None`) — MCP-derived and native ids
             # alike (RFC §2), read verbatim off the pod's own wire field rather
@@ -263,7 +283,10 @@ class _RuntimeTemplatePayload:
             default_capability_ids=[
                 cid
                 for cid in data.get("default_capability_ids", [])
-                if isinstance(cid, str) and cid
+                if isinstance(cid, str)
+                and cid
+                and cid not in quarantined_capability_ids
+                and not cid.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
             ],
             # Optional during rolling upgrades: older runtime pods do not
             # advertise this deployment policy yet.

@@ -12562,6 +12562,12 @@
                               "title": "Enableelecwarfare",
                               "type": "boolean"
                             },
+                            "enableApplications": {
+                              "default": false,
+                              "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application capability administration, and the frontend Apps experience stay disabled.",
+                              "title": "Enableapplications",
+                              "type": "boolean"
+                            },
                             "enableAllResourceSpaces": {
                               "default": false,
                               "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
@@ -12763,6 +12769,74 @@
                         "additionalProperties": false
                       },
                       "title": "Runtime Catalog Sources",
+                      "type": "array"
+                    },
+                    "application_sources": {
+                      "description": "Applications this deployment serves. Each entry names the browser-facing prefix Fred frames at /apps/<app_id>/ and, optionally, the server-side upstream behind /app-services/<app_id>/.",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One application this deployment serves, registered by an operator.\n\nMirrors ``RuntimeCatalogSourceConfig``. Everything here is browser-facing\nor catalog metadata: the server-side proxy upstreams belong to the\nfrontend gateway, which is the only process that routes to them.",
+                        "properties": {
+                          "app_id": {
+                            "description": "Application id. Interpolated into /apps/<app_id>/ and /app-services/<app_id>/, and into the app__<app_id> capability the team authorization grant is written against.",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                            "title": "App Id",
+                            "type": "string"
+                          },
+                          "ui_prefix": {
+                            "description": "Browser-facing prefix the application frame loads. Must be exactly /apps/<app_id> while the UI is served from Fred's origin, or an absolute http(s) URL when it is served from its own.",
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "title": "Ui Prefix",
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+                            "title": "Version",
+                            "type": "string"
+                          },
+                          "icon": {
+                            "default": "extension",
+                            "maxLength": 64,
+                            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                            "title": "Icon",
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "description": "Locale to display name, e.g. {\"en\": \"Reactor\"}.",
+                            "title": "Display Name",
+                            "type": "object"
+                          },
+                          "description": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "description": "Locale to description.",
+                            "title": "Description",
+                            "type": "object"
+                          },
+                          "enabled": {
+                            "default": true,
+                            "title": "Enabled",
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "app_id",
+                          "ui_prefix",
+                          "version",
+                          "display_name",
+                          "description"
+                        ],
+                        "title": "ApplicationSourceConfig",
+                        "type": "object"
+                      },
+                      "title": "Application Sources",
                       "type": "array"
                     }
                   },
@@ -14605,6 +14679,12 @@
                               "title": "Enableelecwarfare",
                               "type": "boolean"
                             },
+                            "enableApplications": {
+                              "default": false,
+                              "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application capability administration, and the frontend Apps experience stay disabled.",
+                              "title": "Enableapplications",
+                              "type": "boolean"
+                            },
                             "enableAllResourceSpaces": {
                               "default": false,
                               "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
@@ -14806,6 +14886,74 @@
                         "additionalProperties": false
                       },
                       "title": "Runtime Catalog Sources",
+                      "type": "array"
+                    },
+                    "application_sources": {
+                      "description": "Applications this deployment serves. Each entry names the browser-facing prefix Fred frames at /apps/<app_id>/ and, optionally, the server-side upstream behind /app-services/<app_id>/.",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One application this deployment serves, registered by an operator.\n\nMirrors ``RuntimeCatalogSourceConfig``. Everything here is browser-facing\nor catalog metadata: the server-side proxy upstreams belong to the\nfrontend gateway, which is the only process that routes to them.",
+                        "properties": {
+                          "app_id": {
+                            "description": "Application id. Interpolated into /apps/<app_id>/ and /app-services/<app_id>/, and into the app__<app_id> capability the team authorization grant is written against.",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                            "title": "App Id",
+                            "type": "string"
+                          },
+                          "ui_prefix": {
+                            "description": "Browser-facing prefix the application frame loads. Must be exactly /apps/<app_id> while the UI is served from Fred's origin, or an absolute http(s) URL when it is served from its own.",
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "title": "Ui Prefix",
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+                            "title": "Version",
+                            "type": "string"
+                          },
+                          "icon": {
+                            "default": "extension",
+                            "maxLength": 64,
+                            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                            "title": "Icon",
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "description": "Locale to display name, e.g. {\"en\": \"Reactor\"}.",
+                            "title": "Display Name",
+                            "type": "object"
+                          },
+                          "description": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "description": "Locale to description.",
+                            "title": "Description",
+                            "type": "object"
+                          },
+                          "enabled": {
+                            "default": true,
+                            "title": "Enabled",
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "app_id",
+                          "ui_prefix",
+                          "version",
+                          "display_name",
+                          "description"
+                        ],
+                        "title": "ApplicationSourceConfig",
+                        "type": "object"
+                      },
+                      "title": "Application Sources",
                       "type": "array"
                     }
                   },

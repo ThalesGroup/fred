@@ -85,7 +85,7 @@ class CapabilityEnablementItem(BaseModel):
         default_factory=list,
         description="The enable-with-settings form (rendered like config fields).",
     )
-    kind: Literal["tool", "agent", "model"] = Field(
+    kind: Literal["tool", "agent", "model", "app"] = Field(
         default="tool",
         description=(
             '"tool": a pod-advertised capability. "agent": a control-plane'
@@ -93,7 +93,8 @@ class CapabilityEnablementItem(BaseModel):
             " (CAPAB-01, RFC §8.6) — every team's access to every agent is an"
             ' explicit admin grant, exactly like a tool. "model": a'
             " pod-advertised projection of one models_catalog.yaml"
-            " (provider, name) pair (OBSERV-02 v3, RFC §8.7)."
+            ' (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app":'
+            " a control-plane projection of one installed Fred application."
         ),
     )
     default_capability_ids: list[str] = Field(
