@@ -2278,10 +2278,6 @@
     "teamCard": {
       "join": "Join",
       "inviteOnly": "Invite only",
-      "invitationMail": {
-        "subject": "[{{site}}] Request to join the {{team}} team",
-        "body": "Hello,\n\nI would like to join the {{team}} team on {{site}}.\n\nUser details: {{user}}\n\nGo to the {{team}} team page: {{agentsUrl}}\nManage the {{team}} team members: {{membersUrl}}"
-      },
       "memberCount": "{{count}} members"
     },
     "teamRoles": {
