@@ -194,9 +194,30 @@ the caller's open records and resolves the intended one on the first turn,
 which needs no contract change and keeps the containment intact.
 
 **Prerequisite either way.** Navigation alone is not useful; the record's
-context has to reach the agent. Session-scoped context prompts already exist
-server-side and are the natural carrier, but whether they are exposed on the
-session wire needs confirming before any design depends on them.
+context has to reach the agent, and how it gets there is a second design
+question sitting behind the first.
+
+The obvious candidate is not a fit. `context_prompt_ids` is an ordered list of
+**prompt-library references** — personal or team prompt ids, resolved against
+the caller's authorized teams and joined as conversation context at execution
+time. It is a curated, human-owned, long-lived asset. Routing per-record context
+through it would mean minting a library entry for every task, on a completely
+different lifecycle, with nothing responsible for removing them. It would
+degrade a feature users own in order to carry machine state.
+
+Session attachments are closer, and already do most of the mechanical job: a
+session-scoped row holding free text, written server-side, folded into the
+system prompt on every turn and never surfaced as a user-editable prompt. What
+does not fit is the framing. That text reaches the agent introduced as files the
+user attached, with an instruction to retrieve their content through the search
+tools — so record context carried this way would describe an attachment that
+does not exist, and point the agent at an index that has nothing to return.
+
+The carrier question is therefore narrower than "build something new": either
+the attachment channel grows a variant that is honest about not being a file, or
+a sibling to it appears. Either way it should be settled before the navigation
+message is worth adding, because navigation without context only moves the user
+to an agent that still has to ask which record it is looking at.
 
 **Recommendation:** do not grant it yet. Build an application that wants it,
 using the lookup approach, and let the friction be measured rather than
