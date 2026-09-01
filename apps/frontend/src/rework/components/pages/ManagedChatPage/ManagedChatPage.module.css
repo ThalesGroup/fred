@@ -16,10 +16,28 @@
   color: var(--on-surface);
 }
 
-/* ── Content row — [ main column (flex) ][ push drawer ] ─────────────────── */
-/* Sits below the full-width header. A push drawer (attachments / capability /
-   document-scope) takes layout space on the right so the chat column shifts
-   left when open, while the header above is untouched. */
+/* ── Page body — [ left stack (flex) ][ push drawer ] ────────────────────── */
+/* The flex row a push drawer (attachments / capability / document-scope) reflows
+   against: opening one takes layout space on the right, shifting the whole left
+   stack — header included — left, so the drawer spans the full page height. */
+.pageBody {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: row;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Left stack — the conversation column: header above, content below ───── */
+.leftStack {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Content row — holds the main column below the header ────────────────── */
 .contentRow {
   display: flex;
   flex: 1 1 0;

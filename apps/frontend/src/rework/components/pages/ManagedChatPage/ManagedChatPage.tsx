@@ -385,112 +385,118 @@ export default function ManagedChatPage() {
             event.currentTarget.value = "";
           }}
         />
-        {/* Full-width header — always spans the whole page and stays above the
-            content row below, so an opened side panel slides UNDER it instead of
-            shrinking it. The inner row is capped to the composer field width so
-            title and composer stay aligned. data-picker-top-boundary: the
-            composer's anchored pickers (usePickerMenuMaxHeight) stop just below
-            this bar. */}
-        <div className={styles.topBar} data-picker-top-boundary>
-          <div className={styles.topBarInner}>
-            <div className={styles.topBarTitle}>
-              {chat.sessionId && chat.sessionTitle != null && (
-                <div className={styles.topBarTitleRow}>
-                  <span className={styles.titleLabel}>
-                    {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
-                  </span>
-                  {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
-                  <span className={styles.editButtonSlot}>
-                    <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-                  </span>
+        {/* Page body — a row of [ left stack ][ full-height push drawers ]. A
+            side panel now reflows the WHOLE left stack (header included) instead
+            of sliding under the header, so viewers span the full page height. */}
+        <div className={styles.pageBody}>
+          <div className={styles.leftStack}>
+            {/* Conversation header. When a side panel opens it reflows left
+            together with the content below — the panel sits at the page body's
+            right edge at full height, no longer under this bar. The inner row is
+            capped to the composer field width so title and composer stay aligned.
+            data-picker-top-boundary: the composer's anchored pickers
+            (usePickerMenuMaxHeight) stop just below this bar. */}
+            <div className={styles.topBar} data-picker-top-boundary>
+              <div className={styles.topBarInner}>
+                <div className={styles.topBarTitle}>
+                  {chat.sessionId && chat.sessionTitle != null && (
+                    <div className={styles.topBarTitleRow}>
+                      <span className={styles.titleLabel}>
+                        {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+                      </span>
+                      {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
+                      <span className={styles.editButtonSlot}>
+                        <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+                      </span>
+                    </div>
+                  )}
+                  <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
                 </div>
-              )}
-              <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
-            </div>
-            <div className={styles.topBarRight}>
-              {conversationTokens.total_tokens > 0 && (
-                <span className={styles.conversationTokens}>
-                  {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
-                </span>
-              )}
-              <div className={styles.topBarActions}>
-                {attachmentsCount > 0 && (
-                  <button
-                    type="button"
-                    className={styles.conversationFilesButton}
-                    onClick={() =>
-                      setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
-                    }
-                  >
-                    <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-                    <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-                  </button>
-                )}
-                {isAdmin && (
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "build" }}
-                    aria-label={t("chatbot.toggleDebugDrawer")}
-                    onClick={() => setDebugOpen((v) => !v)}
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Content row: [ chat main column (flex) ][ push drawer ]. The push
-            drawer reflows the chat left while the full-width header above stays
-            put and the panel slides under it. */}
-        <div className={styles.contentRow}>
-          <div className={styles.mainColumn}>
-            {allowChatAttachments && dragActive && (
-              <div className={styles.dropOverlay} aria-hidden>
-                <div className={styles.dropOverlayContent}>
-                  <span className={styles.dropOverlayPlus}>+</span>
-                  <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
+                <div className={styles.topBarRight}>
+                  {conversationTokens.total_tokens > 0 && (
+                    <span className={styles.conversationTokens}>
+                      {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
+                    </span>
+                  )}
+                  <div className={styles.topBarActions}>
+                    {attachmentsCount > 0 && (
+                      <button
+                        type="button"
+                        className={styles.conversationFilesButton}
+                        onClick={() =>
+                          setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
+                        }
+                      >
+                        <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
+                        <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <IconButton
+                        variant="icon"
+                        size="small"
+                        icon={{ category: "outlined", type: "build" }}
+                        aria-label={t("chatbot.toggleDebugDrawer")}
+                        onClick={() => setDebugOpen((v) => !v)}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
 
-            <div
-              className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
-              ref={scrollContainerRef}
-            >
-              {isInitialState ? (
-                <div className={styles.initialStage}>
-                  <ManagedChatWelcome />
-                  <div className={styles.initialComposer}>
+            {/* Conversation column — holds only the main column now; the push drawers
+            moved up to the page body so they reflow the header too. */}
+            <div className={styles.contentRow}>
+              <div className={styles.mainColumn}>
+                {allowChatAttachments && dragActive && (
+                  <div className={styles.dropOverlay} aria-hidden>
+                    <div className={styles.dropOverlayContent}>
+                      <span className={styles.dropOverlayPlus}>+</span>
+                      <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
+                  ref={scrollContainerRef}
+                >
+                  {isInitialState ? (
+                    <div className={styles.initialStage}>
+                      <ManagedChatWelcome />
+                      <div className={styles.initialComposer}>
+                        {composer}
+                        <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <ConversationThread
+                      messages={chat.threadMessages}
+                      pendingHitl={chat.pendingHitl}
+                      isLoading={chat.isLoadingHistory}
+                      isStreaming={chat.waitResponse}
+                      scrollContainerRef={scrollContainerRef}
+                      onHitlAnswer={chat.handleHitlAnswer}
+                      maxChatInputChars={chat.maxChatInputChars}
+                      hitlFreeText={chat.hitlFreeText}
+                      onHitlFreeTextChange={chat.setHitlFreeText}
+                    />
+                  )}
+                </div>
+
+                {!isInitialState && (
+                  <div className={styles.inputOverlay}>
                     {composer}
                     <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
                   </div>
-                </div>
-              ) : (
-                <ConversationThread
-                  messages={chat.threadMessages}
-                  pendingHitl={chat.pendingHitl}
-                  isLoading={chat.isLoadingHistory}
-                  isStreaming={chat.waitResponse}
-                  scrollContainerRef={scrollContainerRef}
-                  onHitlAnswer={chat.handleHitlAnswer}
-                  maxChatInputChars={chat.maxChatInputChars}
-                  hitlFreeText={chat.hitlFreeText}
-                  onHitlFreeTextChange={chat.setHitlFreeText}
-                />
-              )}
-            </div>
-
-            {!isInitialState && (
-              <div className={styles.inputOverlay}>
-                {composer}
-                <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Capability side-panel slot (#1979) — mounts as a flex sibling of the
-            main column so its push drawer reflows the conversation left. */}
+          {/* Capability side-panel slot — full-height sibling of the left stack:
+            its push drawer reflows the header and the conversation together. */}
           <CapabilitySidePanelHost
             capabilityIds={chat.capabilityIds}
             activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
@@ -531,6 +537,7 @@ export default function ManagedChatPage() {
             />
           )}
         </div>
+        {/* /pageBody */}
 
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
         {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}

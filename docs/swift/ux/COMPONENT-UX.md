@@ -2635,14 +2635,16 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 **Location:** `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
 **Status:** `Functional`
 
-Page composition (`.page` is a **flex column**, 2026-08-06): a full-width `topBar` (holding
-`SessionTitleEditor`) sits on top and always spans the whole page; below it a `.contentRow` (flex
-row) holds the main column (`chatArea` scroll container + sticky composer) on the left and the
-push drawers (capability / attachments / document-scope) on the right. Pulling the header out of
-the main column means an opening push drawer reflows only the content row — the panel slides
-**under** the full-width header instead of shrinking it. (Before this, the header lived inside the
-main column and shrank whenever a push drawer opened.) The `data-picker-top-boundary` attribute
-stays on the header so the composer's anchored pickers still stop just below it. The composer is
+Page composition (`.page` is a **flex column**): a `.pageBody` (**flex row**, 2026-09-01) holds
+the `.leftStack` on the left and the push drawers (capability / attachments / document-scope) on
+the right. `.leftStack` is a flex column — the `topBar` (holding `SessionTitleEditor`) above, the
+`.contentRow` → main column (`chatArea` scroll container + sticky composer) below. An opening push
+drawer reflows the **whole left stack, header included**, so the drawer spans the full page height
+for better viewer visualization (changed 2026-09-01 — previously the drawers lived inside
+`.contentRow` and reflowed only the content, the panel sliding **under** the full-width header;
+before that again the header lived inside the main column and shrank on open). The
+`data-picker-top-boundary` attribute stays on the header so the composer's anchored pickers still
+stop just below it. The composer is
 built once (a single `composer` element) and placed either centered in the empty "new
 conversation" state or in the sticky `inputOverlay` mid-conversation — same structure both times
 (2026-08-06, see `RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` —
