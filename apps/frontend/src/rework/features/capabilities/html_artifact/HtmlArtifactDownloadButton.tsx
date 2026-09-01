@@ -66,7 +66,8 @@ export default function HtmlArtifactDownloadButton({ html, css, title }: { html:
     } catch {
       showError({
         summary: t("capability.html_artifact.exportFailed", {
-          defaultValue: `Could not export the ${format.toUpperCase()}.`,
+          format: format.toUpperCase(),
+          defaultValue: "Could not export the {{format}}.",
         }),
       });
     }
