@@ -78,7 +78,7 @@ describe("createApplicationRequest", () => {
     expect(deps.logout).not.toHaveBeenCalled();
   });
 
-  it("logs out after the retry is still unauthorized", async () => {
+  it("leaves the Fred session alone when the application service keeps refusing", async () => {
     const deps = dependencies([new Response(null, { status: 401 }), new Response(null, { status: 401 })]);
     const request = createApplicationRequest("example-app", "team-1", deps);
 
@@ -86,6 +86,19 @@ describe("createApplicationRequest", () => {
 
     expect(response.status).toBe(401);
     expect(deps.fetch).toHaveBeenCalledTimes(2);
+    expect(deps.ensureFreshToken.mock.calls).toEqual([[30], [0]]);
+    expect(deps.logout).not.toHaveBeenCalled();
+  });
+
+  it("logs out when the refresh itself fails, without replaying the call", async () => {
+    const deps = dependencies([new Response(null, { status: 401 })]);
+    deps.ensureFreshToken.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const request = createApplicationRequest("example-app", "team-1", deps);
+
+    const response = await request("resource");
+
+    expect(response.status).toBe(401);
+    expect(deps.fetch).toHaveBeenCalledOnce();
     expect(deps.logout).toHaveBeenCalledOnce();
   });
 
