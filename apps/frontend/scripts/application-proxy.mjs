@@ -13,10 +13,16 @@
 // limitations under the License.
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+// nginx map-block directives. Production emits app ids as map keys, where a
+// directive name is read as syntax rather than a key, so the whole class is
+// rejected here too — dev must not accept what production cannot start with.
+const RESERVED_IDS = new Set(["default", "hostnames", "include", "volatile"]);
 const FORBIDDEN_UPSTREAM_CHARACTERS = /[\s$;{}"'\\]/;
-const UPSTREAM_PATH_TRAVERSAL_PATTERN = /(?:^|\/)\.{1,2}(?:\/|$)/;
+// Origin only, matching the entrypoint: nginx forwards the client path
+// verbatim to a proxy_pass with no URI part, so a base path here would
+// silently replace the whole request path instead of prefixing it.
 const SAFE_UPSTREAM_PATTERN =
-  /^https?:\/\/(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:]+\])(?::(?:[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:\/[A-Za-z0-9._~!&()*+,=:@/-]*)?$/;
+  /^https?:\/\/(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:]+\])(?::(?:[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?\/*$/;
 
 export const APPLICATION_UI_PREFIX = "/apps";
 export const APPLICATION_SERVICE_PREFIX = "/app-services";
@@ -53,22 +59,11 @@ function normalizeUpstream(value, applicationId, field) {
   ) {
     fail(`${label} must be a safe HTTP(S) URL without credentials or query`);
   }
-  if (!SAFE_UPSTREAM_PATTERN.test(value) || UPSTREAM_PATH_TRAVERSAL_PATTERN.test(value)) {
+  if (!SAFE_UPSTREAM_PATTERN.test(value)) {
     fail(`${label} must be a safe HTTP(S) URL`);
   }
 
-  let decodedPath;
-  try {
-    decodedPath = decodeURIComponent(parsed.pathname);
-  } catch {
-    fail(`${label} contains invalid path encoding`);
-  }
-  if (decodedPath.split("/").some((segment) => segment === "." || segment === "..")) {
-    fail(`${label} must not contain path traversal`);
-  }
-
-  const normalizedPath = parsed.pathname.replace(/\/+$/, "");
-  return `${parsed.origin}${normalizedPath}`;
+  return parsed.origin;
 }
 
 /**
@@ -96,7 +91,7 @@ export function parseApplicationRegistrations(registrationsJson) {
     if (!isObject(entry) || Object.keys(entry).some((key) => !REGISTRATION_KEYS.has(key))) {
       fail(`${source} contains an entry with unsupported keys`);
     }
-    if (typeof entry.app_id !== "string" || !ID_PATTERN.test(entry.app_id)) {
+    if (typeof entry.app_id !== "string" || !ID_PATTERN.test(entry.app_id) || RESERVED_IDS.has(entry.app_id)) {
       fail(`${source} contains an entry without a valid app_id`);
     }
     if (ids.has(entry.app_id)) {
@@ -183,14 +178,17 @@ export function loadApplicationProxyConfig({
 
   const proxy = {};
   for (const registration of registrations) {
-    proxy[`${APPLICATION_UI_PREFIX}/${registration.app_id}`] = {
+    // Vite matches a plain string proxy key with url.startsWith, so "/apps/acme"
+    // would also answer for "/apps/acme-forecast"; a "^" key is matched as a
+    // RegExp. Ids are [a-z0-9-] only, so nothing here needs escaping.
+    proxy[`^${APPLICATION_UI_PREFIX}/${registration.app_id}(?:[/?]|$)`] = {
       target: registration.ui_upstream,
       changeOrigin: true,
       secure: true,
       rewrite: (requestPath) => rewriteApplicationUiPath(requestPath, registration.app_id),
     };
     if (registration.service_upstream !== null) {
-      proxy[`${APPLICATION_SERVICE_PREFIX}/${registration.app_id}`] = {
+      proxy[`^${APPLICATION_SERVICE_PREFIX}/${registration.app_id}/`] = {
         target: registration.service_upstream,
         changeOrigin: true,
         secure: true,
