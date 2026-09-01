@@ -19,16 +19,16 @@
  * top clears ManagedChatPage's .topBar band, which is two lines tall (8px
  * padding + a 24px title line + a 20px agent-name line + 8px padding = 60px),
  * plus a breathing gap - a 48px offset sat on the band. */
+/* In-flow at the page root, to the right of the chat body: it reserves its own
+   column (reflowing the body left) instead of floating. Full page height, inset
+   12px on top/right/bottom; launchers stack from the top. */
 .rail {
   display: flex;
-  position: absolute;
-  top: calc(var(--spacing-4xl) + var(--spacing-s));
-  right: var(--spacing-s);
+  flex-shrink: 0;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  z-index: 2;
+  margin: var(--spacing-s) var(--spacing-s) var(--spacing-s) 0;
   border-radius: var(--radius-s);
   background-color: var(--surface-container-low);
   padding: var(--spacing-xs);
-  pointer-events: auto;
 }

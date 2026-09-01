@@ -29,7 +29,10 @@ import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/t
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
+import {
+  CapabilityLauncherRail,
+  CapabilitySidePanelHost,
+} from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
@@ -538,6 +541,14 @@ export default function ManagedChatPage() {
           )}
         </div>
         {/* /pageBody */}
+
+        {/* Launcher rail — page-root sibling of the body (not inside it) so it
+            reserves its own in-flow column at the far right. */}
+        <CapabilityLauncherRail
+          capabilityIds={chat.capabilityIds}
+          activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
+          onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+        />
 
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
         {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
