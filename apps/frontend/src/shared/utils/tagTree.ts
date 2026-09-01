@@ -75,6 +75,41 @@ export function collectDescendantTagIds(node: TagNode): string[] {
 }
 
 /**
+ * Every tag at-or-under `node` (the node's own `tagsHere` plus every descendant's).
+ * Used to rename a whole folder: a folder is a path prefix, so renaming it must
+ * rewrite the path of every tag beneath it, not just the one ending at the node.
+ */
+export function collectDescendantTags(node: TagNode): TagWithPermissions[] {
+  const tags: TagWithPermissions[] = [];
+  function dfs(n: TagNode) {
+    n.tagsHere.forEach((t) => tags.push(t));
+    n.children.forEach((child) => dfs(child));
+  }
+  dfs(node);
+  return tags;
+}
+
+/**
+ * The new `{ name, path }` for one tag when its containing folder is renamed from
+ * `oldFull` to `newFull`. The tag's leading `oldFull` prefix is swapped for
+ * `newFull`, then the result is split back into leaf name + parent path. `tag`
+ * must be at-or-under the folder (`fullPath(tag)` equals `oldFull` or starts with
+ * `oldFull + "/"`); callers get that set from `collectDescendantTags`.
+ */
+export function rewriteTagUnderFolder(
+  tag: Pick<TagWithItemsId, "name" | "path">,
+  oldFull: string,
+  newFull: string,
+): { name: string; path: string } {
+  const nextFull = `${newFull}${fullPath(tag).slice(oldFull.length)}`;
+  const seg = nextFull.lastIndexOf("/");
+  return {
+    name: seg >= 0 ? nextFull.slice(seg + 1) : nextFull,
+    path: seg >= 0 ? nextFull.slice(0, seg) : "",
+  };
+}
+
+/**
  * Every `document_uid` tagged under `node`, its sub-folders included — a tag's
  * own `item_ids` never cover nested tags, same reason `collectDescendantTagIds`
  * exists. Deduplicated: a document is tagged into exactly one folder, but the
