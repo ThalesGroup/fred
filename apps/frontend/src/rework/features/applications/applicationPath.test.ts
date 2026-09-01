@@ -14,6 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  applicationChatRouteTarget,
   applicationRouteBasePath,
   applicationRouteTarget,
   applicationServiceUrl,
@@ -62,5 +63,22 @@ describe("application paths", () => {
       "folders/My%20Docs?return=https://example.test/a/../b",
     );
     expect(normalizeApplicationRelativePath("reports/100%25-complete")).toBe("reports/100%25-complete");
+  });
+});
+
+describe("chat route target", () => {
+  it("builds the team's own agents route", () => {
+    expect(applicationChatRouteTarget("team-1")).toBe("/team/team-1/agents");
+  });
+
+  it("takes no caller path, so a frame cannot choose the destination", () => {
+    // The whole security property: the only input is the team the host is
+    // already rendering, so there is nothing a frame can pass to redirect it.
+    expect(applicationChatRouteTarget.length).toBe(1);
+  });
+
+  it("encodes a hostile team id instead of letting it escape the route", () => {
+    expect(applicationChatRouteTarget("../../admin")).toBe("/team/..%2F..%2Fadmin/agents");
+    expect(applicationChatRouteTarget("a/b?x=1")).toBe("/team/a%2Fb%3Fx%3D1/agents");
   });
 });

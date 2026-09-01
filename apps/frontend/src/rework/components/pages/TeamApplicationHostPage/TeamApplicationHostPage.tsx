@@ -13,10 +13,14 @@
 // limitations under the License.
 
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ApplicationSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import {
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import { ApplicationErrorBoundary } from "@rework/features/applications/ApplicationErrorBoundary.tsx";
 import {
@@ -27,7 +31,13 @@ import {
   type ApplicationHostMessage,
 } from "@rework/features/applications/applicationHost.ts";
 import { applicationLocaleText } from "@rework/features/applications/applicationI18n.ts";
-import { applicationRouteBasePath, applicationRouteTarget } from "@rework/features/applications/applicationPath.ts";
+import {
+  applicationChatRouteTarget,
+  applicationChatSessionTarget,
+  applicationNewChatTarget,
+  applicationRouteBasePath,
+  applicationRouteTarget,
+} from "@rework/features/applications/applicationPath.ts";
 import { createApplicationRequest } from "@rework/features/applications/applicationRequest.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
 import styles from "./TeamApplicationHostPage.module.css";
@@ -87,6 +97,70 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
   const locale = i18n.resolvedLanguage ?? i18n.language ?? "en";
   const basePath = applicationRouteBasePath(teamId, application.id);
   const request = useMemo(() => createApplicationRequest(application.id, teamId), [application.id, teamId]);
+
+  // openChat navigates after awaiting two lookups. Without this the user can
+  // click away, the listing lands, and the router yanks them back — useNavigate
+  // stays live after unmount, so the await is the hazard, not the click.
+  const goneRef = useRef(false);
+  useEffect(() => {
+    goneRef.current = false;
+    return () => {
+      goneRef.current = true;
+    };
+  }, []);
+
+  const [fetchTeamSessions] = useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery();
+  const [fetchTeamAgents] = useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery();
+
+  /**
+   * Resolve where "open a conversation" should land.
+   *
+   * A frame-supplied session id is treated as a candidate and nothing more: it
+   * is matched against the caller's own sessions, and the agent instance comes
+   * from the matched record rather than the frame. Anything that does not match
+   * falls back to a new conversation, so the failure mode is a fresh chat and
+   * never a route the application chose — that covers an unknown id, another
+   * user's, a listing that fails, and one that has aged past the listing's
+   * newest-50 window.
+   */
+  const openChat = useCallback(
+    async (candidateSessionId: string | null) => {
+      if (candidateSessionId) {
+        try {
+          const sessions = await fetchTeamSessions({ teamId }).unwrap();
+          if (goneRef.current) return;
+          const match = sessions?.find((s) => s.session_id === candidateSessionId);
+          if (match?.agent_instance_id) {
+            navigate(applicationChatSessionTarget(teamId, match.agent_instance_id, match.session_id));
+            return;
+          }
+        } catch {
+          // Fall through: an unavailable listing must not strand the user.
+        }
+      }
+      // No conversation to resume: start a new one. Which agent is the host's
+      // choice, not the frame's — with a single enabled agent that is
+      // unambiguous, and otherwise the picker is the honest answer rather than
+      // guessing on the user's behalf.
+      try {
+        const agents = await fetchTeamAgents({ teamId }).unwrap();
+        if (goneRef.current) return;
+        // Suspended instances are hidden from chat, so they must not be
+        // counted here either — otherwise two "agents" could look ambiguous
+        // when only one is actually reachable.
+        const enabled = (agents ?? []).filter((a) => a.status === "enabled" && !a.suspension_reason);
+        if (enabled.length === 1) {
+          navigate(applicationNewChatTarget(teamId, enabled[0].agent_instance_id));
+          return;
+        }
+      } catch {
+        // Fall through to the picker: never strand the user on a failed lookup.
+      }
+      if (goneRef.current) return;
+      navigate(applicationChatRouteTarget(teamId));
+    },
+    [fetchTeamAgents, fetchTeamSessions, navigate, teamId],
+  );
 
   // The message listener is installed once per frame but must read the current
   // route and locale, so those travel through a ref instead of resubscribing.
@@ -164,6 +238,17 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
         return;
       }
 
+      if (message.type === "fred:open-chat") {
+        // The only navigation that leaves this application's subtree. A frame
+        // never names a route: without a session candidate this lands on the
+        // team's own agents surface, and with one the host resolves the target
+        // from ITS session listing rather than trusting the id. So the worst a
+        // compromised application can do is reopen a conversation its own user
+        // already owns and can already reach from the sidebar.
+        void openChat(message.sessionId);
+        return;
+      }
+
       if (message.type === "fred:navigate") {
         try {
           const target = applicationRouteTarget(contextRef.current.basePath, message.path);
@@ -205,7 +290,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
       for (const controller of inFlight.values()) controller.abort();
       inFlight.clear();
     };
-  }, [application.id, navigate, request, targetOrigin, teamId]);
+  }, [application.id, navigate, openChat, request, targetOrigin, teamId]);
 
   // Route changes made in Fred (back/forward, a sidebar link) are pushed down.
   // Echoing back the sub-path the frame itself asked for would ping-pong.

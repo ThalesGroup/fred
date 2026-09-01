@@ -30,6 +30,9 @@ const h = vi.hoisted(() => ({
   request: vi.fn(),
   subPath: "",
   uiPrefix: "/apps/example-ui/",
+  sessions: [] as Array<{ session_id: string; agent_instance_id?: string }>,
+  sessionsFail: false,
+  agents: [] as Array<{ agent_instance_id: string; status?: string; suspension_reason?: string | null }>,
   result: { data: undefined, isLoading: false, isError: false } as {
     data?: { items: Array<Record<string, unknown>> };
     isLoading: boolean;
@@ -56,6 +59,16 @@ vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
 }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
+}));
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi.ts", () => ({
+  useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => [
+    () => ({
+      unwrap: () => (h.sessionsFail ? Promise.reject(new Error("down")) : Promise.resolve(h.sessions)),
+    }),
+  ],
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => [
+    () => ({ unwrap: () => Promise.resolve(h.agents) }),
+  ],
 }));
 vi.mock("@rework/features/applications/applicationRequest.ts", () => ({
   createApplicationRequest: () => h.request,
@@ -165,6 +178,9 @@ beforeEach(() => {
   h.appId = "example";
   h.isPersonalTeam = false;
   h.navigate.mockReset();
+  h.sessions = [];
+  h.sessionsFail = false;
+  h.agents = [];
   h.request.mockReset();
   h.subPath = "";
   h.uiPrefix = "/apps/example-ui/";
@@ -317,6 +333,93 @@ describe("TeamApplicationHostPage routing", () => {
     await postFromFrame({ type: "fred:navigate", path: "/team/team-2/agents" });
 
     expect(h.navigate).not.toHaveBeenCalled();
+  });
+
+  it("opens the team's agents surface on fred:open-chat", async () => {
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat" });
+
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/agents");
+  });
+
+  it("ignores a destination the frame tries to smuggle into fred:open-chat", async () => {
+    // The frame states an intent and nothing else. If a path ever reached the
+    // router from here, this message would become the escape hatch that the
+    // subtree confinement exists to prevent.
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat", path: "/admin/teams" });
+    await postFromFrame({ type: "fred:open-chat", teamId: "team-2" });
+
+    expect(h.navigate).toHaveBeenCalledTimes(2);
+    expect(h.navigate).toHaveBeenNthCalledWith(1, "/team/team-1/agents");
+    expect(h.navigate).toHaveBeenNthCalledWith(2, "/team/team-1/agents");
+  });
+
+  it("resumes the conversation when the session belongs to the caller", async () => {
+    h.sessions = [{ session_id: "s-1", agent_instance_id: "agent-9" }];
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat", sessionId: "s-1" });
+
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/managed-chat/agent-9?session=s-1");
+  });
+
+  it("opens a new conversation with the team's only agent", async () => {
+    h.agents = [{ agent_instance_id: "agent-9", status: "enabled" }];
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat" });
+
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/managed-chat/agent-9");
+  });
+
+  it("shows the picker rather than guessing when several agents are available", async () => {
+    h.agents = [
+      { agent_instance_id: "agent-9", status: "enabled" },
+      { agent_instance_id: "agent-8", status: "enabled" },
+    ];
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat" });
+
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/agents");
+  });
+
+  it("ignores disabled and suspended agents when deciding if the choice is unambiguous", async () => {
+    // A suspended instance is hidden from chat, so counting it would send the
+    // user to a picker listing one reachable agent.
+    h.agents = [
+      { agent_instance_id: "agent-9", status: "enabled" },
+      { agent_instance_id: "agent-8", status: "disabled" },
+      { agent_instance_id: "agent-7", status: "enabled", suspension_reason: "capability_unavailable" },
+    ];
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat" });
+
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/managed-chat/agent-9");
+  });
+
+  it("starts a fresh conversation when the session is not the caller's", async () => {
+    // The whole point of validating: an id the frame invented must not become
+    // a route, or the application could steer the user into someone else's chat.
+    h.sessions = [{ session_id: "s-1", agent_instance_id: "agent-9" }];
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat", sessionId: "someone-elses-session" });
+
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/agents");
+  });
+
+  it("falls back to a fresh conversation when the session listing fails", async () => {
+    h.sessionsFail = true;
+    await connect();
+
+    await postFromFrame({ type: "fred:open-chat", sessionId: "s-1" });
+
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/agents");
   });
 
   it("pushes a Fred-side route change down, but does not echo the frame's own", async () => {
