@@ -67,7 +67,10 @@ const VIEWPORT_META = '<meta name="viewport" content="width=device-width, initia
 // author's <style>, so intentional author rules still win (no !important).
 const FIT_STYLE =
   "<style>" +
-  "html{box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}" +
+  "html{box-sizing:border-box}" +
+  // print-color-adjust:exact so backgrounds/colors survive print-to-PDF (browsers
+  // drop them by default); harmless on screen, only affects the print rendering.
+  "*,*::before,*::after{box-sizing:inherit;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
   "html,body{margin:0}body{padding:12px;overflow-wrap:break-word;word-break:break-word}" +
   "img,svg,video,canvas{max-width:100%;height:auto}" +
   "table{max-width:100%}pre{max-width:100%;overflow-x:auto}" +

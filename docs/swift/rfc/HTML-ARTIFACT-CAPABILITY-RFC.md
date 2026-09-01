@@ -150,9 +150,11 @@ mirroring the `writable_document` plugin:
     `previewBuffers.nextBufferAction`).
   - **Download** — a format menu (2026-09-01): **HTML** (composed self-contained
     file, CSS inlined), **PDF** (opens the composed doc and triggers the browser
-    print dialog — real text, no new heavy dep), **PNG** (rasterized via
-    `html-to-image` from an off-screen `allow-same-origin`/no-scripts frame). All
-    three render the same sanitized + CSP-locked document, so no author script runs.
+    print dialog — real text; `print-color-adjust:exact` keeps backgrounds), **PNG**
+    (renders off-screen, serializes the DOM, rasterizes it through an
+    `<svg><foreignObject>` loaded as an `<img>` — secure static mode: no scripts, no
+    external loads, no extra dependency). All three render the same sanitized +
+    CSP-locked document, so no author script runs.
 - **Slice** `htmlArtifactSlice` — the cross-component bus (a card deep in the
   thread drives the far-away panel), newest-`version`-wins per `artifact_id`.
   Mirrors `writableDocumentSlice`.
