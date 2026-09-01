@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
 
@@ -81,6 +82,29 @@ def test_put_file_uses_direct_minio_file_upload(monkeypatch, tmp_path):
     assert store.client.fput_calls == [("objects", "tabular/doc-1/rev/data.parquet", str(parquet_file), "application/vnd.apache.parquet")]
     assert stored.size == len(b"parquet-data")
     assert stored.file_name == "data.parquet"
+
+
+def test_get_preview_bytes_releases_connection(monkeypatch):
+    # get_object returns a urllib3 response that must be released back to the pool;
+    # without it every preview fetch leaks a connection and the pool is exhausted.
+    monkeypatch.setattr("knowledge_flow_backend.core.stores.content.minio_content_store.Minio", _FakeMinio)
+    store = MinioStorageBackend(
+        endpoint="http://internal-minio:9000",
+        access_key="minio",
+        secret_key="minio-secret",  # pragma: allowlist secret
+        document_bucket="documents",
+        object_bucket="objects",
+        secure=False,
+    )
+    resp = MagicMock()
+    resp.read.return_value = b"image-bytes"
+    store.client.get_object = MagicMock(return_value=resp)
+
+    data = store.get_preview_bytes("doc-1/preview.png")
+
+    assert data == b"image-bytes"
+    resp.close.assert_called_once()
+    resp.release_conn.assert_called_once()
 
 
 def test_internal_presigned_url_uses_internal_minio_client(monkeypatch):

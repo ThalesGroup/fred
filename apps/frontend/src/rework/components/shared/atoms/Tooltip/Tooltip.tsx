@@ -46,6 +46,14 @@ interface TooltipProps {
    *  Unlike `text`, the tooltip widens to fit and wraps instead of forcing a
    *  single nowrap line. Takes precedence over `text` when both are set. */
   content?: ReactNode;
+  /**
+   * Where the panel sits relative to the trigger.
+   * - `"top"` (default): above the trigger, flipping below when there's no room.
+   * - `"left"`: to the left of the trigger, vertically centred on it, flipping
+   *   right when there's no room. Suited to a trigger hugging the viewport's
+   *   right edge (e.g. a right-rail icon button).
+   */
+  placement?: "top" | "left";
   children: ReactNode;
 }
 
@@ -84,7 +92,7 @@ function trackFocusModality() {
 
 if (typeof document !== "undefined") trackFocusModality();
 
-export const Tooltip = ({ text, content, children, interactive = false }: TooltipProps) => {
+export const Tooltip = ({ text, content, children, interactive = false, placement = "top" }: TooltipProps) => {
   const tooltipId = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const contentRef = useRef<HTMLSpanElement>(null);
@@ -189,31 +197,40 @@ export const Tooltip = ({ text, content, children, interactive = false }: Toolti
     const height = Math.min(rawHeight, availableHeight);
     const width = Math.min(rawWidth, availableWidth);
 
-    // Positioned by its TOP edge in BOTH directions, never by its bottom via a
-    // -100% translate. That translate is what let a stale measurement push the
-    // panel off-screen: it makes `top` the bottom edge, so a height measured
-    // smaller than what finally renders grows the panel UPWARD, past the top of
-    // the window, with its first lines unreachable. Anchoring the top instead
-    // makes the guarantee structural — `top` is clamped to at least the margin,
-    // and `maxHeight` above caps the panel to the viewport, so the bottom edge
-    // cannot escape either however wrong the measurement was. Above-vs-below
-    // still uses the measured height, but getting that wrong now only costs a
-    // less pretty placement, never a clipped panel.
-    const fitsAbove = triggerRect.top - height - TOOLTIP_GAP_PX >= VIEWPORT_MARGIN_PX;
-    const desiredTop = fitsAbove ? triggerRect.top - TOOLTIP_GAP_PX - height : triggerRect.bottom + TOOLTIP_GAP_PX;
-    const top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
+    // Both coordinates are the panel's real top/left edge — never anchored by a
+    // bottom/right edge via a negative translate. That translate is what let a
+    // stale measurement push the panel off-screen: it makes `top` the bottom
+    // edge, so a height measured smaller than what finally renders grows the
+    // panel past the window edge with its first lines unreachable. Anchoring the
+    // top edge instead makes the guarantee structural — `top` is clamped to at
+    // least the margin and `maxHeight` caps the panel to the viewport, so the
+    // bottom edge cannot escape however wrong the measurement was.
+    let top: number;
+    let left: number;
+    if (placement === "left") {
+      // To the left of the trigger, flipping right only when it wouldn't fit
+      // (trigger hugging the viewport's left edge).
+      const fitsLeftSide = triggerRect.left - width - TOOLTIP_GAP_PX >= VIEWPORT_MARGIN_PX;
+      const desiredLeft = fitsLeftSide
+        ? triggerRect.left - TOOLTIP_GAP_PX - width
+        : triggerRect.left + triggerRect.width + TOOLTIP_GAP_PX;
+      left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
+      // Vertically centred on the trigger.
+      const center = (triggerRect.top + triggerRect.bottom) / 2;
+      const desiredTop = center - height / 2;
+      top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
+    } else {
+      const fitsAbove = triggerRect.top - height - TOOLTIP_GAP_PX >= VIEWPORT_MARGIN_PX;
+      const desiredTop = fitsAbove ? triggerRect.top - TOOLTIP_GAP_PX - height : triggerRect.bottom + TOOLTIP_GAP_PX;
+      top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
 
-    // Aligned on the trigger's own edge, with no transform: `left` is the
-    // panel's real left edge. Centring it on the trigger (translateX(-50%))
-    // reads fine for a one-line hint but detaches a wide panel from the small
-    // chip that opened it — the panel spreads either side, then gets clamped,
-    // and ends up floating somewhere the user has to hunt for. Anchoring an
-    // edge keeps the panel visibly coming from its trigger, and makes the
-    // on-screen guarantee as simple in this axis as in the other: both
-    // coordinates are real edges, both are clamped, both are capped.
-    const fitsLeftAligned = triggerRect.left + width <= viewportWidth() - VIEWPORT_MARGIN_PX;
-    const desiredLeft = fitsLeftAligned ? triggerRect.left : triggerRect.left + triggerRect.width - width;
-    const left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
+      // Aligned on the trigger's own left edge (no centring transform): centring
+      // a wide panel on a small chip detaches it from the trigger and leaves it
+      // floating after the clamp. Anchoring the edge keeps it visibly attached.
+      const fitsLeftAligned = triggerRect.left + width <= viewportWidth() - VIEWPORT_MARGIN_PX;
+      const desiredLeft = fitsLeftAligned ? triggerRect.left : triggerRect.left + triggerRect.width - width;
+      left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
+    }
 
     setContentStyle({
       top,
@@ -222,7 +239,7 @@ export const Tooltip = ({ text, content, children, interactive = false }: Toolti
       maxWidth: availableWidth,
       overflow: "auto",
     });
-  }, [triggerRect]);
+  }, [triggerRect, placement]);
 
   const child = isValidElement(children)
     ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, { "aria-describedby": tooltipId })

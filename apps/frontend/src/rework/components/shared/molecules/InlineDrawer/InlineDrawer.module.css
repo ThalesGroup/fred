@@ -47,17 +47,23 @@
   position: relative;
   flex-shrink: 0;
   visibility: hidden;
+  /* Above the capability launcher rail (z-index 2): the panel opens over the
+     rail and, on close, finishes its width animation in front of it — the rail
+     only reappears once the panel is fully gone, never on top of it. */
+  z-index: 3;
   transition:
     width 250ms ease-out,
     visibility 250ms;
-  border-left: 1px solid transparent;
+  /* Transparent shell so the panel's top/bottom inset (below) reads as a real
+     margin — the page shows through — and no flush divider: the panel is a
+     rounded card whose left edge is its own border-radius. */
+  background: transparent;
   width: 0;
   overflow: hidden;
 }
 
 .drawer[data-layout="push"][data-open="true"] {
   visibility: visible;
-  border-left-color: var(--outline-retreat);
   width: var(--drawer-width);
 }
 
@@ -75,10 +81,24 @@
 
 .drawer[data-layout="push"] .panel {
   position: absolute;
-  top: 0;
+  top: var(--spacing-xs);
   right: 0;
-  bottom: 0;
+  bottom: var(--spacing-xs);
+  /* Fade the content with the width collapse so a closing panel dissolves
+     instead of being clipped away (the host keeps it mounted for the duration). */
+  opacity: 1;
+  transition: opacity 200ms ease-out;
+  /* Rounded left corners, flush right against the viewport edge; clip the
+     content (iframe, header, tabs) to the radius. */
+  border-top-left-radius: var(--radius-m);
+  border-bottom-left-radius: var(--radius-m);
+  background: var(--drawer-background, var(--surface-container));
   width: var(--drawer-width);
+  overflow: hidden;
+}
+
+.drawer[data-layout="push"]:not([data-open="true"]) .panel {
+  opacity: 0;
 }
 
 /* ── Floating-card variant (opt-in, push layout) ──────────────────────────
@@ -169,6 +189,10 @@
   }
 
   .drawer[data-layout="push"] .panel {
+    top: 0;
+    bottom: 0;
+    /* Full-screen panel: drop the card inset and corners. */
+    border-radius: 0;
     width: 100%;
   }
 

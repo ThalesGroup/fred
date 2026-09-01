@@ -2962,7 +2962,6 @@ async def _write_react_v2_checkpoint(
     checkpointer,
     *,
     thread_id: str,
-    checkpoint_ns: str = "",
     channel_values: dict[str, Any],
 ):
     """
@@ -2970,6 +2969,10 @@ async def _write_react_v2_checkpoint(
     (the same `aput` production code uses, `graph_runtime.py::_store_pending_checkpoint`'s
     non-legacy counterpart) — no `runtime_kind`/`pending` markers, since ReAct
     V2's `create_agent()` never stamps those (#2179).
+
+    Always UNNAMESPACED, like production: LangGraph resets `checkpoint_ns` to
+    `""` on every root-graph run, so a compiled ReAct agent's checkpoints can
+    only ever land there (`test_langgraph_resets_root_checkpoint_namespace`).
     """
 
     checkpoint = empty_checkpoint()
@@ -2977,10 +2980,7 @@ async def _write_react_v2_checkpoint(
     checkpoint["channel_values"] = channel_values
     checkpoint["channel_versions"] = {key: checkpoint_id for key in channel_values}
     return await checkpointer.aput(
-        checkpoint_config(
-            thread_id=thread_id,
-            checkpoint_ns=checkpoint_ns,
-        ),
+        checkpoint_config(thread_id=thread_id),
         checkpoint,
         {"source": "update", "step": 0, "parents": {}},
         dict(checkpoint["channel_versions"]),
@@ -2992,7 +2992,6 @@ async def _write_react_v2_interrupt(
     *,
     thread_id: str,
     interrupt_id: str,
-    checkpoint_ns: str = "",
     task_id: str = "task-1",
     channel_values: dict[str, Any] | None = None,
 ):
@@ -3009,7 +3008,6 @@ async def _write_react_v2_interrupt(
     stored_config = await _write_react_v2_checkpoint(
         checkpointer,
         thread_id=thread_id,
-        checkpoint_ns=checkpoint_ns,
         channel_values=channel_values or {"messages": []},
     )
     await checkpointer.aput_writes(
@@ -3087,7 +3085,6 @@ def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
                 checkpointer,
                 thread_id="session-react-v2",
                 interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3138,7 +3135,6 @@ def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
             _write_react_v2_checkpoint(
                 checkpointer,
                 thread_id="session-react-v2-done",
-                checkpoint_ns=definition.agent_id,
                 channel_values={"messages": []},
             )
         )
@@ -3241,7 +3237,6 @@ def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> Non
                 checkpointer,
                 thread_id="session-react-input-resume",
                 interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3385,7 +3380,6 @@ def test_resume_reuses_exchange_id_from_the_interrupted_turn(
                 checkpointer,
                 thread_id="session-exchange-continuity",
                 interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3528,7 +3522,6 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         resume_a = client.post(
@@ -3551,7 +3544,6 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-b",
-                checkpoint_ns=definition.agent_id,
             )
         )
         assert "interrupt-a" != "interrupt-b"
@@ -3635,7 +3627,6 @@ def test_resume_replay_after_success_does_not_execute_again(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         payload = {
@@ -3699,7 +3690,6 @@ def test_resume_rejects_non_matching_interrupt_id_variants(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-real",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3747,7 +3737,6 @@ def test_resume_rejects_token_belonging_to_another_thread(
                 checkpointer,
                 thread_id="session-thread-a",
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         asyncio.run(
@@ -3755,7 +3744,6 @@ def test_resume_rejects_token_belonging_to_another_thread(
                 checkpointer,
                 thread_id="session-thread-b",
                 interrupt_id="interrupt-b",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3806,14 +3794,13 @@ async def test_concurrent_duplicate_resumes_have_exactly_one_winner(
             checkpointer,
             thread_id="session-concurrent",
             interrupt_id="interrupt-a",
-            checkpoint_ns=definition.agent_id,
         )
 
         async def _attempt():
             try:
                 claim = await agent_app_module._claim_hitl_resume_before_invocation(
                     session_id="session-concurrent",
-                    checkpoint_ns=definition.agent_id,
+                    checkpoint_ns="",
                     interrupt_id="interrupt-a",
                 )
                 return "ok" if claim is not None else "none"
@@ -3866,7 +3853,6 @@ async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
             checkpointer,
             thread_id=session_id,
             interrupt_id="interrupt-a",
-            checkpoint_ns=definition.agent_id,
         )
 
         payload = {
@@ -3955,7 +3941,6 @@ def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         payload = {
@@ -4032,7 +4017,6 @@ def test_resume_start_failure_releases_the_claim_for_a_retry(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         payload = {
@@ -4138,7 +4122,6 @@ async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
             checkpointer,
             thread_id=session_id,
             interrupt_id="interrupt-a",
-            checkpoint_ns=definition.agent_id,
         )
         payload = {
             "agent_id": "rags.sample.echo",

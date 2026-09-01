@@ -83,6 +83,23 @@ describe("downloadManyAsZip", () => {
     expect(await zip.file("b.txt")!.async("string")).toBe("B");
   });
 
+  it("keeps every file's bytes when zipping several (no 0-byte entries)", async () => {
+    // Guards the Firefox 0-byte regression: JSZip read Blobs lazily during
+    // generateAsync, dropping all but one entry to empty. Every entry must carry
+    // its full content.
+    const contents = { "a.txt": "alpha", "b.txt": "beta", "c.txt": "gamma" };
+    await downloadManyAsZip(
+      Object.entries(contents).map(([filename, text]) => ({ filename, fetchBlob: async () => blob(text) })),
+      "resources.zip",
+    );
+
+    const zip = await JSZip.loadAsync(createdUrls[0]);
+    expect(Object.keys(zip.files).sort()).toEqual(["a.txt", "b.txt", "c.txt"]);
+    for (const [name, text] of Object.entries(contents)) {
+      expect(await zip.file(name)!.async("string")).toBe(text);
+    }
+  });
+
   it("disambiguates same-named files instead of one overwriting the other", async () => {
     await downloadManyAsZip(
       [
