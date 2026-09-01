@@ -235,4 +235,9 @@ describe("artifactFileName", () => {
     expect(artifactFileName("   ")).toBe("artifact.html");
     expect(artifactFileName("")).toBe("artifact.html");
   });
+
+  it("uses the given extension (e.g. png) when provided", () => {
+    expect(artifactFileName("My Landing Page!", "png")).toBe("my-landing-page.png");
+    expect(artifactFileName("", "png")).toBe("artifact.png");
+  });
 });

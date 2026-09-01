@@ -12,31 +12,74 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Download the composed self-contained .html for one artifact, shared by BOTH the
-// in-chat card and the pane header so the two stay DRY.
-//
-// Unlike ppt_filler / writable_document (whose bytes live behind a bearer-protected
-// download route), the html_artifact markup rides inline on the chat part, so this
-// is a plain client-side blob save — no network, no bearer.
+// Download menu for one artifact — HTML (self-contained file), PDF (via the
+// browser's print dialog), PNG (rasterized). Shared by the in-chat card and the
+// pane header so the two stay DRY. The markup rides inline on the chat part, so
+// HTML/PNG are plain client-side saves — no network, no bearer.
 
 import { useTranslation } from "react-i18next";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import type { OptionModel } from "@models/Option.model.ts";
 import { downloadHtmlArtifact } from "./htmlArtifactDocument";
+import { downloadHtmlArtifactPng, printHtmlArtifact } from "./htmlArtifactExport";
+
+type DownloadFormat = "html" | "pdf" | "png";
 
 export default function HtmlArtifactDownloadButton({ html, css, title }: { html: string; css: string; title: string }) {
   const { t } = useTranslation();
-  const label = t("capability.html_artifact.download", { defaultValue: "Download .html" });
+  const { showError } = useToast();
+  const label = t("capability.html_artifact.download", { defaultValue: "Download" });
+
+  const options: OptionModel<DownloadFormat>[] = [
+    {
+      value: "html",
+      key: "html",
+      label: t("capability.html_artifact.downloadHtml", { defaultValue: "HTML" }),
+      icon: { category: "outlined", type: "code" },
+    },
+    {
+      value: "pdf",
+      key: "pdf",
+      label: t("capability.html_artifact.downloadPdf", { defaultValue: "PDF" }),
+      icon: { category: "outlined", type: "picture_as_pdf" },
+    },
+    {
+      value: "png",
+      key: "png",
+      label: t("capability.html_artifact.downloadPng", { defaultValue: "PNG" }),
+      icon: { category: "outlined", type: "image" },
+    },
+  ];
+
+  const onSelect = async (format: DownloadFormat) => {
+    if (format === "html") {
+      downloadHtmlArtifact(html, css, title);
+    } else if (format === "pdf") {
+      if (!printHtmlArtifact(html, css)) {
+        showError({
+          summary: t("capability.html_artifact.popupBlocked", { defaultValue: "Allow pop-ups to export as PDF." }),
+        });
+      }
+    } else {
+      try {
+        await downloadHtmlArtifactPng(html, css, title);
+      } catch {
+        showError({ summary: t("capability.html_artifact.pngFailed", { defaultValue: "Could not export the PNG." }) });
+      }
+    }
+  };
 
   return (
-    <Tooltip text={label}>
-      <IconButton
-        variant="icon"
-        size="small"
-        icon={{ category: "outlined", type: "download" }}
-        onClick={() => downloadHtmlArtifact(html, css, title)}
-        aria-label={label}
-      />
-    </Tooltip>
+    <IconButtonMenu
+      iconButton={{
+        variant: "icon",
+        size: "small",
+        icon: { category: "outlined", type: "download" },
+        "aria-label": label,
+      }}
+      options={options}
+      onSelect={onSelect}
+    />
   );
 }
