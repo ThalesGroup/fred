@@ -299,6 +299,23 @@ def validate_team_settings(
     return cleaned
 
 
+def _suspension_store(
+    catalog_entry: CapabilityCatalogEntry,
+    agent_instance_store: AgentInstanceStore | None,
+) -> AgentInstanceStore | None:
+    """The store a revoke suspends dependents with, or `None` when there are
+    none: applications reuse only the authorization tuple, so they alone may
+    omit it. Callers resolve this BEFORE their tuple writes — refusing after
+    them would leave access revoked and its dependents still running.
+    """
+
+    if catalog_entry.kind == "app":
+        return None
+    if agent_instance_store is None:
+        raise RuntimeError("agent_instance_store is required for non-app capabilities")
+    return agent_instance_store
+
+
 async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> None:
     """Idempotently anchor a capability to the singleton organization so its
     `can_manage` / `can_use` permissions resolve (RFC §8.1)."""
@@ -409,6 +426,7 @@ async def disable_capability_for_team(
     instances suspended.
     """
 
+    suspend_store = _suspension_store(catalog_entry, agent_instance_store)
     try:
         await rebac.delete_relation(
             Relation(
@@ -431,12 +449,10 @@ async def disable_capability_for_team(
         # cached reader reporting the pre-write (enabled) state for a TTL.
         invalidate_capability_relations_cache(catalog_entry.id)
     del settings_store  # settings row is intentionally retained (re-enable restores)
-    if catalog_entry.kind == "app":
+    if suspend_store is None:
         return 0
-    if agent_instance_store is None:
-        raise RuntimeError("agent_instance_store is required for non-app capabilities")
     return await suspend_dependent_instances(
-        agent_instance_store=agent_instance_store,
+        agent_instance_store=suspend_store,
         team_id=team_id,
         capability_id=catalog_entry.id,
         kpi_writer=kpi_writer,
@@ -475,6 +491,11 @@ async def reset_capability_for_team(
             f"Application {catalog_entry.id!r} cannot reset personal team "
             f"{str(team_id)!r} to an enabled platform default."
         )
+    # A default-ON reset keeps access by inheritance, so it suspends nothing
+    # and needs no store.
+    suspend_store = (
+        None if default_on else _suspension_store(catalog_entry, agent_instance_store)
+    )
     try:
         await rebac.delete_relation(
             Relation(
@@ -495,12 +516,10 @@ async def reset_capability_for_team(
         # #2181 PR): a half-failure between the two deletes must not leave a
         # cached reader reporting the pre-write state for a TTL.
         invalidate_capability_relations_cache(catalog_entry.id)
-    if default_on or catalog_entry.kind == "app":
+    if suspend_store is None:
         return 0
-    if agent_instance_store is None:
-        raise RuntimeError("agent_instance_store is required for non-app capabilities")
     return await suspend_dependent_instances(
-        agent_instance_store=agent_instance_store,
+        agent_instance_store=suspend_store,
         team_id=team_id,
         capability_id=catalog_entry.id,
         kpi_writer=kpi_writer,
@@ -753,6 +772,7 @@ async def set_capability_default_on(
             invalidate_capability_relations_cache(catalog_entry.id)
         return 0
 
+    suspend_store = _suspension_store(catalog_entry, agent_instance_store)
     try:
         await rebac.delete_relation(
             Relation(
@@ -763,23 +783,19 @@ async def set_capability_default_on(
         )
     finally:
         invalidate_capability_relations_cache(catalog_entry.id)
-    # Applications reuse only the authorization tuple. They have no agent
-    # instances to suspend or revive when that tuple changes.
-    if catalog_entry.kind == "app":
+    if suspend_store is None:
         return 0
-    if agent_instance_store is None:
-        raise RuntimeError("agent_instance_store is required for non-app capabilities")
 
     # Teams with an explicit grant keep access; everyone else loses inherited
     # use — whether they used it as a tool or as a `kind="agent"` template
     # (2026-07-19, GitHub #2004 item 1).
     enabled_teams = await explicitly_enabled_team_ids(rebac, catalog_entry.id)
     suspended = 0
-    for instance in await agent_instance_store.list_all():
+    for instance in await suspend_store.list_all():
         if str(instance.team_id) in enabled_teams:
             continue
         if await _suspend_instance_for_revoked_capability(
-            agent_instance_store=agent_instance_store,
+            agent_instance_store=suspend_store,
             instance=instance,
             capability_id=catalog_entry.id,
             kpi_writer=kpi_writer,

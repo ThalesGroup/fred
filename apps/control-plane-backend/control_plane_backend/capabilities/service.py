@@ -43,7 +43,6 @@ from fred_sdk.contracts.capability.manifest import (
 )
 
 from control_plane_backend.app.feature_flags import is_feature_enabled
-from control_plane_backend.applications.catalog import registered_applications
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
     ORG_REF,
@@ -119,11 +118,12 @@ async def _require_can_manage(
             raise CapabilityNotFound(
                 f"Application capability {capability_id!r} is not installed."
             )
+        # Parked (`enabled: false`) entries stay manageable: parking withdraws
+        # an app from the catalog while its grants keep living, so gating here
+        # would strand them. Granting stays refused by the strict catalog read.
         known_ids = {
             item.capability_id
-            for item in registered_applications(
-                deps.configuration.platform.application_sources
-            )
+            for item in deps.configuration.platform.application_sources
         }
         if capability_id not in known_ids:
             raise CapabilityNotFound(
@@ -163,11 +163,14 @@ def _catalog_entry_for_revoke(
     needed to carry out the revoke; requiring one anyway means an admin
     cannot revoke a live model grant for exactly as long as the model pod's
     `/agents/models-catalog` endpoint is having trouble (2026-08-01, GitHub
-    #2191) — fail-OPEN on an authorization-management surface. `kind="tool"`/
-    `"agent"` ids are NOT given this fallback: their entries carry
-    `team_settings_fields` other write paths (e.g. a subsequent enable) rely
-    on, and their catalog absence already has other handling (health-unknown
-    suspension) this stub would bypass silently.
+    #2191) — fail-OPEN on an authorization-management surface. A parked
+    application (`enabled: false`) leaves the catalog the same way while its
+    gateway routes and its grants keep living, so `kind="app"` ids get the
+    same fallback for the same reason. `kind="tool"`/`"agent"` ids are NOT
+    given this fallback: their entries carry `team_settings_fields` other
+    write paths (e.g. a subsequent enable) rely on, and their catalog absence
+    already has other handling (health-unknown suspension) this stub would
+    bypass silently.
     """
 
     entry = catalog.get(capability_id)
@@ -181,6 +184,16 @@ def _catalog_entry_for_revoke(
             description=capability_id,
             icon="neurology",
             kind="model",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+        )
+    if capability_id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+        return CapabilityCatalogEntry(
+            id=capability_id,
+            version="0",
+            name=capability_id,
+            description=capability_id,
+            icon="extension",
+            kind="app",
             team_scope=TeamScopePolicy.ADMIN_GATED,
         )
     raise CapabilityNotFound(
@@ -718,7 +731,9 @@ async def preview_capability_revoke(
 
     rebac = _rebac(deps)
     await _require_can_manage(rebac, user, capability_id, deps=deps)
-    entry = _catalog_entry(await aggregate_capability_catalog(deps), capability_id)
+    entry = _catalog_entry_for_revoke(
+        await aggregate_capability_catalog(deps), capability_id
+    )
     if entry.kind == "app":
         return CapabilityImpactPreview(capability_id=capability_id)
     impact = await preview_revoke_impact(
