@@ -80,9 +80,8 @@ or translation `.json` files, stop — the host is missing an extension point.
 A team-scoped product page is **your** container image, built and released by
 you, on your own cycle. Fred compiles none of it: there is no directory in this
 repository to add, no manifest to author, no generator to run, and nothing
-generated to commit. What used to be a bundled `apps/applications/<id>/`
-package is gone — an application that shipped inside Fred's frontend image
-forced a Fred rebuild for every change to your product, which is exactly the
+generated to commit. Shipping an application inside Fred's frontend image would
+force a Fred rebuild for every change to your product, which is exactly the
 coupling this guide exists to remove.
 
 An application is up to two independently deployed services, and Fred exposes
@@ -272,8 +271,15 @@ spaces are outside V1.
   `/app-services/` — it is unavailable, not unknown.
 - `service_required: true` with no `service_upstream` fails container startup.
   A permanent 503 is a deployment mistake, so it is caught at boot.
-- Unsafe upstream URLs — credentials, query strings, path traversal,
-  non-`http(s)` schemes — are rejected at startup.
+- An upstream URL must be an origin and nothing more —
+  `http(s)://host[:port]`. The gateway forwards the client path to a
+  `proxy_pass` that carries no URI part, so a base path would replace the
+  request path instead of prefixing it. Credentials, query strings, any path,
+  and non-`http(s)` schemes are all rejected at startup.
+- An `app_id` must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$` with nothing after
+  it, not even a newline, and may not be `default`, `hostnames`, `include`, or
+  `volatile`: the gateway emits ids as nginx `map` keys, and those four are
+  read as directives instead. Rejected at startup.
 - An own-origin `ui_prefix` that is not exactly `/apps/<app_id>` is rejected
   when the control plane loads its configuration.
 

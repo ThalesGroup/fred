@@ -3080,16 +3080,6 @@ retroactively and must be re-ticked by hand.
 
 ## 46. Contract Notes — team applications are runtime-registered, frame-hosted UIs (2026-08-31)
 
-**Supersedes the whole of the previous §45.** That note described build-time
-bundled applications: an `apps/applications/<application-id>/fred-app.json`
-manifest, a generated frontend lazy-loader registry, a packaged control-plane
-catalog with a per-app `contract_digest` and `catalog_revision`, and a
-`host_api_version` verified against a compiled module. None of that exists any
-more, and every sentence of it is now false. Fork teams build and deploy their
-own application images; Fred compiles no application code. The note is
-rewritten rather than amended because it never left this branch — there is no
-deployed consumer of the shape it described.
-
 Fred has one generic V1 host for trusted applications a deployment registers.
 Registration is deployment configuration, expressed like
 `platform.runtime_catalog_sources`: a flat `platform.application_sources` list
@@ -3102,8 +3092,11 @@ at config load, as is an own-origin `ui_prefix` that is not exactly
 path is a silent 404 the browser cannot distinguish from a cold service.
 `enabled: false` parks an entry without deleting it, but withdraws it only
 from the catalog; its gateway routes keep serving until that half is removed
-too. Removing an entry makes the application unavailable on the next config
-load, not on the next rebuild.
+too. Its existing team grants keep living as well: revoking one stays
+available for a parked entry, while granting a new one does not. An entry
+withdrawn from the catalog must still be unwindable, or the grants an operator
+parked it to retire are stranded. Removing an entry makes the application
+unavailable on the next config load, not on the next rebuild.
 
 The typed deployment-wide `enableApplications` feature gate defaults to
 `false`. It is an availability boundary, not an authorization relation. While
@@ -3145,13 +3138,12 @@ GET /control-plane/v1/teams/{team_id}/applications
 ```
 
 `ApplicationSummary` carries `id`, `version`, `name` and `description` as
-locale maps, validated `icon`, and `ui_prefix`. Three changes against the
-previous shape: `catalog_revision` is gone from `ApplicationList` (there is no
-build to revise); `host_api_version` and `contract_digest` are gone (they
-proved a compiled module matched its catalog entry, and there is no compiled
-module); and `name`/`description` are locale maps rather than keys into a
-generated Fred translation bundle, because an independently deployed
-application has no entry in one. `"en"` is always present and is the fallback.
+locale maps, validated `icon`, and `ui_prefix` — and nothing that would tie an
+application to a Fred build. There is no catalog revision, no host API version
+and no contract digest, because no application code is compiled into Fred for
+them to describe. `name`/`description` are locale maps rather than translation
+keys for the same reason: an independently deployed application has no entry in
+Fred's translation bundle. `"en"` is always present and is the fallback.
 `service_upstream` is deliberately absent from the wire: the browser reaches an
 application API only through the proxy. The service canonicalizes the team id
 and checks the user's `can_use_team_applications` permission before team or
@@ -3184,16 +3176,22 @@ teams release their UI images on their own cadence; a version outside that set
 renders `protocol-mismatch` rather than a broken screen. Frame messages are
 admitted only from a closed parser — unknown types, oversized header maps,
 non-allowlisted methods, and malformed request ids are dropped before reaching
-Fred state, the router, or diagnostics. The context handed over is plain
-cloneable data: team identity, base and sub path, locale.
+Fred state, the router, or diagnostics. A request id already in flight is
+refused with `fred:response-error` rather than dropped: the id is the channel's
+only correlation token, so admitting it twice would leave one frame request
+answered twice and one call outside the concurrency bound. The context handed
+over is plain cloneable data: team identity, base and sub path, locale.
 
 The authenticated request adapter stays on the host side of that channel. It
 derives `/app-services/<app_id>/teams/<team_id>/...`, owns token refresh and
 one 401 retry, and rejects absolute, traversing, or protected-header inputs;
 the frame supplies only a relative path and an ordinary payload over
-`fred:request`. **No app receives Fred's store, Keycloak object, or raw token**
-— that remains true, and is now the property that makes moving the frame to a
-separate origin a configuration change rather than a redesign.
+`fred:request`. A 401 from an application service is that service's own
+entitlement decision and never ends the Fred session; only a token refresh that
+fails does, so one misconfigured application cannot log the user out.
+**No app receives Fred's store, Keycloak object, or raw token** — that remains
+true, and is now the property that makes moving the frame to a separate origin
+a configuration change rather than a redesign.
 
 Two browser-facing prefixes exist, and only these:
 

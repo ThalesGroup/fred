@@ -91,11 +91,11 @@ gateway paths must also fail closed at those boundaries. Hiding a frontend
 control is not authorization, so the normal permission checks still apply when
 the feature is enabled.
 
-`enableApplications` is the bundled-applications gate and defaults to `false`.
+`enableApplications` is the team-applications gate and defaults to `false`.
 While it is off, application routes, catalogs, administration controls, and
-`/app-services` gateway paths are unavailable. Installed manifests and existing
-team grants remain intact so enabling the flag does not require rebuilding Fred
-or recreating entitlements.
+both the `/apps` and `/app-services` gateway paths are unavailable. Registered
+entries and existing team grants stay configured but dormant, so enabling the
+flag needs no re-registration and no re-granting.
 
 The control-plane field is the single authoritative deployment setting. The
 Fred Helm chart derives the frontend container's
