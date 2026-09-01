@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import PromptViewDialog, { type PromptViewDetail } from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
@@ -57,6 +58,12 @@ export default function HomeSearch() {
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Land on Home ready to type: focus the spotlight on mount. This also latches
+  // `active` (via onFocus) so the per-team aggregation warms up right away.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   const sources = useHomeSearchIndex(active);
   const results = useMemo(() => filterHomeSearch(sources, query), [sources, query]);
@@ -141,8 +148,24 @@ export default function HomeSearch() {
 
   const iconFor = (hit: SearchHit) => {
     if (hit.kind === "agent") return resolveAgentIcon(hit.instance, agentIconName);
-    if (hit.kind === "team") return "groups";
     return "description";
+  };
+
+  // Teams show their real avatar (custom image, else coloured initials) rather
+  // than a generic icon; agents and prompts keep the tinted icon tile.
+  const rowVisual = (hit: SearchHit) => {
+    if (hit.kind === "team") {
+      return hit.avatarImageUrl ? (
+        <img className={styles.rowAvatar} src={hit.avatarImageUrl} alt="" />
+      ) : (
+        <TeamInitials className={styles.rowAvatar} name={hit.name} size="small" shape="square" />
+      );
+    }
+    return (
+      <span className={styles.rowIcon}>
+        <Icon category="outlined" type={iconFor(hit)} />
+      </span>
+    );
   };
 
   const sublabelFor = (hit: SearchHit): string | undefined => {
@@ -171,9 +194,7 @@ export default function HomeSearch() {
         onMouseEnter={() => setActiveIndex(index)}
         onClick={() => activate(hit)}
       >
-        <span className={styles.rowIcon}>
-          <Icon category="outlined" type={iconFor(hit)} />
-        </span>
+        {rowVisual(hit)}
         <span className={styles.rowText}>
           <span className={styles.rowLabel}>{hit.name}</span>
           {sublabel && <span className={styles.rowSublabel}>{sublabel}</span>}
