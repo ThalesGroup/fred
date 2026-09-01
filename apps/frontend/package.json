@@ -22,7 +22,7 @@
   "dependencies": {
     "@fontsource/inter": "^5.2.6",
     "@fontsource/roboto": "^5.1.0",
-    "@mdxeditor/editor": "^4.0.4",
+    "@mdxeditor/editor": "^4.2.3",
     "@reduxjs/toolkit": "^2.1.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.2",
