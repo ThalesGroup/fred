@@ -22,11 +22,13 @@ import type { CapabilityUiPlugin } from "./types";
 import { demoEchoCapability } from "./demo_echo/plugin";
 import { writableDocumentCapability } from "./writable_document/plugin";
 import { pptFillerCapability } from "./ppt_filler/plugin";
+import { htmlArtifactCapability } from "./html_artifact/plugin";
 
 export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [
   demoEchoCapability,
   writableDocumentCapability,
   pptFillerCapability,
+  htmlArtifactCapability,
 ];
 
 export type { CapabilityUiPlugin, UiPartRenderer, UiPartRendererProps } from "./types";

@@ -27,5 +27,8 @@
   flex-direction: column;
   gap: var(--spacing-2xs);
   z-index: 2;
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-low);
+  padding: var(--spacing-xs);
   pointer-events: auto;
 }

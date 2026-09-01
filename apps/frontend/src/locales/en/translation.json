@@ -254,7 +254,8 @@
       "description": "Ability to edit and generate a downloadable text document.",
       "panel": {
         "writable_document_pane": {
-          "title": "Document"
+          "title": "Document",
+          "launcher": "Text viewer"
         }
       },
       "untitled": "Document",
@@ -276,6 +277,33 @@
       },
       "code": {
         "plainText": "Plain text"
+      }
+    },
+    "html_artifact": {
+      "name": "Generate a web page (HTML/CSS)",
+      "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
+      "panel": {
+        "html_artifact_pane": {
+          "title": "HTML artifact",
+          "launcher": "HTML/CSS viewer"
+        }
+      },
+      "untitled": "HTML artifact",
+      "close": "Close panel",
+      "download": "Download .html",
+      "openInNewTab": "Open in a new tab",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "resetZoom": "Reset zoom",
+      "empty": "No artifact yet. Ask the assistant to build a page or component.",
+      "card": {
+        "aria": "HTML artifact",
+        "open": "Open preview"
+      },
+      "tabs": {
+        "preview": "Preview",
+        "html": "HTML",
+        "css": "CSS"
       }
     },
     "ppt_filler": {
@@ -325,7 +353,8 @@
       },
       "panel": {
         "ppt_preview_pane": {
-          "title": "Presentation preview"
+          "title": "Presentation preview",
+          "launcher": "PPT viewer"
         }
       }
     }
@@ -2435,6 +2464,10 @@
             "powerpointDocument": {
               "title": "Fill in a PowerPoint document",
               "description": "Ability to fill a PPT file from a detailed template."
+            },
+            "webPage": {
+              "title": "Generate a web page (HTML/CSS)",
+              "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
             },
             "reasoning": {
               "title": "Reasoning",
