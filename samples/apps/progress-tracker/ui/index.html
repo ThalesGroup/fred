@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Progress Tracker</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; padding: 20px; background: transparent; }
+      h1 { font-size: 1.15rem; margin: 0 0 2px; }
+      .sub { color: #777; font-size: 0.82rem; margin-bottom: 16px; }
+      form { display: flex; gap: 8px; margin-bottom: 16px; }
+      input { flex: 1; padding: 7px 10px; border: 1px solid #8884; border-radius: 6px;
+              background: transparent; color: inherit; font: inherit; }
+      button { padding: 7px 14px; border: 0; border-radius: 6px; background: #2563eb;
+               color: #fff; font: inherit; cursor: pointer; }
+      .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+      .stat { flex: 1 1 110px; border: 1px solid #8883; border-radius: 8px; padding: 9px 12px; }
+      .stat .n { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+      .stat .k { font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
+      .task { border: 1px solid #8883; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+              cursor: pointer; }
+      .task:hover { border-color: #2563eb88; }
+      .row { display: flex; align-items: baseline; gap: 10px; }
+      .handle { font-family: ui-monospace, monospace; font-size: 0.8rem; color: #2563eb; }
+      .title { font-weight: 600; }
+      .pill { margin-left: auto; font-size: 0.72rem; padding: 2px 9px; border-radius: 999px; }
+      .open { background: #64748b22; color: #64748b; }
+      .decided { background: #16a34a22; color: #16a34a; }
+      .meta { font-size: 0.76rem; color: #888; margin-top: 6px; }
+      .back { background: none; color: #2563eb; padding: 0; margin-bottom: 12px; font-size: 0.85rem; }
+      .discuss { margin-left: auto; font-size: 0.8rem; padding: 5px 12px; }
+      .hint { color: #16a34a; font-size: 0.8rem; margin-top: 8px; }
+      .entry { border-left: 2px solid #8884; padding: 2px 0 2px 12px; margin-bottom: 12px; }
+      .entry.agent { border-left-color: #2563eb; }
+      .who { font-size: 0.72rem; color: #888; margin-bottom: 2px; }
+      .who .tag { color: #2563eb; font-weight: 600; }
+      .q { color: #888; }
+      .sid { font-family: ui-monospace, monospace; font-size: 0.68rem; color: #aaa; }
+      h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em;
+           color: #888; margin: 22px 0 10px; font-weight: 600; }
+      .convo { border: 1px solid #8883; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+      .msg { margin-bottom: 9px; font-size: 0.86rem; white-space: pre-wrap; }
+      .msg .role { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
+                   color: #888; display: block; margin-bottom: 1px; }
+      .msg.assistant .role { color: #2563eb; }
+      #err { color: #dc2626; font-size: 0.85rem; }
+      .empty { color: #888; font-size: 0.88rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Progress Tracker</h1>
+    <div class="sub" id="ctx">connecting…</div>
+    <form id="new">
+      <input id="title" placeholder="What needs tracking?" maxlength="200" required />
+      <button type="submit">Add task</button>
+    </form>
+
+    <div id="err"></div>
+    <div id="view"></div>
+
+    <script>
+      // Frame side of the Fred application protocol. This page holds no token
+      // and names no upstream: every call is asked of the host, which attaches
+      // the caller's bearer and routes to this application's own service.
+      const PROTOCOL_VERSION = "1";
+      const pending = new Map();
+      let seq = 0;
+      let teamId = null;
+      let openHandle = null;   // null = list view, otherwise the task being read
+
+      const post = (msg) => parent.postMessage(msg, "*");
+      const esc = (s) =>
+        String(s ?? "").replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+      // The host prefixes /app-services/<app>/teams/<team> itself, so a path
+      // here is relative to that root — never repeat the team segment.
+      function hostFetch(path, init = {}) {
+        // A fresh id per request: the host bounds concurrency per id, and
+        // reusing one would collide with a request still in flight.
+        const requestId = `r${++seq}`;
+        post({
+          type: "fred:request",
+          requestId,
+          path,
+          method: init.method || "GET",
+          headers: init.body ? { "content-type": "application/json" } : {},
+          body: init.body || null,
+        });
+        return new Promise((resolve, reject) => {
+          pending.set(requestId, { resolve, reject });
+          setTimeout(() => {
+            if (pending.delete(requestId)) reject(new Error("timed out"));
+          }, 15000);
+        });
+      }
+
+      window.addEventListener("message", (event) => {
+        const m = event.data;
+        if (!m || typeof m !== "object") return;
+
+        if (m.type === "fred:context") {
+          teamId = m.context?.team?.id ?? null;
+          document.getElementById("ctx").textContent =
+            `${m.context?.team?.name ?? "team"} · protocol v${m.protocolVersion}`;
+          load();
+          return;
+        }
+        const entry = pending.get(m.requestId);
+        if (!entry) return;
+        pending.delete(m.requestId);
+        if (m.type === "fred:response-error") return entry.reject(new Error("request failed"));
+        if (m.type !== "fred:response") return;
+        if (m.status >= 200 && m.status < 300) {
+          try { entry.resolve(m.body ? JSON.parse(m.body) : null); }
+          catch { entry.reject(new Error("bad JSON")); }
+        } else {
+          entry.reject(new Error(`HTTP ${m.status}`));
+        }
+      });
+
+      // An entry written through the capability carries the session it came
+      // from; one typed here does not. That is the whole basis of attribution.
+      const isAgent = (e) => e.source === "agent" || Boolean(e.session_id);
+      const entriesOf = (t) => [
+        ...(t.notes || []).map((n) => ({ ...n, kind: "note" })),
+        ...(t.decisions || []).map((d) => ({ ...d, kind: "decision" })),
+      ];
+
+      function summarise(items) {
+        let agentWrites = 0, touched = 0;
+        const sessions = new Set();
+        for (const t of items) {
+          const entries = entriesOf(t);
+          const byAgent = entries.filter(isAgent).length;
+          agentWrites += byAgent;
+          if (byAgent) touched += 1;
+          for (const s of t.session_ids || []) sessions.add(s);
+          for (const e of entries) if (e.session_id) sessions.add(e.session_id);
+        }
+        return { agentWrites, touched, conversations: sessions.size };
+      }
+
+      const statCard = (n, k) => `<div class="stat"><div class="n">${n}</div><div class="k">${k}</div></div>`;
+
+      function renderList(items) {
+        const s = summarise(items);
+        const stats = `
+          <div class="stats">
+            ${statCard(items.length, "tasks")}
+            ${statCard(s.agentWrites, "agent writes")}
+            ${statCard(s.conversations, "conversations")}
+            ${statCard(`${s.touched}/${items.length}`, "agent-touched")}
+          </div>`;
+
+        const list = items.length
+          ? items.map((t) => {
+              const e = entriesOf(t);
+              const byAgent = e.filter(isAgent).length;
+              return `
+                <div class="task" data-handle="${esc(t.handle)}">
+                  <div class="row">
+                    <span class="handle">${esc(t.handle)}</span>
+                    <span class="title">${esc(t.title)}</span>
+                    <span class="pill ${t.stage === "decided" ? "decided" : "open"}">${esc(t.stage)}</span>
+                  </div>
+                  <div class="meta">
+                    ${byAgent} agent write(s) · ${(t.session_ids || []).length} conversation(s)
+                    · updated ${esc(t.updated_at || "")}
+                  </div>
+                </div>`;
+            }).join("")
+          : '<div class="empty">No tasks yet. Add one, then discuss it with an agent in chat.</div>';
+
+        document.getElementById("view").innerHTML = stats + list;
+
+        for (const el of document.querySelectorAll(".task")) {
+          el.addEventListener("click", () => { openHandle = el.dataset.handle; load(); });
+        }
+      }
+
+      function renderDetail(t, convos) {
+        const entries = entriesOf(t).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+        const s = summarise([t]);
+
+        const timeline = entries.length
+          ? entries.map((e) => {
+              const agent = isAgent(e);
+              const body = e.kind === "decision"
+                ? `<span class="q">${esc(e.question)}</span> → ${esc(e.answer)}`
+                : esc(e.text);
+              return `
+                <div class="entry ${agent ? "agent" : ""}">
+                  <div class="who">
+                    <span class="tag">${agent ? "agent" : "you"}</span> · ${esc(e.kind)} · ${esc(e.at || "")}
+                    ${e.session_id ? `<span class="sid">· ${esc(String(e.session_id).slice(0, 8))}</span>` : ""}
+                  </div>
+                  <div>${body}</div>
+                </div>`;
+            }).join("")
+          : '<div class="empty">Nothing recorded yet. Ask an agent about this task in chat.</div>';
+
+        document.getElementById("view").innerHTML = `
+          <button class="back" id="back">← all tasks</button>
+          <div class="row">
+            <span class="handle">${esc(t.handle)}</span>
+            <span class="title">${esc(t.title)}</span>
+            <span class="pill ${t.stage === "decided" ? "decided" : "open"}">${esc(t.stage)}</span>
+            <button class="discuss" id="discuss">Discuss in chat</button>
+          </div>
+          <div class="hint" id="discussHint"></div>
+          <div class="stats" style="margin-top:14px">
+            ${statCard(s.agentWrites, "agent writes")}
+            ${statCard(s.conversations, "conversations")}
+          </div>
+          ${timeline}
+          ${renderConversations(convos)}`;
+
+        document.getElementById("back").addEventListener("click", () => { openHandle = null; load(); });
+
+        // `fred:open-chat` is the one message that leaves this app's subtree,
+        // and it names no route: the host picks the destination. The record
+        // travels through the pin below, never through the message.
+        document.getElementById("discuss").addEventListener("click", async () => {
+          try {
+            const r = await hostFetch(`tasks/${encodeURIComponent(t.handle)}/discuss`, {
+              method: "POST", body: "{}",
+            });
+            const mins = Math.round((r.expires_in_seconds || 1800) / 60);
+            // Resume the conversation this task was last discussed in, if there
+            // is one. The host verifies the id against the caller's own
+            // sessions, so an unknown or stale one simply starts a fresh chat.
+            const resume = (t.session_ids || []).slice(-1)[0] || null;
+            const hint = document.getElementById("discussHint");
+            // The element is gone if the user navigated while this was in
+            // flight; the pin still stands, so that must not read as failure.
+            if (hint) {
+              // Deliberately not "reopening": the host only resumes a session
+              // the viewer owns, so a teammate's conversation — or one that has
+              // aged out — starts a fresh chat instead. The pin covers both.
+              hint.textContent =
+                `Opening chat. ${t.handle} attaches on the agent's first tool call (pinned ${mins} min).`;
+            }
+            // The host owns the destination. The record travels through the pin
+            // above; this only says which conversation to resume, if any.
+            post({ type: "fred:open-chat", sessionId: resume });
+          } catch (e) {
+            document.getElementById("err").textContent = `Could not pin: ${e.message}`;
+          }
+        });
+      }
+
+      function renderConversations(convos) {
+        const items = convos?.items || [];
+        if (!items.length) {
+          return `<h2>conversation</h2><div class="empty">No conversation linked yet. Ask an agent
+                  about ${esc(openHandle)} in chat and pin it.</div>`;
+        }
+        return `<h2>conversation</h2>` + items.map((c) => {
+          const msgs = (c.messages || []).map((m) => `
+            <div class="msg ${m.role === "assistant" ? "assistant" : ""}">
+              <span class="role">${esc(m.role)}</span>${esc(m.text)}
+            </div>`).join("");
+          // The runtime returns only the caller's own rows, so an empty list
+          // here means a teammate's conversation, not a missing one.
+          return `<div class="convo">
+                    <div class="who"><span class="sid">${esc(String(c.session_id).slice(0, 8))}</span></div>
+                    ${msgs || '<div class="empty">Not yours to read.</div>'}
+                  </div>`;
+        }).join("");
+      }
+
+      async function load() {
+        if (!teamId) return;
+        document.getElementById("new").style.display = openHandle ? "none" : "flex";
+        try {
+          if (openHandle) {
+            const h = encodeURIComponent(openHandle);
+            // History is a separate read: a runtime hiccup should cost the
+            // transcript, not the whole task view.
+            const [task, convos] = await Promise.all([
+              hostFetch(`tasks/${h}`),
+              hostFetch(`tasks/${h}/conversations`).catch(() => null),
+            ]);
+            renderDetail(task, convos);
+          } else {
+            renderList((await hostFetch("tasks")).items || []);
+          }
+          document.getElementById("err").textContent = "";
+        } catch (e) {
+          document.getElementById("err").textContent = `Could not load: ${e.message}`;
+        }
+      }
+
+      document.getElementById("new").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const input = document.getElementById("title");
+        const title = input.value.trim();
+        if (!title || !teamId) return;
+        try {
+          await hostFetch("tasks", { method: "POST", body: JSON.stringify({ title }) });
+          input.value = "";
+          openHandle = null;
+          load();
+        } catch (e) {
+          document.getElementById("err").textContent = `Could not add task: ${e.message}`;
+        }
+      });
+
+      // No push channel exists, so progress made in chat arrives by polling.
+      setInterval(load, 10000);
+
+      // Announce last: the host replies with fred:context, which starts the load.
+      post({ type: "fred:ready", protocolVersion: PROTOCOL_VERSION });
+    </script>
+  </body>
+</html>
