@@ -22,7 +22,6 @@ download exhausted the pool and later reads failed with a generic download error
 from unittest.mock import MagicMock
 
 import pytest
-
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
 
 
