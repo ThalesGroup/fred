@@ -149,12 +149,14 @@ mirroring the `writable_document` plugin:
     double-buffered so a re-render/zoom never flashes the blank frame (see
     `previewBuffers.nextBufferAction`).
   - **Download** — a format menu (2026-09-01): **HTML** (composed self-contained
-    file, CSS inlined), **PDF** (opens the composed doc and triggers the browser
-    print dialog — real text; `print-color-adjust:exact` keeps backgrounds), **PNG**
-    (renders off-screen, serializes the DOM, rasterizes it through an
-    `<svg><foreignObject>` loaded as an `<img>` — secure static mode: no scripts, no
-    external loads, no extra dependency). All three render the same sanitized +
-    CSP-locked document, so no author script runs.
+    file, CSS inlined), plus **PNG** and **PDF** built from the SAME faithful
+    render — the artifact is laid out off-screen, its DOM serialized, and rasterized
+    through an `<svg><foreignObject>` loaded as an `<img>` (secure static mode: no
+    scripts, no external loads). PNG is that canvas; PDF wraps the canvas JPEG in a
+    hand-assembled one-page document (no PDF library). Both capture the real
+    background and add none of the browser print chrome. (Print-to-PDF was tried
+    first and dropped: browsers omit backgrounds and inject header/footer/margins.)
+    All paths render the same sanitized + CSP-locked document, so no author script runs.
 - **Slice** `htmlArtifactSlice` — the cross-component bus (a card deep in the
   thread drives the far-away panel), newest-`version`-wins per `artifact_id`.
   Mirrors `writableDocumentSlice`.

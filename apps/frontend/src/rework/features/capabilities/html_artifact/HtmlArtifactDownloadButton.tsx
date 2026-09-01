@@ -22,7 +22,7 @@ import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { OptionModel } from "@models/Option.model.ts";
 import { downloadHtmlArtifact } from "./htmlArtifactDocument";
-import { downloadHtmlArtifactPng, printHtmlArtifact } from "./htmlArtifactExport";
+import { downloadHtmlArtifactPdf, downloadHtmlArtifactPng } from "./htmlArtifactExport";
 
 type DownloadFormat = "html" | "pdf" | "png";
 
@@ -55,18 +55,20 @@ export default function HtmlArtifactDownloadButton({ html, css, title }: { html:
   const onSelect = async (format: DownloadFormat) => {
     if (format === "html") {
       downloadHtmlArtifact(html, css, title);
-    } else if (format === "pdf") {
-      if (!printHtmlArtifact(html, css)) {
-        showError({
-          summary: t("capability.html_artifact.popupBlocked", { defaultValue: "Allow pop-ups to export as PDF." }),
-        });
-      }
-    } else {
-      try {
+      return;
+    }
+    try {
+      if (format === "pdf") {
+        await downloadHtmlArtifactPdf(html, css, title);
+      } else {
         await downloadHtmlArtifactPng(html, css, title);
-      } catch {
-        showError({ summary: t("capability.html_artifact.pngFailed", { defaultValue: "Could not export the PNG." }) });
       }
+    } catch {
+      showError({
+        summary: t("capability.html_artifact.exportFailed", {
+          defaultValue: `Could not export the ${format.toUpperCase()}.`,
+        }),
+      });
     }
   };
 
