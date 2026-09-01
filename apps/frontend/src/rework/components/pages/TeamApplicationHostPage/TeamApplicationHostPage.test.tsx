@@ -61,7 +61,10 @@ vi.mock("@rework/features/applications/applicationRequest.ts", () => ({
   createApplicationRequest: () => h.request,
 }));
 
-import TeamApplicationHostPage, { APPLICATION_HANDSHAKE_TIMEOUT_MS } from "./TeamApplicationHostPage.tsx";
+import TeamApplicationHostPage, {
+  APPLICATION_HANDSHAKE_TIMEOUT_MS,
+  MAX_IN_FLIGHT_APPLICATION_REQUESTS,
+} from "./TeamApplicationHostPage.tsx";
 
 const FRED_ORIGIN = "http://localhost:3000";
 
@@ -396,5 +399,49 @@ describe("TeamApplicationHostPage service proxying", () => {
     await postFromFrame({ type: "fred:request", path: "reports" });
 
     expect(h.request).not.toHaveBeenCalled();
+  });
+});
+
+describe("TeamApplicationHostPage request identity", () => {
+  it("refuses a request whose id is already in flight instead of issuing a second call", async () => {
+    h.request.mockReturnValue(new Promise<Response>(() => undefined));
+    const spy = await connect();
+    spy.mockClear();
+
+    await postFromFrame({ type: "fred:request", requestId: "dup", path: "reports" });
+    await postFromFrame({ type: "fred:request", requestId: "dup", path: "secrets" });
+
+    expect(h.request).toHaveBeenCalledOnce();
+    expect(h.request.mock.calls[0]?.[0]).toBe("reports");
+    expect(postedMessages(spy)).toEqual([{ type: "fred:response-error", requestId: "dup" }]);
+  });
+
+  it("keeps the call it is running abortable after refusing the reused id", async () => {
+    h.request.mockReturnValue(new Promise<Response>(() => undefined));
+    await connect();
+
+    await postFromFrame({ type: "fred:request", requestId: "dup", path: "reports" });
+    await postFromFrame({ type: "fred:request", requestId: "dup", path: "secrets" });
+
+    act(() => root?.unmount());
+    root = undefined;
+
+    const signals = h.request.mock.calls.map((call) => (call[1] as RequestInit).signal as AbortSignal);
+    expect(signals.map((signal) => signal.aborted)).toEqual([true]);
+  });
+
+  it("refuses the request that would exceed the concurrency bound", async () => {
+    h.request.mockReturnValue(new Promise<Response>(() => undefined));
+    const spy = await connect();
+    spy.mockClear();
+
+    for (let index = 0; index <= MAX_IN_FLIGHT_APPLICATION_REQUESTS; index += 1) {
+      await postFromFrame({ type: "fred:request", requestId: `r${index}`, path: "reports" });
+    }
+
+    expect(h.request).toHaveBeenCalledTimes(MAX_IN_FLIGHT_APPLICATION_REQUESTS);
+    expect(postedMessages(spy)).toEqual([
+      { type: "fred:response-error", requestId: `r${MAX_IN_FLIGHT_APPLICATION_REQUESTS}` },
+    ]);
   });
 });

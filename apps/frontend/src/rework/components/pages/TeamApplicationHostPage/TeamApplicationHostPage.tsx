@@ -38,7 +38,7 @@ type HostState = "catalog-loading" | "unavailable" | "connecting" | "protocol-mi
 export const APPLICATION_HANDSHAKE_TIMEOUT_MS = 15_000;
 
 /** Bound on concurrent proxied calls, so one frame cannot exhaust the tab. */
-const MAX_IN_FLIGHT_APPLICATION_REQUESTS = 16;
+export const MAX_IN_FLIGHT_APPLICATION_REQUESTS = 16;
 
 function ApplicationHostState({ state }: { state: HostState }) {
   const { t } = useTranslation();
@@ -176,7 +176,10 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
         return;
       }
 
-      if (inFlight.size >= MAX_IN_FLIGHT_APPLICATION_REQUESTS) {
+      // The frame's requestId is the channel's only correlation token, so an id
+      // that is already running cannot be admitted: a second call under it would
+      // be invisible to the bound, unabortable, and answered twice.
+      if (inFlight.has(message.requestId) || inFlight.size >= MAX_IN_FLIGHT_APPLICATION_REQUESTS) {
         post({ type: "fred:response-error", requestId: message.requestId });
         return;
       }

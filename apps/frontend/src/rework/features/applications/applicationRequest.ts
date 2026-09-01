@@ -69,13 +69,16 @@ export function createApplicationRequest(
       });
 
     await dependencies.ensureFreshToken(30);
-    let response = await request();
+    const response = await request();
     if (response.status !== 401) return response;
 
-    if (await dependencies.ensureFreshToken(0)) {
-      response = await request();
+    // A 401 here is usually the application service's own entitlement decision,
+    // not a dead Fred session — only a failed refresh proves that, so only that
+    // ends the session. Otherwise one misconfigured application logs the user out.
+    if (!(await dependencies.ensureFreshToken(0))) {
+      dependencies.logout();
+      return response;
     }
-    if (response.status === 401) dependencies.logout();
-    return response;
+    return request();
   };
 }
