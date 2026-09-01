@@ -62,9 +62,11 @@ class GcsContentStore(BaseContentStore):
     - :meth:`get_presigned_url` (browser-facing) stays intentionally unsupported.
       The VFS share flow uses application-level HMAC tokens, which are
       backend-agnostic and work over GCS as-is.
-    - :meth:`get_presigned_url_internal` (backend-internal tabular Parquet reads)
-      mints short-lived V4 signed URLs via IAM ``signBlob`` under Workload
-      Identity — keyless, no SA JSON key. Requires ``signing_service_account_email``.
+    - :meth:`get_presigned_url_internal` mints short-lived V4 signed URLs via IAM
+      ``signBlob`` under Workload Identity — keyless, no SA JSON key. Requires
+      ``signing_service_account_email``. No knowledge-flow feature consumes it
+      anymore: tabular Parquet reads use :meth:`download_object_to_path` instead
+      (#2364), because ``signBlob`` is not grantable on every deployment.
     """
 
     def __init__(
@@ -76,10 +78,11 @@ class GcsContentStore(BaseContentStore):
     ):
         self.document_bucket_name = document_bucket
         self.object_bucket_name = object_bucket
-        # Service account used to sign V4 signed URLs for backend-internal tabular
-        # reads via IAM signBlob (Workload Identity, no JSON key). Optional here;
-        # the application factory enforces its presence for GCS deployments so
-        # construction stays testable. Consumed in get_presigned_url_internal.
+        # Service account used to sign V4 signed URLs via IAM signBlob (Workload
+        # Identity, no JSON key). Optional everywhere since #2364: no
+        # knowledge-flow feature calls get_presigned_url_internal anymore, and
+        # that method refuses clearly when invoked without this email — there is
+        # no startup validation for it.
         self.signing_service_account_email = signing_service_account_email
         # Lazily-acquired ADC credentials, cached and refreshed on demand to mint
         # the access token for IAM signBlob. None until the first signing call.
@@ -319,6 +322,51 @@ class GcsContentStore(BaseContentStore):
         except NotFound as e:
             raise FileNotFoundError(f"Object not found: {key}") from e
 
+    def download_object_to_path(self, key: str, destination: Path, *, timeout_seconds: int = 60) -> None:
+        """
+        Download one object from the objects bucket into a local file, streaming.
+
+        Why this exists:
+        - Tabular DuckDB reads used to require a V4 signed URL so `httpfs` could
+          fetch the Parquet artifact over HTTPS, and minting one needs
+          `iam.serviceAccounts.signBlob` — a grant sovereign deployments
+          (tp-s3ns, #2364) do not hold. This method uses the same
+          ADC/Workload-Identity client as every other download in this store,
+          so plain `storage.objects.get` on the objects bucket is enough.
+        - `blob.download_to_filename` streams to disk in chunks, unlike
+          `get_object_stream` which buffers the whole object in memory.
+
+        How to use:
+        - Call from server-side code that wants a local reader (DuckDB) to
+          consume the artifact from disk; the caller owns the destination's
+          lifecycle and should scope it to the reading job.
+        - `timeout_seconds` bounds per-request socket inactivity (connect/read),
+          not total transfer time, so a stalled connection releases the calling
+          worker instead of pinning its execution slot indefinitely.
+
+        Example:
+        - `store.download_object_to_path("tabular/datasets/d/r/data.parquet", job_dir / "data.parquet")`
+        """
+        object_name = self._normalize_key(key)
+        blob = self.object_bucket.blob(object_name)
+        started = time.monotonic()
+        try:
+            blob.download_to_filename(str(destination), timeout=timeout_seconds)
+        except NotFound as e:
+            destination.unlink(missing_ok=True)
+            raise FileNotFoundError(f"Object not found: {key}") from e
+        except Exception:
+            # Never leave a truncated file behind: a partial Parquet would fail
+            # later with a confusing DuckDB error instead of a clear one here.
+            destination.unlink(missing_ok=True)
+            raise
+        logger.info(
+            "[CONTENT][GCS] downloaded object key=%s size_bytes=%s in %dms",
+            key,
+            destination.stat().st_size,
+            int((time.monotonic() - started) * 1000),
+        )
+
     def get_presigned_url(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
         """
         Not supported on the pure Workload Identity path.
@@ -357,25 +405,29 @@ class GcsContentStore(BaseContentStore):
         Mint a short-lived V4 signed URL for backend-internal object reads.
 
         Why this exists:
-        - Tabular DuckDB reads need a DuckDB-readable HTTPS location for Parquet
-          artifacts. Under Workload Identity there is no SA private key, so the
-          URL is signed via the IAM signBlob API using the configured signing
-          service account (keyless).
+        - Under Workload Identity there is no SA private key, so the URL is
+          signed via the IAM signBlob API using the configured signing service
+          account (keyless). No knowledge-flow feature calls this anymore —
+          tabular DuckDB reads use `download_object_to_path` instead (#2364) —
+          but the capability stays available for callers that explicitly opt
+          into internal signed URLs.
 
         How to use:
-        - Call from server-side code paths such as tabular DuckDB reads. The
-          returned URL is a secret: never log it, return it in API/MCP payloads,
-          or persist it.
+        - Call only from server-side code. The returned URL is a secret: never
+          log it, return it in API/MCP payloads, or persist it.
 
         Example:
         - `store.get_presigned_url_internal("tabular/datasets/d/r/data.parquet", expires=timedelta(minutes=5))`
         """
         object_name = self._normalize_key(key)
         if not self.signing_service_account_email:
-            # Defensive guard: the application factory already fails fast at
-            # startup, but a store built outside it must still refuse clearly
-            # rather than emit an unusable URL.
-            raise RuntimeError(f"[CONTENT][GCS] Cannot sign internal URL for '{key}': no signing_service_account_email configured for the GCS content store.")
+            # This is the only guard: nothing validates the email at startup
+            # anymore (#2364 removed the factory fail-fast). NotImplementedError
+            # keeps the base-class contract — "this backend does not support
+            # presigned URLs (as configured)" — so a caller probing capabilities
+            # degrades to its explicit unsupported-operation path instead of an
+            # opaque 500.
+            raise NotImplementedError(f"[CONTENT][GCS] Cannot sign internal URL for '{key}': no signing_service_account_email configured for the GCS content store.")
 
         signed_url = self.object_bucket.blob(object_name).generate_signed_url(
             version="v4",

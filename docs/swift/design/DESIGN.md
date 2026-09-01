@@ -276,10 +276,11 @@ advertised (`output.md` or a dataset listing):
 3. **Mount** — a fresh in-memory DuckDB connection **per query** mounts only
    the caller's readable datasets as read-only views over Parquet. No
    cross-query state, no writable tables.
-4. **Locate** — remote object stores resolve Parquet through a short-lived
-   backend-internal presigned URL (§3), read via DuckDB `httpfs`; local
-   filesystem storage uses a direct path. A store offering neither fails as
-   an explicit unsupported operation.
+4. **Locate** — S3-compatible stores resolve Parquet through a short-lived
+   backend-internal presigned URL, read via DuckDB `httpfs`; GCS downloads
+   the artifact server-side into a job-scoped temp file (§3); local
+   filesystem storage uses a direct path. A store offering none of these
+   fails as an explicit unsupported operation.
 5. **Redact** — signed URLs are stripped from any caught `duckdb`/`httpfs`
    error before it is logged or surfaced.
 
@@ -355,34 +356,71 @@ cannot unblock a stalled read; the bound is `httpfs`'s own retry defaults
 (~2 min worst case against a 30s `query_timeout_seconds`), not a deployment
 setting, since the remote path can't be exercised offline to tighten it.
 
-## 3. Tabular Reads on GCS — Signed URLs
+## 3. Tabular Reads on GCS — Server-Side Downloads (#2364)
 
 Backend-internal tabular reads (DuckDB mounting Parquet, §2) need a
-DuckDB-readable location. On GCS this is a short-lived **V4 signed URL**
-minted via IAM `signBlob` under Workload Identity — never a service-account
-JSON key:
+DuckDB-readable location. On GCS this is a **job-scoped local file**: the
+artifact is downloaded server-side through the same ADC / Workload Identity
+`storage.Client` the store uses for every other read — no signed URLs, no
+`httpfs`, no service-account JSON key.
 
-- `GcsContentStore.get_presigned_url_internal(...)` implements it, gated by
-  config `content_storage.signing_service_account_email` (required when
-  `content_storage.type: gcs`; startup fails clearly if missing rather than
-  guessing).
-- IAM: the signing service account needs `storage.objects.get` on the
-  tabular-artifacts bucket; the Workload Identity service account needs
-  `iam.serviceAccounts.signBlob` on the signing account
-  (`roles/iam.serviceAccountTokenCreator`).
-- TTL bounded by `storage.tabular_store.query.internal_presigned_ttl_seconds`.
-  Signed URLs are never returned in API responses, MCP payloads, or logs —
-  including on error: object URLs are redacted from caught `duckdb`/`httpfs`
-  exceptions before logging (a failed Parquet read otherwise echoes the full
-  signed URL in the exception string).
+This replaced the earlier V4-signed-URL design (`get_presigned_url_internal`
+via IAM `signBlob`): tabular reads are 100% backend-internal, so nothing ever
+needed a URL except `httpfs`, and the `iam.serviceAccounts.signBlob` grant the
+signing required is not obtainable on every deployment (tp-s3ns, the incident
+behind #2364). Plain `storage.objects.get` on the objects bucket is enough.
+
+- `TabularService._dataset_location_scope()` selects the path per store type
+  and owns the lifecycle: one temp directory per DuckDB job, downloads via
+  `GcsContentStore.download_object_to_path(...)` (streaming, chunked), cleanup
+  when the job returns. The scope wraps the whole connection lifetime, since
+  DuckDB opens Parquet lazily at execution time, not at view creation.
+  Download errors are stripped of store internals before they surface: a
+  missing artifact maps to a generic not-found (never the internal object
+  key), and google client errors — whose text embeds the raw GCS REST URL —
+  are re-raised redacted, mirroring the `httpfs` signed-URL redaction.
+- Replica-safe by construction: each pod downloads into its own local temp
+  directory; the bucket stays the single store of record.
+- Disk cost is bounded twice. The per-job directory is deleted in every
+  outcome — the scope wraps the whole job body (opened before the DuckDB
+  connection, closed after it), and the worker thread always finishes the job
+  function even after a caller-side 504, so cleanup runs on success, error,
+  abort, and timeout alike. And
+  `storage.tabular_store.query.max_local_artifact_bytes` (default 512 MiB)
+  caps what one job may materialize, failing over-budget queries as `400`:
+  the artifact's declared ingestion size is checked *before* downloading, so
+  a single oversized artifact cannot fill the disk mid-transfer (legacy
+  artifacts that declared no size are charged after the fact — overshoot
+  bounded by that one artifact). The budget is thereby also the per-artifact
+  ceiling on GCS; deployments ingesting very large tabular files raise it.
+  Instantaneous worst case per pod: `max_concurrent_queries × budget`.
+  DuckDB spilling stays disabled (§2) so queries cannot add to it.
+- Trade-off: the whole artifact is fetched instead of `httpfs` range reads —
+  acceptable at CSV/Excel sizes; a pod-local cache keyed by object key + etag
+  is the natural follow-up if latency ever warrants it. Downloads are
+  sequential within a job (deliberate: the abort handle is checked between
+  datasets, and job slots already bound per-pod concurrency), so a
+  many-dataset join pays its downloads serially inside the job's wall-clock
+  budget; `search_values` mounts lazily, one table at a time, so its early
+  break also skips the fetches. Each download call carries an explicit
+  socket-inactivity timeout, which bounds fully stalled connections — a
+  slow-but-active transfer still holds its execution slot for the transfer's
+  duration (the abort handle cannot interrupt mid-download; the disk budget's
+  pre-download size check is the ceiling on how long that can be). This is
+  the same class of limit the `httpfs` path already documents in §2.
+- `content_storage.signing_service_account_email` is now optional and unused
+  by knowledge-flow features; `GcsContentStore.get_presigned_url_internal`
+  remains implemented for callers that explicitly opt into signed URLs.
 - Cross-backend invariant: MinIO/S3-compatible stores keep serving tabular
-  reads through their existing backend-internal presigned-URL path; local
-  storage keeps the direct filesystem fallback. The GCS path is additive and
-  does not change either.
+  reads through their existing backend-internal presigned-URL path (TTL
+  bounded by `storage.tabular_store.query.internal_presigned_ttl_seconds`);
+  local storage keeps the direct filesystem fallback. Signed URLs remain
+  redacted from caught `duckdb`/`httpfs` errors on those paths.
 - Browser-facing document/VFS sharing is unrelated and unchanged — it uses
   application-level HMAC download tokens, not provider signed URLs;
   `GcsContentStore.get_presigned_url` (the browser-facing method) still
-  raises `NotImplementedError` for knowledge-flow documents.
+  raises `NotImplementedError` for knowledge-flow documents (proxy-URL
+  design tracked in #2318).
 - **Amendment — control-plane team assets (banner/logo):** the
   control-plane's `TeamService` serves these straight to the browser with no
   HMAC-token fallback of its own, so `fred_core.store.GcsContentStore`'s

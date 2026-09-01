@@ -558,18 +558,12 @@ class ApplicationContext:
                 public_secure=config.public_secure,
             )
         elif isinstance(config, GcsStorageConfig):
-            # Fail fast at startup: GCS tabular Parquet reads need a signing SA to
-            # mint V4 signed URLs via IAM signBlob. There is no per-feature flag to
-            # detect tabular usage, so a missing email must stop the boot with a
-            # clear message rather than surfacing later as an opaque runtime error.
-            if not config.signing_service_account_email:
-                raise ValueError(
-                    "content_storage.type=gcs requires 'signing_service_account_email' "
-                    "to sign V4 signed URLs for tabular Parquet reads (IAM signBlob under "
-                    "Workload Identity, no JSON key). Set it to the signing service account "
-                    "that holds storage.objects.get on the objects bucket and on which the "
-                    "Workload Identity service account has iam.serviceAccounts.signBlob."
-                )
+            # signing_service_account_email is optional: tabular Parquet reads
+            # download artifacts through the ADC/Workload-Identity client instead
+            # of minting V4 signed URLs (#2364 — signBlob is not grantable on
+            # every deployment), and browser-facing presigned URLs are
+            # unsupported on GCS by design. The email is consumed only if a code
+            # path explicitly calls get_presigned_url_internal.
             self._content_store_instance = GcsContentStore(
                 document_bucket=f"{config.bucket_name}-documents",
                 object_bucket=f"{config.bucket_name}-objects",

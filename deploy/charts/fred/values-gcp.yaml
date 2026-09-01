@@ -67,9 +67,9 @@ applications:
 
   knowledge-flow-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
-    # The GSA needs roles/storage.objectAdmin on the content + fs buckets, and
-    # iam.serviceAccounts.signBlob on the signing service account below
-    # (typically roles/iam.serviceAccountTokenCreator) for tabular signed URLs.
+    # The GSA needs roles/storage.objectAdmin on the content + fs buckets.
+    # No signBlob grant is needed: tabular Parquet reads download artifacts
+    # through the ADC client instead of minting signed URLs (#2364).
     serviceAccount:
       annotations:
         iam.gke.io/gcp-service-account: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
@@ -81,11 +81,11 @@ applications:
         type: gcs
         bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. <GCP_PROJECT_ID>-content
         project_id: "" # optional; inferred from ADC when empty
-        # Required: service account used to sign V4 signed URLs for tabular
-        # Parquet reads via IAM signBlob (keyless). Startup fails clearly if unset.
-        # It needs storage.objects.get on the -objects bucket; the GSA above needs
-        # iam.serviceAccounts.signBlob on it. May be the GSA itself (self-signing).
-        signing_service_account_email: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+        # Optional: only needed to re-enable internal V4 signed URLs via IAM
+        # signBlob (no knowledge-flow feature consumes them anymore - tabular
+        # reads use ADC downloads, #2364). Leave unset on deployments without
+        # the iam.serviceAccounts.signBlob grant (e.g. tp-s3ns).
+        # signing_service_account_email: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
 
       # --- Virtual filesystem: native GCS ---
       filesystem:
@@ -116,11 +116,11 @@ applications:
           pointer_chunks_enabled: false
           query:
             engine: "duckdb"
-            # Tabular SQL preview reads Parquet through backend-internal V4 signed
-            # URLs. On GCS these are minted via iam.serviceAccounts.signBlob using
-            # content_storage.signing_service_account_email (see above).
+            # On GCS, tabular SQL reads download the Parquet artifact server-side
+            # (ADC client, storage.objects.get) into a job-local temp file - no
+            # signed URLs, no signBlob (#2364). access_mode and the TTL below only
+            # apply to S3-compatible stores (MinIO), which keep presigned URLs.
             access_mode: "presigned_url"
-            # TTL for the internal signed URL; keep short — only DuckDB uses it.
             internal_presigned_ttl_seconds: 3600
             default_max_rows: 200
             max_rows: 1000
