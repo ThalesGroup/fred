@@ -3584,6 +3584,41 @@ root card above the table was tried on 2026-08-21 and removed the same day
   option silently missing.
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
+## Bundled applications host
+
+### `TeamApplicationsPage`
+
+**Location:** `src/rework/components/pages/TeamApplicationsPage/`
+
+The collaborative-team application index renders one responsive card per
+authorized application. Each card uses the generated name, description, and
+validated Material icon. A control-plane/local version or digest mismatch
+keeps the card visible but non-interactive with an "unavailable in this Fred
+build" label, so one rolling-update mismatch does not hide or break unrelated
+apps. Loading, load-error, empty, and personal-space states are explicit.
+
+The team sidebar adds exactly one **Apps** entry when at least one authorized
+application is compatible with the local build. It never adds one navigation
+item per application and never shows the entry in a personal space.
+
+### `TeamApplicationHostPage`
+
+**Location:** `src/rework/components/pages/TeamApplicationHostPage/`
+
+The wildcard host fills the normal Fred content area and keeps the Fred shell
+mounted. Catalog loading, generic unavailability, local contract mismatch,
+module-load failure, and render failure have distinct contained empty states.
+Application code is lazy-loaded only after the authorized team catalog and
+local registration agree.
+
+The platform-admin Capabilities page exposes applications through its **Apps**
+filter. App rows reuse default-on and collaborative-team matrix controls but
+omit personal-space and agent-health controls.
+
+#### Host constraints
+
+- Application-owned information architecture remains outside the generic host
+  contract; the host specifies containment and failure behavior only.
 
 ---
 

@@ -31,6 +31,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import {
   useAdminCapabilitiesQuery,
   useLazyCapabilityRevokeImpactQuery,
@@ -60,13 +61,16 @@ import {
 // pod-advertised projection of one models_catalog.yaml entry, OBSERV-02 v3
 // RFC §8.7) — one admin surface, filtered by kind, rather than a separate
 // page: a tool can be depended on by several agents, so admins need all
-// three views over the same underlying enablement mechanism, not several
-// disconnected ones.
-const KIND_FILTERS: Array<"tool" | "agent" | "model"> = ["tool", "agent", "model"];
+// enabled views over the same underlying mechanism, not several disconnected
+// pages. The optional Apps view follows the deployment-wide feature gate.
+type CapabilityKind = "tool" | "agent" | "model" | "app";
+const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model"];
 
 export default function CapabilitiesPage() {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
+  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
+  const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
   const { data, isLoading, isError } = useAdminCapabilitiesQuery();
   // The registry-governance view (`can_list_all_teams`), not the caller-scoped
@@ -94,7 +98,8 @@ export default function CapabilitiesPage() {
   // admin (or another tab) in between is not re-granted.
   const [pendingGrantAll, setPendingGrantAll] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
-  const [kindFilter, setKindFilter] = useState<"tool" | "agent" | "model">("tool");
+  const [kindFilter, setKindFilter] = useState<CapabilityKind>("tool");
+  const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
   // switch off `isTogglingDefault` used to include the one the admin just
   // clicked, which still holds native focus at that instant: yanking
@@ -124,11 +129,15 @@ export default function CapabilitiesPage() {
   const [togglingReasoningId, setTogglingReasoningId] = useState<string | null>(null);
   const inFlightReasoningIdRef = useRef<string | null>(null);
 
-  const allCapabilities = data?.items ?? [];
+  // Keep stale cached app rows unreachable if the deployment switch is turned
+  // off while this page is mounted. The backend applies the same gate.
+  const allCapabilities = (data?.items ?? []).filter((capability) => applicationsEnabled || capability.kind !== "app");
   // `kind` is optional on the generated type (added to the enablement item
   // after tools already shipped) — an absent value is a tool, same default
   // as the backend's own `CapabilityEnablementItem.kind`.
-  const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === kindFilter);
+  const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
+  const rowIsUnused = (capability: CapabilityEnablementItem) =>
+    capability.kind === "app" ? enabledTeamCount(capability) === 0 : isUnused(capability);
 
   // Resolved from the live query on every render — NOT snapshotted into state.
   // Every drawer mutation invalidates and refetches the list; a snapshot taken
@@ -136,6 +145,7 @@ export default function CapabilitiesPage() {
   // behind it updates.
   const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
+  const visiblePendingDefaultOff = applicationsEnabled || pendingDefaultOff?.kind !== "app" ? pendingDefaultOff : null;
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
     if (inFlightDefaultOnIdRef.current === capability.id) {
@@ -256,6 +266,12 @@ export default function CapabilitiesPage() {
       // in the same gesture rather than surfacing a refusal the admin has to
       // resolve by hand, one capability at a time, elsewhere in the table.
       setPendingGrantAll(capability);
+      // Applications have no agent-instance dependencies or suspension
+      // lifecycle. Their confirmation stays generic and never asks the
+      // agent-specific impact endpoint for a meaningless preview.
+      if (capability.kind !== "app") {
+        void fetchRevokeImpact({ capabilityId: capability.id });
+      }
     } else {
       void applyDefaultOn(capability, true);
     }
@@ -271,6 +287,7 @@ export default function CapabilitiesPage() {
   // the preview is still loading we render nothing extra — the dialog keeps its
   // generic message and stays actionable.
   const renderImpactDetails = () => {
+    if (!visiblePendingDefaultOff || visiblePendingDefaultOff.kind === "app") return null;
     if (revokeImpact.isFetching || !impact) return null;
     return (
       <div className={styles.impact}>
@@ -362,7 +379,7 @@ export default function CapabilitiesPage() {
       label: t("rework.admin.capabilities.col.capability"),
       size: "2.4fr",
       cellRenderer: (cap) => (
-        <div className={`${styles.capCell} ${isUnused(cap) ? styles.dimmed : ""}`}>
+        <div className={`${styles.capCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
           <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
             <span className={styles.capName} title={t(cap.name, { defaultValue: cap.name })}>
@@ -378,7 +395,7 @@ export default function CapabilitiesPage() {
     // The two axes share this screen and must not be confused: the default-on
     // column above is "who may use this model at all" (ReBAC, per team); this
     // one is "does it run with reasoning" (global, no subject, §5.4).
-    ...(kindFilter === "model"
+    ...(activeKindFilter === "model"
       ? [
           {
             label: t("rework.admin.capabilities.col.reasoning"),
@@ -414,7 +431,7 @@ export default function CapabilitiesPage() {
       size: "1.6fr",
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
-        const personal = personalSpaceCount(cap);
+        const personal = cap.kind === "app" ? 0 : personalSpaceCount(cap);
         // Personal-class reach is additive to the team count — "12 teams" over
         // "40 personal spaces", one line each — because personal spaces are
         // deliberately not in `total_team_count` (RFC §8.4). A zero part says
@@ -430,7 +447,7 @@ export default function CapabilitiesPage() {
           parts.push(t("rework.admin.capabilities.enabledTeams.personal", { count: personal }));
         }
         const stack = (
-          <span className={`${styles.countStack} ${isUnused(cap) ? styles.dimmed : ""}`}>
+          <span className={`${styles.countStack} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
             {parts.map((part) => (
               <span key={part} className={styles.count}>
                 {part}
@@ -459,44 +476,48 @@ export default function CapabilitiesPage() {
         );
       },
     },
-    {
-      label: t("rework.admin.capabilities.col.health"),
-      size: "1fr",
-      cellRenderer: (cap) => {
-        // Resting health straight from the aggregate list (#1975): agents this
-        // capability breaks AT REST (`suspended_instances`) vs. agents whose pod
-        // was unreachable so their health can't be determined
-        // (`health_unknown_instances`) — kept visually distinct.
-        const suspended = cap.suspended_instances ?? 0;
-        const unknown = cap.health_unknown_instances ?? 0;
-        return (
-          <div className={styles.centered}>
-            {suspended > 0 ? (
-              // Clickable: opens the drill-down of which agents, in which team,
-              // this capability breaks at rest (#1975). A button, not a span, so
-              // it is keyboard-reachable and announced as actionable.
-              <button
-                type="button"
-                className={styles.healthWarnButton}
-                onClick={() => setSuspendedCapabilityId(cap.id)}
-                aria-label={t("rework.admin.capabilities.health.suspendedAction", { count: suspended })}
-              >
-                <Icon category="outlined" type="warning" />
-                {t("rework.admin.capabilities.health.suspended", { count: suspended })}
-              </button>
-            ) : unknown > 0 ? (
-              <Tooltip text={t("rework.admin.capabilities.health.unknownHint")}>
-                <span className={styles.healthNeutral}>
-                  {t("rework.admin.capabilities.health.unknown", { count: unknown })}
-                </span>
-              </Tooltip>
-            ) : (
-              <span className={styles.healthNeutral}>{t("rework.admin.capabilities.health.healthy")}</span>
-            )}
-          </div>
-        );
-      },
-    },
+    ...(activeKindFilter === "app"
+      ? []
+      : [
+          {
+            label: t("rework.admin.capabilities.col.health"),
+            size: "1fr",
+            cellRenderer: (cap: CapabilityEnablementItem) => {
+              // Resting health straight from the aggregate list: agents this
+              // capability breaks AT REST (`suspended_instances`) vs. agents whose pod
+              // was unreachable so their health can't be determined
+              // (`health_unknown_instances`) — kept visually distinct.
+              const suspended = cap.suspended_instances ?? 0;
+              const unknown = cap.health_unknown_instances ?? 0;
+              return (
+                <div className={styles.centered}>
+                  {suspended > 0 ? (
+                    // Clickable: opens the drill-down of which agents, in which team,
+                    // this capability breaks at rest. A button, not a span, so
+                    // it is keyboard-reachable and announced as actionable.
+                    <button
+                      type="button"
+                      className={styles.healthWarnButton}
+                      onClick={() => setSuspendedCapabilityId(cap.id)}
+                      aria-label={t("rework.admin.capabilities.health.suspendedAction", { count: suspended })}
+                    >
+                      <Icon category="outlined" type="warning" />
+                      {t("rework.admin.capabilities.health.suspended", { count: suspended })}
+                    </button>
+                  ) : unknown > 0 ? (
+                    <Tooltip text={t("rework.admin.capabilities.health.unknownHint")}>
+                      <span className={styles.healthNeutral}>
+                        {t("rework.admin.capabilities.health.unknown", { count: unknown })}
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <span className={styles.healthNeutral}>{t("rework.admin.capabilities.health.healthy")}</span>
+                  )}
+                </div>
+              );
+            },
+          },
+        ]),
     {
       label: t("rework.admin.capabilities.col.actions"),
       // Wide enough for the one-line button at desktop widths, but still a
@@ -506,7 +527,7 @@ export default function CapabilitiesPage() {
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
         // admin opens to grant its first team.
-        <div className={`${styles.actionsCell} ${isUnused(cap) ? styles.dimmed : ""}`}>
+        <div className={`${styles.actionsCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
           <Button
             color="on-surface"
             variant="outlined"
@@ -527,7 +548,7 @@ export default function CapabilitiesPage() {
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}
         actions={
-          kindFilter === "model" && (
+          activeKindFilter === "model" && (
             <Button
               color="on-surface"
               variant="outlined"
@@ -545,9 +566,9 @@ export default function CapabilitiesPage() {
             color="secondary"
             variant="radio"
             aria-label={t("rework.admin.capabilities.kindFilter.aria")}
-            selectedIndex={KIND_FILTERS.indexOf(kindFilter)}
-            onSelectedIndexChange={(index) => setKindFilter(KIND_FILTERS[index])}
-            items={KIND_FILTERS.map((kind) => ({
+            selectedIndex={kindFilters.indexOf(activeKindFilter)}
+            onSelectedIndexChange={(index) => setKindFilter(kindFilters[index])}
+            items={kindFilters.map((kind) => ({
               label: t(`rework.admin.capabilities.kindFilter.${kind}`),
             }))}
           />
@@ -561,11 +582,13 @@ export default function CapabilitiesPage() {
         <PageEmptyState
           icon="tune"
           message={t(
-            kindFilter === "agent"
+            activeKindFilter === "agent"
               ? "rework.admin.capabilities.emptyAgents"
-              : kindFilter === "model"
+              : activeKindFilter === "model"
                 ? "rework.admin.capabilities.emptyModels"
-                : "rework.admin.capabilities.empty",
+                : activeKindFilter === "app"
+                  ? "rework.admin.capabilities.emptyApps"
+                  : "rework.admin.capabilities.empty",
           )}
         />
       )}
@@ -597,15 +620,23 @@ export default function CapabilitiesPage() {
       />
 
       <ConfirmationDialog
-        open={pendingDefaultOff !== null}
-        title={t("rework.admin.capabilities.defaultOffConfirm.title")}
-        message={t("rework.admin.capabilities.defaultOffConfirm.message")}
+        open={visiblePendingDefaultOff !== null}
+        title={t(
+          visiblePendingDefaultOff?.kind === "app"
+            ? "rework.admin.capabilities.defaultOffConfirm.appTitle"
+            : "rework.admin.capabilities.defaultOffConfirm.title",
+        )}
+        message={t(
+          visiblePendingDefaultOff?.kind === "app"
+            ? "rework.admin.capabilities.defaultOffConfirm.appMessage"
+            : "rework.admin.capabilities.defaultOffConfirm.message",
+        )}
         details={renderImpactDetails()}
         confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
         cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}
         criticalAction
         onConfirm={() => {
-          if (pendingDefaultOff) void applyDefaultOn(pendingDefaultOff, false);
+          if (visiblePendingDefaultOff) void applyDefaultOn(visiblePendingDefaultOff, false);
           setPendingDefaultOff(null);
         }}
         onCancel={() => setPendingDefaultOff(null)}

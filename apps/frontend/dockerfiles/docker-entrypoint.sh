@@ -14,11 +14,65 @@ set -eu
 # FRONTEND_DNS_RESOLVER overrides the resolver nginx uses for optional
 # upstreams (default: the container's own nameserver, from /etc/resolv.conf,
 # falling back to Docker's embedded DNS 127.0.0.11).
+# FRONTEND_ENABLE_APPLICATIONS is the deployment-wide application gateway
+# switch. It accepts only true or false and defaults to the fail-closed state.
+# FRONTEND_APPLICATIONS_JSON registers the applications this deployment serves.
+# Registration is deployment configuration, not a build artifact: each entry
+# names an app_id, the fork-built UI behind /apps/<app_id>/, and optionally the
+# application service behind /app-services/<app_id>/. Example:
+#   FRONTEND_APPLICATIONS_JSON='[{"app_id":"acme-forecast",
+#     "ui_upstream":"http://acme-forecast-ui:80",
+#     "service_upstream":"http://acme-forecast-api:8000",
+#     "service_required":true}]'
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
 : "${FRONTEND_EVALUATION_UPSTREAM:=http://fred-evaluation-backend}"
 : "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
+: "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE:=10m}"
+: "${FRONTEND_NGINX_CONFIG:=/etc/nginx/conf.d/fred.conf}"
+: "${FRONTEND_ENABLE_APPLICATIONS:=false}"
+if [ -z "${FRONTEND_APPLICATIONS_JSON:-}" ]; then
+    FRONTEND_APPLICATIONS_JSON='[]'
+fi
+
+fail_application_configuration() {
+    echo "Invalid application configuration: $1" >&2
+    exit 1
+}
+
+case "${FRONTEND_ENABLE_APPLICATIONS}" in
+    true | false) ;;
+    *) fail_application_configuration "FRONTEND_ENABLE_APPLICATIONS must be either true or false" ;;
+esac
+
+if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
+    if ! printf '%s' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}" | grep -Eq '^[1-9][0-9]*[kKmMgG]?$'; then
+        fail_application_configuration "FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE must be a positive nginx size"
+    fi
+    if ! command -v jq >/dev/null 2>&1; then
+        fail_application_configuration "jq is required to validate application registrations"
+    fi
+    if ! printf '%s' "${FRONTEND_APPLICATIONS_JSON}" | jq -e '
+        def safe_url:
+            type == "string" and
+            test("^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\\[[0-9A-Fa-f:]+\\])(?::(?:[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[A-Za-z0-9._~!&()*+,=:@/-]*)?$") and
+            (test("(?:^|/)\\.{1,2}(?:/|$)") | not);
+        type == "array" and
+        (all(.[];
+            type == "object" and
+            ((keys - ["app_id", "service_required", "service_upstream", "ui_upstream"]) | length == 0) and
+            (.app_id | type == "string" and test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
+            (.ui_upstream | safe_url) and
+            (.service_upstream == null or (.service_upstream | safe_url)) and
+            ((.service_required // false) | type == "boolean") and
+            ((.service_required // false) == false or .service_upstream != null)
+        )) and
+        ([.[].app_id] | length == (unique | length))
+    ' >/dev/null 2>&1; then
+        fail_application_configuration "FRONTEND_APPLICATIONS_JSON must list unique app_ids with a safe HTTP(S) ui_upstream, plus a service_upstream for every service_required application"
+    fi
+fi
 
 # fred-agent-evaluator is optional: some platforms don't deploy it, so
 # FRONTEND_EVALUATION_UPSTREAM's hostname may not resolve. A literal
@@ -32,7 +86,61 @@ if [ -z "${FRONTEND_DNS_RESOLVER:-}" ]; then
 fi
 : "${FRONTEND_DNS_RESOLVER:=127.0.0.11}"
 
-cat > /etc/nginx/conf.d/fred.conf <<EOF
+{
+if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
+# One id map serves both prefixes: the UI and the service of an application
+# always share its id, and each location reads its own upstream map below.
+printf 'map $uri $fred_application_id {\n'
+printf '    default "";\n'
+printf '    ~^/apps/(?<fred_ui_id_from_uri>[a-z][a-z0-9-]*)(?:/|$) $fred_ui_id_from_uri;\n'
+printf '    ~^/app-services/(?<fred_service_id_from_uri>[a-z][a-z0-9-]*)(?:/|$) $fred_service_id_from_uri;\n'
+printf '}\n\n'
+
+printf 'map $fred_application_id $fred_application_installed {\n'
+printf '    default 0;\n'
+printf '%s' "${FRONTEND_APPLICATIONS_JSON}" |
+    jq -r 'sort_by(.app_id)[] | .app_id' |
+    while IFS= read -r application_id; do
+        printf '    "%s" 1;\n' "${application_id}"
+    done
+printf '}\n\n'
+
+# Emit one nginx map from application id to a projection of the named upstream
+# field. Applications without that field simply fall through to the default.
+emit_application_map() {
+    map_variable=$1
+    upstream_field=$2
+    projection=$3
+    printf 'map $fred_application_id $%s {\n' "${map_variable}"
+    printf '    default "";\n'
+    printf '%s' "${FRONTEND_APPLICATIONS_JSON}" |
+        jq -r --arg field "${upstream_field}" --arg projection "${projection}" '
+            def url_parts:
+                capture("^https?://(?<host>\\[[0-9A-Fa-f:]+\\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::(?<port>[0-9]+))?(?:/|$)");
+            [.[] | select(.[$field] != null)] | sort_by(.app_id)[] |
+            .[$field] as $url |
+            ($url | url_parts) as $parts |
+            (if $projection == "upstream" then ($url | sub("/+$"; ""))
+             elif $projection == "authority" then ($parts.host + (if ($parts.port // "") == "" then "" else ":" + $parts.port end))
+             else ($parts.host | ltrimstr("[") | rtrimstr("]"))
+             end) as $value |
+            "\(.app_id)|\($value)"
+        ' |
+        while IFS='|' read -r application_id application_value; do
+            printf '    "%s" "%s";\n' "${application_id}" "${application_value}"
+        done
+    printf '}\n\n'
+}
+
+emit_application_map fred_application_upstream service_upstream upstream
+emit_application_map fred_application_upstream_authority service_upstream authority
+emit_application_map fred_application_upstream_server_name service_upstream server_name
+emit_application_map fred_application_ui_upstream ui_upstream upstream
+emit_application_map fred_application_ui_authority ui_upstream authority
+emit_application_map fred_application_ui_server_name ui_upstream server_name
+fi
+
+cat <<EOF
 server {
     listen 8080;
     server_name localhost;
@@ -81,14 +189,101 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
+EOF
 
+if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
+cat <<'EOF'
+    location = /apps {
+        return 404;
+    }
+
+    # ^~ so this beats the \.mjs$ regex location below: an app bundle serves its
+    # own module assets, which must reach the app UI and not Fred's document root.
+    location ^~ /apps/ {
+        if ($fred_application_ui_upstream = "") {
+            return 404;
+        }
+EOF
+printf '        client_max_body_size %s;\n' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}"
+cat <<'EOF'
+        # The whole /apps/<id> prefix is kept upstream so the absolute asset URLs
+        # the fork baked into its bundle keep resolving through this location.
+        proxy_pass $fred_application_ui_upstream$uri$is_args$args;
+        proxy_http_version 1.1;
+        proxy_set_header Host $fred_application_ui_authority;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $fred_application_ui_server_name;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 5;
+    }
+
+    location = /app-services {
+        return 404;
+    }
+
+    location ~ ^/app-services/[a-z][a-z0-9-]*(?<fred_application_path>/.*)$ {
+        if ($fred_application_installed = 0) {
+            return 404;
+        }
+        if ($fred_application_upstream = "") {
+            return 503;
+        }
+EOF
+printf '        client_max_body_size %s;\n' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}"
+cat <<'EOF'
+        proxy_request_buffering off;
+        proxy_pass $fred_application_upstream$fred_application_path$is_args$args;
+        proxy_http_version 1.1;
+        proxy_set_header Host $fred_application_upstream_authority;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $fred_application_upstream_server_name;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 5;
+        proxy_buffering off;
+        proxy_read_timeout 3600;
+        proxy_send_timeout 3600;
+    }
+
+    location /app-services/ {
+        return 404;
+    }
+EOF
+else
+cat <<'EOF'
+    location = /apps {
+        return 404;
+    }
+
+    location ^~ /apps/ {
+        return 404;
+    }
+
+    location = /app-services {
+        return 404;
+    }
+
+    location ^~ /app-services/ {
+        return 404;
+    }
+EOF
+fi
+
+cat <<'EOF'
     location / {
-        try_files \$uri /index.html;
+        try_files $uri /index.html;
     }
 
     # Ensure ES module workers (.mjs) are served with a JS MIME type.
-    location ~ \.mjs\$ {
-        try_files \$uri =404;
+    location ~ \.mjs$ {
+        try_files $uri =404;
         default_type application/javascript;
         types {
             application/javascript                           mjs;
@@ -96,5 +291,6 @@ server {
     }
 }
 EOF
+} > "${FRONTEND_NGINX_CONFIG}"
 
 exec nginx -g 'daemon off;'

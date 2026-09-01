@@ -160,6 +160,15 @@ describe("CapabilityTeamMatrixDrawer tri-state controls", () => {
     expect(html).toContain("rework.admin.capabilities.matrix.default");
     expect(html).toContain("rework.admin.capabilities.matrix.enable");
   });
+
+  it("does not offer the personal-space class control for an application", () => {
+    const html = render({
+      capability: capability({ id: "app__example", kind: "app" }),
+      teams: [team("nb", "Nightly Build")],
+    });
+    expect(html).toContain("Nightly Build");
+    expect(html).not.toContain("rework.admin.capabilities.matrix.personal.label");
+  });
 });
 
 // Regression coverage for #2408: activating an agent whose default tool

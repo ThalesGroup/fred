@@ -129,6 +129,11 @@ type team
     # -> must be member; deliberately excludes `public` (unlike can_read)
     define can_use_team_agents: team_member
 
+    # Can discover/use team-scoped product applications.
+    # -> must be member; deliberately excludes `public` and is independent
+    # from agent access.
+    define can_use_team_applications: team_member
+
     # Team-scoped evaluation capabilities (RFC §6.2/§3.2). team_admin may run
     # evaluations directly (RFC §24.6: team_admin may also grant team_analyst
     # without separate platform approval); team_editor has no evaluation
