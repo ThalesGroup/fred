@@ -138,7 +138,20 @@ origin signal the UI shows.
 
 ## 4. Proposed work packages
 
-### P1 - Signed workspace principal at the `/fs` boundary
+### P1 - Signed workspace principal at the `/fs` boundary - SUPERSEDED (2026-09-02)
+
+**Do not build this.** The finding it answers (F1) is real and still open, but the
+solution is abandoned: it depends on a signed `ExecutionGrant` that RUNTIME-07 rev. 2
+dropped, and `#1853` is closed. Building an ad-hoc signature scheme for a surface that is
+being deleted would be work spent twice.
+
+F1 is closed structurally instead, by the scoped WorkspaceService of `#2328` (§9 below):
+the Workspace contract has no "list the teams" operation at all, and the namespace is
+derived server-side rather than asserted by the caller. The `can_access_files` relation
+merged in `#2476` already closed the narrower gap - marketplace visibility no longer
+doubles as filesystem access.
+
+The original proposal is kept below for the record only.
 
 Introduce a narrow runtime-to-Knowledge-Flow workspace principal derived from the signed
 execution grant:
@@ -229,7 +242,7 @@ is a UI/KF response signal, not an SDK listing contract.
 ## 5. Recommended sequencing
 
 1. **P2 + P6 first.** Low risk, fixes misleading contracts and path buglets.
-2. **P1 with RUNTIME-07.** This is the security-critical boundary.
+2. ~~**P1 with RUNTIME-07.**~~ Superseded - see P1 and §9.
 3. **P5.** Decide streaming/presigned before large deployments rely on `/fs`.
 4. **P3 + P4.** Share-copy metadata and atomicity are correctness polish.
 5. **P7.** Decide whether SDK provenance is product surface or UI-only.
@@ -260,8 +273,57 @@ is a UI/KF response signal, not an SDK listing contract.
 
 Before implementation, decide:
 
-1. Does P1 live inside `RUNTIME-07` or as a child FILES task that consumes signed grants?
+1. ~~Does P1 live inside `RUNTIME-07`...~~ Closed 2026-09-02: neither. See §9.
 2. Is share-copy provenance intentionally path-only, or do we need stored metadata?
 3. Should SDK `FsEntry` expose provenance, or is provenance only a Files UI signal?
 4. Does graph runtime template resolution intentionally include agent-space templates, or
    should it match `ToolContext`?
+
+---
+
+## 9. Workspace contract (2026-09-02) - the replacement for P1
+
+Scope of this section: the not-yet-built part of `#2328`. The `can_access_files` gate is
+already shipped (`#2476`) and is documented in `FILESYSTEM.md`, not here.
+
+The model only ever sees `/workspace/...`. Knowledge Flow maps that onto the **existing**
+physical prefix `teams/{team}/agents/{instance}/users/{uid}/...`, with no new segment - so
+bytes already stored stay addressable and there is no migration. The namespace is derived
+server-side from the session context; it is never assembled by the caller. That is the
+whole point: today the SDK adapter builds team-rooted paths client-side, which is why the
+raw `/fs` boundary cannot tell one actor from another.
+
+### The five operations, and what justifies each
+
+| Operation | Consumer that justifies it |
+| --- | --- |
+| `list` (bounded, actor-scoped) | `TODO.md` proof (`ls` tool), `WorkspaceFsPort.ls`, Agents viewer |
+| `read` | `TODO.md` proof, `resolve_template`, `resources.fetch_text`, agent assets, Agents viewer |
+| `write` (create / replace) | `TODO.md` proof, `artifacts.publish_text`, ppt-filler, save-time asset store |
+| `delete` | `AgentConfigAssetsAdapter.delete` (idempotent replacement) |
+| `link` (signed download) | artifact chips, PPT preview, `link_for`, Agents viewer |
+
+### Deliberately excluded - this list is a stop signal
+
+`edit` (the Deep adapter does read + replace + write), `glob`, `grep`, `mkdir`, `rename`,
+`copy_to_shared`, `stat`, paginated `cat`, per-type stats.
+
+None of these found a retained consumer. If one comes back "for parity" with `/fs`, that is
+the stop signal `#2328` calls for: stop and re-evaluate the retained use cases rather than
+widen the contract.
+
+### Two actors, one namespace
+
+The human actor is not new - `/fs` is already called from the browser with the user's token
+(`AgentsWorkspace` → `useLsQuery`). The agent actor, with its server-derived namespace, is
+the newcomer. That both travel the same routes with the same token today is precisely the
+cause of `#2113`. Isolation tests must therefore cover **both**: the human read-only, the
+agent read-write.
+
+### Documented residual
+
+Without an agent principal, Knowledge Flow still cannot prove which `agent_instance_id` is
+calling: a user-token bearer can reach an agent workspace inside their own team, for their
+own uid. The residual is bounded (same team, same user) and must be named in the Workspace
+doc before agent writes are enabled. M2M co-signature stays a separate hardening step, not
+a prerequisite.
