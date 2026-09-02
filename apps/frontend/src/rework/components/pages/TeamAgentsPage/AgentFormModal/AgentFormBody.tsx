@@ -400,6 +400,7 @@ export function AgentFormBody({
                 {capabilityView === "simple" ? (
                   <SimpleCapabilitiesView
                     availableIds={availableCapabilityIds}
+                    supportsCapabilities={selectedTemplate?.supports_capabilities ?? true}
                     selection={{ selectedCapabilityIds, capabilityConfigValues, reasoningEnabled }}
                     disabled={isSubmitting}
                     onSelectionChange={onCapabilitySelectionReplace}

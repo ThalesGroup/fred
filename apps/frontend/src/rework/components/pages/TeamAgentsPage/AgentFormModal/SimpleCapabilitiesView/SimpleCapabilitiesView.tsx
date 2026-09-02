@@ -22,6 +22,9 @@ import styles from "./SimpleCapabilitiesView.module.css";
 interface SimpleCapabilitiesViewProps {
   /** Team's admin-enabled capability ids (from the template's available_capabilities). */
   availableIds: ReadonlySet<string>;
+  /** Template's own supports_capabilities (unfiltered by team grants) — distinguishes
+   *  "this agent doesn't support selection" from "the team has zero usable capabilities". */
+  supportsCapabilities: boolean;
   selection: CapabilitySelectionState;
   disabled: boolean;
   onSelectionChange: (next: CapabilitySelectionState) => void;
@@ -40,6 +43,7 @@ interface SimpleCapabilitiesViewProps {
  */
 export function SimpleCapabilitiesView({
   availableIds,
+  supportsCapabilities,
   selection,
   disabled,
   onSelectionChange,
@@ -47,19 +51,13 @@ export function SimpleCapabilitiesView({
 }: SimpleCapabilitiesViewProps) {
   const { t } = useTranslation();
   const activeIds = new Set(selection.selectedCapabilityIds);
-  // The template's own `available_capabilities` is now the honest signal
-  // (see AgentDefinition.supports_capabilities) — empty means this agent
-  // doesn't participate in capability selection at all, not just that
-  // nothing happens to be enabled. A "reasoning"-kind pack maps to a plain
-  // form field, not a backend capability, so it stays interactive regardless.
-  const templateSupportsCapabilities = availableIds.size > 0;
 
   return (
     <div className={styles.view}>
       {TOOL_PACK_SECTIONS.map((section) => {
         const isCapabilityBackedSection =
           section.packs.length > 0 && section.packs.every((pack) => pack.kind === "capabilities");
-        const showNotSupported = isCapabilityBackedSection && !templateSupportsCapabilities;
+        const showNotSupported = isCapabilityBackedSection && !supportsCapabilities;
 
         return (
           <section key={section.id} className={styles.section}>

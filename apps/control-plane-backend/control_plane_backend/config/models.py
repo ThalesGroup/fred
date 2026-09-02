@@ -84,7 +84,7 @@ class FrontendFeatureFlags(BaseModel):
     )
     enableInformationSystems: bool = Field(
         default=False,
-        description="Show the Information Systems (SI) team nav entry and page — rags-services CRUD (#2307).",
+        description="Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",
     )
 
 

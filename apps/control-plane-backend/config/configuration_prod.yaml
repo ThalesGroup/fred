@@ -94,7 +94,7 @@ platform:
   #       fr: "Ne téléversez pas de documents sensibles ou classifiés."
   frontend:
     feature_flags:
-      enableInformationSystems: true # local dev — live-testing the rags SI UI (#2307)
+      enableInformationSystems: true # local dev — unused now the in-repo SI UI is gone, kept for the standalone rags-services page
   #   info_banner:
   #     color: "#00BBDD"
   #     auto_hide_seconds: 30 # omit for a persistent banner (the default)

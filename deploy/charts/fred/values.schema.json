@@ -12576,7 +12576,7 @@
                             },
                             "enableInformationSystems": {
                               "default": false,
-                              "description": "Show the Information Systems (SI) team nav entry and page \u2014 rags-services CRUD (#2307).",
+                              "description": "Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",
                               "title": "Enableinformationsystems",
                               "type": "boolean"
                             }
@@ -14699,7 +14699,7 @@
                             },
                             "enableInformationSystems": {
                               "default": false,
-                              "description": "Show the Information Systems (SI) team nav entry and page \u2014 rags-services CRUD (#2307).",
+                              "description": "Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",
                               "title": "Enableinformationsystems",
                               "type": "boolean"
                             }

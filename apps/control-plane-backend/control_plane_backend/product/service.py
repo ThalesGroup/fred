@@ -187,6 +187,7 @@ class _RuntimeTemplatePayload:
         kind: str,
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
+        supports_capabilities: bool = True,
         default_capability_ids: list[str] | None = None,
         max_chat_input_chars: int | None = None,
     ) -> None:
@@ -200,6 +201,7 @@ class _RuntimeTemplatePayload:
             description=description,
         )
         self.available_capabilities = available_capabilities or []
+        self.supports_capabilities = supports_capabilities
         # The capability ids activated when an instance's `selected_capability_ids`
         # is None (CAPAB-01 / #1980, RFC §8.1 amendment): the plain catalog ids of
         # `definition.default_mcp_servers`, mirrored on the wire as
@@ -275,6 +277,10 @@ class _RuntimeTemplatePayload:
             # Pod-installed capabilities (#1974) — the same SDK wire model the
             # pod serializes, never a hand-declared parallel copy.
             available_capabilities=available_capabilities,
+            # Unfiltered by team can_use, unlike available_capabilities above —
+            # the only way to tell "team has zero usable capabilities" apart
+            # from "template doesn't support selection" once that's narrowed.
+            supports_capabilities=bool(data.get("supports_capabilities", True)),
             # Ids of `definition.default_mcp_servers` (the servers activated when
             # `selected_capability_ids is None`) — MCP-derived and native ids
             # alike (RFC §2), read verbatim off the pod's own wire field rather
@@ -1603,6 +1609,7 @@ async def list_agent_templates(
                     available_capabilities=filter_entries_by_usable(
                         template.available_capabilities, usable_ids
                     ),
+                    supports_capabilities=template.supports_capabilities,
                     # Unfiltered on purpose: this is the template's DECLARED
                     # default list, and `available_capabilities` above is
                     # already narrowed to what this team `can_use`. The

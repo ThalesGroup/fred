@@ -997,16 +997,14 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Capabilities this template genuinely offers for selection (#1974, RFC
-    # §3.8). Sourced from capabilities installed on this pod, filtered down
-    # to what the individual definition actually declares support for:
-    # `[]` outright when `AgentDefinition.supports_capabilities` is False
-    # (the honest "this agent doesn't support capabilities" signal — not a
-    # pod-registration coincidence), then further narrowed to
-    # `execution_models`-compatible entries for Graph templates that do opt
-    # in. Mirrored per template so control-plane aggregation and the
-    # agent-creation UI need no second fetch.
+    # Filtered by supports_capabilities below: [] outright for a template that
+    # opts out, so a coincidentally pod-registered capability is never offered.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
+    # Mirrors AgentDefinition.supports_capabilities verbatim (unfiltered by team
+    # grants) — the only way control-plane can tell "this team has zero usable
+    # capabilities" apart from "this template doesn't support selection at all"
+    # once available_capabilities has been narrowed to the team's can_use set.
+    supports_capabilities: bool = True
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
     # filtering. `available_mcp_servers` above stays MCP-only (it carries full
@@ -3839,13 +3837,9 @@ def _build_agent_router(
                 # exact "select it, save it, discover the incompatibility at
                 # first launch" flow the loud refusal exists to prevent.
                 #
-                # Definitions that declare `supports_capabilities=False` (the
-                # default for GraphAgentDefinition) never participate in
-                # capability selection at all, regardless of what happens to
-                # be registered on this pod — that list is a fact about this
-                # pod's registry, not about what the agent's own definition
-                # declares. Short-circuit to [] rather than let coincidental
-                # pod registration leak into the picker.
+                # A definition opting out via supports_capabilities=False never
+                # offers one, regardless of pod registration — short-circuit
+                # rather than let that leak into the picker.
                 available_capabilities=(
                     []
                     if not definition.supports_capabilities
@@ -3857,6 +3851,7 @@ def _build_agent_router(
                         if "graph" in entry.execution_models
                     ]
                 ),
+                supports_capabilities=definition.supports_capabilities,
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
