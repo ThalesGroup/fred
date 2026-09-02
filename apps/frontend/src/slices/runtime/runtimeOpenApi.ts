@@ -518,7 +518,9 @@ export type RuntimeErrorEvent = {
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
-  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source). */
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
   chunk_kind?: string | null;
   citation_url?: string | null;
   confidential?: boolean | null;
@@ -931,7 +933,7 @@ export type CapabilityCatalogEntry = {
   /** Material Symbols name; see CapabilityManifest.icon */
   icon: string;
   id: string;
-  kind?: "tool" | "agent" | "model";
+  kind?: "tool" | "agent" | "model" | "app";
   model_chat_profile_ids?: string[];
   model_display_name?: string | null;
   model_profile_ids?: string[];
@@ -985,6 +987,8 @@ export type AgentTuning = {
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
+  /** Does a NEW conversation start with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control — where the switch starts, never where it stays. Inert unless `reasoning_enabled`; kept rather than reset so withdrawing and restoring the offer does not lose the author's choice. */
+  reasoning_default_on?: boolean;
   /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
     
     True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */

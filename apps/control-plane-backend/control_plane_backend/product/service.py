@@ -36,6 +36,9 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     StoredCapabilityConfig,
 )
+from fred_sdk.contracts.capability.manifest import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_sdk.contracts.models import TeamScopePolicy
 from pydantic import ValidationError
 
@@ -241,6 +244,27 @@ class _RuntimeTemplatePayload:
             and raw_max_chat_input_chars > 0
             else None
         )
+        parsed_capabilities = [
+            CapabilityCatalogEntry.model_validate(entry)
+            for entry in data.get("available_capabilities", [])
+            if isinstance(entry, dict)
+        ]
+        quarantined_capability_ids = {
+            entry.id
+            for entry in parsed_capabilities
+            if entry.kind == "app"
+            or entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+        }
+        if quarantined_capability_ids:
+            logger.warning(
+                "Ignoring product-application entries advertised by an agent runtime: %s",
+                sorted(quarantined_capability_ids),
+            )
+        available_capabilities = [
+            entry
+            for entry in parsed_capabilities
+            if entry.id not in quarantined_capability_ids
+        ]
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -250,11 +274,7 @@ class _RuntimeTemplatePayload:
             default_tuning=tuning,
             # Pod-installed capabilities (#1974) — the same SDK wire model the
             # pod serializes, never a hand-declared parallel copy.
-            available_capabilities=[
-                CapabilityCatalogEntry.model_validate(entry)
-                for entry in data.get("available_capabilities", [])
-                if isinstance(entry, dict)
-            ],
+            available_capabilities=available_capabilities,
             # Ids of `definition.default_mcp_servers` (the servers activated when
             # `selected_capability_ids is None`) — MCP-derived and native ids
             # alike (RFC §2), read verbatim off the pod's own wire field rather
@@ -263,7 +283,10 @@ class _RuntimeTemplatePayload:
             default_capability_ids=[
                 cid
                 for cid in data.get("default_capability_ids", [])
-                if isinstance(cid, str) and cid
+                if isinstance(cid, str)
+                and cid
+                and cid not in quarantined_capability_ids
+                and not cid.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
             ],
             # Optional during rolling upgrades: older runtime pods do not
             # advertise this deployment policy yet.
@@ -1580,6 +1603,22 @@ async def list_agent_templates(
                     available_capabilities=filter_entries_by_usable(
                         template.available_capabilities, usable_ids
                     ),
+                    # Unfiltered on purpose: this is the template's DECLARED
+                    # default list, and `available_capabilities` above is
+                    # already narrowed to what this team `can_use`. The
+                    # agent-creation form intersects the two, so a default the
+                    # team is not enabled for is never pre-ticked (and never
+                    # rendered) — same result as filtering here, without
+                    # making the field lie about what the template declares.
+                    default_capability_ids=list(template.default_capability_ids),
+                    # REASON-01 level 3 + Amendment B (#2473), read off the
+                    # pod's `default_tuning`. Unfiltered by platform state on
+                    # purpose: this is what the template DECLARES. Levels 1-2
+                    # are send-path gates (`_platform_reasoning_control`), so a
+                    # declared True on a deployment with no reasoning-enabled
+                    # model simply never produces a composer control.
+                    reasoning_enabled=template.default_tuning.reasoning_enabled,
+                    reasoning_default_on=template.default_tuning.reasoning_default_on,
                 )
             )
     return templates

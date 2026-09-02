@@ -33,6 +33,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from control_plane_backend.applications.catalog import ApplicationSourceConfig
 from control_plane_backend.capabilities import enablement, seeding
 from control_plane_backend.capabilities.enablement import (
     AgentCapabilityDependencyNotSatisfied,
@@ -40,7 +41,9 @@ from control_plane_backend.capabilities.enablement import (
     DefaultOnNotAllowed,
     disable_capability_for_team,
     enable_capability_for_team,
+    has_org_relation,
     reset_capability_for_team,
+    set_capability_default_on,
     set_capability_personal_scope,
     suspend_dependent_instances,
     validate_team_settings,
@@ -60,6 +63,20 @@ from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
 from test_main import _FakeAgentInstanceStore, _make_record
+
+_EXAMPLE_APPLICATION = ApplicationSourceConfig(
+    app_id="example",
+    ui_prefix="/apps/example",
+    version="1.0.0",
+    display_name={"en": "Example"},
+    description={"en": "An application served from its own container."},
+)
+
+
+def _installed_app_capability_ids() -> set[str]:
+    """Application projections are always present beside pod projections."""
+
+    return {_EXAMPLE_APPLICATION.capability_id}
 
 
 class _NoReasoningEnabledStore:
@@ -645,6 +662,181 @@ async def test_personal_scope_enabled_rejects_agent_capability_missing_tool_depe
 
 
 @pytest.mark.asyncio
+async def test_default_on_rejects_agent_capability_whose_dependency_is_not_default_on() -> (
+    None
+):
+    """2026-08-28, GitHub #2470: the platform-wide switch is the third face of
+    the `depends_on` gate, and was the one with no check at all.
+
+    Turning a `kind="agent"` template default-on hands it to EVERY team at
+    once, so a dependency that is not itself default-on leaves every one of
+    them inheriting a template it cannot use — the same live bug fix A
+    addressed per-team, only platform-wide and silent.
+    """
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    with pytest.raises(AgentCapabilityDependencyNotSatisfied):
+        await set_capability_default_on(
+            rebac=rebac,
+            agent_instance_store=store,
+            catalog_entry=sql_expert,
+            on=True,
+            updated_by="admin",
+        )
+
+    # Rejected before any write — not even the capability anchor.
+    assert rebac.tuples == set()
+
+
+@pytest.mark.asyncio
+async def test_default_on_rejects_when_dependency_is_only_team_enabled() -> None:
+    """A dependency enabled for the teams that exist TODAY is not enough:
+    default-on also reaches every team created tomorrow, which would inherit
+    the template with no grant on the dependency. Only the dependency being
+    default-on itself satisfies the platform-wide gate."""
+
+    rebac = _FakeRebac()
+    settings = _FakeSettingsStore()
+    store = _FakeAgentInstanceStore([])
+    tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    await enable_capability_for_team(
+        rebac=rebac,
+        settings_store=settings,
+        catalog_entry=tool_entry,
+        team_id="team-a",
+        settings={},
+        updated_by="admin",
+    )
+
+    with pytest.raises(AgentCapabilityDependencyNotSatisfied):
+        await set_capability_default_on(
+            rebac=rebac,
+            agent_instance_store=store,
+            catalog_entry=sql_expert,
+            on=True,
+            updated_by="admin",
+        )
+
+
+@pytest.mark.asyncio
+async def test_default_on_allows_agent_capability_once_dependency_is_default_on() -> (
+    None
+):
+    """The "grant all" order the admin UI performs: dependency default-on
+    first, then the template — which must then succeed."""
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=tool_entry,
+        on=True,
+        updated_by="admin",
+    )
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=sql_expert,
+        on=True,
+        updated_by="admin",
+    )
+
+    assert await has_org_relation(
+        rebac, SQL_EXPERT_TEMPLATE_ID, RelationType.DEFAULT_ON
+    )
+
+
+@pytest.mark.asyncio
+async def test_default_off_is_never_blocked_by_the_dependency_gate() -> None:
+    """The gate guards the ON direction only. A template already default-on
+    whose dependency was revoked afterwards must still be turnable OFF —
+    otherwise the admin is trapped in exactly the broken state #2470 exists to
+    prevent."""
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+    tool_entry = _entry("mcp-knowledge-flow-mcp-tabular")
+    sql_expert = _entry(
+        SQL_EXPERT_TEMPLATE_ID,
+        kind="agent",
+        default_capability_ids=("mcp-knowledge-flow-mcp-tabular",),
+    )
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=tool_entry,
+        on=True,
+        updated_by="admin",
+    )
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=sql_expert,
+        on=True,
+        updated_by="admin",
+    )
+    # The dependency goes away underneath the template.
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=tool_entry,
+        on=False,
+        updated_by="admin",
+    )
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=sql_expert,
+        on=False,
+        updated_by="admin",
+    )
+    assert not await has_org_relation(
+        rebac, SQL_EXPERT_TEMPLATE_ID, RelationType.DEFAULT_ON
+    )
+
+
+@pytest.mark.asyncio
+async def test_default_on_gate_ignores_tool_capabilities() -> None:
+    """`kind="tool"` entries have no `default_capability_ids` by construction —
+    the gate must not add a round trip, nor a refusal, for them."""
+
+    rebac = _FakeRebac()
+    store = _FakeAgentInstanceStore([])
+
+    await set_capability_default_on(
+        rebac=rebac,
+        agent_instance_store=store,
+        catalog_entry=_entry("corp_drive"),
+        on=True,
+        updated_by="admin",
+    )
+    assert await has_org_relation(rebac, "corp_drive", RelationType.DEFAULT_ON)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "scope", [TeamScopePolicy.DEFAULT_ON, TeamScopePolicy.ADMIN_GATED]
 )
@@ -956,18 +1148,22 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
 
     catalog = await aggregate_capability_catalog(deps)
 
-    assert set(catalog) == {"doc_access"}
+    assert set(catalog) == {"doc_access"} | _installed_app_capability_ids()
 
 
 @pytest.mark.asyncio
@@ -1035,11 +1231,15 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
@@ -1047,7 +1247,15 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     catalog = await aggregate_capability_catalog(deps)
 
     sentinel_id = product_service.template_capability_id("runtime-a", "sentinel")
-    assert set(catalog) == {"doc_access", sentinel_id, "model__openai__gpt-5.1"}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            sentinel_id,
+            "model__openai__gpt-5.1",
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[sentinel_id].kind == "agent"
     assert catalog["doc_access"].kind == "tool"
     assert catalog["model__openai__gpt-5.1"].kind == "model"
@@ -1106,11 +1314,15 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
@@ -1119,7 +1331,14 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
 
     # The tool entry is refused; the real agent entry (fetched second) wins
     # the id, never overwritten — the collision this prefix exists to prevent.
-    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            colliding_tool_id,
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[colliding_tool_id].kind == "agent"
 
 
@@ -1173,18 +1392,29 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
 
     catalog = await aggregate_capability_catalog(deps)
 
-    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            colliding_tool_id,
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[colliding_tool_id].kind == "model"
 
 
@@ -1244,6 +1474,10 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
@@ -1251,7 +1485,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
                     SimpleNamespace(
                         enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
                     ),
-                ]
+                ],
             )
         )
     )
@@ -2764,3 +2998,54 @@ async def test_aggregate_list_surfaces_agent_default_capability_ids(
     ]
     # A tool has no defaults by construction — the UI must not gate on it.
     assert by_id["mcp-knowledge-flow-mcp-tabular"].default_capability_ids == []
+
+
+@pytest.mark.asyncio
+async def test_disable_without_agent_store_writes_no_tuples() -> None:
+    """The store a revoke suspends dependents with is resolved before the tuple
+    writes: refusing afterwards would leave access revoked and the dependents
+    that relied on it still running."""
+
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await disable_capability_for_team(
+            rebac=rebac,
+            settings_store=None,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            team_id="team-a",
+        )
+
+    assert rebac.write_log == []
+
+
+@pytest.mark.asyncio
+async def test_reset_without_agent_store_writes_no_tuples() -> None:
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await reset_capability_for_team(
+            rebac=rebac,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            team_id="team-a",
+            default_on=False,
+        )
+
+    assert rebac.write_log == []
+
+
+@pytest.mark.asyncio
+async def test_default_off_without_agent_store_writes_no_tuples() -> None:
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await enablement.set_capability_default_on(
+            rebac=rebac,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            on=False,
+        )
+
+    assert rebac.write_log == []

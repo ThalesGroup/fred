@@ -137,6 +137,17 @@ def test_can_use_team_agents_is_team_member_only() -> None:
     }
 
 
+def test_can_use_team_applications_is_team_member_only() -> None:
+    """Product applications are collaborative-team-only in V1. The
+    permission must not reuse ``can_read`` because public visibility is not
+    application membership."""
+    team = _type_definition("team")
+
+    assert team["relations"]["can_use_team_applications"] == {
+        "computedUserset": {"relation": "team_member"}
+    }
+
+
 def test_can_access_files_is_team_member_only() -> None:
     """Entering a team's filesystem box (`/teams/{id}/...`) must be gated on
     `team_member`, never on `can_read`: a PUBLIC team grants `public` so the

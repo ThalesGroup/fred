@@ -158,6 +158,11 @@ class TeamPermission(str, Enum):
     # AUTHZ-05 review item 1b: `team_member`-only, unlike CAN_READ (which
     # also admits `public`) — gates seeing/using the team's agents.
     CAN_USE_TEAM_AGENTS = "can_use_team_agents"
+    # Product applications are collaborative-team-only in V1. Keep this
+    # separate from CAN_READ (which admits public non-members) and from the
+    # agent-specific permission above.
+    CAN_USE_TEAM_APPLICATIONS = "can_use_team_applications"
+
     # Box-entry gate for the team's filesystem (`/teams/{id}/...`). Separate from
     # CAN_READ on purpose: a PUBLIC team carries `public`, so CAN_READ would let
     # any connected user list and read that team's files.

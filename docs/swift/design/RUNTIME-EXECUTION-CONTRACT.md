@@ -2252,7 +2252,8 @@ already-resumed, HITL prompt:
    `interrupt_id` raises — no scalar fallback exists.
 4. **Durable, atomic, fenced claim** (`FredSqlCheckpointer`'s
    `checkpoint_hitl_claim` table, key `(thread_id, checkpoint_ns,
-   interrupt_id)`), acquired as LATE as possible — inside
+   interrupt_id)`, with `checkpoint_ns` always `""` for ReAct V2 — see
+   §8.61), acquired as LATE as possible — inside
    `agent_app._iterate_runtime_event_payloads`, immediately before
    `executor.stream(...)`, never in the read-only gate. State machine
    `claimed -> started -> consumed`, every operation fenced by an opaque
@@ -4275,3 +4276,196 @@ time what it can draw and skips unknown kinds.
 **Migration.** None. The field defaults to an empty list, so rows written before
 this change read back as "no cards" - exactly what they render today. Their parts
 are not recoverable; they were never stored.
+
+---
+
+### 8.60 ✅ `document_similarity` capability + `DocumentSimilarityPort` - issue #2461 (2026-08-28)
+
+**Was**: Knowledge Flow shipped targeted similarity / comparison search in
+`POST /vector/similarity-search` (issue #1772, `DESIGN.md` §4), but a Fred agent
+could only reach it over the Text MCP server. There was no first-order path, so
+#1772's last acceptance criterion - a comparison agent calling it directly
+instead of fetching everything and filtering client-side - stayed open.
+
+**Now**: a real capability, `document_similarity`, registered through the
+`fred.capabilities` entry point alongside its `document_access` /
+`document_summarize` / `document_verbatim` / `document_extract` siblings and
+`ADMIN_GATED` like them. One tool, `find_similar_passages(anchor,
+document_uids, top_k)`, reaching Knowledge Flow through a new typed port,
+`RuntimeServices.document_similarity` (`DocumentSimilarityPort.find_similar`),
+behind `DocumentSimilarityAdapter`. `VectorSearchClient.similarity_search`
+carries the wire call.
+
+**Why a capability and not a built-in tool ref.** The first cut of this issue
+ported the `mvp/rags-support` shape verbatim: a `knowledge.similarity_search`
+entry in the `fred-sdk` built-in catalog, next to `knowledge.search`. That was
+withdrawn before merge. `capabilities/document_access/capability.py` already
+documents the built-in surface as back-compat whose retirement is a follow-up,
+so adding to it would have meant shipping a new tool onto a surface with a
+scheduled end, and a second, differently-scoped comparison path the moment
+anyone wired both. The capability path also buys what the built-in cannot
+express: per-instance config, admin gating, and team scoping.
+
+**Why its own port rather than a method on `DocumentSearchPort`.** Two reasons,
+one structural and one about safety. Structural: every document feature here
+already has its own optional port (`document_tree`, `document_summarize`,
+`document_markdown`, `document_extraction`), and adding an abstract method to a
+published SDK ABC breaks every out-of-tree implementor. Safety: the two ports
+enforce different things. Under `search(...)` the document uids come from the
+capability's stored config, so narrowing them against the session binding is a
+formality. Under `find_similar(...)` they come from the MODEL, on the call - so
+that seam is the only thing between an LLM-named uid and a document the user
+never put in this conversation. It returns `DocumentSearchResult` rather than a
+near-identical twin: both modes produce ranked `VectorSearchHit`s.
+
+**Three deliberate behaviours**, each pinned by a test:
+
+- **An empty target never widens, and never reads as "no matches".** Targeting
+  is the point of the mode. A missing, empty, or non-list `document_uids` is
+  answered as an `is_error` artifact and never reaches the port. If narrowing
+  against the session binding empties the set, the adapter raises the new
+  `DocumentScopeRefusedError` rather than calling Knowledge Flow with an empty
+  target list (which downstream reads as "no targeting") - and rather than
+  returning no hits, which the model cannot tell apart from a genuine no-match
+  and would report as "nothing in that document resembles this passage" about a
+  document it never searched. The capability renders that refusal as its own
+  `is_error` result naming the out-of-scope uids, not through
+  `document_tool_failure` - nothing failed downstream, so the transport wording
+  would be a lie.
+- **A weak match stays citable**: `select_citable_sources(hits,
+  min_score_ratio=0.0)`. That helper excludes two things
+  (RAG-DATASET-DISCOVERY-RFC.md §7) and only one applies here. Dataset-pointer
+  chunks are still never citable - metadata, not content. The score-ratio half
+  is switched off: it cuts corpus-wide noise relative to the best match, and the
+  caller named these documents, so a weak match is a real finding about them,
+  often the interesting one. Passing `min_score_ratio=0.0` rather than
+  `tuple(hits)` is what keeps the first exclusion - an easy distinction to lose.
+- **`general_only` is honoured**, as in `_invoke_knowledge_search`: corpus
+  retrieval turned off for the turn is off for every corpus tool, and naming
+  target uids does not opt back in.
+
+**Bounded transient retry**, in `VectorSearchClient.similarity_search` only:
+`KfBaseClient._request_with_token_refresh` retries a 401 and nothing else, and
+no caller above retries either, so one dropped connection failed a whole
+comparison run - which fans out one call per anchor passage. Two jittered
+retries, scoped to this method rather than the shared base client so
+`search`/`rerank` keep their behaviour. What is retried is drawn tightly around
+one question - could the work already be in flight, and would re-issuing help?
+
+- retried: connection errors, connect timeouts, **pool timeouts** (no
+  connection was ever acquired, so nothing was sent), and 502/503/504;
+- not retried: read and write timeouts - Knowledge Flow may still be reranking
+  the first request, so re-issuing multiplies load on an already-slow backend
+  rather than recovering, which the fan-out then multiplies again;
+- not retried: a plain 500, and no 4xx. Knowledge Flow's controller wraps every
+  unexpected exception in a 500, so retrying one buys three full
+  pool-and-rerank round trips before failing anyway.
+
+**Its own read timeout**, `RuntimeTimeouts.similarity_read` (default 90s,
+mirroring the `summarize_read` precedent and applied per-request the same way).
+Knowledge Flow retrieves a candidate pool of up to 100 chunks and cross-encodes
+all of them inside one request, making this the heaviest read on the vector
+path; the shared 30s default is what a plain `search` is sized for. It is also
+the one failure the retry above deliberately will not recover from, which makes
+a generous ceiling the only defence.
+
+**The tool points the model at the corpus, not at attachments.** Knowledge Flow
+runs this mode with `include_session_scope=False` ("comparison is over the
+corpus targets, not chat attachments"), so a file attached to the conversation
+is not searchable here and its uid would return zero hits. The tool docstring
+says so explicitly, because the sibling document tools DO accept attachment
+uids and a model that carried that habit over would read the empty result as
+"nothing matches".
+
+**Frontend.** It rides the **team-resources** pack (`toolPacks.ts`), corpus-only,
+not the document-reading one. Two reasons, and the first is what settles it: the
+tool takes document uids it cannot produce, and `document_access` - the pack's
+uid source, through `list_document_tree` and the `uid` on every search hit -
+lives here. A document-reading pack that carried it alone would hand an agent
+three uid-taking tools and no way to obtain one. Second, it belongs here anyway:
+Knowledge Flow runs this mode over the corpus with `include_session_scope=False`,
+so it is a search mode, not a reading tool, and it contributes nothing to an
+attachments-only agent - hence `add(CAP_DOCUMENT_SIMILARITY, nextCorpus)` in
+`withResourceState`, which is what actually selects the pack's capabilities
+(`enablesCapabilityIds` documents an intent pack, it does not drive it).
+
+Fixed alongside, and independent of this capability: `derivePackChecked`
+required EVERY id in a pack to be selected while `applyPackToggle` only ever
+adds ids the admin enabled, so a plain pack containing anything unavailable to
+the team could not be switched on at all - flip it, the missing member is never
+added, the derived state reads false again - while switching it off still
+stripped the rest. It now takes `availableIds` and derives from the members the
+team can actually select.
+
+### 8.61 ✅ ReAct V2 checkpoints are always unnamespaced - issue #2479 (2026-08-31)
+
+**Was**: every ReAct V2 HITL resume dead-ended in
+`409 "No pending checkpoint was found for this session."`. The paused
+checkpoint existed, with its `__interrupt__` write; the admission gate
+(§8.39 layer 2) was reading in the wrong place.
+
+**Why**: LangGraph resets `checkpoint_ns` to `""` for every non-nested run
+(`pregel/_loop.py::PregelLoop.__init__`). A per-agent namespace configured
+on a compiled root graph therefore never reaches storage. The executor
+passed one anyway, while the gate and the `checkpoint_hitl_claim` key both
+read at `agent_instance_id` - so the write and the read never met. The
+hand-rolled Graph runtime is unaffected: it calls `aput` itself, so its
+namespace is real.
+
+**Now**:
+
+- ReAct V2 stores and reads unnamespaced. The executor no longer configures
+  a `checkpoint_ns` (it was inert), and the HITL claim keys on `""`.
+- `_resume_checkpoint_namespaces` picks the candidate namespace from the
+  request's own resume identifier - `checkpoint_id` is Graph V2's,
+  `interrupt_id` is ReAct V2's. A `checkpoint_id` resume probes the agent
+  namespace only, since the Graph executor reads nowhere else and a gate
+  that waved it through would fail mid-stream, past the point a 409 can be
+  sent. An `interrupt_id` resume probes `""` first, keeping the agent
+  namespace for a Graph pause that never stamped a `checkpoint_id`. The gate
+  runs before target resolution, so it cannot know the runtime kind directly.
+- `test_langgraph_resets_root_checkpoint_namespace` pins the LangGraph
+  behaviour: a version bump that changed it fails a test instead of
+  silently moving live checkpoints out of the gate's reach.
+
+**Still open**: isolating agent checkpoints within a shared session, the
+goal of #2415. `checkpoint_ns` cannot deliver it for a root graph - the only
+LangGraph-native lever is `thread_id`, which touches
+`checkpoint_thread_owner`, per-user erasure, and session deletion. Tracked
+in issue #2481; ReAct agents currently share the session's checkpoint thread.
+
+---
+
+### 8.62 ✅ `AgentDefinition` declares its reasoning defaults; `default_tuning` carries them — issue #2473 (2026-08-28)
+
+**Additive SDK surface.** `AgentDefinition` gains two declarable fields,
+`reasoning_enabled` and `reasoning_default_on` (both default `False`), and
+`AgentTuning` gains `reasoning_default_on` beside the `reasoning_enabled` it
+already had. `_definition_to_agent_tuning` (`app/agent_app.py`) now projects
+both onto the `default_tuning` a pod advertises on `/pod/v1/agents/templates`;
+it previously projected only `role`/`description`/`tags`/`fields`, which pinned
+both fields `False` on the wire regardless of what a definition declared.
+
+**Why the pod side matters.** REASON-01 level 3 is an agent property, and
+Amendment B's `reasoning_default_on` seeds where the composer's toggle starts.
+Both were reachable only per instance, through the agent-creation form — so a
+template could not express "this agent's job needs reasoning". The wire already
+carried `default_tuning` as a full `AgentTuning`, so no new transport was
+needed; the projection was the whole gap.
+
+**No runtime behaviour change.** These fields are declaration only. Nothing in
+the execution path reads them: reasoning is still turned off at the single
+`RoutedChatModelFactory.build_for_chat` point (§8.48), against
+`RuntimeContext.reasoning` (level 4) and `reasoning_enabled_model_ids` (level
+2). A template declaring `reasoning_enabled=True` on a deployment where no model
+has its reasoning enabled produces no composer control and no reasoning turn.
+
+**Rolling upgrade.** Both models default the fields to `False`, so a pod
+predating #2473 advertises a `default_tuning` without the keys and a newer
+control-plane reads both as `False` — never inventing an offer no template
+declared. Consumer side and the seed-not-gate semantics:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33 addendum (2026-08-28).
+
+**Adopter.** `fred_agents.platform_ops` declares both `True` — a diagnostic
+agent whose turns are inherently multi-step.
+

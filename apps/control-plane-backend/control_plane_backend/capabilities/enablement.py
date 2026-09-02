@@ -102,6 +102,12 @@ class PersonalScopeNotAllowed(Exception):
     http_status = 409
 
 
+class ApplicationTeamScopeNotAllowed(Exception):
+    """V1 applications may be enabled only for collaborative teams."""
+
+    http_status = 409
+
+
 class AgentCapabilityDependencyNotSatisfied(Exception):
     """A `kind="agent"` capability's default tool capabilities are not all
     usable yet by the team/personal-scope being granted (RFC §8.6, 2026-07-19
@@ -168,6 +174,60 @@ async def _require_agent_capability_dependencies_usable_by_team(
         )
 
 
+async def agent_capability_missing_platform_dependencies(
+    rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry
+) -> list[str]:
+    """Ids in `catalog_entry.default_capability_ids` that are NOT themselves
+    platform-wide `default_on` — the third face of the `depends_on` gate
+    (RFC §8.6), for the platform-wide switch (2026-08-28, GitHub #2470).
+
+    Why this exists: `enable_capability_for_team` and
+    `set_capability_personal_scope` both refuse to grant a `kind="agent"`
+    capability whose default tool capabilities the grantee cannot use, but
+    `set_capability_default_on` had no such check — so flipping an agent
+    template default-on handed the template to EVERY team while its
+    dependencies stayed ungranted, enrolling a non-functional agent
+    platform-wide with no error at any point.
+
+    `default_on` is the only satisfying marker here, deliberately: default-on
+    is the one grant that reaches every team, present and future, so a
+    dependency merely enabled for the teams that happen to exist today would
+    leave tomorrow's team with the same broken template. This is stricter than
+    the personal-space counterpart below (which accepts `personal_on` OR
+    `default_on`) because that one is scoped to the personal class, not to
+    every team.
+
+    Public and non-raising, matching `agent_capability_missing_dependencies` —
+    a caller that needs to report rather than reject gets the same answer
+    without catching an exception.
+    """
+
+    if catalog_entry.kind != "agent" or not catalog_entry.default_capability_ids:
+        return []
+    missing: list[str] = []
+    for cap_id in catalog_entry.default_capability_ids:
+        if not await has_org_relation(rebac, cap_id, RelationType.DEFAULT_ON):
+            missing.append(cap_id)
+    return missing
+
+
+async def _require_agent_capability_dependencies_default_on(
+    rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry
+) -> None:
+    """Platform-wide counterpart of the two dependency gates: refuse to turn a
+    `kind="agent"` capability default-on unless each of its
+    `default_capability_ids` is itself default-on (#2470)."""
+
+    missing = await agent_capability_missing_platform_dependencies(rebac, catalog_entry)
+    if missing:
+        raise AgentCapabilityDependencyNotSatisfied(
+            f"Cannot turn agent capability {catalog_entry.id!r} default-on: its "
+            f"default tool capability id(s) {missing!r} are not default-on "
+            "themselves, so every team would inherit a template it cannot use. "
+            "Turn them default-on first."
+        )
+
+
 async def _require_agent_capability_dependencies_usable_by_all_personal_spaces(
     rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry
 ) -> None:
@@ -208,6 +268,23 @@ def cap_ref(capability_id: str) -> RebacReference:
 
 def _team_ref(team_id: TeamId) -> RebacReference:
     return RebacReference(type=Resource.TEAM, id=str(team_id))
+
+
+def _is_personal_application_team(team_id: TeamId) -> bool:
+    # The admin API accepts the same reserved alias as other team routes. It
+    # cannot canonicalize it without the target user's identity, but it can
+    # still fail closed before writing any application grant.
+    return str(team_id) == "personal" or is_personal_team_id(str(team_id))
+
+
+def _reject_personal_team_application_grant(
+    catalog_entry: CapabilityCatalogEntry, team_id: TeamId
+) -> None:
+    if catalog_entry.kind == "app" and _is_personal_application_team(team_id):
+        raise ApplicationTeamScopeNotAllowed(
+            f"Application {catalog_entry.id!r} cannot be enabled for personal "
+            "teams; V1 applications are collaborative-team-only."
+        )
 
 
 def _type_of(field: FieldSpec) -> str:
@@ -276,6 +353,23 @@ def validate_team_settings(
     return cleaned
 
 
+def _suspension_store(
+    catalog_entry: CapabilityCatalogEntry,
+    agent_instance_store: AgentInstanceStore | None,
+) -> AgentInstanceStore | None:
+    """The store a revoke suspends dependents with, or `None` when there are
+    none: applications reuse only the authorization tuple, so they alone may
+    omit it. Callers resolve this BEFORE their tuple writes — refusing after
+    them would leave access revoked and its dependents still running.
+    """
+
+    if catalog_entry.kind == "app":
+        return None
+    if agent_instance_store is None:
+        raise RuntimeError("agent_instance_store is required for non-app capabilities")
+    return agent_instance_store
+
+
 async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> None:
     """Idempotently anchor a capability to the singleton organization so its
     `can_manage` / `can_use` permissions resolve (RFC §8.1)."""
@@ -292,7 +386,7 @@ async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> No
 async def enable_capability_for_team(
     *,
     rebac: RebacEngine,
-    settings_store: TeamCapabilitySettingsStore,
+    settings_store: TeamCapabilitySettingsStore | None,
     catalog_entry: CapabilityCatalogEntry,
     team_id: TeamId,
     settings: Mapping[str, Any],
@@ -310,19 +404,25 @@ async def enable_capability_for_team(
     write below so the `can_use` lookup observes the new grant.
     """
 
+    _reject_personal_team_application_grant(catalog_entry, team_id)
     validated = validate_team_settings(
         list(catalog_entry.team_settings_fields), settings
     )
     await _require_agent_capability_dependencies_usable_by_team(
         rebac, catalog_entry, team_id
     )
-    # 1. Settings row first (configuration half).
-    await settings_store.upsert(
-        team_id=team_id,
-        capability_id=catalog_entry.id,
-        settings=validated,
-        updated_by=updated_by,
-    )
+    # 1. Settings row first (configuration half). V1 applications deliberately
+    # have no generic team-settings payload: this store is also consumed by
+    # agent-runtime paths that applications do not use.
+    if catalog_entry.kind != "app":
+        if settings_store is None:
+            raise RuntimeError("settings_store is required for non-app capabilities")
+        await settings_store.upsert(
+            team_id=team_id,
+            capability_id=catalog_entry.id,
+            settings=validated,
+            updated_by=updated_by,
+        )
     # 2. Authorization half: anchor, clear any opt-out, then grant.
     await ensure_capability_anchor(rebac, catalog_entry.id)
     try:
@@ -362,8 +462,8 @@ async def enable_capability_for_team(
 async def disable_capability_for_team(
     *,
     rebac: RebacEngine,
-    settings_store: TeamCapabilitySettingsStore,
-    agent_instance_store: AgentInstanceStore,
+    settings_store: TeamCapabilitySettingsStore | None,
+    agent_instance_store: AgentInstanceStore | None,
     catalog_entry: CapabilityCatalogEntry,
     team_id: TeamId,
     kpi_writer: BaseKPIWriter | None = None,
@@ -380,6 +480,7 @@ async def disable_capability_for_team(
     instances suspended.
     """
 
+    suspend_store = _suspension_store(catalog_entry, agent_instance_store)
     try:
         await rebac.delete_relation(
             Relation(
@@ -402,8 +503,10 @@ async def disable_capability_for_team(
         # cached reader reporting the pre-write (enabled) state for a TTL.
         invalidate_capability_relations_cache(catalog_entry.id)
     del settings_store  # settings row is intentionally retained (re-enable restores)
+    if suspend_store is None:
+        return 0
     return await suspend_dependent_instances(
-        agent_instance_store=agent_instance_store,
+        agent_instance_store=suspend_store,
         team_id=team_id,
         capability_id=catalog_entry.id,
         kpi_writer=kpi_writer,
@@ -413,7 +516,7 @@ async def disable_capability_for_team(
 async def reset_capability_for_team(
     *,
     rebac: RebacEngine,
-    agent_instance_store: AgentInstanceStore,
+    agent_instance_store: AgentInstanceStore | None,
     catalog_entry: CapabilityCatalogEntry,
     team_id: TeamId,
     default_on: bool,
@@ -430,6 +533,23 @@ async def reset_capability_for_team(
     number of instances suspended.
     """
 
+    if (
+        catalog_entry.kind == "app"
+        and default_on
+        and _is_personal_application_team(team_id)
+    ):
+        # Resetting a personal-team opt-out while default-on is active would
+        # recreate inherited access. Cleanup is still allowed when default-on
+        # is off, and explicit disable always remains available.
+        raise ApplicationTeamScopeNotAllowed(
+            f"Application {catalog_entry.id!r} cannot reset personal team "
+            f"{str(team_id)!r} to an enabled platform default."
+        )
+    # A default-ON reset keeps access by inheritance, so it suspends nothing
+    # and needs no store.
+    suspend_store = (
+        None if default_on else _suspension_store(catalog_entry, agent_instance_store)
+    )
     try:
         await rebac.delete_relation(
             Relation(
@@ -450,10 +570,10 @@ async def reset_capability_for_team(
         # #2181 PR): a half-failure between the two deletes must not leave a
         # cached reader reporting the pre-write state for a TTL.
         invalidate_capability_relations_cache(catalog_entry.id)
-    if default_on:
+    if suspend_store is None:
         return 0
     return await suspend_dependent_instances(
-        agent_instance_store=agent_instance_store,
+        agent_instance_store=suspend_store,
         team_id=team_id,
         capability_id=catalog_entry.id,
         kpi_writer=kpi_writer,
@@ -671,7 +791,7 @@ async def revive_dependent_instances(
 async def set_capability_default_on(
     *,
     rebac: RebacEngine,
-    agent_instance_store: AgentInstanceStore,
+    agent_instance_store: AgentInstanceStore | None,
     catalog_entry: CapabilityCatalogEntry,
     on: bool,
     kpi_writer: BaseKPIWriter | None = None,
@@ -683,7 +803,9 @@ async def set_capability_default_on(
     inherited access: every instance selecting the capability whose team lacks
     an explicit `enabled` grant is suspended (`CAPABILITY_ACCESS_REVOKED`).
     A capability with a REQUIRED team-settings field can never be default-on
-    (§8.2) — nobody has filled the settings.
+    (§8.2) — nobody has filled the settings. Nor can a `kind="agent"` template
+    whose `default_capability_ids` are not themselves default-on (§8.6, #2470)
+    — every team would inherit a template it cannot use.
     """
 
     if on:
@@ -692,6 +814,7 @@ async def set_capability_default_on(
                 f"Capability {catalog_entry.id!r} has required team settings and "
                 "cannot be default-on."
             )
+        await _require_agent_capability_dependencies_default_on(rebac, catalog_entry)
         await ensure_capability_anchor(rebac, catalog_entry.id)
         try:
             await rebac.add_relation(
@@ -706,6 +829,7 @@ async def set_capability_default_on(
             invalidate_capability_relations_cache(catalog_entry.id)
         return 0
 
+    suspend_store = _suspension_store(catalog_entry, agent_instance_store)
     try:
         await rebac.delete_relation(
             Relation(
@@ -716,16 +840,19 @@ async def set_capability_default_on(
         )
     finally:
         invalidate_capability_relations_cache(catalog_entry.id)
+    if suspend_store is None:
+        return 0
+
     # Teams with an explicit grant keep access; everyone else loses inherited
     # use — whether they used it as a tool or as a `kind="agent"` template
     # (2026-07-19, GitHub #2004 item 1).
     enabled_teams = await explicitly_enabled_team_ids(rebac, catalog_entry.id)
     suspended = 0
-    for instance in await agent_instance_store.list_all():
+    for instance in await suspend_store.list_all():
         if str(instance.team_id) in enabled_teams:
             continue
         if await _suspend_instance_for_revoked_capability(
-            agent_instance_store=agent_instance_store,
+            agent_instance_store=suspend_store,
             instance=instance,
             capability_id=catalog_entry.id,
             kpi_writer=kpi_writer,
@@ -767,6 +894,11 @@ async def set_capability_personal_scope(
     the number of instances suspended.
     """
 
+    if catalog_entry.kind == "app":
+        raise PersonalScopeNotAllowed(
+            f"Application {catalog_entry.id!r} has no personal-space scope; "
+            "V1 applications are collaborative-team-only."
+        )
     if scope == "enabled" and team_settings_has_required_fields(
         catalog_entry.team_settings_fields
     ):

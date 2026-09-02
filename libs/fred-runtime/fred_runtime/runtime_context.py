@@ -23,6 +23,7 @@ from typing import Any, Callable, Mapping, Protocol
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_sdk.contracts.models import MCPServerConfiguration
+from fred_sdk.contracts.runtime import PlatformSqlPort
 from langchain_core.language_models.chat_models import BaseChatModel
 
 
@@ -82,6 +83,10 @@ class RuntimeTimeouts:
     # routinely exceeds the default read timeout for large PDFs. Not part of
     # `as_httpx_timeout_config()` — applied per-request by KfDocumentClient.
     summarize_read: float = 300.0
+    # Per-request read override for targeted similarity search: KF cross-encodes
+    # a pool of up to 100 chunks in one request, and a read timeout is the one
+    # failure its retry will not recover from. Applied by VectorSearchClient.
+    similarity_read: float = 90.0
 
     def as_httpx_timeout_config(self) -> dict[str, float | None]:
         """
@@ -150,6 +155,11 @@ class RuntimeConfig:
     # endpoint can re-read the file without needing the full AgentPodConfig
     # object, which isn't otherwise reachable from RuntimeContext.
     models_catalog_path: str | None = None
+    # Read-only SQL over the platform database (OPSCAP-01-PG): pod-lifetime
+    # adapter behind `RuntimeServices.platform_sql`, built by
+    # `PodApplicationContext.initialize_platform_sql()`. None on the SQLite
+    # dev escape hatch (Postgres-only enforcement).
+    platform_sql: PlatformSqlPort | None = None
 
 
 class RuntimeContext:

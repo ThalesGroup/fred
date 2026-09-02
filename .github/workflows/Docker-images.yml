@@ -1,0 +1,137 @@
+name: Docker images
+
+# Reusable: one definition of how every image in .github/docker-images.json is
+# built. Callers pass publish=false for a pre-merge check, publish=true to
+# release. Nothing else may hold a second copy of the image list.
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: "Push to the registry. Build-only (no login, no credentials) when false."
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_NAMESPACE: thalesgroup/fred-agent
+
+jobs:
+  resolve:
+    name: Resolve image matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.include }}
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+
+      # A Dockerfile nobody listed is a Dockerfile nobody builds — that is how a
+      # missing COPY line reached a release tag. Adding one must be a conscious
+      # "build it" or "here is why not", never a silent omission.
+      - name: Every Dockerfile is accounted for
+        run: |
+          set -euo pipefail
+          manifest=.github/docker-images.json
+          failed=0
+
+          mapfile -t discovered < <(find . \
+            -type d \( -name .git -o -name node_modules -o -name .venv \) -prune -o \
+            -type f \( -name 'Dockerfile*' -o -name '*.Dockerfile' \) -print |
+            sed 's|^\./||' | sort)
+
+          # A discovery step that finds nothing would pass this guard vacuously,
+          # which is the very failure mode it exists to prevent.
+          if [ "${#discovered[@]}" -eq 0 ]; then
+            echo "::error file=$manifest::Found no Dockerfile at all. Discovery is broken, not the repository."
+            exit 1
+          fi
+          echo "Discovered ${#discovered[@]} Dockerfiles."
+
+          for dockerfile in "${discovered[@]}"; do
+            if ! jq -e --arg d "$dockerfile" '[.images[], .excluded[]] | any(.dockerfile == $d)' "$manifest" > /dev/null; then
+              echo "::error file=$dockerfile::Not listed in $manifest. Add it to .images so every pull request builds it, or to .excluded with a reason."
+              failed=1
+            fi
+          done
+
+          for dockerfile in $(jq -r '[.images[], .excluded[]] | .[].dockerfile' "$manifest"); do
+            if [ ! -f "$dockerfile" ]; then
+              echo "::error file=$manifest::Lists $dockerfile, which no longer exists. Remove or rename the entry."
+              failed=1
+            fi
+          done
+
+          exit $failed
+
+      - name: Build the matrix
+        id: matrix
+        run: |
+          set -euo pipefail
+          include=$(jq -c --argjson publish ${{ inputs.publish }} \
+            '[.images[] | select(($publish | not) or .publish)]' \
+            .github/docker-images.json)
+          echo "include=$include" >> "$GITHUB_OUTPUT"
+          echo "$include" | jq -r '.[] | "\(.name)\t\(.dockerfile)"'
+
+  build:
+    name: ${{ inputs.publish && 'Push' || 'Build' }} ${{ matrix.name }}
+    needs: resolve
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+
+      # Only the pre-merge path needs it: the gha cache exporter requires the
+      # docker-container driver, and the publish path keeps the plain default
+      # builder it has always released from.
+      - name: Set up Docker Buildx
+        if: ${{ !inputs.publish }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Github Container Registry
+        if: inputs.publish
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Release tags keep the semver contract. Swift branch pushes publish
+      # dev images under dedicated tags so they never collide with main-line
+      # release automation.
+      - name: Extract metadata
+        id: meta
+        if: inputs.publish
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ matrix.name }}
+          tags: |
+            type=match,enable=${{ startsWith(github.ref, 'refs/tags/code/v') }},pattern=code/(v.*),group=1
+            type=raw,enable=${{ github.ref == 'refs/heads/swift' }},value=swift-dev
+            type=sha,enable=${{ github.ref == 'refs/heads/swift' }},prefix=swift-dev-,format=short
+
+      # Pre-merge builds read and write the Actions cache to stay affordable.
+      # The publish path stays uncached so a released image never reuses layers
+      # built from an unmerged branch.
+      - name: Build${{ inputs.publish && ' and push' || '' }} Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
+          push: ${{ inputs.publish }}
+          tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
+          labels: ${{ steps.meta.outputs.labels }} # many various informations
+          # The empty string is falsy in expressions, so it has to sit on the
+          # falsy side: `publish && '' || format(...)` returns the format branch
+          # for both values of publish and asks a driver-less builder to export.
+          cache-from: ${{ !inputs.publish && format('type=gha,scope={0}', matrix.name) || '' }}
+          cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}

@@ -129,6 +129,11 @@ type team
     # -> must be member; deliberately excludes `public` (unlike can_read)
     define can_use_team_agents: team_member
 
+    # Can discover/use team-scoped product applications.
+    # -> must be member; deliberately excludes `public` and is independent
+    # from agent access.
+    define can_use_team_applications: team_member
+
     # Can enter the team's filesystem box (/teams/{id}/... in the virtual FS)
     # -> must be member; reusing `can_read` would turn "listed in the
     # marketplace" into "may read this team's files" for every PUBLIC team

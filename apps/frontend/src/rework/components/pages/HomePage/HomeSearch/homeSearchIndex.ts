@@ -33,6 +33,8 @@ export interface AgentEntry {
 export interface TeamEntry {
   id: string;
   name: string;
+  /** Custom team avatar; when absent the row falls back to coloured initials. */
+  avatarImageUrl?: string | null;
 }
 export interface TeamPromptGroup {
   teamId: string;
@@ -53,6 +55,7 @@ export interface TeamHit {
   kind: "team";
   id: string;
   name: string;
+  avatarImageUrl?: string | null;
 }
 export interface PromptHit {
   kind: "prompt";
@@ -150,7 +153,7 @@ export function filterHomeSearch(
   const teams: TeamHit[] = [];
   for (const team of sources.teams) {
     if (matches(query, team.name)) {
-      teams.push({ kind: "team", id: team.id, name: team.name });
+      teams.push({ kind: "team", id: team.id, name: team.name, avatarImageUrl: team.avatarImageUrl });
       if (teams.length >= cap) break;
     }
   }

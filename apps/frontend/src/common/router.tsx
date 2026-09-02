@@ -38,12 +38,15 @@ import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPag
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import TeamApplicationHostPage from "@components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx";
+import TeamApplicationsPage from "@components/pages/TeamApplicationsPage/TeamApplicationsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
+import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { Protected } from "@core/guards/Protected";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
@@ -124,6 +127,24 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/resources",
         element: <TeamResourcesPage />,
+      },
+      {
+        path: "team/:teamId/apps",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationsPage />
+          </FrontendFeatureGate>
+        ),
+      },
+      {
+        // Every deeper segment belongs to the selected build-time application.
+        // The host resolves the team catalog before touching its local loader.
+        path: "team/:teamId/apps/:appId/*",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationHostPage />
+          </FrontendFeatureGate>
+        ),
       },
       {
         path: "team/:teamId/usage",

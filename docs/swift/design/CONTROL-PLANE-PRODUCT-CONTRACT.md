@@ -278,6 +278,10 @@ Two distinct concepts:
 - `display_name`, `description`, `category`
 - `tags`, `capabilities`, `team_instantiable`, `status`
 - `default_tuning_fields: list[ManagedAgentFieldSpec]` — field descriptors the frontend renders dynamically at enrollment
+- `default_capability_ids: list[str]` — **added 2026-08-28 (#2458).** The
+  capability ids the template activates by default, verbatim from the pod's
+  `definition.default_mcp_servers`. Deliberately NOT filtered by the team's
+  `can_use`, unlike `available_capabilities` beside it — see §45.
 - `mcp_servers: list[ManagedMcpServerRef]` — MCP tool references advertised by the template; `display_name` enriched from the pod's MCP catalog; `config_fields` for per-instance tool configuration declared by the tool catalog
 
 The control plane is a **pure proxy** for these values — it does not interpret them. The runtime pod is the author; the control plane aggregates and forwards.
@@ -1467,6 +1471,62 @@ client predicate still reads the (empty) grant lists and can render an agent
 row as blocked. The team matrix is already decorative in that mode, so the
 mismatch is cosmetic and not worth a second code path.
 
+**2026-08-28 — the `depends_on` gate reaches the platform-wide switch, and the
+UI offers to satisfy it (GitHub #2470).** Three write paths grant a
+`kind="agent"` capability; only two of them enforced the 2026-07-19 gate.
+`PUT /admin/capabilities/{capability_id}/default-on` had **no dependency check
+at all** — so turning an agent template default-on handed it to *every* team
+while its `default_capability_ids` stayed ungranted, enrolling a
+non-functional agent platform-wide with no error at any point. Surfaced by the
+`platform_ops` template (#2458), the first shipped template that declares a
+dependency.
+
+**Behaviour change on an existing route.** `PUT .../default-on` with
+`default_on: true` now 409s (`AgentCapabilityDependencyNotSatisfied`, the same
+exception the other two paths raise) when the entry is `kind="agent"` and any
+id in its `default_capability_ids` is not **itself `default_on`**. Turning
+default-on **off** is never gated — a template already on whose dependency was
+revoked afterwards must stay switchable off, or the admin is trapped in the
+very state this prevents. No new field, exception type, or error shape; the
+route's error contract is unchanged (plain-string `detail`, no `error_code`).
+
+`default_on` is the only satisfying marker here, deliberately stricter than
+the personal-scope rule (`(personal_on OR default_on) AND NOT
+personal_disabled`): default-on reaches every team *present and future*, so a
+dependency merely granted to the teams that exist today would still leave
+tomorrow's team inheriting a template it cannot use.
+
+Client-side consequences (`CapabilitiesPage.tsx`,
+`CapabilityTeamMatrixDrawer.tsx`, `missingAgentDependenciesForPlatform` in
+`capabilityEnablement.ts`): the 2026-08-25 entry's disabled "Enable" segment
+is **replaced by an "Enable all" confirmation** on all three paths. The
+segment stays clickable (a disabled segment is also keyboard-dead, which left
+the admin with no in-place way forward); clicking it names the missing
+dependencies and offers to grant them **at the same scope** as the template —
+per team, personal-class, or default-on — before granting the template itself.
+There is deliberately no "enable the template anyway": all three paths now
+refuse it consistently. `selectChoice`/`submitEnable`/`onToggleDefault` remain
+what keep an ungated grant off the wire, so the client gate is still a
+better-error affordance and never an enforcement point.
+
+**Not transactional, and ordered on purpose.** "Enable all" issues one write
+per dependency and then the template, sequentially. A dependency that fails
+aborts the sequence *before* the template, so a partial failure always leaves
+"dependency granted, template not" — never the inverse, which is the broken
+state being fixed. The failing dependency is named in the error toast.
+
+**Two consequences of that ordering, both deliberate.** (1) The client-side
+#2408 pre-check in `submitEnable` is **skipped** for the final template write
+of an "Enable all" run: `allCapabilities` comes from the RTK Query cache,
+which has not refetched at that instant, so the pre-check would still see the
+just-granted dependencies as missing and refuse the write the admin confirmed.
+The backend re-checks either way, so nothing is weakened — the client gate
+remains a better-error affordance, never an enforcement point. (2) When the
+template itself declares `team_settings_fields`, the team-row flow grants the
+dependencies and then **opens the settings form** rather than enabling
+outright; the dialog says so up front, since the run stops there until the
+form is saved.
+
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 
 **New endpoint:** `GET /teams/{team_id}/candidate-members?query=<string>` →
@@ -2262,6 +2322,47 @@ change only: `AgentTuning.reasoning_enabled`/`reasoning_default_on` remain
 plain agent properties (no `ConfigModel`, no `TurnOptionsModel`, no
 middleware), enforced at the single `build_for_chat` point as before.
 
+### Addendum — a template declares its reasoning defaults (2026-08-28, #2473)
+
+Both reasoning fields were settable **per agent instance only**: whoever filled
+in the creation form decided them, and a template had no way to say "this
+agent's job needs reasoning". Amendment B's own title says "let an agent
+**author** preselect reasoning ON", but the author had no surface to do it from
+— the SDK's `AgentTuning` did not even declare `reasoning_default_on`. #2473
+closes that gap.
+
+| Field | On | Meaning |
+| ----- | -- | ------- |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentDefinition` (fred-sdk) | What a template DECLARES; both default `False` |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentTuning` / pod `default_tuning` | How the declaration reaches control-plane — `_definition_to_agent_tuning` now projects both |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentTemplateSummary` | What the agent-creation form reads to pre-tick its Reasoning card |
+
+**A seed, not a gate — the same contract Amendment B set.** The form pre-ticks
+from the template exactly as `default_capability_ids` pre-ticks capabilities
+(#1974); the operator may untick either before saving, and enrollment keeps
+overwriting both from the request, so the form stays authoritative once shown.
+
+**The pre-tick is unconditional, and that is deliberate.** It does not consult
+`reasoning_enabled_model_ids`. This copies existing behaviour rather than adding
+any: the form's Reasoning card is already rendered unconditionally and the form
+has never read the platform gate. Levels 1-2 stay enforced live on the send path
+(`_platform_reasoning_control`, `build_for_chat`), so a declared `True` on a
+deployment where no model has its reasoning enabled is simply inert — no
+descriptor emitted — precisely as a hand-ticked `True` is today, and the control
+reappears if an admin later enables a model. Suppressing the pre-tick instead
+would make it vanish according to platform state invisible from that form, which
+is the confusion §8's absent-not-inert rule exists to prevent.
+
+**No migration.** `ManagedAgentTuning` already carried both fields with `False`
+defaults, so stored rows and pods predating #2473 deserialize unchanged and
+report both `False`. Only NEW instances of a declaring template are affected;
+existing instances do not gain their template's reasoning defaults retroactively
+(the same boundary `materialize_default_capability_selections` draws for
+capabilities).
+
+First adopter: `platform_ops` (#2458) declares both `True` — a diagnostic agent
+whose turns are inherently multi-step.
+
 ---
 
 ## 34. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
@@ -2941,3 +3042,220 @@ default and reported `"public"`) — truthful for a space that was never
 marketplace-listed and never readable by non-members. Joining-mode UI
 consequence (already shipped in #2398): a new team's settings show the
 locked "manual only" joining state until it is made public.
+
+---
+
+## 45. Contract Notes — `AgentTemplateSummary.default_capability_ids` (2026-08-28, issue #2458)
+
+**What changed.** `GET /teams/{team_id}/agent-templates` now returns
+`default_capability_ids: list[str]` on every `AgentTemplateSummary`. Additive
+and optional — an older client ignoring it is unaffected.
+
+**Why.** The agent-creation form always submits an EXPLICIT `capability_ids`
+whenever the template advertises any capability, and an explicit `[]` means
+"select nothing" in `_apply_capability_selection` (§ capability selection;
+RFC AGENT-CAPABILITY §8.1). The template-default path there only runs for a
+`None` selection, so it was unreachable from the UI: a template's declared
+defaults were silently dropped on every new instance, and the user had to
+tick them by hand. Found on `platform_ops`, whose sole default is
+`platform_postgres` (#2458); it affected every template with defaults,
+including `general_assistant`'s `document_access`.
+
+**The filtering asymmetry — deliberate.** `available_capabilities` on the same
+payload IS narrowed to what the team `can_use` (CAPAB-01 / #1980);
+`default_capability_ids` is NOT. The field describes what the *template*
+declares, which is a static, non-secret property of a template the team was
+already granted in order to see the summary at all. The client intersects the
+two, so an admin-gated default a team is not enabled for is neither pre-ticked
+nor rendered — the intersection, not the raw list, is the authorization
+boundary. Filtering both would make the field misreport the template; filtering
+neither would pre-tick a box whose save 403s.
+
+**Applies to new instances only.** An instance enrolled before this field
+existed persisted a genuine `selected_capability_ids: []`, which is
+indistinguishable from a deliberate "no capabilities" — so
+`materialize_default_capability_selections` skips it by design (it backfills
+`None` rows only). Existing agents do not gain their template's defaults
+retroactively and must be re-ticked by hand.
+
+## 46. Contract Notes — team applications are runtime-registered, frame-hosted UIs (2026-08-31)
+
+Fred has one generic V1 host for trusted applications a deployment registers.
+Registration is deployment configuration, expressed like
+`platform.runtime_catalog_sources`: a flat `platform.application_sources` list
+whose entries carry `app_id`, browser-facing `ui_prefix`, `version`, `icon`,
+localized `display_name` and `description`, and `enabled`. It registers no
+proxy upstream: routing belongs to the frontend gateway, so `app_id` is the
+only key the two registrations share. Duplicate `app_id` values are rejected
+at config load, as is an own-origin `ui_prefix` that is not exactly
+`/apps/<app_id>` — the gateway routes on that segment, so any other own-origin
+path is a silent 404 the browser cannot distinguish from a cold service.
+`enabled: false` parks an entry without deleting it, but withdraws it only
+from the catalog; its gateway routes keep serving until that half is removed
+too. Its existing team grants keep living as well: revoking one stays
+available for a parked entry, while granting a new one does not. An entry
+withdrawn from the catalog must still be unwindable, or the grants an operator
+parked it to retire are stranded. Removing an entry makes the application
+unavailable on the next config load, not on the next rebuild.
+
+The typed deployment-wide `enableApplications` feature gate defaults to
+`false`. It is an availability boundary, not an authorization relation. While
+off, the team application endpoint returns a generic not-found response,
+application entries are absent from the administration catalog, application
+mutations cannot write relations, the frontend does not mount application
+pages or navigation, and both `/apps` and `/app-services` paths return 404.
+Registered entries and existing grants remain configured but dormant.
+Effective access is therefore:
+
+```text
+enableApplications
+AND user can_use_team_applications on team:<team_id>
+AND team:<team_id> can_use capability:app__<app_id>
+AND the frame answers the protocol handshake with an accepted version
+```
+
+Applications reuse capability enablement for coarse admission. A registered
+`app_id` derives capability id `app__<app_id>`; `app__` is reserved for catalog
+`kind="app"`. The discriminator exists only on the JSON-safe
+`CapabilityCatalogEntry` and admin wire model: runtime `CapabilityManifest`
+continues to accept `tool | agent | model` only. Every registered application
+is `admin_gated`; registration alone grants no team access. The admin catalog
+entry carries single-string labels, so the mandatory `"en"` display strings are
+the ones projected there.
+
+Existing platform-admin capability routes remain the only enablement writers.
+Application rows support default-on and collaborative-team controls, but have
+no personal-space control or generic team-settings JSON. App changes do not
+enter agent dependency, impact, health, suspension, revival, reasoning, or
+model-binding paths. Attempts to grant an app to a personal team are rejected;
+revocation remains available to clean up a stale personal tuple.
+
+The team discovery contract is:
+
+```text
+GET /control-plane/v1/teams/{team_id}/applications
+  -> ApplicationList { schema_version: "1", items: ApplicationSummary[] }
+```
+
+`ApplicationSummary` carries `id`, `version`, `name` and `description` as
+locale maps, validated `icon`, and `ui_prefix` — and nothing that would tie an
+application to a Fred build. There is no catalog revision, no host API version
+and no contract digest, because no application code is compiled into Fred for
+them to describe. `name`/`description` are locale maps rather than translation
+keys for the same reason: an independently deployed application has no entry in
+Fred's translation bundle. `"en"` is always present and is the fallback.
+`service_upstream` is deliberately absent from the wire: the browser reaches an
+application API only through the proxy. The service canonicalizes the team id
+and checks the user's `can_use_team_applications` permission before team or
+application metadata. A collaborative team then sees only registered items for
+which that team has `capability#can_use`. Personal teams return an empty list.
+With ReBAC disabled, all registered items are returned for collaborative teams.
+
+The frontend keeps two generic routes, `/team/:teamId/apps` and
+`/team/:teamId/apps/:appId/*`. It resolves the authorized response before
+anything else, so an unknown or unentitled id learns only `unavailable` and no
+frame is created. A resolved application is rendered in an iframe whose `src`
+comes from `ui_prefix` — validated to be `http(s)` before it can become a
+`src`, with the frame's target origin derived from the same value. Host states
+are `catalog-loading`, `unavailable`, `connecting`, `protocol-mismatch`,
+`unreachable`, and `render`, and render failures are contained per app.
+
+Parent and frame communicate only over `postMessage`, from the first message:
+
+```text
+frame -> host : fred:ready { protocolVersion }
+host  -> frame: fred:context { protocolVersion, applicationId, context }
+                fred:route { subPath }
+                fred:response | fred:response-error { requestId, ... }
+frame -> host : fred:navigate { path, replace }
+                fred:open-chat { sessionId? }
+                fred:request { requestId, path, method, headers, body }
+```
+
+The host accepts a *set* of protocol versions (currently `"1"`) because fork
+teams release their UI images on their own cadence; a version outside that set
+renders `protocol-mismatch` rather than a broken screen. Frame messages are
+admitted only from a closed parser — unknown types, oversized header maps,
+non-allowlisted methods, and malformed request ids are dropped before reaching
+Fred state, the router, or diagnostics. A request id already in flight is
+refused with `fred:response-error` rather than dropped: the id is the channel's
+only correlation token, so admitting it twice would leave one frame request
+answered twice and one call outside the concurrency bound. The context handed
+over is plain cloneable data: team identity, base and sub path, locale.
+
+`fred:navigate` moves the user only inside the application's own subtree: its
+path is resolved against `basePath` and an absolute, traversing, or schemed
+path throws, which the host swallows rather than reporting, so a frame cannot
+probe the boundary.
+
+`fred:open-chat` is the single exception, and it is deliberately narrow. It
+names **no route** — the parser discards any path or team a frame attaches —
+and the host builds the target from the team it is already rendering. Where an
+application can send the user is therefore bounded by the host rather than
+chosen by the frame. That bound is a runtime one, not a fixed set settled in
+review, and the next paragraph is what establishes it.
+
+Its one field, `sessionId`, is a **candidate rather than a destination**. The
+host matches it against `GET /teams/{team_id}/sessions`, which is scoped to the
+caller (`user_id=user.uid`), and takes the agent instance from the matched
+record — never from the frame. So the most a compromised application can do is
+reopen a conversation its own viewer already owns and can reach from the
+sidebar. Anything else — an unknown id, a teammate's, one aged past the
+listing's newest-50 window, or a listing that fails — falls back to a new
+conversation with the team's only enabled agent, or to the agents surface when
+that choice is ambiguous.
+
+Nothing about the conversation travels on this message. An application that
+wants a conversation to be about one of its records records that intent through
+its own service, and its capability resolves it on the agent side from the
+runtime identity — so the record never passes through a channel the model or
+the frame could redirect.
+
+The authenticated request adapter stays on the host side of that channel. It
+derives `/app-services/<app_id>/teams/<team_id>/...`, owns token refresh and
+one 401 retry, and rejects absolute, traversing, or protected-header inputs;
+the frame supplies only a relative path and an ordinary payload over
+`fred:request`. A 401 from an application service is that service's own
+entitlement decision and never ends the Fred session; only a token refresh that
+fails does, so one misconfigured application cannot log the user out.
+**No app receives Fred's store, Keycloak object, or raw token** — that remains
+true, and is now the property that makes moving the frame to a separate origin
+a configuration change rather than a redesign.
+
+Two browser-facing prefixes exist, and only these:
+
+```text
+/apps/<app_id>/          -> the application's own UI service
+/app-services/<app_id>/  -> the application's own API
+```
+
+Both are served by the frontend gateway from `FRONTEND_APPLICATIONS_JSON`,
+which pairs each `app_id` with a server-side `ui_upstream` and optional
+`service_upstream`. The gateway forwards the entire `/apps/<app_id>` prefix so
+the bundle's own absolute asset URLs resolve, and strips `/app-services/<app_id>`
+because the application constructs those paths itself. The three-state service
+discipline is unchanged and now also covers the UI prefix: an unregistered
+`app_id` is 404 in both namespaces, a registered application with no
+`service_upstream` is 503 under `/app-services/`, and `service_required: true`
+with no `service_upstream` fails container startup rather than serving a
+permanent 503. The gateway applies a deployment-owned client body budget to
+both namespaces (10 MiB by default) and disables intermediary request buffering
+on the service leg. Application services remain responsible for equal or
+smaller per-request limits, aggregate concurrency bounds, and authorization
+before consuming a request body.
+
+The gateway authorizes nothing; the control plane does. A gateway registration
+with no matching `application_sources` entry therefore proxies both prefixes
+for an application no team was granted, so the gateway list must stay a subset
+of the catalog.
+
+`ui_prefix` is a path today and the frame is therefore same-origin with Fred.
+A same-origin iframe is a rendering and lifecycle boundary, not a security
+boundary: applications are trusted code a fork builds and deploys, on the same
+footing as its agent pods, and the frame is not a sandbox for untrusted code.
+The `postMessage` handshake is what keeps the eventual separate-origin move a
+configuration edit — `ui_prefix` becomes an absolute `https` URL and nothing
+else changes. Anything that would only work same-origin is a defect against
+this contract. Durable installed/tombstoned registration, admin-visible
+stale-grant cleanup after removal, and `pending_reactivation` on id
+reappearance remain deferred lifecycle requirements.

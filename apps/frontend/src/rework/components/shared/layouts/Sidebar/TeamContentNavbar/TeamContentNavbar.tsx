@@ -24,12 +24,16 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
+import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
+import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
+import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -80,6 +84,16 @@ export default function TeamContentNavbar() {
   // construction: a personal space is never `canOpenTeamSettings`.
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
+  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
+  const { data: teamApplications, isError: applicationsError } = useTeamApplications(
+    teamId,
+    isPersonalTeam || inSettings || inUsage,
+  );
+  // Every entry the Control Plane returns is already registered and authorized
+  // for this team; Fred no longer compiles application code, so there is no
+  // second, build-time compatibility question to ask here.
+  const showApplications =
+    applicationsEnabled && !isPersonalTeam && !applicationsError && (teamApplications?.items?.length ?? 0) > 0;
 
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
@@ -111,10 +125,13 @@ export default function TeamContentNavbar() {
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 
   // Team avatar (28×28, 4px): the custom image when set, else colour-tinted
-  // initials (same fallback as the Home team list). Square 4px on both, incl.
-  // the personal space.
+  // square initials (same fallback as the Home team list). The personal space
+  // reuses that list's round user avatar (UserAvatar) — the "this is you"
+  // signal — sized down to fit this compact header.
   const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
-  const teamAvatar = selectedTeam?.avatar_image_url ? (
+  const teamAvatar = isPersonalTeam ? (
+    <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
+  ) : selectedTeam?.avatar_image_url ? (
     <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
   ) : (
     <TeamInitials
@@ -146,6 +163,14 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
+  if (showApplications) {
+    navigationItems.push({
+      type: "link",
+      label: t("rework.sidebar.team.menu.apps"),
+      icon: { category: "outlined", type: "widgets", filled: true },
+      linkProps: { to: `/team/${teamId}/apps` },
+    });
+  }
 
   // Launching and cancelling evaluation campaigns requires agent-update rights
   // (AGENT-EVALUATION-RFC §8.4), not member administration — so the Evaluations

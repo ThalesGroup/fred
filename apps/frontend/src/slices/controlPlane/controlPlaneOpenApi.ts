@@ -225,6 +225,12 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: build.query<
+      GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiResponse,
+      GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/applications` }),
+    }),
     getFrontendBootstrapControlPlaneV1FrontendBootstrapGet: build.query<
       GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse,
       GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg
@@ -1343,6 +1349,11 @@ export type RevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelat
   userId: string;
   relation: UserTeamRelation;
 };
+export type GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiResponse =
+  /** status 200 Successful Response */ ApplicationList;
+export type GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiArg = {
+  teamId: string;
+};
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse =
   /** status 200 Successful Response */ FrontendBootstrap;
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
@@ -2146,6 +2157,7 @@ export type TeamPermission =
   | "can_administer_admins"
   | "can_read_conversations"
   | "can_use_team_agents"
+  | "can_use_team_applications"
   | "can_access_files"
   | "can_run_evaluations"
   | "can_manage_evaluation_corpus"
@@ -2237,9 +2249,30 @@ export type RemoveTeamMemberResponse = {
 export type GrantTeamMemberRoleRequest = {
   relation: UserTeamRelation;
 };
+export type ApplicationSummary = {
+  id: string;
+  version: string;
+  /** Locale to display name */
+  name: {
+    [key: string]: string;
+  };
+  /** Locale to description */
+  description: {
+    [key: string]: string;
+  };
+  icon: string;
+  /** Browser-facing prefix the application frame loads. A path when the application UI is served from Fred's origin, an absolute http(s) URL when it is not. */
+  ui_prefix: string;
+};
+export type ApplicationList = {
+  schema_version: "1";
+  items: ApplicationSummary[];
+};
 export type FrontendFeatureFlags = {
   enableK8Features?: boolean;
   enableElecWarfare?: boolean;
+  /** Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application capability administration, and the frontend Apps experience stay disabled. */
+  enableApplications?: boolean;
   /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */
   enableAllResourceSpaces?: boolean;
 };
@@ -2429,7 +2462,7 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
-  kind?: "tool" | "agent" | "model";
+  kind?: "tool" | "agent" | "model" | "app";
   execution_models?: ("react" | "graph")[];
   route_base_url?: string | null;
   default_capability_ids?: string[];
@@ -2456,6 +2489,14 @@ export type AgentTemplateSummary = {
   default_tuning_fields?: ManagedAgentFieldSpec[];
   /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
+  /** Capability ids this template activates by default (RFC AGENT-CAPABILITY §2), verbatim from the pod's `definition.default_mcp_servers` — MCP-derived and native ids alike. Unlike `available_capabilities` this list is NOT filtered by the team's `can_use`: intersect the two client-side to get the defaults a team may actually activate. The agent-creation form uses it to pre-tick a new instance's capabilities so a template's declared defaults are not silently dropped by an explicit empty selection.
+    
+    Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
+  default_capability_ids?: string[];
+  /** Does this template offer per-question reasoning (REASON-01 level 3)? Verbatim from the pod's `default_tuning`. The agent-creation form pre-ticks its Reasoning card from it, as `default_capability_ids` pre-ticks capabilities — a seed the operator can untick, never a lock. False for pods predating #2473. */
+  reasoning_enabled?: boolean;
+  /** Does this template start new conversations with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Verbatim from the pod's `default_tuning`; only meaningful alongside `reasoning_enabled`. False for pods predating #2473. */
+  reasoning_default_on?: boolean;
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {
@@ -2957,8 +2998,8 @@ export type CapabilityEnablementItem = {
   personal_scope?: "enabled" | "disabled" | "default";
   /** The enable-with-settings form (rendered like config fields). */
   team_settings_fields?: FieldSpec[];
-  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). */
-  kind?: "tool" | "agent" | "model";
+  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app": a control-plane projection of one installed Fred application. */
+  kind?: "tool" | "agent" | "model" | "app";
   /** For a `kind="agent"` row: the template's default tool/MCP capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). Enabling the agent for a team 409s unless each of these is already usable by that team - exposed so the admin UI can disable the grant up front and explain why (GitHub #2408). Always empty for `kind="tool"`/`"model"`. */
   default_capability_ids?: string[];
   /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
@@ -3490,6 +3531,8 @@ export const {
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation,
   useGrantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPostMutation,
   useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation,
+  useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery,
+  useLazyGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery,
   useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,

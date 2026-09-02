@@ -118,6 +118,20 @@ def _merge_corpus_scope_hits(*hit_groups: List[VectorSearchHit], top_k: int) -> 
     return sorted(merged_by_key.values(), key=lambda h: h.score or 0.0, reverse=True)[:top_k]
 
 
+def _coerce_chunk_index(raw: Any) -> Optional[int]:
+    """Stores return chunk_index as int, float or string depending on the backend."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    if isinstance(raw, str):
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    return None
+
+
 class VectorSearchService:
     """
     Fred — Vector Search Service (policy-driven).
@@ -243,7 +257,14 @@ class VectorSearchService:
                 logger.debug("Could not resolve tag id=%s: %s", tid, e)
         return names, full_paths
 
-    async def _to_hit(self, doc: Document, score: float, rank: int, user: KeycloakUser) -> VectorSearchHit:
+    async def _to_hit(
+        self,
+        doc: Document,
+        score: float,
+        rank: int,
+        user: KeycloakUser,
+        tags_meta: tuple[list[str], list[str]] | None = None,
+    ) -> VectorSearchHit:
         """
         Convert a LangChain Document + score into a VectorSearchHit UI DTO.
         Rationale:
@@ -253,7 +274,7 @@ class VectorSearchService:
 
         # Pull both ids and names (UI displays names; filters might use ids)
         tag_ids = md.get("tag_ids") or []
-        tag_names, tag_full_paths = await self._tags_meta_from_ids(tag_ids, user)
+        tag_names, tag_full_paths = tags_meta if tags_meta is not None else await self._tags_meta_from_ids(tag_ids, user)
         uid = md.get("document_uid") or "Unknown"
         vf = md.get("viewer_fragment")
         preview_url = f"/documents/{uid}"
@@ -311,6 +332,7 @@ class VectorSearchService:
             # metrics & provenance
             score=score,
             rank=rank,
+            chunk_index=_coerce_chunk_index(md.get("chunk_index")),
             embedding_model=str(md.get("embedding_model") or "unknown_model"),
             vector_index=md.get("vector_index") or "unknown_index",
             token_count=md.get("token_count"),
@@ -926,3 +948,66 @@ class VectorSearchService:
                 actor=self._kpi_actor(user=None),
             )
             return reranked_documents
+
+    async def get_document_chunks_ordered(
+        self,
+        *,
+        user: KeycloakUser,
+        document_uid: str,
+        limit: int,
+    ) -> List[VectorSearchHit]:
+        """Return a document's stored chunks in chunk_index order, capped at `limit`.
+
+        A direct store fetch, not a search: similarity ranking cannot guarantee that
+        every row of a large table comes back, so callers that need a whole table ask
+        for the document itself.
+
+        The ReBAC READ check belongs to the caller, as for every other route on
+        this controller.
+
+        Known cost: `limit` bounds the response, not the store read - every backend's
+        `get_chunks_for_document` fetches the whole document (OpenSearch caps at 10k)
+        and the slice happens here. Pushing the bound into the stores is a separate
+        change; this route is no worse than the existing callers of that method.
+        """
+        try:
+            raw_chunks = await asyncio.to_thread(self.vector_store.get_chunks_for_document, document_uid)
+        except NotImplementedError:
+            logger.warning("[VECTOR][DOC_CHUNKS] store %s cannot fetch chunks by document", type(self.vector_store).__name__)
+            return []
+        if not raw_chunks:
+            return []
+
+        def _order(chunk: dict) -> tuple[bool, int]:
+            # None last, matching the runtime adapter: an unindexed legacy chunk
+            # degrades to the end rather than jumping ahead of chunk 0.
+            index = _coerce_chunk_index((chunk.get("metadata") or {}).get("chunk_index"))
+            return (index is None, index or 0)
+
+        raw_chunks.sort(key=_order)
+        truncated = len(raw_chunks) > limit
+
+        tags_cache: dict[tuple[str, ...], tuple[list[str], list[str]]] = {}
+        hits: List[VectorSearchHit] = []
+        for rank, entry in enumerate(raw_chunks[:limit]):
+            metadata = entry.get("metadata") or {}
+            tag_ids = tuple(metadata.get("tag_ids") or [])
+            if tag_ids not in tags_cache:
+                tags_cache[tag_ids] = await self._tags_meta_from_ids(list(tag_ids), user)
+            hits.append(
+                await self._to_hit(
+                    Document(page_content=entry.get("text") or "", metadata=metadata),
+                    score=0.0,
+                    rank=rank,
+                    user=user,
+                    tags_meta=tags_cache[tag_ids],
+                )
+            )
+        logger.info(
+            "[VECTOR][DOC_CHUNKS] document_uid=%s returned=%d of %d truncated=%s",
+            document_uid,
+            len(hits),
+            len(raw_chunks),
+            truncated,
+        )
+        return hits

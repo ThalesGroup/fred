@@ -315,6 +315,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/applications
+    review_status: approved
+    required_permission: can_use_team_applications # Response items are additionally filtered by capability#can_use.
+  - service: control-plane
     method: PATCH
     path: /control-plane/v1/teams/{team_id}
     review_status: pending_review
@@ -1279,6 +1284,11 @@ operations:
     path: /knowledge-flow/v1/vector/rerank
     review_status: pending_review
     required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/vector/document-chunks
+    review_status: approved
+    required_permission: document.read
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/vector/search
