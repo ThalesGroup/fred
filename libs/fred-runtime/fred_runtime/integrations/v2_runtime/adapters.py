@@ -1703,11 +1703,13 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
     """
     Runtime adapter behind `RuntimeServices.document_markdown` (DOCREAD-01).
 
-    Fetches a corpus document's FULL parsed markdown by uid and returns it one
-    bounded page at a time. Same doctrine as `DocumentSummarizeAdapter`: no
-    scope narrowing (the caller already holds a concrete uid and KF's
-    per-document ReBAC is the gate), the per-turn binding/token stay private
-    (through `_VectorSearchAgentShim` + `KfDocumentClient`).
+    Fetches a document's FULL text by uid (corpus markdown or a session
+    attachment, resolved Knowledge Flow-side) and returns it one bounded page
+    at a time. Same doctrine as `DocumentSummarizeAdapter`: no
+    scope narrowing (the caller already holds a concrete uid and KF is the
+    gate - per-document ReBAC for corpus, chunk-level session ownership for an
+    attachment), the per-turn binding/token stay private (through
+    `_VectorSearchAgentShim` + `KfDocumentClient`).
 
     Pagination is done adapter-side because Knowledge Flow's markdown endpoint
     has no page parameter today (the KF client stays wire-format only). To avoid
