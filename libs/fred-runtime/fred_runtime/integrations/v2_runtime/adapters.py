@@ -1055,7 +1055,10 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     },
                 ),
             ),
-            sources=tuple(hits),
+            # min_score_ratio=0.0: every hit here already matched the caller's
+            # explicit anchor/document_uids, so only the dataset-pointer filter
+            # applies — mirrors document_similarity/capability.py's same call.
+            sources=select_citable_sources(hits, min_score_ratio=0.0),
         )
 
     async def _invoke_traces_summarize_conversation(
