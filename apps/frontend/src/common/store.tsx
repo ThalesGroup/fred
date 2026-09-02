@@ -16,7 +16,6 @@ import { combineReducers, configureStore, createReducer, isFulfilled, isPending,
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
 import { evaluationApi } from "../slices/evaluation/evaluationApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
-import { ragsApi } from "../slices/rags/ragsApi.ts";
 import { taskSlice } from "../rework/features/tasks/taskSlice.ts";
 import { capabilityRoutingSlice } from "./capabilityRoutingSlice.ts";
 import { demoEchoCapabilityApi } from "../rework/features/capabilities/demo_echo/api/demoEchoCapabilityApi.ts";
@@ -54,7 +53,6 @@ const combinedReducer = combineReducers({
   [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
   [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
   [evaluationApi.reducerPath]: evaluationApi.reducer,
-  [ragsApi.reducerPath]: ragsApi.reducer,
   tasks: taskSlice.reducer,
   capabilityRouting: capabilityRoutingSlice.reducer,
   [demoEchoCapabilityApi.reducerPath]: demoEchoCapabilityApi.reducer,
@@ -74,7 +72,6 @@ export const store = configureStore({
       knowledgeFlowApi.middleware,
       controlPlaneApi.middleware,
       evaluationApi.middleware,
-      ragsApi.middleware,
       demoEchoCapabilityApi.middleware,
       writableDocumentCapabilityApi.middleware,
       pptFillerCapabilityApi.middleware,

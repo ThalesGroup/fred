@@ -2024,10 +2024,6 @@
       "evaluationService": {
         "title": "Service d'évaluation indisponible",
         "description": "Démarrez le service fred-evaluation pour gérer les évaluations et les exécutions."
-      },
-      "ragsServices": {
-        "title": "Service Systèmes d'information injoignable",
-        "description": "Vérifiez que le service rags-services est démarré."
       }
     },
     "sidebar": {
@@ -2043,8 +2039,7 @@
           "platformRoles": "Rôles plateforme",
           "selftest": "Auto-test",
           "tasks": "Activité",
-          "teams": "Equipes",
-          "informationSystems": "Systèmes d'information"
+          "teams": "Equipes"
         },
         "title": "Espace administration"
       },
@@ -3003,54 +2998,6 @@
           "failed_or_running_excluded": "En échec ou en cours (non touchés)",
           "errors": "Erreurs"
         }
-      }
-    },
-    "informationSystems": {
-      "title": "Systèmes d'information",
-      "subtitle": "Associez des documents qualifiés par rôle à une librairie pour qu'Eva, Iris et Gap puissent l'évaluer.",
-      "loading": "Chargement des systèmes d'information...",
-      "empty": "Aucun système d'information pour le moment.",
-      "table": {
-        "name": "Système d'information",
-        "documents": "Documents",
-        "similarities": "Similarités",
-        "contradictions": "Contradictions",
-        "actions": "Actions",
-        "manageDocuments": "Gérer les documents",
-        "delete": "Supprimer"
-      },
-      "deleteDialog": {
-        "title": "Supprimer le système d'information ?",
-        "message": "Cela supprime « {{name}} » et ses associations de documents. Cette action est irréversible.",
-        "confirm": "Supprimer",
-        "cancel": "Annuler",
-        "success": "Système d'information supprimé",
-        "errorSummary": "Échec de la suppression du système d'information",
-        "errorFallback": "Impossible de supprimer le système d'information. Veuillez réessayer."
-      },
-      "create": {
-        "action": "Créer",
-        "title": "Créer un système d'information",
-        "helperText": "Choisissez une librairie de documents existante. Le système d'information reprend le nom de cette librairie — non modifiable ici, car les agents rags s'appuient sur une correspondance exacte.",
-        "libraryLabel": "Librairie",
-        "libraryPlaceholder": "Sélectionner une librairie...",
-        "noLibraries": "Aucune librairie disponible — chaque librairie de premier niveau a déjà un système d'information.",
-        "submit": "Créer",
-        "success": "Système d'information « {{name}} » créé",
-        "errorSummary": "Échec de la création du système d'information",
-        "errorFallback": "Impossible de créer le système d'information. Veuillez réessayer.",
-        "errorConflict": "Un système d'information existe déjà pour cette librairie."
-      },
-      "assignDocuments": {
-        "title": "Documents — {{name}}",
-        "subtitle": "Attribuez un rôle à chaque document, ou laissez-le sans rôle.",
-        "document": "Document",
-        "role": "Rôle",
-        "roleNone": "— aucun —",
-        "empty": "Cette librairie ne contient aucun document.",
-        "success": "Rôles des documents mis à jour",
-        "errorSummary": "Échec de la mise à jour des rôles des documents",
-        "errorFallback": "Impossible d'enregistrer les attributions de rôles. Veuillez réessayer."
       }
     }
   },

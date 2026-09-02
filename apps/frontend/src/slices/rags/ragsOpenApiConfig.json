@@ -1,8 +1,0 @@
-{
-  "schemaFile": "./openapi.json",
-  "apiFile": "./ragsApi.ts",
-  "apiImport": "ragsApi",
-  "outputFile": "ragsOpenApi.ts",
-  "exportName": "ragsApi",
-  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
-}

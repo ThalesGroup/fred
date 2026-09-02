@@ -51,7 +51,6 @@ const baseConfig = defineConfig({
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
       "/control-plane": process.env.VITE_BACKEND_URL_CONTROL_PLANE || "http://localhost:8222",
       "/rags/agents": process.env.VITE_BACKEND_URL_RAGS_AGENTS || "http://localhost:8013",
-      "/rags-services": process.env.VITE_BACKEND_URL_RAGS_SERVICES || "http://localhost:8112",
       "/evaluation": process.env.VITE_BACKEND_URL_EVALUATION || "http://localhost:8336",
       "/samples": process.env.VITE_BACKEND_URL_SAMPLES || "http://localhost:8010",
     },

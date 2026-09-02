@@ -17,11 +17,6 @@ include ../../scripts/makefiles/config/INFO-frontend.mk
 
 NODE_VERSION=22.13.0
 
-# rags-services (#2307) lives in the sibling fred-rags repo, not this monorepo —
-# override if your checkout lives elsewhere, e.g.
-# `RAGS_SERVICES_DIR=/path/to/rags-services make update-rags-api`.
-RAGS_SERVICES_DIR ?= $(HOME)/Fred/fred-rags/apps/rags-services
-
 ##@ Common workflows
 ##> The commands you actually use day to day:
 ##>   make run             start the local dev server on http://localhost:5173
@@ -164,7 +159,7 @@ application-container-smoke: ## Verify /apps and /app-services routing in an alr
 # after changing a backend controller or model, and commit the regenerated
 # *OpenApi.ts alongside the backend change.
 .PHONY: update-all-apis
-update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api update-evaluation-api update-rags-api ## Regenerate the API client for ALL backends at once
+update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api update-evaluation-api ## Regenerate the API client for ALL backends at once
 	@echo "All backend API clients regenerated"
 
 .PHONY: update-knowledge-flow-api
@@ -194,24 +189,6 @@ update-evaluation-api: check-node node_modules ## Regenerate the API client for 
 	cd ../fred-evaluation-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-evaluation-backend..."
 	npx --no-install @rtk-query/codegen-openapi src/slices/evaluation/evaluationOpenApiConfig.json
-
-# rags-services (#2307) is a standalone backend in the sibling fred-rags repo —
-# not vendored into this monorepo. Its OpenAPI spec is generated there, then
-# copied into a local snapshot (src/slices/rags/openapi.json, gitignored) so
-# the codegen step below can read it the same way as every in-repo backend.
-.PHONY: update-rags-api
-update-rags-api: check-node node_modules ## Regenerate the API client for the rags-services backend only (sibling fred-rags repo)
-	@if [ ! -d "$(RAGS_SERVICES_DIR)" ]; then \
-		echo "❌ rags-services checkout not found at $(RAGS_SERVICES_DIR)"; \
-		echo "   Override with: RAGS_SERVICES_DIR=/path/to/rags-services make update-rags-api"; \
-		exit 1; \
-	fi
-	@echo "🔧 Generating rags-services OpenAPI specification..."
-	$(MAKE) -C "$(RAGS_SERVICES_DIR)" generate-openapi
-	@echo "📋 Copying OpenAPI snapshot into src/slices/rags/..."
-	cp "$(RAGS_SERVICES_DIR)/openapi.json" src/slices/rags/openapi.json
-	@echo "🎯 Generating RTK Query hooks for rags-services..."
-	npx --no-install @rtk-query/codegen-openapi src/slices/rags/ragsOpenApiConfig.json
 
 # Per-capability client (AGENT-CAPABILITY-RFC §9.1, #1979): each capability's
 # router has its OWN OpenAPI document (dumped by the runtime CLI) and its OWN
