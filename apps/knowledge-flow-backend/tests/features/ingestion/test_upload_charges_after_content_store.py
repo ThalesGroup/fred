@@ -119,7 +119,6 @@ async def _drain(service: _RecordingService, monkeypatch: pytest.MonkeyPatch, tm
         background_tasks=None,
         kpi=_FakeKpi(),
         kpi_actor=SimpleNamespace(type="human"),
-        timer_dims={},
     ):
         events.append(event)
     return events
