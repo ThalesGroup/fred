@@ -103,6 +103,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useDeletePlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
+vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
+  useFrontendFeatureFlag: () => ({ enabled: false, isLoading: false }),
+}));
+
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({
     showSuccess: vi.fn(),
