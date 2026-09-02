@@ -1,0 +1,53 @@
+{
+  "images": [
+    {
+      "name": "fred-agents",
+      "context": ".",
+      "dockerfile": "apps/fred-agents/dockerfiles/Dockerfile-prod",
+      "build_args": "",
+      "publish": true
+    },
+    {
+      "name": "knowledge-flow-backend",
+      "context": ".",
+      "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod",
+      "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false",
+      "publish": true
+    },
+    {
+      "name": "control-plane-backend",
+      "context": ".",
+      "dockerfile": "apps/control-plane-backend/dockerfiles/Dockerfile-prod",
+      "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false",
+      "publish": true
+    },
+    {
+      "name": "frontend",
+      "context": ".",
+      "dockerfile": "apps/frontend/dockerfiles/Dockerfile-prod",
+      "build_args": "",
+      "publish": true
+    },
+    {
+      "name": "ws-bench",
+      "context": "developer_tools/benchmarks",
+      "dockerfile": "developer_tools/benchmarks/Dockerfile",
+      "build_args": "",
+      "publish": false
+    }
+  ],
+  "excluded": [
+    {
+      "dockerfile": ".devcontainer/Dockerfile-devcontainer",
+      "reason": "Copies nothing from the repo but .devcontainer/scripts/, so no change under apps/ or libs/ can break it. Its build time is dominated by third-party downloads (nodesource, github releases, astral.sh) that would make a required PR gate slow and flaky."
+    },
+    {
+      "dockerfile": "apps/frontend/dockerfiles/Dockerfile-dev",
+      "reason": "Stale: copies frontend/ and scripts/ from a pre-monorepo layout, so it cannot build from any context. Its only consumer, deploy/docker-compose/docker-compose.yml, points at an equally stale path. Delete or repair, then move it to images."
+    },
+    {
+      "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-dev",
+      "reason": "Stale: puts scripts/ at /app/scripts and the project at /app/knowledge-flow-backend, so the Makefile include ../../scripts/makefiles/config/INFO-knowledge-flow.mk misses and make dev fails. It also lays fred-core out at /app/fred-core while pyproject.toml resolves it at ../../libs/fred-core. Delete or repair, then move it to images."
+    }
+  ]
+}
