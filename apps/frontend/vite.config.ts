@@ -14,14 +14,33 @@
 
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { transformWithEsbuild } from "vite";
+import { mergeConfig, transformWithEsbuild, type Plugin } from "vite";
 import svgr from "@svgr/rollup";
 import path from "path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { visualizer } from "rollup-plugin-visualizer";
+import { loadApplicationProxyConfig, parseApplicationsEnabled } from "./scripts/application-proxy.mjs";
+
+function applicationFailClosedPlugin(classifyRequest: (requestUrl: string) => "proxy" | 404 | 503 | null): Plugin {
+  return {
+    name: "fred-applications-fail-closed",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const classification = classifyRequest(request.url ?? "");
+        if (classification === null || classification === "proxy") {
+          next();
+          return;
+        }
+        response.statusCode = classification;
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.end(classification === 404 ? "Not found" : "Application service unavailable");
+      });
+    },
+  };
+}
 
 // https://vitejs.dev/config/
-export default defineConfig({
+const baseConfig = defineConfig({
   server: {
     host: "0.0.0.0",
     port: parseInt(process.env.VITE_PORT || "5173"),
@@ -41,6 +60,7 @@ export default defineConfig({
     alias: {
       src: path.resolve(__dirname, "./src"),
     },
+    dedupe: ["react", "react-dom"],
   },
   plugins: [
     {
@@ -103,4 +123,19 @@ export default defineConfig({
       exclude: ["src/rework/**/*.test.ts", "src/rework/**/*.test.tsx", "src/rework/types/**"],
     },
   },
+});
+
+export default defineConfig(({ command, mode }) => {
+  // A build has no deployment configuration, so completeness of the upstreams
+  // is a serve-time and container-startup concern only.
+  const applications = loadApplicationProxyConfig({
+    registrationsJson: process.env.FRONTEND_APPLICATIONS_JSON ?? "[]",
+    requireServiceUpstreams: command === "serve" && mode !== "test",
+    enabled: parseApplicationsEnabled(process.env.FRONTEND_ENABLE_APPLICATIONS),
+  });
+
+  return mergeConfig(baseConfig, {
+    server: { proxy: applications.proxy },
+    plugins: [applicationFailClosedPlugin(applications.classifyRequest)],
+  });
 });

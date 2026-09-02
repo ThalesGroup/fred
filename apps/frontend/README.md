@@ -42,6 +42,43 @@ make docker-run \
   FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222
 ```
 
+Applications are not built into Fred. Each one is an independently built and
+deployed UI container (optionally with its own API), registered in deployment
+configuration. The frontend serves two prefixes for them, and the dev server
+and the nginx container resolve both the same way:
+
+| Prefix                    | Proxied to         | Seen by                       |
+| ------------------------- | ------------------ | ----------------------------- |
+| `/apps/<app_id>/`         | `ui_upstream`      | the browser, in the app frame |
+| `/app-services/<app_id>/` | `service_upstream` | the app's own code            |
+
+```bash
+FRONTEND_ENABLE_APPLICATIONS=true \
+FRONTEND_APPLICATIONS_JSON='[{"app_id":"acme-forecast","ui_upstream":"http://localhost:8300","service_upstream":"http://localhost:8301","service_required":true}]' \
+make run
+```
+
+The whole `/apps/<app_id>` prefix is forwarded upstream, so build the app's
+bundle with that base path — its own absolute asset URLs then resolve back
+through this route. `/app-services/<app_id>` is stripped instead, because the
+app constructs those paths itself.
+
+Trailing upstream slashes are normalized and unsafe URLs are rejected. An entry
+with `service_required: true` and no `service_upstream` fails startup; omitting
+`service_upstream` on a UI-only application is fine and its service path returns 503. Unknown ids return 404 in both namespaces. The list is consumed only by the
+development server or container and is never returned to browser code. The
+control-plane process must also have
+`platform.frontend.feature_flags.enableApplications: true` and its own
+`platform.application_sources` entry for the same `app_id`; the environment
+variables above open only the local frontend gateway. Both sides default to
+`false` and fail closed when omitted.
+
+The application gateway accepts a positive nginx size in
+`FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE`, defaults it to `10m`, and streams
+request bodies to the selected service without nginx request buffering. Each
+application service must still enforce its own, equal or smaller, request-body
+and concurrency limits.
+
 You can force the mode with:
 
 ```bash

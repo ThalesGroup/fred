@@ -860,6 +860,7 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["feature_flags"]["enableK8Features"] is False
+    assert payload["feature_flags"]["enableApplications"] is False
     assert "ui_settings" not in payload
     # AUTHZ-05 review item 11: `permissions` only ever carries the two
     # OpenFGA-derived flags now — the Keycloak-role-derived `items` list and
@@ -868,6 +869,31 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     # Rebac disabled in test config -> NoopRebacEngine authorizes everything.
     assert payload["permissions"]["is_platform_admin"] is True
     assert payload["permissions"]["is_platform_observer"] is True
+
+
+@pytest.mark.asyncio
+async def test_applications_feature_flag_keeps_contract_mounted_but_fails_closed() -> (
+    None
+):
+    app = create_app()
+    path = "/control-plane/v1/teams/{team_id}/applications"
+    assert path in app.openapi()["paths"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        disabled = await client.get("/control-plane/v1/teams/personal/applications")
+        assert disabled.status_code == 404
+        assert disabled.json() == {"detail": "Not Found"}
+
+        container = get_application_container_from_app(app)
+        container.configuration.platform.frontend.feature_flags.enableApplications = (
+            True
+        )
+        enabled = await client.get("/control-plane/v1/teams/personal/applications")
+
+    assert enabled.status_code == 200
+    assert enabled.json()["items"] == []
 
 
 @pytest.mark.asyncio

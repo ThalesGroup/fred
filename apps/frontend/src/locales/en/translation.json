@@ -1092,10 +1092,12 @@
           "tool": "Capabilities",
           "agent": "Agents",
           "model": "Models",
+          "app": "Apps",
           "aria": "Filter by feature kind"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "emptyModels": "No models are advertised by any runtime pod yet.",
+        "emptyApps": "No applications are installed on this platform yet.",
         "col": {
           "capability": "Feature",
           "enabledTeams": "Enabled teams",
@@ -1133,6 +1135,8 @@
         "defaultOffConfirm": {
           "title": "Disable default-on?",
           "message": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this feature.",
+          "appTitle": "Disable application by default?",
+          "appMessage": "Turning off default-on removes inherited application access from every team. Explicit team grants remain unchanged.",
           "confirm": "Disable",
           "cancel": "Cancel",
           "impact": "This will suspend {{count}} agent(s) that currently work.",
@@ -2067,6 +2071,7 @@
       "team": {
         "marketplace": "Marketplace",
         "menu": {
+          "apps": "Apps",
           "resources": "Resources"
         },
         "teamLabel": "Team",
@@ -3070,10 +3075,22 @@
     "chatContextPreviewTitle": "Chat context preview"
   },
   "teamAppsPage": {
-    "headerInfoTooltip": "These apps are only available to your team and are managed by team owners.",
+    "headerInfoTooltip": "Applications are available only to authorized team members.",
     "headerSubtitle": "Team's apps",
-    "noAppDescription": "The team owners have not configured any applications for this group at this time.",
-    "noAppTitle": "No app"
+    "title": "Applications",
+    "subtitle": "Applications available to this team.",
+    "loading": "Loading applications…",
+    "loadError": "Applications could not be loaded.",
+    "noAppDescription": "No applications are available for this team.",
+    "noAppTitle": "No app",
+    "host": {
+      "catalog-loading": "Loading application…",
+      "connecting": "Connecting to the application…",
+      "unavailable": "This application is unavailable.",
+      "protocol-mismatch": "This application speaks a Fred application protocol this deployment does not support.",
+      "unreachable": "The application did not respond. It may be starting up or misconfigured.",
+      "render": "The application stopped unexpectedly. Fred is still available."
+    }
   },
   "unauthorized": {
     "message": "You do not have the required permissions to access this page.",

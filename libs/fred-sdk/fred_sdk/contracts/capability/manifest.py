@@ -60,6 +60,13 @@ CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
 # duplicated by convention in two places.
 MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
 
+# Reserved id prefix for control-plane-projected product applications
+# (CONTROL-PLANE-PRODUCT-CONTRACT.md, "team applications are
+# runtime-registered, frame-hosted UIs"). Applications reuse the capability
+# tuple model for coarse team admission but are not runtime capabilities, so
+# only the JSON-safe `CapabilityCatalogEntry` admits `kind="app"`.
+APPLICATION_CAPABILITY_NAMESPACE_PREFIX = "app__"
+
 
 def model_capability_id(provider: str, name: str) -> str:
     """Stable, namespaced capability id for one (provider, model name) pair.
@@ -352,8 +359,10 @@ class CapabilityCatalogEntry(BaseModel):
     # projection of an agent template into this catalog, CAPAB-01 RFC §8.6),
     # or "model" (pod-advertised projection of one models_catalog.yaml
     # (provider, name) pair, OBSERV-02 v3, RFC §8.7) — see
-    # `CapabilityManifest.kind`.
-    kind: Literal["tool", "agent", "model"] = "tool"
+    # `CapabilityManifest.kind`. "app" is a control-plane-side projection of
+    # a registered product application; no CapabilityManifest of kind "app"
+    # is authorable.
+    kind: Literal["tool", "agent", "model", "app"] = "tool"
     # See `CapabilityManifest.execution_models` (CAPAB-02). Advertised so a
     # future catalog/UI filter can hide a ReAct-only capability from a Graph
     # template's picker instead of only failing loud at selection time.
