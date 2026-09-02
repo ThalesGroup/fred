@@ -204,10 +204,15 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
     };
 
     const onMessage = (event: MessageEvent) => {
-      // Identity is the frame's own window. Same-origin today an origin check
-      // alone would admit any other Fred document, so it cannot stand in. A
-      // detached frame has no content window, and null must never match null.
-      if (!frame.contentWindow || event.source !== frame.contentWindow) return;
+      // Both checks are required, for two different threats. Identity is the
+      // frame's own window because same-origin today an origin check alone
+      // would admit any other Fred document — a detached frame has no content
+      // window, and null must never match null. But window identity survives
+      // the frame navigating itself: `contentWindow` stays the same object
+      // even after an in-frame redirect to a different origin, so the source
+      // check alone would keep trusting a compromised/redirected app. The
+      // origin check catches exactly that case.
+      if (!frame.contentWindow || event.source !== frame.contentWindow || event.origin !== targetOrigin) return;
 
       const message = parseApplicationFrameMessage(event.data);
       if (!message) return;

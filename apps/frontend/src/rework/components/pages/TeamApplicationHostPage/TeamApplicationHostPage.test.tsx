@@ -146,9 +146,9 @@ function spyOnFrame() {
   return vi.spyOn(frameWindow(), "postMessage").mockImplementation(() => undefined);
 }
 
-async function postFromFrame(data: unknown, source: unknown = frameWindow()) {
+async function postFromFrame(data: unknown, source: unknown = frameWindow(), origin: string = FRED_ORIGIN) {
   await act(async () => {
-    window.dispatchEvent(new MessageEvent("message", { data, source: source as Window, origin: FRED_ORIGIN }));
+    window.dispatchEvent(new MessageEvent("message", { data, source: source as Window, origin }));
     await Promise.resolve();
   });
 }
@@ -199,7 +199,7 @@ describe("TeamApplicationHostPage frame admission", () => {
 
     await renderPage();
     const spy = spyOnFrame();
-    await postFromFrame({ type: "fred:ready", protocolVersion: "1" });
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" }, frameWindow(), "https://apps.example");
 
     expect(frame()?.getAttribute("src")).toBe("https://apps.example/example/");
     expect(spy.mock.calls[0]?.[1]).toBe("https://apps.example");
@@ -302,6 +302,19 @@ describe("TeamApplicationHostPage protocol handshake", () => {
     const spy = spyOnFrame();
 
     await postFromFrame({ type: "fred:ready", protocolVersion: "1" }, window);
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(page.textContent).toContain("teamAppsPage.host.connecting");
+  });
+
+  it("ignores a handshake from the frame's own window once it has navigated off the configured origin", async () => {
+    // contentWindow keeps the same identity across an in-frame navigation, so
+    // the source check alone would still admit this message — only the origin
+    // check catches a frame that redirected itself to another origin.
+    const page = await renderPage();
+    const spy = spyOnFrame();
+
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" }, frameWindow(), "https://attacker.example");
 
     expect(spy).not.toHaveBeenCalled();
     expect(page.textContent).toContain("teamAppsPage.host.connecting");
