@@ -130,5 +130,8 @@ jobs:
           push: ${{ inputs.publish }}
           tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
           labels: ${{ steps.meta.outputs.labels }} # many various informations
-          cache-from: ${{ inputs.publish && '' || format('type=gha,scope={0}', matrix.name) }}
-          cache-to: ${{ inputs.publish && '' || format('type=gha,mode=max,scope={0}', matrix.name) }}
+          # The empty string is falsy in expressions, so it has to sit on the
+          # falsy side: `publish && '' || format(...)` returns the format branch
+          # for both values of publish and asks a driver-less builder to export.
+          cache-from: ${{ !inputs.publish && format('type=gha,scope={0}', matrix.name) || '' }}
+          cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}
