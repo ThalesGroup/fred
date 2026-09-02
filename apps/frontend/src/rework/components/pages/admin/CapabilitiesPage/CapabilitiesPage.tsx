@@ -260,18 +260,17 @@ export default function CapabilitiesPage() {
       // platform-wide impact (no teamId) so the admin sees what breaks.
       setPendingDefaultOff(capability);
       setShowAffected(false);
-      void fetchRevokeImpact({ capabilityId: capability.id });
-    } else if (missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
-      // #2470: the backend now 409s this write. Offer to grant the dependencies
-      // in the same gesture rather than surfacing a refusal the admin has to
-      // resolve by hand, one capability at a time, elsewhere in the table.
-      setPendingGrantAll(capability);
       // Applications have no agent-instance dependencies or suspension
       // lifecycle. Their confirmation stays generic and never asks the
       // agent-specific impact endpoint for a meaningless preview.
       if (capability.kind !== "app") {
         void fetchRevokeImpact({ capabilityId: capability.id });
       }
+    } else if (missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
+      // #2470: the backend now 409s this write. Offer to grant the dependencies
+      // in the same gesture rather than surfacing a refusal the admin has to
+      // resolve by hand, one capability at a time, elsewhere in the table.
+      setPendingGrantAll(capability);
     } else {
       void applyDefaultOn(capability, true);
     }
