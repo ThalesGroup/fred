@@ -3078,8 +3078,6 @@ indistinguishable from a deliberate "no capabilities" — so
 `None` rows only). Existing agents do not gain their template's defaults
 retroactively and must be re-ticked by hand.
 
----
-
 ## 46. Contract Notes — team applications are runtime-registered, frame-hosted UIs (2026-08-31)
 
 Fred has one generic V1 host for trusted applications a deployment registers.
@@ -3170,6 +3168,7 @@ host  -> frame: fred:context { protocolVersion, applicationId, context }
                 fred:route { subPath }
                 fred:response | fred:response-error { requestId, ... }
 frame -> host : fred:navigate { path, replace }
+                fred:open-chat { sessionId? }
                 fred:request { requestId, path, method, headers, body }
 ```
 
@@ -3183,6 +3182,34 @@ refused with `fred:response-error` rather than dropped: the id is the channel's
 only correlation token, so admitting it twice would leave one frame request
 answered twice and one call outside the concurrency bound. The context handed
 over is plain cloneable data: team identity, base and sub path, locale.
+
+`fred:navigate` moves the user only inside the application's own subtree: its
+path is resolved against `basePath` and an absolute, traversing, or schemed
+path throws, which the host swallows rather than reporting, so a frame cannot
+probe the boundary.
+
+`fred:open-chat` is the single exception, and it is deliberately narrow. It
+names **no route** — the parser discards any path or team a frame attaches —
+and the host builds the target from the team it is already rendering. Where an
+application can send the user is therefore bounded by the host rather than
+chosen by the frame. That bound is a runtime one, not a fixed set settled in
+review, and the next paragraph is what establishes it.
+
+Its one field, `sessionId`, is a **candidate rather than a destination**. The
+host matches it against `GET /teams/{team_id}/sessions`, which is scoped to the
+caller (`user_id=user.uid`), and takes the agent instance from the matched
+record — never from the frame. So the most a compromised application can do is
+reopen a conversation its own viewer already owns and can reach from the
+sidebar. Anything else — an unknown id, a teammate's, one aged past the
+listing's newest-50 window, or a listing that fails — falls back to a new
+conversation with the team's only enabled agent, or to the agents surface when
+that choice is ambiguous.
+
+Nothing about the conversation travels on this message. An application that
+wants a conversation to be about one of its records records that intent through
+its own service, and its capability resolves it on the agent side from the
+runtime identity — so the record never passes through a channel the model or
+the frame could redirect.
 
 The authenticated request adapter stays on the host side of that channel. It
 derives `/app-services/<app_id>/teams/<team_id>/...`, owns token refresh and

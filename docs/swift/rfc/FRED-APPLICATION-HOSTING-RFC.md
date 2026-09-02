@@ -180,51 +180,35 @@ application from steering the user around the product, and the closed
 vocabulary is what makes the contract auditable at all. The question is whether
 to grant a single, narrowly scoped exception.
 
-**Shape, if granted.** One additional frame message asking the host to open a
-conversation with a record as context. The host — never the frame — decides the
-destination, so the frame supplies context and not a route. The obvious
-constraints are that it may reach only the conversation surface, only within
-the team the frame was handed, and never an arbitrary path.
+**Resolved — granted, in the narrowest form that is still useful.** One
+message, `fred:open-chat`. The frame names no route: it may attach a session
+id, and the host builds the target itself from the team it is already
+rendering.
 
-**Why it is not obviously right.** It would be the first message that moves the
-user out of the application's subtree, converting a boundary with no exceptions
-into a boundary with one. Boundaries with one exception attract a second. The
-alternative costs an application only a lookup: an agent-side tool that lists
-the caller's open records and resolves the intended one on the first turn,
-which needs no contract change and keeps the containment intact.
+Be precise about what that buys, because an earlier draft of this section
+claimed more. The id is a *candidate*, not a destination. The host matches it
+against the caller's own session listing and takes the agent instance from the
+matched record, never from the message; an id that does not match falls back to
+a new conversation, or to the team's agents surface when the agent choice is
+ambiguous. The reachable set is therefore bounded by conversations the viewer
+already owns and can already open from the sidebar.
 
-**Prerequisite either way.** Navigation alone is not useful; the record's
-context has to reach the agent, and how it gets there is a second design
-question sitting behind the first.
+That is weaker than "the destinations are fixed when this code is reviewed",
+which is what a payload-free message would have delivered and what the earlier
+wording implied. The bound now rests on two runtime properties rather than on
+the shape of the message: that the session listing is scoped to the caller, and
+that an unmatched id falls back rather than failing open. Both are worth naming
+here, because changing either widens this exception without touching the frame
+contract at all.
 
-The obvious candidate is not a fit. `context_prompt_ids` is an ordered list of
-**prompt-library references** — personal or team prompt ids, resolved against
-the caller's authorized teams and joined as conversation context at execution
-time. It is a curated, human-owned, long-lived asset. Routing per-record context
-through it would mean minting a library entry for every task, on a completely
-different lifecycle, with nothing responsible for removing them. It would
-degrade a feature users own in order to carry machine state.
+The carrier question that blocked this dissolved rather than being answered.
+Nothing about the record travels on the message: an application records what
+the conversation should be about through its own service, and its capability
+resolves it on the agent side from the runtime identity. No session-scoped
+context channel was needed after all.
 
-Session attachments are closer, and already do most of the mechanical job: a
-session-scoped row holding free text, written server-side, folded into the
-system prompt on every turn and never surfaced as a user-editable prompt. What
-does not fit is the framing. That text reaches the agent introduced as files the
-user attached, with an instruction to retrieve their content through the search
-tools — so record context carried this way would describe an attachment that
-does not exist, and point the agent at an index that has nothing to return.
-
-The carrier question is therefore narrower than "build something new": either
-the attachment channel grows a variant that is honest about not being a file, or
-a sibling to it appears. Either way it should be settled before the navigation
-message is worth adding, because navigation without context only moves the user
-to an agent that still has to ask which record it is looking at.
-
-**Recommendation:** do not grant it yet. Build an application that wants it,
-using the lookup approach, and let the friction be measured rather than
-predicted. If the first turn of every conversation proves genuinely costly, the
-evidence will also say what context the message must carry.
-
----
+The durable description now lives in `CONTROL-PLANE-PRODUCT-CONTRACT.md` (frame
+contract).
 
 ## 5. Authorization
 
@@ -347,9 +331,10 @@ belongs to several teams.
    decision with the widest consequences and should be settled explicitly.
 2. The durable registration and removal lifecycle (§6), including the catalog
    and gateway asymmetry.
-3. Whether to let an application hand a record to a conversation (§4.5). It is
-   the first exception to the subtree confinement, so it is a boundary decision
-   rather than a convenience.
+3. ~~Whether to let an application hand a record to a conversation (§4.5).~~
+   Decided — granted as `fred:open-chat`, with the bound and its two runtime
+   dependencies recorded in §4.5. Kept in this list only until §4.5 is folded
+   into the contract doc and trimmed from here.
 4. Serving an application from its own origin. The contract is written to make
    this a configuration change; it needs verifying under an opaque origin before
    the isolation property can be claimed rather than intended.

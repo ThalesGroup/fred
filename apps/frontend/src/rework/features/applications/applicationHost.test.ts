@@ -103,3 +103,42 @@ describe("parseApplicationFrameMessage", () => {
     expect(parseApplicationFrameMessage({ type: "fred:request", requestId: "r", path: "i", headers })).toBeNull();
   });
 });
+
+describe("fred:open-chat", () => {
+  it("is admitted with no payload, and names no session", () => {
+    expect(parseApplicationFrameMessage({ type: "fred:open-chat" })).toEqual({
+      type: "fred:open-chat",
+      sessionId: null,
+    });
+  });
+
+  it("carries a session id through as a candidate", () => {
+    expect(parseApplicationFrameMessage({ type: "fred:open-chat", sessionId: "s-1" })).toEqual({
+      type: "fred:open-chat",
+      sessionId: "s-1",
+    });
+  });
+
+  it("normalises a non-string or empty session id to none", () => {
+    for (const sessionId of [42, "", null, {}, []]) {
+      expect(parseApplicationFrameMessage({ type: "fred:open-chat", sessionId })).toEqual({
+        type: "fred:open-chat",
+        sessionId: null,
+      });
+    }
+  });
+
+  it("ignores any path a frame tries to attach", () => {
+    // Pinning that the message carries no destination: a frame that smuggles a
+    // path must not get it back out of the parser, or the host would have
+    // something frame-controlled to navigate to.
+    expect(parseApplicationFrameMessage({ type: "fred:open-chat", path: "/admin/teams" })).toEqual({
+      type: "fred:open-chat",
+      sessionId: null,
+    });
+  });
+
+  it("still rejects an unknown message type", () => {
+    expect(parseApplicationFrameMessage({ type: "fred:open-admin" })).toBeNull();
+  });
+});

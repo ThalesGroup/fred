@@ -47,6 +47,9 @@ const h = vi.hoisted(() => ({
   /** Capability ids whose default-on write should reject. */
   failFor: new Set<string>(),
   errors: [] as string[],
+  /** Capability ids the revoke-impact preview was requested for, in order. */
+  impactCalls: [] as string[],
+  applicationsEnabled: false,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -70,7 +73,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     { isLoading: false },
   ],
   useSetModelReasoningMutation: () => [vi.fn(), { isLoading: false }],
-  useLazyCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
+  useLazyCapabilityRevokeImpactQuery: () => [
+    (args: { capabilityId: string }) => void h.impactCalls.push(args.capabilityId),
+    { data: undefined, isFetching: false },
+  ],
   // The drawer's own writes land in the same `h.calls` log, so the team and
   // personal paths assert ordering exactly like the platform one does.
   useEnableTeamCapabilityMutation: () => [
@@ -103,10 +109,6 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useDeletePlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
-vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: () => ({ enabled: false, isLoading: false }),
-}));
-
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({
     showSuccess: vi.fn(),
@@ -114,6 +116,14 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
     showInfo: vi.fn(),
     showError: (arg: { summary?: string }) => h.errors.push(arg?.summary ?? ""),
   }),
+}));
+
+// The page reads the applications deployment gate on every render, and that
+// hook goes through RTK Query. Left unmocked it needs a store this suite has no
+// reason to build. It defaults off, which is both the deployment default and
+// irrelevant to the agent-only flow above.
+vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
+  useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
 }));
 
 vi.mock("./SuspendedInstancesDrawer", () => ({ SuspendedInstancesDrawer: () => null }));
@@ -150,6 +160,8 @@ beforeEach(() => {
   h.calls = [];
   h.failFor = new Set();
   h.errors = [];
+  h.impactCalls = [];
+  h.applicationsEnabled = false;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -167,6 +179,15 @@ function renderAgentsTab(items: CapabilityEnablementItem[]) {
   // KIND_FILTERS order is [tool, agent, model]; the tab strip is the first radio group.
   const tabs = container.querySelectorAll('[role="radio"]');
   act(() => (tabs[1] as HTMLElement).click());
+}
+
+/** Same, for any kind tab: [tool, agent, model], plus app when the gate is on. */
+function renderKindTab(items: CapabilityEnablementItem[], index: number) {
+  h.items = items;
+  act(() => root.render(<CapabilitiesPage />));
+  if (index === 0) return;
+  const tabs = container.querySelectorAll('[role="radio"]');
+  act(() => (tabs[index] as HTMLElement).click());
 }
 
 const defaultOnSwitch = () => container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
@@ -344,5 +365,39 @@ describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
 
     expect(dialog()).toBeNull();
     expect(h.calls.map((c) => c.id)).toEqual(["platform_ops"]);
+  });
+});
+
+// Where the applications work meets the grant-all flow above: both edit the same
+// if/else chain in `onToggleDefault`, so every rebase resolves it by hand. These
+// pin which branch each behaviour belongs to, which no other test asserts.
+describe("CapabilitiesPage default-on toggle routing", () => {
+  it("previews the revoke impact for an ordinary capability", () => {
+    renderKindTab([cap({ id: "web_search", default_on: true })], 0);
+    act(() => defaultOnSwitch()!.click());
+
+    expect(h.impactCalls).toEqual(["web_search"]);
+    expect(dialog()?.textContent).toContain("defaultOffConfirm.title");
+  });
+
+  it("asks for no impact preview when the row is an application", () => {
+    // An application has no agent instances to suspend, so the agent-specific
+    // impact endpoint has nothing to say about one.
+    h.applicationsEnabled = true;
+    renderKindTab([cap({ id: "app__forecast", kind: "app", default_on: true })], 3);
+    act(() => defaultOnSwitch()!.click());
+
+    expect(h.impactCalls).toEqual([]);
+    expect(dialog()?.textContent).toContain("defaultOffConfirm.appTitle");
+  });
+
+  it("routes an agent with missing dependencies to grant-all, previewing nothing", () => {
+    // Turning default-on ON must never ask for a REVOKE preview: that request
+    // belongs to the off path alone.
+    renderKindTab([AGENT, DEP], 1);
+    act(() => defaultOnSwitch()!.click());
+
+    expect(h.impactCalls).toEqual([]);
+    expect(dialog()?.textContent).toContain("grantAllConfirm.title");
   });
 });

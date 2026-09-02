@@ -96,6 +96,13 @@ export type ApplicationHostMessage =
 export type ApplicationFrameMessage =
   | { type: "fred:ready"; protocolVersion: string }
   | { type: "fred:navigate"; path: string; replace: boolean }
+  // The one message that leaves the application's subtree. It names no route:
+  // the frame states an intent and the host decides where that lands, so the
+  // surface an application can reach is fixed at review time. `sessionId` is a
+  // CANDIDATE, never a destination — the host honours it only after matching
+  // it against the caller's own sessions, so the worst an application can do
+  // is reopen a conversation its user already owns.
+  | { type: "fred:open-chat"; sessionId: string | null }
   | {
       type: "fred:request";
       requestId: string;
@@ -134,6 +141,12 @@ export function parseApplicationFrameMessage(data: unknown): ApplicationFrameMes
     case "fred:ready":
       if (typeof message.protocolVersion !== "string") return null;
       return { type: "fred:ready", protocolVersion: message.protocolVersion };
+
+    case "fred:open-chat":
+      return {
+        type: "fred:open-chat",
+        sessionId: typeof message.sessionId === "string" && message.sessionId ? message.sessionId : null,
+      };
 
     case "fred:navigate":
       if (typeof message.path !== "string") return null;
