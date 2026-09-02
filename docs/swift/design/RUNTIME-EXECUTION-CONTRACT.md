@@ -4488,8 +4488,14 @@ Two additions to the agent-template surface `agent_app.py`'s
 - `TOOL_REF_SIMILARITY_SEARCH` (`knowledge.similarity_search`, `fred_sdk.support.builtins`):
   a document-to-document comparison primitive — ranks passages most similar
   to an anchor text, restricted to an explicit `document_uids` list — distinct
-  from `knowledge.search`'s corpus-wide retrieval. Wired into
-  `FredKnowledgeSearchToolInvoker` (`v2_runtime/adapters.py`).
+  from `knowledge.search`'s corpus-wide retrieval. `FredKnowledgeSearchToolInvoker`
+  (`v2_runtime/adapters.py`) delegates it to `DocumentSimilarityAdapter` —
+  the same `RuntimeServices.document_similarity` port §8.60's `document_similarity`
+  capability calls — so scope-narrowing, `general_only` enforcement, and
+  citable-source filtering live once, not in two parallel implementations.
+  `declared_tool_refs`-based agents get this for free with no per-team
+  capability enablement; §8.60's capability remains the ADMIN_GATED,
+  chat-control-carrying route to the same port.
 
 **Rolling upgrade.** Both fields default to the pre-existing behaviour
 (`supports_capabilities=True`, no similarity tool referenced), so a pod

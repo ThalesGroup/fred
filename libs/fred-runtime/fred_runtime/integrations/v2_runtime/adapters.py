@@ -879,6 +879,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         self._search_client = VectorSearchClient(
             agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
         )
+        self._similarity_port = DocumentSimilarityAdapter(
+            binding=binding, settings=self._settings
+        )
         self._builtins: dict[str, ToolHandler] = {
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
             TOOL_REF_SIMILARITY_SEARCH: self._invoke_similarity_search,
@@ -1021,13 +1024,23 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         min_score = _field("min_score")
         min_score = min_score if isinstance(min_score, (int, float)) else None
 
-        hits = await self._search_client.similarity_search(
-            anchor=anchor,
-            document_uids=[str(uid) for uid in document_uids],
-            top_k=top_k,
-            rerank=rerank,
-            min_score=min_score,
-        )
+        # Delegates to RuntimeServices.document_similarity — the same port the
+        # document_similarity capability uses (RUNTIME-EXECUTION-CONTRACT.md
+        # §8.60) — so scope-narrowing and general_only enforcement live once.
+        try:
+            result = await self._similarity_port.find_similar(
+                anchor,
+                document_uids=[str(uid) for uid in document_uids],
+                top_k=top_k,
+                rerank=rerank,
+                min_score=min_score,
+            )
+        except DocumentScopeRefusedError as exc:
+            raise RuntimeError(
+                "knowledge.similarity_search: none of the requested documents "
+                f"are in scope for this conversation ({', '.join(exc.requested_uids)})"
+            ) from exc
+        hits = result.hits
 
         _LLM_FIELDS = {
             "uid",
