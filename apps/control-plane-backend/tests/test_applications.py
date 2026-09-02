@@ -381,6 +381,27 @@ def test_config_rejects_unsafe_ui_prefix(ui_prefix: str) -> None:
         _source("example", ui_prefix=ui_prefix)
 
 
+# Mirrors RESERVED_IDS in apps/frontend/scripts/application-proxy.mjs: an id
+# the control plane accepted here but the gateway rejects would grant a
+# capability for an application whose frontend container never starts.
+@pytest.mark.parametrize("app_id", ["default", "hostnames", "include", "volatile"])
+def test_config_rejects_reserved_application_id(app_id: str) -> None:
+    with pytest.raises(ValidationError, match="reserved"):
+        _source(app_id, ui_prefix=f"/apps/{app_id}")
+
+
+@pytest.mark.parametrize(
+    "ui_prefix",
+    [
+        "https://apps.example:99999/example",  # out of the 0-65535 range
+        "https://apps.example:notaport/example",
+    ],
+)
+def test_config_rejects_absolute_ui_prefix_with_invalid_port(ui_prefix: str) -> None:
+    with pytest.raises(ValidationError, match="port"):
+        _source("example", ui_prefix=ui_prefix)
+
+
 # The gateway keys its upstream map on the URI segment after /apps/, so a
 # same-origin prefix that disagrees with its own app_id routes nowhere. Both
 # halves can be spelled identically and still 404, which is why this is

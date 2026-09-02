@@ -48,6 +48,12 @@ from pydantic import (
 from control_plane_backend.applications.schemas import ApplicationSummary
 
 APPLICATION_ID_PATTERN = r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+# Mirrors RESERVED_IDS in apps/frontend/scripts/application-proxy.mjs: these
+# collide with nginx map directives the gateway generates from the same
+# config, so a control-plane-accepted id the gateway then rejects would grant
+# a capability for an application whose frontend container fails to start.
+# Keep the two lists identical.
+_RESERVED_APPLICATION_IDS = frozenset({"default", "hostnames", "include", "volatile"})
 _SEMVER_PATTERN = (
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
@@ -95,6 +101,14 @@ def _normalized_ui_prefix(value: str) -> str:
         )
     if parsed.username or parsed.password:
         raise ValueError("ui_prefix must not carry credentials")
+    try:
+        parsed.port
+    except ValueError as exc:
+        # A non-numeric or out-of-range (0-65535) port passes urlsplit() itself
+        # — it only raises when the port is actually read. The browser's own
+        # `new URL()` rejects the same value, so left unchecked here this
+        # would authorize an application that can never render.
+        raise ValueError(f"ui_prefix has an invalid port: {exc}") from exc
     return value.rstrip("/")
 
 
@@ -153,6 +167,16 @@ class ApplicationSourceConfig(BaseModel):
     )
     description: dict[str, str] = Field(..., description="Locale to description.")
     enabled: bool = True
+
+    @field_validator("app_id")
+    @classmethod
+    def _check_app_id(cls, value: str) -> str:
+        if value in _RESERVED_APPLICATION_IDS:
+            raise ValueError(
+                f"app_id {value!r} is reserved by the frontend gateway "
+                f"({sorted(_RESERVED_APPLICATION_IDS)}) and cannot be registered"
+            )
+        return value
 
     @field_validator("ui_prefix")
     @classmethod
