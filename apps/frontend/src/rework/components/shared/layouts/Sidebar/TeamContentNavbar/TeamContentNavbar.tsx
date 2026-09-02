@@ -24,6 +24,8 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
+import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
+import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
@@ -123,10 +125,13 @@ export default function TeamContentNavbar() {
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 
   // Team avatar (28×28, 4px): the custom image when set, else colour-tinted
-  // initials (same fallback as the Home team list). Square 4px on both, incl.
-  // the personal space.
+  // square initials (same fallback as the Home team list). The personal space
+  // reuses that list's round user avatar (UserAvatar) — the "this is you"
+  // signal — sized down to fit this compact header.
   const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
-  const teamAvatar = selectedTeam?.avatar_image_url ? (
+  const teamAvatar = isPersonalTeam ? (
+    <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
+  ) : selectedTeam?.avatar_image_url ? (
     <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
   ) : (
     <TeamInitials

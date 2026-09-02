@@ -1537,6 +1537,12 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "status": "available",
             "default_tuning_fields": [],
             "available_capabilities": [],
+            "default_capability_ids": [],
+            # #2473: a template declaring neither reasoning field reports both
+            # false — the platform default, and what a pod predating #2473
+            # sends.
+            "reasoning_enabled": False,
+            "reasoning_default_on": False,
         }
     ]
 

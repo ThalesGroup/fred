@@ -2398,7 +2398,9 @@ Opt-in **floating-card** variant (`floating` prop, push layout, 2026-08-06): the
 into a card inset from every edge — single `outline-muted` 1px border, `--radius-m` (16px)
 corners, subtle `--shadow-s` — dropping the flush edge border and the header divider. Width stays
 fixed during the open animation so content doesn't reflow. First consumer: the document-scope
-panel (see "Document-scope side panel"). Default panels stay flush.
+panel (see "Document-scope side panel"). Default push panels stay flush: full page height, square
+corners, a 1px `outline-muted` left divider, no top/bottom inset (2026-09-01 — previously a
+`--radius-m` rounded card with a small top/bottom margin and a transparent left edge).
 
 #### Open UX issues
 
@@ -2635,14 +2637,19 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 **Location:** `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
 **Status:** `Functional`
 
-Page composition (`.page` is a **flex column**, 2026-08-06): a full-width `topBar` (holding
-`SessionTitleEditor`) sits on top and always spans the whole page; below it a `.contentRow` (flex
-row) holds the main column (`chatArea` scroll container + sticky composer) on the left and the
-push drawers (capability / attachments / document-scope) on the right. Pulling the header out of
-the main column means an opening push drawer reflows only the content row — the panel slides
-**under** the full-width header instead of shrinking it. (Before this, the header lived inside the
-main column and shrank whenever a push drawer opened.) The `data-picker-top-boundary` attribute
-stays on the header so the composer's anchored pickers still stop just below it. The composer is
+Page composition (`.page` is a **flex row**, 2026-09-01): `[ .pageBody (flex:1) ][ launcher rail ]`.
+`.pageBody` (flex row) holds the `.leftStack` on the left and the push drawers (capability /
+attachments / document-scope) on the right. `.leftStack` is a flex column — the `topBar` (holding
+`SessionTitleEditor`) above, the `.contentRow` → main column (`chatArea` scroll container + sticky
+composer) below. An opening push drawer reflows the **whole left stack, header included**, so the
+drawer spans the full page height for better viewer visualization (changed 2026-09-01 — previously
+the drawers lived inside `.contentRow` and reflowed only the content, the panel sliding **under**
+the full-width header; before that again the header lived inside the main column and shrank on
+open). The `topBar` is an inset rounded card — `--radius-s` corners, 12px top/left/right margin,
+flush bottom (2026-09-01). The launcher rail is a **page-root in-flow column** at the far right
+(see "Capability side-panel launcher rail"), not part of `.pageBody`. The
+`data-picker-top-boundary` attribute stays on the header so the composer's anchored pickers still
+stop just below it. The composer is
 built once (a single `composer` element) and placed either centered in the empty "new
 conversation" state or in the sticky `inputOverlay` mid-conversation — same structure both times
 (2026-08-06, see `RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` —
@@ -3626,8 +3633,14 @@ agent-health controls.
 
 **Status:** `Functional`
 
-The floating rail on the chat page's right edge, one small icon button per side panel
-a session's active capabilities declare. Two changes (#2459):
+The launcher rail on the chat page's right edge, one small icon button per side panel
+a session's active capabilities declare. **Since 2026-09-01 it is a page-root in-flow
+column** — extracted into `CapabilityLauncherRail` (a flex sibling of `.pageBody`, not
+inside it), `flex-shrink: 0`, full page height, 12px top/right/bottom margin — so it
+reserves its own space at the far right and reflows the chat body left, rather than
+floating over it as an absolutely-positioned overlay. Opening a panel retires the whole
+rail (returns `null`), so the body-side push drawer takes the full width. Earlier
+behaviour (#2459):
 
 - **A launcher appears only once its panel has something to show.** The rail used to
   render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`
@@ -3644,14 +3657,15 @@ a session's active capabilities declare. Two changes (#2459):
   `edit_document` in the same pass (2026-08-28). Colour stays the rail's neutral
   `on-surface-retreat`: the launchers sit in the same floating-chrome band as the trace
   and attachments buttons, and tinting only these two would break that band.
-- **The rail dropped to 68px from the top** (2026-08-28). Its 48px offset was computed
-  against a one-line top bar; the bar now stacks a 24px title over a 20px agent name, so
-  the first launcher sat on the band.
-- **The rail retires entirely while a panel is open** (2026-08-28). It is absolutely
-  positioned against the whole slot, drawer included, so with a panel open it landed on
-  that drawer's own close button. Moving the remaining launchers into the drawer's
-  `headerActions` was tried the same day and dropped: closing the open panel to reach
-  another one is cheap, and one home for the launchers beats two (developer decision).
+- **The rail dropped to 68px from the top** (2026-08-28, superseded 2026-09-01). Back when
+  the rail was absolutely positioned, its top offset was tuned against the two-line top bar;
+  in-flow at the page root this offset is gone (the 12px top margin replaces it).
+- **The rail retires entirely while a panel is open** (2026-08-28, still current). When it was
+  an absolutely-positioned overlay this avoided landing on the open drawer's close button;
+  now that it is an in-flow column, retiring also hands its width back to the body so the
+  drawer fills the page. Moving the remaining launchers into the drawer's `headerActions` was
+  tried the same day and dropped: closing the open panel to reach another one is cheap, and
+  one home for the launchers beats two (developer decision).
 - **The drawer's own title band is gone for both panes** (2026-08-28). A pane that
   names the artefact it holds does not also need the drawer naming the panel above
   it - two title rows said the same thing twice and ate the top of the column. A

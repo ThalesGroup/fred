@@ -174,6 +174,60 @@ async def _require_agent_capability_dependencies_usable_by_team(
         )
 
 
+async def agent_capability_missing_platform_dependencies(
+    rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry
+) -> list[str]:
+    """Ids in `catalog_entry.default_capability_ids` that are NOT themselves
+    platform-wide `default_on` — the third face of the `depends_on` gate
+    (RFC §8.6), for the platform-wide switch (2026-08-28, GitHub #2470).
+
+    Why this exists: `enable_capability_for_team` and
+    `set_capability_personal_scope` both refuse to grant a `kind="agent"`
+    capability whose default tool capabilities the grantee cannot use, but
+    `set_capability_default_on` had no such check — so flipping an agent
+    template default-on handed the template to EVERY team while its
+    dependencies stayed ungranted, enrolling a non-functional agent
+    platform-wide with no error at any point.
+
+    `default_on` is the only satisfying marker here, deliberately: default-on
+    is the one grant that reaches every team, present and future, so a
+    dependency merely enabled for the teams that happen to exist today would
+    leave tomorrow's team with the same broken template. This is stricter than
+    the personal-space counterpart below (which accepts `personal_on` OR
+    `default_on`) because that one is scoped to the personal class, not to
+    every team.
+
+    Public and non-raising, matching `agent_capability_missing_dependencies` —
+    a caller that needs to report rather than reject gets the same answer
+    without catching an exception.
+    """
+
+    if catalog_entry.kind != "agent" or not catalog_entry.default_capability_ids:
+        return []
+    missing: list[str] = []
+    for cap_id in catalog_entry.default_capability_ids:
+        if not await has_org_relation(rebac, cap_id, RelationType.DEFAULT_ON):
+            missing.append(cap_id)
+    return missing
+
+
+async def _require_agent_capability_dependencies_default_on(
+    rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry
+) -> None:
+    """Platform-wide counterpart of the two dependency gates: refuse to turn a
+    `kind="agent"` capability default-on unless each of its
+    `default_capability_ids` is itself default-on (#2470)."""
+
+    missing = await agent_capability_missing_platform_dependencies(rebac, catalog_entry)
+    if missing:
+        raise AgentCapabilityDependencyNotSatisfied(
+            f"Cannot turn agent capability {catalog_entry.id!r} default-on: its "
+            f"default tool capability id(s) {missing!r} are not default-on "
+            "themselves, so every team would inherit a template it cannot use. "
+            "Turn them default-on first."
+        )
+
+
 async def _require_agent_capability_dependencies_usable_by_all_personal_spaces(
     rebac: RebacEngine, catalog_entry: CapabilityCatalogEntry
 ) -> None:
@@ -749,7 +803,9 @@ async def set_capability_default_on(
     inherited access: every instance selecting the capability whose team lacks
     an explicit `enabled` grant is suspended (`CAPABILITY_ACCESS_REVOKED`).
     A capability with a REQUIRED team-settings field can never be default-on
-    (§8.2) — nobody has filled the settings.
+    (§8.2) — nobody has filled the settings. Nor can a `kind="agent"` template
+    whose `default_capability_ids` are not themselves default-on (§8.6, #2470)
+    — every team would inherit a template it cannot use.
     """
 
     if on:
@@ -758,6 +814,7 @@ async def set_capability_default_on(
                 f"Capability {catalog_entry.id!r} has required team settings and "
                 "cannot be default-on."
             )
+        await _require_agent_capability_dependencies_default_on(rebac, catalog_entry)
         await ensure_capability_anchor(rebac, catalog_entry.id)
         try:
             await rebac.add_relation(

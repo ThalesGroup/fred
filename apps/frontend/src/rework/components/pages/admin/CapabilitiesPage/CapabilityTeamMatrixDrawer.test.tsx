@@ -173,8 +173,14 @@ describe("CapabilityTeamMatrixDrawer tri-state controls", () => {
 
 // Regression coverage for #2408: activating an agent whose default tool
 // capabilities the target team (or every personal space) cannot use yet was
-// offered freely and answered with a bare HTTP 409. The grant is now blocked
-// up front, and the row says which dependency is in the way.
+// offered freely and answered with a bare HTTP 409. The row says which
+// dependency is in the way.
+//
+// #2470 changed the remedy, not the diagnosis: the Enable segment stays
+// CLICKABLE so it can open the "Enable all" confirmation, which grants the
+// missing dependencies before the template. What keeps a bare grant off the
+// wire is `selectChoice`/`submitEnable`, not a disabled attribute — so these
+// tests assert the hint, and assert that the segment is reachable.
 describe("CapabilityTeamMatrixDrawer agent dependency gate (#2408, RFC §8.6 depends_on)", () => {
   const agent = capability({ id: "sentinel", name: "cap.sentinel", kind: "agent", default_capability_ids: ["dep"] });
   const dep = (over: Partial<CapabilityEnablementItem> = {}) => capability({ id: "dep", name: "Tabular MCP", ...over });
@@ -186,11 +192,14 @@ describe("CapabilityTeamMatrixDrawer agent dependency gate (#2408, RFC §8.6 dep
   /** The row's three tri-state buttons, in CHOICES (disable/default/enable) order. */
   const enableSegment = (rowHtml: string) => rowHtml.split("<button").slice(1, 4)[2] ?? "";
 
-  it("blocks Enable and names the dependency when the team cannot use it", () => {
+  it("names the dependency, and keeps Enable clickable so it can offer to grant it", () => {
     const html = render({ capability: agent, allCapabilities: [agent, dep()], teams: nb });
     const row = teamRow(html);
     expect(row).toContain("rework.admin.capabilities.matrix.dependencyHint:Tabular MCP");
-    expect(enableSegment(row)).toContain("disabled");
+    // #2470: reachable on purpose — the click opens the "Enable all" dialog
+    // rather than doing nothing. A disabled segment is also keyboard-dead,
+    // which is what left the admin with no in-place way forward.
+    expect(enableSegment(row)).not.toContain("disabled");
   });
 
   it("offers Enable normally once the dependency is enabled for that team", () => {
@@ -247,11 +256,23 @@ describe("CapabilityTeamMatrixDrawer agent dependency gate (#2408, RFC §8.6 dep
     expect(row).not.toContain("rework.admin.capabilities.matrix.personal.dependencyHint");
   });
 
-  it("blocks the personal-space class row when the dependency has no personal access", () => {
+  it("names the dependency on the personal-space class row, Enable still clickable", () => {
     const html = render({ capability: agent, allCapabilities: [agent, dep()], teams: nb });
     const row = personalRow(html);
     expect(row).toContain("rework.admin.capabilities.matrix.personal.dependencyHint:Tabular MCP");
-    expect(enableSegment(row)).toContain("disabled");
+    // #2470, same as the team row: the click opens the "Enable all" dialog.
+    expect(enableSegment(row)).not.toContain("disabled");
+  });
+
+  it("still hard-blocks the personal class row when the capability needs required team settings", () => {
+    // Unchanged by #2470: this synthetic class row has no form to fill the
+    // settings in with, so there is nothing "Enable all" could do about it.
+    const gated = capability({
+      ...agent,
+      team_settings_fields: [{ key: "token", type: "string", required: true, title: "Token" }],
+    });
+    const html = render({ capability: gated, allCapabilities: [gated, dep({ default_on: true })], teams: nb });
+    expect(enableSegment(personalRow(html))).toContain("disabled");
   });
 
   it("offers the personal-space class row once the dependency is on by default", () => {

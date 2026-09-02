@@ -3,7 +3,12 @@ import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { buildAgentFormSubmitPayload, extractCapabilityConfigValues } from "./AgentFormModal";
+import {
+  buildAgentFormSubmitPayload,
+  defaultCapabilitySelection,
+  defaultReasoningSelection,
+  extractCapabilityConfigValues,
+} from "./AgentFormModal";
 
 function makeCapabilityTemplate(capabilityIds: string[]): AgentTemplateSummary {
   return {
@@ -26,6 +31,79 @@ const EMPTY_CAPABILITY_STATE = {
   capabilityAssetFiles: {} as Record<string, Record<string, File | undefined>>,
   capabilityBlockingErrors: {} as Record<string, string | null>,
 };
+
+describe("defaultReasoningSelection", () => {
+  it("seeds both fields from the template's declared defaults", () => {
+    // #2473: platform_ops declares both, so a new instance opens with the
+    // Reasoning card ticked and its nested "start in Boost" switch on.
+    const template = {
+      ...makeCapabilityTemplate([]),
+      reasoning_enabled: true,
+      reasoning_default_on: true,
+    } as AgentTemplateSummary;
+
+    expect(defaultReasoningSelection(template)).toEqual({
+      reasoningEnabled: true,
+      reasoningDefaultOn: true,
+    });
+  });
+
+  it("seeds the offer without the default-on switch", () => {
+    // The two are independent: a template may offer reasoning while still
+    // leaving new conversations starting in Rapide.
+    const template = {
+      ...makeCapabilityTemplate([]),
+      reasoning_enabled: true,
+      reasoning_default_on: false,
+    } as AgentTemplateSummary;
+
+    expect(defaultReasoningSelection(template)).toEqual({
+      reasoningEnabled: true,
+      reasoningDefaultOn: false,
+    });
+  });
+
+  it("defaults to off for a template that declares neither, and for none", () => {
+    // The pre-#2473 behaviour, and what an older pod's payload yields — the
+    // form must not invent a reasoning offer no template asked for.
+    expect(defaultReasoningSelection(makeCapabilityTemplate([]))).toEqual({
+      reasoningEnabled: false,
+      reasoningDefaultOn: false,
+    });
+    expect(defaultReasoningSelection(undefined)).toEqual({
+      reasoningEnabled: false,
+      reasoningDefaultOn: false,
+    });
+  });
+});
+
+describe("defaultCapabilitySelection", () => {
+  it("pre-ticks the template's declared defaults", () => {
+    const template = {
+      ...makeCapabilityTemplate(["platform_postgres", "other_tool"]),
+      default_capability_ids: ["platform_postgres"],
+    };
+
+    expect(defaultCapabilitySelection(template)).toEqual(["platform_postgres"]);
+  });
+
+  it("drops a default the template does not advertise to this team", () => {
+    // `available_capabilities` is `can_use`-filtered server-side, so an
+    // admin-gated default the team is not enabled for arrives absent from it.
+    // It must not be pre-ticked — the save would 403 on an explicit selection.
+    const template = {
+      ...makeCapabilityTemplate(["other_tool"]),
+      default_capability_ids: ["platform_postgres"],
+    };
+
+    expect(defaultCapabilitySelection(template)).toEqual([]);
+  });
+
+  it("returns nothing for a template declaring no defaults, or no template", () => {
+    expect(defaultCapabilitySelection(makeCapabilityTemplate(["other_tool"]))).toEqual([]);
+    expect(defaultCapabilitySelection(undefined)).toEqual([]);
+  });
+});
 
 describe("buildAgentFormSubmitPayload", () => {
   it("trims display name, role, description, and usage statement on create submit", () => {

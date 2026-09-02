@@ -278,6 +278,10 @@ Two distinct concepts:
 - `display_name`, `description`, `category`
 - `tags`, `capabilities`, `team_instantiable`, `status`
 - `default_tuning_fields: list[ManagedAgentFieldSpec]` — field descriptors the frontend renders dynamically at enrollment
+- `default_capability_ids: list[str]` — **added 2026-08-28 (#2458).** The
+  capability ids the template activates by default, verbatim from the pod's
+  `definition.default_mcp_servers`. Deliberately NOT filtered by the team's
+  `can_use`, unlike `available_capabilities` beside it — see §45.
 - `mcp_servers: list[ManagedMcpServerRef]` — MCP tool references advertised by the template; `display_name` enriched from the pod's MCP catalog; `config_fields` for per-instance tool configuration declared by the tool catalog
 
 The control plane is a **pure proxy** for these values — it does not interpret them. The runtime pod is the author; the control plane aggregates and forwards.
@@ -1467,6 +1471,62 @@ client predicate still reads the (empty) grant lists and can render an agent
 row as blocked. The team matrix is already decorative in that mode, so the
 mismatch is cosmetic and not worth a second code path.
 
+**2026-08-28 — the `depends_on` gate reaches the platform-wide switch, and the
+UI offers to satisfy it (GitHub #2470).** Three write paths grant a
+`kind="agent"` capability; only two of them enforced the 2026-07-19 gate.
+`PUT /admin/capabilities/{capability_id}/default-on` had **no dependency check
+at all** — so turning an agent template default-on handed it to *every* team
+while its `default_capability_ids` stayed ungranted, enrolling a
+non-functional agent platform-wide with no error at any point. Surfaced by the
+`platform_ops` template (#2458), the first shipped template that declares a
+dependency.
+
+**Behaviour change on an existing route.** `PUT .../default-on` with
+`default_on: true` now 409s (`AgentCapabilityDependencyNotSatisfied`, the same
+exception the other two paths raise) when the entry is `kind="agent"` and any
+id in its `default_capability_ids` is not **itself `default_on`**. Turning
+default-on **off** is never gated — a template already on whose dependency was
+revoked afterwards must stay switchable off, or the admin is trapped in the
+very state this prevents. No new field, exception type, or error shape; the
+route's error contract is unchanged (plain-string `detail`, no `error_code`).
+
+`default_on` is the only satisfying marker here, deliberately stricter than
+the personal-scope rule (`(personal_on OR default_on) AND NOT
+personal_disabled`): default-on reaches every team *present and future*, so a
+dependency merely granted to the teams that exist today would still leave
+tomorrow's team inheriting a template it cannot use.
+
+Client-side consequences (`CapabilitiesPage.tsx`,
+`CapabilityTeamMatrixDrawer.tsx`, `missingAgentDependenciesForPlatform` in
+`capabilityEnablement.ts`): the 2026-08-25 entry's disabled "Enable" segment
+is **replaced by an "Enable all" confirmation** on all three paths. The
+segment stays clickable (a disabled segment is also keyboard-dead, which left
+the admin with no in-place way forward); clicking it names the missing
+dependencies and offers to grant them **at the same scope** as the template —
+per team, personal-class, or default-on — before granting the template itself.
+There is deliberately no "enable the template anyway": all three paths now
+refuse it consistently. `selectChoice`/`submitEnable`/`onToggleDefault` remain
+what keep an ungated grant off the wire, so the client gate is still a
+better-error affordance and never an enforcement point.
+
+**Not transactional, and ordered on purpose.** "Enable all" issues one write
+per dependency and then the template, sequentially. A dependency that fails
+aborts the sequence *before* the template, so a partial failure always leaves
+"dependency granted, template not" — never the inverse, which is the broken
+state being fixed. The failing dependency is named in the error toast.
+
+**Two consequences of that ordering, both deliberate.** (1) The client-side
+#2408 pre-check in `submitEnable` is **skipped** for the final template write
+of an "Enable all" run: `allCapabilities` comes from the RTK Query cache,
+which has not refetched at that instant, so the pre-check would still see the
+just-granted dependencies as missing and refuse the write the admin confirmed.
+The backend re-checks either way, so nothing is weakened — the client gate
+remains a better-error affordance, never an enforcement point. (2) When the
+template itself declares `team_settings_fields`, the team-row flow grants the
+dependencies and then **opens the settings form** rather than enabling
+outright; the dialog says so up front, since the run stops there until the
+form is saved.
+
 ## 18. Contract Notes — team-scoped candidate-member search (2026-07-20)
 
 **New endpoint:** `GET /teams/{team_id}/candidate-members?query=<string>` →
@@ -2262,6 +2322,47 @@ change only: `AgentTuning.reasoning_enabled`/`reasoning_default_on` remain
 plain agent properties (no `ConfigModel`, no `TurnOptionsModel`, no
 middleware), enforced at the single `build_for_chat` point as before.
 
+### Addendum — a template declares its reasoning defaults (2026-08-28, #2473)
+
+Both reasoning fields were settable **per agent instance only**: whoever filled
+in the creation form decided them, and a template had no way to say "this
+agent's job needs reasoning". Amendment B's own title says "let an agent
+**author** preselect reasoning ON", but the author had no surface to do it from
+— the SDK's `AgentTuning` did not even declare `reasoning_default_on`. #2473
+closes that gap.
+
+| Field | On | Meaning |
+| ----- | -- | ------- |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentDefinition` (fred-sdk) | What a template DECLARES; both default `False` |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentTuning` / pod `default_tuning` | How the declaration reaches control-plane — `_definition_to_agent_tuning` now projects both |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentTemplateSummary` | What the agent-creation form reads to pre-tick its Reasoning card |
+
+**A seed, not a gate — the same contract Amendment B set.** The form pre-ticks
+from the template exactly as `default_capability_ids` pre-ticks capabilities
+(#1974); the operator may untick either before saving, and enrollment keeps
+overwriting both from the request, so the form stays authoritative once shown.
+
+**The pre-tick is unconditional, and that is deliberate.** It does not consult
+`reasoning_enabled_model_ids`. This copies existing behaviour rather than adding
+any: the form's Reasoning card is already rendered unconditionally and the form
+has never read the platform gate. Levels 1-2 stay enforced live on the send path
+(`_platform_reasoning_control`, `build_for_chat`), so a declared `True` on a
+deployment where no model has its reasoning enabled is simply inert — no
+descriptor emitted — precisely as a hand-ticked `True` is today, and the control
+reappears if an admin later enables a model. Suppressing the pre-tick instead
+would make it vanish according to platform state invisible from that form, which
+is the confusion §8's absent-not-inert rule exists to prevent.
+
+**No migration.** `ManagedAgentTuning` already carried both fields with `False`
+defaults, so stored rows and pods predating #2473 deserialize unchanged and
+report both `False`. Only NEW instances of a declaring template are affected;
+existing instances do not gain their template's reasoning defaults retroactively
+(the same boundary `materialize_default_capability_selections` draws for
+capabilities).
+
+First adopter: `platform_ops` (#2458) declares both `True` — a diagnostic agent
+whose turns are inherently multi-step.
+
 ---
 
 ## 34. Contract Notes — `prepare_execution` session ownership check (2026-07-31)
@@ -2942,7 +3043,44 @@ marketplace-listed and never readable by non-members. Joining-mode UI
 consequence (already shipped in #2398): a new team's settings show the
 locked "manual only" joining state until it is made public.
 
-## 45. Contract Notes — team applications are runtime-registered, frame-hosted UIs (2026-08-31)
+---
+
+## 45. Contract Notes — `AgentTemplateSummary.default_capability_ids` (2026-08-28, issue #2458)
+
+**What changed.** `GET /teams/{team_id}/agent-templates` now returns
+`default_capability_ids: list[str]` on every `AgentTemplateSummary`. Additive
+and optional — an older client ignoring it is unaffected.
+
+**Why.** The agent-creation form always submits an EXPLICIT `capability_ids`
+whenever the template advertises any capability, and an explicit `[]` means
+"select nothing" in `_apply_capability_selection` (§ capability selection;
+RFC AGENT-CAPABILITY §8.1). The template-default path there only runs for a
+`None` selection, so it was unreachable from the UI: a template's declared
+defaults were silently dropped on every new instance, and the user had to
+tick them by hand. Found on `platform_ops`, whose sole default is
+`platform_postgres` (#2458); it affected every template with defaults,
+including `general_assistant`'s `document_access`.
+
+**The filtering asymmetry — deliberate.** `available_capabilities` on the same
+payload IS narrowed to what the team `can_use` (CAPAB-01 / #1980);
+`default_capability_ids` is NOT. The field describes what the *template*
+declares, which is a static, non-secret property of a template the team was
+already granted in order to see the summary at all. The client intersects the
+two, so an admin-gated default a team is not enabled for is neither pre-ticked
+nor rendered — the intersection, not the raw list, is the authorization
+boundary. Filtering both would make the field misreport the template; filtering
+neither would pre-tick a box whose save 403s.
+
+**Applies to new instances only.** An instance enrolled before this field
+existed persisted a genuine `selected_capability_ids: []`, which is
+indistinguishable from a deliberate "no capabilities" — so
+`materialize_default_capability_selections` skips it by design (it backfills
+`None` rows only). Existing agents do not gain their template's defaults
+retroactively and must be re-ticked by hand.
+
+---
+
+## 46. Contract Notes — team applications are runtime-registered, frame-hosted UIs (2026-08-31)
 
 Fred has one generic V1 host for trusted applications a deployment registers.
 Registration is deployment configuration, expressed like

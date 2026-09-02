@@ -94,12 +94,16 @@ export async function downloadManyAsZip(files: DownloadableFile[], zipFilename: 
     return;
   }
   const zip = new JSZip();
-  const blobs = await Promise.all(files.map((f) => f.fetchBlob()));
+  // Read each file into an ArrayBuffer BEFORE adding it. Handing `zip.file` a Blob
+  // makes JSZip read it LAZILY during generateAsync, and reading several Blobs
+  // there drops all but one entry to 0 bytes (seen on Firefox). A buffer is
+  // consumed synchronously, so every entry keeps its bytes.
+  const buffers = await Promise.all(files.map(async (f) => (await f.fetchBlob()).arrayBuffer()));
   const usedNames = new Set<string>();
   files.forEach((f, i) => {
     const name = uniqueName(f.filename, usedNames);
     usedNames.add(name);
-    zip.file(name, blobs[i]);
+    zip.file(name, buffers[i]);
   });
   downloadFile(await zip.generateAsync({ type: "blob" }), zipFilename);
 }

@@ -214,6 +214,10 @@ async def put_capability_default_on(
         AuthorizationError,
         CapabilityNotFound,
         DefaultOnNotAllowed,
+        # #2470: turning an agent template default-on is refused when its
+        # `default_capability_ids` are not default-on themselves. Without this
+        # the 409 would escape as an unhandled 500.
+        AgentCapabilityDependencyNotSatisfied,
     ) as exc:
         raise _map_error(exc) from exc
 

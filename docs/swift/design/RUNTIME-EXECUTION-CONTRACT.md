@@ -2252,7 +2252,8 @@ already-resumed, HITL prompt:
    `interrupt_id` raises — no scalar fallback exists.
 4. **Durable, atomic, fenced claim** (`FredSqlCheckpointer`'s
    `checkpoint_hitl_claim` table, key `(thread_id, checkpoint_ns,
-   interrupt_id)`), acquired as LATE as possible — inside
+   interrupt_id)`, with `checkpoint_ns` always `""` for ReAct V2 — see
+   §8.61), acquired as LATE as possible — inside
    `agent_app._iterate_runtime_event_payloads`, immediately before
    `executor.stream(...)`, never in the read-only gate. State machine
    `claimed -> started -> consumed`, every operation fenced by an opaque
@@ -4276,6 +4277,8 @@ time what it can draw and skips unknown kinds.
 this change read back as "no cards" - exactly what they render today. Their parts
 are not recoverable; they were never stored.
 
+---
+
 ### 8.60 ✅ `document_similarity` capability + `DocumentSimilarityPort` - issue #2461 (2026-08-28)
 
 **Was**: Knowledge Flow shipped targeted similarity / comparison search in
@@ -4393,3 +4396,76 @@ the team could not be switched on at all - flip it, the missing member is never
 added, the derived state reads false again - while switching it off still
 stripped the rest. It now takes `availableIds` and derives from the members the
 team can actually select.
+
+### 8.61 ✅ ReAct V2 checkpoints are always unnamespaced - issue #2479 (2026-08-31)
+
+**Was**: every ReAct V2 HITL resume dead-ended in
+`409 "No pending checkpoint was found for this session."`. The paused
+checkpoint existed, with its `__interrupt__` write; the admission gate
+(§8.39 layer 2) was reading in the wrong place.
+
+**Why**: LangGraph resets `checkpoint_ns` to `""` for every non-nested run
+(`pregel/_loop.py::PregelLoop.__init__`). A per-agent namespace configured
+on a compiled root graph therefore never reaches storage. The executor
+passed one anyway, while the gate and the `checkpoint_hitl_claim` key both
+read at `agent_instance_id` - so the write and the read never met. The
+hand-rolled Graph runtime is unaffected: it calls `aput` itself, so its
+namespace is real.
+
+**Now**:
+
+- ReAct V2 stores and reads unnamespaced. The executor no longer configures
+  a `checkpoint_ns` (it was inert), and the HITL claim keys on `""`.
+- `_resume_checkpoint_namespaces` picks the candidate namespace from the
+  request's own resume identifier - `checkpoint_id` is Graph V2's,
+  `interrupt_id` is ReAct V2's. A `checkpoint_id` resume probes the agent
+  namespace only, since the Graph executor reads nowhere else and a gate
+  that waved it through would fail mid-stream, past the point a 409 can be
+  sent. An `interrupt_id` resume probes `""` first, keeping the agent
+  namespace for a Graph pause that never stamped a `checkpoint_id`. The gate
+  runs before target resolution, so it cannot know the runtime kind directly.
+- `test_langgraph_resets_root_checkpoint_namespace` pins the LangGraph
+  behaviour: a version bump that changed it fails a test instead of
+  silently moving live checkpoints out of the gate's reach.
+
+**Still open**: isolating agent checkpoints within a shared session, the
+goal of #2415. `checkpoint_ns` cannot deliver it for a root graph - the only
+LangGraph-native lever is `thread_id`, which touches
+`checkpoint_thread_owner`, per-user erasure, and session deletion. Tracked
+in issue #2481; ReAct agents currently share the session's checkpoint thread.
+
+---
+
+### 8.62 ✅ `AgentDefinition` declares its reasoning defaults; `default_tuning` carries them — issue #2473 (2026-08-28)
+
+**Additive SDK surface.** `AgentDefinition` gains two declarable fields,
+`reasoning_enabled` and `reasoning_default_on` (both default `False`), and
+`AgentTuning` gains `reasoning_default_on` beside the `reasoning_enabled` it
+already had. `_definition_to_agent_tuning` (`app/agent_app.py`) now projects
+both onto the `default_tuning` a pod advertises on `/pod/v1/agents/templates`;
+it previously projected only `role`/`description`/`tags`/`fields`, which pinned
+both fields `False` on the wire regardless of what a definition declared.
+
+**Why the pod side matters.** REASON-01 level 3 is an agent property, and
+Amendment B's `reasoning_default_on` seeds where the composer's toggle starts.
+Both were reachable only per instance, through the agent-creation form — so a
+template could not express "this agent's job needs reasoning". The wire already
+carried `default_tuning` as a full `AgentTuning`, so no new transport was
+needed; the projection was the whole gap.
+
+**No runtime behaviour change.** These fields are declaration only. Nothing in
+the execution path reads them: reasoning is still turned off at the single
+`RoutedChatModelFactory.build_for_chat` point (§8.48), against
+`RuntimeContext.reasoning` (level 4) and `reasoning_enabled_model_ids` (level
+2). A template declaring `reasoning_enabled=True` on a deployment where no model
+has its reasoning enabled produces no composer control and no reasoning turn.
+
+**Rolling upgrade.** Both models default the fields to `False`, so a pod
+predating #2473 advertises a `default_tuning` without the keys and a newer
+control-plane reads both as `False` — never inventing an offer no template
+declared. Consumer side and the seed-not-gate semantics:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §33 addendum (2026-08-28).
+
+**Adopter.** `fred_agents.platform_ops` declares both `True` — a diagnostic
+agent whose turns are inherently multi-step.
+

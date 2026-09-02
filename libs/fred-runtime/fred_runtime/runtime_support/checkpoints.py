@@ -76,6 +76,11 @@ def checkpoint_namespace(
 
     Managed agent instances are isolated by their concrete instance id.
     SDK-defined agents fall back to their stable agent id.
+
+    Only reaches storage for the hand-rolled Graph runtime, which calls `aput`
+    itself: LangGraph resets `checkpoint_ns` to `""` on every root-graph run
+    (`pregel/_loop.py::PregelLoop.__init__`), so a compiled graph's checkpoints
+    are always unnamespaced however its config is built.
     """
     return agent_instance_id or agent_id
 

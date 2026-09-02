@@ -1,0 +1,18 @@
+name: Check docker images
+
+# No paths filter on purpose: an image breaks from far outside its own directory
+# — a libs/ package added as a path dependency but never COPYed is exactly the
+# release-blocking bug this gate exists to catch.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  docker-images:
+    uses: ./.github/workflows/Docker-images.yml
+    with:
+      publish: false

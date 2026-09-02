@@ -254,7 +254,8 @@
       "description": "Ability to edit and generate a downloadable text document.",
       "panel": {
         "writable_document_pane": {
-          "title": "Document"
+          "title": "Document",
+          "launcher": "Text viewer"
         }
       },
       "untitled": "Document",
@@ -276,6 +277,36 @@
       },
       "code": {
         "plainText": "Plain text"
+      }
+    },
+    "html_artifact": {
+      "name": "Generate a web page (HTML/CSS)",
+      "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
+      "panel": {
+        "html_artifact_pane": {
+          "title": "HTML artifact",
+          "launcher": "HTML/CSS viewer"
+        }
+      },
+      "untitled": "HTML artifact",
+      "close": "Close panel",
+      "download": "Download",
+      "downloadHtml": "HTML",
+      "downloadPdf": "PDF",
+      "downloadPng": "PNG",
+      "openInNewTab": "Open in a new tab",
+      "copy": "Copy to clipboard",
+      "copied": "Copied to clipboard",
+      "copyFailed": "Could not copy.",
+      "exportFailed": "Could not export the {{format}}.",
+      "fitWidth": "Fit width",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "resetZoom": "Reset zoom",
+      "empty": "No artifact yet. Ask the assistant to build a page or component.",
+      "card": {
+        "aria": "HTML artifact",
+        "open": "Open preview"
       }
     },
     "ppt_filler": {
@@ -325,7 +356,18 @@
       },
       "panel": {
         "ppt_preview_pane": {
-          "title": "Presentation preview"
+          "title": "Presentation preview",
+          "launcher": "PPT viewer"
+        }
+      }
+    },
+    "platform_postgres": {
+      "name": "Platform database (read-only SQL)",
+      "description": "Admin capability: answer operational questions with read-only SQL over the platform's own Postgres database.",
+      "fields": {
+        "statement_timeout_s": {
+          "title": "Statement timeout (seconds)",
+          "description": "Maximum time a single SQL statement may run before the server cancels it (1–120 seconds)."
         }
       }
     }
@@ -1150,7 +1192,18 @@
         "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
         "reasoningOffToast": "Reasoning disabled for this model.",
         "reasoningOnToast": "Reasoning enabled for this model.",
-        "reasoningToggleError": "Could not change this model's reasoning setting."
+        "reasoningToggleError": "Could not change this model's reasoning setting.",
+        "grantAllConfirm": {
+          "title": "Enable required features too?",
+          "messageTeam": "{{agent}} needs {{deps}} to work. This team cannot use it yet, so enabling the agent alone would leave it non-functional.",
+          "messagePersonal": "{{agent}} needs {{deps}} to work. Personal spaces cannot use it yet, so enabling the agent alone would leave it non-functional.",
+          "messagePlatform": "{{agent}} needs {{deps}} to work. It is not on by default, so every team would inherit an agent it cannot use.",
+          "confirm": "Enable all",
+          "cancel": "Cancel",
+          "depFailed": "Could not enable {{dep}} — {{agent}} was left unchanged.",
+          "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
+          "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
+        }
       },
       "platformModelBindings": {
         "openButton": "Platform model binding",
@@ -2440,6 +2493,10 @@
             "powerpointDocument": {
               "title": "Fill in a PowerPoint document",
               "description": "Ability to fill a PPT file from a detailed template."
+            },
+            "webPage": {
+              "title": "Generate a web page (HTML/CSS)",
+              "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
             },
             "reasoning": {
               "title": "Reasoning",

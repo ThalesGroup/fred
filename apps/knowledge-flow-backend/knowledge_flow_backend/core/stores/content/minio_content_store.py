@@ -219,7 +219,13 @@ class MinioStorageBackend(BaseContentStore):
     def get_preview_bytes(self, doc_path: str) -> bytes:
         try:
             response = self.client.get_object(self.document_bucket, doc_path)
-            return response.read()
+            try:
+                return response.read()
+            finally:
+                # release_conn() returns the urllib3 connection to the pool; without
+                # it every preview fetch leaks one and eventually exhausts the pool.
+                response.close()
+                response.release_conn()
         except S3Error as e:
             logger.error(f"[CONTENT][MINIO] Error fetching preview path={doc_path}: {e}")
             raise FileNotFoundError(f"Preview image not found for document {doc_path}")

@@ -53,7 +53,7 @@ describe("filterHomeSearch", () => {
     ],
     teams: [
       { id: "t1", name: "Alpha" },
-      { id: "t2", name: "Contracts Team" },
+      { id: "t2", name: "Contracts Team", avatarImageUrl: "https://cdn/contracts.png" },
     ],
     prompts: unifyPrompts(
       [{ teamId: "t1", teamName: "Alpha", prompts: [teamPrompt("p1", "Contract summary", "summarize a contract")] }],
@@ -73,6 +73,11 @@ describe("filterHomeSearch", () => {
     expect(r.agents.map((a) => a.id)).toEqual(["a1"]);
     expect(r.teams.map((t) => t.id)).toEqual(["t2"]);
     expect(r.prompts.map((p) => p.id)).toEqual(["p1"]);
+  });
+
+  it("carries a team's avatar url onto its hit (drives the real avatar in the menu)", () => {
+    const r = filterHomeSearch(sources, "contracts team");
+    expect(r.teams.map((t) => t.avatarImageUrl)).toEqual(["https://cdn/contracts.png"]);
   });
 
   it("matches an agent on its role, not just its name", () => {
