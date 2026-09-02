@@ -69,7 +69,14 @@ ANALYST_ONLY_CAPS = {
 # the one deliberate exception is can_read_conversations_for_evaluation
 # (team_analyst only, see module docstring).
 ADMIN_AND_ANALYST_CAPS = {"can_run_evaluations", "can_manage_evaluation_corpus"}
-MEMBER_BASELINE_CAPS = {"can_read", "can_read_members", "can_read_conversations", "can_use_team_agents"}
+MEMBER_BASELINE_CAPS = {
+    "can_read",
+    "can_read_members",
+    "can_read_conversations",
+    "can_use_team_agents",
+    "can_use_team_applications",
+    "can_access_files",
+}
 
 
 def _platform_admin_username() -> str:

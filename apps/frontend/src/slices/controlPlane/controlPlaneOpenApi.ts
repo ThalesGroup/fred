@@ -2158,6 +2158,7 @@ export type TeamPermission =
   | "can_read_conversations"
   | "can_use_team_agents"
   | "can_use_team_applications"
+  | "can_access_files"
   | "can_run_evaluations"
   | "can_manage_evaluation_corpus"
   | "can_read_conversations_for_evaluation";

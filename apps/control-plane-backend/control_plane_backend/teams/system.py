@@ -67,6 +67,7 @@ async def build_personal_team(
             TeamPermission("can_read"),
             TeamPermission("can_update_resources"),
             TeamPermission("can_update_agents"),
+            TeamPermission("can_access_files"),
         ],
         # Matches the hardcoded `permissions` above rather than a live
         # `_get_user_roles_in_team` lookup: the owner's `team_editor` tuple

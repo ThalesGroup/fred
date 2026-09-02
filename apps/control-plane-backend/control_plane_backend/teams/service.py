@@ -1603,8 +1603,8 @@ async def _get_team_permissions_for_user(
     Why this function exists:
     - `TeamWithPermissions.permissions` needs every `TeamPermission` checked
       at once for the caller — one `has_permissions` BatchCheck round-trip
-      (native OpenFGA `BatchCheck` on `OpenFgaRebacEngine`), not 14 separate
-      `has_permission` Checks
+      (native OpenFGA `BatchCheck` on `OpenFgaRebacEngine`), not one
+      `has_permission` Check per enum member
 
     How to use it:
     - pass the already-authorized `team_id` and, when available, the

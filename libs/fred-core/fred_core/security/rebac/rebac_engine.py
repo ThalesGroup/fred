@@ -163,6 +163,11 @@ class TeamPermission(str, Enum):
     # agent-specific permission above.
     CAN_USE_TEAM_APPLICATIONS = "can_use_team_applications"
 
+    # Box-entry gate for the team's filesystem (`/teams/{id}/...`). Separate from
+    # CAN_READ on purpose: a PUBLIC team carries `public`, so CAN_READ would let
+    # any connected user list and read that team's files.
+    CAN_ACCESS_FILES = "can_access_files"
+
     # Team-scoped evaluation capabilities (RFC §6.2/§3.2).
     CAN_RUN_EVALUATIONS = "can_run_evaluations"
     CAN_MANAGE_EVALUATION_CORPUS = "can_manage_evaluation_corpus"
@@ -1034,10 +1039,11 @@ class RebacEngine(ABC):
         no tuple until the owner's first permission check touches one — this
         lazily provisions exactly one (`user:<uid> team_editor team:personal-
         <uid>`), matching `build_personal_team`'s hardcoded permission set
-        (`can_read`, `can_update_resources`, `can_update_agents` — all implied
-        by `team_editor`). Runs before every `check_user_permission_or_raise`/
-        `has_user_permission` call so it applies uniformly across every backend,
-        with no per-caller special-casing.
+        (`can_read`, `can_update_resources`, `can_update_agents`,
+        `can_access_files` - all implied by `team_editor`). Runs before every
+        `check_user_permission_or_raise`/`has_user_permission` call so it
+        applies uniformly across every backend, with no per-caller
+        special-casing.
 
         Never provisions for another user's personal team — `add_relation`'s own
         write-guard would refuse that shape regardless, but this check avoids
