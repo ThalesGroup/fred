@@ -1,25 +1,46 @@
 /* ── Page shell ────────────────────────────────────────────────────────── */
-/* Column layout: [ full-width header ] on top, [ content row ] below. The
-   header always spans the whole page and stays put; only the content row
-   reflows when a push drawer opens, so the panel slides UNDER the header
-   instead of shrinking it. */
+/* Row layout: [ pageBody (header + content) ][ launcher rail ]. A push drawer
+   inside the body reflows the whole left stack (header included); the rail is a
+   page-root sibling reserving its own column at the far right. */
 .page {
   /* Single source of truth for the composer field width — the RichInputField
      .field and the top bar's inner row both read it so they stay aligned. */
   --composer-max-width: 720px;
   display: flex;
   position: relative;
-  flex-direction: column;
+  /* Row so the launcher rail reserves its own column to the right of the body:
+     [ pageBody (flex:1) ][ rail ]. Overlay drawers (trace / debug) are fixed, so
+     they don't participate. */
+  flex-direction: row;
   background: var(--surface-main);
   height: 100%;
   overflow: hidden;
   color: var(--on-surface);
 }
 
-/* ── Content row — [ main column (flex) ][ push drawer ] ─────────────────── */
-/* Sits below the full-width header. A push drawer (attachments / capability /
-   document-scope) takes layout space on the right so the chat column shifts
-   left when open, while the header above is untouched. */
+/* ── Page body — [ left stack (flex) ][ push drawer ] ────────────────────── */
+/* The flex row a push drawer (attachments / capability / document-scope) reflows
+   against: opening one takes layout space on the right, shifting the whole left
+   stack — header included — left, so the drawer spans the full page height. */
+.pageBody {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: row;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Left stack — the conversation column: header above, content below ───── */
+.leftStack {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Content row — holds the main column below the header ────────────────── */
 .contentRow {
   display: flex;
   flex: 1 1 0;
@@ -75,10 +96,14 @@
   font: var(--font-label-large);
 }
 
-/* ── Session title bar — full-width surface, keeps its intrinsic height ─── */
+/* ── Session title bar — inset rounded card, keeps its intrinsic height ─── */
 .topBar {
   display: flex;
   flex-shrink: 0;
+  /* Inset the header as a rounded card on top/left/right, flush at the bottom
+     against the conversation below. */
+  margin: var(--spacing-s) var(--spacing-s) 0;
+  border-radius: var(--radius-s);
   background: var(--surface-container);
   /* Horizontal padding matches the composer's .bar so the inner row lines up
      with the field at narrow widths too. */

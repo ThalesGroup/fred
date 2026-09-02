@@ -1823,8 +1823,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           lockedSuffix={renameTarget.kind === "document" ? documentExtension(renameTarget.doc) : undefined}
           onSubmit={async (newName) => {
             if (renameTarget.kind === "folder") {
-              const tag = renameTarget.node.tagsHere[0];
-              if (tag) await commands.renameTag(tag as unknown as TagWithItemsId, newName);
+              await commands.renameFolder(renameTarget.node, newName);
             } else {
               await commands.renameDocument(renameTarget.doc, newName, currentTag?.id);
             }

@@ -2457,6 +2457,14 @@ export type AgentTemplateSummary = {
   default_tuning_fields?: ManagedAgentFieldSpec[];
   /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
+  /** Capability ids this template activates by default (RFC AGENT-CAPABILITY §2), verbatim from the pod's `definition.default_mcp_servers` — MCP-derived and native ids alike. Unlike `available_capabilities` this list is NOT filtered by the team's `can_use`: intersect the two client-side to get the defaults a team may actually activate. The agent-creation form uses it to pre-tick a new instance's capabilities so a template's declared defaults are not silently dropped by an explicit empty selection.
+    
+    Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
+  default_capability_ids?: string[];
+  /** Does this template offer per-question reasoning (REASON-01 level 3)? Verbatim from the pod's `default_tuning`. The agent-creation form pre-ticks its Reasoning card from it, as `default_capability_ids` pre-ticks capabilities — a seed the operator can untick, never a lock. False for pods predating #2473. */
+  reasoning_enabled?: boolean;
+  /** Does this template start new conversations with the composer's reasoning toggle already ON (REASON-01 Amendment B)? Verbatim from the pod's `default_tuning`; only meaningful alongside `reasoning_enabled`. False for pods predating #2473. */
+  reasoning_default_on?: boolean;
 };
 export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {

@@ -104,6 +104,7 @@ export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
+export const CAP_HTML_ARTIFACT = "html_artifact";
 // Document-reading pair (DOCREAD-01): two independent backend capabilities that
 // the Simple view groups under one "Lecture de documents" pack, while the
 // Advanced view keeps each toggle separate.
@@ -195,6 +196,15 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "rework.teams.formAgent.capabilities.packs.powerpointDocument.description",
         includes: [{ capabilityId: CAP_PPT_FILLER, labelKey: "capability.ppt_filler.name" }],
         enablesCapabilityIds: [CAP_PPT_FILLER],
+      },
+      {
+        id: "web_page",
+        kind: "capabilities",
+        icon: "code",
+        titleKey: "rework.teams.formAgent.capabilities.packs.webPage.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.webPage.description",
+        includes: [{ capabilityId: CAP_HTML_ARTIFACT, labelKey: "capability.html_artifact.name" }],
+        enablesCapabilityIds: [CAP_HTML_ARTIFACT],
       },
     ],
   },

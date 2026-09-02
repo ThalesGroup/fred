@@ -45,9 +45,12 @@ import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/Platfor
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import {
+  capabilityLabel,
+  dependencyLabels,
   enabledTeamCount,
   hasReasoningControl,
   isCapabilityUnused as isUnused,
+  missingAgentDependenciesForPlatform,
   personalSpaceCount,
   requiresTeamSettings,
 } from "./capabilityEnablement";
@@ -84,6 +87,12 @@ export default function CapabilitiesPage() {
   const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
   const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<CapabilityEnablementItem | null>(null);
+  // #2470: an agent template whose dependencies are not default-on, waiting for
+  // the admin to confirm granting them alongside it. Holds the capability the
+  // switch was clicked on; the missing ids are re-derived at confirm time from
+  // the live list rather than snapshotted, so a dependency granted by another
+  // admin (or another tab) in between is not re-granted.
+  const [pendingGrantAll, setPendingGrantAll] = useState<CapabilityEnablementItem | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   const [kindFilter, setKindFilter] = useState<"tool" | "agent" | "model">("tool");
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
@@ -200,6 +209,40 @@ export default function CapabilitiesPage() {
     }
   };
 
+  /**
+   * Turn each missing dependency default-on, then the template itself (#2470).
+   *
+   * Order is load-bearing and matches the backend gate: the template is written
+   * LAST, so a dependency that fails leaves "dependency granted, template not"
+   * — never the inverse, which is precisely the broken platform-wide state this
+   * whole change exists to prevent. There is no transaction available here, so
+   * the ordering is the guarantee.
+   */
+  const grantAllDefaultOn = async (capability: CapabilityEnablementItem) => {
+    // Re-derived now, not at dialog-open time: the list refetches underneath an
+    // open dialog, and re-granting an already-default-on dependency is a wasted
+    // write the admin never asked for.
+    const missing = missingAgentDependenciesForPlatform(capability, allCapabilities);
+    for (const depId of missing) {
+      try {
+        await setDefaultOn({
+          capabilityId: depId,
+          setCapabilityDefaultOnRequest: { default_on: true },
+        }).unwrap();
+      } catch (error) {
+        showError({
+          summary: t("rework.admin.capabilities.grantAllConfirm.depFailed", {
+            dep: dependencyLabels(t, [depId], allCapabilities),
+            agent: capabilityLabel(t, capability),
+          }),
+          detail: normalizeApiError(error).detail,
+        });
+        return;
+      }
+    }
+    await applyDefaultOn(capability, true);
+  };
+
   const onToggleDefault = (capability: CapabilityEnablementItem) => {
     if (capability.default_on) {
       // Turning default-on off revokes inherited access team-by-team and can
@@ -208,6 +251,11 @@ export default function CapabilitiesPage() {
       setPendingDefaultOff(capability);
       setShowAffected(false);
       void fetchRevokeImpact({ capabilityId: capability.id });
+    } else if (missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
+      // #2470: the backend now 409s this write. Offer to grant the dependencies
+      // in the same gesture rather than surfacing a refusal the admin has to
+      // resolve by hand, one capability at a time, elsewhere in the table.
+      setPendingGrantAll(capability);
     } else {
       void applyDefaultOn(capability, true);
     }
@@ -561,6 +609,30 @@ export default function CapabilitiesPage() {
           setPendingDefaultOff(null);
         }}
         onCancel={() => setPendingDefaultOff(null)}
+      />
+
+      <ConfirmationDialog
+        open={pendingGrantAll !== null}
+        title={t("rework.admin.capabilities.grantAllConfirm.title")}
+        message={
+          pendingGrantAll
+            ? t("rework.admin.capabilities.grantAllConfirm.messagePlatform", {
+                agent: capabilityLabel(t, pendingGrantAll),
+                deps: dependencyLabels(
+                  t,
+                  missingAgentDependenciesForPlatform(pendingGrantAll, allCapabilities),
+                  allCapabilities,
+                ),
+              })
+            : ""
+        }
+        confirmLabel={t("rework.admin.capabilities.grantAllConfirm.confirm")}
+        cancelLabel={t("rework.admin.capabilities.grantAllConfirm.cancel")}
+        onConfirm={() => {
+          if (pendingGrantAll) void grantAllDefaultOn(pendingGrantAll);
+          setPendingGrantAll(null);
+        }}
+        onCancel={() => setPendingGrantAll(null)}
       />
     </div>
   );

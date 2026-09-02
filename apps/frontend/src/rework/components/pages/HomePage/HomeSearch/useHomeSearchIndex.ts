@@ -38,7 +38,10 @@ export function useHomeSearchIndex(active: boolean): SearchSources {
   const { availableTeams } = useFrontendBootstrap();
 
   const teamMeta = useMemo(
-    () => availableTeams.filter((team) => team.is_member).map((team) => ({ id: team.id, name: team.name })),
+    () =>
+      availableTeams
+        .filter((team) => team.is_member)
+        .map((team) => ({ id: team.id, name: team.name, avatarImageUrl: team.avatar_image_url ?? null })),
     [availableTeams],
   );
 

@@ -22,6 +22,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import SearchField from "@shared/molecules/SearchField/SearchField.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -42,7 +43,9 @@ import { TuningFieldRenderer } from "../../TeamAgentsPage/AgentFormModal/TuningF
 import styles from "./CapabilityTeamMatrixDrawer.module.css";
 import {
   PERSONAL_SCOPE_ROW_ID,
+  capabilityLabel,
   capabilityPersonalScopeChoice,
+  dependencyLabels,
   excludePersonalTeams,
   filterTeamsByName,
   isCapabilityOnForTeam,
@@ -143,6 +146,15 @@ export function CapabilityTeamMatrixDrawer({
   // another row, and that must not revert the first row's optimistic state.
   const [pendingByTeam, setPendingByTeam] = useState<Record<string, TeamCapabilityChoice>>({});
 
+  // #2470: which row's "Enable" click is waiting on the dependency
+  // confirmation. `PERSONAL_SCOPE_ROW_ID` stands for the personal class row,
+  // reusing the same reserved id the pending-spinner map keys on, so the two
+  // paths need no separate state. `isGrantingAll` folds into `busy` above —
+  // the sequential dependency writes are several round-trips during which no
+  // other row may be touched.
+  const [grantAllTeamId, setGrantAllTeamId] = useState<string | null>(null);
+  const [isGrantingAll, setIsGrantingAll] = useState(false);
+
   const markPending = (teamId: string, choice: TeamCapabilityChoice) =>
     setPendingByTeam((prev) => ({ ...prev, [teamId]: choice }));
   const unmarkPending = (teamId: string) =>
@@ -154,7 +166,7 @@ export function CapabilityTeamMatrixDrawer({
 
   // `busy` at settle time, readable from the effect below without making the
   // effect re-run (and wrongly drop entries) on every mutation start/stop.
-  const busy = isEnabling || isDisabling || isSettingPersonal;
+  const busy = isEnabling || isDisabling || isSettingPersonal || isGrantingAll;
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
@@ -213,17 +225,6 @@ export function CapabilityTeamMatrixDrawer({
   // personal spaces (nobody filled the settings) — same §8.2 rule as default-on.
   const requiresSettings = capability ? requiresTeamSettings(capability) : false;
 
-  // Dependency ids are opaque; the hint has to name what the admin actually
-  // sees in the catalog. Falls back to the raw id for a dependency the list
-  // doesn't carry — the same fail-open direction the predicates take.
-  const dependencyLabels = (ids: string[]) =>
-    ids
-      .map((depId) => {
-        const dep = allCapabilities.find((candidate) => candidate.id === depId);
-        return dep ? t(dep.name, { defaultValue: dep.name }) : depId;
-      })
-      .join(", ");
-
   // The personal-class `depends_on` gate (RFC §8.6): class-enabling an agent
   // 409s unless each default tool capability already has org-level personal
   // access. Computed once — it has no per-row axis, unlike the team variant.
@@ -252,28 +253,42 @@ export function CapabilityTeamMatrixDrawer({
   // Toasts name the team; ids are opaque (Keycloak group ids), so resolve.
   const teamLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
 
-  const startEnable = (teamId: string) => {
+  const startEnable = (teamId: string, depsAlreadyGranted = false) => {
     if (!capability) return;
     if (hasSettings) {
       setEditingTeamId(teamId);
       setFormValues(seedSettingsFromFields(fields));
     } else {
-      void submitEnable(teamId, {});
+      void submitEnable(teamId, {}, depsAlreadyGranted);
     }
   };
 
-  const submitEnable = async (teamId: string, settings: Record<string, unknown>) => {
+  const submitEnable = async (
+    teamId: string,
+    settings: Record<string, unknown>,
+    /**
+     * Set by the "Enable all" flow, which has just granted the dependencies
+     * itself (#2470). `allCapabilities` comes from the parent's RTK Query
+     * cache, which has NOT refetched yet at that instant — so the gate below
+     * would still see them as missing and refuse the very write the admin just
+     * confirmed. The backend re-checks regardless, so skipping the client-side
+     * pre-check here loses no safety.
+     */
+    depsAlreadyGranted = false,
+  ) => {
     if (!capability) return;
     // The single choke point for the #2408 gate: both the tri-state click and
     // the enable-with-settings form's submit land here, and the catalog can
     // refetch (revoking a dependency) while that form sits open. Refused with
     // the same sentence the residual 409 would have carried, rather than
     // silently doing nothing to a Save the admin just clicked.
-    const blocking = missingAgentDependenciesForTeam(capability, allCapabilities, teamId);
+    const blocking = depsAlreadyGranted ? [] : missingAgentDependenciesForTeam(capability, allCapabilities, teamId);
     if (blocking.length > 0) {
       showError({
         summary: t("rework.admin.capabilities.matrix.enableError"),
-        detail: t("rework.admin.capabilities.matrix.dependencyConflict", { deps: dependencyLabels(blocking) }),
+        detail: t("rework.admin.capabilities.matrix.dependencyConflict", {
+          deps: dependencyLabels(t, blocking, allCapabilities),
+        }),
       });
       return;
     }
@@ -300,7 +315,9 @@ export function CapabilityTeamMatrixDrawer({
       const missing = missingAgentDependenciesForTeam(capability, allCapabilities, teamId);
       const detail =
         normalized.kind === "conflict" && missing.length > 0
-          ? t("rework.admin.capabilities.matrix.dependencyConflict", { deps: dependencyLabels(missing) })
+          ? t("rework.admin.capabilities.matrix.dependencyConflict", {
+              deps: dependencyLabels(t, missing, allCapabilities),
+            })
           : normalized.detail;
       showError({ summary: t("rework.admin.capabilities.matrix.enableError"), detail });
     }
@@ -352,25 +369,125 @@ export function CapabilityTeamMatrixDrawer({
       const detail =
         normalized.kind === "conflict" && missingPersonalDeps.length > 0
           ? t("rework.admin.capabilities.matrix.personal.dependencyConflict", {
-              deps: dependencyLabels(missingPersonalDeps),
+              deps: dependencyLabels(t, missingPersonalDeps, allCapabilities),
             })
           : normalized.detail;
       showError({ summary: t(keys.error), detail });
     }
   };
 
+  const agentLabel = capability ? capabilityLabel(t, capability) : "";
+
+  /**
+   * Grant the template's missing dependencies, then the template itself
+   * (#2470). `teamId` is a real team, or `PERSONAL_SCOPE_ROW_ID` for the
+   * personal class row.
+   *
+   * The template is always written LAST so a failing dependency leaves
+   * "dependency granted, template not" — never a template granted without what
+   * it needs, which is the broken state this whole change prevents. No
+   * transaction is available, so the ordering is the guarantee.
+   *
+   * Dependencies are granted at the SAME scope as the template: a per-team
+   * grant enables them for that team only; the personal class row sets their
+   * personal scope. Neither silently widens access platform-wide.
+   */
+  const grantAllFor = async (teamId: string) => {
+    if (!capability) return;
+    const personal = teamId === PERSONAL_SCOPE_ROW_ID;
+    // Re-derived now rather than snapshotted at dialog-open time: the catalog
+    // refetches underneath an open dialog, and re-granting a dependency
+    // another admin just enabled is a write nobody asked for.
+    const missing = personal
+      ? missingAgentDependenciesForPersonalSpaces(capability, allCapabilities)
+      : missingAgentDependenciesForTeam(capability, allCapabilities, teamId);
+
+    setIsGrantingAll(true);
+    try {
+      for (const depId of missing) {
+        const dep = allCapabilities.find((candidate) => candidate.id === depId);
+        try {
+          if (personal) {
+            await setPersonalScope({
+              capabilityId: depId,
+              setCapabilityPersonalScopeRequest: { scope: "enabled" },
+            }).unwrap();
+          } else {
+            // A dependency of its own with REQUIRED team settings cannot be
+            // granted unattended — there is no form to fill in from here, and
+            // guessing values would write a broken configuration. Send the
+            // admin to that capability's own row instead of failing opaquely.
+            if (dep && requiresTeamSettings(dep)) {
+              showError({
+                summary: t("rework.admin.capabilities.grantAllConfirm.depFailed", {
+                  dep: dependencyLabels(t, [depId], allCapabilities),
+                  agent: agentLabel,
+                }),
+                detail: t("rework.admin.capabilities.grantAllConfirm.depNeedsSettings", {
+                  dep: dependencyLabels(t, [depId], allCapabilities),
+                }),
+              });
+              return;
+            }
+            await enableCapability({
+              capabilityId: depId,
+              teamId,
+              enableTeamCapabilityRequest: { settings: {} },
+            }).unwrap();
+          }
+        } catch (err) {
+          showError({
+            summary: t("rework.admin.capabilities.grantAllConfirm.depFailed", {
+              dep: dependencyLabels(t, [depId], allCapabilities),
+              agent: agentLabel,
+            }),
+            detail: normalizeApiError(err).detail,
+          });
+          return;
+        }
+      }
+      // Dependencies are in place — now the template, through the ordinary
+      // paths, so the enable-with-settings form still appears when it should.
+      // INSIDE the try: `isGrantingAll` folds into `busy`, and releasing it
+      // before this last write would leave a window in which another row is
+      // clickable while the sequence is still running.
+      if (personal) {
+        await submitPersonalScope("enabled");
+      } else {
+        startEnable(teamId, true);
+      }
+    } finally {
+      setIsGrantingAll(false);
+    }
+  };
+
   const selectPersonalChoice = (current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
     if (busy || next === current) return;
-    if (next === "enabled" && (requiresSettings || missingPersonalDeps.length > 0)) return;
+    if (next === "enabled") {
+      // Required team settings still hard-block: there is no form on this
+      // synthetic class row to fill them in with (§8.4).
+      if (requiresSettings) return;
+      // Missing dependencies no longer hard-block — they open the "Enable all"
+      // confirmation instead (#2470).
+      if (missingPersonalDeps.length > 0) {
+        setGrantAllTeamId(PERSONAL_SCOPE_ROW_ID);
+        return;
+      }
+    }
     void submitPersonalScope(next);
   };
 
   const selectChoice = (teamId: string, current: TeamCapabilityChoice, next: TeamCapabilityChoice) => {
     if (busy || next === current) return;
     if (next === "enabled") {
-      // Defensive twin of the disabled segment: a grant the backend would 409
-      // (#2408) must not reach the wire from a keyboard path either.
-      if (!capability || missingAgentDependenciesForTeam(capability, allCapabilities, teamId).length > 0) return;
+      if (!capability) return;
+      // #2470: a grant the backend would 409 (#2408) still must not reach the
+      // wire — but instead of doing nothing, offer to grant the missing
+      // dependencies for this team first.
+      if (missingAgentDependenciesForTeam(capability, allCapabilities, teamId).length > 0) {
+        setGrantAllTeamId(teamId);
+        return;
+      }
       startEnable(teamId);
       return;
     }
@@ -384,195 +501,248 @@ export function CapabilityTeamMatrixDrawer({
     ? t("rework.admin.capabilities.matrix.title", { name: t(capability.name, { defaultValue: capability.name }) })
     : "";
 
+  // Missing dependencies for whichever row the confirmation is open on —
+  // re-derived on render, so the dialog's sentence tracks a catalog refetch
+  // instead of naming a dependency that has since been granted.
+  const grantAllMissing =
+    capability && grantAllTeamId
+      ? grantAllTeamId === PERSONAL_SCOPE_ROW_ID
+        ? missingAgentDependenciesForPersonalSpaces(capability, allCapabilities)
+        : missingAgentDependenciesForTeam(capability, allCapabilities, grantAllTeamId)
+      : [];
+
   return (
-    <InlineDrawer open={open} onClose={onClose} title={title} width="520px">
-      {capability && (
-        <div className={styles.body}>
-          <p className={styles.hint}>{t("rework.admin.capabilities.matrix.subtitle")}</p>
+    <>
+      <InlineDrawer open={open} onClose={onClose} title={title} width="520px">
+        {capability && (
+          <div className={styles.body}>
+            <p className={styles.hint}>{t("rework.admin.capabilities.matrix.subtitle")}</p>
 
-          {status === "loading" && (
-            <p className={`${styles.hint} ${styles.loadingHint}`} role="status">
-              <Spinner size={16} decorative />
-              {t("rework.admin.capabilities.matrix.teamsLoading")}
-            </p>
-          )}
+            {status === "loading" && (
+              <p className={`${styles.hint} ${styles.loadingHint}`} role="status">
+                <Spinner size={16} decorative />
+                {t("rework.admin.capabilities.matrix.teamsLoading")}
+              </p>
+            )}
 
-          {status === "error" && (
-            <p className={styles.error} role="alert">
-              {t("rework.admin.capabilities.matrix.teamsError")}
-            </p>
-          )}
+            {status === "error" && (
+              <p className={styles.error} role="alert">
+                {t("rework.admin.capabilities.matrix.teamsError")}
+              </p>
+            )}
 
-          {status !== "loading" && status !== "error" && (
-            <>
-              <SearchField
-                value={teamQuery}
-                onChange={setTeamQuery}
-                placeholder={t("rework.admin.capabilities.matrix.searchPlaceholder")}
-                clearAriaLabel={t("rework.admin.capabilities.matrix.clearSearch")}
-                autoFocus
-              />
+            {status !== "loading" && status !== "error" && (
+              <>
+                <SearchField
+                  value={teamQuery}
+                  onChange={setTeamQuery}
+                  placeholder={t("rework.admin.capabilities.matrix.searchPlaceholder")}
+                  clearAriaLabel={t("rework.admin.capabilities.matrix.clearSearch")}
+                  autoFocus
+                />
 
-              {status === "registryEmpty" && (
-                <p className={styles.hint}>{t("rework.admin.capabilities.matrix.noTeams")}</p>
-              )}
+                {status === "registryEmpty" && (
+                  <p className={styles.hint}>{t("rework.admin.capabilities.matrix.noTeams")}</p>
+                )}
 
-              {status === "searchEmpty" && (
-                <p className={styles.hint}>{t("rework.admin.capabilities.matrix.searchEmpty")}</p>
-              )}
+                {status === "searchEmpty" && (
+                  <p className={styles.hint}>{t("rework.admin.capabilities.matrix.searchEmpty")}</p>
+                )}
 
-              {(status === "ready" || (status === "registryEmpty" && showPersonalRow)) && (
-                <ul className={styles.teamList}>
-                  {showPersonalRow &&
-                    (() => {
-                      const personalChoice = capabilityPersonalScopeChoice(capability);
-                      const pendingChoice = pendingByTeam[PERSONAL_SCOPE_ROW_ID];
-                      const isPending = pendingChoice !== undefined;
-                      const displayChoice = pendingChoice ?? personalChoice;
-                      // Same rule as the team rows: never block the segment
-                      // that is already selected, or a class grant whose
-                      // dependency was revoked afterwards would strand this
-                      // row's control for keyboard users (`ButtonGroup` only
-                      // gives the selected item `tabIndex={0}`).
-                      const enableBlocked =
-                        displayChoice !== "enabled" && (requiresSettings || missingPersonalDeps.length > 0);
-                      return (
-                        <li
-                          key={PERSONAL_SCOPE_ROW_ID}
-                          className={`${styles.teamRow} ${styles.personalRow}`}
-                          aria-busy={isPending}
-                        >
-                          <div className={styles.personalMain}>
-                            <span className={styles.teamName}>{personalLabel}</span>
-                            <span className={styles.personalSub}>
-                              {t("rework.admin.capabilities.matrix.personal.hint")}
-                            </span>
-                            {missingPersonalDeps.length > 0 && displayChoice !== "enabled" && (
-                              <span className={styles.blockedSub}>
-                                {t("rework.admin.capabilities.matrix.personal.dependencyHint", {
-                                  deps: dependencyLabels(missingPersonalDeps),
-                                })}
+                {(status === "ready" || (status === "registryEmpty" && showPersonalRow)) && (
+                  <ul className={styles.teamList}>
+                    {showPersonalRow &&
+                      (() => {
+                        const personalChoice = capabilityPersonalScopeChoice(capability);
+                        const pendingChoice = pendingByTeam[PERSONAL_SCOPE_ROW_ID];
+                        const isPending = pendingChoice !== undefined;
+                        const displayChoice = pendingChoice ?? personalChoice;
+                        // Same rule as the team rows: never block the segment
+                        // that is already selected, or a class grant whose
+                        // dependency was revoked afterwards would strand this
+                        // row's control for keyboard users (`ButtonGroup` only
+                        // gives the selected item `tabIndex={0}`).
+                        //
+                        // #2470: missing dependencies are deliberately NOT part
+                        // of this any more — the segment stays clickable and
+                        // opens the "Enable all" confirmation. Only required
+                        // team settings still hard-block, because this synthetic
+                        // class row has no form to fill them in with.
+                        const enableBlocked = displayChoice !== "enabled" && requiresSettings;
+                        return (
+                          <li
+                            key={PERSONAL_SCOPE_ROW_ID}
+                            className={`${styles.teamRow} ${styles.personalRow}`}
+                            aria-busy={isPending}
+                          >
+                            <div className={styles.personalMain}>
+                              <span className={styles.teamName}>{personalLabel}</span>
+                              <span className={styles.personalSub}>
+                                {t("rework.admin.capabilities.matrix.personal.hint")}
                               </span>
-                            )}
-                          </div>
-                          <div className={styles.teamActions}>
-                            {isPending && <span className={styles.spinner} aria-hidden="true" />}
-                            <ButtonGroup
-                              size="small"
-                              color="secondary"
-                              variant="radio"
-                              aria-label={t("rework.admin.capabilities.matrix.rowControlAria", {
-                                team: personalLabel,
-                              })}
-                              selectedIndex={CHOICES.indexOf(displayChoice)}
-                              onSelectedIndexChange={(index) => selectPersonalChoice(displayChoice, CHOICES[index])}
-                              items={CHOICES.map((target) => ({
-                                label: t(CHOICE_LABEL_KEY[target]),
-                                disabled: busy || (target === "enabled" && enableBlocked),
-                              }))}
-                            />
-                          </div>
-                        </li>
-                      );
-                    })()}
-                  {status === "ready" &&
-                    visibleTeams.map((team) => {
-                      const choice = teamCapabilityChoice(capability, team.id);
-                      const off = !isCapabilityOnForTeam(capability, team.id);
-                      const isEditing = editingTeamId === team.id;
-                      // While a change is in flight the segment shows the admin's
-                      // click, not the not-yet-refetched server state.
-                      const pendingChoice = pendingByTeam[team.id];
-                      const isPending = pendingChoice !== undefined;
-                      const displayChoice = pendingChoice ?? choice;
-                      // #2408: the same `depends_on` gate the enable write
-                      // enforces (RFC §8.6). Blocking here is what turns a bare
-                      // 409 into an explanation the admin can act on.
-                      //
-                      // Never applied to the segment that is already selected.
-                      // A dependency CAN be revoked after the agent was granted
-                      // (`product/service.py` documents that exact sequence),
-                      // and `ButtonGroup` gives only the selected item
-                      // `tabIndex={0}` — disabling it would make the whole row
-                      // keyboard-unreachable, so the admin could no longer even
-                      // revoke the now-broken grant. Nothing is lost: an
-                      // already-enabled row has no enable action to prevent.
-                      const missingDeps = missingAgentDependenciesForTeam(capability, allCapabilities, team.id);
-                      const dependencyBlocked = missingDeps.length > 0 && displayChoice !== "enabled";
-                      return (
-                        <li
-                          key={team.id}
-                          className={`${styles.teamRow} ${off && !isEditing && !isPending ? styles.dimmed : ""}`}
-                          aria-busy={isPending}
-                        >
-                          <div className={styles.teamMain}>
-                            <span className={styles.teamName} title={team.name}>
-                              {team.name}
-                            </span>
-                            {dependencyBlocked && (
-                              <span className={styles.blockedSub}>
-                                {t("rework.admin.capabilities.matrix.dependencyHint", {
-                                  deps: dependencyLabels(missingDeps),
+                              {missingPersonalDeps.length > 0 && displayChoice !== "enabled" && (
+                                <span className={styles.blockedSub}>
+                                  {t("rework.admin.capabilities.matrix.personal.dependencyHint", {
+                                    deps: dependencyLabels(t, missingPersonalDeps, allCapabilities),
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                            <div className={styles.teamActions}>
+                              {isPending && <span className={styles.spinner} aria-hidden="true" />}
+                              <ButtonGroup
+                                size="small"
+                                color="secondary"
+                                variant="radio"
+                                aria-label={t("rework.admin.capabilities.matrix.rowControlAria", {
+                                  team: personalLabel,
                                 })}
+                                selectedIndex={CHOICES.indexOf(displayChoice)}
+                                onSelectedIndexChange={(index) => selectPersonalChoice(displayChoice, CHOICES[index])}
+                                items={CHOICES.map((target) => ({
+                                  label: t(CHOICE_LABEL_KEY[target]),
+                                  disabled: busy || (target === "enabled" && enableBlocked),
+                                }))}
+                              />
+                            </div>
+                          </li>
+                        );
+                      })()}
+                    {status === "ready" &&
+                      visibleTeams.map((team) => {
+                        const choice = teamCapabilityChoice(capability, team.id);
+                        const off = !isCapabilityOnForTeam(capability, team.id);
+                        const isEditing = editingTeamId === team.id;
+                        // While a change is in flight the segment shows the admin's
+                        // click, not the not-yet-refetched server state.
+                        const pendingChoice = pendingByTeam[team.id];
+                        const isPending = pendingChoice !== undefined;
+                        const displayChoice = pendingChoice ?? choice;
+                        // #2408: the same `depends_on` gate the enable write
+                        // enforces (RFC §8.6). Blocking here is what turns a bare
+                        // 409 into an explanation the admin can act on.
+                        //
+                        // Never applied to the segment that is already selected.
+                        // A dependency CAN be revoked after the agent was granted
+                        // (`product/service.py` documents that exact sequence),
+                        // and `ButtonGroup` gives only the selected item
+                        // `tabIndex={0}` — disabling it would make the whole row
+                        // keyboard-unreachable, so the admin could no longer even
+                        // revoke the now-broken grant. Nothing is lost: an
+                        // already-enabled row has no enable action to prevent.
+                        const missingDeps = missingAgentDependenciesForTeam(capability, allCapabilities, team.id);
+                        // #2470: this now only drives the explanatory sub-label.
+                        // The segment itself stays enabled so the click can open
+                        // the "Enable all" confirmation; `selectChoice` is what
+                        // keeps a bare grant off the wire.
+                        const dependencyBlocked = missingDeps.length > 0 && displayChoice !== "enabled";
+                        return (
+                          <li
+                            key={team.id}
+                            className={`${styles.teamRow} ${off && !isEditing && !isPending ? styles.dimmed : ""}`}
+                            aria-busy={isPending}
+                          >
+                            <div className={styles.teamMain}>
+                              <span className={styles.teamName} title={team.name}>
+                                {team.name}
                               </span>
+                              {dependencyBlocked && (
+                                <span className={styles.blockedSub}>
+                                  {t("rework.admin.capabilities.matrix.dependencyHint", {
+                                    deps: dependencyLabels(t, missingDeps, allCapabilities),
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                            <div className={styles.teamActions}>
+                              {isPending && <span className={styles.spinner} aria-hidden="true" />}
+                              <ButtonGroup
+                                size="small"
+                                color="secondary"
+                                variant="radio"
+                                aria-label={t("rework.admin.capabilities.matrix.rowControlAria", { team: team.name })}
+                                selectedIndex={CHOICES.indexOf(displayChoice)}
+                                onSelectedIndexChange={(index) => selectChoice(team.id, displayChoice, CHOICES[index])}
+                                items={CHOICES.map((target) => ({
+                                  label: t(CHOICE_LABEL_KEY[target]),
+                                  disabled: busy || (target === "enabled" && isEditing),
+                                }))}
+                              />
+                            </div>
+                            {isEditing && (
+                              <form
+                                className={styles.settingsForm}
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  void submitEnable(team.id, formValues);
+                                }}
+                              >
+                                {fields.map((field) => (
+                                  <TuningFieldRenderer
+                                    key={field.key}
+                                    field={field as ManagedAgentFieldSpec}
+                                    value={formValues[field.key]}
+                                    onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
+                                    disabled={busy}
+                                  />
+                                ))}
+                                <div className={styles.settingsActions}>
+                                  <Button
+                                    color="on-surface"
+                                    variant="text"
+                                    size="small"
+                                    onClick={() => setEditingTeamId(null)}
+                                  >
+                                    {t("rework.admin.capabilities.matrix.cancel")}
+                                  </Button>
+                                  <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
+                                    {t("rework.admin.capabilities.matrix.saveEnable")}
+                                  </Button>
+                                </div>
+                              </form>
                             )}
-                          </div>
-                          <div className={styles.teamActions}>
-                            {isPending && <span className={styles.spinner} aria-hidden="true" />}
-                            <ButtonGroup
-                              size="small"
-                              color="secondary"
-                              variant="radio"
-                              aria-label={t("rework.admin.capabilities.matrix.rowControlAria", { team: team.name })}
-                              selectedIndex={CHOICES.indexOf(displayChoice)}
-                              onSelectedIndexChange={(index) => selectChoice(team.id, displayChoice, CHOICES[index])}
-                              items={CHOICES.map((target) => ({
-                                label: t(CHOICE_LABEL_KEY[target]),
-                                disabled: busy || (target === "enabled" && (isEditing || dependencyBlocked)),
-                              }))}
-                            />
-                          </div>
-                          {isEditing && (
-                            <form
-                              className={styles.settingsForm}
-                              onSubmit={(e) => {
-                                e.preventDefault();
-                                void submitEnable(team.id, formValues);
-                              }}
-                            >
-                              {fields.map((field) => (
-                                <TuningFieldRenderer
-                                  key={field.key}
-                                  field={field as ManagedAgentFieldSpec}
-                                  value={formValues[field.key]}
-                                  onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
-                                  disabled={busy}
-                                />
-                              ))}
-                              <div className={styles.settingsActions}>
-                                <Button
-                                  color="on-surface"
-                                  variant="text"
-                                  size="small"
-                                  onClick={() => setEditingTeamId(null)}
-                                >
-                                  {t("rework.admin.capabilities.matrix.cancel")}
-                                </Button>
-                                <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
-                                  {t("rework.admin.capabilities.matrix.saveEnable")}
-                                </Button>
-                              </div>
-                            </form>
-                          )}
-                        </li>
-                      );
-                    })}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </InlineDrawer>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </InlineDrawer>
+
+      <ConfirmationDialog
+        open={grantAllTeamId !== null}
+        title={t("rework.admin.capabilities.grantAllConfirm.title")}
+        message={t(
+          grantAllTeamId === PERSONAL_SCOPE_ROW_ID
+            ? "rework.admin.capabilities.grantAllConfirm.messagePersonal"
+            : "rework.admin.capabilities.grantAllConfirm.messageTeam",
+          { agent: agentLabel, deps: dependencyLabels(t, grantAllMissing, allCapabilities) },
+        )}
+        // `startEnable` only OPENS the settings form when the template carries
+        // fields — the dependencies are granted, but the template is not
+        // enabled until that form is saved. Say so up front rather than let a
+        // button labelled "Enable all" quietly stop half-way. Not shown on the
+        // personal class row: it has no settings form (§8.4 forbids required
+        // settings there), so `submitPersonalScope` really does finish.
+        details={
+          hasSettings && grantAllTeamId !== PERSONAL_SCOPE_ROW_ID ? (
+            <p className={styles.hint}>
+              {t("rework.admin.capabilities.grantAllConfirm.thenSettingsForm", { agent: agentLabel })}
+            </p>
+          ) : undefined
+        }
+        confirmLabel={t("rework.admin.capabilities.grantAllConfirm.confirm")}
+        cancelLabel={t("rework.admin.capabilities.grantAllConfirm.cancel")}
+        onConfirm={() => {
+          const target = grantAllTeamId;
+          setGrantAllTeamId(null);
+          if (target) void grantAllFor(target);
+        }}
+        onCancel={() => setGrantAllTeamId(null)}
+      />
+    </>
   );
 }

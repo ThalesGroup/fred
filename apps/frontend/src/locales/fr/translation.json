@@ -254,7 +254,8 @@
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
       "panel": {
         "writable_document_pane": {
-          "title": "Document"
+          "title": "Document",
+          "launcher": "Viewer texte"
         }
       },
       "untitled": "Document",
@@ -276,6 +277,36 @@
       },
       "code": {
         "plainText": "Texte brut"
+      }
+    },
+    "html_artifact": {
+      "name": "Générer une page web (HTML/CSS)",
+      "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat.",
+      "panel": {
+        "html_artifact_pane": {
+          "title": "Artefact HTML",
+          "launcher": "Viewer HTML/CSS"
+        }
+      },
+      "untitled": "Artefact HTML",
+      "close": "Fermer le panneau",
+      "download": "Télécharger",
+      "downloadHtml": "HTML",
+      "downloadPdf": "PDF",
+      "downloadPng": "PNG",
+      "openInNewTab": "Ouvrir dans un nouvel onglet",
+      "copy": "Copier dans le presse-papier",
+      "copied": "Copié dans le presse-papier",
+      "copyFailed": "Impossible de copier.",
+      "exportFailed": "Impossible d'exporter le {{format}}.",
+      "fitWidth": "Ajuster la largeur",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "resetZoom": "Réinitialiser le zoom",
+      "empty": "Aucun artefact pour l'instant. Demandez à l'assistant de créer une page ou un composant.",
+      "card": {
+        "aria": "Artefact HTML",
+        "open": "Ouvrir l'aperçu"
       }
     },
     "ppt_filler": {
@@ -325,7 +356,18 @@
       },
       "panel": {
         "ppt_preview_pane": {
-          "title": "Aperçu de la présentation"
+          "title": "Aperçu de la présentation",
+          "launcher": "Viewer PPT"
+        }
+      }
+    },
+    "platform_postgres": {
+      "name": "Base de données plateforme (SQL lecture seule)",
+      "description": "Capacité d'administration : répondre aux questions d'exploitation par des requêtes SQL en lecture seule sur la base Postgres de la plateforme.",
+      "fields": {
+        "statement_timeout_s": {
+          "title": "Délai maximal d'exécution (secondes)",
+          "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
         }
       }
     }
@@ -1146,7 +1188,18 @@
         "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement — mais désactiver le modèle éteint son raisonnement.",
         "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
         "reasoningOnToast": "Raisonnement activé pour ce modèle.",
-        "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle."
+        "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle.",
+        "grantAllConfirm": {
+          "title": "Activer aussi les fonctionnalités requises ?",
+          "messageTeam": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette équipe ne peut pas encore l'utiliser : activer l'agent seul le laisserait inopérant.",
+          "messagePersonal": "{{agent}} a besoin de {{deps}} pour fonctionner. Les espaces personnels ne peuvent pas encore l'utiliser : activer l'agent seul le laisserait inopérant.",
+          "messagePlatform": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette fonctionnalité n'est pas activée par défaut : chaque équipe hériterait donc d'un agent inutilisable.",
+          "confirm": "Tout activer",
+          "cancel": "Annuler",
+          "depFailed": "Impossible d'activer {{dep}} — {{agent}} n'a pas été modifié.",
+          "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
+          "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
+        }
       },
       "platformModelBindings": {
         "openButton": "Liaison de modèle plateforme",
@@ -2441,6 +2494,10 @@
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
+            },
+            "webPage": {
+              "title": "Générer une page web (HTML/CSS)",
+              "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat."
             },
             "reasoning": {
               "title": "Raisonnement",

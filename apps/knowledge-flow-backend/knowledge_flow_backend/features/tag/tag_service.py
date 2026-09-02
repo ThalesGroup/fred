@@ -316,7 +316,14 @@ class TagService:
             *(item_service.remove_tag_id_from_item(user, removed_id, tag_id) for removed_id in removed_ids),
         )
 
-        # Update tag
+        # Apply the editable metadata from the request. Without this the endpoint
+        # saved the tag loaded from the store unchanged, so every rename (name or
+        # path) was silently dropped — a folder rename appeared to do nothing.
+        # `type` is intentionally not mutated here: it selected `item_service`
+        # above, so changing it would desynchronize the item diff already applied.
+        tag.name = tag_data.name
+        tag.path = tag_data.path
+        tag.description = tag_data.description
         tag.updated_at = datetime.now()
         updated_tag = await self._tag_store.update_tag_by_id(tag_id, tag)
 
