@@ -147,6 +147,7 @@ granted directly to someone with no elevated role.
 Can:
 
 - use team-managed agents
+- discover and use installed applications enabled for that collaborative team
 - use prompts visible in their team context
 - manage their own personal prompts
 - leave the team (AUTHZ-09) — self-remove via
@@ -160,6 +161,19 @@ Cannot:
 - leave the team while they are its sole `team_admin` — the "at least one
   `team_admin`" invariant (`### Team admin` above) is evaluated on every
   removal, self-directed or not, and blocks this one case regardless of role
+
+Application admission deliberately uses two independent checks:
+
+1. the user has `team#can_use_team_applications`, computed from
+   `team_member`; and
+2. that team has `capability#can_use` on
+   `capability:app__<application-id>`.
+
+The first excludes public non-members and platform administrators who hold no
+role on the selected team. The second is the platform-admin-managed coarse
+enablement. V1 applications are unavailable in personal teams even when a
+capability is default-on; application services still own any finer-grained
+object authorization.
 
 ### Personal teams — self-provisioned, never admin-writable (AUTHZ-08)
 

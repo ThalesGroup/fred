@@ -21,7 +21,7 @@ sends on every bootstrap/team fetch — neither one calls a new endpoint.
 | Tier                                    | Hook                       | Reads                                                  | Backing data                                                                       |
 | ---------------------------------------- | -------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Org-level (singleton, `organization:fred`) | `useUserCapabilities()`    | `canAdmin`, `canObservePlatform`                         | `FrontendBootstrap.permissions.{is_platform_admin,is_platform_observer}` (OpenFGA)  |
-| Team-level (per team_id)                 | `useTeamCapabilities(team)` | `canRead`, `canUpdateInfo`, `canUpdateResources`, `canUpdateAgents`, `canReadMembers`, `canAdministerMembers`, `canAdministerEditors`, `canAdministerAnalysts`, `canAdministerAdmins`, `canReadConversations`, `canUseTeamAgents`, `canRunEvaluations`, `canManageEvaluationCorpus`, `canReadConversationsForEvaluation` | `TeamWithPermissions.permissions` (OpenFGA, per `teams/service.py::_get_team_permissions_for_user`) |
+| Team-level (per team_id)                 | `useTeamCapabilities(team)` | `canRead`, `canUpdateInfo`, `canUpdateResources`, `canUpdateAgents`, `canReadMembers`, `canAdministerMembers`, `canAdministerEditors`, `canAdministerAnalysts`, `canAdministerAdmins`, `canReadConversations`, `canUseTeamAgents`, `canUseTeamApplications`, `canRunEvaluations`, `canManageEvaluationCorpus`, `canReadConversationsForEvaluation` | `TeamWithPermissions.permissions` (OpenFGA, per `teams/service.py::_get_team_permissions_for_user`) |
 
 **Which one do I use?** If the answer to "can Alice do this" would ever
 change depending on *which team* she's looking at, it's team-level. If the
@@ -34,6 +34,22 @@ in scope (from `useGetTeamQuery`, `useSelectedTeam`, or a prop) — it does not
 fetch anything itself. There is no team-scoped route guard today: every
 `/team/:teamId/...` route renders unconditionally, and team-level gating
 happens *inside* the page (hide/disable a button, not redirect the route).
+
+### Integrated application admission
+
+The generic application host adds a data gate, not a third authorization
+tier. `useTeamCapabilities()` exposes `canUseTeamApplications` for ordinary UI
+decisions, while the host fetches
+`GET /control-plane/v1/teams/{team_id}/applications`. That endpoint first
+requires `can_use_team_applications`, then returns only installed applications
+for which the selected team has `capability#can_use` on
+`app__<application-id>`.
+
+The host searches that authorized response before consulting or invoking its
+build-time module registry. Unknown, unavailable, and unentitled ids therefore
+share one result before local module details are inspected. Frontend hiding is
+only UX: an application service must repeat membership, installation, and
+entitlement checks for every request.
 
 ## Route guards
 

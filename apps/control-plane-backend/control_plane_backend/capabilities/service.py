@@ -37,10 +37,12 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
     MODEL_CAPABILITY_NAMESPACE_PREFIX,
     TeamScopePolicy,
 )
 
+from control_plane_backend.app.feature_flags import is_feature_enabled
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
     ORG_REF,
@@ -82,6 +84,7 @@ from control_plane_backend.teams.service import (
     count_all_collaborative_teams,
     count_all_personal_spaces,
 )
+from control_plane_backend.teams.system import resolve_system_team_id
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +94,43 @@ def _rebac(deps: ProductServiceDependencies) -> RebacEngine:
 
 
 async def _require_can_manage(
-    rebac: RebacEngine, user: KeycloakUser, capability_id: str
+    rebac: RebacEngine,
+    user: KeycloakUser,
+    capability_id: str,
+    *,
+    deps: ProductServiceDependencies,
 ) -> None:
     """Gate a mutation on `capability#can_manage` (org admin, RFC §8.1/§8.5).
 
     The capability is anchored first (idempotent) so `can_manage` resolves even
     for a brand-new capability an admin has never touched.
     """
+
+    if capability_id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+        # Validate reserved application ids without first anchoring an
+        # arbitrary path parameter. The org-level gate runs before loading
+        # application metadata, preserving the admin boundary. The deployment
+        # kill switch is then checked before reading registered applications or
+        # creating any structural tuple, so disabled applications are both
+        # undiscoverable and immutable through the generic capability API.
+        await require_manage_any(rebac, user)
+        if not is_feature_enabled(deps.configuration, "enableApplications"):
+            raise CapabilityNotFound(
+                f"Application capability {capability_id!r} is not installed."
+            )
+        # Parked (`enabled: false`) entries stay manageable: parking withdraws
+        # an app from the catalog while its grants keep living, so gating here
+        # would strand them. Granting stays refused by the strict catalog read.
+        known_ids = {
+            item.capability_id
+            for item in deps.configuration.platform.application_sources
+        }
+        if capability_id not in known_ids:
+            raise CapabilityNotFound(
+                f"Application capability {capability_id!r} is not installed."
+            )
+        await ensure_capability_anchor(rebac, capability_id)
+        return
 
     await ensure_capability_anchor(rebac, capability_id)
     await rebac.check_user_permission_or_raise(
@@ -130,11 +163,14 @@ def _catalog_entry_for_revoke(
     needed to carry out the revoke; requiring one anyway means an admin
     cannot revoke a live model grant for exactly as long as the model pod's
     `/agents/models-catalog` endpoint is having trouble (2026-08-01, GitHub
-    #2191) — fail-OPEN on an authorization-management surface. `kind="tool"`/
-    `"agent"` ids are NOT given this fallback: their entries carry
-    `team_settings_fields` other write paths (e.g. a subsequent enable) rely
-    on, and their catalog absence already has other handling (health-unknown
-    suspension) this stub would bypass silently.
+    #2191) — fail-OPEN on an authorization-management surface. A parked
+    application (`enabled: false`) leaves the catalog the same way while its
+    gateway routes and its grants keep living, so `kind="app"` ids get the
+    same fallback for the same reason. `kind="tool"`/`"agent"` ids are NOT
+    given this fallback: their entries carry `team_settings_fields` other
+    write paths (e.g. a subsequent enable) rely on, and their catalog absence
+    already has other handling (health-unknown suspension) this stub would
+    bypass silently.
     """
 
     entry = catalog.get(capability_id)
@@ -150,9 +186,31 @@ def _catalog_entry_for_revoke(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
         )
+    if capability_id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+        return CapabilityCatalogEntry(
+            id=capability_id,
+            version="0",
+            name=capability_id,
+            description=capability_id,
+            icon="extension",
+            kind="app",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+        )
     raise CapabilityNotFound(
         f"Capability {capability_id!r} is not advertised by any runtime pod."
     )
+
+
+def _canonical_team_id_for_entry(
+    user: KeycloakUser,
+    entry: CapabilityCatalogEntry,
+    team_id: TeamId,
+) -> TeamId:
+    """Canonicalize reserved team aliases before application tuple writes."""
+
+    if entry.kind != "app":
+        return team_id
+    return resolve_system_team_id(user, team_id) or team_id
 
 
 def _fold_personal_scope(
@@ -232,7 +290,22 @@ async def _build_enablement_item(
         capability_relation_subjects(relations, RelationType.DISABLED, Resource.TEAM)
     )
     personal_scope = _fold_personal_scope(relations)
-    entry_impact = impact.get(entry.id)
+    if entry.kind == "app":
+        enabled_team_ids = [
+            team_id
+            for team_id in enabled_team_ids
+            if team_id != "personal" and not is_personal_team_id(team_id)
+        ]
+        disabled_team_ids = [
+            team_id
+            for team_id in disabled_team_ids
+            if team_id != "personal" and not is_personal_team_id(team_id)
+        ]
+        personal_scope = "default"
+    # Applications do not participate in agent health. Even malformed/stale
+    # agent tuning that happens to mention an ``app__`` id must not leak into
+    # their admin health counters or impact details.
+    entry_impact = None if entry.kind == "app" else impact.get(entry.id)
     return CapabilityEnablementItem(
         id=entry.id,
         name=entry.name,
@@ -243,7 +316,9 @@ async def _build_enablement_item(
         enabled_team_ids=enabled_team_ids,
         disabled_team_ids=disabled_team_ids,
         total_team_count=total_team_count,
-        total_personal_space_count=total_personal_space_count,
+        total_personal_space_count=(
+            0 if entry.kind == "app" else total_personal_space_count
+        ),
         personal_scope=personal_scope,
         team_settings_fields=list(entry.team_settings_fields),
         kind=entry.kind,
@@ -267,10 +342,12 @@ async def _build_enablement_item(
         # REASON-01 §5.3: derived pod-side, carried verbatim. Empty for every
         # kind but "model", and for models with no thinking-capable profile —
         # which is exactly when the admin row shows no reasoning control.
-        thinking_profile_ids=list(entry.model_thinking_profile_ids),
+        thinking_profile_ids=(
+            [] if entry.kind == "app" else list(entry.model_thinking_profile_ids)
+        ),
         # §5.6 — no stored row means off. One pre-fetched set for the whole
         # list, not a per-row query.
-        reasoning_enabled=entry.id in reasoning_enabled_ids,
+        reasoning_enabled=(entry.kind != "app" and entry.id in reasoning_enabled_ids),
     )
 
 
@@ -384,19 +461,26 @@ async def enable_team_capability(
     deps: ProductServiceDependencies,
 ) -> TeamCapabilityEnablementResult:
     rebac = _rebac(deps)
-    await _require_can_manage(rebac, user, capability_id)
+    await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry(catalog, capability_id)
+    team_id = _canonical_team_id_for_entry(user, entry, team_id)
     validated = await enable_capability_for_team(
         rebac=rebac,
-        settings_store=deps.get_team_capability_settings_store(),
+        settings_store=(
+            None if entry.kind == "app" else deps.get_team_capability_settings_store()
+        ),
         catalog_entry=entry,
         team_id=team_id,
         settings=settings,
         updated_by=user.uid,
     )
-    revived = await _revive_after_grant(
-        capability_id=capability_id, team_id=team_id, deps=deps
+    revived = (
+        0
+        if entry.kind == "app"
+        else await _revive_after_grant(
+            capability_id=capability_id, team_id=team_id, deps=deps
+        )
     )
     return TeamCapabilityEnablementResult(
         capability_id=capability_id,
@@ -415,13 +499,18 @@ async def disable_team_capability(
     deps: ProductServiceDependencies,
 ) -> TeamCapabilityEnablementResult:
     rebac = _rebac(deps)
-    await _require_can_manage(rebac, user, capability_id)
+    await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry_for_revoke(catalog, capability_id)
+    team_id = _canonical_team_id_for_entry(user, entry, team_id)
     suspended = await disable_capability_for_team(
         rebac=rebac,
-        settings_store=deps.get_team_capability_settings_store(),
-        agent_instance_store=deps.get_agent_instance_store(),
+        settings_store=(
+            None if entry.kind == "app" else deps.get_team_capability_settings_store()
+        ),
+        agent_instance_store=(
+            None if entry.kind == "app" else deps.get_agent_instance_store()
+        ),
         catalog_entry=entry,
         team_id=team_id,
         kpi_writer=deps.get_kpi_writer(),
@@ -446,13 +535,16 @@ async def reset_team_capability(
     (the "default" segment of the admin tri-state matrix, RFC §8.5)."""
 
     rebac = _rebac(deps)
-    await _require_can_manage(rebac, user, capability_id)
+    await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry_for_revoke(catalog, capability_id)
+    team_id = _canonical_team_id_for_entry(user, entry, team_id)
     default_on = await has_org_relation(rebac, capability_id, RelationType.DEFAULT_ON)
     suspended = await reset_capability_for_team(
         rebac=rebac,
-        agent_instance_store=deps.get_agent_instance_store(),
+        agent_instance_store=(
+            None if entry.kind == "app" else deps.get_agent_instance_store()
+        ),
         catalog_entry=entry,
         team_id=team_id,
         default_on=default_on,
@@ -465,7 +557,7 @@ async def reset_team_capability(
         await _revive_after_grant(
             capability_id=capability_id, team_id=team_id, deps=deps
         )
-        if default_on
+        if default_on and entry.kind != "app"
         else 0
     )
     return TeamCapabilityEnablementResult(
@@ -485,7 +577,7 @@ async def set_default_on(
     deps: ProductServiceDependencies,
 ) -> CapabilityDefaultOnResult:
     rebac = _rebac(deps)
-    await _require_can_manage(rebac, user, capability_id)
+    await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     # Granting (on=True) needs the REAL entry — it reads `team_settings_fields`
     # to enforce `DefaultOnNotAllowed`, which a stub can't safely fake. Turning
@@ -498,7 +590,9 @@ async def set_default_on(
     )
     suspended = await set_capability_default_on(
         rebac=rebac,
-        agent_instance_store=deps.get_agent_instance_store(),
+        agent_instance_store=(
+            None if entry.kind == "app" else deps.get_agent_instance_store()
+        ),
         catalog_entry=entry,
         on=default_on,
         kpi_writer=deps.get_kpi_writer(),
@@ -511,7 +605,7 @@ async def set_default_on(
     # reconcile re-suspends rather than clears. That is the tri-state working,
     # not a special case.
     revived = 0
-    if default_on:
+    if default_on and entry.kind != "app":
         agent_instance_store = deps.get_agent_instance_store()
         # A team is a revive candidate whether its dependent selected
         # `capability_id` as a TOOL, or IS an instance of it as a
@@ -592,7 +686,7 @@ async def set_model_reasoning(
     """
 
     rebac = _rebac(deps)
-    await _require_can_manage(rebac, user, capability_id)
+    await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry(catalog, capability_id)
     if entry.kind != "model" or not entry.model_thinking_profile_ids:
@@ -636,7 +730,12 @@ async def preview_capability_revoke(
     """
 
     rebac = _rebac(deps)
-    await _require_can_manage(rebac, user, capability_id)
+    await _require_can_manage(rebac, user, capability_id, deps=deps)
+    entry = _catalog_entry_for_revoke(
+        await aggregate_capability_catalog(deps), capability_id
+    )
+    if entry.kind == "app":
+        return CapabilityImpactPreview(capability_id=capability_id)
     impact = await preview_revoke_impact(
         deps, capability_id=capability_id, team_id=team_id
     )
@@ -701,9 +800,18 @@ async def set_personal_scope(
     """Set the personal-space class tri-state for a capability (RFC §8.4)."""
 
     rebac = _rebac(deps)
-    await _require_can_manage(rebac, user, capability_id)
+    await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry(catalog, capability_id)
+    if entry.kind == "app":
+        from control_plane_backend.capabilities.enablement import (
+            PersonalScopeNotAllowed,
+        )
+
+        raise PersonalScopeNotAllowed(
+            f"Application {entry.id!r} has no personal-space scope; "
+            "V1 applications are collaborative-team-only."
+        )
 
     # Peeked BEFORE the write (same "peek, mutate, decide" shape as
     # `reset_team_capability`'s `default_on` read above) so the grant/revoke

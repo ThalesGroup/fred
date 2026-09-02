@@ -3585,6 +3585,45 @@ root card above the table was tried on 2026-08-21 and removed the same day
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
 
+## Team applications host
+
+### `TeamApplicationsPage`
+
+**Location:** `src/rework/components/pages/TeamApplicationsPage/`
+
+The collaborative-team application index renders one responsive card per
+authorized application, each carrying the catalog's localized name and
+description and a validated Material icon with a `widgets` fallback. Every
+listed application is already registered and granted, so cards have no
+partially-available state. Loading, load-error, empty, and personal-space
+states are explicit.
+
+The team sidebar adds exactly one **Apps** entry when the deployment gate is on,
+the space is collaborative, and the catalog returned at least one application.
+It never adds one navigation item per application.
+
+### `TeamApplicationHostPage`
+
+**Location:** `src/rework/components/pages/TeamApplicationHostPage/`
+
+The wildcard host fills the normal Fred content area and keeps the Fred shell
+mounted. It renders the application in an iframe and reaches it only over
+postMessage: catalog loading, unavailability, handshake in progress, protocol
+mismatch, and unreachable frame each have a distinct contained state, and an
+error boundary keeps a failing frame from taking down the shell. A frame that
+never completes the handshake is treated as broken rather than pending, and
+concurrent proxied requests are capped so one frame cannot exhaust the tab.
+
+The platform-admin Capabilities page exposes applications through its **Apps**
+filter, which appears only while the deployment gate is on. App rows reuse
+default-on and collaborative-team matrix controls but omit personal-space and
+agent-health controls.
+
+#### Host constraints
+
+- Application-owned information architecture remains outside the generic host
+  contract; the host specifies containment and failure behavior only.
+
 ---
 
 ### Capability side-panel launcher rail (2026-08-28)

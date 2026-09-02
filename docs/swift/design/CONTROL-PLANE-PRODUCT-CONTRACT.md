@@ -3077,3 +3077,185 @@ indistinguishable from a deliberate "no capabilities" — so
 `materialize_default_capability_selections` skips it by design (it backfills
 `None` rows only). Existing agents do not gain their template's defaults
 retroactively and must be re-ticked by hand.
+
+## 46. Contract Notes — team applications are runtime-registered, frame-hosted UIs (2026-08-31)
+
+Fred has one generic V1 host for trusted applications a deployment registers.
+Registration is deployment configuration, expressed like
+`platform.runtime_catalog_sources`: a flat `platform.application_sources` list
+whose entries carry `app_id`, browser-facing `ui_prefix`, `version`, `icon`,
+localized `display_name` and `description`, and `enabled`. It registers no
+proxy upstream: routing belongs to the frontend gateway, so `app_id` is the
+only key the two registrations share. Duplicate `app_id` values are rejected
+at config load, as is an own-origin `ui_prefix` that is not exactly
+`/apps/<app_id>` — the gateway routes on that segment, so any other own-origin
+path is a silent 404 the browser cannot distinguish from a cold service.
+`enabled: false` parks an entry without deleting it, but withdraws it only
+from the catalog; its gateway routes keep serving until that half is removed
+too. Its existing team grants keep living as well: revoking one stays
+available for a parked entry, while granting a new one does not. An entry
+withdrawn from the catalog must still be unwindable, or the grants an operator
+parked it to retire are stranded. Removing an entry makes the application
+unavailable on the next config load, not on the next rebuild.
+
+The typed deployment-wide `enableApplications` feature gate defaults to
+`false`. It is an availability boundary, not an authorization relation. While
+off, the team application endpoint returns a generic not-found response,
+application entries are absent from the administration catalog, application
+mutations cannot write relations, the frontend does not mount application
+pages or navigation, and both `/apps` and `/app-services` paths return 404.
+Registered entries and existing grants remain configured but dormant.
+Effective access is therefore:
+
+```text
+enableApplications
+AND user can_use_team_applications on team:<team_id>
+AND team:<team_id> can_use capability:app__<app_id>
+AND the frame answers the protocol handshake with an accepted version
+```
+
+Applications reuse capability enablement for coarse admission. A registered
+`app_id` derives capability id `app__<app_id>`; `app__` is reserved for catalog
+`kind="app"`. The discriminator exists only on the JSON-safe
+`CapabilityCatalogEntry` and admin wire model: runtime `CapabilityManifest`
+continues to accept `tool | agent | model` only. Every registered application
+is `admin_gated`; registration alone grants no team access. The admin catalog
+entry carries single-string labels, so the mandatory `"en"` display strings are
+the ones projected there.
+
+Existing platform-admin capability routes remain the only enablement writers.
+Application rows support default-on and collaborative-team controls, but have
+no personal-space control or generic team-settings JSON. App changes do not
+enter agent dependency, impact, health, suspension, revival, reasoning, or
+model-binding paths. Attempts to grant an app to a personal team are rejected;
+revocation remains available to clean up a stale personal tuple.
+
+The team discovery contract is:
+
+```text
+GET /control-plane/v1/teams/{team_id}/applications
+  -> ApplicationList { schema_version: "1", items: ApplicationSummary[] }
+```
+
+`ApplicationSummary` carries `id`, `version`, `name` and `description` as
+locale maps, validated `icon`, and `ui_prefix` — and nothing that would tie an
+application to a Fred build. There is no catalog revision, no host API version
+and no contract digest, because no application code is compiled into Fred for
+them to describe. `name`/`description` are locale maps rather than translation
+keys for the same reason: an independently deployed application has no entry in
+Fred's translation bundle. `"en"` is always present and is the fallback.
+`service_upstream` is deliberately absent from the wire: the browser reaches an
+application API only through the proxy. The service canonicalizes the team id
+and checks the user's `can_use_team_applications` permission before team or
+application metadata. A collaborative team then sees only registered items for
+which that team has `capability#can_use`. Personal teams return an empty list.
+With ReBAC disabled, all registered items are returned for collaborative teams.
+
+The frontend keeps two generic routes, `/team/:teamId/apps` and
+`/team/:teamId/apps/:appId/*`. It resolves the authorized response before
+anything else, so an unknown or unentitled id learns only `unavailable` and no
+frame is created. A resolved application is rendered in an iframe whose `src`
+comes from `ui_prefix` — validated to be `http(s)` before it can become a
+`src`, with the frame's target origin derived from the same value. Host states
+are `catalog-loading`, `unavailable`, `connecting`, `protocol-mismatch`,
+`unreachable`, and `render`, and render failures are contained per app.
+
+Parent and frame communicate only over `postMessage`, from the first message:
+
+```text
+frame -> host : fred:ready { protocolVersion }
+host  -> frame: fred:context { protocolVersion, applicationId, context }
+                fred:route { subPath }
+                fred:response | fred:response-error { requestId, ... }
+frame -> host : fred:navigate { path, replace }
+                fred:open-chat { sessionId? }
+                fred:request { requestId, path, method, headers, body }
+```
+
+The host accepts a *set* of protocol versions (currently `"1"`) because fork
+teams release their UI images on their own cadence; a version outside that set
+renders `protocol-mismatch` rather than a broken screen. Frame messages are
+admitted only from a closed parser — unknown types, oversized header maps,
+non-allowlisted methods, and malformed request ids are dropped before reaching
+Fred state, the router, or diagnostics. A request id already in flight is
+refused with `fred:response-error` rather than dropped: the id is the channel's
+only correlation token, so admitting it twice would leave one frame request
+answered twice and one call outside the concurrency bound. The context handed
+over is plain cloneable data: team identity, base and sub path, locale.
+
+`fred:navigate` moves the user only inside the application's own subtree: its
+path is resolved against `basePath` and an absolute, traversing, or schemed
+path throws, which the host swallows rather than reporting, so a frame cannot
+probe the boundary.
+
+`fred:open-chat` is the single exception, and it is deliberately narrow. It
+names **no route** — the parser discards any path or team a frame attaches —
+and the host builds the target from the team it is already rendering. Where an
+application can send the user is therefore bounded by the host rather than
+chosen by the frame. That bound is a runtime one, not a fixed set settled in
+review, and the next paragraph is what establishes it.
+
+Its one field, `sessionId`, is a **candidate rather than a destination**. The
+host matches it against `GET /teams/{team_id}/sessions`, which is scoped to the
+caller (`user_id=user.uid`), and takes the agent instance from the matched
+record — never from the frame. So the most a compromised application can do is
+reopen a conversation its own viewer already owns and can reach from the
+sidebar. Anything else — an unknown id, a teammate's, one aged past the
+listing's newest-50 window, or a listing that fails — falls back to a new
+conversation with the team's only enabled agent, or to the agents surface when
+that choice is ambiguous.
+
+Nothing about the conversation travels on this message. An application that
+wants a conversation to be about one of its records records that intent through
+its own service, and its capability resolves it on the agent side from the
+runtime identity — so the record never passes through a channel the model or
+the frame could redirect.
+
+The authenticated request adapter stays on the host side of that channel. It
+derives `/app-services/<app_id>/teams/<team_id>/...`, owns token refresh and
+one 401 retry, and rejects absolute, traversing, or protected-header inputs;
+the frame supplies only a relative path and an ordinary payload over
+`fred:request`. A 401 from an application service is that service's own
+entitlement decision and never ends the Fred session; only a token refresh that
+fails does, so one misconfigured application cannot log the user out.
+**No app receives Fred's store, Keycloak object, or raw token** — that remains
+true, and is now the property that makes moving the frame to a separate origin
+a configuration change rather than a redesign.
+
+Two browser-facing prefixes exist, and only these:
+
+```text
+/apps/<app_id>/          -> the application's own UI service
+/app-services/<app_id>/  -> the application's own API
+```
+
+Both are served by the frontend gateway from `FRONTEND_APPLICATIONS_JSON`,
+which pairs each `app_id` with a server-side `ui_upstream` and optional
+`service_upstream`. The gateway forwards the entire `/apps/<app_id>` prefix so
+the bundle's own absolute asset URLs resolve, and strips `/app-services/<app_id>`
+because the application constructs those paths itself. The three-state service
+discipline is unchanged and now also covers the UI prefix: an unregistered
+`app_id` is 404 in both namespaces, a registered application with no
+`service_upstream` is 503 under `/app-services/`, and `service_required: true`
+with no `service_upstream` fails container startup rather than serving a
+permanent 503. The gateway applies a deployment-owned client body budget to
+both namespaces (10 MiB by default) and disables intermediary request buffering
+on the service leg. Application services remain responsible for equal or
+smaller per-request limits, aggregate concurrency bounds, and authorization
+before consuming a request body.
+
+The gateway authorizes nothing; the control plane does. A gateway registration
+with no matching `application_sources` entry therefore proxies both prefixes
+for an application no team was granted, so the gateway list must stay a subset
+of the catalog.
+
+`ui_prefix` is a path today and the frame is therefore same-origin with Fred.
+A same-origin iframe is a rendering and lifecycle boundary, not a security
+boundary: applications are trusted code a fork builds and deploys, on the same
+footing as its agent pods, and the frame is not a sandbox for untrusted code.
+The `postMessage` handshake is what keeps the eventual separate-origin move a
+configuration edit — `ui_prefix` becomes an absolute `https` URL and nothing
+else changes. Anything that would only work same-origin is a defect against
+this contract. Durable installed/tombstoned registration, admin-visible
+stale-grant cleanup after removal, and `pending_reactivation` on id
+reappearance remain deferred lifecycle requirements.

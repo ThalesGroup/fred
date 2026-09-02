@@ -137,6 +137,17 @@ def test_can_use_team_agents_is_team_member_only() -> None:
     }
 
 
+def test_can_use_team_applications_is_team_member_only() -> None:
+    """Product applications are collaborative-team-only in V1. The
+    permission must not reuse ``can_read`` because public visibility is not
+    application membership."""
+    team = _type_definition("team")
+
+    assert team["relations"]["can_use_team_applications"] == {
+        "computedUserset": {"relation": "team_member"}
+    }
+
+
 def test_can_observe_platform_gates_platform_wide_kpi_observation() -> None:
     """AUTHZ-05 review item 16: `can_observe_platform` is the one relation for
     cross-user / platform-wide KPI observation, gating the control-plane
