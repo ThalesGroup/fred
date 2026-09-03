@@ -1,0 +1,46 @@
+# Brand the stock frontend image without rebuilding it: one zip in your object
+# storage, fetched by the container at startup and served in place of the baked
+# logos, icons and legal markdown. Archive layout and the full variable list:
+# apps/frontend/README.md, section "Theme overlay".
+applications:
+  frontend:
+    extraEnvVars:
+      - name: FRONTEND_THEME_URL
+        value: "http://minio.data.svc.cluster.local:9000/fred-themes/acme-theme-1.0.zip"
+      # The key the control-plane already uses for its content_storage works;
+      # a read-only key scoped to the theme bucket is better. Drop both for a
+      # public or presigned URL.
+      - name: FRONTEND_THEME_S3_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: fred-theme-s3
+            key: accessKey
+      - name: FRONTEND_THEME_S3_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: fred-theme-s3
+            key: secretKey
+      # Uncomment to refuse to start without the theme instead of falling back
+      # to the stock assets.
+      # - name: FRONTEND_THEME_REQUIRED
+      #   value: "true"
+    # Writable overlay target, required under readOnlyRootFilesystem.
+    extraVolumes:
+      - name: theme
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: theme
+        mountPath: /usr/share/nginx/html/theme
+    configuration:
+      config_json:
+        properties:
+          # File names inside the archive's images/ folder. Logo and favicon
+          # names get ".svg" appended; avatars and banners keep their extension.
+          logoName: "acme-logo"
+          logoNameDark: "acme-logo-dark"
+          faviconName: "acme-favicon"
+          faviconNameDark: "acme-favicon-dark"
+          defaultTeamAvatarFile: "acme-team-avatar.png"
+          agentIconName: "customAgent"
+          siteTitle: "Acme"
+          releaseBrand: "acme"

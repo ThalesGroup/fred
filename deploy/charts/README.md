@@ -96,6 +96,8 @@ Overload the file `fred/values.yaml`
 
 > ⚠️ **Warning:** Pay attention to the example file `custom-values-examples/custom-fred.yaml`
 
+To brand the stock frontend image (logos, icons, legal markdown) without rebuilding it, start from `custom-values-examples/frontend-theme.yaml`.
+
 Note:
 if `applications.agentic-backend.configuration.storage.*_store.type` OR `applications.knowledge-flow-backend.configuration.storage.*_store.type` are valued with `opensearch`, it will trigger the creation of indexes.
 

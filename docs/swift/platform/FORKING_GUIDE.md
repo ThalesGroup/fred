@@ -22,6 +22,12 @@ If this rule is broken, every merge becomes a manual conflict resolution exercis
 
 ## The `contrib/` mechanism
 
+Static content does not require a fork at all: the stock frontend image fetches
+a **theme archive** (logos, icons, legal markdown, `contrib/<brand>/` files)
+from your object storage at startup - see "Theme overlay" in
+`apps/frontend/README.md`. Keep the files in a fork only when you want them
+versioned next to your own code; the cascade below applies either way.
+
 Fred's frontend resolves content files through a brand-aware cascade. Set your brand name once in `apps/frontend/public/config.json`:
 
 ```json
@@ -372,6 +378,7 @@ a mismatch shows as an explicit error state rather than a broken page.
 
 ## Checklist before your first clean merge
 
+- [ ] Brand assets travel in a theme archive (`FRONTEND_THEME_URL`) rather than in the fork, unless you need them versioned with your code
 - [ ] `apps/frontend/public/config.json` has `"releaseBrand": "<your-brand>"`
 - [ ] Legal content is in `apps/frontend/public/contrib/<your-brand>/gcu.md` (and language variants)
 - [ ] Privacy notice is in `apps/frontend/public/contrib/<your-brand>/gdpr.md`
