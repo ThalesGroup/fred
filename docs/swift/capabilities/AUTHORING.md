@@ -60,6 +60,7 @@ Contract surface (import from here, never re-declare):
 | `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. Its own tool loading is a separate, pre-existing path (`FredMcpToolProvider`) already common to ReAct and Graph — it legitimately overrides `middleware()` only for its prompt fragment. |
 | `libs/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. Implements only `middleware()` (its tool schema is built per turn from the parsed template — a genuine ReAct-specific need) and declares `execution_models=("react",)` — selecting it on a Graph agent fails loudly at assembly rather than silently contributing nothing. |
 | `libs/fred-capability-platform-ops/` (`PlatformPostgresCapability`, #2458) | **First capability package of the admin-ops family** (same `libs/fred-capability-*` packaging as `ppt-filler`): two tools (`postgres_list_tables`, `postgres_run_query`) reaching the platform database through the typed `RuntimeServices.platform_sql` port (`PlatformSqlPort`, fred-sdk) — Tier B credentials never enter the package; transport/server failures rendered as `is_error` tool results via the SDK-typed `PlatformSqlPortError`. Implements `tools()` only — works on ReAct and Graph agents. |
+| `libs/fred-capability-subagent/` (`SubAgentCapability`, #2525) | **The depth-aware reference**: one tool, `run_subagent`, that re-runs the calling agent through `RuntimeServices.agent_invoker` with a fresh context. Read it for two things a config-only capability never needs — a **per-turn tool description** built in `tools()` (which runs once per turn) under the cache rule "values may vary by execution context, never per turn", and a **bound enforced by not returning the tool** at `ctx.invocation_depth >= max_depth`, with the config clamped (`platform_postgres`'s `statement_timeout_s` idiom). `tools()` only. |
 
 ---
 
@@ -99,6 +100,21 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+
+### What else the context carries
+
+- **`ctx.identity.agent_id`** — the agent *template/definition* id, beside the
+  `agent_instance_id` (the managed instance) it already carried. Both are
+  optional: a capability that needs one and finds `None` must fail loudly, never
+  guess.
+- **`ctx.invocation_depth`** — how many agent-to-agent invocations deep this turn
+  runs; `0` for a user's own turn, `d+1` for a child invoked from a turn at depth
+  `d` (`RUNTIME-EXECUTION-CONTRACT.md` §8.63). It comes from a counter carried
+  privately on the invoker, **never from the request**, so a capability may
+  bound recursion on it. Its own field rather than part of `CapabilityIdentity`,
+  which answers "who", not "how deep". Enforcement belongs in `tools()`: return
+  no tool past the limit, so a leaf turn is never shown a call it would only be
+  refused (`subagent` is the reference).
 
 ---
 

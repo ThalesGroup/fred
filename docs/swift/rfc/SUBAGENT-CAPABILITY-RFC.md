@@ -1,6 +1,6 @@
 # RFC — Sub-agent Capability: an agent delegates work to fresh-context copies of itself
 
-**Status:** Draft for developer review
+**Status:** Tier 1 slice 1 (#2525) shipped 2026-09-03; §5.6 HITL, §5.2 prompt mode, §7 token accounting and §6.5 `sources`/`ui_parts` still open (#2526-#2529). Tiers 2-3 not specified.
 **Author:** Florian Muller
 **Date:** 2026-09-03
 **Area:** `fred-sdk` (contracts), `fred-runtime` (invoker, capability block), new capability package
@@ -98,6 +98,15 @@ carried today (never on the request, which a caller can forge):
 | `agent_instance_id` | `CapabilityIdentity`; capabilities that key storage on the instance (agent-config filesystem area) must see the parent's instance, not `None` |
 | `exchange_id` | KPI/trace correlation with the parent turn |
 | `reasoning_enabled_model_ids` | same reasoning policy as the parent |
+| `turn_options` | the invoker path has no other channel for them (§5.4) |
+| the parent's `BoundRuntimeContext` | the only place the per-turn retrieval selections live (§5.4) |
+
+> Amended 2026-09-03 (#2525, as built): the last two rows were missing from
+> the original table. Everything above is carried on one private
+> `_ParentTurn` attribute; the request's own `PortableContext` became a
+> declaration the invoker *verifies* (a same-agent child claiming another
+> user/session/team is refused) rather than the source of the child's
+> context. Shipped detail: `RUNTIME-EXECUTION-CONTRACT.md` §8.63.
 
 Graph callers of `invoke_agent` keep today's behaviour for cross-agent calls:
 these values are only forwarded when the child `agent_id` equals the parent's.
@@ -129,6 +138,12 @@ human approval are unavailable or will refuse (§5.6).
 
 **Two ways to handle layer 1 — both are to be evaluated in the POC**
 (decision 2026-09-03, developer review). The table above shows mode R.
+
+> **Live today: mode A** (#2525). Layer 1 is the parent's own template,
+> unchanged; the framing and the parent's `prompt` travel as the child's
+> `message`, so nothing on the invocation contract moved. Mode R needs the
+> `system_prompt` override of §6.7, which is #2527 — that is where this
+> section's remaining question gets closed.
 
 - **Mode R — replace.** Layer 1 becomes framing + the parent's `prompt`. A
   parent template written for a human ("the user will ask you…") cannot mislead
@@ -176,9 +191,17 @@ session list, whatever session id they carry.
 
 ### 5.4 Inherited context
 
-The invoker already copies the caller's `PortableContext` to the child, so
-`RuntimeContext`-carried selections (search policy, RAG scope, selected
-libraries and documents) flow down today.
+**Corrected 2026-09-03 (#2525, code check).** An earlier draft said the
+invoker's existing `PortableContext` copy already carried the caller's
+`RuntimeContext` selections down. It does not: `PortableContext` is
+`extra="forbid"` and has no `selected_document_uids`,
+`selected_document_libraries_ids` or `search_policy` field at all, so every
+child ever invoked answered over the full corpus. As built, a same-agent
+child's context is derived from the parent's own `RuntimeContext` (carried on
+the private `_ParentTurn`, §5.1), minus the user's conversation context
+(`context_prompt_text`, `attachments_markdown` — layers 7–8 of §5.2), the
+resume fields, and the access token. Cross-agent children still get only the
+caller-supplied `PortableContext`, unchanged.
 
 `turn_options` are **also inherited**, for consistency with that. The only
 turn options that exist are `DocumentAccessTurnOptions`
@@ -225,6 +248,34 @@ dedicated cap.** A user can already spend without limit by sending turns;
 accountability belongs to a usage/quota surface (§11.2). The one difference
 the performance review must weigh is that turns are sequential per
 conversation while fan-out is concurrent in one pod (§6.4).
+
+> **The premise above is wrong — reopened 2026-09-03 by the #2525 performance
+> review, decision needed before this ships to a shared deployment.** Two
+> code checks:
+>
+> 1. `max_tool_calls_per_turn` is **not** `None` on most agents:
+>    `fred_agents/tool_pacing.py` sets 12 on five of them and
+>    `platform_ops.py` sets 30.
+> 2. Worse, it does not bound fan-out at all across depth. It maps to
+>    `ToolCallLimitMiddleware(run_limit=...)` (`react/middleware/frame.py`),
+>    which is **per graph run** — and a child is its own graph run, so the
+>    counter **resets at every level**. With the default `max_depth=3` the
+>    real worst case for one user message is 12 + 12² + 12³ ≈ 1 900
+>    concurrent agent turns (platform_ops: ~28 000), against a shared
+>    `httpx` pool of 500 connections per pod and a 5 s pool timeout with no
+>    retry. Pool exhaustion there fails **other users'** turns, not only the
+>    delegating one.
+>
+> So "accepted, no dedicated cap" was decided against a bound that does not
+> exist. The options are a per-turn concurrency cap in the capability (a
+> pod-local semaphore is the right scope — it protects this pod's pool), a
+> per-turn child count, or dropping the default `max_depth` to 2 to delete
+> the squared term. §6.5's per-child content cap has the same shape of
+> problem: six children at the cap overrun the parent's 200 k history budget
+> after every one of them has been paid for.
+>
+> #2525 ships the depth bound and nothing else here, deliberately — a
+> concurrency cap is a design decision this RFC has not taken.
 
 ### 5.6 HITL
 
@@ -401,16 +452,21 @@ Tier 1 (§13) is split into five sub-issues, playable after the first one:
 (prompt mode decision), #2528 (token accounting) and #2529 (`sources` /
 `ui_parts` + fan-out performance review) land on top of it in any order.
 
+Slice 1 (#2525) shipped 2026-09-03 — its durable what/why is
+`RUNTIME-EXECUTION-CONTRACT.md` §8.63 and `capabilities/AUTHORING.md`; the
+rows below are marked ✅ where that slice covered them, and the rest are what
+#2526–#2529 still have to build.
+
 | File | Change |
 | ---- | ------ |
-| `fred_sdk/contracts/capability/context.py` | `invocation_depth: int = 0` on `CapabilityContext` |
-| `fred_sdk/contracts/context.py` | `token_usage` on `AgentInvocationResult`; `sources`/`ui_parts` populated by the invoker; `system_prompt` override on `AgentInvocationRequest` (§6.7) |
-| `fred_runtime/app/agent_app.py` | depth threading; private carry on `LocalRegistryAgentInvoker` of depth + the six values in §5.1; checkpointer-free child run; `execution_error` fix; `token_usage` populated |
-| `fred_runtime/capabilities/assembly.py` | `invocation_depth` into built contexts |
+| `fred_sdk/contracts/capability/context.py` | ✅ `invocation_depth: int = 0` on `CapabilityContext`; ✅ `agent_id: str \| None` on `CapabilityIdentity` (a capability must be able to name the agent it runs for) |
+| `fred_sdk/contracts/context.py` | `token_usage` on `AgentInvocationResult` (#2528); `sources`/`ui_parts` populated by the invoker (#2529); `system_prompt` override on `AgentInvocationRequest` (§6.7, #2527) |
+| `fred_runtime/app/agent_app.py` | ✅ depth threading; ✅ private carry on `LocalRegistryAgentInvoker` (`_ParentTurn`) of depth + the values in §5.1; ✅ checkpointer-free same-agent child; ✅ `execution_error` fix; `token_usage` populated (#2528) |
+| `fred_runtime/capabilities/assembly.py` | ✅ `invocation_depth` into built contexts |
 | `fred_runtime/react/middleware/hitl.py`, `frame.py` | depth ≥ 1 behaviour of §5.6 (hide gated tools; error result instead of `interrupt()`) |
-| `libs/fred-capability-subagent/` | new package: manifest, `tools()`, tests |
-| `RUNTIME-EXECUTION-CONTRACT.md` §14 | dated entry: `system_prompt` override and the caller power it grants (§6.7), depth, `token_usage`, `execution_error` fix; known-gaps list updated |
-| `capabilities/AUTHORING.md` | `invocation_depth` on `CapabilityContext` |
+| `libs/fred-capability-subagent/` | ✅ new package: manifest, `tools()`, tests |
+| `RUNTIME-EXECUTION-CONTRACT.md` | ✅ dated entry §8.63 (depth, same-agent carry, checkpointer-free child, `execution_error` fix) + §14 known-gaps updated; still to add: `system_prompt` override and the caller power it grants (§6.7, #2527), `token_usage` (#2528) |
+| `capabilities/AUTHORING.md` | ✅ `invocation_depth` on `CapabilityContext`, `agent_id` on `CapabilityIdentity` |
 | `OBSERVABILITY-AND-AUDIT.md` | `agent.subagent_turn_completed` |
 
 ## 9. Alternative considered — `TeamAgent`

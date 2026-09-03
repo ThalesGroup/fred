@@ -3988,15 +3988,19 @@ See "Note of intention" below.
 
 ### Known gaps (tracked, not yet closed)
 
-- **Composition depth / cycle limit.** Not implemented — nothing today
-  prevents agent A invoking B invoking A, or an unbounded invocation chain.
-  Tracked as MEMORY-06 in
+- **Composition depth / cycle limit.** Narrowed, not closed (§8.63): the
+  invoker now counts depth on every re-entry and the `subagent` capability
+  stops offering its tool at `max_depth`, but a Graph node or `TeamAgent`
+  calling `invoke_agent` directly still has no bound of its own. Tracked as
+  MEMORY-06 in
   [`../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md).
 - **Agent-scoped checkpoint isolation.** Checkpoint state is keyed by
   `session_id` alone, not by agent — a caller and a callee sharing one
-  session can load or overwrite each other's checkpoint. Tracked as
-  MEMORY-02 in the same RFC (proposed fix: `checkpoint_ns` derived from the
-  executing agent, `thread_id` kept as `session_id`).
+  session can load or overwrite each other's checkpoint. Sidestepped for
+  same-agent children, which run checkpointer-free (§8.63); still open for
+  every cross-agent caller. Tracked as MEMORY-02 in the same RFC (proposed
+  fix: `checkpoint_ns` derived from the executing agent, `thread_id` kept as
+  `session_id`).
 
 ### Real-world adopter — fred-rags "move to cloud"
 
@@ -4469,3 +4473,86 @@ declared. Consumer side and the seed-not-gate semantics:
 **Adopter.** `fred_agents.platform_ops` declares both `True` — a diagnostic
 agent whose turns are inherently multi-step.
 
+
+### 8.63 ✅ Sub-agent invocation: same-agent children, bounded depth, `execution_error` mapped — issue #2525 (2026-09-03)
+
+The ReAct side of `invoke_agent` (§14). A `subagent` capability
+(`libs/fred-capability-subagent`) gives an agent one tool, `run_subagent`,
+that runs a fresh-context copy of the calling agent. Design and deferred
+tiers: `../rfc/SUBAGENT-CAPABILITY-RFC.md`.
+
+**Same-agent children inherit the parent turn; cross-agent children do not.**
+Before this, a child invoked through `LocalRegistryAgentInvoker` reached
+`_iterate_runtime_event_payloads` with no `tuning`, no `capability_registry`,
+no `team_settings`, no `agent_instance_id`, no `exchange_id` and no
+`reasoning_enabled_model_ids` — so it had **no capabilities and no tools at
+all**. That is unchanged for a child naming a *different* agent, which must
+still be resolved on its own terms. A child naming the **same** `agent_id` now
+inherits all of those, plus the parent's `turn_options` and the selections on
+its `RuntimeContext` (`selected_document_uids`, `search_policy`, `language`,
+…), so a user who narrowed their agent to one folder gets children searching
+that folder and no wider.
+
+All of it travels on a **private attribute of the invoker**
+(`_ParentTurn`), the `platform_chat_model_binding` doctrine (§8.55): never on
+`RuntimeContext`, `PortableContext` or `AgentInvocationRequest`, so a caller
+can neither read nor forge it. The request's `PortableContext` becomes a
+*declaration* the invoker verifies — a same-agent child whose claimed
+`user_id`/`session_id`/`team_id` differ from the calling turn's is refused —
+rather than the channel the child's context is built from. The child does
+**not** inherit `context_prompt_text`, `attachments_markdown`, the resume
+fields, or the access token (which reaches it as an explicit parameter).
+
+**Composition depth is now bounded on this path.** `CapabilityContext` gains
+`invocation_depth: int = 0` (additive; threaded from
+`_iterate_runtime_event_payloads` through `_build_capability_block` into every
+capability context). The counter lives on the invoker, which re-enters the
+turn path at *d+1* on **every** invocation, cross-agent included — depth is a
+property of the call stack, not of an agent's identity, so an A → B → A cycle
+is bounded too. Enforcement is capability-side, in `tools()`: at `max_depth`
+(clamped config, default 3, ceiling 5) the tool is simply not returned, so a
+leaf child is never shown a delegation it would only be refused. There is
+deliberately **no second limit** in the invoker — one bound, one place. This
+narrows, but does not close, the MEMORY-06 gap listed in §14: Graph and
+`TeamAgent` callers still have no bound of their own.
+
+**A same-agent child runs without a checkpointer.** `RuntimeServices` is built
+fresh per request, so this is a per-run substitution
+(`_build_runtime_services(use_checkpointer=False)`), not a change to the pod's
+checkpointer. Without it the child would map the parent's `session_id` to
+LangGraph's `thread_id`, load the parent's checkpoint — seeing the whole
+conversation — and overwrite it mid-turn. Cross-agent children keep today's
+behaviour byte for byte; the MEMORY-02 gap in §14 stays open for them. Two
+consequences, both accepted: a child cannot be resumed, and therefore cannot
+be paused for human approval (HITL stripping is a follow-up — until it lands,
+enable `subagent` only on agents with no approval-gated tools).
+
+**`CapabilityIdentity` gains `agent_id`** (additive, default `None`): the
+template/definition id beside the `agent_instance_id` it already carried. A
+capability that needs it and finds it `None` must fail loudly, never guess.
+
+**`execution_error` is mapped.** `LocalRegistryAgentInvoker` handled `final`,
+`assistant_delta` and `node_error` but not `execution_error` — the terminal
+event a raising child ends its stream with. Every caller of `invoke_agent`
+(the `fred-rags` pod included) therefore received `is_error=True` with an
+**empty** message, which a model reads as "the callee answered nothing". The
+invoker now returns the event's real `message`.
+
+**Not in this change** (tracked separately): HITL stripping, per-child token
+accounting (`agent.subagent_turn_completed`), child `sources`/`ui_parts` on
+`AgentInvocationResult`, and the `system_prompt` override on
+`AgentInvocationRequest` — so §14's frozen request/result shapes are
+unchanged here.
+
+**And, explicitly, no bound on fan-out.** Depth bounds height; nothing bounds
+how many children one assistant message launches, and they run concurrently in
+one pod against a shared connection pool. `max_tool_calls_per_turn` does *not*
+serve as that bound — it maps to a **per-graph-run** limit, and a child is its
+own graph run, so the counter resets at every level. Neither does the per-child
+content cap compose: N children each under it still overrun the parent's
+history budget. Both are open questions on
+[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5,
+raised by this change's performance review and to be settled before the
+capability is enabled on a shared deployment. Until then it is a local/POC
+surface: an admin must enable it per team (`ADMIN_GATED`), and no agent
+selects it by default.
