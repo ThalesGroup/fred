@@ -1016,8 +1016,9 @@ class DocumentMarkdownResult(FrozenModel):
     - `DocumentSummaryResult` is a lossy overview — this is the document
       verbatim, nothing dropped;
     - `DocumentRawContent` is the original uploaded bytes (a PDF/DOCX blob the
-      model cannot read as text) — this is the markdown Knowledge Flow parsed at
-      ingestion (`output.md`), directly usable by the model.
+      model cannot read as text) — this is text the model can read directly:
+      the markdown Knowledge Flow parsed at ingestion (`output.md`) for a corpus
+      document, or a session attachment's own extracted text.
 
     Pagination is the whole point (it is why `document_summarize`'s "half
     answer" failure mode cannot recur here): `text` is one bounded window
@@ -1035,14 +1036,17 @@ class DocumentMarkdownResult(FrozenModel):
 
 class DocumentMarkdownPort(ABC):
     """
-    Capability-safe paginated read of a corpus document's FULL parsed markdown
-    by uid (DOCREAD-01). Same doctrine as `DocumentSummarizePort`: takes SCOPE
+    Capability-safe paginated read of a document's FULL text by uid
+    (DOCREAD-01) — a corpus document's parsed markdown, or a session
+    attachment's text rebuilt from its vectors, resolved server-side under one
+    uid. Same doctrine as `DocumentSummarizePort`: takes SCOPE
     PARAMETERS only (the uid plus the page window) and NEVER a caller-supplied
     context, identity, or access token — auth/identity come solely from the
-    adapter's privately-captured per-turn binding, and Knowledge Flow's own
-    per-document ReBAC is the real authorization gate. Document uids are
-    internal working identifiers: tools use them freely but never surface them
-    to the end user.
+    adapter's privately-captured per-turn binding. Knowledge Flow is the real
+    authorization gate, per source: per-document ReBAC for a corpus document,
+    and chunk-level session ownership (`scope`/`user_id`) for an attachment,
+    which has no ReBAC tuple to check. Document uids are internal working
+    identifiers: tools use them freely but never surface them to the end user.
     """
 
     @abstractmethod

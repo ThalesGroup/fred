@@ -130,6 +130,41 @@ class BaseVectorStore(ABC):
             return True
         return any(is_own_session_chunk(c, user_id) for c in chunks)
 
+    def get_own_session_document_text(self, document_uid: str, user_id: str) -> str:
+        """Rebuild a session attachment's text from the chunks `user_id` owns.
+
+        A session attachment has no metadata record and no ReBAC tuple, so its
+        vectors are the only text there is and `is_own_session_chunk` is the
+        only access gate. Returns "" when nothing is readable (unknown uid,
+        someone else's attachment, corpus chunks, unsupported backend) so the
+        caller surfaces its own denial rather than an empty document. Chunks
+        are ordered by page: fast ingest stores one per page.
+
+        The trailing notice matters for readers that promise completeness
+        (`read_document`, `extract_from_document`): fast ingest DROPS whole
+        pages past its character cap, so without it a clipped attachment is
+        indistinguishable from a whole one. Attachments ingested before the
+        flag was stamped carry no marker and stay silent, as they were.
+        """
+        try:
+            chunks = self.get_chunks_for_document(document_uid)
+        except NotImplementedError:
+            return ""
+
+        owned = [c for c in chunks if is_own_session_chunk(c, user_id)]
+        if not owned:
+            return ""
+
+        def _page(chunk: Dict[str, Any]) -> int:
+            page = (chunk.get("metadata") or {}).get("page")
+            return page if isinstance(page, int) else 0
+
+        owned.sort(key=_page)
+        text = "\n\n".join((c.get("text") or "") for c in owned).strip()
+        if any((c.get("metadata") or {}).get("truncated") for c in owned):
+            text += "\n\n[This file was truncated when it was attached: text beyond the ingestion limit was never stored, so this is NOT the complete document.]"
+        return text
+
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         """Optional capability: fetch raw chunk data for all chunks of a document."""
         raise NotImplementedError("This vector store does not support fetching raw chunks.")

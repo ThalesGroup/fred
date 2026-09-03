@@ -3214,8 +3214,10 @@ never summarizing. The map phase runs with **bounded concurrency
 exponential + jitter) so a throttling provider slows the extraction rather than
 failing the turn (DOCREAD-01 #2). Document text is resolved through
 `SummarizeService.get_document_text`, so the corpus/session-attachment access
-rules stay single-sourced. `document_verbatim`'s positional read stays on the
-paginated `document_markdown` port; only exhaustive extraction moved.
+rules stay single-sourced (that resolution moved to
+`ContentService.get_markdown_preview` in §8.63). `document_verbatim`'s
+positional read stays on the paginated `document_markdown` port; only
+exhaustive extraction moved.
 
 Wiring mirrors the summarize path: `KfDocumentClient.extract` (extended read
 timeout), `DocumentExtractionAdapter`, injected in `agent_app.py`'s turn-time
@@ -4500,4 +4502,59 @@ Two additions to the agent-template surface `agent_app.py`'s
 **Rolling upgrade.** Both fields default to the pre-existing behaviour
 (`supports_capabilities=True`, no similarity tool referenced), so a pod
 predating this entry advertises templates control-plane reads unchanged.
+
+---
+
+### 8.64 ✅ `read_document` resolves session attachments too — issue #2495 (2026-09-02)
+
+**One resolution point instead of a corpus-only reader and a fallback nobody
+else could reach.** `DocumentMarkdownPort` reaches Knowledge Flow through
+`GET /markdown/{document_uid}`, which resolved text via
+`ContentService.get_markdown_preview`: a metadata-store record plus a preview
+artifact (`output.md`). A session attachment (fast ingest,
+`POST /fast/ingest`) has neither — vectors only, no metadata record, no ReBAC
+tuple — so `read_document` returned 403/404 on exactly the files the
+attachment prompt suffix told the model to name. Its siblings did not:
+`summarize_document` and `extract_from_document` both resolved through
+`SummarizeService.get_document_text`, which fell back to rebuilding the text
+from the session vectors.
+
+**The fallback moved down, not sideways.** Reconstruction is now
+`BaseVectorStore.get_own_session_document_text`, beside the two other
+session-ownership decisions (`is_own_session_chunk`,
+`may_delete_session_document`), and `ContentService.get_markdown_preview` is
+the single reader that applies it. `SummarizeService._get_document_markdown`,
+`_reconstruct_attachment_text` and `get_document_text` are gone; summarize and
+extract call the content service directly. Net effect on the port: an
+attachment uid now pages like any other document, and `DocumentMarkdownAdapter`
+is unchanged (it still paginates adapter-side and memoises per uid per turn).
+
+**Scoped to the metadata seam, deliberately.** The fallback fires only when the
+corpus *metadata* resolution fails (`FileNotFoundError` / `AuthorizationError`)
+— the exact signature of an attachment. A corpus document whose preview is not
+ready still fails fast and pays no chunk scan, which is the behaviour the
+previous fallback (wrapped around the whole preview call) did not have.
+
+**A clipped attachment now says so.** Fast ingest drops WHOLE PAGES past its
+60k-char cap and recorded that only in the upload response, never in the
+vectors — so a rebuilt attachment was indistinguishable from a complete one,
+and `read_document`'s footer would tell the model "END OF DOCUMENT reached...
+you now have the complete text". `fast_ingest` now stamps `truncated` into each
+chunk's metadata and the reconstruction appends a plain-text notice when it is
+set. Attachments ingested before this carry no flag and stay silent, as they
+were. The notice is in-band rather than a new `DocumentMarkdownResult` field:
+it reaches summarize and extract by the same path, with no wire change.
+
+**Security is unchanged and now single-sourced.** Reconstruction joins only
+chunks whose own `scope == "session"` and `user_id` match the caller, so a
+corpus document a user was denied READ on is never readable back through its
+vectors; an empty reconstruction re-raises the original denial rather than
+returning an empty document.
+
+**Still corpus-only** (each for its own structural reason, not an oversight):
+`find_similar_passages` (Knowledge Flow runs it with
+`include_session_scope=False` and its controller gates every uid on a ReBAC
+tuple — §8.60), `list_document_tree`, `list_documents_by_label` (labels are a
+metadata-store notion), the tabular tools (#2418) and `ppt_filler`'s raw-bytes
+fetch (an attachment keeps no blob).
 

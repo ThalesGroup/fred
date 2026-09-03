@@ -1159,6 +1159,9 @@ class IngestionController:
                         "scope": scope,
                         "retrievable": True,
                         "source": "fast_ingest",
+                        # Whole pages are dropped past the char cap; the vectors
+                        # are the only copy, so readers must be able to say so.
+                        "truncated": result.truncated,
                         "page": p.page_no,
                     }
                     docs.append(Document(page_content=p.text or "", metadata=doc_meta))
@@ -1176,6 +1179,7 @@ class IngestionController:
                     "scope": scope,
                     "retrievable": True,
                     "source": "fast_ingest",
+                    "truncated": result.truncated,
                 }
                 docs.append(Document(page_content=text, metadata=doc_meta))
 
