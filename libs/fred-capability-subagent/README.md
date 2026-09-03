@@ -13,6 +13,10 @@ Design: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md` (issue #2525).
   conversation. The prompt the parent writes is everything the child knows.
 - **Config** `max_depth` (default 3, clamped to 1–5) — how many delegation
   hops deep the tool stays available.
+- **Metric** `agent.subagent_turn_completed` — one KPI event per finished
+  child, carrying its tokens. Dims, Grafana/PromQL, and why a query reading
+  `agent.turn_completed` alone under-counts:
+  `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §3.1.
 
 The child is an ordinary agent turn: it runs concurrently with its siblings
 (LangGraph's tool node runs one message's tool calls in parallel), keeps the
@@ -46,8 +50,6 @@ Local/POC surface today:
   compose with it. Deliberate for the POC, to be settled with POC data — #2531.
 - **No timeout, and the parent's SSE stream is silent** for a child's whole
   run (RFC §10).
-- **Child turns emit no turn-level KPI**, so their token spend is counted
-  nowhere (#2528).
 - **Approval-gated (HITL) tools are not yet stripped** from a child's tool
   list, and a child has no checkpoint an interrupt could persist to (#2526).
   Until that lands, enable this only on agents with no approval-gated tools.

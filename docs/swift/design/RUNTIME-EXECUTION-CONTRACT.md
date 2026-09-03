@@ -3928,6 +3928,11 @@ GraphNodeContext.invoke_agent(
 `output_schema` and `scope` are optional and additive — every caller that
 never sets them keeps working unchanged.
 
+`AgentInvocationResult.token_usage` (`dict[str, int] | None`, §8.64) carries the
+callee's billed spend verbatim from its `final` event — `None` when the callee
+reported none, or when the call ended on an error event. A callee's turn emits no
+`agent.turn_completed`, so this is the only place its spend survives.
+
 ### Requesting several facts in one call — compose the schema, don't ask for a new primitive
 
 `output_schema` is deliberately one schema per call. There is no separate
@@ -4560,3 +4565,57 @@ POC, to be settled with POC data — see issue #2531 and
 [`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5.
 Until then it is a local/POC surface: an admin must enable it per team
 (`ADMIN_GATED`), and no agent selects it by default.
+
+### 8.64 ✅ Sub-agent token spend is measurable per child — issue #2528 (2026-09-03)
+
+A child turn runs through `LocalRegistryAgentInvoker`, not `_stream`, so it
+emits no `agent.turn_completed` of its own — sub-agent spend was invisible
+rather than double-counted. The numbers existed and were discarded: the
+child's `final` event carries `token_usage` and the invoker read only
+`content`. Design: `../rfc/SUBAGENT-CAPABILITY-RFC.md` §7.
+
+**`AgentInvocationResult` gains `token_usage: dict[str, int] | None`**
+(additive, appended last). The invoker copies it verbatim from the `final`
+payload — same wire shape, no new type. The `node_error` / `execution_error`
+returns leave it `None`: no `final` event ran, so there is nothing to read.
+This is a §14 surface change, and it applies to **every** `invoke_agent`
+caller, Graph nodes included — a callee's billed spend is now readable by
+whoever invoked it.
+
+**`CapabilityIdentity` gains `exchange_id: str | None`** (additive, appended
+last). It was already reaching `_iterate_runtime_event_payloads`; it now
+travels the last hop through `_build_capability_block` into every capability's
+identity, so a capability emitting a KPI can name the turn that produced it.
+RFC §5.1's carry table already listed `exchange_id` for exactly this purpose.
+
+**The `subagent` capability emits `agent.subagent_turn_completed`** through
+`RuntimeServices.kpi_writer`, once per finished child — failures included, a
+child that burned tokens and then failed being precisely the case the metric
+exists to surface. Shape, dims and the Grafana/PromQL spec:
+`../platform/OBSERVABILITY-AND-AUDIT.md` §3.1. Two consequences worth naming
+here:
+
+- **A separate metric, not folded into the parent's turn.** Per-child
+  attribution is what makes a runaway sub-agent diagnosable, and two metrics
+  can be summed while one folded number can never be split. The accepted cost
+  is that anything reading `agent.turn_completed` alone under-counts — stated
+  in §3.1 next to the metric.
+- **`invocation_depth` joins `PROMETHEUS_ALLOWED_LABELS`**, the only new label
+  here. Closed set of at most five values, no identity — the
+  `runtime_stage`/`rebac_operation`/`pdf_stage` pattern. The event's
+  `session_id`, `exchange_id`, `agent_instance_id` and `team_id` stay
+  store-only dims, exactly as on `agent.turn_completed`.
+
+This is also the **first capability to emit a KPI**. The emission is wrapped
+in one `try/except`: `RuntimeServices.kpi_writer` is typed as the abstract
+`BaseKPIWriter`, so the platform writer's fail-open behaviour is not something
+a capability package can assume — a metric must never turn a finished child
+into a failed tool call. The rules that generalise from this are written up in
+`../capabilities/AUTHORING.md` ("Emitting a KPI from a capability"). The metric
+name also joins `KpiLogStore._STRUCTURED_EVENT_NAMES`, so a log-sink-only
+deployment records children alongside their parents rather than dropping them.
+
+**Not in this change:** no Grafana dashboard JSON. This repository has never
+versioned one (Stream 1 is an infrastructure-owned Grafana over Google Managed
+Prometheus); the panel is created from the PromQL in §3.1 rather than inventing
+a new artifact class for one metric.

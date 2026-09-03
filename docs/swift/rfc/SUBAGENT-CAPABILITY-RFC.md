@@ -1,6 +1,6 @@
 # RFC — Sub-agent Capability: an agent delegates work to fresh-context copies of itself
 
-**Status:** Tier 1 slice 1 (#2525) shipped 2026-09-03; §5.6 HITL, §5.2 prompt mode, §7 token accounting and §6.5 `sources`/`ui_parts` still open (#2526-#2529). Tiers 2-3 not specified.
+**Status:** Tier 1 slice 1 (#2525) and §7 token accounting (#2528) shipped 2026-09-03; §5.6 HITL, §5.2 prompt mode and §6.5 `sources`/`ui_parts` still open (#2526, #2527, #2529). Tiers 2-3 not specified.
 **Author:** Florian Muller
 **Date:** 2026-09-03
 **Area:** `fred-sdk` (contracts), `fred-runtime` (invoker, capability block), new capability package
@@ -394,30 +394,13 @@ documented power, not a surprise. A private channel was ruled out: the tool
 reaches the invoker only through `AgentInvokerPort.invoke(request)`, and a
 second method would be the second invocation path §2 rejects.
 
-## 7. Token accounting
+## 7. Token accounting — shipped (#2528, 2026-09-03)
 
-Child turns emit **no** `agent.turn_completed` today — that metric is emitted
-only from `_stream`, which the invoker bypasses. Sub-agent spend would be
-invisible, not double-counted.
-
-The numbers exist and are thrown away: token usage rides the `final` event's
-`token_usage` field (`contracts/runtime.py:327`), and the invoker reads only
-`content` from that payload.
-
-Therefore:
-
-1. `AgentInvocationResult` gains `token_usage` (additive).
-2. The capability emits **`agent.subagent_turn_completed`** through
-   `ctx.services.kpi_writer`, with the child's tokens as quantities and the
-   **parent's** `session_id`, `agent_instance_id` and `exchange_id` plus
-   `invocation_depth` as dims.
-
-A separate metric, not folded into the parent's turn: per-child attribution is
-what makes a runaway sub-agent diagnosable, and aggregation can always sum two
-metrics while a folded number can never be split. The accepted cost is that any
-query reading `agent.turn_completed` alone under-counts — so the metric ships
-**with** its Grafana panel and an `OBSERVABILITY-AND-AUDIT.md` note, per the
-hot-path checklist.
+Closed. `AgentInvocationResult` carries the callee's `token_usage`, and the
+capability emits `agent.subagent_turn_completed` once per child. The durable
+what/why now lives in the compact docs: `RUNTIME-EXECUTION-CONTRACT.md` §8.64
+for the contract surface, `platform/OBSERVABILITY-AND-AUDIT.md` §3.1 for the
+metric's dims, the under-count caveat and the Grafana/PromQL spec.
 
 ## 8. Change inventory
 

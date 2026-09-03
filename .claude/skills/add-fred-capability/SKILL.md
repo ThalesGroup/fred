@@ -183,6 +183,11 @@ hand-edit them. See `apps/frontend/Makefile` (`update-demo-echo-capability-api`)
   `RuntimeServices` port. A missing port must **fail loud**, not silently return nothing.
 - Run `make test` + `make code-quality` in `libs/fred-runtime` (and `libs/fred-sdk` if you
   touched the contract surface). Green before claiming done.
+- Emitting a KPI? `ctx.services.kpi_writer` only. Guard the `None` port, wrap the `emit`
+  in `try/except` (the port is abstract — a metric must never fail a turn), and ship the
+  PromQL in `platform/OBSERVABILITY-AND-AUDIT.md`. A dim you want on a Grafana panel must
+  be in `PROMETHEUS_ALLOWED_LABELS` — never an id. See AUTHORING.md "Emitting a KPI from a
+  capability"; `subagent` is the reference.
 
 ---
 
