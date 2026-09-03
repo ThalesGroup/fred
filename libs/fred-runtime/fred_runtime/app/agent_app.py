@@ -48,7 +48,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequenc
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, cast
+from enum import Enum, auto
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 import httpx
@@ -776,6 +777,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 "team_settings": inherited.team_settings,
                 "reasoning_enabled_model_ids": inherited.reasoning_enabled_model_ids,
                 "use_checkpointer": False,
+                "usable_model_ids": inherited.binding.usable_model_ids,
             }
             if inherited is not None
             else {}
@@ -3379,6 +3381,16 @@ async def _claim_hitl_resume_before_invocation(
     )
 
 
+class _Unresolved(Enum):
+    """Sentinel for "not supplied", where `None` is itself a meaning.
+
+    `usable_model_ids` is tri-state — `None` is "ReBAC off, no restriction",
+    an empty tuple is "nothing allowed" — so absence needs its own value.
+    """
+
+    TOKEN = auto()
+
+
 async def _iterate_runtime_event_payloads(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
@@ -3394,6 +3406,9 @@ async def _iterate_runtime_event_payloads(
     platform_chat_model_binding: ModelBinding | None = None,
     invocation_depth: int = 0,
     use_checkpointer: bool = True,
+    usable_model_ids: tuple[str, ...] | None | Literal[_Unresolved.TOKEN] = (
+        _Unresolved.TOKEN
+    ),
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -3415,9 +3430,9 @@ async def _iterate_runtime_event_payloads(
     - stored in RuntimeContext so KF tool adapters can use it for outbound calls
     - None in local dev when security is disabled
 
-    invocation_depth / use_checkpointer:
-    - both come from `LocalRegistryAgentInvoker`'s private state, never from the
-      request (RUNTIME-EXECUTION-CONTRACT.md §8.63)
+    invocation_depth / use_checkpointer / usable_model_ids:
+    - all three come from `LocalRegistryAgentInvoker`'s private state, never
+      from the request (RUNTIME-EXECUTION-CONTRACT.md §8.63)
     """
 
     request_id = str(uuid4())
@@ -3430,13 +3445,17 @@ async def _iterate_runtime_event_payloads(
     # call. No team context (agent-to-agent invocation) → no restriction,
     # the same posture _authorize_execution_or_raise already applies to a
     # teamless request.
-    usable_model_ids: tuple[str, ...] | None = None
-    if resolved_team_id is not None:
-        from ..model_routing import usable_model_capability_ids
+    # A same-agent child is handed its parent's already-resolved tuple: same
+    # team by construction (the invoker refuses any other), so re-asking would
+    # be one ListObjects per child on the path to its first model call.
+    if usable_model_ids is _Unresolved.TOKEN:
+        usable_model_ids = None
+        if resolved_team_id is not None:
+            from ..model_routing import usable_model_capability_ids
 
-        rebac = get_runtime_context().config.rebac_engine
-        ids = await usable_model_capability_ids(rebac, resolved_team_id)
-        usable_model_ids = tuple(ids) if ids is not None else None
+            rebac = get_runtime_context().config.rebac_engine
+            ids = await usable_model_capability_ids(rebac, resolved_team_id)
+            usable_model_ids = tuple(ids) if ids is not None else None
     execution_action = ctx.get("execution_action") or (
         ExecutionGrantAction.RESUME.value
         if request.resume_payload is not None

@@ -26,9 +26,13 @@ depends on.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+from types import SimpleNamespace
 
+import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
+from fred_runtime import model_routing
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import create_agent_app
 from fred_sdk.contracts.context import (
@@ -328,6 +332,84 @@ def test_a_child_that_cites_nothing_carries_nothing(monkeypatch) -> None:
     assert result.content == "ok"
     assert result.sources == ()
     assert result.ui_parts == ()
+
+
+def test_a_same_agent_child_carries_the_parent_s_model_authorization(
+    monkeypatch,
+) -> None:
+    parent_agent_id = _EchoAgent().agent_id
+    # Fail-closed and possibly empty: an empty tuple is "nothing allowed", the
+    # opposite of the None that means "ReBAC is off" — so it must survive the
+    # carry as itself.
+    parent = replace(
+        _parent_turn(agent_id=parent_agent_id),
+        binding=_binding().model_copy(update={"usable_model_ids": ()}),
+    )
+
+    seen = _record_turn(monkeypatch)
+    asyncio.run(_invoker(parent).invoke(_child_request(parent_agent_id)))
+    assert seen["usable_model_ids"] == ()
+
+    # A cross-agent child resolves its own: different agent, possibly a
+    # different team.
+    seen = _record_turn(monkeypatch)
+    asyncio.run(_invoker(parent).invoke(_child_request(OTHER_AGENT_ID)))
+    assert "usable_model_ids" not in seen
+
+
+def test_a_carried_authorization_snapshot_skips_the_rebac_query(monkeypatch) -> None:
+    """What the carry buys: one ReBAC round trip fewer per child, on the path
+    to its first model call."""
+
+    calls: list[str] = []
+
+    async def _counting_query(rebac, team_id):
+        calls.append(team_id)
+        return frozenset({"model__openai__gpt-5.1"})
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(rebac_engine=None)),
+    )
+    monkeypatch.setattr(
+        model_routing, "usable_model_capability_ids", _counting_query, raising=False
+    )
+
+    class _Stop(Exception):
+        pass
+
+    bindings: list[BoundRuntimeContext] = []
+
+    def _capture(definition, binding, **kwargs):
+        # Everything under test happens before the turn is assembled.
+        bindings.append(binding)
+        raise _Stop
+
+    monkeypatch.setattr(agent_app_module, "_build_runtime_services", _capture)
+
+    async def _drive(**kwargs) -> None:
+        stream = agent_app_module._iterate_runtime_event_payloads(
+            _EchoAgent(),
+            agent_app_module._AgentExecuteRequest(
+                agent_id=_EchoAgent().agent_id,
+                message="hi",
+                context={"user_id": "alice", "session_id": "session-1"},
+            ),
+            team_id="fredlab",
+            **kwargs,
+        )
+        with pytest.raises(_Stop):
+            await anext(stream)
+
+    asyncio.run(_drive(usable_model_ids=("model__mistral__large",)))
+    assert calls == []
+    assert bindings[-1].usable_model_ids == ("model__mistral__large",)
+
+    # Absent — a top-level turn — it still resolves its own.
+    asyncio.run(_drive())
+    assert calls == ["fredlab"]
+    assert bindings[-1].usable_model_ids == ("model__openai__gpt-5.1",)
 
 
 def test_execution_error_reaches_the_caller_with_its_message(monkeypatch) -> None:
