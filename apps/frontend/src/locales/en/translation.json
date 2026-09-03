@@ -381,7 +381,7 @@
         },
         "prompt_mode": {
           "title": "Instructions given to sub-agents",
-          "description": "\"append\" keeps this agent's own instructions in the sub-agent and sends the delegated task as its message. \"replace\" gives the sub-agent the delegated task alone, so it inherits no persona, output language or business rule from these instructions. Guardrails and tools are kept either way."
+          "description": "\"append\" keeps this agent's own instructions in the sub-agent and sends the delegated task as its message. \"replace\" gives the sub-agent the delegated task alone, so it inherits no persona, output language or business rule from these instructions. Guardrails and tools are kept either way. \"replace\" works on ReAct agents only — a Graph agent must keep \"append\", or every delegation it makes is refused."
         }
       }
     }
