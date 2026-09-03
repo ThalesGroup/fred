@@ -820,13 +820,16 @@ class _GraphNodeExecutionContext:
         prior_turns: tuple[ConversationTurn, ...] = (),
         output_schema: type[BaseModel] | None = None,
         scope: InvocationScope | None = None,
+        system_prompt: str | None = None,
     ) -> AgentInvocationResult:
         """Invoke another registered agent for one turn (RFC AGENT-INVOKE).
 
         When ``output_schema`` is given the callee is asked for a JSON object of that
         shape; the validated payload is attached to ``result.structured`` (with a
         bounded retry, ``None`` if it could not be coerced). When ``scope`` is given,
-        the callee's retrieval world is narrowed for this call only.
+        the callee's retrieval world is narrowed for this call only. When
+        ``system_prompt`` is given it replaces the callee's authored template
+        for this call — that layer only, guardrails kept (§8.64).
         """
         agent_invoker = self.services.agent_invoker
         if agent_invoker is None:
@@ -887,6 +890,7 @@ class _GraphNodeExecutionContext:
                             prior_turns=prior_turns,
                             scope=scope,
                             output_schema=schema_dict,
+                            system_prompt=system_prompt,
                         )
                     )
                     if output_schema is None or result.is_error:

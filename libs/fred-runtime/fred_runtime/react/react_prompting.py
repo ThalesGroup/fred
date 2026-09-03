@@ -313,6 +313,7 @@ def compose_system_prompt(
     agent_id: str,
     tool_suffix: str = "",
     runtime_suffixes: Sequence[str] = (),
+    base_prompt_override: str | None = None,
 ) -> str:
     """
     Assemble the final system prompt shared by the ReAct and Deep runtimes.
@@ -338,11 +339,16 @@ def compose_system_prompt(
     How to use:
     - render the agent template first, then pass it here with the runtime's tool
       suffix and any runtime-specific suffixes.
+
+    ``base_prompt_override`` is a caller-supplied replacement for that first
+    layer only (``AgentInvocationRequest.system_prompt``, §8.64). It is used
+    verbatim — it is caller text, not an agent template — and every suffix
+    below it still applies, so no caller can drop the runtime's invariants.
     """
 
     return "".join(
         [
-            base_prompt,
+            base_prompt if base_prompt_override is None else base_prompt_override,
             tool_suffix,
             build_guardrail_suffix(definition),
             build_global_base_prompt_suffix(),

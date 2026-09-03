@@ -106,6 +106,7 @@ def test_invoke_agent_records_call_and_replays_result() -> None:
             "output_schema": None,
             "scope": None,
             "prior_turns": (),
+            "system_prompt": None,
         }
     ]
 

@@ -814,6 +814,15 @@ class AgentInvocationRequest(FrozenModel):
     """JSON schema the callee output should conform to (RFC AGENT-INVOKE). Optional;
     informational for transports that can force structured output natively."""
 
+    system_prompt: str | None = None
+    """Replace the callee's rendered agent template for this call. Optional.
+
+    That layer ONLY: the runtime-owned tool descriptions, guardrails, output
+    contract and recovery notice are still appended and a caller cannot remove
+    them. ReAct-family callees only — a Graph callee composes no system prompt,
+    so the invoker refuses rather than ignoring the field.
+    """
+
 
 class AgentInvocationResult(FrozenModel):
     """

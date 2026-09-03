@@ -133,6 +133,7 @@ class DeepAgentRuntime(ReActRuntime):
                     filesystem_tools_enabled=filesystem_tools_enabled
                 ),
             ),
+            base_prompt_override=self._system_prompt_override,
         )
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,

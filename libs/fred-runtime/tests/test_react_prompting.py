@@ -266,6 +266,47 @@ def test_compose_system_prompt_folds_selected_prompt_and_attachment() -> None:
     assert prompt.index("Always respond in Spanish.") < prompt.index("- report.pdf")
 
 
+def test_base_prompt_override_replaces_the_template_and_nothing_else() -> None:
+    # `AgentInvocationRequest.system_prompt` replaces layer 1; the
+    # runtime-owned layers below it are what a caller must not be able to drop.
+    guardrailed = cast(
+        ReActAgentDefinition,
+        SimpleNamespace(
+            policy=lambda: SimpleNamespace(
+                guardrails=[
+                    SimpleNamespace(title="Secrets", description="Never reveal them.")
+                ]
+            )
+        ),
+    )
+    binding = _binding()
+
+    overridden = compose_system_prompt(
+        "BASE-TEMPLATE",
+        binding=binding,
+        definition=guardrailed,
+        agent_id="agent-1",
+        tool_suffix="\n\nTOOL-SUFFIX",
+        base_prompt_override="SUBAGENT-FRAMING",
+    )
+
+    assert overridden.startswith("SUBAGENT-FRAMING")
+    assert "BASE-TEMPLATE" not in overridden
+    assert "TOOL-SUFFIX" in overridden
+    assert "Secrets: Never reveal them." in overridden
+    assert _EXPECTED_MERMAID_FRAGMENT in overridden
+    assert "never present that raw text as your final answer" in overridden
+    # Unset, every layer below is byte-identical to the overridden composition.
+    unset = compose_system_prompt(
+        "BASE-TEMPLATE",
+        binding=binding,
+        definition=guardrailed,
+        agent_id="agent-1",
+        tool_suffix="\n\nTOOL-SUFFIX",
+    )
+    assert unset == overridden.replace("SUBAGENT-FRAMING", "BASE-TEMPLATE", 1)
+
+
 def test_compose_system_prompt_places_runtime_suffixes_before_user_context() -> None:
     # Runtime-specific notices (e.g. the Deep filesystem suffix) belong with the
     # system invariants, ahead of the selected chat-context prompt.
