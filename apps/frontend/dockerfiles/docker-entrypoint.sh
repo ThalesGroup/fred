@@ -24,6 +24,14 @@ set -eu
 #     "ui_upstream":"http://acme-forecast-ui:80",
 #     "service_upstream":"http://acme-forecast-api:8000",
 #     "service_required":true}]'
+# FRONTEND_THEME_URL points at a zip laid out like apps/frontend/public/
+# (images/, contrib/<brand>/, root *.md). Its files are served in place of the
+# baked ones for those three surfaces only, so a deployment brands the stock
+# image without rebuilding it. https:// (public, presigned, or an S3 object URL
+# signed with FRONTEND_THEME_S3_ACCESS_KEY + FRONTEND_THEME_S3_SECRET_KEY in
+# region FRONTEND_THEME_S3_REGION) or file:// for an archive mounted from a
+# volume. FRONTEND_THEME_REQUIRED=true makes a fetch or unpack failure fatal;
+# by default the container logs a warning and serves the stock assets.
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
@@ -32,6 +40,12 @@ set -eu
 : "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE:=10m}"
 : "${FRONTEND_NGINX_CONFIG:=/etc/nginx/conf.d/fred.conf}"
 : "${FRONTEND_ENABLE_APPLICATIONS:=false}"
+: "${FRONTEND_THEME_URL:=}"
+: "${FRONTEND_THEME_S3_ACCESS_KEY:=}"
+: "${FRONTEND_THEME_S3_SECRET_KEY:=}"
+: "${FRONTEND_THEME_S3_REGION:=us-east-1}"
+: "${FRONTEND_THEME_REQUIRED:=false}"
+FRONTEND_THEME_DIR=/usr/share/nginx/html/theme
 if [ -z "${FRONTEND_APPLICATIONS_JSON:-}" ]; then
     FRONTEND_APPLICATIONS_JSON='[]'
 fi
@@ -81,6 +95,90 @@ if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
         fail_application_configuration "FRONTEND_APPLICATIONS_JSON must list unique app_ids with a safe HTTP(S) ui_upstream, plus a service_upstream for every service_required application"
     fi
 fi
+
+case "${FRONTEND_THEME_REQUIRED}" in
+    true | false) ;;
+    *)
+        echo "Invalid theme configuration: FRONTEND_THEME_REQUIRED must be either true or false" >&2
+        exit 1
+        ;;
+esac
+
+theme_failure() {
+    if [ "${FRONTEND_THEME_REQUIRED}" = "true" ]; then
+        echo "Theme installation failed: $1" >&2
+        exit 1
+    fi
+    echo "Theme skipped, serving the stock assets: $1" >&2
+}
+
+# Fetch FRONTEND_THEME_URL and copy its served surfaces into the overlay
+# directory. Symlinks are dropped: unzip recreates them and nginx would follow
+# one out of the web root.
+install_theme() {
+    [ -n "${FRONTEND_THEME_URL}" ] || return 0
+    work=$(mktemp -d /tmp/fred-theme.XXXXXX)
+    archive="${work}/theme.zip"
+    if [ -n "${FRONTEND_THEME_S3_ACCESS_KEY}" ] && [ -n "${FRONTEND_THEME_S3_SECRET_KEY}" ]; then
+        # The credential goes through a private config file, never the command line.
+        printf 'user = "%s:%s"\n' "${FRONTEND_THEME_S3_ACCESS_KEY}" "${FRONTEND_THEME_S3_SECRET_KEY}" > "${work}/curl.conf"
+        set -- -K "${work}/curl.conf" --aws-sigv4 "aws:amz:${FRONTEND_THEME_S3_REGION}:s3"
+    else
+        set --
+    fi
+    if ! curl "$@" -fsSL --retry 2 --max-time 120 -o "${archive}" "${FRONTEND_THEME_URL}"; then
+        rm -rf "${work}"
+        theme_failure "cannot download ${FRONTEND_THEME_URL}"
+        return 0
+    fi
+    # unzip relocates entries that escape the archive root and says so. Such an
+    # archive is malformed: refuse it instead of guessing where its files go.
+    if unzip -l "${archive}" 2>&1 | grep -q 'removing leading'; then
+        rm -rf "${work}"
+        theme_failure "archive contains entries escaping its root"
+        return 0
+    fi
+    mkdir "${work}/unpacked"
+    if ! unzip -oq "${archive}" -d "${work}/unpacked" >/dev/null 2>&1; then
+        rm -rf "${work}"
+        theme_failure "cannot unpack the archive"
+        return 0
+    fi
+    find "${work}/unpacked" -type l -delete
+    root="${work}/unpacked"
+    # zip -r acme-theme/ wraps everything in one folder: look inside it.
+    set -- "${root}"/*
+    if [ $# -eq 1 ] && [ -d "$1" ]; then
+        case "$(basename "$1")" in
+            images | contrib) ;;
+            *) root=$1 ;;
+        esac
+    fi
+    staging="${work}/theme"
+    mkdir "${staging}"
+    for entry in "${root}"/*; do
+        [ -e "${entry}" ] || continue
+        name=$(basename "${entry}")
+        if [ -d "${entry}" ] && { [ "${name}" = images ] || [ "${name}" = contrib ]; }; then
+            cp -R "${entry}" "${staging}/"
+        elif [ -f "${entry}" ] && [ "${name%.md}" != "${name}" ]; then
+            cp "${entry}" "${staging}/"
+        else
+            echo "Theme entry ignored, not a served surface: ${name}" >&2
+        fi
+    done
+    if ! mkdir -p "${FRONTEND_THEME_DIR}" ||
+        ! find "${FRONTEND_THEME_DIR}" -mindepth 1 -delete ||
+        ! cp -R "${staging}/." "${FRONTEND_THEME_DIR}/"; then
+        rm -rf "${work}"
+        theme_failure "cannot write ${FRONTEND_THEME_DIR}"
+        return 0
+    fi
+    rm -rf "${work}"
+    echo "Theme installed from ${FRONTEND_THEME_URL}: $(find "${FRONTEND_THEME_DIR}" -type f | wc -l | tr -d ' ') files"
+}
+
+install_theme
 
 # fred-agent-evaluator is optional: some platforms don't deploy it, so
 # FRONTEND_EVALUATION_UPSTREAM's hostname may not resolve. A literal
@@ -294,6 +392,24 @@ EOF
 fi
 
 cat <<'EOF'
+    # Deployment theme: files unpacked under /theme shadow the baked ones for
+    # these three surfaces only. index.html, config.json and the bundle never do.
+    location ^~ /images/ {
+        try_files /theme$uri $uri /index.html;
+    }
+
+    location ^~ /contrib/ {
+        try_files /theme$uri $uri /index.html;
+    }
+
+    location ~ ^/[^/]+\.md$ {
+        try_files /theme$uri $uri /index.html;
+    }
+
+    location ^~ /theme/ {
+        return 404;
+    }
+
     location / {
         try_files $uri /index.html;
     }

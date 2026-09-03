@@ -152,6 +152,10 @@ test: check-node node_modules ## Run the unit test suite (vitest) with coverage
 application-container-smoke: ## Verify /apps and /app-services routing in an already-built frontend image
 	FRONTEND_IMAGE=$(IMAGE_FULL) sh tests/application-container-smoke.sh
 
+.PHONY: theme-container-smoke
+theme-container-smoke: ## Verify the deployment theme overlay (FRONTEND_THEME_URL) in an already-built frontend image
+	FRONTEND_IMAGE=$(IMAGE_FULL) sh tests/theme-container-smoke.sh
+
 ##@ API client generation
 
 # The frontend RTK Query client and TypeScript types are GENERATED from each

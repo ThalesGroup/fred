@@ -53,6 +53,14 @@ COPY --chown=nginx:nginx --chmod=755 apps/frontend/dockerfiles/docker-entrypoint
 RUN touch /etc/nginx/conf.d/fred.conf && \
     chown nginx:nginx /etc/nginx/conf.d/fred.conf
 
+# Theme overlay target (see docker-entrypoint.sh): nginx-owned so the entrypoint
+# can fill it without a volume; mount an emptyDir here under a read-only root
+# filesystem. curl and unzip come from the base image, so a base bump that drops
+# them fails the build rather than the pod.
+RUN mkdir -p /usr/share/nginx/html/theme && \
+    chown nginx:nginx /usr/share/nginx/html/theme && \
+    command -v curl && command -v unzip
+
 # Disable default configuration for nginx
 RUN mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.disabled
 
