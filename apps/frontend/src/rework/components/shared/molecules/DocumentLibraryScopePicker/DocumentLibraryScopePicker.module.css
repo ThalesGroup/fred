@@ -144,16 +144,6 @@
   min-width: 0;
 }
 
-/* Covered by the folder pick above: ticked, but the tick belongs to the folder.
-   Softened rather than greyed out, so it still reads as selected. */
-.documentToggle:has(.checkbox:disabled) {
-  cursor: default;
-}
-
-.checkbox:disabled {
-  opacity: 0.65;
-}
-
 .stateText,
 .loadingText {
   margin: 0;
