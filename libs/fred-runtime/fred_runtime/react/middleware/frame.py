@@ -50,6 +50,7 @@ def build_react_platform_middleware_frame(
     max_tool_calls_per_turn: int | None = None,
     capability_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
+    invocation_depth: int = 0,
 ) -> list[AgentMiddleware]:
     """
     Assemble the fixed platform middleware frame for one ReAct agent.
@@ -66,6 +67,9 @@ def build_react_platform_middleware_frame(
       inserted between DynamicPromptMiddleware and TracingKpiMiddleware
     - `capability_hitl` carries the capability `HitlSpec` bindings merged into
       the single FredHitlMiddleware gate (RFC §5.4) — never a second gate
+    - `invocation_depth` is how many agent-to-agent invocations deep this turn
+      is; at 1 or more the same gate refuses instead of interrupting, since a
+      sub-agent has no human to ask (SUBAGENT-CAPABILITY-RFC.md §5.6)
 
     Example:
     - `build_react_platform_middleware_frame(..., capability_middleware=block.middleware, capability_hitl=block.hitl)`
@@ -101,6 +105,7 @@ def build_react_platform_middleware_frame(
             approval_policy=approval_policy,
             available_tool_names=available_tool_names,
             capability_hitl=capability_hitl,
+            invocation_depth=invocation_depth,
         ),
     ]
     if max_tool_calls_per_turn is not None:

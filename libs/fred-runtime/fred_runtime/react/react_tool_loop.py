@@ -98,6 +98,7 @@ def build_tool_loop_compiled_react_agent(
     max_tool_calls_per_turn: int | None = None,
     capability_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
+    invocation_depth: int = 0,
 ) -> object:
     """
     Build the compiled ReAct agent: `create_agent` + the platform middleware frame.
@@ -118,6 +119,9 @@ def build_tool_loop_compiled_react_agent(
       `HitlSpec` bindings for the single approval gate; capability tools ride
       on their middleware (`AgentMiddleware.tools`), so `tools` stays the
       platform-resolved set
+    - `invocation_depth` is the turn's agent-to-agent nesting level; the HITL
+      gate refuses instead of interrupting from 1 upwards (a sub-agent has no
+      human to ask — SUBAGENT-CAPABILITY-RFC.md §5.6)
 
     Example:
     - `build_tool_loop_compiled_react_agent(..., available_tool_names={"ls", "read_file"})`
@@ -134,6 +138,7 @@ def build_tool_loop_compiled_react_agent(
         max_tool_calls_per_turn=max_tool_calls_per_turn,
         capability_middleware=capability_middleware,
         capability_hitl=capability_hitl,
+        invocation_depth=invocation_depth,
     )
     # Names, per middleware, exactly what tools reach `create_agent` — the
     # boundary past which tool binding is LangChain's own responsibility, not

@@ -3657,6 +3657,7 @@ async def _iterate_runtime_event_payloads(
                 definition=definition,
                 services=services,
                 capability_block=capability_block,
+                invocation_depth=invocation_depth,
             )
             runtime.bind(binding)
             await runtime.activate()

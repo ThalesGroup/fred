@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,7 +35,8 @@ from fred_sdk.contracts.runtime import (
     PendingToolCall,
 )
 from langchain.agents.middleware import AgentMiddleware, AgentState
-from langchain.agents.middleware.types import hook_config
+from langchain.agents.middleware.types import ModelRequest, ModelResponse, hook_config
+from langchain_core.messages import ToolMessage
 from langgraph.runtime import Runtime
 from langgraph.types import interrupt
 
@@ -44,6 +45,33 @@ from fred_runtime.support.filesystem_context import rewrite_filesystem_tool_argu
 from .shared import state_messages
 
 logger = logging.getLogger(__name__)
+
+# Tool result a gated call gets instead of an interrupt when no human can be
+# reached (invocation depth ≥ 1). A sub-agent runs inside its parent's tool
+# call, with no checkpointer to persist an interrupt and no UI channel to
+# raise it on — asking would hang the parent, so the call is refused.
+SUBAGENT_APPROVAL_UNAVAILABLE = (
+    "Error: this tool requires human approval, which is unavailable in a "
+    "sub-agent. Do not call it again — continue with the tools you have, or "
+    "report in your answer what could not be done without it."
+)
+
+
+def _tool_schema_name(tool: object) -> str | None:
+    """Name of one entry of `ModelRequest.tools`, which holds `BaseTool`
+    objects and raw provider schemas (flat or OpenAI `function`-wrapped)."""
+
+    if isinstance(tool, Mapping):
+        name = tool.get("name")
+        if isinstance(name, str):
+            return name
+        function = tool.get("function")
+        if isinstance(function, Mapping):
+            nested = function.get("name")
+            return nested if isinstance(nested, str) else None
+        return None
+    name = getattr(tool, "name", None)
+    return name if isinstance(name, str) else None
 
 
 @dataclass(frozen=True)
@@ -353,6 +381,12 @@ class FredHitlMiddleware(AgentMiddleware):
     - the legacy `notes` free-text injection was dead code in the ReAct wiring
       (the approval callback never returned notes) and is not carried over
 
+    - a sub-agent (`invocation_depth` ≥ 1) can never wait for a human: it runs
+      inside its parent's tool call, checkpointer-free, with no UI channel, so
+      asking would hang the parent. Unconditionally gated tools are hidden from
+      its model and anything that would still have interrupted is refused with
+      an error tool result (SUBAGENT-CAPABILITY-RFC.md §5.6)
+
     How to use:
     - always part of the frame (the filesystem rewrite applies even when
       approval is disabled); gating is controlled by `approval_policy`
@@ -365,12 +399,34 @@ class FredHitlMiddleware(AgentMiddleware):
         approval_policy: ToolApprovalPolicy,
         available_tool_names: set[str] | frozenset[str],
         capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
+        invocation_depth: int = 0,
     ) -> None:
         super().__init__()
         self._binding = binding
         self._approval_policy = approval_policy
         self._available_tool_names = available_tool_names
         self._capability_hitl = dict(capability_hitl or {})
+        self._invocation_depth = invocation_depth
+        # Both sets are resolved once per compiled agent: `ToolApprovalPolicy`
+        # is frozen and the bindings never change after assembly, while the
+        # gate itself runs per model call and per tool call.
+        self._operator_gated: frozenset[str] = (
+            frozenset(approval_policy.always_require_tools)
+            if approval_policy.enabled
+            else frozenset()
+        )
+        self._hidden_tool_names = (
+            self._unconditionally_gated_names() if invocation_depth > 0 else frozenset()
+        )
+
+    def _unconditionally_gated_names(self) -> frozenset[str]:
+        """Tools whose approval does not depend on the call's arguments: a
+        capability `HitlSpec` with `require`, or the operator's exact list. A
+        `when` predicate is excluded — only the gate can answer it, per call."""
+
+        return self._operator_gated | frozenset(
+            name for name, bound in self._capability_hitl.items() if bound.spec.require
+        )
 
     def _requires_human_approval(self, tool_name: str) -> bool:
         """
@@ -381,9 +437,7 @@ class FredHitlMiddleware(AgentMiddleware):
         enabled AND the tool is in the exact `always_require_tools` list.
         """
 
-        return self._approval_policy.enabled and tool_name in set(
-            self._approval_policy.always_require_tools
-        )
+        return tool_name in self._operator_gated
 
     def _gate_decision(
         self, tool_name: str, tool_call: Mapping[str, Any]
@@ -423,13 +477,65 @@ class FredHitlMiddleware(AgentMiddleware):
                     tool_name,
                 )
                 needs = True
-        if (
-            not needs
-            and self._approval_policy.enabled
-            and tool_name in set(self._approval_policy.always_require_tools)
-        ):
+        if not needs and tool_name in self._operator_gated:
             needs = True
         return needs, bound.spec.question
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        """
+        Hide the tools no one can approve from a sub-agent's model (RFC §5.6).
+
+        Empty at depth 0, so the depth-0 request is handed on untouched. The
+        `aafter_model` refusal below is the safety net for what stays visible
+        (a `when` predicate can only be answered per call).
+        """
+
+        if self._hidden_tool_names:
+            kept = [
+                tool
+                for tool in request.tools
+                if _tool_schema_name(tool) not in self._hidden_tool_names
+            ]
+            if len(kept) != len(request.tools):
+                request = request.override(tools=kept)
+        return await handler(request)
+
+    def _refuse_without_a_human(self, gated: Sequence[GatedToolCall]) -> dict[str, Any]:
+        """
+        Answer every gated call with an error result instead of interrupting.
+
+        LangChain's model→tools edge only sends the calls that have no
+        `ToolMessage` yet, so answering here both refuses these calls and lets
+        the ungated ones in the same batch run; when the whole batch is
+        refused it routes straight back to the model.
+        """
+
+        logger.info(
+            "[HITL] invocation_depth=%d: refusing %d approval-gated call(s) "
+            "(%s) — no human can be reached from a sub-agent.",
+            self._invocation_depth,
+            len(gated),
+            ", ".join(sorted({call.tool_name for call in gated})),
+        )
+        if not all(call.tool_call_id for call in gated):
+            # An id-less call cannot be answered, and an unanswered call still
+            # executes: skip the whole batch instead (the cancel path).
+            return {"jump_to": "model"}
+        return {
+            "messages": [
+                ToolMessage(
+                    content=SUBAGENT_APPROVAL_UNAVAILABLE,
+                    tool_call_id=call.tool_call_id or "",
+                    name=call.tool_name,
+                    status="error",
+                )
+                for call in gated
+            ]
+        }
 
     @hook_config(can_jump_to=["model"])
     async def aafter_model(
@@ -478,6 +584,8 @@ class FredHitlMiddleware(AgentMiddleware):
         # so a partial per-call answer was never meaningful even before this.
         if not gated:
             return None
+        if self._invocation_depth > 0:
+            return self._refuse_without_a_human(gated)
         request = build_tool_approval_request(binding=self._binding, calls=gated)
         decision = interrupt(request.model_dump(mode="json"))
         if _is_cancelled_human_decision(decision):

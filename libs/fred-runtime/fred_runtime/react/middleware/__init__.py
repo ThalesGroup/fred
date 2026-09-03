@@ -35,8 +35,8 @@ The frame, in `create_agent` middleware list order:
     3. >>> CAPABILITY BLOCK INSERTION SLOT (#1973) <<<
        Capability middleware stacks are inserted here, sorted by capability id
        (RFC §5.3). Their `wrap_model_call` nests inside the platform prompt and
-       outside tracing, so observability always records the final request.
-    4. TracingKpiMiddleware          — innermost `wrap_model_call`: the
+       outside tracing, so observability records the request as they left it.
+    4. TracingKpiMiddleware          — the
        `v2.react.model` span, `llm.call_latency_ms` KPI timer, and the
        `[LLM][CALL]`/`[LLM][RESPONSE]` logs measure/describe the bare model
        call, exactly as the legacy `reasoner` node did. The model itself is
@@ -52,7 +52,13 @@ The frame, in `create_agent` middleware list order:
        rewrite + the human tool-approval gate (RFC §5.4). ONE combined
        `interrupt()` per turn covering every gated call at once (#2177
        batching) with the `HumanInputRequest` payload; cancel jumps back to
-       the model without executing any tool of the batch.
+       the model without executing any tool of the batch. At invocation depth
+       ≥ 1 it never interrupts: gated calls are refused with an error tool
+       result, and its `wrap_model_call` — the INNERMOST one, so it is the
+       last word on what the model is offered — hides the unconditionally
+       gated tools (SUBAGENT-CAPABILITY-RFC.md §5.6). That hiding runs inside
+       tracing, so a depth ≥ 1 span lists tools the model never saw; the
+       alternative was reordering the frame and changing the depth-0 gate.
     7. ToolCallLimitMiddleware       — LangChain prebuilt, appended only when
        `max_tool_calls_per_turn` is set. Listed AFTER FredHitl on purpose:
        `after_model` hooks run in REVERSE list order, so the limit blocks
