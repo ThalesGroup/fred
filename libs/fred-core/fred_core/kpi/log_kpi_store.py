@@ -28,6 +28,9 @@ from fred_core.kpi.kpi_writer_structures import (
 _STRUCTURED_EVENT_NAMES = frozenset(
     {
         "agent.turn_completed",
+        # Sub-agent turns are counted separately; without this the log sink
+        # records the parent's turns and silently drops its children's.
+        "agent.subagent_turn_completed",
         "agent.turn_error_total",
         "agent.tool_failed_total",
         "agent.tool_latency_ms",
