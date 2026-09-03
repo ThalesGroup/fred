@@ -2381,6 +2381,13 @@
       },
       "parameters": {
         "title": "Settings",
+        "name": {
+          "label": "Team name",
+          "support": "This name identifies your team everywhere on the platform. It must be unique.",
+          "save": "Rename team",
+          "alreadyTaken": "Another team already uses this name.",
+          "saveError": "Could not rename the team."
+        },
         "description": {
           "label": "Team description",
           "placeholder": "Help other users understand your team's role."

@@ -37,12 +37,15 @@ from control_plane_backend.teams.schemas import (
     TeamAlreadyExistsError,
     TeamNotFoundError,
     TeamRescueNotOrphanedError,
+    TeamWithPermissions,
+    UpdateTeamRequest,
 )
 from control_plane_backend.teams.service import (
     create_team,
     delete_team,
     list_all_teams_for_registry,
     rescue_team_admin,
+    update_team,
 )
 from fred_core import (
     KeycloakUser,
@@ -56,6 +59,7 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 
@@ -116,12 +120,14 @@ class _FakeMetadataStore:
         teams: dict[str, TeamMetadata] | None = None,
         *,
         create_raises: Exception | None = None,
+        upsert_raises: Exception | None = None,
     ) -> None:
         self.teams = dict(teams or {})
         self.deleted_ids: list[str] = []
         self.created: list[tuple[str, str]] = []
         self.advisory_lock_keys: list[str] = []
         self._create_raises = create_raises
+        self._upsert_raises = upsert_raises
 
     async def get_by_team_id(self, team_id, session=None):
         return self.teams.get(str(team_id))
@@ -136,6 +142,20 @@ class _FakeMetadataStore:
         metadata = TeamMetadata(id=TeamId(str(team_id)), name=name)
         self.teams[str(team_id)] = metadata
         return metadata
+
+    async def upsert(self, team_id, patch, session=None) -> TeamMetadata | None:
+        """Mirrors the real store's partial semantics via `to_store_values`, so a
+        patch that leaves a field unset really does keep the stored value."""
+        if self._upsert_raises is not None:
+            raise self._upsert_raises
+        existing = self.teams.get(str(team_id))
+        if existing is None:
+            return None
+        record = existing.model_dump()
+        record.update(patch.to_store_values())
+        updated = TeamMetadata(**record)
+        self.teams[str(team_id)] = updated
+        return updated
 
     async def delete(self, team_id, session=None) -> None:
         self.deleted_ids.append(str(team_id))
@@ -345,6 +365,177 @@ async def test_seed_starter_kit_failure_is_swallowed() -> None:
         TeamId("swiftpost-team-id"),
         _deps(rebac, store, prompt_category_store=failing_category_store),
     )
+
+
+# --------------------------- update_team (team_admin rename) ----------------
+
+
+def _stub_team_projection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace `update_team`'s response tail with a bare projection.
+
+    `_build_team_with_permissions` is a ReBAC read/BatchCheck fan-out with its
+    own tests; these cover the rename rules, not the projection.
+    """
+
+    async def _build(_user, metadata, _deps, _token) -> TeamWithPermissions:
+        return TeamWithPermissions(id=metadata.id, name=metadata.name)
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service._build_team_with_permissions",
+        _build,
+    )
+
+
+def _team_store(**names: str) -> _FakeMetadataStore:
+    return _FakeMetadataStore(
+        {tid: TeamMetadata(id=TeamId(tid), name=name) for tid, name in names.items()}
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_team_renames_the_team_under_can_update_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rename rides the existing team PATCH surface, so it is gated on
+    `can_update_info` — exactly `team_admin` in schema.fga — and needs no
+    platform-admin governance capability of its own. The stored name is the
+    trimmed one: surrounding whitespace would make two visually identical
+    names collide-free at the DB level."""
+    rebac = _FakeRebac()
+    store = _team_store(t1="Northbridge")
+    _stub_team_projection(monkeypatch)
+
+    team = await update_team(
+        _user(),
+        TeamId("t1"),
+        UpdateTeamRequest(name="  Southbridge  "),
+        _deps(rebac, store),
+    )
+
+    assert team.name == "Southbridge"
+    assert store.teams["t1"].name == "Southbridge"
+    assert rebac.team_permission_checks == [
+        ("t1", (TeamPermission.CAN_UPDATE_INFO,)),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_team_refuses_a_name_another_team_already_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`teammetadata.name` is globally unique, so a rename can collide exactly
+    like a create. It must surface as the same 409 and leave the team's own
+    name untouched."""
+    store = _team_store(t1="Northbridge", t2="Southbridge")
+    _stub_team_projection(monkeypatch)
+
+    with pytest.raises(TeamAlreadyExistsError):
+        await update_team(
+            _user(),
+            TeamId("t1"),
+            UpdateTeamRequest(name="Southbridge"),
+            _deps(_FakeRebac(), store),
+        )
+
+    assert store.teams["t1"].name == "Northbridge"
+
+
+@pytest.mark.asyncio
+async def test_update_team_accepts_the_name_the_team_already_has(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The form posts every field it renders, so an unchanged name reaches the
+    service on any edit. Matching the team's *own* registry row is a no-op, not
+    a conflict — the rest of the patch must still apply."""
+    store = _team_store(t1="Northbridge")
+    _stub_team_projection(monkeypatch)
+
+    team = await update_team(
+        _user(),
+        TeamId("t1"),
+        UpdateTeamRequest(name="Northbridge", description="Storage team"),
+        _deps(_FakeRebac(), store),
+    )
+
+    assert team.name == "Northbridge"
+    assert store.teams["t1"].description == "Storage team"
+
+
+@pytest.mark.asyncio
+async def test_update_team_translates_a_rename_integrity_error_to_already_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same race as `create_team`'s: the `get_by_name` pre-check is a fast path
+    only, and cannot close the window between two concurrent renames onto the
+    same name. The unique constraint catches it, and the caller must still see
+    a 409 rather than a raw 500."""
+    store = _FakeMetadataStore(
+        {"t1": TeamMetadata(id=TeamId("t1"), name="Northbridge")},
+        upsert_raises=IntegrityError("UPDATE", {}, Exception("duplicate key")),
+    )
+    _stub_team_projection(monkeypatch)
+
+    with pytest.raises(TeamAlreadyExistsError):
+        await update_team(
+            _user(),
+            TeamId("t1"),
+            UpdateTeamRequest(name="Southbridge"),
+            _deps(_FakeRebac(), store),
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_team_does_not_mask_an_integrity_error_without_a_rename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only `name` is unique-constrained. A patch that renames nothing has no
+    business turning a database failure into "that team name is taken"."""
+    store = _FakeMetadataStore(
+        {"t1": TeamMetadata(id=TeamId("t1"), name="Northbridge")},
+        upsert_raises=IntegrityError("UPDATE", {}, Exception("boom")),
+    )
+    _stub_team_projection(monkeypatch)
+
+    with pytest.raises(IntegrityError):
+        await update_team(
+            _user(),
+            TeamId("t1"),
+            UpdateTeamRequest(description="Storage team"),
+            _deps(_FakeRebac(), store),
+        )
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_update_team_request_refuses_a_blank_name(value: str | None) -> None:
+    """Every other field on this request treats `null` as "clear the value" —
+    a team always has a name, so for this one it is a client error, not an
+    erasure. A whitespace-only name is the same mistake in disguise."""
+    with pytest.raises(ValidationError):
+        UpdateTeamRequest.model_validate({"name": value})
+
+
+def test_create_and_rename_agree_on_trimming() -> None:
+    """Both write paths must trim, or the uniqueness they share is only skin
+    deep: a team created as `"Ops "` and a rename to `"Ops"` would each pass
+    the pre-check and the unique index, leaving two teams a reader cannot tell
+    apart."""
+    created = CreateTeamRequest(name="  Ops  ", initial_team_admin_ids=["alice"])
+    renamed = UpdateTeamRequest(name="  Ops  ")
+
+    assert created.name == "Ops"
+    assert renamed.name == "Ops"
+
+    with pytest.raises(ValidationError):
+        CreateTeamRequest.model_validate(
+            {"name": "   ", "initial_team_admin_ids": ["alice"]}
+        )
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_update_team_request_keeps_clearing_other_fields(value: str | None) -> None:
+    """Guard against the name rule leaking onto its neighbours: `description`
+    still accepts `null` (clear it) and any string."""
+    assert UpdateTeamRequest.model_validate({"description": value}).description == value
 
 
 # --------------------------- can_rescue_team_admin ---------------------------
