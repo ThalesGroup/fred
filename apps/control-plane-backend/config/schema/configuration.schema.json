@@ -236,6 +236,12 @@
           "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
           "title": "Enableallresourcespaces",
           "type": "boolean"
+        },
+        "enableInformationSystems": {
+          "default": false,
+          "description": "Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",
+          "title": "Enableinformationsystems",
+          "type": "boolean"
         }
       },
       "title": "FrontendFeatureFlags",

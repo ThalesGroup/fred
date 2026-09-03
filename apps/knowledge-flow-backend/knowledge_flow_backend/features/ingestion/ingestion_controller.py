@@ -571,7 +571,6 @@ class IngestionController:
         background_tasks: BackgroundTasks | None,
         kpi: KPIWriter,
         kpi_actor: KPIActor,
-        timer_dims: dict,
     ):
         success = 0
         last_error: str | None = None
@@ -790,7 +789,6 @@ class IngestionController:
                         except Exception:
                             logger.warning("OPS-04: could not fail task %s after submission failure", task_id, exc_info=True)
 
-        timer_dims["status"] = "ok" if success == total else "error"
         overall_status = Status.SUCCESS if success == total else Status.FAILED
         done_payload: dict = {"step": "done", "status": overall_status}
         if last_error:
@@ -901,35 +899,29 @@ class IngestionController:
             kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
             kpi_actor = KPIActor(type="human", user_id=user.uid)
-            with kpi.timer(
-                "api.request_latency_ms",
-                dims={"route": "/upload-process-documents", "method": "POST"},
-                actor=kpi_actor,
-            ) as d:
-                parsed_input = IngestionInput(**json.loads(metadata_json))
-                tags = parsed_input.tags
-                source_tag = parsed_input.source_tag
-                profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
+            parsed_input = IngestionInput(**json.loads(metadata_json))
+            tags = parsed_input.tags
+            source_tag = parsed_input.source_tag
+            profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
-                for tag_id in tags:
-                    await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
-                await self._check_quota_before_upload(files, tags, user)
+            for tag_id in tags:
+                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            await self._check_quota_before_upload(files, tags, user)
 
-                preloaded_files = self._preload_uploaded_files(files)
-                event_stream = self._stream_upload_process(
-                    preloaded_files=preloaded_files,
-                    user=user,
-                    tags=tags,
-                    source_tag=source_tag,
-                    profile=profile,
-                    scheduler_task_service=self.scheduler_task_service,
-                    background_tasks=background_tasks if self.scheduler_task_service is not None else None,
-                    kpi=kpi,
-                    kpi_actor=kpi_actor,
-                    timer_dims=d,
-                )
+            preloaded_files = self._preload_uploaded_files(files)
+            event_stream = self._stream_upload_process(
+                preloaded_files=preloaded_files,
+                user=user,
+                tags=tags,
+                source_tag=source_tag,
+                profile=profile,
+                scheduler_task_service=self.scheduler_task_service,
+                background_tasks=background_tasks if self.scheduler_task_service is not None else None,
+                kpi=kpi,
+                kpi_actor=kpi_actor,
+            )
 
-                return StreamingResponse(event_stream, media_type="application/x-ndjson")
+            return StreamingResponse(event_stream, media_type="application/x-ndjson")
 
         @router.post(
             "/quota/precheck",

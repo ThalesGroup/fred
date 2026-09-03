@@ -148,6 +148,32 @@ def test_can_use_team_applications_is_team_member_only() -> None:
     }
 
 
+def test_can_access_files_is_team_member_only() -> None:
+    """Entering a team's filesystem box (`/teams/{id}/...`) must be gated on
+    `team_member`, never on `can_read`: a PUBLIC team grants `public` so the
+    marketplace can list it, so `can_read` would let any connected user
+    enumerate and read that team's `shared/` area.
+
+    `team_member` already unions `team_admin`/`team_editor`/`team_analyst`, so
+    the elevated roles reach it without a separate branch here.
+    """
+    team = _type_definition("team")
+
+    assert team["relations"]["can_access_files"] == {
+        "computedUserset": {"relation": "team_member"}
+    }
+    assert team["relations"]["team_member"] == {
+        "union": {
+            "child": [
+                {"this": {}},
+                {"computedUserset": {"relation": "team_admin"}},
+                {"computedUserset": {"relation": "team_editor"}},
+                {"computedUserset": {"relation": "team_analyst"}},
+            ]
+        }
+    }
+
+
 def test_can_observe_platform_gates_platform_wide_kpi_observation() -> None:
     """AUTHZ-05 review item 16: `can_observe_platform` is the one relation for
     cross-user / platform-wide KPI observation, gating the control-plane

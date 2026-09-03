@@ -4471,8 +4471,41 @@ declared. Consumer side and the seed-not-gate semantics:
 **Adopter.** `fred_agents.platform_ops` declares both `True` — a diagnostic
 agent whose turns are inherently multi-step.
 
+---
 
-### 8.63 ✅ `read_document` resolves session attachments too — issue #2495 (2026-09-02)
+### 8.63 ✅ `AgentDefinition.supports_capabilities`; `knowledge.similarity_search` builtin tool (PR #2504, 2026-09-02)
+
+Two additions to the agent-template surface `agent_app.py`'s
+`/agents/templates` route advertises:
+
+- `AgentDefinition.supports_capabilities: bool`, default `True` on the shared
+  base and `False` on `GraphAgentDefinition` (no graph node consumes
+  capability-provided tools today). `_AgentTemplateSummary.available_capabilities`
+  is now `[]` outright for a non-participating definition, and the new
+  `_AgentTemplateSummary.supports_capabilities` field mirrors the flag
+  unfiltered, so control-plane's `AgentTemplateSummary.supports_capabilities`
+  can distinguish "this team has zero usable capabilities" from "this
+  template doesn't support selection" — `available_capabilities` alone
+  conflates the two once team `can_use` filtering has run.
+- `TOOL_REF_SIMILARITY_SEARCH` (`knowledge.similarity_search`, `fred_sdk.support.builtins`):
+  a document-to-document comparison primitive — ranks passages most similar
+  to an anchor text, restricted to an explicit `document_uids` list — distinct
+  from `knowledge.search`'s corpus-wide retrieval. `FredKnowledgeSearchToolInvoker`
+  (`v2_runtime/adapters.py`) delegates it to `DocumentSimilarityAdapter` —
+  the same `RuntimeServices.document_similarity` port §8.60's `document_similarity`
+  capability calls — so scope-narrowing, `general_only` enforcement, and
+  citable-source filtering live once, not in two parallel implementations.
+  `declared_tool_refs`-based agents get this for free with no per-team
+  capability enablement; §8.60's capability remains the ADMIN_GATED,
+  chat-control-carrying route to the same port.
+
+**Rolling upgrade.** Both fields default to the pre-existing behaviour
+(`supports_capabilities=True`, no similarity tool referenced), so a pod
+predating this entry advertises templates control-plane reads unchanged.
+
+---
+
+### 8.64 ✅ `read_document` resolves session attachments too — issue #2495 (2026-09-02)
 
 **One resolution point instead of a corpus-only reader and a fallback nobody
 else could reach.** `DocumentMarkdownPort` reaches Knowledge Flow through
@@ -4524,3 +4557,4 @@ returning an empty document.
 tuple — §8.60), `list_document_tree`, `list_documents_by_label` (labels are a
 metadata-store notion), the tabular tools (#2418) and `ppt_filler`'s raw-bytes
 fetch (an attachment keeps no blob).
+

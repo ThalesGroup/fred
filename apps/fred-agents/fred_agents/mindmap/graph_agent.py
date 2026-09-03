@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from fred_core.store import VectorSearchHit
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_FS,
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     TOOL_REF_KNOWLEDGE_SEARCH,
     FieldSpec,
@@ -61,14 +60,8 @@ class MindmapGraphAgent(GraphAgent):
         "knowledge-flow",
     )
 
-    # Filesystem is a functional dependency here (unlike general/deep assistant,
-    # which dropped it — #2334): the graph steps read picker-selected documents
-    # via bounded `read_file_page` calls, code-driven rather than LLM-steered.
-    # Still subject to the /fs team-scoping gap (AGENT-FILESYSTEM-HARDENING-RFC
-    # F1) until the runtime principal lands; admission remains admin-gated.
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
     )
 
     declared_tool_refs: tuple[ToolRefRequirement, ...] = (
@@ -100,16 +93,6 @@ class MindmapGraphAgent(GraphAgent):
                 "the Documents picker before generating a mindmap."
             ),
             default=True,
-            ui=UIHints(group="Document reading"),
-        ),
-        FieldSpec(
-            key="settings.page_line_limit",
-            type="integer",
-            title="Page line limit",
-            description="Maximum number of document lines read per paginated call.",
-            default=120,
-            min=20,
-            max=500,
             ui=UIHints(group="Document reading"),
         ),
         FieldSpec(

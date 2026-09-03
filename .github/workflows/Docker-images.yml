@@ -134,4 +134,7 @@ jobs:
           # falsy side: `publish && '' || format(...)` returns the format branch
           # for both values of publish and asks a driver-less builder to export.
           cache-from: ${{ !inputs.publish && format('type=gha,scope={0}', matrix.name) || '' }}
-          cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}
+          # ignore-error: the cache is an optimisation, so a GitHub cache-service
+          # timeout must cost a slower build next time, not a red check on an
+          # image that already compiled.
+          cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}

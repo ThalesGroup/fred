@@ -1023,6 +1023,7 @@ export type AgentTemplateSummary = {
   } | null;
   kind: ExecutionCategory;
   max_chat_input_chars: number;
+  supports_capabilities?: boolean;
   template_agent_id: string;
   title: string;
 };

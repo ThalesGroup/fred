@@ -257,11 +257,18 @@ Real, currently shipping examples:
   every SSE event type — read it to see every event path a graph agent can
   emit, not as a business-logic template.
 
-**Testing a node without a real model or sub-agent:** use
-`fred_sdk.testing.FakeGraphNodeContext` — a double covering `invoke_agent`
-and `invoke_structured_model` (the two calls every graph node uses to reach
-the model and sub-agents), fails loudly on any call you didn't configure. See
-`libs/fred-sdk/README.md` § Testing your nodes offline for the full example.
+**Testing a node without a real model, sub-agent, or tool:** use
+`fred_sdk.testing.FakeGraphNodeContext` — a double covering `invoke_agent`,
+`invoke_structured_model`, and `invoke_tool` (the calls a graph node uses to
+reach the model, sub-agents, and declared platform tools), fails loudly on
+any call you didn't configure. See `libs/fred-sdk/README.md` § Testing your
+nodes offline for the full example.
+
+**Opting in to capability selection:** `GraphAgentDefinition` defaults
+`supports_capabilities = False` — today's node functions don't consume
+capability-provided tools, so the agent-creation form doesn't offer any.
+Set `supports_capabilities = True` on your own definition only if your
+node functions genuinely read from the capability/tool-selection surface.
 
 ---
 
@@ -315,6 +322,7 @@ Import from `fred_sdk`:
 | Constant                                 | What it does                                            |
 | ----------------------------------------- | -------------------------------------------------------- |
 | `TOOL_REF_KNOWLEDGE_SEARCH`               | Search document libraries and return grounded snippets   |
+| `TOOL_REF_SIMILARITY_SEARCH`              | Compare an anchor passage against explicit target documents |
 | `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`         | Publish a markdown file artifact for the user             |
 | `TOOL_REF_RESOURCES_FETCH_TEXT`           | Read a config or template file                            |
 | `TOOL_REF_GEO_RENDER_POINTS`              | Render geographic points on a map                         |

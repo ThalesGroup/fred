@@ -28,7 +28,6 @@ export default function AdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
   const { canAdmin, canObservePlatform } = useUserCapabilities();
-
   const allItems: (NavigationMenuItemProps & { visible: boolean })[] = [
     {
       type: "link",
