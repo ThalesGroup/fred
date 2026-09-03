@@ -375,3 +375,108 @@ def test_child_capability_block_is_built_from_the_forwarded_tuning(
     assert seen["agent_instance_id"] == "instance-1"
     assert seen["turn_options"] == {"document_access": {"library_tag_ids": ["lib-1"]}}
     assert seen["invocation_depth"] == 2
+
+
+# --- Per-child token accounting -------------------------------------------
+# A child turn emits no `agent.turn_completed` (only `_stream` does), so the
+# `final` event's `token_usage` is the only place its spend survives.
+
+
+def test_token_usage_from_the_final_event_reaches_the_caller(monkeypatch) -> None:
+    _record_turn(
+        monkeypatch,
+        payloads=[
+            {
+                "kind": "final",
+                "sequence": 0,
+                "content": "ok",
+                "token_usage": {"input_tokens": 1200, "output_tokens": 300},
+            }
+        ],
+    )
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    assert result.token_usage == {"input_tokens": 1200, "output_tokens": 300}
+
+
+def test_token_usage_is_none_when_the_child_reports_none(monkeypatch) -> None:
+    _record_turn(monkeypatch)
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    assert result.is_error is False
+    assert result.token_usage is None
+
+
+def test_a_failed_child_carries_no_token_usage(monkeypatch) -> None:
+    # No `final` event, so there is nothing to read: the metric records the
+    # failed child with no counters rather than inventing zeros.
+    _record_turn(
+        monkeypatch,
+        payloads=[
+            {"kind": "execution_error", "sequence": 0, "message": "provider timed out"}
+        ],
+    )
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    assert result.is_error is True
+    assert result.token_usage is None
+
+
+def test_capability_identity_carries_the_turns_exchange_id(
+    monkeypatch, tmp_path
+) -> None:
+    """`CapabilityIdentity.exchange_id` is what lets a capability's KPI event
+    name the turn that produced it — the `subagent` capability's per-child
+    metric is its first consumer."""
+    seen: dict = {}
+
+    def _capture_capability_block(capability_registry, tuning, **kwargs):
+        seen.update(kwargs)
+        return None
+
+    monkeypatch.setattr(
+        agent_app_module, "_build_capability_block", _capture_capability_block
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="Done.")])
+        ),
+    )
+
+    definition = _EchoAgent()
+    registry = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app):
+        services = agent_app_module._build_runtime_services(
+            definition,
+            _binding(),
+            team_id="fredlab",
+            registry=registry,
+            parent_turn=_parent_turn(agent_id=definition.agent_id),
+        )
+        assert services.agent_invoker is not None
+        asyncio.run(services.agent_invoker.invoke(_child_request(definition.agent_id)))
+
+    # The parent turn's exchange id, inherited by the same-agent child.
+    assert seen["exchange_id"] == "exchange-1"

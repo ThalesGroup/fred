@@ -76,6 +76,9 @@ class CapabilityIdentity(BaseModel):
     team_id: str | None = None
     agent_instance_id: str | None = None
     agent_id: str | None = None
+    # The turn's exchange id, so a capability emitting a KPI can correlate its
+    # event with the turn that produced it. Appended last, additive-optional.
+    exchange_id: str | None = None
 
 
 StoredT = TypeVar("StoredT", bound=BaseModel)
