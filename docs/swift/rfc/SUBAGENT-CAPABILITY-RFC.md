@@ -1,6 +1,6 @@
 # RFC — Sub-agent Capability: an agent delegates work to fresh-context copies of itself
 
-**Status:** Tier 1 slice 1 (#2525) shipped 2026-09-03; §5.6 HITL, §5.2 prompt mode, §7 token accounting and §6.5 `sources`/`ui_parts` still open (#2526-#2529). Tiers 2-3 not specified.
+**Status:** Tier 1 slice 1 (#2525) and the result surface (#2529) shipped 2026-09-03; §5.6 HITL, §5.2 prompt mode and §7 token accounting still open (#2526-#2528). Tiers 2-3 not specified.
 **Author:** Florian Muller
 **Date:** 2026-09-03
 **Area:** `fred-sdk` (contracts), `fred-runtime` (invoker, capability block), new capability package
@@ -352,23 +352,20 @@ pod, sharing model clients and connection pools. This is hot-path work —
 
 ### 6.5 Result
 
-The tool returns `content_and_artifact` with a `ToolInvocationResult`, carrying
-the child's text plus its `sources` **and** `ui_parts`. `ToolResultRuntimeEvent`
-already transports both, so a research child's citations reach the UI on the
-parent's tool-result line with no frontend work.
+Shipped 2026-09-03 (#2529): the tool returns `content_and_artifact` with a
+`ToolInvocationResult` carrying the child's text plus its `sources` and
+`ui_parts`, and the content cap refuses an over-long answer rather than
+truncating it. What and why:
+[`../design/RUNTIME-EXECUTION-CONTRACT.md`](../design/RUNTIME-EXECUTION-CONTRACT.md)
+§8.64.
 
-> **Decided 2026-09-03: keep `ui_parts`.** A child must be able to produce a
-> document or a PowerPoint when the task calls for it — sub-agents are not a
-> reduced agent. Note that the invoker today fills only `content` on
-> `AgentInvocationResult` (`agent_app.py:680`); `sources` and `ui_parts` from
-> the `final` event are new plumbing. Risk to watch: a child renders into the
-> parent's turn, and ownership / duplicate rendering are unresolved — record
-> what the POC shows, do not pre-empt it.
-
-Content is capped by a **module constant**. Over the cap, the child gets an
-error result telling it to be more concise — never a silent truncation, and
-never an unbounded string into a parent whose own history budget is 200k
-characters (`react_tool_loop.py:83`, calibrated after a field incident).
+**Still open — one observation, not a design question.** A child renders into
+the parent's turn, and ownership / duplicate rendering could only be settled by
+watching it happen. Code analysis predicts each part renders once and persists
+once, under the parent's exchange, with a latent double-render if anything ever
+renders parts on a tool-result row; the predictions and their file references
+are on [#2529](https://github.com/ThalesGroup/fred/issues/2529), where the POC's
+answer belongs. Nothing to decide here until then.
 
 ### 6.6 Errors
 
