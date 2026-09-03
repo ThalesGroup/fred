@@ -803,14 +803,27 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             if kind == "final":
                 # A callee is not a reduced agent: its citations and its parts
                 # travel with its answer. The payload is a JSON dump of the
-                # child's `final` event, so the model re-validates both.
-                return AgentInvocationResult(
-                    agent_id=request.agent_id,
-                    content=payload.get("content", ""),
-                    sources=payload.get("sources") or (),
-                    ui_parts=payload.get("ui_parts") or (),
-                    is_error=False,
-                )
+                # child's `final` event, so the model re-validates both — and a
+                # part this process cannot rebuild is an error result, never an
+                # exception escaping a port whose every other branch returns one.
+                try:
+                    return AgentInvocationResult(
+                        agent_id=request.agent_id,
+                        content=payload.get("content", ""),
+                        sources=payload.get("sources") or (),
+                        ui_parts=payload.get("ui_parts") or (),
+                        is_error=False,
+                    )
+                except ValidationError as exc:
+                    logger.exception(
+                        "[fred-runtime] callee result rejected agent_id=%s",
+                        request.agent_id,
+                    )
+                    return AgentInvocationResult(
+                        agent_id=request.agent_id,
+                        content=f"The callee's answer could not be read: {exc}",
+                        is_error=True,
+                    )
             if kind == "assistant_delta":
                 content_parts.append(payload.get("delta", ""))
             elif kind == "node_error":

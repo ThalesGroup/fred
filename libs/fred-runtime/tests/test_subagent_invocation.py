@@ -139,6 +139,7 @@ def _record_turn(monkeypatch, payloads: list[dict] | None = None) -> dict:
         team_settings=None,
         reasoning_enabled_model_ids=None,
         use_checkpointer=True,
+        usable_model_ids=agent_app_module._Unresolved.TOKEN,
         **kwargs,
     ):
         seen["definition"] = definition
@@ -150,6 +151,7 @@ def _record_turn(monkeypatch, payloads: list[dict] | None = None) -> dict:
         seen["team_settings"] = team_settings
         seen["reasoning_enabled_model_ids"] = reasoning_enabled_model_ids
         seen["use_checkpointer"] = use_checkpointer
+        seen["usable_model_ids"] = usable_model_ids
         seen.update(kwargs)
         for payload in payloads or [{"kind": "final", "sequence": 0, "content": "ok"}]:
             yield payload
@@ -319,6 +321,34 @@ def test_child_sources_and_ui_parts_reach_the_caller(monkeypatch) -> None:
     assert part.href == "/documents/doc-a"
 
 
+def test_a_part_this_process_cannot_rebuild_is_an_error_not_a_crash(
+    monkeypatch,
+) -> None:
+    _record_turn(
+        monkeypatch,
+        payloads=[
+            {
+                "kind": "final",
+                "sequence": 0,
+                "content": "here it is",
+                # A part kind no capability registered in this process.
+                "ui_parts": [{"type": "from_the_future", "payload": {}}],
+            }
+        ],
+    )
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    # Every other branch of this port returns an error result; so does this one.
+    assert result.is_error is True
+    assert "could not be read" in result.content
+
+
 def test_a_child_that_cites_nothing_carries_nothing(monkeypatch) -> None:
     _record_turn(monkeypatch)
     parent_agent_id = _EchoAgent().agent_id
@@ -354,7 +384,7 @@ def test_a_same_agent_child_carries_the_parent_s_model_authorization(
     # different team.
     seen = _record_turn(monkeypatch)
     asyncio.run(_invoker(parent).invoke(_child_request(OTHER_AGENT_ID)))
-    assert "usable_model_ids" not in seen
+    assert seen["usable_model_ids"] is agent_app_module._Unresolved.TOKEN
 
 
 def test_a_carried_authorization_snapshot_skips_the_rebac_query(monkeypatch) -> None:
