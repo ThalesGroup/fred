@@ -613,11 +613,13 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         self,
         registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
         access_token: str | None,
+        capability_registry: CapabilityRegistry | None = None,
         *,
         platform_chat_model_binding: ModelBinding | None = None,
     ) -> None:
         self._registry = registry
         self._access_token = access_token
+        self._capability_registry = capability_registry
         # TRUSTED — the caller's own `BoundRuntimeContext.platform_chat_model_binding`
         # (see `_build_runtime_services`), carried privately on this invoker so a
         # nested `context.invoke_agent(...)` child inherits the same
@@ -663,6 +665,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             invocation_turns=request.prior_turns,
         )
 
+        final_result: AgentInvocationResult | None = None
         content_parts: list[str] = []
         async for payload in _iterate_runtime_event_payloads(
             definition,
@@ -670,6 +673,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             access_token=self._access_token,
             team_id=request.context.team_id,
             registry=self._registry,
+            capability_registry=self._capability_registry,
             # Private trusted propagation (see __init__): the child inherits
             # the parent turn's platform chat binding, never the request's
             # own `context` — that dict has no field for it at all.
@@ -677,11 +681,21 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         ):
             kind = payload.get("kind")
             if kind == "final":
-                return AgentInvocationResult(
+                final_result = AgentInvocationResult(
                     agent_id=request.agent_id,
-                    content=payload.get("content", ""),
+                    content=str(payload.get("content") or ""),
+                    structured=payload.get("structured"),
                     is_error=False,
                 )
+                continue
+            if kind == "execution_error":
+                final_result = AgentInvocationResult(
+                    agent_id=request.agent_id,
+                    content=str(payload.get("message") or ""),
+                    is_error=True,
+                )
+                continue
+
             if kind == "assistant_delta":
                 content_parts.append(payload.get("delta", ""))
             elif kind == "node_error":
@@ -690,6 +704,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                     content=payload.get("error_message", "Unknown error"),
                     is_error=True,
                 )
+        if final_result is not None:
+            return final_result
 
         return AgentInvocationResult(
             agent_id=request.agent_id,
@@ -705,6 +721,7 @@ def _build_runtime_services(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
+    capability_registry: CapabilityRegistry | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -805,6 +822,7 @@ def _build_runtime_services(
         LocalRegistryAgentInvoker(
             registry=registry,
             access_token=access_token,
+            capability_registry=capability_registry,
             # Private trusted propagation (LocalRegistryAgentInvoker
             # docstring): carries THIS turn's trusted platform chat binding
             # onto the invoker so a nested context.invoke_agent(...) child
@@ -979,11 +997,14 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Capabilities installed on this pod (#1974, RFC §3.8): pod-scoped, so every
-    # template from one pod advertises the same set — mirrored per template the
-    # same way available_mcp_servers is, so control-plane aggregation and the
-    # agent-creation UI need no second fetch.
+    # Filtered by supports_capabilities below: [] outright for a template that
+    # opts out, so a coincidentally pod-registered capability is never offered.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
+    # Mirrors AgentDefinition.supports_capabilities verbatim (unfiltered by team
+    # grants) — the only way control-plane can tell "this team has zero usable
+    # capabilities" apart from "this template doesn't support selection at all"
+    # once available_capabilities has been narrowed to the team's can_use set.
+    supports_capabilities: bool = True
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
     # filtering. `available_mcp_servers` above stays MCP-only (it carries full
@@ -2907,6 +2928,14 @@ def _effective_capability_ids(
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # A definition that declares it does not support capability selection
+        # (see AgentDefinition.supports_capabilities) never activates one —
+        # including a stale explicit selection saved before this field
+        # existed. Treat it exactly like "no selection made" so it falls
+        # through to the `default_mcp_servers` path below, the separate,
+        # still-active mechanism for an agent's own hardcoded MCP needs.
+        selected = None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
     if capability_registry is None:
@@ -3013,6 +3042,14 @@ def _build_capability_block(
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # Mirrors the same guard in `_effective_capability_ids`: a definition
+        # that opts out of capability selection ignores any saved selection
+        # outright, including a stale one from before this field existed
+        # (e.g. an agent instance with capabilities saved while its template
+        # still let the picker offer them). Never raise for it below — just
+        # treat it as unselected.
+        selected = None
     capability_config = tuning.capability_config if tuning is not None else {}
     if capability_registry is None:
         # A None selection with no registry is inert; a real selection is a bug.
@@ -3296,7 +3333,7 @@ async def _iterate_runtime_event_payloads(
     portable_context = PortableContext(
         request_id=request_id,
         correlation_id=correlation_id,
-        actor=ctx.get("user_id", "anonymous"),
+        actor=ctx.get("user_id") or ctx.get("actor") or "anonymous",
         tenant=ctx.get("tenant", "default"),
         environment=PortableEnvironment.DEV,
         trace_id=ctx.get("trace_id"),
@@ -3419,6 +3456,7 @@ async def _iterate_runtime_event_payloads(
         team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,
+        capability_registry=capability_registry,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -3798,8 +3836,14 @@ def _build_agent_router(
                 # time regardless, but a picker that lists it first invites the
                 # exact "select it, save it, discover the incompatibility at
                 # first launch" flow the loud refusal exists to prevent.
+                #
+                # A definition opting out via supports_capabilities=False never
+                # offers one, regardless of pod registration — short-circuit
+                # rather than let that leak into the picker.
                 available_capabilities=(
-                    all_capability_entries
+                    []
+                    if not definition.supports_capabilities
+                    else all_capability_entries
                     if not isinstance(definition, GraphAgentDefinition)
                     else [
                         entry
@@ -3807,6 +3851,7 @@ def _build_agent_router(
                         if "graph" in entry.execution_models
                     ]
                 ),
+                supports_capabilities=definition.supports_capabilities,
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],

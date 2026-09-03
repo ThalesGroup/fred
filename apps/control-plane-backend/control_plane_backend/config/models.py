@@ -82,6 +82,10 @@ class FrontendFeatureFlags(BaseModel):
         default=False,
         description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe.",
     )
+    enableInformationSystems: bool = Field(
+        default=False,
+        description="Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",
+    )
 
 
 class UploadWarning(BaseModel):

@@ -96,6 +96,7 @@ from fred_sdk.contracts.runtime import (
 from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
+    TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 from langchain_core.tools import BaseTool
@@ -878,8 +879,12 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         self._search_client = VectorSearchClient(
             agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
         )
+        self._similarity_port = DocumentSimilarityAdapter(
+            binding=binding, settings=self._settings
+        )
         self._builtins: dict[str, ToolHandler] = {
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
+            TOOL_REF_SIMILARITY_SEARCH: self._invoke_similarity_search,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
             TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
         }
@@ -986,6 +991,87 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
             sources=select_citable_sources(hits),
+        )
+
+    async def _invoke_similarity_search(
+        self, request: ToolInvocationRequest
+    ) -> ToolInvocationResult:
+        payload = request.payload
+        nested_payload = payload.get("payload")
+        nested_dict = nested_payload if isinstance(nested_payload, dict) else None
+
+        def _field(key, default=None):
+            value = payload.get(key, default)
+            if value is None and nested_dict is not None:
+                value = nested_dict.get(key, default)
+            return value
+
+        anchor = _field("anchor")
+        if not isinstance(anchor, str) or not anchor.strip():
+            raise RuntimeError(
+                "knowledge.similarity_search requires a non-empty anchor"
+            )
+
+        document_uids = _field("document_uids")
+        if not isinstance(document_uids, list) or not document_uids:
+            raise RuntimeError(
+                "knowledge.similarity_search requires a non-empty document_uids list"
+            )
+
+        top_k_raw = _field("top_k", 10)
+        top_k = top_k_raw if isinstance(top_k_raw, int) and top_k_raw > 0 else 10
+        rerank = bool(_field("rerank", True))
+        min_score = _field("min_score")
+        min_score = min_score if isinstance(min_score, (int, float)) else None
+
+        # Delegates to RuntimeServices.document_similarity — the same port the
+        # document_similarity capability uses (RUNTIME-EXECUTION-CONTRACT.md
+        # §8.60) — so scope-narrowing and general_only enforcement live once.
+        try:
+            result = await self._similarity_port.find_similar(
+                anchor,
+                document_uids=[str(uid) for uid in document_uids],
+                top_k=top_k,
+                rerank=rerank,
+                min_score=min_score,
+            )
+        except DocumentScopeRefusedError as exc:
+            raise RuntimeError(
+                "knowledge.similarity_search: none of the requested documents "
+                f"are in scope for this conversation ({', '.join(exc.requested_uids)})"
+            ) from exc
+        hits = result.hits
+
+        _LLM_FIELDS = {
+            "uid",
+            "title",
+            "content",
+            "file_name",
+            "page",
+            "section",
+            "score",
+        }
+
+        def _llm_slice(hit: VectorSearchHit) -> dict[str, object]:
+            return {
+                k: v for k, v in hit.model_dump(mode="json").items() if k in _LLM_FIELDS
+            }
+
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(
+                ToolContentBlock(
+                    kind=ToolContentKind.JSON,
+                    data={
+                        "anchor": anchor,
+                        "hits": [_llm_slice(hit) for hit in hits],
+                    },
+                ),
+            ),
+            # min_score_ratio=0.0: every hit here already matched the caller's
+            # explicit anchor/document_uids, so only the dataset-pointer filter
+            # applies — mirrors document_similarity/capability.py's same call.
+            sources=select_citable_sources(hits, min_score_ratio=0.0),
         )
 
     async def _invoke_traces_summarize_conversation(

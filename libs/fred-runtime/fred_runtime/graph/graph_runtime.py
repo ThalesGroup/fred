@@ -1303,23 +1303,25 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                         # Graceful error recovery: merge 'node_error' into state,
                         # emit a structured event, and continue at the declared
                         # fallback node instead of crashing the whole execution.
+                        error_message = str(node_exc).strip() or type(node_exc).__name__
+
                         logger.warning(
                             "[V2][GRAPH] Node %r raised; routing to on_error=%r. agent=%s error=%s",
                             node_id,
                             on_error_target,
                             self._definition.agent_id,
-                            node_exc,
+                            error_message,
                         )
                         if emit_event is not None:
                             emit_event(
                                 NodeErrorRuntimeEvent(
                                     sequence=0,
                                     node_id=node_id,
-                                    error_message=str(node_exc),
+                                    error_message=error_message,
                                     routed_to=on_error_target,
                                 )
                             )
-                        state = _merge_state(state, {"node_error": str(node_exc)})
+                        state = _merge_state(state, {"node_error": error_message})
                         node_id = on_error_target
                         continue
                     raise

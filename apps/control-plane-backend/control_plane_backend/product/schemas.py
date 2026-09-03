@@ -191,6 +191,15 @@ class AgentTemplateSummary(BaseModel):
             "metadata-driven form."
         ),
     )
+    supports_capabilities: bool = Field(
+        default=True,
+        description=(
+            "Whether this template genuinely participates in capability "
+            "selection, unfiltered by the team's can_use grants — unlike "
+            "available_capabilities, which an empty team grant also empties. "
+            "False means the frontend should say so, not imply zero grants."
+        ),
+    )
     default_capability_ids: list[str] = Field(
         default_factory=list,
         description=(

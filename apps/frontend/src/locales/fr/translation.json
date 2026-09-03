@@ -2473,6 +2473,7 @@
             "actionsIntegration": "Actions et intégration"
           },
           "actionsIntegrationEmpty": "Aucune capacité dans cette section pour le moment.",
+          "notSupported": "Cet agent ne prend pas en charge la sélection de capacités.",
           "packs": {
             "teamResources": {
               "title": "Accès aux ressources de l'équipe",
