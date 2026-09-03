@@ -27,12 +27,10 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import create_agent_app
-from fred_sdk.contracts.capability import CapabilityContext, CapabilityIdentity
-from fred_sdk.contracts.capability.context import EmptyModel
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
@@ -41,7 +39,6 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.models import AgentTuning
-from fred_sdk.contracts.runtime import RuntimeServices
 from langchain_core.messages import AIMessage
 from test_agent_app import _build_test_config, _EchoAgent
 
@@ -124,10 +121,30 @@ def _record_turn(monkeypatch, payloads: list[dict] | None = None) -> dict:
 
     seen: dict = {}
 
-    async def _fake(definition, request, access_token=None, **kwargs):
+    # Mirrors the real signature's defaults, so `seen` always holds the
+    # EFFECTIVE value a child runs with, not just what was passed explicitly.
+    async def _fake(
+        definition,
+        request,
+        access_token=None,
+        *,
+        exchange_id=None,
+        tuning=None,
+        capability_registry=None,
+        team_settings=None,
+        reasoning_enabled_model_ids=None,
+        use_checkpointer=True,
+        **kwargs,
+    ):
         seen["definition"] = definition
         seen["request"] = request
         seen["access_token"] = access_token
+        seen["exchange_id"] = exchange_id
+        seen["tuning"] = tuning
+        seen["capability_registry"] = capability_registry
+        seen["team_settings"] = team_settings
+        seen["reasoning_enabled_model_ids"] = reasoning_enabled_model_ids
+        seen["use_checkpointer"] = use_checkpointer
         seen.update(kwargs)
         for payload in payloads or [{"kind": "final", "sequence": 0, "content": "ok"}]:
             yield payload
@@ -290,7 +307,6 @@ def test_child_services_drop_the_pod_checkpointer(monkeypatch, tmp_path) -> None
         ),
     )
     app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
-    from fastapi.testclient import TestClient
 
     with TestClient(app):
         parent = agent_app_module._build_runtime_services(
@@ -308,25 +324,54 @@ def test_child_services_drop_the_pod_checkpointer(monkeypatch, tmp_path) -> None
         assert child.checkpointer is None
 
 
-def test_capability_context_depth_defaults_to_zero() -> None:
-    ctx = CapabilityContext(
-        identity=CapabilityIdentity(user_id="alice"),
-        config=EmptyModel(),
-        turn_options=EmptyModel(),
-        services=RuntimeServices(),
+def test_child_capability_block_is_built_from_the_forwarded_tuning(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    The outcome, not the seam: a REAL nested turn through the invoker, with
+    `_build_capability_block` captured where it is actually called, proving the
+    child's tools are assembled from the parent's tuning at depth+1.
+    """
+    seen: dict = {}
+
+    def _capture_capability_block(capability_registry, tuning, **kwargs):
+        seen["capability_registry"] = capability_registry
+        seen["tuning"] = tuning
+        seen.update(kwargs)
+        return None
+
+    monkeypatch.setattr(
+        agent_app_module, "_build_capability_block", _capture_capability_block
     )
-    assert ctx.invocation_depth == 0
-
-
-@pytest.mark.parametrize("depth", [0, 1, 4])
-def test_capability_contexts_receive_the_turn_depth(depth: int) -> None:
-    from fred_runtime.capabilities import build_capability_context
-    from fred_runtime.capabilities.demo import DemoEchoCapability
-
-    ctx = build_capability_context(
-        DemoEchoCapability(),
-        identity=CapabilityIdentity(user_id="alice"),
-        services=RuntimeServices(),
-        invocation_depth=depth,
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="Done.")])
+        ),
     )
-    assert ctx.invocation_depth == depth
+
+    definition = _EchoAgent()
+    registry = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app):
+        services = agent_app_module._build_runtime_services(
+            definition,
+            _binding(),
+            team_id="fredlab",
+            registry=registry,
+            parent_turn=_parent_turn(agent_id=definition.agent_id, depth=1),
+        )
+        assert services.agent_invoker is not None
+        result = asyncio.run(
+            services.agent_invoker.invoke(_child_request(definition.agent_id))
+        )
+
+    assert result.is_error is False
+    assert seen["tuning"].selected_capability_ids == ["subagent"]
+    assert seen["capability_registry"] == "registry-sentinel"
+    assert seen["team_settings"] == {"subagent": {}}
+    assert seen["agent_instance_id"] == "instance-1"
+    assert seen["turn_options"] == {"document_access": {"library_tag_ids": ["lib-1"]}}
+    assert seen["invocation_depth"] == 2

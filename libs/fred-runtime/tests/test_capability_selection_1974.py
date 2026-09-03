@@ -286,6 +286,22 @@ def test_team_settings_reach_capability_context_typed() -> None:
     assert settings.root_folder == "folder-123"
 
 
+def test_invocation_depth_reaches_every_built_context() -> None:
+    # Threaded from the turn path so a capability can bound agent-to-agent
+    # recursion on it; 0 for a user's own turn.
+    registry = _registry(DemoEchoCapability())
+    for depth in (0, 1, 4):
+        contexts = build_capability_contexts(
+            registry,
+            selected_capability_ids=["demo_echo"],
+            capability_config={},
+            identity=_identity(),
+            services=RuntimeServices(),
+            invocation_depth=depth,
+        )
+        assert contexts["demo_echo"].invocation_depth == depth
+
+
 def test_team_settings_default_to_empty_model_when_absent() -> None:
     registry = _registry(DriveCapability())
     contexts = build_capability_contexts(

@@ -21,6 +21,8 @@ against a stub invoker.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fred_capability_subagent.capability import (
     DEFAULT_MAX_DEPTH,
@@ -37,6 +39,9 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.context import AgentInvocationRequest, AgentInvocationResult
 from fred_sdk.contracts.runtime import AgentInvokerPort, RuntimeServices
+from langchain_core.messages import AIMessage
+from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode
 
 AGENT_ID = "v2.sample.assistant"
 
@@ -174,3 +179,41 @@ async def test_missing_invoker_port_fails_loud():
     tool = _tools()[0]
     with pytest.raises(RuntimeError, match="agent_invoker"):
         await tool.coroutine(prompt="Do the thing.")
+
+
+@pytest.mark.asyncio
+async def test_calls_in_one_assistant_message_run_concurrently():
+    """Two `run_subagent` calls in one AIMessage overlap in flight.
+
+    Driven through LangGraph's real `ToolNode`, which is what runs a turn's
+    tool calls — the barrier only releases if both children are in flight, so
+    a sequential implementation deadlocks instead of quietly passing.
+    """
+
+    barrier = asyncio.Barrier(2)
+
+    class _BarrierInvoker(AgentInvokerPort):
+        async def invoke(
+            self, request: AgentInvocationRequest
+        ) -> AgentInvocationResult:
+            await barrier.wait()
+            return AgentInvocationResult(agent_id=AGENT_ID, content="done")
+
+    tool = _tools(invoker=_BarrierInvoker())[0]
+    message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "call-1", "name": "run_subagent", "args": {"prompt": "first"}},
+            {"id": "call-2", "name": "run_subagent", "args": {"prompt": "second"}},
+        ],
+    )
+
+    graph = StateGraph(MessagesState)
+    graph.add_node("tools", ToolNode([tool]))
+    graph.add_edge(START, "tools")
+
+    result = await asyncio.wait_for(
+        graph.compile().ainvoke({"messages": [message]}), timeout=5
+    )
+
+    assert [m.content for m in result["messages"][1:]] == ["done", "done"]

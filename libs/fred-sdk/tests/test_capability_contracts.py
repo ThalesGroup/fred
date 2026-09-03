@@ -185,6 +185,17 @@ def test_default_tools_is_empty() -> None:
     assert list(cap.tools(ctx)) == []
 
 
+def test_invocation_depth_defaults_to_zero() -> None:
+    # Additive with a default, so no existing capability or test changes.
+    ctx = CapabilityContext(
+        identity=_identity(),
+        config=_Config(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(),
+    )
+    assert ctx.invocation_depth == 0
+
+
 def test_default_middleware_wraps_tools_in_tool_carrier_middleware() -> None:
     cap = _ToolsOnlyCapability()
     ctx = CapabilityContext(
