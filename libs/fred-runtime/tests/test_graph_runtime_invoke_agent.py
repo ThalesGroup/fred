@@ -150,3 +150,18 @@ def test_invoke_agent_forwards_scope_and_stays_backward_compatible() -> None:
     assert invoker.requests[0].output_schema is None
     # message is untouched when no schema is requested
     assert invoker.requests[0].message == "hi"
+
+
+def test_invoke_agent_forwards_the_system_prompt_override() -> None:
+    invoker = _FakeInvoker(["plain text answer"])
+    ctx = _context(invoker)
+
+    result = asyncio.run(
+        ctx.invoke_agent("callee", "hi", system_prompt="SUBAGENT-FRAMING")
+    )
+
+    assert result.content == "plain text answer"
+    assert invoker.requests[0].system_prompt == "SUBAGENT-FRAMING"
+    # Absent by default, so every existing Graph caller is unchanged.
+    asyncio.run(ctx.invoke_agent("callee", "hi"))
+    assert invoker.requests[1].system_prompt is None
