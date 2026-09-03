@@ -294,9 +294,10 @@ HITL set.
 ### 6.1 Shape
 
 `run_subagent`, from a standalone package `libs/fred-capability-subagent`
-(capability id `subagent`), depending only on `fred-sdk` —
-`AgentInvokerPort` and `RuntimeServices` are both SDK types. One entry-point
-line, per `AUTHORING.md`.
+(capability id `subagent`), depending on `fred-sdk` — `AgentInvokerPort` and
+`RuntimeServices` are both SDK types — plus `fred-core` for the `KPIActor` its
+per-child metric needs (§7), which `fred-sdk` does not re-export. One
+entry-point line, per `AUTHORING.md`.
 
 Arguments:
 

@@ -56,7 +56,10 @@ Fred-specific retention requirement, since nothing identifying reaches this stre
 > and therefore emits **no** `agent.turn_completed`. Total spend for a period is
 > `agent.turn_completed` **plus** `agent.subagent_turn_completed`. This is deliberate: per-child
 > attribution is what makes a runaway sub-agent diagnosable, and two metrics can always be summed
-> while one folded number can never be split.
+> while one folded number can never be split. That sum covers user turns and `run_subagent`
+> children, not every child: a Graph node or `TeamAgent` calling `invoke_agent` directly emits
+> neither metric — the emission lives in the `subagent` capability, not in the invoker — so those
+> invocations stay uncounted.
 
 Emitted once per finished child, by the capability, through `RuntimeServices.kpi_writer`.
 

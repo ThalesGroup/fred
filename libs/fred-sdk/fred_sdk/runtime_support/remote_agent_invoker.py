@@ -296,6 +296,9 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
                             sources=runtime_event.sources,
                             ui_parts=runtime_event.ui_parts,
                             is_error=False,
+                            # A callee's turn emits no `agent.turn_completed`,
+                            # so this is the only place its spend survives.
+                            token_usage=runtime_event.token_usage,
                         )
 
         except Exception as exc:
