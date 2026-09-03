@@ -41,7 +41,11 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
-from fred_sdk.contracts.context import AgentInvocationRequest, AgentInvocationResult
+from fred_sdk.contracts.context import (
+    AgentInvocationRequest,
+    AgentInvocationResult,
+    ToolInvocationResult,
+)
 from fred_sdk.contracts.runtime import AgentInvokerPort, RuntimeServices
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
@@ -88,12 +92,12 @@ def _tools(**kwargs):
     return SubAgentCapability().tools(_context(**kwargs))
 
 
-async def _run(tool: BaseTool, prompt: str) -> None:
-    """Run the tool for its effect on the stub invoker's recorded requests."""
+async def _run(tool: BaseTool, prompt: str) -> tuple[str, ToolInvocationResult]:
+    """Call the tool the way its runtime does: `tools()` builds `StructuredTool`s."""
 
     coroutine = cast(StructuredTool, tool).coroutine
     assert coroutine is not None
-    await coroutine(prompt=prompt)
+    return await coroutine(prompt=prompt)
 
 
 def test_tool_is_offered_below_max_depth():
@@ -146,7 +150,7 @@ async def test_child_answer_is_returned_with_the_framing_sent():
     )
     tool = _tools(invoker=invoker)[0]
 
-    content, artifact = await tool.coroutine(prompt="Count the matching documents.")
+    content, artifact = await _run(tool, "Count the matching documents.")
 
     assert content == "42 documents match."
     assert artifact.is_error is False
@@ -209,7 +213,7 @@ async def test_failing_child_becomes_a_tool_error_carrying_the_message():
     )
     tool = _tools(invoker=invoker)[0]
 
-    content, artifact = await tool.coroutine(prompt="Do the thing.")
+    content, artifact = await _run(tool, "Do the thing.")
 
     assert artifact.is_error is True
     assert "model provider timed out" in content
@@ -223,7 +227,7 @@ async def test_over_cap_answer_asks_for_a_shorter_one_instead_of_truncating():
     )
     tool = _tools(invoker=invoker)[0]
 
-    content, artifact = await tool.coroutine(prompt="Summarize everything.")
+    content, artifact = await _run(tool, "Summarize everything.")
 
     assert artifact.is_error is True
     assert "shorter answer" in content
@@ -235,7 +239,7 @@ async def test_over_cap_answer_asks_for_a_shorter_one_instead_of_truncating():
 async def test_missing_invoker_port_fails_loud():
     tool = _tools()[0]
     with pytest.raises(RuntimeError, match="agent_invoker"):
-        await tool.coroutine(prompt="Do the thing.")
+        await _run(tool, "Do the thing.")
 
 
 @pytest.mark.asyncio
