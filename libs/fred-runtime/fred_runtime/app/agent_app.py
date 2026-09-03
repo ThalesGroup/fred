@@ -616,10 +616,9 @@ class _ParentTurn:
     invocation_depth: int
 
 
-# Parent-turn context keys a same-agent child must NOT inherit: the user's own
-# conversation context (composed-prompt layers 7-8, which a child has no user
-# for), and the resume/auth fields a fresh one-shot turn re-derives — the access
-# token reaches the child as an explicit parameter, not through this dict.
+# Not inherited by a same-agent child: the user's own conversation context
+# (composed-prompt layers 7-8) and the resume/auth fields a fresh one-shot turn
+# re-derives — the access token travels as a parameter, not in this dict.
 _CHILD_CONTEXT_DROPPED_KEYS = frozenset(
     {
         "context_prompt_text",
@@ -669,13 +668,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
     - this invoker runs the sub-agent through the same runtime stack, sharing
       the caller's access token and registry
 
-    Same-agent children (the sub-agent case) additionally inherit the parent's
-    resolved tuning, capability registry, team settings, instance id, exchange
-    id, reasoning policy, turn options and per-turn retrieval selections, and
-    run checkpointer-free so they cannot load or overwrite the parent's state. A
-    child naming a DIFFERENT agent keeps the long-standing behaviour: it is
-    resolved on its own terms, with only the access token, registry and
-    platform chat binding shared.
+    A child naming the SAME agent additionally inherits the parent turn's
+    resolved state and runs checkpointer-free; a child naming a different agent
+    keeps today's behaviour (RUNTIME-EXECUTION-CONTRACT.md §8.63).
 
     How to use it:
     - injected automatically by _build_runtime_services when a registry is present
@@ -765,10 +760,25 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             context=context_dict,
             resume_payload=None,
             invocation_turns=request.prior_turns,
-            # Turn options narrow, never widen (DocumentAccessTurnOptions):
-            # a child that did not inherit them would search wider than the
-            # user's own turn was allowed to.
+            # Turn options narrow, never widen: a child without them would
+            # search wider than the user's own turn was allowed to.
             turn_options=dict(inherited.turn_options or {}) if inherited else {},
+        )
+
+        # What a same-agent child inherits, resolved once. It also runs
+        # checkpointer-free: a sub-agent turn is never resumed, and would
+        # otherwise load — then overwrite — the parent's own thread state.
+        inherited_turn: dict[str, Any] = (
+            {
+                "exchange_id": inherited.exchange_id,
+                "tuning": inherited.tuning,
+                "capability_registry": inherited.capability_registry,
+                "team_settings": inherited.team_settings,
+                "reasoning_enabled_model_ids": inherited.reasoning_enabled_model_ids,
+                "use_checkpointer": False,
+            }
+            if inherited is not None
+            else {}
         )
 
         content_parts: list[str] = []
@@ -783,19 +793,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             # own `context` — that dict has no field for it at all.
             platform_chat_model_binding=self._platform_chat_model_binding,
             # Depth counts call stack, not identity: it rises on EVERY
-            # re-entry, so an A→B→A cycle is bounded too.
+            # re-entry, so an A -> B -> A cycle is bounded too.
             invocation_depth=(parent.invocation_depth if parent else 0) + 1,
-            exchange_id=inherited.exchange_id if inherited else None,
-            tuning=inherited.tuning if inherited else None,
-            capability_registry=inherited.capability_registry if inherited else None,
-            team_settings=inherited.team_settings if inherited else None,
-            reasoning_enabled_model_ids=(
-                inherited.reasoning_enabled_model_ids if inherited else None
-            ),
-            # A sub-agent is one turn and is never resumed; without this it
-            # would map the parent's session_id to LangGraph's thread_id and
-            # load — then overwrite — the parent's own state mid-turn.
-            use_checkpointer=inherited is None,
+            **inherited_turn,
         ):
             kind = payload.get("kind")
             if kind == "final":
@@ -3412,9 +3412,7 @@ async def _iterate_runtime_event_payloads(
 
     invocation_depth / use_checkpointer:
     - both come from `LocalRegistryAgentInvoker`'s private state, never from the
-      request: depth bounds agent-to-agent recursion (capability-side, see
-      `CapabilityContext.invocation_depth`) and a sub-agent child runs
-      checkpointer-free so it cannot load or overwrite its parent's state
+      request (RUNTIME-EXECUTION-CONTRACT.md §8.63)
     """
 
     request_id = str(uuid4())

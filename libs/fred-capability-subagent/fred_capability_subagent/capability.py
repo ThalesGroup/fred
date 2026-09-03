@@ -14,16 +14,9 @@
 
 """`SubAgentCapability` — delegate a prompt to a fresh-context copy of this agent.
 
-Why this module exists (SUBAGENT-CAPABILITY-RFC.md):
-- a ReAct agent facing work that decomposes into independent pieces has no way
-  to delegate: everything stays in one linear history. `run_subagent` runs the
-  same agent again, with a fresh context and a parent-authored prompt, and
-  returns its answer on an ordinary tool-result line.
-
-Shape: `tools()` only — no middleware, so the capability runs on both execution
-models. Recursion is bounded here, where the tool is built: at `max_depth` the
-tool is simply absent from the schema, so a leaf child never sees it. There is
-deliberately no second limit in the runtime — one bound, one place.
+What it is, why, and its open limits: README.md and
+`docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md`; the runtime half it drives is
+`RUNTIME-EXECUTION-CONTRACT.md` §8.63.
 """
 
 from __future__ import annotations
@@ -54,22 +47,17 @@ SUBAGENT_CAPABILITY_ID = "subagent"
 # The tool-result `tool_ref` this capability stamps on its results.
 _TOOL_REF = "subagent"
 _TOOL_NAME = "run_subagent"
+# `PortableContext` requires these; the invoker mints the child's real ones.
+_REQUEST_ID_PLACEHOLDER = "subagent"
 
-# How many agent-to-agent hops the tool stays available for. 3 lets a parent
-# delegate, and its child delegate once more, which is as deep as a task
-# decomposition has ever needed to go here; the ceiling exists because each
-# level multiplies the concurrent turns one pod runs.
+# Delegation hops the tool stays available for. The ceiling is low because each
+# level multiplies the turns one pod runs at once — see README.
 DEFAULT_MAX_DEPTH = 3
 MIN_MAX_DEPTH = 1
 MAX_MAX_DEPTH = 5
 
-# Cap on ONE child's answer, in characters. The parent's own history budget is
-# 200k characters, so an unbounded child answer can consume the parent's whole
-# turn. Over the cap the parent gets an error result telling it to ask for less
-# — never a silent truncation, which would look like a complete answer.
-# Known gap: per child, so it does not compose with fan-out — six children at
-# the cap still overrun that 200k budget. A shared per-turn budget is the fix,
-# and it needs the same decision as the fan-out bound itself.
+# Cap on ONE child's answer, in characters, against the parent's 200k history
+# budget. Per child, so it does not compose with fan-out — see README.
 MAX_SUBAGENT_CONTENT_CHARS = 40_000
 
 # Prepended to the parent's prompt as the child's user message (prompt mode A):
@@ -105,13 +93,8 @@ def _clamped_max_depth(value: int) -> int:
 
 
 def _tool_description(remaining_depth: int) -> str:
-    """Build the per-turn tool description.
-
-    Cache rule (RFC §6.3): every value here varies by execution CONTEXT
-    (depth, config), never per turn. Tool schemas sit at the front of the
-    prompt, so a description that changed between turns would invalidate the
-    KV cache for the whole conversation.
-    """
+    """Build the tool description. Every value here may vary by execution
+    context but never per turn — RFC §6.3's cache rule."""
 
     nested = (
         "Your sub-agents can delegate further"
@@ -166,12 +149,12 @@ def _build_run_subagent_tool(
                 "subagent: RuntimeServices.agent_invoker is not available on "
                 "this execution path."
             )
-        # The invoker replaces this with the calling turn's own trusted
-        # context for a same-agent child; it is a declaration of who the
-        # child runs as, which the invoker verifies, not a channel.
-        context = PortableContext(
-            request_id=f"subagent-{identity.session_id or 'no-session'}",
-            correlation_id=f"subagent-{identity.session_id or 'no-session'}",
+        # Only user/session/team are read: the invoker verifies those against
+        # the calling turn and derives everything else from it. The remaining
+        # fields are required by the model and carry no meaning here.
+        declared_identity = PortableContext(
+            request_id=_REQUEST_ID_PLACEHOLDER,
+            correlation_id=_REQUEST_ID_PLACEHOLDER,
             actor=identity.user_id,
             tenant="default",
             environment=PortableEnvironment.DEV,
@@ -184,7 +167,7 @@ def _build_run_subagent_tool(
             AgentInvocationRequest(
                 agent_id=agent_id,
                 message=f"{_SUBAGENT_FRAMING}{prompt}",
-                context=context,
+                context=declared_identity,
             )
         )
         if result.is_error:
