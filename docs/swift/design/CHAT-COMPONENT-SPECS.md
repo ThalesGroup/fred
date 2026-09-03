@@ -810,6 +810,12 @@ uploading.
   multi-file batch (paste, drop or picker) registers every chip before the
   first ingestion starts and ingests concurrently — `useChatAttachments.addFiles`
   used to go one file at a time, which hid file N behind file N-1's ingestion.
+  Browser limit, not ours: Firefox hands the page only the first file of a
+  multi-file copy (Mozilla bug 864052, open since 2013, parity gap with Chrome
+  and Safari, which expose them all). Nothing in the page can recover the
+  others — drag & drop or the picker are the multi-file paths there. Every
+  paste logs `types=… files=… attached=…` at debug level to tell this apart
+  from a composer bug.
 
 ### 8.4 Props
 
