@@ -38,7 +38,11 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.models import AgentTuning
+from fred_sdk.contracts.models import (
+    AgentTuning,
+    MCPServerRef,
+    ReActAgentDefinition,
+)
 from langchain_core.messages import AIMessage
 from test_agent_app import _build_test_config, _EchoAgent
 
@@ -84,9 +88,11 @@ def _parent_turn(
     agent_id: str,
     depth: int = 0,
     tuning: AgentTuning | None = None,
+    definition: ReActAgentDefinition | None = None,
 ) -> agent_app_module._ParentTurn:
     return agent_app_module._ParentTurn(
         agent_id=agent_id,
+        definition=definition if definition is not None else _EchoAgent(),
         tuning=tuning
         or AgentTuning(role="r", description="d", selected_capability_ids=["subagent"]),
         capability_registry="registry-sentinel",  # type: ignore[arg-type]
@@ -375,3 +381,50 @@ def test_child_capability_block_is_built_from_the_forwarded_tuning(
     assert seen["agent_instance_id"] == "instance-1"
     assert seen["turn_options"] == {"document_access": {"library_tag_ids": ["lib-1"]}}
     assert seen["invocation_depth"] == 2
+
+
+def test_same_agent_child_runs_the_definition_its_parent_runs(monkeypatch) -> None:
+    """
+    The registry holds raw templates. Only `_apply_runtime_tuning` turns an
+    instance's selected capability id into an `MCPServerRef`, so a child
+    resolved off the registry ran with NO MCP tools at all while its parent
+    kept them — and nothing in the stream said why.
+    """
+    seen = _record_turn(monkeypatch)
+    # What the parent's own turn runs: the template overlaid with its
+    # instance's tuning.
+    tuned = _EchoAgent().model_copy(
+        update={
+            "default_mcp_servers": (MCPServerRef(id="mcp-tabular"),),
+            "system_prompt_template": "the operator's own prompt",
+        }
+    )
+
+    asyncio.run(
+        _invoker(_parent_turn(agent_id=tuned.agent_id, definition=tuned)).invoke(
+            _child_request(tuned.agent_id)
+        )
+    )
+
+    child = seen["definition"]
+    assert child.system_prompt_template == "the operator's own prompt"
+    # The tool surface itself, not just the definition field it comes from.
+    settings = agent_app_module._build_agent_settings(child, team_id="fredlab")
+    assert [ref.id for ref in settings.active_mcp_servers] == ["mcp-tabular"]
+
+
+def test_cross_agent_child_runs_the_registry_template(monkeypatch) -> None:
+    """The parent instance's tuning describes the parent, not some other agent."""
+    seen = _record_turn(monkeypatch)
+    tuned = _EchoAgent().model_copy(
+        update={"default_mcp_servers": (MCPServerRef(id="mcp-tabular"),)}
+    )
+
+    asyncio.run(
+        _invoker(_parent_turn(agent_id=tuned.agent_id, definition=tuned)).invoke(
+            _child_request(OTHER_AGENT_ID)
+        )
+    )
+
+    assert seen["definition"].agent_id == OTHER_AGENT_ID
+    assert seen["definition"].default_mcp_servers == ()

@@ -4493,6 +4493,13 @@ its `RuntimeContext` (`selected_document_uids`, `search_policy`, `language`,
 …), so a user who narrowed their agent to one folder gets children searching
 that folder rather than the whole corpus.
 
+**A same-agent child runs the parent's own definition, not the registry
+template.** `_ParentTurn` carries it. The registry holds templates, and only
+`_apply_runtime_tuning` turns an instance's `selected_capability_ids` into the
+`default_mcp_servers` that `_build_agent_settings` hands `FredMcpToolProvider`
+— so forwarding `tuning` alone left the child with the native capability block
+but **no MCP tools at all**, plus the template's system prompt.
+
 A caller-supplied `InvocationScope` still applies **on top** of those inherited
 selections, exactly as it does for a cross-agent call — it replaces the
 document/library/policy keys rather than intersecting with them, so a Graph

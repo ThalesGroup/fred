@@ -605,6 +605,10 @@ class _ParentTurn:
     """
 
     agent_id: str
+    # The parent's TUNED definition, not the registry template: only
+    # `_apply_runtime_tuning` turns an instance's selected capabilities into
+    # `default_mcp_servers`, and a child off the template has no MCP tools.
+    definition: ReActAgentDefinition | GraphAgentDefinition
     tuning: AgentTuning | None
     capability_registry: CapabilityRegistry | None
     team_settings: Mapping[str, Mapping[str, Any]] | None
@@ -701,14 +705,6 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         self._platform_chat_model_binding = platform_chat_model_binding
 
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
-        definition = self._registry.get(request.agent_id)
-        if definition is None:
-            return AgentInvocationResult(
-                agent_id=request.agent_id,
-                content=f"Agent '{request.agent_id}' is not registered in this pod.",
-                is_error=True,
-            )
-
         parent = self._parent_turn
         # The one condition that drives everything below: a child of the SAME
         # agent is this agent running again, so it inherits the parent turn's
@@ -718,6 +714,17 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             if parent is not None and request.agent_id == parent.agent_id
             else None
         )
+        definition = (
+            inherited.definition
+            if inherited is not None
+            else self._registry.get(request.agent_id)
+        )
+        if definition is None:
+            return AgentInvocationResult(
+                agent_id=request.agent_id,
+                content=f"Agent '{request.agent_id}' is not registered in this pod.",
+                is_error=True,
+            )
         if inherited is not None:
             trusted = inherited.binding.portable_context
             claimed = request.context
@@ -3569,6 +3576,7 @@ async def _iterate_runtime_event_payloads(
         use_checkpointer=use_checkpointer,
         parent_turn=_ParentTurn(
             agent_id=definition.agent_id,
+            definition=definition,
             tuning=tuning,
             capability_registry=capability_registry,
             team_settings=team_settings,
