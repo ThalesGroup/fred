@@ -4491,7 +4491,14 @@ still be resolved on its own terms. A child naming the **same** `agent_id` now
 inherits all of those, plus the parent's `turn_options` and the selections on
 its `RuntimeContext` (`selected_document_uids`, `search_policy`, `language`,
 …), so a user who narrowed their agent to one folder gets children searching
-that folder and no wider.
+that folder rather than the whole corpus.
+
+A caller-supplied `InvocationScope` still applies **on top** of those inherited
+selections, exactly as it does for a cross-agent call — it replaces the
+document/library/policy keys rather than intersecting with them, so a Graph
+caller invoking a same-agent child can widen them (the tracked #1859 shape).
+`run_subagent` never sets `scope`, so the capability's own children cannot;
+closing it for every caller is #1859's job, not this entry's.
 
 All of it travels on a **private attribute of the invoker**
 (`_ParentTurn`), the `platform_chat_model_binding` doctrine (§8.55): never on
@@ -4546,13 +4553,10 @@ unchanged here.
 
 **And, explicitly, no bound on fan-out.** Depth bounds height; nothing bounds
 how many children one assistant message launches, and they run concurrently in
-one pod against a shared connection pool. `max_tool_calls_per_turn` does *not*
-serve as that bound — it maps to a **per-graph-run** limit, and a child is its
-own graph run, so the counter resets at every level. Neither does the per-child
-content cap compose: N children each under it still overrun the parent's
-history budget. Both are open questions on
-[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5,
-raised by this change's performance review and to be settled before the
-capability is enabled on a shared deployment. Until then it is a local/POC
-surface: an admin must enable it per team (`ADMIN_GATED`), and no agent
-selects it by default.
+one pod against a shared connection pool. `max_tool_calls_per_turn` is not that
+bound — it is per graph run, and a child is its own graph run, so it resets at
+every level; nor does the per-child content cap compose. Deliberate for the
+POC, to be settled with POC data — see issue #2531 and
+[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5.
+Until then it is a local/POC surface: an admin must enable it per team
+(`ADMIN_GATED`), and no agent selects it by default.

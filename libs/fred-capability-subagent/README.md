@@ -29,10 +29,8 @@ invoker — never on the request, so a crafted invocation cannot reset it). At
 shown a delegation it would only be refused. There is deliberately no second
 limit in the runtime.
 
-Depth bounds height, not width: **nothing bounds fan-out**. N children are N
-full agent turns running concurrently in one pod, and
-`max_tool_calls_per_turn` does not help — it maps to a per-graph-run limit and
-a child is its own graph run, so the counter resets at every level.
+Depth bounds height, not width: nothing bounds fan-out (#2531). N children are
+N full agent turns running concurrently in one pod.
 
 ## Registration
 
@@ -42,15 +40,10 @@ It is wired into the pod as an editable path dependency of `apps/fred-agents`.
 
 ## Known limitations
 
-Local/POC surface today — settle these before enabling it anywhere shared
-(RFC §5.5, raised by this change's performance review):
+Local/POC surface today:
 
-- **Unbounded fan-out.** See above. One user message can launch enough
-  concurrent child turns to exhaust the pod's shared connection pool, which
-  fails *other users'* turns too.
-- **The content cap does not compose.** It is per child; N children each under
-  it still overrun the parent's history budget — after every one of them has
-  been paid for.
+- **Unbounded fan-out**, and the content cap is per child so it does not
+  compose with it. Deliberate for the POC, to be settled with POC data — #2531.
 - **No timeout, and the parent's SSE stream is silent** for a child's whole
   run (RFC §10).
 - **Child turns emit no turn-level KPI**, so their token spend is counted
