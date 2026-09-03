@@ -3259,3 +3259,43 @@ else changes. Anything that would only work same-origin is a defect against
 this contract. Durable installed/tombstoned registration, admin-visible
 stale-grant cleanup after removal, and `pending_reactivation` on id
 reappearance remain deferred lifecycle requirements.
+
+---
+
+## 47. Contract Notes — a team_admin may rename their own team (2026-09-03, issue #2516)
+
+**`UpdateTeamRequest.name` (`PATCH /teams/{team_id}`), 1-180 chars.** A team's
+name was set once by `POST /teams` (platform-admin only) and immutable
+afterwards; a team_admin who mistyped it, or whose team was renamed in the real
+world, had no way to fix it. It now rides the existing team PATCH surface, which
+is gated on `can_update_info` — defined as exactly `team_admin` in `schema.fga`.
+No new endpoint, no new permission, no governance capability: renaming is team
+self-service, unlike creating or deleting a team. Deleting a team from the team
+settings stays out of scope.
+
+**`null` is a client error for this field, not "clear the value".** Every other
+field on `UpdateTeamRequest` uses `exclude_unset` partial semantics where an
+explicit `null` clears the stored value. A team always has a name, so `null` and
+a whitespace-only string are both 422; the accepted value is stored trimmed.
+`CreateTeamRequest.name` now trims the same way — uniqueness only means
+something if both write paths agree, otherwise a team created as `"Ops "` and a
+rename to `"Ops"` each clear the pre-check and the unique index and leave two
+teams a reader cannot tell apart.
+
+**A rename can 409.** `teammetadata.name` is globally unique (migration
+`a8b9c0d1e2f3`), so `update_team` reuses `TeamAlreadyExistsError` exactly like
+`create_team`: a `get_by_name` pre-check for the common case, and an
+`IntegrityError` catch around the upsert for the concurrent-rename race the
+pre-check cannot close. An `IntegrityError` on a patch that renames nothing is
+re-raised untouched — `name` is the only unique-constrained column, and a
+database failure must not be reported as a taken name. Renaming a team to the
+name it already holds is a no-op, not a conflict.
+
+**Personal spaces are not renameable, and need no guard to stay that way.** They
+have no `teammetadata` row, so `update_team` already 404s for them through its
+normal existence check.
+
+**Consequence for bundle import.** `importer.py` reconciles teams by name, not
+id. A bundle exported before a rename no longer matches the renamed team and
+creates a new one on import. Accepted for now; the import surface is unchanged
+by this issue.
