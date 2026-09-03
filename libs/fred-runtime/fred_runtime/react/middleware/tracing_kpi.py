@@ -55,9 +55,13 @@ class TracingKpiMiddleware(AgentMiddleware):
       name) nested under the active agent span; KPI records
       `llm.call_latency_ms`; `[LLM][CALL]`/`[LLM][RESPONSE]` logs describe the
       exact request/response
-    - this middleware is the INNERMOST `wrap_model_call` of the platform frame
-      so span/KPI/log measure the bare model call, exactly as the legacy
-      `reasoner` node wrapped only `model.ainvoke(...)`
+    - this middleware is the innermost `wrap_model_call` of the platform frame
+      that touches the request, so span/KPI/log measure the bare model call,
+      exactly as the legacy `reasoner` node wrapped only `model.ainvoke(...)`.
+      One exception, sub-agents only: `SubAgentHitlMiddleware` hides
+      approval-gated tools inside this span, so at invocation depth ≥ 1 the
+      recorded `tools`/`chars_tools` overstate what was sent (see the package
+      docstring)
 
     How to use:
     - always part of the frame; span/KPI are no-ops when tracer/kpi are None,

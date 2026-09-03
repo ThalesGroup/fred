@@ -53,11 +53,15 @@ The frame, in `create_agent` middleware list order:
        `interrupt()` per turn covering every gated call at once (#2177
        batching) with the `HumanInputRequest` payload; cancel jumps back to
        the model without executing any tool of the batch. At invocation depth
-       ≥ 1 it never interrupts: gated calls are refused with an error tool
-       result, and its `wrap_model_call` — the INNERMOST one, so it is the
-       last word on what the model is offered — hides the unconditionally
-       gated tools (SUBAGENT-CAPABILITY-RFC.md §5.6). That hiding runs inside
-       tracing, so a depth ≥ 1 span lists tools the model never saw; the
+       ≥ 1 the frame builds its `SubAgentHitlMiddleware` subclass instead,
+       which never interrupts: gated calls are refused with an error tool
+       result, and it adds the INNERMOST `wrap_model_call` — the last word on
+       what the model is offered — to hide the unconditionally gated tools
+       (SUBAGENT-CAPABILITY-RFC.md §5.6). A subclass rather than a flag
+       because `create_agent` registers model-call hooks per CLASS, so a
+       depth-0 agent would otherwise pay for a hook that can do nothing.
+       That hiding runs inside tracing, so a depth ≥ 1 span and its
+       `chars_tools` attribute count tools the model never saw; the
        alternative was reordering the frame and changing the depth-0 gate.
     7. ToolCallLimitMiddleware       — LangChain prebuilt, appended only when
        `max_tool_calls_per_turn` is set. Listed AFTER FredHitl on purpose:
@@ -87,6 +91,7 @@ from .frame import build_react_platform_middleware_frame
 from .hitl import (
     CapabilityHitlBinding,
     FredHitlMiddleware,
+    SubAgentHitlMiddleware,
     build_tool_approval_request,
 )
 from .tool_observability import ToolObservabilityMiddleware
@@ -97,6 +102,7 @@ __all__ = [
     "CheckpointHygieneMiddleware",
     "DynamicPromptMiddleware",
     "FredHitlMiddleware",
+    "SubAgentHitlMiddleware",
     "ToolObservabilityMiddleware",
     "TracingKpiMiddleware",
     "build_react_platform_middleware_frame",

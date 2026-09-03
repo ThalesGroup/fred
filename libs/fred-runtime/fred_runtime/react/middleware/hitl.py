@@ -415,16 +415,11 @@ class FredHitlMiddleware(AgentMiddleware):
             if approval_policy.enabled
             else frozenset()
         )
-        self._hidden_tool_names = (
-            self._unconditionally_gated_names() if invocation_depth > 0 else frozenset()
-        )
-
-    def _unconditionally_gated_names(self) -> frozenset[str]:
-        """Tools whose approval does not depend on the call's arguments: a
-        capability `HitlSpec` with `require`, or the operator's exact list. A
-        `when` predicate is excluded — only the gate can answer it, per call."""
-
-        return self._operator_gated | frozenset(
+        # Tools whose approval does not depend on the call's arguments: a
+        # capability `HitlSpec` with `require`, or the operator's exact list.
+        # A `when` predicate is excluded — only the gate can answer it, per
+        # call. Read by `SubAgentHitlMiddleware`, which does the hiding.
+        self._unconditionally_gated: frozenset[str] = self._operator_gated | frozenset(
             name for name, bound in self._capability_hitl.items() if bound.spec.require
         )
 
@@ -480,29 +475,6 @@ class FredHitlMiddleware(AgentMiddleware):
         if not needs and tool_name in self._operator_gated:
             needs = True
         return needs, bound.spec.question
-
-    async def awrap_model_call(
-        self,
-        request: ModelRequest,
-        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
-    ) -> ModelResponse:
-        """
-        Hide the tools no one can approve from a sub-agent's model (RFC §5.6).
-
-        Empty at depth 0, so the depth-0 request is handed on untouched. The
-        `aafter_model` refusal below is the safety net for what stays visible
-        (a `when` predicate can only be answered per call).
-        """
-
-        if self._hidden_tool_names:
-            kept = [
-                tool
-                for tool in request.tools
-                if _tool_schema_name(tool) not in self._hidden_tool_names
-            ]
-            if len(kept) != len(request.tools):
-                request = request.override(tools=kept)
-        return await handler(request)
 
     def _refuse_without_a_human(self, gated: Sequence[GatedToolCall]) -> dict[str, Any]:
         """
@@ -593,3 +565,40 @@ class FredHitlMiddleware(AgentMiddleware):
             # let the model replan.
             return {"jump_to": "model"}
         return None
+
+
+class SubAgentHitlMiddleware(FredHitlMiddleware):
+    """
+    The gate a sub-agent gets: the same one, plus tool hiding (RFC §5.6).
+
+    Why this is a subclass and not a flag on the base:
+    - `create_agent` decides membership of the model-call chain per CLASS, not
+      per instance, so a base-class `awrap_model_call` would be registered —
+      and wrapped in a `traceable` costing two executor hops per model call —
+      on every depth-0 turn, to do nothing. Depth 0 must pay nothing
+    - the merged gated set (capability specs + operator list) still lives in
+      ONE place: the base class this inherits. `build_react_platform_middleware_frame`
+      picks the class from the depth; nothing else may instantiate it
+    """
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        """
+        Drop the tools no one here can approve before the model sees them.
+
+        The inherited `aafter_model` refusal is the safety net for whatever
+        stays visible — a `when` predicate can only be answered per call.
+        """
+
+        if self._unconditionally_gated:
+            kept = [
+                tool
+                for tool in request.tools
+                if _tool_schema_name(tool) not in self._unconditionally_gated
+            ]
+            if len(kept) != len(request.tools):
+                request = request.override(tools=kept)
+        return await handler(request)

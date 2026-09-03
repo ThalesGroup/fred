@@ -33,7 +33,7 @@ from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
-from .hitl import CapabilityHitlBinding, FredHitlMiddleware
+from .hitl import CapabilityHitlBinding, FredHitlMiddleware, SubAgentHitlMiddleware
 from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
@@ -100,7 +100,10 @@ def build_react_platform_middleware_frame(
         # gate has already let the call through (a HITL-refused proposal
         # never reaches here, so it never produces a "started" event).
         ToolObservabilityMiddleware(kpi=kpi, binding=binding),
-        FredHitlMiddleware(
+        # Same gate either way; the sub-agent subclass adds the tool hiding.
+        # Chosen by class because `create_agent` registers model-call hooks
+        # per class — a depth-0 agent must not carry one it never uses.
+        (SubAgentHitlMiddleware if invocation_depth > 0 else FredHitlMiddleware)(
             binding=binding,
             approval_policy=approval_policy,
             available_tool_names=available_tool_names,

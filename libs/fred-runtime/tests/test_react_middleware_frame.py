@@ -42,6 +42,7 @@ from fred_runtime.react.middleware import (
     CheckpointHygieneMiddleware,
     DynamicPromptMiddleware,
     FredHitlMiddleware,
+    SubAgentHitlMiddleware,
     ToolObservabilityMiddleware,
     TracingKpiMiddleware,
     build_react_platform_middleware_frame,
@@ -433,3 +434,12 @@ def test_frame_forwards_the_invocation_depth_to_the_hitl_gate() -> None:
     assert isinstance(gate, FredHitlMiddleware)
     assert gate._invocation_depth == 2
     assert _frame()[-1]._invocation_depth == 0  # type: ignore[attr-defined]
+
+
+def test_only_a_sub_agent_frame_carries_a_model_call_hook_on_the_gate() -> None:
+    """`create_agent` registers `wrap_model_call` per CLASS, so a depth-0 gate
+    must not be the subclass — it would join the model-call chain to do
+    nothing on every call of every turn."""
+
+    assert type(_frame()[-1]) is FredHitlMiddleware
+    assert type(_frame(invocation_depth=1)[-1]) is SubAgentHitlMiddleware

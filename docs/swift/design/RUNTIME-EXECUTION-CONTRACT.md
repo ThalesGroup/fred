@@ -4588,7 +4588,10 @@ counter. Nothing else in the frame consumes it.
 
 **At depth ≥ 1 the one existing gate stops interrupting**, in two layers:
 
-- `awrap_model_call` removes the **unconditionally** gated tools from
+- `awrap_model_call` — added by a `SubAgentHitlMiddleware` subclass the frame
+  builds *only* at depth ≥ 1, because `create_agent` registers model-call
+  hooks per **class**: a depth-0 agent must not carry a hook it can never use
+  — removes the **unconditionally** gated tools from
   `request.tools` — a capability `HitlSpec` with `require`, or the operator's
   exact `always_require_tools` list — so the child's model is never offered a
   tool it could only be refused. A `when` predicate is deliberately excluded:
@@ -4602,9 +4605,11 @@ counter. Nothing else in the frame consumes it.
   batch routes straight back to the model. This second layer is what makes the
   hang structurally impossible, whatever the first layer missed.
 
-**Depth 0 is unchanged, byte for byte.** The hidden-tool set is empty at depth
-0, so the request reaches the model untouched, and the interrupt path is the
-same code it always was. Every pre-existing HITL test passes unmodified.
+**Depth 0 is unchanged.** It builds the plain `FredHitlMiddleware`, so it
+registers no model-call hook at all and the interrupt path is the same code it
+always was; every pre-existing HITL test passes unmodified. The one thing it
+does gain is cheaper: the operator `always_require_tools` list is now resolved
+into a frozenset once per turn instead of being rebuilt on every tool call.
 
 **Deliberately NOT a second middleware, and not the capability's job.** The
 gated set is only ever complete inside `FredHitlMiddleware` — capability
@@ -4615,10 +4620,15 @@ second place that knows about HITL (RFC §5.6). The `subagent` capability's
 child framing therefore stays generic — "Tools that need a human approval are
 unavailable or will refuse" — and never enumerates tool names.
 
-**Known cosmetic consequence.** `FredHitlMiddleware` is the innermost
-`wrap_model_call` of the frame, so the tool hiding runs *inside*
-`TracingKpiMiddleware`: a depth ≥ 1 trace span lists tools the model never
-saw. Accepted rather than reordering the frame, which would move the gate's
-`after_model` relative to the capability block and `ToolCallLimitMiddleware`
-and so change depth-0 behaviour. The `[LLM][CALL]` log is unaffected (it does
-not carry tools).
+**Two accepted observability consequences, at depth ≥ 1 only.** The gate is
+the innermost `wrap_model_call` of the frame, so the tool hiding runs *inside*
+`TracingKpiMiddleware`: the span's `tools` payload **and its `chars_tools`
+attribute** — the one tool-volume signal that survives with content capture
+off — count tools the model never saw. Accepted rather than reordering the
+frame, which would move the gate's `after_model` relative to the capability
+block and `ToolCallLimitMiddleware` and so change depth-0 behaviour;
+`llm.call_latency_ms` still brackets the real call, and the `[LLM][CALL]` log
+carries no tools. Second: a refusal is recorded by an app log only. The tool
+node never runs it, so `ToolObservabilityMiddleware` never fires and there is
+no `agent.tool_failed_total` for it — a counter here would need a deliberate
+`PROMETHEUS_ALLOWED_LABELS` decision rather than a drive-by one.
