@@ -92,17 +92,30 @@ def get_weather(city: str) -> str:
     return f"sunny in {city}"
 
 
+def _bound_tool_name(tool: Any) -> str:
+    """Name of one entry handed to `bind_tools`: a tool object, or a flat or
+    `function`-wrapped provider schema."""
+
+    if isinstance(tool, dict):
+        return str(tool.get("name") or tool.get("function", {}).get("name", ""))
+    return str(getattr(tool, "name", ""))
+
+
 class ScriptedModel(BaseChatModel):
     """Deterministic scripted model recording every model input verbatim."""
 
     script: list[AIMessage] = Field(default_factory=list)
     calls: list[list[BaseMessage]] = Field(default_factory=list)
+    # Tool schemas offered per model call, in call order — what the middleware
+    # frame finally let through, not what was declared at build time.
+    bound_tools: list[list[str]] = Field(default_factory=list)
 
     @property
     def _llm_type(self) -> str:
         return "scripted-frame-1972"
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> "ScriptedModel":
+        self.bound_tools.append([_bound_tool_name(t) for t in tools])
         return self
 
     def _generate(
@@ -410,3 +423,13 @@ def test_frame_appends_tool_call_limit_after_hitl() -> None:
         FredHitlMiddleware,
         ToolCallLimitMiddleware,
     ]
+
+
+def test_frame_forwards_the_invocation_depth_to_the_hitl_gate() -> None:
+    """Depth reaches the one gate that can refuse instead of interrupting; it
+    is the only middleware in the frame that needs it."""
+
+    gate = _frame(invocation_depth=2)[-1]
+    assert isinstance(gate, FredHitlMiddleware)
+    assert gate._invocation_depth == 2
+    assert _frame()[-1]._invocation_depth == 0  # type: ignore[attr-defined]

@@ -28,6 +28,9 @@ imported, not duplicated) and covers what the registry tests cannot:
   heuristics — a capability tool is gated only by its own spec or the
   operator's exact list), operator exact-list override, and gating
   independent of the operator `enabled` toggle
+- the same gate at invocation depth ≥ 1, where no human can be reached:
+  unconditionally gated tools hidden from the model, anything that would still
+  have interrupted refused instead (SUBAGENT-CAPABILITY-RFC.md §5.6)
 """
 
 from __future__ import annotations
@@ -62,11 +65,14 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import BaseModel
 from test_react_middleware_frame import (
+    EXECUTED_TOOLS,
     ScriptedModel,
     _binding,
     _cfg,
     _definition,
     _tool_call,
+    get_weather,
+    send_email,
 )
 
 # ---------------------------------------------------------------------------
@@ -181,11 +187,13 @@ def _build_capability_agent(
     *,
     approval_enabled: bool = True,
     always_require_tools: list[str] | None = None,
+    tools: list[Any] | None = None,
+    invocation_depth: int = 0,
 ) -> Any:
     block = build_capability_agent_block(registry, _contexts(registry, configs))
     return build_tool_loop_compiled_react_agent(
         model=model,
-        tools=[],
+        tools=tools or [],
         system_prompt="SYS-cap.",
         binding=_binding(),
         approval_policy=ToolApprovalPolicy(
@@ -197,6 +205,7 @@ def _build_capability_agent(
         available_tool_names={"demo_echo", "demo_gadget"},
         capability_middleware=block.middleware,
         capability_hitl=block.hitl,
+        invocation_depth=invocation_depth,
     )
 
 
@@ -664,3 +673,127 @@ async def test_hitl_cancel_still_replans_for_capability_tools() -> None:
 
     assert GADGET_RUNS == []
     assert str(res["messages"][-1].content) == "gadget done"
+
+
+# ---------------------------------------------------------------------------
+# Sub-agent depth: no child can hang on a human (SUBAGENT-CAPABILITY-RFC §5.6)
+# ---------------------------------------------------------------------------
+
+
+def _always_gate(request: HitlGateRequest) -> bool:
+    del request
+    return True
+
+
+@pytest.fixture(autouse=True)
+def _reset_frame_tool_log() -> None:
+    # The frame module's own autouse reset does not reach this module.
+    EXECUTED_TOOLS.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("depth", [0, 1])
+async def test_unconditionally_gated_tools_are_hidden_only_from_a_sub_agent(
+    depth: int,
+) -> None:
+    """Both gated sources disappear from a child's schema — the capability
+    `HitlSpec` with `require` and the operator's exact list — while an ungated
+    tool stays. At depth 0 the model is offered everything, as today."""
+
+    model = ScriptedModel(script=[AIMessage(content="nothing to do")])
+    agent = _build_capability_agent(
+        model,
+        _gadget_registry(require=True),
+        {"demo_gadget": {}},
+        tools=[send_email, get_weather],
+        always_require_tools=["send_email"],
+        invocation_depth=depth,
+    )
+
+    await agent.ainvoke({"messages": [HumanMessage("hello")]}, _cfg(f"t-hide-{depth}"))
+
+    offered = set(model.bound_tools[0])
+    assert "get_weather" in offered
+    if depth == 0:
+        assert {"demo_gadget", "send_email"} <= offered
+    else:
+        assert offered.isdisjoint({"demo_gadget", "send_email"})
+
+
+@pytest.mark.asyncio
+async def test_conditionally_gated_call_is_refused_and_the_child_turn_completes() -> (
+    None
+):
+    """A `when` predicate can only be answered per call, so its tool stays
+    visible; the gate is the safety net that keeps the child from hanging."""
+
+    model = ScriptedModel(script=_gadget_script() + [AIMessage(content="gadget done")])
+    agent = _build_capability_agent(
+        model,
+        _gadget_registry(when=_always_gate),
+        {"demo_gadget": {}},
+        invocation_depth=1,
+    )
+
+    res = await agent.ainvoke(
+        {"messages": [HumanMessage("gadget")]}, _cfg("t-depth-when")
+    )
+
+    assert "demo_gadget" in set(model.bound_tools[0])
+    assert "__interrupt__" not in res
+    assert GADGET_RUNS == []
+    refusals = [m for m in res["messages"] if isinstance(m, ToolMessage)]
+    assert [m.tool_call_id for m in refusals] == ["g-1"]
+    assert refusals[0].status == "error"
+    assert "human approval" in str(refusals[0].content)
+    assert str(res["messages"][-1].content) == "gadget done"
+
+
+@pytest.mark.asyncio
+async def test_the_same_conditionally_gated_call_still_interrupts_at_depth_zero() -> (
+    None
+):
+    agent = _build_capability_agent(
+        ScriptedModel(script=_gadget_script()),
+        _gadget_registry(when=_always_gate),
+        {"demo_gadget": {}},
+    )
+
+    res = await agent.ainvoke(
+        {"messages": [HumanMessage("gadget")]}, _cfg("t-depth-zero-when")
+    )
+
+    assert "__interrupt__" in res
+    assert GADGET_RUNS == []
+
+
+@pytest.mark.asyncio
+async def test_a_refused_call_does_not_hold_back_the_rest_of_its_batch() -> None:
+    """Refusing by answering the call — rather than interrupting — lets
+    LangChain route the batch's ungated calls to the tool node as usual."""
+
+    model = ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call("demo_gadget", {"path": "/workspace/a"}, "g-1"),
+                    _tool_call("get_weather", {"city": "Nice"}, "w-1"),
+                ],
+            ),
+            AIMessage(content="batch done"),
+        ]
+    )
+    agent = _build_capability_agent(
+        model,
+        _gadget_registry(when=_always_gate),
+        {"demo_gadget": {}},
+        tools=[get_weather],
+        invocation_depth=2,
+    )
+
+    res = await agent.ainvoke({"messages": [HumanMessage("both")]}, _cfg("t-depth-mix"))
+
+    assert GADGET_RUNS == []
+    assert EXECUTED_TOOLS == [("get_weather", {"city": "Nice"})]
+    assert str(res["messages"][-1].content) == "batch done"
