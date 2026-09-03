@@ -457,7 +457,7 @@ def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
     assert "do not claim you cannot see or analyze an attachment" in suffix
 
 
-def test_attachment_context_suffix_marks_spreadsheets_as_text_not_tabular() -> None:
+def test_attachment_context_suffix_marks_csv_as_sql_queryable() -> None:
     suffix = build_attachment_context_suffix(
         _binding(
             "## Attached files\n"
@@ -465,17 +465,31 @@ def test_attachment_context_suffix_marks_spreadsheets_as_text_not_tabular() -> N
         )
     )
 
-    # Regression for #2418: fast ingest converts CSV/Excel attachments to
-    # markdown text (no tabular artifact, no ReBAC tuple), so the prompt must
-    # steer agents away from the tabular/SQL tools, whose fail-closed ReBAC
-    # check turns "unknown dataset" into a misleading 403.
-    assert "Spreadsheet-like attachments (CSV, XLS, XLSX)" in suffix
-    assert "treated as text documents" in suffix
+    # ATTACH-TAB-01: fast ingest now builds a real `tabular_v1` dataset for
+    # CSV attachments (DESIGN.md, "Session-Scoped Attachment Datasets"), so
+    # the prompt must tell agents to use the tabular/SQL tools for exact
+    # questions instead of steering them away entirely.
+    assert "CSV attachments are converted to markdown text" in suffix
+    assert "indexed as a SQL-queryable dataset" in suffix
+    assert "pass a CSV attachment's uid to the tabular/SQL tools" in suffix
+
+
+def test_attachment_context_suffix_marks_excel_as_text_not_tabular() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- plan.xlsx [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        )
+    )
+
+    # Excel attachments are not part of ATTACH-TAB-01 increment 1 — they keep
+    # the original "text only" guidance.
+    assert "Excel attachments (XLS, XLSX) are text only for now" in suffix
     assert "NOT loaded as SQL-queryable tables" in suffix
-    assert "never pass an attachment's uid to the tabular/SQL tools" in suffix
+    assert "never pass their uid to the tabular/SQL tools" in suffix
 
 
-def test_attachment_context_suffix_annotates_each_spreadsheet_line_inline() -> None:
+def test_attachment_context_suffix_annotates_each_line_inline_by_type() -> None:
     suffix = build_attachment_context_suffix(
         _binding(
             "## Attached files\n"
@@ -485,15 +499,16 @@ def test_attachment_context_suffix_annotates_each_spreadsheet_line_inline() -> N
         )
     )
 
-    # #2418 follow-up: the paragraph-level rule alone was ignored in live
-    # testing, so each spreadsheet line carries the warning inline, next to
-    # the uid the model would otherwise feed to the tabular/SQL tools.
+    # A paragraph-level rule alone was ignored in live testing, so each
+    # CSV/Excel line carries its own annotation inline, next to the uid the
+    # model would otherwise mishandle.
     assert (
         "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document "
-        "(markdown text, NOT a SQL dataset - use the conversation search tool, "
-        "never the tabular/SQL tools)" in suffix
+        "(also a SQL-queryable dataset - pass this id to the tabular/SQL tools"
+        in suffix
     )
-    # Case-insensitive extension match (.XLSX) is annotated too.
+    # Case-insensitive extension match (.XLSX) is annotated too, with the
+    # Excel (not CSV) note.
     assert (
         "- Plan_2026.XLSX [77aa1cfdbffe4847a4d2f087741f2899]: conversation document "
         "(markdown text, NOT a SQL dataset" in suffix
@@ -506,7 +521,42 @@ def test_attachment_context_suffix_annotates_each_spreadsheet_line_inline() -> N
             "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document"
         )
     )
-    assert suffix.count("NOT a SQL dataset") == 2
+    assert suffix.count("also a SQL-queryable dataset") == 1
+    assert suffix.count("NOT a SQL dataset") == 1
+
+
+def test_attachment_context_suffix_annotates_xlsm_like_xlsx() -> None:
+    # .xlsm is a real configured attachment suffix (FastSpreadsheetProcessor)
+    # that a bare `xlsx?` pattern would silently miss.
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- budget.xlsm [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        )
+    )
+
+    assert (
+        "- budget.xlsm [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document "
+        "(markdown text, NOT a SQL dataset" in suffix
+    )
+
+
+def test_attachment_context_suffix_does_not_annotate_a_filename_only_containing_csv() -> (
+    None
+):
+    # The annotation must only fire for a real ".csv" extension, matching the
+    # same `filename.lower().endswith(".csv")` gate `fast_ingest` uses to
+    # decide whether a tabular dataset was actually built — a filename that
+    # merely contains ".csv" mid-string must not be told it's SQL-queryable
+    # when no dataset exists for it.
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- export.csv.bak [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        )
+    )
+
+    assert "also a SQL-queryable dataset" not in suffix
 
 
 def test_document_scope_suffix_names_the_selection() -> None:

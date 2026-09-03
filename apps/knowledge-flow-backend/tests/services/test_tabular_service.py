@@ -24,6 +24,7 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
+    FAST_INGEST_SOURCE_TAG,
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
     read_tabular_artifact,
@@ -78,6 +79,38 @@ async def _ingest_csv(
         tag_names=tag_names,
     )
     processed_metadata = processor.process(str(csv_path), metadata)
+    await MetadataService().save_document_metadata(_user(), processed_metadata)
+    return processed_metadata
+
+
+def _attachment_metadata(*, document_uid: str, file_name: str, uploaded_by: str) -> DocumentMetadata:
+    """Metadata shaped like a fast-ingested chat attachment: no tags (so no
+    ReBAC tuple gets created — see `_persist_metadata_and_follow_up`), marked
+    with the same `source_tag` the vector chunks carry."""
+    metadata = DocumentMetadata(
+        identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[], tag_names=[]),
+    )
+    metadata.identity.uploaded_by = uploaded_by
+    return metadata
+
+
+async def _ingest_attachment_csv(
+    *,
+    tmp_path: Path,
+    document_uid: str,
+    file_name: str,
+    content: str,
+    uploaded_by: str,
+) -> DocumentMetadata:
+    csv_path = tmp_path / file_name
+    csv_path.write_text(content, encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _attachment_metadata(document_uid=document_uid, file_name=file_name, uploaded_by=uploaded_by)
+    processed_metadata = processor.process(str(csv_path), metadata, emit_pointer_chunk=False)
     await MetadataService().save_document_metadata(_user(), processed_metadata)
     return processed_metadata
 
@@ -669,6 +702,137 @@ async def test_tabular_service_rejects_explicit_dataset_requests_without_rebac_a
 
 
 @pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_authorizes_the_uploader_without_rebac(tmp_path, metadata_store):
+    """
+    ATTACH-TAB-01: a fast-ingested attachment carries no ReBAC tuple by
+    design, so its uploader must still be authorized via ownership metadata
+    — the same equality check `is_own_session_chunk` already applies to its
+    vector chunks (DESIGN.md, "Session-Scoped Attachment Datasets").
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+        uploaded_by="u-1",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())  # no ReBAC access to anything
+
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
+    assert dataset is not None
+    assert dataset.metadata.document_uid == "doc-attachment"
+
+
+@pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_denies_a_different_user(tmp_path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+        uploaded_by="someone-else",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())
+
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
+    assert dataset is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_ignores_a_tagged_document_even_with_the_fast_ingest_source_tag(tmp_path, metadata_store):
+    """
+    Hardening: `source_tag` is an operator-configured, client-suppliable
+    string with nothing reserving "fast_ingest" against an operator naming a
+    real corpus source the same way. A genuine attachment is always tagless
+    by construction, so a same-named but tagged document — even one owned by
+    the caller — must never be authorized through this fallback.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-collision", title="sales.csv"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    metadata.identity.uploaded_by = "u-1"
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user(), processed)
+
+    service = TabularService()
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-collision")
+    assert dataset is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_ignores_corpus_documents(tmp_path, metadata_store):
+    # A tagged corpus document is never authorized through this fallback,
+    # even for its own uploader — it must go through ReBAC like any other
+    # corpus document.
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-corpus",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    service = TabularService()
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-corpus")
+    assert dataset is None
+
+
+@pytest.mark.asyncio
+async def test_query_read_authorizes_an_owned_attachment_dataset_with_no_rebac_tuple(tmp_path, metadata_store):
+    """
+    End-to-end: `query_read` on an explicitly requested attachment dataset
+    succeeds via ownership metadata alone — the exact case a fail-closed
+    ReBAC check could never resolve for an untagged document, now handled
+    without minting any ReBAC tuple.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    metadata = await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\nLyon,20\n",
+        uploaded_by="u-1",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())
+    dataset = await service._resolve_owned_attachment_dataset(_user(), metadata.document_uid)
+    assert dataset is not None
+
+    response = await service.query_read(
+        _user(),
+        request=TabularQueryRequest(
+            sql=f"SELECT COUNT(*) AS n FROM {dataset.query_alias}",
+            dataset_uids=[metadata.document_uid],
+        ),
+    )
+    assert response.rows == [{"n": 2}]
+
+
+@pytest.mark.asyncio
 async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_lookup(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
@@ -1161,6 +1325,36 @@ def test_tabular_processor_emits_dataset_pointer_chunk_when_enabled(tmp_path):
     assert "Paris" not in text
     assert "Lyon" not in text
     assert "Sample values" not in text
+
+
+def test_tabular_processor_skips_pointer_chunk_when_disabled_per_call(tmp_path):
+    """
+    Verify `emit_pointer_chunk=False` overrides an enabled deployment config.
+
+    Why this exists:
+    - `flat_metadata_from` (used by `_emit_pointer_chunk`) carries no
+      `scope`/`user_id` fields, so a pointer chunk for a session-scoped chat
+      attachment would be visible to every user's search regardless of the
+      deployment's `pointer_chunks_enabled` setting (DESIGN.md,
+      "Session-Scoped Attachment Datasets"). The per-call override is what
+      the attachment ingestion path relies on to prevent that leak.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    processor.tabular_config.pointer_chunks_enabled = True
+    fake_vector_store = _FakeVectorStore()
+    processor.vector_store = fake_vector_store
+
+    metadata = _metadata(document_uid="doc-attachment", file_name="sales.csv")
+    processed_metadata = processor.process(str(csv_path), metadata, emit_pointer_chunk=False)
+
+    assert fake_vector_store.added_documents == []
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
+    assert ProcessingStage.VECTORIZED not in processed_metadata.processing.stages
 
 
 def test_tabular_processor_pointer_chunk_failure_is_non_fatal(tmp_path, caplog):

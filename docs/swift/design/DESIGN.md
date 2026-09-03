@@ -355,6 +355,97 @@ cannot unblock a stalled read; the bound is `httpfs`'s own retry defaults
 (~2 min worst case against a 30s `query_timeout_seconds`), not a deployment
 setting, since the remote path can't be exercised offline to tighten it.
 
+### Session-Scoped Attachment Datasets (ATTACH-TAB-01)
+
+CSV files attached directly to a chat conversation (`POST /fast/ingest`) get
+a second, real `tabular_v1` artifact alongside the existing text preview —
+not only a bounded Markdown-table chunk. Excel/XLSX attachments are not
+covered yet; they keep the text-only behavior below until a follow-up
+increment generalizes this to `tabular_multi_v1`. That follow-up must also
+extend `_resolve_owned_attachment_dataset` (or add a `tabular_multi_v1`
+sibling) to `TabularService.get_document_markdown` — untouched in this
+increment since it is scoped to spreadsheet documents, which no CSV
+attachment ever produces, so wiring it in now would be dead code.
+
+**Ingestion.** `fast_ingest` builds a `DocumentMetadata` for the attachment
+directly (`identity.document_uid` = the same uuid already used for its
+vector chunks, so the one bracketed id the agent is given works for both
+search and SQL; `source.source_tag = "fast_ingest"`, mirroring the vector
+chunks' own `source: "fast_ingest"` marker; **no tags**) — deliberately not
+via `IngestionService.extract_metadata()`/`process_metadata()`, both built
+for corpus documents: the former's versioning step scans the whole metadata
+catalog for a same-named document and raises if one exists (wrong semantics
+for a session-scoped attachment, and would collide across unrelated users
+sharing a common filename like "sales.csv"), and the latter requires
+`source_tag` to resolve against the operator-configured `document_sources`
+registry, which an attachment was never meant to join. The Parquet
+conversion itself is fully reused — `TabularProcessor.process()` (DuckDB
+CSV→Parquet via the same `CsvTabularProcessor` delimiter/encoding detection,
+`tabular_v1` extension), exactly as corpus CSV ingestion does. The metadata
+record is persisted through the normal `MetadataService` path, only after
+the fast-ingest vectors this endpoint's contract actually depends on are
+safely stored — so a vector-store failure can never leave an orphaned
+Parquet artifact or metadata record behind.
+
+**Why this creates no ReBAC tuple.** `_persist_metadata_and_follow_up` only
+writes a ReBAC parent link when `metadata.tags.tag_ids` is non-empty (see
+`features/metadata/service.py`). An attachment record carries no tags, so
+persisting it through the ordinary path is sufficient by construction — no
+bespoke "trusted, tagless" write path was needed. Storage-quota adjustment
+and tag-timestamp updates are likewise no-ops for a tagless record; the
+`document.created_total` KPI still fires, which is fine.
+
+**Authorization — no OpenFGA tuple, ever.** Fast-ingested attachments are
+deliberately "resource-less" in ReBAC: no tuple, ownership proven via chunk
+metadata instead (`_authorize_fast_ingest_delete`,
+`ingestion_controller.py:112-127`). `TabularService` stays consistent with
+that design rather than reversing it for this one surface. `describe_documents`,
+`_select_query_datasets`, and `_get_dataset_or_raise` each already have a
+"requested uid not in the ReBAC-authorized set" fallback (used today to
+decide `403` vs `404`); every one of them gained one more step, tried first:
+a single indexed `metadata_store.get_metadata_by_uid(document_uid)` lookup
+(`_resolve_owned_attachment_dataset`, batched as
+`_resolve_owned_attachment_datasets` for the two multi-uid call sites),
+treated as authorized when `source_tag == "fast_ingest"` and
+`identity.uploaded_by == user.uid` (the same equality check
+`is_own_session_chunk` already applies to vector chunks). Only if that
+doesn't match does the existing ReBAC check decide the `403`.
+
+This is deliberately **not** wired into `_resolve_authorized_datasets`
+itself, which enumerates every document the caller can read (used by
+`list_documents`/`list_datasets`) — `get_all_metadata()` filters in Python
+over every row in the metadata table (`PostgresDocumentMetadataStore.
+get_all_metadata`), so folding attachment resolution in there would add an
+unbounded table scan to every tabular listing call. The narrower fix costs
+one indexed lookup, and only when a document_uid is actually named. Attachment
+datasets consequently never appear in a blind `list_documents`/`list_datasets`
+enumeration — harmless, since the agent is already handed the uid directly in
+the attachment prompt suffix and has no need to "discover" it.
+
+**Pointer chunks stay off for attachments, unconditionally.**
+`TabularProcessor._emit_pointer_chunk` (§5 below) writes into the *shared*
+vector store using `flat_metadata_from(metadata)` — a corpus-oriented
+projection with no `scope`/`user_id` fields. A pointer chunk emitted that way
+for an attachment would not carry the `scope="session"`/`user_id` markers
+every other fast-ingest chunk relies on for isolation, i.e. it could surface
+in another user's search. `TabularProcessor.process()` takes an explicit
+`emit_pointer_chunk: bool = True` parameter; the attachment path passes
+`False` regardless of the deployment's `pointer_chunks_enabled` setting.
+Corpus ingestion is unaffected (default unchanged).
+
+**Deletion.** `DELETE /fast/delete/{document_uid}` deletes the Parquet
+artifact (`content_store`, same prefix corpus re-ingestion pruning already
+uses) and the metadata record (`metadata_store.delete_metadata`, a raw
+store-level call — no ReBAC permission check applies, matching how deletion
+of this document class already worked before this change) alongside the
+existing vector cleanup, when a `tabular_v1` artifact was produced.
+
+**Prompt suffix.** `build_attachment_context_suffix`
+(`libs/fred-runtime/fred_runtime/react/react_prompting.py`) now tells agents
+`.csv` attachments *are* SQL-queryable via the tabular tools, using the same
+uid given for search. `.xlsx`/`.xls`/`.xlsm` keep the prior "text only, not
+SQL-queryable" wording until Excel gets the same treatment.
+
 ## 3. Tabular Reads on GCS — Signed URLs
 
 Backend-internal tabular reads (DuckDB mounting Parquet, §2) need a

@@ -40,6 +40,15 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.common.team_id import TeamId
+from fred_core.documents.document_structures import (
+    DocumentMetadata,
+    FileInfo,
+    FileType,
+    Identity,
+    SourceInfo,
+    SourceType,
+    Tagging,
+)
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.scheduler import SchedulerBackend
 from langchain_core.documents import Document
@@ -83,6 +92,7 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_plain
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_spreadsheet_processor import (
     FastSpreadsheetProcessor,
 )
+from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
@@ -95,6 +105,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcess,
     FileToProcessWithoutUser,
 )
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
 
 logger = logging.getLogger(__name__)
 
@@ -377,6 +388,59 @@ class IngestionController:
         await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
         return self._scheduler_backend().value
 
+    async def _build_attachment_tabular_dataset(
+        self,
+        *,
+        user: KeycloakUser,
+        document_uid: str,
+        filename: str,
+        raw_path: pathlib.Path,
+    ) -> bool:
+        """
+        Build a SQL-queryable `tabular_v1` dataset for one CSV chat attachment.
+
+        Why this exists:
+        - Chat-attached CSVs get the same DuckDB/Parquet dataset corpus CSV
+          ingestion produces, so the tabular tools can answer precise
+          questions (counts, filters, aggregates) the fast-text markdown
+          preview cannot (DESIGN.md, "Session-Scoped Attachment Datasets").
+
+        How to use:
+        - Call with the raw upload path, before it is cleaned up.
+        - Best-effort: any failure is logged and swallowed — the attachment
+          still works as a text-only preview, exactly as before this feature.
+        - Reuses `document_uid` from the fast-ingest vector chunks so the one
+          bracketed id the agent is given works for both search and SQL.
+        - Persists metadata with no tags, so no ReBAC tuple is created —
+          `TabularService._resolve_owned_attachment_dataset` authorizes this
+          document class by ownership metadata instead.
+        - Builds `DocumentMetadata` directly rather than going through
+          `IngestionService.extract_metadata()`/`process_metadata()`: those
+          assume a corpus document. `extract_metadata()`'s versioning step
+          scans the whole metadata catalog for a same-named document and
+          raises if one exists — folder semantics that make no sense for an
+          untagged, session-scoped attachment. `process_metadata()` also
+          requires `source_tag` to resolve against the operator-configured
+          `document_sources` registry (`resolve_source_type`), which a chat
+          attachment was never meant to be a member of.
+        """
+        try:
+            metadata = DocumentMetadata(
+                identity=Identity(document_name=filename, document_uid=document_uid, title=filename, uploaded_by=user.uid),
+                source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),  # type: ignore[reportCallIssue]  # basedpyright doesn't recognize Field(None, ...) positional defaults as satisfying SourceInfo's synthesized __init__; pull_location genuinely defaults to None (document_structures.py) -- same false positive as scripts/seed_synthetic_corpus.py:119
+                file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+                tags=Tagging(tag_ids=[]),
+            )
+            await asyncio.to_thread(self._tabular_processor.process, str(raw_path), metadata, emit_pointer_chunk=False)
+            await self.service.metadata_service.save_document_metadata(user, metadata)
+            return True
+        except Exception:
+            logger.exception(
+                "[FAST TEXT][INGEST] Failed to build tabular dataset for %s (attachment stays text-only)",
+                filename,
+            )
+            return False
+
     async def _delete_fast_ingest_artifacts(
         self,
         *,
@@ -397,8 +461,58 @@ class IngestionController:
         chat attachments no longer store a raw copy in workspace storage (FILES-04).
         """
 
-        del user, storage_key
-        return await self._delete_fast_vectors(document_uid=document_uid)
+        del storage_key
+        backend = await self._delete_fast_vectors(document_uid=document_uid)
+        await self._delete_attachment_tabular_dataset(user=user, document_uid=document_uid)
+        return backend
+
+    async def _delete_attachment_tabular_dataset(self, *, user: KeycloakUser, document_uid: str) -> None:
+        """
+        Best-effort cleanup of one attachment's tabular dataset, if it has one.
+
+        Why this exists:
+        - `_build_attachment_tabular_dataset` persists a metadata record and a
+          Parquet artifact alongside the vectors `_delete_fast_vectors`
+          already cleans up; deleting an attachment must not leave those
+          two behind.
+        - Re-verifies ownership itself rather than trusting the caller's
+          authorization: `_authorize_fast_ingest_delete`'s "no vector chunks
+          = safe retry" rule (`may_delete_session_document`) was designed for
+          an idempotent vector-only delete and passes for ANY document with
+          zero vector chunks — including any corpus CSV dataset whenever
+          `pointer_chunks_enabled` is off (the shipped default). Without this
+          method's own check, any authenticated user could delete any other
+          user's or team's tabular dataset by calling
+          `DELETE /fast/delete/{their_document_uid}`. Same ownership test as
+          `TabularService._resolve_owned_attachment_dataset`.
+        - Deletes the Parquet objects and metadata row directly rather than
+          `MetadataService.delete_document_and_artifacts_trusted`: that
+          method also releases storage-quota accounting
+          (`_delete_and_release`), which requires a Postgres engine even to
+          determine there is nothing to release for a tagless, quota-exempt
+          attachment — infrastructure this narrow cleanup has no other
+          reason to depend on.
+        """
+        try:
+            context = ApplicationContext.get_instance()
+            metadata_store = context.get_metadata_store()
+            metadata = await metadata_store.get_metadata_by_uid(document_uid)
+            if metadata is None or read_tabular_artifact(metadata) is None:
+                return
+            if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.identity.uploaded_by != user.uid:
+                return
+            content_store = context.get_content_store()
+            artifacts_prefix = context.get_config().storage.tabular_store.artifacts_prefix
+            prefix = document_artifact_prefix(artifacts_prefix=artifacts_prefix, document_uid=document_uid)
+            for stored_object in content_store.list_objects(prefix):
+                content_store.delete_object(stored_object.key)
+            await metadata_store.delete_metadata(document_uid)
+        except Exception:
+            logger.warning(
+                "[FAST TEXT][INGEST][DELETE] Failed to clean up tabular dataset for doc_uid=%s",
+                document_uid,
+                exc_info=True,
+            )
 
     async def _resolve_tag_owners(self, tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
         """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
@@ -802,6 +916,7 @@ class IngestionController:
         self._fast_text_instances: Dict[str, BaseFastTextProcessor] = {}
         self.embedder = ApplicationContext.get_instance().get_embedder()
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
+        self._tabular_processor = TabularProcessor()
         scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
         processing_cfg = ApplicationContext.get_instance().get_config().processing
         max_parallelism = ApplicationContext.get_instance().get_config().scheduler.temporal.ingestion_workflow_parallelism
@@ -1105,48 +1220,71 @@ class IngestionController:
 
             # Store to temp
             raw_path = uploadfile_to_path(file)
+            document_uid = uuid.uuid4().hex
+            tabular_available = False
 
-            # Extract fast text
-            result: FastTextResult
+            # The tabular build (best-effort, after vectors below) still needs
+            # the raw file, so cleanup now wraps the whole handler instead of
+            # just fast-text extraction.
             try:
-                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
-                logger.info(
-                    "[FAST TEXT][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
-                    user.uid,
-                    filename,
-                    result.total_chars,
-                    result.page_count,
-                    result.truncated,
-                )
-                text = result.text or ""
-                if not text.strip() and not result.pages:
-                    logger.warning(
-                        "[FAST TEXT][INGEST] EMPTY FILE user=%s file=%s (page_count=%s truncated=%s)",
+                # Extract fast text
+                result: FastTextResult
+                try:
+                    result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
+                    logger.info(
+                        "[FAST TEXT][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
                         user.uid,
                         filename,
+                        result.total_chars,
                         result.page_count,
                         result.truncated,
                     )
-                    raise HTTPException(
-                        status_code=422,
-                        detail={
-                            "code": "fast_text_empty_extraction",
-                            "message": f"No text could be extracted from {filename}.",
-                        },
-                    )
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            finally:
-                cleanup_uploaded_temp_file(raw_path)
+                    text = result.text or ""
+                    if not text.strip() and not result.pages:
+                        logger.warning(
+                            "[FAST TEXT][INGEST] EMPTY FILE user=%s file=%s (page_count=%s truncated=%s)",
+                            user.uid,
+                            filename,
+                            result.page_count,
+                            result.truncated,
+                        )
+                        raise HTTPException(
+                            status_code=422,
+                            detail={
+                                "code": "fast_text_empty_extraction",
+                                "message": f"No text could be extracted from {filename}.",
+                            },
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=str(e))
 
-            docs: list[Document] = []
-            document_uid = uuid.uuid4().hex
+                docs: list[Document] = []
 
-            if result.pages:
-                # Ingest per-page to keep chunks smaller and recall higher.
-                for p in result.pages:
+                if result.pages:
+                    # Ingest per-page to keep chunks smaller and recall higher.
+                    for p in result.pages:
+                        chunk_uid = uuid.uuid4().hex
+                        doc_meta = {
+                            "document_uid": document_uid,
+                            CHUNK_ID_FIELD: chunk_uid,
+                            "file_name": filename,
+                            "document_name": filename,
+                            "title": filename,
+                            "user_id": user.uid,
+                            "session_id": session_id,
+                            "scope": scope,
+                            "retrievable": True,
+                            "source": "fast_ingest",
+                            # Whole pages are dropped past the char cap; the vectors
+                            # are the only copy, so readers must be able to say so.
+                            "truncated": result.truncated,
+                            "page": p.page_no,
+                        }
+                        docs.append(Document(page_content=p.text or "", metadata=doc_meta))
+                else:
+                    # Single combined doc fallback
                     chunk_uid = uuid.uuid4().hex
                     doc_meta = {
                         "document_uid": document_uid,
@@ -1159,47 +1297,41 @@ class IngestionController:
                         "scope": scope,
                         "retrievable": True,
                         "source": "fast_ingest",
-                        # Whole pages are dropped past the char cap; the vectors
-                        # are the only copy, so readers must be able to say so.
                         "truncated": result.truncated,
-                        "page": p.page_no,
                     }
-                    docs.append(Document(page_content=p.text or "", metadata=doc_meta))
-            else:
-                # Single combined doc fallback
-                chunk_uid = uuid.uuid4().hex
-                doc_meta = {
-                    "document_uid": document_uid,
-                    CHUNK_ID_FIELD: chunk_uid,
-                    "file_name": filename,
-                    "document_name": filename,
-                    "title": filename,
-                    "user_id": user.uid,
-                    "session_id": session_id,
-                    "scope": scope,
-                    "retrievable": True,
-                    "source": "fast_ingest",
-                    "truncated": result.truncated,
-                }
-                docs.append(Document(page_content=text, metadata=doc_meta))
+                    docs.append(Document(page_content=text, metadata=doc_meta))
 
-            try:
-                scheduler_backend, chunks = await self._store_fast_vectors(document_uid=document_uid, docs=docs)
-                logger.info(
-                    "[FAST TEXT][INGEST] Stored vectors backend=%s doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
-                    scheduler_backend,
-                    document_uid,
-                    chunks,
-                    user.uid,
-                    session_id,
-                    scope,
-                    bool(result.pages),
-                )
-            except HTTPException:
-                raise
-            except Exception:
-                logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
-                raise HTTPException(status_code=500, detail="Failed to store vectors")
+                try:
+                    scheduler_backend, chunks = await self._store_fast_vectors(document_uid=document_uid, docs=docs)
+                    logger.info(
+                        "[FAST TEXT][INGEST] Stored vectors backend=%s doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
+                        scheduler_backend,
+                        document_uid,
+                        chunks,
+                        user.uid,
+                        session_id,
+                        scope,
+                        bool(result.pages),
+                    )
+                except HTTPException:
+                    raise
+                except Exception:
+                    logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
+                    raise HTTPException(status_code=500, detail="Failed to store vectors")
+
+                # Best-effort and last: only attempted once the vectors this
+                # endpoint's contract actually depends on are safely stored,
+                # so a tabular-build failure never leaves a Parquet artifact
+                # or metadata record orphaned by an earlier vector-store failure.
+                if filename.lower().endswith(".csv"):
+                    tabular_available = await self._build_attachment_tabular_dataset(
+                        user=user,
+                        document_uid=document_uid,
+                        filename=filename,
+                        raw_path=raw_path,
+                    )
+            finally:
+                cleanup_uploaded_temp_file(raw_path)
 
             summary_md = ""
             summary_truncated = False
@@ -1220,6 +1352,7 @@ class IngestionController:
                 "summary_md": summary_md,
                 "summary_chars": len(summary_md),
                 "summary_truncated": summary_truncated,
+                "tabular_available": tabular_available,
             }
 
         @router.delete(

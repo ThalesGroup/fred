@@ -254,8 +254,23 @@ def build_global_base_prompt_suffix() -> str:
     return f"\n\n{GLOBAL_BASE_PROMPT_MARKDOWN}"
 
 
-_SPREADSHEET_ATTACHMENT_RE = re.compile(r"\.(?:csv|xlsx?)\b", re.IGNORECASE)
-_SPREADSHEET_ATTACHMENT_NOTE = (
+# Matches only a real filename extension — the extension must be followed by
+# the attachment line's own terminator (" [uid]", ": description", or
+# end-of-string), not just any non-word character. A plain `\b` would also
+# match e.g. "export.csv.bak" (word boundary between "v" and "."), annotating
+# a line the actual `.csv` tabular-build gate in `fast_ingest`
+# (`filename.lower().endswith(".csv")`) would never match.
+_FILENAME_TERMINATOR = r"(?=[\s:\[]|$)"
+_CSV_ATTACHMENT_RE = re.compile(rf"\.csv{_FILENAME_TERMINATOR}", re.IGNORECASE)
+_CSV_ATTACHMENT_NOTE = (
+    " (also a SQL-queryable dataset - pass this id to the tabular/SQL tools "
+    "for exact counts, filters, or aggregates over its rows; use the "
+    "conversation search tool for everything else)"
+)
+# `xls[xm]?` covers .xls, .xlsx, and .xlsm — all three are real configured
+# attachment suffixes (FastSpreadsheetProcessor).
+_EXCEL_ATTACHMENT_RE = re.compile(rf"\.xls[xm]?{_FILENAME_TERMINATOR}", re.IGNORECASE)
+_EXCEL_ATTACHMENT_NOTE = (
     " (markdown text, NOT a SQL dataset - use the conversation search tool, "
     "never the tabular/SQL tools)"
 )
@@ -278,17 +293,24 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         for line in attachments_markdown.splitlines()
         if not line.lstrip().startswith("data:")
     ]
-    # #2418 follow-up: the paragraph-level "not SQL-queryable" rule alone was
-    # ignored in live testing (the model still fed an attachment uid to the
-    # tabular tools). Models weigh an annotation glued to the data far more
-    # than a distant instruction, so repeat it on each spreadsheet line, right
-    # next to the uid the model would otherwise pass to those tools.
-    safe_attachment_lines = [
-        f"{line}{_SPREADSHEET_ATTACHMENT_NOTE}"
-        if line.lstrip().startswith("-") and _SPREADSHEET_ATTACHMENT_RE.search(line)
-        else line
-        for line in safe_attachment_lines
-    ]
+
+    # A paragraph-level rule alone was ignored in live testing (the model
+    # still fed an attachment uid to the wrong tool). Models weigh an
+    # annotation glued to the data far more than a distant instruction, so
+    # repeat it on each CSV/Excel line, right next to the uid the model would
+    # pass to those tools. CSV attachments are real SQL-queryable datasets
+    # (DESIGN.md, "Session-Scoped Attachment Datasets") — only Excel still
+    # gets the "text only" annotation.
+    def _annotate(line: str) -> str:
+        if not line.lstrip().startswith("-"):
+            return line
+        if _CSV_ATTACHMENT_RE.search(line):
+            return f"{line}{_CSV_ATTACHMENT_NOTE}"
+        if _EXCEL_ATTACHMENT_RE.search(line):
+            return f"{line}{_EXCEL_ATTACHMENT_NOTE}"
+        return line
+
+    safe_attachment_lines = [_annotate(line) for line in safe_attachment_lines]
     safe_attachments_markdown = "\n".join(safe_attachment_lines).strip()
     if not safe_attachments_markdown:
         return ""
@@ -302,11 +324,13 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         "included in this prompt, so to answer any question about an attached file "
         "you MUST first call the search tool to retrieve its content — do not claim "
         "you cannot see or analyze an attachment before searching for it. "
-        "Spreadsheet-like attachments (CSV, XLS, XLSX) are converted to markdown "
-        "text at upload time and must be treated as text documents like any other "
-        "attachment: they are NOT loaded as SQL-queryable tables, so never pass an "
-        "attachment's uid to the tabular/SQL tools - retrieve their content through "
-        "the same conversation-scoped search tool. "
+        "CSV attachments are converted to markdown text at upload time, like any "
+        "other attachment, AND indexed as a SQL-queryable dataset: pass a CSV "
+        "attachment's uid to the tabular/SQL tools for exact counts, filters, or "
+        "aggregates over its rows, and use the search tool for narrative questions "
+        "about it. Excel attachments (XLS, XLSX) are text only for now: they are "
+        "NOT loaded as SQL-queryable tables, so never pass their uid to the "
+        "tabular/SQL tools - retrieve their content through the search tool. "
         "When a file line below shows a bracketed identifier, that is the "
         "file's internal document uid: pass exactly that value — never the "
         "file name — to document tools that take a document_uid (e.g. "
