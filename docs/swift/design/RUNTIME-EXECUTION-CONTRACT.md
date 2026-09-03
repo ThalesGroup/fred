@@ -3225,7 +3225,8 @@ returning the consolidated list; its `page_max_chars` config field was removed
 Tuning knobs (concurrency, retry, input cap) are module constants pending live
 calibration against real provider limits, and the map remains inherently
 LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
-`test_document_extractor.py` (exhaustive de-dupe, NONE handling, 429 retry),
+`test_document_extractor.py` (exhaustive de-dupe, NONE handling, 429 retry;
+the 429 detector itself moved to `fred_core` in §8.64 and is tested there),
 `test_capability_document_reading.py` (one-call path, empty/truncation/error
 shaping).
 
@@ -4567,3 +4568,70 @@ POC, to be settled with POC data — see issue #2531 and
 [`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5.
 Until then it is a local/POC surface: an admin must enable it per team
 (`ADMIN_GATED`), and no agent selects it by default.
+
+### 8.64 ✅ Provider rate limits (429) are retried, not fatal — issue #2535 (2026-09-04)
+
+**One HTTP 429 used to abort the whole turn.** Observed live while exercising
+the sub-agent capability against Mistral (`mistral-small-latest`, `code=1300`,
+the same provider error §8.44 records for document extraction). The ReAct stream
+(`react/react_runtime.py`) catches a mid-turn exception only to close dangling
+tool-call/thought rows, then re-raises; that becomes an `execution_error` SSE
+event and the frontend renders "Agent error" with the raw provider payload. The
+answer is lost. The graph runtime has graceful `node_error` recovery; the ReAct
+runtime had none.
+
+**New `RateLimitRetryMiddleware`** in the platform frame
+(`react/middleware/rate_limit_retry.py`), entry 4 of the frame order — inside
+the capability block, just outside `TracingKpiMiddleware`. (Issue #2535 first
+proposed placing it *before* the capability block; it went after, so a
+capability's own `awrap_model_call` runs once per model call rather than once
+per retried attempt.) That position is the
+design: hygiene, prompt and capability middleware are computed **once** for the
+whole retried call, while each retried attempt is still its own
+`v2.react.model` span and its own `llm.call_latency_ms` sample. It retries
+**429 only** (any other failure propagates untouched), honouring the provider's
+`Retry-After` and otherwise backing off exponentially with jitter, bounded by
+**both** an attempt count (`_MAX_ATTEMPTS = 4`) and a wall-clock budget
+(`_RETRY_BUDGET_S = 60`) — the budget is what stops a throttled provider from
+holding an SSE stream open while a human waits. A `Retry-After` longer than the
+budget is **clamped to whatever budget is left, not rejected**: Mistral's
+tokens-per-minute limit sends `Retry-After: 60`, which is precisely the incident
+this exists for, so treating an oversized hint as unaffordable would have
+retried nothing at all. The budget bounds the retry loop, not a single hung
+call — an in-flight request is the transport timeout's job
+(`http_clients.py`). On exhaustion it raises `ProviderRateLimitError`, whose message
+reaches the user as a rate-limit sentence instead of provider JSON. Tuning
+knobs are module constants pending live calibration, as in §8.44.
+
+**Why the provider SDK's own `max_retries` was not enough.** It is real
+(exponential backoff, honours `Retry-After`) but: its retries are **invisible in
+this codebase** — the `openai` SDK logs them at INFO on `openai._base_client`,
+which `fred_core/logs/log_setup.py` pins to WARNING with `propagate=False`, so a
+throttled turn looked merely slow; its backoff is capped at 8s
+(`MAX_RETRY_DELAY`, not configurable); it exists only on the OpenAI-shaped
+wrappers, since `model/factory.py` pops the setting for Ollama and
+vertex-model-garden; it has no wall-clock bound; and its jitter is only
+−25%..0% of the delay, so concurrent fan-out children retry in near-lockstep and
+re-trip the same limit. The middleware owns the agent-path policy; profile
+`max_retries` values are left as they are for other call sites.
+
+**Throttling is now observable.** `MetricNames.LLM_RATE_LIMITS`
+(`llm.rate_limit_events_total`) was declared and emitted by nothing; this
+middleware is its emitter, one count per throttle event with `model_name` and
+`status` (`ok` while retrying, `error` on the event that fails the turn), plus a
+WARNING per backoff and an ERROR on exhaustion. Both dims are in
+`PROMETHEUS_ALLOWED_LABELS`, so the counter is Grafana-visible per
+`OBSERVABILITY-AND-AUDIT.md`.
+
+**Detector single-sourced.** `is_rate_limit(exc) -> (bool, retry_after)` moved
+from `knowledge_flow_backend/features/extract/extractor.py` to
+`fred_core/model/rate_limit.py`; Knowledge Flow's map phase (§8.44) now imports
+it. Providers surface 429 in different shapes through LangChain, so it probes a
+status code, the exception type name and the message text rather than importing
+any one provider's error class — and there is now exactly one definition of
+"throttled" in the monorepo.
+
+**This does not bound fan-out.** Retry buys patience, not headroom: a burst that
+exceeds the provider's limit several times over still needs a concurrency cap.
+That remains issue #2531 (see §8.63's closing note); this incident is a data
+point for it.
