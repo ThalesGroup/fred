@@ -56,9 +56,10 @@ Doctrine (RFC §3.5, §3.8, §10):
 Scoping precedence (`turn_option ⊆ capability_config ⊆ session_binding`):
 - HERE both tools narrow their stored-config scope (`config.library_tag_ids` /
   `config.document_uids`) by the per-turn `document_scope` selection
-  (`turn_options`), enforcing `turn_option ⊆ capability_config`; a library
-  selection and a document selection each narrow on their own, and together
-  intersect;
+  (`turn_options`), enforcing `turn_option ⊆ capability_config`; a library pick
+  and a document pick each narrow on their own, and UNION when both are made -
+  "that library, plus that file", the rule Knowledge Flow already applies to
+  search hits;
 - the runtime adapter then bounds the result by the session binding's own scope,
   enforcing `⊆ session_binding` (see `DocumentSearchAdapter`).
 

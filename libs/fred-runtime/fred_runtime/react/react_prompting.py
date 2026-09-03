@@ -287,13 +287,13 @@ def build_document_scope_suffix(binding: BoundRuntimeContext) -> str:
         return ""
     listed = "\n".join(f"- {uid}" for uid in uids)
     return (
-        "\n\nThe user has restricted this turn to the document(s) listed below, "
-        "and the document tools reach nothing else: search, the document tree "
-        "and the reading tools all return or accept only these. When the user "
-        'says "this document" or "the document", they mean one of them - read '
-        "it rather than asking which file is meant. Pass a listed value as "
-        "`document_uid`; these are internal working ids, so NEVER repeat one in "
-        "your answer - refer to a document by its display name.\n\n"
+        "\n\nThe user has picked the document(s) listed below for this turn. "
+        'When they say "this document" or "the document", they mean one of '
+        "them - read it rather than asking which file they mean. Pass a listed "
+        "value as `document_uid`; these are internal working ids, so NEVER "
+        "repeat one in your answer - refer to a document by its display name. "
+        "The user may also have selected whole libraries, whose documents are "
+        "in scope too and reachable through search and the document tree.\n\n"
         f"{listed}"
     )
 

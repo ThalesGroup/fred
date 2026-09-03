@@ -202,11 +202,14 @@ def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
 def test_document_scope_suffix_names_the_selection() -> None:
     suffix = build_document_scope_suffix(_binding(selected_document_uids=["u-1"]))
 
-    assert "restricted this turn" in suffix
+    assert "picked the document(s) listed below" in suffix
     # Without a referent the model asks which file is meant while one is ticked.
     assert "this document" in suffix
     assert "- u-1" in suffix
     assert "NEVER repeat" in suffix
+    # A library pick unions with the document pick, so the suffix must not
+    # claim the listed documents are all the tools can reach.
+    assert "whole libraries" in suffix
 
 
 def test_document_scope_suffix_is_absent_without_a_selection() -> None:

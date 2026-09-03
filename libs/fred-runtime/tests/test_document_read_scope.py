@@ -149,6 +149,45 @@ async def test_no_selection_bounds_nothing() -> None:
     assert page.text == "the whole document"
 
 
+async def test_a_library_pick_disarms_the_gate() -> None:
+    """Library and document picks UNION, and a library cannot be resolved to its
+    documents pod-side - so enforcing the document list alone would refuse a
+    document the user selected through its library."""
+
+    adapter = adapters_module.DocumentMarkdownAdapter(
+        binding=_binding(
+            selected_document_uids=["in-scope"],
+            selected_document_libraries_ids=["lib-a"],
+        ),
+        settings=_FakeSettings(),
+    )
+
+    page = await adapter.fetch_markdown("a-document-of-lib-a")
+
+    assert page.text == "the whole document"
+
+
+async def test_an_attached_file_stays_readable_under_a_corpus_selection() -> None:
+    """The picker lists the corpus, so an attachment uid is never in the
+    selection - refusing it would make the conversation's own files unreadable
+    while the attachment prompt tells the model to read them by uid."""
+
+    adapter = adapters_module.DocumentMarkdownAdapter(
+        binding=_binding(
+            selected_document_uids=["in-scope"],
+            attachments_markdown=(
+                "## Attached files for this conversation\n"
+                "- notes.pdf [attached-1]: conversation document"
+            ),
+        ),
+        settings=_FakeSettings(),
+    )
+
+    page = await adapter.fetch_markdown("attached-1")
+
+    assert page.text == "the whole document"
+
+
 async def test_summarize_refuses_a_uid_outside_the_selection() -> None:
     adapter = adapters_module.DocumentSummarizeAdapter(
         binding=_binding(selected_document_uids=["in-scope"]),

@@ -4598,14 +4598,24 @@ already merges library hits with document hits, so ticking a library plus one
 file elsewhere means "that library, plus that file". The tree now follows the
 same rule rather than inventing an intersection nobody asked for.
 
-**One residual, deliberate.** The read gate enforces the document level only: a
-library-level selection cannot be checked pod-side, since resolving a library to
-its documents needs the tag store fred-agents does not have. Search and the tree
-still narrow by library, so only a uid carried over from an earlier, wider turn
-gets past it; closing that means moving the scope onto Knowledge Flow's read
-endpoints.
+**The gate refuses only what it can prove.** A false refusal is worse than a
+missed one here: the model reports a document the user picked as unreachable.
+So two cases pass through, both by design — a selection that includes a library
+(its documents cannot be enumerated pod-side, and refusing them would refuse the
+user's own pick), and a uid among the conversation's attached files
+(`get_attachment_uids`, read from the same `attachments_markdown` the model is
+told to quote from — the picker lists the corpus, so an attachment is never in
+the selection). What remains enforced is the case that produced the bug: a
+documents-only selection, with a stale uid from a wider earlier turn.
 
-**Attachments follow the selection, as they already did.** A non-empty selection
-also bounds the conversation's attached files — Knowledge Flow restricts the
-session branch of a search to the same uids, so the reading tools now behave the
-way search always has rather than inventing an exception.
+**Two known gaps, tracked rather than papered over.**
+
+- With `bind_libraries=True`, the pinned library is always sent as the tree's
+  library scope and Knowledge Flow unions it with the document scope, so ticking
+  one file still lists the whole bound library. Separating "the user picked this
+  library" from "the agent is pinned to it" needs a second wire field, not a
+  behaviour change here.
+- `narrow_scope_ids` reads an empty intersection (`config.document_uids`
+  disjoint from the turn's pick) as "no bound at this level" and re-widens to the
+  session selection. Pre-existing on the search path, now shared by the tree;
+  `DocumentSimilarityAdapter` is the one caller that handles it explicitly.

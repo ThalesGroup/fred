@@ -115,6 +115,7 @@ from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.table_hits import repair_table_hits
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
+    get_attachment_uids,
     get_document_library_tags_ids,
     get_document_uids,
     get_rag_knowledge_scope,
@@ -1288,23 +1289,34 @@ def _ensure_uid_in_turn_scope(
     The uid comes from the MODEL - a search hit, the tree, or a turn taken
     before the user narrowed the scope - so this seam is the only thing keeping
     a document the user took out of the conversation out of the answer.
-    An empty selection bounds nothing. A non-empty one bounds attachments too,
-    exactly as it already does on the search path (Knowledge Flow restricts the
-    session branch to the same uids).
 
-    Documents only: a library-level selection is NOT enforced here, because
-    resolving a library to its documents needs the tag store this pod does not
-    have. Search and the tree still narrow to the selected libraries, so a
-    stale uid from an earlier turn is the only way past it - closing that means
-    moving the scope onto Knowledge Flow's read endpoints.
+    It refuses only what it can prove is out of scope, because a false refusal
+    is worse here than a missed one: the model reports a document the user
+    picked as unreachable. Two cases it cannot prove, and therefore lets
+    through:
+
+    - a library is part of the selection. Library and document picks UNION (the
+      rule search and the tree apply), and resolving a library to its documents
+      needs a tag store this pod has none of - so every document of that
+      library would be refused;
+    - the uid is one of the conversation's attached files. The picker lists the
+      corpus, so an attachment is never part of the selection, while the
+      attachment prompt tells the model to read those files by uid.
     """
 
     selected = get_document_uids(runtime_context)
-    if selected and document_uid not in selected:
-        raise DocumentScopeRefusedError(
-            "the requested document is not part of this conversation's scope",
-            requested_uids=[document_uid],
-        )
+    if not selected:
+        return
+    if get_document_library_tags_ids(runtime_context):
+        return
+    if document_uid in selected:
+        return
+    if document_uid in get_attachment_uids(runtime_context):
+        return
+    raise DocumentScopeRefusedError(
+        "the requested document is not part of this conversation's scope",
+        requested_uids=[document_uid],
+    )
 
 
 class DocumentSearchAdapter(DocumentSearchPort):
