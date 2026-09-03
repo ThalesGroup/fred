@@ -110,6 +110,26 @@ describe("clipboardAttachments", () => {
     expect(clipboardAttachments(clipboard([file("image.png")], "Q1\t120"), PASTED_AT)).toEqual([]);
   });
 
+  it("attaches every file of a multi-file copy, each under its own name", () => {
+    const attached = clipboardAttachments(
+      clipboard(
+        [file("report.pdf", "application/pdf"), file("notes.md", "text/markdown"), file("chart.png", "image/png")],
+        "x-special/nautilus-clipboard\ncopy\nfile:///home/simon/report.pdf\nfile:///home/simon/notes.md\nfile:///home/simon/chart.png",
+      ),
+      PASTED_AT,
+    );
+    expect(attached.map((f) => f.name)).toEqual(["report.pdf", "notes.md", "chart.png"]);
+  });
+
+  it("keeps several generically named files of one paste distinguishable", () => {
+    const attached = clipboardAttachments(clipboard([file("image.png"), file("image.png"), file("")]), PASTED_AT);
+    expect(attached.map((f) => f.name)).toEqual([
+      "pasted-20260903-142530-000.png",
+      "pasted-20260903-142530-000-2.png",
+      "pasted-20260903-142530-000-3.png",
+    ]);
+  });
+
   it("drops empty entries so a stray directory paste is not attached", () => {
     expect(clipboardAttachments(clipboard([file("folder", "", "")]), PASTED_AT)).toEqual([]);
   });
