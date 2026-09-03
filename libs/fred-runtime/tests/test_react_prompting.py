@@ -18,6 +18,7 @@ from typing import cast
 from fred_runtime.react.react_prompting import (
     build_attachment_context_suffix,
     build_context_prompt_suffix,
+    build_document_scope_suffix,
     build_global_base_prompt_suffix,
     build_tool_failure_recovery_suffix,
     compose_system_prompt,
@@ -45,12 +46,14 @@ def _binding(
     *,
     context_prompt_text: str | None = None,
     language: str | None = None,
+    selected_document_uids: list[str] | None = None,
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
             attachments_markdown=attachments_markdown,
             context_prompt_text=context_prompt_text,
             language=language,
+            selected_document_uids=selected_document_uids,
         ),
         portable_context=PortableContext(
             request_id="request-1",
@@ -194,6 +197,24 @@ def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
     assert "documents AND images" in suffix
     assert "MUST first call the search tool" in suffix
     assert "do not claim you cannot see or analyze an attachment" in suffix
+
+
+def test_document_scope_suffix_names_the_selection() -> None:
+    suffix = build_document_scope_suffix(_binding(selected_document_uids=["u-1"]))
+
+    assert "picked the document(s) listed below" in suffix
+    # Without a referent the model asks which file is meant while one is ticked.
+    assert "this document" in suffix
+    assert "- u-1" in suffix
+    assert "NEVER repeat" in suffix
+    # A library pick unions with the document pick, so the suffix must not
+    # claim the listed documents are all the tools can reach.
+    assert "whole libraries" in suffix
+
+
+def test_document_scope_suffix_is_absent_without_a_selection() -> None:
+    assert build_document_scope_suffix(_binding()) == ""
+    assert build_document_scope_suffix(_binding(selected_document_uids=[])) == ""
 
 
 def test_context_prompt_suffix_injects_selected_prompt_text() -> None:

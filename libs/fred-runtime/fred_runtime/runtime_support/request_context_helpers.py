@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Callable, Optional
 
 from fred_sdk.contracts.context import RuntimeContext
@@ -75,6 +76,31 @@ def get_document_uids(context: RuntimeContext | None) -> list[str] | None:
     if not context:
         return None
     return context.selected_document_uids
+
+
+# The frontend renders one attached file per line as
+# `- <name> [<document_uid>]: conversation document`, and the model is told to
+# pass that bracketed value to the document tools - so the runtime reads its own
+# scope decisions from the same source rather than a second, divergent one. The
+# greedy prefix keeps the LAST bracket before the colon, so a file name with
+# brackets of its own does not shadow the uid.
+_ATTACHMENT_UID_RE = re.compile(r"^\s*-\s.*\[([^\[\]]+)\]\s*:", re.MULTILINE)
+
+
+def get_attachment_uids(context: RuntimeContext | None) -> set[str]:
+    """Return the uids of the files attached to the current conversation.
+
+    Why: a corpus-level document selection must not make the conversation's own
+    files unreadable - the picker lists the corpus, so an attachment uid is
+    never part of that selection.
+    Example:
+        >>> sorted(get_attachment_uids(RuntimeContext(
+        ...     attachments_markdown="- notes.pdf [u-1]: conversation document")))
+        ['u-1']
+    """
+    if not context or not context.attachments_markdown:
+        return set()
+    return set(_ATTACHMENT_UID_RE.findall(context.attachments_markdown))
 
 
 def get_rag_knowledge_scope(context: RuntimeContext | None) -> str:

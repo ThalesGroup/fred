@@ -145,17 +145,45 @@ export function DocumentLibraryScopePicker({
     if (disableLibrarySelection) return;
     const tagIds = collectTagIds(node);
     const allSelected = tagIds.every((id) => selectedTagIds.includes(id));
-    if (allSelected) {
-      onChange(selectedTagIds.filter((id) => !tagIds.includes(id)));
-      return;
+    onChange(
+      allSelected
+        ? selectedTagIds.filter((id) => !tagIds.includes(id))
+        : Array.from(new Set([...selectedTagIds, ...tagIds])),
+    );
+    // Either way the folder now speaks for its own documents: drop the
+    // per-document entries it just made redundant (on select) or no longer
+    // covers (on clear), so the two selectors never describe the same folder
+    // twice.
+    if (documentSelectionEnabled && selectedDocumentUids && onDocumentsChange) {
+      const covered = new Set(collectDocumentIds(node));
+      const remaining = selectedDocumentUids.filter((uid) => !covered.has(uid));
+      if (remaining.length !== selectedDocumentUids.length) onDocumentsChange(remaining);
     }
-    onChange(Array.from(new Set([...selectedTagIds, ...tagIds])));
   };
 
-  const toggleDocumentSelection = (documentUid: string, checked: boolean) => {
+  /** Untick one document, including one its folder covers.
+   *
+   *  A scope is a set of libraries plus a set of documents, unioned - it has no
+   *  "everything here except this" to send. So excluding a document from a
+   *  picked folder expands that folder into its own documents (`item_ids`, the
+   *  complete list, not the page of 20 shown) minus this one, and drops the
+   *  folder itself. The folder then reads as partially selected, which is what
+   *  it now is. */
+  const toggleDocumentSelection = (documentUid: string, checked: boolean, node: TagNode) => {
     if (!documentSelectionEnabled || !selectedDocumentUids || !onDocumentsChange) return;
     if (checked) {
       onDocumentsChange(Array.from(new Set([...selectedDocumentUids, documentUid])));
+      return;
+    }
+    const tagId = findPrimaryTagId(node);
+    if (tagId && selectedTagIds.includes(tagId)) {
+      // A pinned library scope is not the user's to carve up - the folder
+      // checkbox is read-only for the same reason, and dropping its tag here
+      // would walk around that.
+      if (disableLibrarySelection) return;
+      const siblings = (node.tagsHere?.[0]?.item_ids ?? []).filter((uid) => uid !== documentUid);
+      onChange(selectedTagIds.filter((id) => id !== tagId));
+      onDocumentsChange(Array.from(new Set([...selectedDocumentUids, ...siblings])));
       return;
     }
     onDocumentsChange(selectedDocumentUids.filter((uid) => uid !== documentUid));
@@ -235,7 +263,12 @@ export function DocumentLibraryScopePicker({
                   <ul className={styles.documentList}>
                     {docs.map((doc) => {
                       const documentUid = doc.identity.document_uid;
-                      const checked = selectedDocumentUids?.includes(documentUid) ?? false;
+                      // Picking the folder already puts every document it holds
+                      // in scope (library and document picks union server-side),
+                      // so show them checked rather than leaving the user to tick
+                      // each one. Still untickable: see toggleDocumentSelection.
+                      const includedByFolder = tagId !== null && selectedTagIds.includes(tagId);
+                      const checked = includedByFolder || (selectedDocumentUids?.includes(documentUid) ?? false);
                       // Same file-type icon/color as the Resources table (shared
                       // fileIconSpec), so a given extension reads identically here.
                       const docSpec = fileIconSpec(doc.file?.file_type);
@@ -247,12 +280,16 @@ export function DocumentLibraryScopePicker({
                       return (
                         <li key={documentUid} className={styles.documentItem}>
                           {documentSelectionEnabled ? (
-                            <label className={styles.documentToggle}>
+                            <label
+                              className={styles.documentToggle}
+                              title={includedByFolder ? t("rework.documentIncludedByFolder") : undefined}
+                            >
                               <input
                                 type="checkbox"
                                 className={styles.checkbox}
                                 checked={checked}
-                                onChange={(event) => toggleDocumentSelection(documentUid, event.target.checked)}
+                                disabled={includedByFolder && disableLibrarySelection}
+                                onChange={(event) => toggleDocumentSelection(documentUid, event.target.checked, child)}
                               />
                               {docIcon}
                               <span className={styles.documentName}>{doc.identity.document_name}</span>

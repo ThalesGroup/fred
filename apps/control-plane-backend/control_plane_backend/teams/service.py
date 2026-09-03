@@ -734,8 +734,9 @@ async def update_team(
 
     Why this function exists:
     - collaborative teams need a single business path for editable metadata,
-      including `joining_mode` (TEAM-09) and `visibility` (TEAM-10) —
-      marketplace discoverability is gated by `visibility` alone (see
+      including `name` (a team_admin rename), `joining_mode` (TEAM-09) and
+      `visibility` (TEAM-10) — marketplace discoverability is gated by
+      `visibility` alone (see
       `ensure_team_public_relations`/`revoke_team_public_relations`)
 
     How to use it:
@@ -758,6 +759,17 @@ async def update_team(
     # PATCH with no fields is a no-op.
     if request.model_fields_set:
         patch_data = request.model_dump(exclude_unset=True)
+        store = deps.get_team_metadata_store()
+        renamed_from: str | None = None
+        # Renaming to the current name is a no-op, not a conflict. Any other
+        # name must be free: `teammetadata.name` is globally unique, so this
+        # pre-check turns the common collision into a 409 instead of a 500.
+        if patch_data.get("name") == metadata.name:
+            patch_data.pop("name")
+        elif "name" in patch_data:
+            if await store.get_by_name(patch_data["name"]):
+                raise TeamAlreadyExistsError(patch_data["name"])
+            renamed_from = metadata.name
         # The public API exposes the team image as `avatar_image_url`, but the
         # storage layer (fred_core `TeamMetadataPatch`) still speaks `banner_*`
         # (#2300 Option A: the DB column keeps its legacy name, no migration).
@@ -784,7 +796,26 @@ async def update_team(
         ):
             patch_data["joining_mode"] = JoiningMode.INVITE_ONLY
         patch = TeamMetadataPatch.model_validate(patch_data)
-        updated = await deps.get_team_metadata_store().upsert(team_id, patch)
+        try:
+            updated = await store.upsert(team_id, patch)
+        except IntegrityError as exc:
+            # `name` is the only unique-constrained column, and the pre-check
+            # above is a fast path only - this is what closes the race between
+            # two concurrent renames onto the same name.
+            if "name" not in patch_data:
+                raise
+            raise TeamAlreadyExistsError(patch_data["name"]) from exc
+        if renamed_from is not None:
+            # Nothing else records a rename: there is no team audit table, and
+            # the bundle importer reconciles teams by name, so a duplicate team
+            # appearing on a later import is only explainable from this line.
+            logger.info(
+                "Team %s renamed from '%s' to '%s' by %s",
+                team_id,
+                renamed_from,
+                patch_data["name"],
+                user.uid,
+            )
         if updated is not None:
             metadata = updated
         if "visibility" in patch_data:
