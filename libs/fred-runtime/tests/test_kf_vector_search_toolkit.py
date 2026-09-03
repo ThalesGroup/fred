@@ -77,6 +77,10 @@ class _FakeSearchClient:
             ),
         ]
 
+    async def get_document_chunks(self, **_kwargs: object) -> list[VectorSearchHit]:
+        """Part of the VectorSearchClient surface; no truncated table in these fixtures."""
+        return []
+
 
 class _FakeSearchClientWithNoise:
     """Stand-in returning one strong hit and one hit that's noise relative to it."""
@@ -93,6 +97,10 @@ class _FakeSearchClientWithNoise:
                 uid="d2", title="Doc 2", content="beta", score=0.05, type="document"
             ),
         ]
+
+    async def get_document_chunks(self, **_kwargs: object) -> list[VectorSearchHit]:
+        """Part of the VectorSearchClient surface; no truncated table in these fixtures."""
+        return []
 
 
 def _build_search_tool(

@@ -31,6 +31,7 @@ from control_plane_backend.app.dependencies import (
     attach_application_container,
     get_application_configuration,
 )
+from control_plane_backend.applications.api import router as applications_router
 from control_plane_backend.bootstrap.api import (
     register_exception_handlers as register_bootstrap_exception_handlers,
 )
@@ -48,6 +49,7 @@ from control_plane_backend.import_export.kea_migration_api import (  # KEA CUTOV
     build_kea_migration_router,
 )
 from control_plane_backend.kpi.api import build_kpi_router
+from control_plane_backend.platform_prompt.api import router as platform_prompt_router
 from control_plane_backend.product.api import router as product_router
 from control_plane_backend.routing_policy.api import (
     register_exception_handlers as register_routing_policy_exception_handlers,
@@ -369,10 +371,12 @@ def create_app() -> FastAPI:
 
     router.include_router(users_router)
     router.include_router(teams_router)
+    router.include_router(applications_router)
     router.include_router(product_router)
     router.include_router(bootstrap_router)
     router.include_router(capabilities_router)
     router.include_router(routing_policy_router)
+    router.include_router(platform_prompt_router)
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())

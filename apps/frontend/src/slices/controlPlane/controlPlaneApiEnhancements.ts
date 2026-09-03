@@ -16,6 +16,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
+    "ControlPlanePlatformPrompt",
     "ControlPlanePlatformRole",
   ],
   endpoints: {
@@ -42,6 +43,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
+    // The team application catalog is another projection of capability
+    // enablement. Reusing the LIST tag makes a local admin toggle remove or add
+    // an open app immediately; focus + bounded polling cover other sessions.
+    getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
       invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
     },
@@ -65,6 +72,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+    },
+    // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
+    getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
+      providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
+    },
+    postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: {
+      invalidatesTags: [{ type: "ControlPlaneSession", id: "INACTIVE" }],
     },
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
@@ -374,6 +388,17 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
       invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
     },
+    // Platform-wide platform prompt — a single row, so one LIST tag covers it,
+    // same shape as the platform model binding above.
+    getPlatformPromptControlPlaneV1AdminPlatformPromptGet: {
+      providesTags: [{ type: "ControlPlanePlatformPrompt" as const, id: "LIST" }],
+    },
+    putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
+    },
+    // Read-only and shipped with the platform: it can only change on deploy, so
+    // it carries no cache tag — nothing in this app can invalidate it.
+    getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: {},
   },
 });
 
@@ -414,11 +439,36 @@ export const {
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery: useMessagesOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery: useSessionsByScopeQuery,
+  // Engagement distributions (#2426) — histogram rows + a median, both fed to
+  // the Engagement section of the admin analytics page.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery: useConversationsPerUserQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery: useConversationDepthQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery: useAgentsPerUserQuery,
+  // Engagement trends (#2428) — the same three medians, recomputed per bucket
+  // over a trailing window the response carries in `window`.
+  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery: useConversationsPerUserTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery: useConversationDepthTrendQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery: useAgentsPerUserTrendQuery,
   useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery: useTopTeamsBySessionsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery: useAgentsTotalQuery,
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
+  // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
+  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery: useUserAgentsUsedTotalQuery,
+  // Home dashboard leaderboard — top agents / top teams (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery: useUserTopAgentsQuery,
+  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery: useUserTopTeamsQuery,
+  // Home dashboard — most recently used agents, newest first (#2298).
+  useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery: useUserRecentAgentsQuery,
+  // Lazy agent-instances fetch — the recent-agents preset returns only ids, so
+  // the Home tiles resolve each to its full instance across its (variable) team.
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: useLazyTeamAgentInstancesQuery,
+  // Home cleanup tool — inactive conversations across spaces + bulk delete (#2298).
+  useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery: useMyInactiveSessionsQuery,
+  usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation: useBulkDeleteMySessionsMutation,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,
@@ -435,6 +485,8 @@ export const {
   useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation: useResetPlatformRebacMutation,
   // Admin capabilities dashboard (CAPAB-01 / #1981).
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
+  // Team-scoped native applications catalog.
+  useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery: useTeamApplicationsQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:
     useEnableTeamCapabilityMutation,
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation:
@@ -454,4 +506,9 @@ export const {
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
     useDeletePlatformModelBindingMutation,
+  // Platform-wide platform prompt — the first block of every agent's system prompt.
+  useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
+  usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Read-only platform operating instructions, shown under the editable prompt.
+  useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
 } = enhancedControlPlaneApi;

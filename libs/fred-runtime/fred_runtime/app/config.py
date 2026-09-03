@@ -64,7 +64,7 @@ Example `config/configuration.yaml`:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from fred_runtime.runtime_context import McpConfigurationLike
@@ -211,6 +211,43 @@ class LangfuseObservabilityConfig(BaseModel):
 
     host: str = "http://localhost:3001"
 
+    capture_content: bool = False
+    """
+    Send prompts, model answers, and tool payloads to Langfuse.
+
+    **Off by default, and it must stay off outside a developer's own machine.**
+    `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md` §7 excludes content —
+    prompts, tool arguments/results, documents — from every observability
+    stream; content lives only in the product's own storage under the product's
+    own access control. Turning this on deliberately breaks that rule for a
+    local Langfuse, which is the only setting where it is legitimate: debugging
+    an agent's reasoning, or checking what a model actually received.
+
+    Enabling it in a shared or production deployment exports user conversations
+    to a system that does not enforce Fred's authorization model. Do not.
+
+    The env var `LANGFUSE_CAPTURE_CONTENT` overrides this field, so a developer
+    can flip it per-run without editing configuration.yaml.
+    """
+
+    max_content_chars: int = 100_000
+    """
+    Total character budget per exported payload when `capture_content` is on.
+
+    This is a budget for the payload as a whole, not a per-string cap. A ReAct
+    turn's transcript grows with every tool round and every model call
+    re-exports all of it, so capping each string alone would still leave the
+    payload unbounded in the number of strings. Truncated payloads carry a
+    `…[truncated N chars]` marker so a reader never mistakes a cut payload for
+    a complete one, and the budget is spent most-recent-first so a verbose
+    system prompt cannot blank out the actual question and answer.
+
+    Override per-run with `LANGFUSE_MAX_CONTENT_CHARS`. That env var is the only
+    working knob when the pod reaches Langfuse through `build_default_tracer`
+    (credentials present but `tracer` not set to `langfuse`), since that path
+    never reads this file.
+    """
+
 
 class PodObservabilityConfig(BaseModel):
     """
@@ -330,6 +367,7 @@ class AgentPodConfig(BaseModel):
 
     _models_catalog_path: str | None = PrivateAttr(default=None)
     _mcp_configuration: McpConfigurationLike | None = PrivateAttr(default=None)
+    _platform_prompt_file: Any | None = PrivateAttr(default=None)
 
     app: PodAppConfig = Field(default_factory=PodAppConfig)
     security: SecurityConfiguration
@@ -340,6 +378,45 @@ class AgentPodConfig(BaseModel):
     storage: PodStorageConfig = Field(default_factory=PodStorageConfig)
     scheduler: PodSchedulerConfig = Field(default_factory=PodSchedulerConfig)
     platform: PodPlatformConfig = Field(default_factory=PodPlatformConfig)
+
+    def set_platform_prompt_file(self, file: Any) -> None:
+        """
+        Attach the parsed `config/platform_prompt.json` as internal runtime data.
+
+        Why this exists:
+        - the two head blocks of every system prompt are pod-shipped config, like
+          the two catalogs, and should not appear as public fields in
+          `configuration.yaml` where an operator could set them by hand and
+          diverge from the file the admin UI reads.
+        - typed `Any` rather than `PlatformPromptFile`: `_catalogs` imports this
+          module, so naming its type here would be a cycle. Same dodge as
+          `_mcp_configuration`.
+
+        How to use it:
+        - call only from internal config bootstrap helpers.
+
+        Example:
+        - `config.set_platform_prompt_file(load_platform_prompt_file(path))`
+        """
+
+        self._platform_prompt_file = file
+
+    def get_platform_prompt_file(self) -> Any | None:
+        """
+        Return the parsed platform-prompt file attached during pod bootstrap.
+
+        Why this exists:
+        - the prompt composer needs both blocks, and `GET /agents/platform-prompt`
+          needs to hand the same two to control-plane.
+
+        How to use it:
+        - call from internal runtime wiring only.
+
+        Example:
+        - `file = config.get_platform_prompt_file()`
+        """
+
+        return self._platform_prompt_file
 
     def set_models_catalog_path(self, path: str) -> None:
         """

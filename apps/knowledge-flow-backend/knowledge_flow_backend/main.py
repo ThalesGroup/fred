@@ -38,6 +38,7 @@ from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
+from fred_core.sql import require_tables
 from prometheus_client import start_http_server
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -79,6 +80,7 @@ from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
+from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -97,6 +99,42 @@ def _norm_origin(o) -> str:
 # -----------------------
 # APP CREATION
 # -----------------------
+
+_RESPONSES_HEADING = "\n\n### Responses:"
+
+
+def _without_response_docs(mcp: FastApiMCP) -> FastApiMCP:
+    """
+    Strip the `### Responses:` block from every tool description of `mcp` (#2412).
+
+    Why this exists:
+    - `convert_openapi_to_mcp_tools` always appends that block; the two
+      `describe_*` flags only choose how fat it is, never whether it exists.
+      With both at their default (False) what survives is, for 49 of the 57
+      tools an agent can reach, pure boilerplate — `**200**: Successful
+      Response` and `Content-Type: application/json`, which state nothing a
+      caller does not already know. The 8 tools that do carry an
+      `**Example Response:**` get field names paired with placeholder values
+      echoed from each field's `title` (`"kind": "Kind"`, where the real
+      values are `csv`/`spreadsheet`), so even there the block misinforms as
+      much as it informs.
+    - Removing it is worth ~1.8k tokens on every model call, on top of the
+      ~17.7k the flag removal already saved. A response schema describes data
+      the model receives milliseconds later anyway.
+
+    How to use:
+    - wrap the constructor: `mcp = _without_response_docs(FastApiMCP(...))`.
+      `FastApiMCP.__init__` calls `setup_server()`, so `.tools` is already
+      populated here, and `handle_list_tools` closes over `self` and re-reads
+      `self.tools` per request — mutating in place is enough, no re-setup.
+      No monkey patch: `.tools` is public API and `mcp.types.Tool` is not
+      frozen.
+    """
+
+    for tool in mcp.tools:
+        if tool.description:
+            tool.description = tool.description.split(_RESPONSES_HEADING, 1)[0].rstrip()
+    return mcp
 
 
 def create_app() -> FastAPI:
@@ -132,17 +170,18 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        from fred_core.models.base import Base as CoreBase
-
-        # #2170: the task tables are no longer among these. They are
-        # `kf_task_run`/`kf_task_event_log` on knowledge-flow's own `Base`, created
-        # by Alembic (`c8f2d5b13ea6`) and by nothing else — so the registration
-        # import that used to sit here would now be a no-op.
-        # This unfiltered `create_all` over the *shared* CoreBase is itself the
-        # defect tracked in #2313, consolidated into #2314; removing it is that
-        # issue's acceptance criterion, deliberately not bundled here.
-        async with application_context.get_pg_async_engine().begin() as conn:
-            await conn.run_sync(CoreBase.metadata.create_all)
+        # #2314 (closes the #2313 defect): startup creates NO tables — DDL is
+        # owned by the Alembic trees alone (see models/table_ownership.py and
+        # DATABASE_MIGRATIONS.md §"Table ownership across trees"). A
+        # deployment that skipped migration jobs must fail here, at boot,
+        # with the fix command — not mid-request as an UndefinedTableError.
+        await require_tables(
+            application_context.get_pg_async_engine(),
+            sorted(REQUIRED_TABLES),
+            component="knowledge-flow",
+            migrate_command="make db-upgrade (apps/knowledge-flow-backend)",
+            version_table="alembic_version_knowledge_flow",
+        )
 
         # SIGUSR1/SIGUSR2 manual triggers + optional periodic gc.collect()+
         # malloc_trim() mitigation (fred_core.diagnostics, ISSUE-010).
@@ -309,27 +348,45 @@ def create_app() -> FastAPI:
     mcp_prefix = "/knowledge-flow/v1"
 
     auth_cfg: AuthConfig = AuthConfig(dependencies=[Depends(get_current_user)])
-    mcp_reports = FastApiMCP(
-        app,
-        name="Knowledge Flow Reports MCP",
-        description="Create Markdown-first reports and get downloadable artifacts.",
-        include_tags=["Reports"],  # ← export only these routes as tools
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
+
+    # #2412: no MCP tool description carries response documentation any more. Two
+    # steps, both landed 2026-08-28:
+    #   1. every mount below leaves `describe_all_responses` and
+    #      `describe_full_response_schema` at their fastapi_mcp default (False).
+    #      Both were True, which made `convert_openapi_to_mcp_tools` append an
+    #      Output Schema dump plus the generic HTTPValidationError 422, repeated
+    #      verbatim once per tool.
+    #   2. `_without_response_docs` then drops the `### Responses:` block itself,
+    #      which those flags size but never suppress.
+    # That text travels in the `tools` API parameter, re-sent in full on every model
+    # call: 87 969 chars across the five servers an agent can actually reach, against
+    # 9 800 after both steps (~19.5k tokens saved per call). Neither flag nor the
+    # helper touches `inputSchema`, so argument generation is unaffected — verified
+    # byte-identical across all 57 tools. Do not re-enable: a response schema
+    # describes data the model receives milliseconds later anyway. If a response
+    # field genuinely needs explaining, put the sentence in the route's docstring —
+    # that is the part that reaches the model.
+    mcp_reports = _without_response_docs(
+        FastApiMCP(
+            app,
+            name="Knowledge Flow Reports MCP",
+            description="Create Markdown-first reports and get downloadable artifacts.",
+            include_tags=["Reports"],  # ← export only these routes as tools
+            auth_config=auth_cfg,
+        )
     )
     mcp_reports.mount_http(mount_path=f"{mcp_prefix}/mcp-reports")
 
     # Optional MCP servers: they export only the tagged routes above.
     if configuration.mcp.opensearch_ops_enabled:
-        mcp_opensearch_ops = FastApiMCP(
-            app,
-            name="Knowledge Flow OpenSearch Ops MCP",
-            description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
-            include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
+        mcp_opensearch_ops = _without_response_docs(
+            FastApiMCP(
+                app,
+                name="Knowledge Flow OpenSearch Ops MCP",
+                description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
+                include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
+                auth_config=auth_cfg,
+            )
         )
         # Mount via HTTP at a clear, versioned path:
         mcp_mount_path = f"{mcp_prefix}/mcp-opensearch-ops"
@@ -339,14 +396,14 @@ def create_app() -> FastAPI:
         logger.warning("%s MCP OpenSearch Ops disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.prometheus_ops_enabled:
-        mcp_prometheus_ops = FastApiMCP(
-            app,
-            name="Knowledge Flow Prometheus Ops MCP",
-            description=("Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, PromQL queries, and metric discovery across namespaces and pods."),
-            include_tags=["Prometheus"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
+        mcp_prometheus_ops = _without_response_docs(
+            FastApiMCP(
+                app,
+                name="Knowledge Flow Prometheus Ops MCP",
+                description=("Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, PromQL queries, and metric discovery across namespaces and pods."),
+                include_tags=["Prometheus"],
+                auth_config=auth_cfg,
+            )
         )
         mcp_mount_path = f"{mcp_prefix}/mcp-prometheus-ops"
         mcp_prometheus_ops.mount_http(mount_path=mcp_mount_path)
@@ -355,98 +412,98 @@ def create_app() -> FastAPI:
         logger.warning("%s MCP Prometheus Ops disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.tabular_enabled:
-        mcp_tabular = FastApiMCP(
-            app,
-            name="Knowledge Flow Tabular MCP",
-            description=(
-                "Read-only SQL access to the tabular documents ingested in Knowledge Flow: "
-                "CSV files (one table each) and Excel workbooks (one or several extracted tables), "
-                "stored as Parquet and queried through DuckDB. "
-                "Recommended flow: list_tabular_documents to discover documents and their table aliases; "
-                "get_tabular_documents_schemas for column-level schemas; "
-                "get_tabular_document_markdown to read a spreadsheet's extraction catalog "
-                "(sheet layout, table context and ranges, residual notes, exact SQL aliases); "
-                "read_query to run one read-only SELECT over the mounted tables. "
-                "Always scope read_query with dataset_uids (document uids — one spreadsheet uid mounts "
-                "every table of the workbook). No write operations are available."
-            ),
-            include_tags=["Tabular"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
+        mcp_tabular = _without_response_docs(
+            FastApiMCP(
+                app,
+                name="Knowledge Flow Tabular MCP",
+                description=(
+                    "Read-only SQL access to the tabular documents ingested in Knowledge Flow: "
+                    "CSV files (one table each) and Excel workbooks (one or several extracted tables), "
+                    "stored as Parquet and queried through DuckDB. "
+                    "Recommended flow: list_tabular_documents to discover documents and their table aliases; "
+                    "get_tabular_documents_schemas for column-level schemas; "
+                    "get_tabular_document_markdown to read a spreadsheet's extraction catalog "
+                    "(sheet layout, table context and ranges, residual notes, exact SQL aliases); "
+                    "read_query to run one read-only SELECT over the mounted tables. "
+                    "Always scope read_query with dataset_uids (document uids — one spreadsheet uid mounts "
+                    "every table of the workbook). No write operations are available."
+                ),
+                include_tags=["Tabular"],
+                auth_config=auth_cfg,
+            )
         )
         mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
     else:
         logger.info("%s MCP Tabular disabled via configuration.mcp.tabular_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.text_enabled:
-        mcp_text = FastApiMCP(
-            app,
-            name="Knowledge Flow Text MCP",
-            description=(
-                "Semantic text search interface backed by the vector store. "
-                "Use this MCP to perform vector similarity search over ingested documents, "
-                "retrieve relevant passages, and ground answers in source material. "
-                "It supports queries by text embedding rather than keyword match."
-            ),
-            include_tags=["Vector Search"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
+        mcp_text = _without_response_docs(
+            FastApiMCP(
+                app,
+                name="Knowledge Flow Text MCP",
+                description=(
+                    "Semantic text search interface backed by the vector store. "
+                    "Use this MCP to perform vector similarity search over ingested documents, "
+                    "retrieve relevant passages, and ground answers in source material. "
+                    "It supports queries by text embedding rather than keyword match."
+                ),
+                include_tags=["Vector Search"],
+                auth_config=auth_cfg,
+            )
         )
         mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
     else:
         logger.info("%s MCP Text disabled via configuration.mcp.text_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.templates_enabled:
-        mcp_template = FastApiMCP(
-            app,
-            name="Knowledge Flow Text MCP",
-            description="MCP server for Knowledge Flow Text",
-            include_tags=["Templates", "Prompts"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
+        mcp_template = _without_response_docs(
+            FastApiMCP(
+                app,
+                name="Knowledge Flow Text MCP",
+                description="MCP server for Knowledge Flow Text",
+                include_tags=["Templates", "Prompts"],
+                auth_config=auth_cfg,
+            )
         )
         mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
     else:
         logger.info("%s MCP Templates disabled via configuration.mcp.templates_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.resources_enabled:
-        mcp_resources = FastApiMCP(
-            app,
-            name="Knowledge Flow Resources MCP",
-            description=(
-                "Access to reusable resources for agents. "
-                "Provides prompts, templates, and other content assets that can be used "
-                "to customize agent behavior or generate well-structured custom reports. "
-                "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
-            ),
-            include_tags=["Resources", "Tags"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
+        mcp_resources = _without_response_docs(
+            FastApiMCP(
+                app,
+                name="Knowledge Flow Resources MCP",
+                description=(
+                    "Access to reusable resources for agents. "
+                    "Provides prompts, templates, and other content assets that can be used "
+                    "to customize agent behavior or generate well-structured custom reports. "
+                    "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
+                ),
+                include_tags=["Resources", "Tags"],
+                auth_config=auth_cfg,
+            )
         )
         mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
     else:
         logger.info("%s MCP Resources disabled via configuration.mcp.resources_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.filesystem_enabled:
-        mcp_fs = FastApiMCP(
-            app,
-            name="Knowledge Flow Filesystem MCP",
-            description=(
-                "Provides unified filesystem access for agents. "
-                "Exposes a virtual filesystem backed by the server's configured storage "
-                "(such as local or MinIO) and allows agents to browse directories, inspect metadata, "
-                "read and write files, delete resources, and search content using regex. "
-                "Use this MCP when an agent needs to retrieve data, persist intermediate results, "
-                "inspect logs, or navigate structured file-based resources during workflow execution."
-            ),
-            include_tags=["Filesystem"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
+        mcp_fs = _without_response_docs(
+            FastApiMCP(
+                app,
+                name="Knowledge Flow Filesystem MCP",
+                description=(
+                    "Provides unified filesystem access for agents. "
+                    "Exposes a virtual filesystem backed by the server's configured storage "
+                    "(such as local or MinIO) and allows agents to browse directories, inspect metadata, "
+                    "read and write files, delete resources, and search content using regex. "
+                    "Use this MCP when an agent needs to retrieve data, persist intermediate results, "
+                    "inspect logs, or navigate structured file-based resources during workflow execution."
+                ),
+                include_tags=["Filesystem"],
+                auth_config=auth_cfg,
+            )
         )
 
         mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-fs")
@@ -454,14 +511,14 @@ def create_app() -> FastAPI:
         logger.info("%s MCP Filesystem disabled via configuration.mcp.filesystem_enabled=false", LOG_PREFIX)
 
     # Corpus manager MCP (mock; exports the HTTP-tagged routes to MCP clients)
-    mcp_corpus = FastApiMCP(
-        app,
-        name="Knowledge Flow Corpus MCP",
-        description=("Manage corpora: start TOC builds, revectorize, purge vectors, and poll task status. Mock implementation backed by in-memory tasks for demos."),
-        include_tags=["CorpusManager"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
+    mcp_corpus = _without_response_docs(
+        FastApiMCP(
+            app,
+            name="Knowledge Flow Corpus MCP",
+            description=("Manage corpora: start TOC builds, revectorize, purge vectors, and poll task status. Mock implementation backed by in-memory tasks for demos."),
+            include_tags=["CorpusManager"],
+            auth_config=auth_cfg,
+        )
     )
     mcp_corpus.mount_http(mount_path=f"{mcp_prefix}/mcp-corpus")
 

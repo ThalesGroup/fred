@@ -37,7 +37,9 @@ import pytest
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.capabilities import enablement as enablement_mod
 from control_plane_backend.capabilities import impact as impact_mod
+from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.product.service import template_capability_id
+from fred_core import KeycloakUser
 from test_main import _FakeAgentInstanceStore, _make_record
 
 
@@ -574,3 +576,49 @@ async def test_revive_skips_unreachable_pod() -> None:
 
     assert revived == 0
     assert record.suspension_reason == SuspensionReason.CAPABILITY_ACCESS_REVOKED.value
+
+
+class _AdminRebac(_NoOpRebac):
+    """Adds the org-admin gate and the structural anchor write the capability
+    service performs before any read."""
+
+    async def check_user_permission_or_raise(
+        self, *_args: object, **_k: object
+    ) -> None:
+        return None
+
+    async def add_relation(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_revoke_preview_tolerates_a_model_the_catalog_dropped() -> None:
+    """`disable_team_capability` keeps working for a model id a catalog fetch
+    failed to re-advertise. The confirm dialog's preview runs behind the same
+    gate on the same id, so it must tolerate the same absence."""
+
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=False)
+                ),
+                application_sources=[],
+                runtime_catalog_sources=[],
+            )
+        ),
+        team_dependencies=SimpleNamespace(rebac=_AdminRebac()),
+        get_agent_instance_store=lambda: _FakeAgentInstanceStore([]),
+        get_kpi_writer=lambda: None,
+    )
+
+    preview = await capability_service.preview_capability_revoke(
+        user=KeycloakUser(uid="admin", username="admin", roles=[], email=None),
+        capability_id="model__openai__gpt-4o",
+        team_id=None,
+        deps=deps,
+    )
+
+    assert preview.capability_id == "model__openai__gpt-4o"
+    assert preview.suspended_instances == 0
+    assert preview.instances == []

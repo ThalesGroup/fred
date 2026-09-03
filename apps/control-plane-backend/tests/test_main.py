@@ -833,7 +833,9 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "is_member": True,
             "my_relations": ["team_editor"],
             "joining_mode": "invite_only",
-            "visibility": "public",
+            # #2433: a personal space is stated private explicitly — it is
+            # never marketplace-listed and unreadable to non-members.
+            "visibility": "private",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
         }
@@ -858,6 +860,7 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["feature_flags"]["enableK8Features"] is False
+    assert payload["feature_flags"]["enableApplications"] is False
     assert "ui_settings" not in payload
     # AUTHZ-05 review item 11: `permissions` only ever carries the two
     # OpenFGA-derived flags now — the Keycloak-role-derived `items` list and
@@ -866,6 +869,31 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     # Rebac disabled in test config -> NoopRebacEngine authorizes everything.
     assert payload["permissions"]["is_platform_admin"] is True
     assert payload["permissions"]["is_platform_observer"] is True
+
+
+@pytest.mark.asyncio
+async def test_applications_feature_flag_keeps_contract_mounted_but_fails_closed() -> (
+    None
+):
+    app = create_app()
+    path = "/control-plane/v1/teams/{team_id}/applications"
+    assert path in app.openapi()["paths"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        disabled = await client.get("/control-plane/v1/teams/personal/applications")
+        assert disabled.status_code == 404
+        assert disabled.json() == {"detail": "Not Found"}
+
+        container = get_application_container_from_app(app)
+        container.configuration.platform.frontend.feature_flags.enableApplications = (
+            True
+        )
+        enabled = await client.get("/control-plane/v1/teams/personal/applications")
+
+    assert enabled.status_code == 200
+    assert enabled.json()["items"] == []
 
 
 @pytest.mark.asyncio
@@ -1411,11 +1439,13 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "admins": [],
         "is_member": True,
         "joining_mode": "invite_only",
-        "visibility": "public",
+        # #2433: a personal space is stated private explicitly.
+        "visibility": "private",
         "permissions": [
             "can_read",
             "can_update_resources",
             "can_update_agents",
+            "can_access_files",
         ],
         "my_relations": ["team_editor"],
         "max_resources_storage_size": 5368709120,
@@ -1437,6 +1467,7 @@ async def test_user_details_reuses_shared_personal_team_contract() -> None:
         "can_read",
         "can_update_resources",
         "can_update_agents",
+        "can_access_files",
     ]
 
 
@@ -1508,6 +1539,13 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "status": "available",
             "default_tuning_fields": [],
             "available_capabilities": [],
+            "supports_capabilities": True,
+            "default_capability_ids": [],
+            # #2473: a template declaring neither reasoning field reports both
+            # false — the platform default, and what a pod predating #2473
+            # sends.
+            "reasoning_enabled": False,
+            "reasoning_default_on": False,
         }
     ]
 
@@ -3162,6 +3200,7 @@ def _build_erasure_deps(
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
@@ -5284,7 +5323,17 @@ async def test_update_team_checks_can_update_info_permission(
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
         permissions = _args[3]
         captured_permissions.append(permissions)
-        return TeamMetadata(id=TeamId("thales"), name="Thales"), "token"
+        # Explicitly PUBLIC (#2433 made the metadata default PRIVATE): this
+        # test PATCHes `joining_mode: open`, and the TEAM-10 downgrade rule
+        # would rewrite that to `invite_only` on a private team — the
+        # downgrade has its own test; this one covers permission gating and
+        # the banner-field bridge.
+        return (
+            TeamMetadata(
+                id=TeamId("thales"), name="Thales", visibility=TeamVisibility.PUBLIC
+            ),
+            "token",
+        )
 
     async def _fake_get_team_permissions_for_user(*_args, **_kwargs):
         return [TeamPermission.CAN_UPDATE_INFO]

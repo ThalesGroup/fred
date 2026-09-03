@@ -23,15 +23,13 @@
 //   contributes nothing (silent skip, never a crash)
 
 import { capabilityUiPlugins } from "./index";
-import type { CapabilityUiPlugin, CapabilitySidePanel } from "./types";
+import type { CapabilityUiPlugin, CapabilitySidePanelSpec } from "./types";
 
-export interface SidePanelEntry {
+export interface SidePanelEntry extends CapabilitySidePanelSpec {
   /** Owning capability id (`manifest.id`). */
   capabilityId: string;
   /** `SidePanelSpec.widget` id. */
   widget: string;
-  /** The component to render in the right column. */
-  Component: CapabilitySidePanel;
 }
 
 export function buildSidePanelRegistry(
@@ -43,7 +41,7 @@ export function buildSidePanelRegistry(
     if (panels.length === 0) continue;
     registry.set(
       plugin.id,
-      panels.map(([widget, Component]) => ({ capabilityId: plugin.id, widget, Component })),
+      panels.map(([widget, spec]) => ({ capabilityId: plugin.id, widget, ...spec })),
     );
   }
   return registry;

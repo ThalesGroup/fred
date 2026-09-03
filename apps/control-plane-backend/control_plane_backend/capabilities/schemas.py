@@ -85,7 +85,7 @@ class CapabilityEnablementItem(BaseModel):
         default_factory=list,
         description="The enable-with-settings form (rendered like config fields).",
     )
-    kind: Literal["tool", "agent", "model"] = Field(
+    kind: Literal["tool", "agent", "model", "app"] = Field(
         default="tool",
         description=(
             '"tool": a pod-advertised capability. "agent": a control-plane'
@@ -93,7 +93,19 @@ class CapabilityEnablementItem(BaseModel):
             " (CAPAB-01, RFC §8.6) — every team's access to every agent is an"
             ' explicit admin grant, exactly like a tool. "model": a'
             " pod-advertised projection of one models_catalog.yaml"
-            " (provider, name) pair (OBSERV-02 v3, RFC §8.7)."
+            ' (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app":'
+            " a control-plane projection of one installed Fred application."
+        ),
+    )
+    default_capability_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            'For a `kind="agent"` row: the template\'s default tool/MCP '
+            "capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). "
+            "Enabling the agent for a team 409s unless each of these is "
+            "already usable by that team - exposed so the admin UI can "
+            "disable the grant up front and explain why (GitHub #2408). "
+            'Always empty for `kind="tool"`/`"model"`.'
         ),
     )
     suspended_instances: int = Field(

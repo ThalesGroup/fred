@@ -158,6 +158,7 @@ from ..integrations.v2_runtime.adapters import (
     DocumentFolderAdapter,
     DocumentMarkdownAdapter,
     DocumentSearchAdapter,
+    DocumentSimilarityAdapter,
     DocumentSummarizeAdapter,
     DocumentTreeAdapter,
     FredKnowledgeSearchToolInvoker,
@@ -507,6 +508,13 @@ def _definition_to_agent_tuning(
         description=definition.description,
         tags=list(definition.tags),
         fields=list(definition.fields),
+        # REASON-01 level 3 + Amendment B (#2473). Projected so a template can
+        # seed the agent form's Reasoning card, the same way
+        # `default_mcp_servers` seeds the capability ticks. Both stayed False
+        # here until #2473, which is why a template could not express "this
+        # agent's job needs reasoning" at all.
+        reasoning_enabled=definition.reasoning_enabled,
+        reasoning_default_on=definition.reasoning_default_on,
     )
 
 
@@ -605,11 +613,14 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         self,
         registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
         access_token: str | None,
+        capability_registry: CapabilityRegistry | None = None,
         *,
         platform_chat_model_binding: ModelBinding | None = None,
+        platform_prompt: str | None = None,
     ) -> None:
         self._registry = registry
         self._access_token = access_token
+        self._capability_registry = capability_registry
         # TRUSTED — the caller's own `BoundRuntimeContext.platform_chat_model_binding`
         # (see `_build_runtime_services`), carried privately on this invoker so a
         # nested `context.invoke_agent(...)` child inherits the same
@@ -619,6 +630,12 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # or any other channel a caller/child could read or forge — the only way
         # to reach it is this private attribute on the invoker itself.
         self._platform_chat_model_binding = platform_chat_model_binding
+        # TRUSTED, same private channel and same reason: without it a nested
+        # `context.invoke_agent(...)` child would compose its prompt with
+        # `platform_prompt=None` and silently fall back to the pod default —
+        # including when an admin deliberately saved `""` to suppress the
+        # block, which is precisely the state that must not be undone.
+        self._platform_prompt = platform_prompt
 
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
         definition = self._registry.get(request.agent_id)
@@ -655,6 +672,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             invocation_turns=request.prior_turns,
         )
 
+        final_result: AgentInvocationResult | None = None
         content_parts: list[str] = []
         async for payload in _iterate_runtime_event_payloads(
             definition,
@@ -662,18 +680,30 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             access_token=self._access_token,
             team_id=request.context.team_id,
             registry=self._registry,
+            capability_registry=self._capability_registry,
             # Private trusted propagation (see __init__): the child inherits
             # the parent turn's platform chat binding, never the request's
             # own `context` — that dict has no field for it at all.
             platform_chat_model_binding=self._platform_chat_model_binding,
+            platform_prompt=self._platform_prompt,
         ):
             kind = payload.get("kind")
             if kind == "final":
-                return AgentInvocationResult(
+                final_result = AgentInvocationResult(
                     agent_id=request.agent_id,
-                    content=payload.get("content", ""),
+                    content=str(payload.get("content") or ""),
+                    structured=payload.get("structured"),
                     is_error=False,
                 )
+                continue
+            if kind == "execution_error":
+                final_result = AgentInvocationResult(
+                    agent_id=request.agent_id,
+                    content=str(payload.get("message") or ""),
+                    is_error=True,
+                )
+                continue
+
             if kind == "assistant_delta":
                 content_parts.append(payload.get("delta", ""))
             elif kind == "node_error":
@@ -682,6 +712,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                     content=payload.get("error_message", "Unknown error"),
                     is_error=True,
                 )
+        if final_result is not None:
+            return final_result
 
         return AgentInvocationResult(
             agent_id=request.agent_id,
@@ -697,6 +729,7 @@ def _build_runtime_services(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
+    capability_registry: CapabilityRegistry | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -754,6 +787,13 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    # Targeted similarity / comparison search: powers document_similarity. Its
+    # own adapter rather than a second method on the search one, because its
+    # targeting comes from the model per call, not from the conversation.
+    document_similarity = DocumentSimilarityAdapter(
+        binding=binding,
+        settings=settings,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
@@ -790,6 +830,7 @@ def _build_runtime_services(
         LocalRegistryAgentInvoker(
             registry=registry,
             access_token=access_token,
+            capability_registry=capability_registry,
             # Private trusted propagation (LocalRegistryAgentInvoker
             # docstring): carries THIS turn's trusted platform chat binding
             # onto the invoker so a nested context.invoke_agent(...) child
@@ -797,6 +838,7 @@ def _build_runtime_services(
             # None. `binding` is this same request's BoundRuntimeContext —
             # never the child's, and never a client-controlled value.
             platform_chat_model_binding=binding.platform_chat_model_binding,
+            platform_prompt=binding.platform_prompt,
         )
         if registry is not None
         else None
@@ -822,6 +864,11 @@ def _build_runtime_services(
         document_summarize=document_summarize,
         document_markdown=document_markdown,
         document_extraction=document_extraction,
+        document_similarity=document_similarity,
+        # Read-only platform SQL (OPSCAP-01-PG): pod-lifetime adapter (like
+        # checkpointer/kpi_writer, NOT per-turn) — read-only enforcement,
+        # row cap and timeout clamp all live server-side in the adapter.
+        platform_sql=runtime_config.platform_sql,
     )
 
 
@@ -959,11 +1006,14 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Capabilities installed on this pod (#1974, RFC §3.8): pod-scoped, so every
-    # template from one pod advertises the same set — mirrored per template the
-    # same way available_mcp_servers is, so control-plane aggregation and the
-    # agent-creation UI need no second fetch.
+    # Filtered by supports_capabilities below: [] outright for a template that
+    # opts out, so a coincidentally pod-registered capability is never offered.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
+    # Mirrors AgentDefinition.supports_capabilities verbatim (unfiltered by team
+    # grants) — the only way control-plane can tell "this team has zero usable
+    # capabilities" apart from "this template doesn't support selection at all"
+    # once available_capabilities has been narrowed to the team's can_use set.
+    supports_capabilities: bool = True
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
     # filtering. `available_mcp_servers` above stays MCP-only (it carries full
@@ -1023,6 +1073,44 @@ class _ModelCatalogEntry(BaseModel):
     capability id apart. None means no profile named this model and the
     frontend falls back to that heuristic. First-declared wins, same
     first-seen rule as `description` above."""
+
+
+class _PlatformPromptFileResponse(BaseModel):
+    """This pod's `config/platform_prompt.json`, as `/agents/platform-prompt`
+    advertises it to control-plane.
+
+    Only the two texts cross the wire — `version` and `_comment` are for whoever
+    opens the file, not for a consumer to branch on.
+    """
+
+    platform_prompt: str
+    """The block a platform admin owns. What this pod composes into every system
+    prompt UNTIL an admin saves one in Postgres, after which the saved value
+    reaches the pod per turn on `BoundRuntimeContext.platform_prompt` and this is
+    unused. Control-plane serves it as the starting point of the admin editor.
+
+    Empty string when the pod shipped no file — the caller cannot tell that from
+    a deliberately empty `platform_prompt`, and does not need to: both mean this
+    pod contributes no platform-prompt block."""
+    platform_instructions: str
+    """The read-only block, rendered directly under the one above on every turn.
+    Nothing can edit it; the admin UI displays it so an admin can see exactly
+    what agents are told alongside their own prompt."""
+
+
+def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | None:
+    """Read one field off the parsed `platform_prompt.json`, or `None`.
+
+    A pod may legitimately ship no file (`apply_external_catalog_overrides`
+    warns and continues), so this collapses "no file" and "field absent" into
+    the `None` both `RuntimeConfig` fields already use for "not configured".
+    """
+
+    parsed = config.get_platform_prompt_file()
+    if parsed is None:
+        return None
+    value = getattr(parsed, field, None)
+    return value if isinstance(value, str) else None
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1166,6 +1254,11 @@ class _ResolvedAgentInstance(BaseModel):
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
     # never read off the caller-supplied context either.
     platform_chat_model_binding: ModelBinding | None = None
+    # Platform-wide platform prompt, resolved fresh by control-plane on this same
+    # call — same trust boundary again: it becomes the FIRST block of the
+    # composed system prompt, ahead of every agent template. `None` means no admin
+    # ever saved one and the pod's shipped `config/platform_prompt.json` applies.
+    platform_prompt: str | None = None
 
 
 @dataclass(slots=True)
@@ -1202,6 +1295,10 @@ class _ResolvedExecutionTarget:
     # managed agent-instance execution only, and direct execution stays
     # pod-local routing.
     platform_chat_model_binding: ModelBinding | None = None
+    # Platform-wide platform prompt, resolved on the SAME per-turn call as the
+    # two fields above and for the same reason. `None` for direct (non-managed)
+    # template execution, where the pod default applies instead.
+    platform_prompt: str | None = None
 
 
 def _active_mcp_server_refs(
@@ -1446,6 +1543,7 @@ async def _resolve_agent_instance(
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
+        platform_prompt=resolution.platform_prompt,
     )
 
 
@@ -1875,6 +1973,38 @@ def _pending_react_v2_interrupt_ids(
     return frozenset(ids)
 
 
+def _resume_checkpoint_namespaces(request: RuntimeExecuteRequest) -> tuple[str, ...]:
+    """
+    Checkpoint namespaces a resume-capable request may target, best first.
+
+    ReAct V2 checkpoints are ALWAYS stored unnamespaced, whatever the runtime
+    configures: LangGraph resets `checkpoint_ns` to `""` for every root-graph
+    run (`pregel/_loop.py::PregelLoop.__init__`, pinned by
+    `test_langgraph_resets_root_checkpoint_namespace`). Only the hand-rolled
+    Graph runtime, which writes through `aput` itself, actually reaches
+    storage under the per-agent namespace.
+
+    This gate runs before the target agent is resolved, so it cannot know
+    which runtime it is talking to — it goes by the request's own resume
+    identifier instead (`checkpoint_id` is Graph V2's, `interrupt_id` is ReAct
+    V2's, mutually exclusive by contract).
+    """
+
+    agent_ns = checkpoint_namespace(
+        agent_instance_id=request.agent_instance_id,
+        agent_id=request.agent_id or request.agent_instance_id or "",
+    )
+    if request.checkpoint_id is not None:
+        # Graph V2, whose executor reads its own namespace and nowhere else.
+        # Probing "" as well would wave a pre-namespacing pause past this gate
+        # only to have it die mid-stream, where a 409 can no longer be sent.
+        return (agent_ns,)
+    # ReAct V2 — always unnamespaced. `agent_ns` stays as a fallback for a
+    # Graph pause that never stamped a checkpoint_id (`graph_runtime.py` only
+    # stamps one when it has it); nothing is ever stored there for ReAct.
+    return ("", agent_ns)
+
+
 async def _validate_session_checkpoint_access(
     request: RuntimeExecuteRequest,
 ) -> None:
@@ -1951,37 +2081,36 @@ async def _validate_session_checkpoint_access(
     if checkpointer is None:
         return
 
-    checkpoint_ns = checkpoint_namespace(
-        agent_instance_id=request.agent_instance_id,
-        agent_id=request.agent_id or request.agent_instance_id or "",
-    )
-
-    loaded = await load_checkpoint(
-        checkpointer,
-        thread_id=session_id,
-        checkpoint_id=request.checkpoint_id,
-        checkpoint_ns=checkpoint_ns,
-    )
-    if (
-        loaded is None
-        and request.resume_payload is not None
-        and request.checkpoint_id is not None
-    ):
-        # The exact-id lookup above is the only path the legacy Graph runtime
-        # ever needs (its checkpoint_id is real). Retry against the thread's
-        # latest checkpoint only once that has failed, on a genuine resume
-        # attempt. ReAct V2 never populates checkpoint_id at all, so its
-        # requests already resolve to "latest checkpoint" on the primary
-        # lookup above (checkpoint_id=None) and never reach this branch —
-        # kept for the legacy Graph runtime's own unknown-checkpoint_id
-        # recovery path (a clean "does not match pending" 409 instead of a
-        # blunt "unknown checkpoint" one), preserving its exact prior
-        # behavior.
+    loaded = None
+    for checkpoint_ns in _resume_checkpoint_namespaces(request):
         loaded = await load_checkpoint(
             checkpointer,
             thread_id=session_id,
+            checkpoint_id=request.checkpoint_id,
             checkpoint_ns=checkpoint_ns,
         )
+        if (
+            loaded is None
+            and request.resume_payload is not None
+            and request.checkpoint_id is not None
+        ):
+            # The exact-id lookup above is the only path the legacy Graph
+            # runtime ever needs (its checkpoint_id is real). Retry against the
+            # thread's latest checkpoint only once that has failed, on a
+            # genuine resume attempt. ReAct V2 never populates checkpoint_id at
+            # all, so its requests already resolve to "latest checkpoint" on
+            # the primary lookup above (checkpoint_id=None) and never reach
+            # this branch — kept for the legacy Graph runtime's own
+            # unknown-checkpoint_id recovery path (a clean "does not match
+            # pending" 409 instead of a blunt "unknown checkpoint" one),
+            # preserving its exact prior behavior.
+            loaded = await load_checkpoint(
+                checkpointer,
+                thread_id=session_id,
+                checkpoint_ns=checkpoint_ns,
+            )
+        if loaded is not None:
+            break
 
     if loaded is None:
         detail = (
@@ -2205,9 +2334,11 @@ async def _write_turn_history(
     # 2. Map runtime events to messages
     final_content = ""
     final_sources: list[VectorSearchHit] = []
+    final_ui_parts: list[dict[str, Any]] = []
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
+    final_context_tokens: int | None = None
 
     for payload in payloads:
         kind = payload.get("kind")
@@ -2221,7 +2352,6 @@ async def _write_turn_history(
                     call_id=payload["call_id"],
                     name=payload["tool_name"],
                     args=payload.get("arguments", {}),
-                    token_usage=payload.get("token_usage"),
                 )
             )
             rank += 1
@@ -2346,6 +2476,14 @@ async def _write_turn_history(
                 for s in raw_sources
                 if isinstance(s, dict)
             ]
+            # The turn's chat parts, aggregated across every tool by the runtime.
+            # `type` is the discriminator the renderer dispatches on; without it
+            # the entry is dead weight in every history row.
+            final_ui_parts = [
+                p
+                for p in (payload.get("ui_parts") or [])
+                if isinstance(p, dict) and isinstance(p.get("type"), str)
+            ]
             tu = payload.get("token_usage")
             if tu:
                 final_token_usage = ChatTokenUsage(
@@ -2357,6 +2495,9 @@ async def _write_turn_history(
                 )
             final_model = payload.get("model_name")
             final_finish_reason = payload.get("finish_reason")
+            raw_context_tokens = payload.get("context_tokens")
+            if isinstance(raw_context_tokens, (int, float)):
+                final_context_tokens = int(raw_context_tokens)
 
     # 2b. Blocks the stream never closed (truncated turn, crashed node). The live
     # UI closes them itself on `final` so the accordion does not pulse forever
@@ -2366,8 +2507,10 @@ async def _write_turn_history(
         if "".join(block.text):
             messages.append(_thought_row(block, thought_id=thought_id))
 
-    # 3. Terminal assistant message (from FinalRuntimeEvent)
-    if final_content or final_model:
+    # 3. Terminal assistant message (from FinalRuntimeEvent). A turn whose only
+    # output is a card (no text, no model name) still has to leave a row, or the
+    # card it produced is lost exactly as before ui_parts were persisted.
+    if final_content or final_model or final_ui_parts:
         messages.append(
             make_assistant_final(
                 session_id,
@@ -2377,7 +2520,9 @@ async def _write_turn_history(
                 model=final_model,
                 usage=final_token_usage,
                 sources=final_sources if final_sources else None,
+                ui_parts=final_ui_parts,
                 finish_reason=final_finish_reason,
+                context_tokens=final_context_tokens,
             )
         )
 
@@ -2540,8 +2685,13 @@ def _emit_turn_completed(
     Two metrics are emitted:
 
     agent.turn_completed (Histogram, ms):
-      Low-cardinality Prometheus dims only — session_id and exchange_id are
-      intentionally excluded to avoid high-cardinality label explosions.
+      Carries `session_id` so OpenSearch analytics can group turns per
+      conversation (issue #2426, the conversation-depth preset). It stays
+      Prometheus-safe because `PROMETHEUS_ALLOWED_LABELS`
+      (`fred_core/kpi/prometheus_kpi_store.py`) does not list it, so it is
+      stripped before label resolution — the OpenSearch store keeps the full
+      dims. Same pattern as `identity_kpi_dims`
+      (`fred_runtime/react/middleware/shared.py`).
       finish_reason="error" when the turn ended with execution_error instead
       of a normal final event.
       Quantities (token counters, tool count) become Prometheus counters via
@@ -2556,11 +2706,19 @@ def _emit_turn_completed(
         outcome = _parse_turn_outcome(payloads, turn_start)
         runtime_id = get_runtime_context().config.service_name
 
-        # Prometheus-safe dims: low-cardinality only.
-        # session_id, exchange_id, user_id, agent_instance_id are per-turn
-        # UUIDs — they must NOT become Prometheus labels (cardinality bomb).
-        # They are available in history rows and SSE logs for per-turn tracing.
-        prom_dims: dict[str, str | None] = {
+        # Dims for both turn metrics. `session_id` is carried on purpose (issue
+        # #2426): the OpenSearch KPI store keeps the full dims, which is what
+        # the conversation-depth preset groups by. It never reaches Prometheus
+        # as a label — `PROMETHEUS_ALLOWED_LABELS`
+        # (`fred_core/kpi/prometheus_kpi_store.py`) is an allowlist and does not
+        # contain it, so it is stripped before label resolution. That allowlist,
+        # not this dict, is what protects against the cardinality bomb; the same
+        # reasoning is spelled out in `identity_kpi_dims`
+        # (`fred_runtime/react/middleware/shared.py`).
+        # exchange_id and user_id stay out: nothing queries them here, and
+        # per-turn tracing already has them in history rows and SSE logs.
+        turn_dims: dict[str, str | None] = {
+            "session_id": session_id,
             "team_id": team_id,
             "template_agent_id": template_agent_id,
             "agent_instance_id": agent_instance_id,
@@ -2575,7 +2733,7 @@ def _emit_turn_completed(
             type="timer",
             value=outcome.total_ms,
             unit="ms",
-            dims=prom_dims,
+            dims=turn_dims,
             quantities={
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
@@ -2590,7 +2748,7 @@ def _emit_turn_completed(
                 name="agent.turn_error_total",
                 type="counter",
                 value=1,
-                dims=prom_dims,
+                dims=turn_dims,
                 actor=KPIActor(type="human", user_id=user_id),
             )
 
@@ -2599,12 +2757,13 @@ def _emit_turn_completed(
             KpiTurnRecord,
             {
                 "ts": datetime.now(timezone.utc).isoformat(),
-                "session_id": session_id,
                 "exchange_id": exchange_id,
                 "user_id": user_id,
                 "total_ms": outcome.total_ms,
                 "is_error": outcome.is_error,
-                **prom_dims,
+                # `session_id` (a required KpiTurnRecord key) and the agent /
+                # model identity keys all come from this spread.
+                **turn_dims,
                 "tool_count": outcome.tool_count,
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
@@ -2663,6 +2822,7 @@ async def _stream(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     platform_chat_model_binding: ModelBinding | None = None,
+    platform_prompt: str | None = None,
 ) -> AsyncIterator[str]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -2710,6 +2870,7 @@ async def _stream(
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_prompt=platform_prompt,
     ):
         collected.append(payload)
         yield _sse(json.dumps(payload, ensure_ascii=False))
@@ -2826,6 +2987,14 @@ def _effective_capability_ids(
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # A definition that declares it does not support capability selection
+        # (see AgentDefinition.supports_capabilities) never activates one —
+        # including a stale explicit selection saved before this field
+        # existed. Treat it exactly like "no selection made" so it falls
+        # through to the `default_mcp_servers` path below, the separate,
+        # still-active mechanism for an agent's own hardcoded MCP needs.
+        selected = None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
     if capability_registry is None:
@@ -2916,22 +3085,33 @@ def _build_capability_block(
 
     Returns None when the agent selects no capabilities.
 
-    MCP handling (#1978, #1988): an MCP-server capability delivers its catalog
-    `agent_instructions` as a prompt fragment via `middleware()`
-    (`_McpInstructionsMiddleware`). The effective selection mirrors
-    `_active_mcp_server_refs`: a `None` capability selection (template default)
-    activates the template's `default_mcp_servers` as capabilities so their
-    instructions are delivered — otherwise a default ReAct agent would silently
-    lose its non-negotiable grounding contract. This block is built identically
-    for both agent kinds (CAPAB-02), but a Graph agent reads only `block.tools`
-    — MCP tools reach it (a separate, already execution-model-agnostic path,
-    `FredMcpToolProvider`), the `agent_instructions` prompt fragment does NOT
-    (Graph never reads `block.middleware` at all). A Graph agent that needs an
-    MCP server's grounding instructions must currently author them into its own
-    system prompt — this is an explicit, known gap, not yet closed (CAPAB-02).
+    MCP handling (#1978, #1988): an MCP-server capability contributes its
+    catalog title + `agent_instructions` as one `McpPromptGroup` in
+    `block.mcp_prompt_groups` (#2455 — before 2026-08-27 this was a
+    per-model-call prompt-fragment middleware, `_McpInstructionsMiddleware`,
+    removed once delivery moved to the static ReAct prompt). The effective
+    selection mirrors `_active_mcp_server_refs`: a `None` capability selection
+    (template default) activates the template's `default_mcp_servers` as
+    capabilities so their instructions are delivered — otherwise a default
+    ReAct agent would silently lose its non-negotiable grounding contract.
+    This block is built identically for both agent kinds (CAPAB-02), but a
+    Graph agent reads only `block.tools` — MCP tools reach it (a separate,
+    already execution-model-agnostic path, `FredMcpToolProvider`),
+    `block.mcp_prompt_groups` does NOT (Graph never builds a ReAct tool-prompt
+    suffix). A Graph agent that needs an MCP server's grounding instructions
+    must currently author them into its own system prompt — this is an
+    explicit, known gap, not yet closed (CAPAB-02).
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # Mirrors the same guard in `_effective_capability_ids`: a definition
+        # that opts out of capability selection ignores any saved selection
+        # outright, including a stale one from before this field existed
+        # (e.g. an agent instance with capabilities saved while its template
+        # still let the picker offer them). Never raise for it below — just
+        # treat it as unselected.
+        selected = None
     capability_config = tuning.capability_config if tuning is not None else {}
     if capability_registry is None:
         # A None selection with no registry is inert; a real selection is a bug.
@@ -3165,6 +3345,7 @@ async def _iterate_runtime_event_payloads(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     platform_chat_model_binding: ModelBinding | None = None,
+    platform_prompt: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -3215,7 +3396,7 @@ async def _iterate_runtime_event_payloads(
     portable_context = PortableContext(
         request_id=request_id,
         correlation_id=correlation_id,
-        actor=ctx.get("user_id", "anonymous"),
+        actor=ctx.get("user_id") or ctx.get("actor") or "anonymous",
         tenant=ctx.get("tenant", "default"),
         environment=PortableEnvironment.DEV,
         trace_id=ctx.get("trace_id"),
@@ -3330,6 +3511,10 @@ async def _iterate_runtime_event_payloads(
         # chat_default_profile_id/agent_profile_overrides above, there is no
         # ctx.get(...) for it at all.
         platform_chat_model_binding=platform_chat_model_binding,
+        # TRUSTED, same channel and same reasoning as the binding above: no
+        # `ctx.get(...)` exists for it, so a request body can never prepend
+        # text ahead of every agent on this deployment.
+        platform_prompt=platform_prompt,
     )
 
     services = _build_runtime_services(
@@ -3338,6 +3523,7 @@ async def _iterate_runtime_event_payloads(
         team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,
+        capability_registry=capability_registry,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -3448,14 +3634,14 @@ async def _iterate_runtime_event_payloads(
             # docstring for the full claimed → started lifecycle and the
             # guarantees it does and does not provide.
             hitl_claim: _HitlResumeClaim | None = None
-            hitl_checkpoint_ns = checkpoint_namespace(
-                agent_instance_id=portable_context.baggage.get("agent_instance_id"),
-                agent_id=definition.agent_id,
-            )
             if request.resume_payload is not None and request.interrupt_id:
                 hitl_claim = await _claim_hitl_resume_before_invocation(
                     session_id=ctx.get("session_id"),
-                    checkpoint_ns=hitl_checkpoint_ns,
+                    # Unnamespaced: this branch is ReAct-only, and LangGraph
+                    # stores every root-graph checkpoint at ns "" whatever the
+                    # runtime configures — the claim must key on the same
+                    # occurrence the early gate validated.
+                    checkpoint_ns="",
                     interrupt_id=request.interrupt_id,
                 )
 
@@ -3717,8 +3903,14 @@ def _build_agent_router(
                 # time regardless, but a picker that lists it first invites the
                 # exact "select it, save it, discover the incompatibility at
                 # first launch" flow the loud refusal exists to prevent.
+                #
+                # A definition opting out via supports_capabilities=False never
+                # offers one, regardless of pod registration — short-circuit
+                # rather than let that leak into the picker.
                 available_capabilities=(
-                    all_capability_entries
+                    []
+                    if not definition.supports_capabilities
+                    else all_capability_entries
                     if not isinstance(definition, GraphAgentDefinition)
                     else [
                         entry
@@ -3726,6 +3918,7 @@ def _build_agent_router(
                         if "graph" in entry.execution_models
                     ]
                 ),
+                supports_capabilities=definition.supports_capabilities,
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
@@ -3804,6 +3997,42 @@ def _build_agent_router(
             return _ModelCatalogResponse(models=[])
         catalog = load_model_catalog(catalog_path)
         return _project_model_catalog_response(catalog)
+
+    @router.get("/platform-prompt")
+    async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
+        """
+        Return the two head blocks this pod ships in `config/platform_prompt.json`.
+
+        Why this endpoint exists:
+        - the admin UI shows both: the platform prompt an admin edits (this file
+          holds the value in force until one is saved to Postgres) and the
+          read-only platform instructions. Control-plane serves that page, runs
+          in a different container, and so cannot read this pod's filesystem —
+          exactly the situation `/agents/models-catalog` already solves for
+          `models_catalog.yaml`.
+        - without it the admin page would show an empty editor on a fresh
+          deployment while agents were already running on this file, which is
+          the one thing the page exists to make visible.
+
+        Serves the file parsed once at boot rather than re-reading it, unlike
+        `/models-catalog`: the prompt composer uses these same in-memory values
+        on every turn, so re-reading here could report a file that agents are
+        not actually using until the pod restarts.
+
+        Returns empty strings when the pod shipped no file — the caller
+        distinguishes that from an unreachable pod by the HTTP status.
+
+        How to use it:
+        - call from control-plane's `_fetch_platform_prompt_file`
+
+        Example:
+        - `GET /fred/agents/v2/agents/platform-prompt`
+        """
+        runtime_config = get_runtime_context().config
+        return _PlatformPromptFileResponse(
+            platform_prompt=runtime_config.default_platform_prompt or "",
+            platform_instructions=runtime_config.platform_instructions or "",
+        )
 
     @router.post("/capabilities/{capability_id}/validate-config")
     async def validate_capability_config(
@@ -4457,6 +4686,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_prompt=target.platform_prompt,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -4544,6 +4774,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_prompt=target.platform_prompt,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -4652,6 +4883,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_prompt=target.platform_prompt,
             ),
             media_type="text/event-stream",
         )
@@ -4772,9 +5004,11 @@ def create_agent_app(
         # 5. bootstrap_observability — global tracer + metrics provider
         # 6. attach_pod_container — container in app.state before any request
         # 7. initialize_sql    — async, may take time
-        # 8. start_metrics_exporter — prometheus thread, after KPI writer exists
-        # 9. start_kpi_tasks   — asyncio tasks, after SQL engine is known
-        # 10. set_runtime_context — wires all built parts into the global config
+        # 8. initialize_platform_sql — dedicated read-only SQL adapter, after
+        #    initialize_sql proved the Postgres config (OPSCAP-01-PG)
+        # 9. start_metrics_exporter — prometheus thread, after KPI writer exists
+        # 10. start_kpi_tasks  — asyncio tasks, after SQL engine is known
+        # 11. set_runtime_context — wires all built parts into the global config
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
@@ -4811,6 +5045,7 @@ def create_agent_app(
         )
         chat_factory = _build_chat_model_factory(config)
         await container.initialize_sql()
+        container.initialize_platform_sql()
         container.start_metrics_exporter()
         await container.start_kpi_tasks()
         checkpointer = container.get_checkpointer()
@@ -4830,6 +5065,12 @@ def create_agent_app(
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
                     models_catalog_path=config.get_models_catalog_path(),
+                    default_platform_prompt=_platform_prompt_file_field(
+                        config, "platform_prompt"
+                    ),
+                    platform_instructions=_platform_prompt_file_field(
+                        config, "platform_instructions"
+                    ),
                     inprocess_toolkit_factory=build_inprocess_toolkit,
                     control_plane_url=config.platform.control_plane_url,
                     rebac_engine=rebac_engine,
@@ -4837,6 +5078,7 @@ def create_agent_app(
                         security.profile if security is not None else None
                     ),
                     kpi_writer=container.get_kpi_writer(),
+                    platform_sql=container.get_platform_sql(),
                 )
             )
         )

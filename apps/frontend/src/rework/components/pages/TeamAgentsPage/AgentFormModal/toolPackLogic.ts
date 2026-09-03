@@ -27,6 +27,7 @@
 
 import {
   CAP_DOCUMENT_ACCESS,
+  CAP_DOCUMENT_SIMILARITY,
   CAP_DOCUMENT_SUMMARIZE,
   CAP_TABULAR,
   DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
@@ -45,7 +46,12 @@ export interface CapabilitySelectionState {
 /** Capabilities governed by the two resource packs in Simple view. Recomputed
  *  as a set from (corpus, attachments) so shared `document_summarize` is never
  *  dropped while still required by the other pack. */
-const RESOURCE_PACK_CAPABILITIES = new Set<string>([CAP_DOCUMENT_ACCESS, CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE]);
+const RESOURCE_PACK_CAPABILITIES = new Set<string>([
+  CAP_DOCUMENT_ACCESS,
+  CAP_TABULAR,
+  CAP_DOCUMENT_SUMMARIZE,
+  CAP_DOCUMENT_SIMILARITY,
+]);
 
 function documentAccessSelected(state: CapabilitySelectionState): boolean {
   return state.selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS);
@@ -87,6 +93,9 @@ function withResourceState(
   add(CAP_TABULAR, nextCorpus);
   // Summarize is shared by both resource packs: on when either is on.
   add(CAP_DOCUMENT_SUMMARIZE, nextCorpus || nextAttachments);
+  // Corpus only: Knowledge Flow never searches the conversation's attachments
+  // in this mode, so it would contribute nothing to an attachments-only agent.
+  add(CAP_DOCUMENT_SIMILARITY, nextCorpus);
 
   const capabilityConfigValues = { ...state.capabilityConfigValues };
   if ((nextCorpus || nextAttachments) && availableIds.has(CAP_DOCUMENT_ACCESS)) {
@@ -104,15 +113,19 @@ function withResourceState(
 
 /** Is the pack currently active, derived from the underlying selection so the
  *  Simple and Advanced views stay in sync automatically. */
-export function derivePackChecked(pack: ToolPack, state: CapabilitySelectionState): boolean {
+export function derivePackChecked(
+  pack: ToolPack,
+  state: CapabilitySelectionState,
+  availableIds: ReadonlySet<string>,
+): boolean {
   if (pack.kind === "reasoning") return state.reasoningEnabled;
   if (pack.documentAccessIntent === "corpus") return corpusOn(state);
   if (pack.documentAccessIntent === "attachments") return attachmentsOn(state);
-  // Plain packs (word/ppt): on when their capability id is selected.
-  return (
-    pack.enablesCapabilityIds.length > 0 &&
-    pack.enablesCapabilityIds.every((id) => state.selectedCapabilityIds.includes(id))
-  );
+  // Plain packs: on when every id the team can ACTUALLY select is selected.
+  // Requiring the full list would leave the switch stuck off whenever a member
+  // is not admin-enabled — `applyPackToggle` never adds those.
+  const selectable = pack.enablesCapabilityIds.filter((id) => availableIds.has(id));
+  return selectable.length > 0 && selectable.every((id) => state.selectedCapabilityIds.includes(id));
 }
 
 /** Compute the new selection state when a pack switch is flipped. Only touches

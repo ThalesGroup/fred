@@ -25,6 +25,11 @@
 // we must NOT auto-open then. So we auto-open a `(preview_id, version)` exactly
 // once, and only if the page has been open for >5s (history replay happens in the
 // first moments after load; a live fill happens well after).
+//
+// Every mount REGISTERS the deck, replay included: that is what tells the pane's
+// launcher this conversation produced something. Registering never moves what the
+// pane shows - only an explicit open does, because the pane keys its pdf.js worker
+// on that value.
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
@@ -32,9 +37,10 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import Button from "@shared/atoms/Button/Button";
 import { requestSidePanelOpen } from "../sidePanelOpenRequestSlice";
+import { useMountSessionId } from "../useOpenSessionId";
 import type { UiPartRendererProps } from "../types";
 import type { PptPreviewPartData } from "./types";
-import { openPreview } from "./pptPreviewSlice";
+import { openPreview, registerPreview } from "./pptPreviewSlice";
 import PptxDownloadButton from "./PptxDownloadButton";
 import styles from "./PptPreviewCardRenderer.module.css";
 
@@ -46,28 +52,30 @@ const AUTO_OPEN_MIN_AGE_MS = 5000;
 export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const sessionId = useMountSessionId();
   const preview = part as unknown as PptPreviewPartData;
 
   const key = `${preview.preview_id}:${preview.version}`;
 
-  // Opening = set the preview data AND signal the page to open the ppt_filler
+  // Opening = register the deck AND signal the page to open the ppt_filler
   // side-panel column (the page owns the single-push-drawer state).
   const openPane = (data: PptPreviewPartData) => {
-    dispatch(openPreview(data));
+    dispatch(openPreview({ sessionId, preview: data }));
     dispatch(requestSidePanelOpen({ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }));
   };
 
   useEffect(() => {
-    if (seenKeys.has(key)) return;
-    const isLiveFill = Date.now() - pageLoadedAt > AUTO_OPEN_MIN_AGE_MS;
+    if (!sessionId) return;
+    const firstSighting = !seenKeys.has(key);
     // Mark seen regardless, so a history-replay mount never auto-opens later and a
     // live fill only pops the panel the first time its part arrives.
     seenKeys.add(key);
-    if (isLiveFill) openPane(preview);
-    // Intentionally keyed on the deck identity only; `preview`/`dispatch` are stable
-    // per that identity for this heuristic.
+    dispatch(registerPreview({ sessionId, preview }));
+    if (firstSighting && Date.now() - pageLoadedAt > AUTO_OPEN_MIN_AGE_MS) openPane(preview);
+    // Intentionally keyed on the deck identity and conversation; `preview`/`dispatch`
+    // are stable per that identity for this heuristic.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, sessionId]);
 
   const title = preview.title || t("capability.ppt_filler.preview.untitled", { defaultValue: "Presentation" });
 

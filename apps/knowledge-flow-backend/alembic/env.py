@@ -20,15 +20,14 @@ import fred_core.documents.document_models  # noqa: F401 — registers metadata 
 from fred_core.models.base import Base as CoreBase
 from fred_core.sql import make_alembic_env
 
-import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401
-import knowledge_flow_backend.models.task_models  # noqa: F401 — registers kf_task_run / kf_task_event_log with Base
 from alembic import context
 from knowledge_flow_backend.common.config_loader import load_configuration
 
-# Import Base and every ORM model so they all register with Base.metadata
-# before autogenerate inspects it.  These imports must stay here (not in
-# knowledge_flow_backend/models/__init__.py) to avoid circular imports at runtime.
+# Importing table_ownership registers every KFB ORM model with Base.metadata
+# (resource, kf_task_*) before autogenerate inspects it, and carries the
+# declared owned-table set.
 from knowledge_flow_backend.models.base import Base
+from knowledge_flow_backend.models.table_ownership import OWNED_TABLES
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
@@ -38,11 +37,15 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    # Both metadata objects so autogenerate sees KFB tables (incl. its own
-    # kf_task_* pair, #2170) and the shared fred-core tables.
+    # Both metadata objects so autogenerate resolves KFB tables (incl. its own
+    # kf_task_* pair, #2170) and the shared fred-core tables it references.
+    # CoreBase also carries tables OTHER trees migrate (users, session*,
+    # teammetadata, session_history) — owned_tables is what keeps this tree's
+    # autogenerate and `alembic check` off them (#2314).
     target_metadata=[Base.metadata, CoreBase.metadata],
     get_postgres_config=lambda: load_configuration().storage.postgres,
     version_table="alembic_version_knowledge_flow",
+    owned_tables=OWNED_TABLES,
 )
 
 if context.is_offline_mode():

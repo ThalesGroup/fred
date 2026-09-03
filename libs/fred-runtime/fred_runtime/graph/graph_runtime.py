@@ -104,6 +104,11 @@ from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
 )
+from fred_runtime.runtime_support.trace_payloads import (
+    serialize_messages,
+    serialize_model_output,
+    to_langfuse_usage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -226,10 +231,6 @@ class _GraphNodeExecutionContext:
     # being buffered in _events, so the caller receives tokens in real time.
     _live_emit: Callable[[RuntimeEvent], None] | None = None
     _last_model_name: str | None = None
-    # Usage of the single most recent model call in this node — used for
-    # per-step attribution (TRACE-01: attached to each ToolCallRuntimeEvent
-    # a node emits, so a step shows only the call that triggered it).
-    _last_token_usage: dict[str, int] | None = None
     # Summed across every model call this node makes — a node can call the
     # model more than once (e.g. planning then acting) before invoking a
     # tool, and the node's real total is their sum, not just the last one.
@@ -270,7 +271,6 @@ class _GraphNodeExecutionContext:
         if model_name:
             self._last_model_name = model_name
         if token_usage:
-            self._last_token_usage = token_usage
             self._total_token_usage = sum_token_usage(
                 self._total_token_usage, token_usage
             )
@@ -527,6 +527,20 @@ class _GraphNodeExecutionContext:
                 )
                 if span is not None:
                     span.set_attribute("status", "ok")
+                    span.set_usage(
+                        model=captured_model_name,
+                        usage=to_langfuse_usage(captured_token_usage),
+                    )
+                    tracer = self.services.tracer
+                    if tracer is not None and tracer.captures_content:
+                        span.set_io(
+                            input=serialize_messages(messages),
+                            output=serialize_model_output(
+                                [accumulated]
+                                if isinstance(accumulated, BaseMessage)
+                                else []
+                            ),
+                        )
                 return accumulated
             except Exception:
                 if span is not None:
@@ -634,11 +648,6 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_ref,
                 call_id=call_id,
                 arguments=payload,
-                # Usage of the most recent model call recorded on this node
-                # (TRACE-01) — the same value `last_model_metadata` reads, not
-                # necessarily this specific call's own usage: a graph node can
-                # invoke several models before invoking a tool.
-                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -713,8 +722,6 @@ class _GraphNodeExecutionContext:
                 tool_name=tool_name,
                 call_id=call_id,
                 arguments=arguments,
-                # See invoke_tool() above — same caveat applies.
-                token_usage=self._last_token_usage,
             )
         )
         span = _start_runtime_span(
@@ -1296,23 +1303,25 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                         # Graceful error recovery: merge 'node_error' into state,
                         # emit a structured event, and continue at the declared
                         # fallback node instead of crashing the whole execution.
+                        error_message = str(node_exc).strip() or type(node_exc).__name__
+
                         logger.warning(
                             "[V2][GRAPH] Node %r raised; routing to on_error=%r. agent=%s error=%s",
                             node_id,
                             on_error_target,
                             self._definition.agent_id,
-                            node_exc,
+                            error_message,
                         )
                         if emit_event is not None:
                             emit_event(
                                 NodeErrorRuntimeEvent(
                                     sequence=0,
                                     node_id=node_id,
-                                    error_message=str(node_exc),
+                                    error_message=error_message,
                                     routed_to=on_error_target,
                                 )
                             )
-                        state = _merge_state(state, {"node_error": str(node_exc)})
+                        state = _merge_state(state, {"node_error": error_message})
                         node_id = on_error_target
                         continue
                     raise

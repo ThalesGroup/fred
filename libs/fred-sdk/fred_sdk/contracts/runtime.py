@@ -31,7 +31,17 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Any, Generic, List, Literal, Protocol, TypeAlias, TypeVar
+from typing import (
+    Annotated,
+    Any,
+    Final,
+    Generic,
+    List,
+    Literal,
+    Protocol,
+    TypeAlias,
+    TypeVar,
+)
 
 from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
@@ -194,10 +204,11 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     tool_name: str = Field(..., min_length=1)
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
-    # Usage of the model call that decided to make this tool call — the
-    # runtime's per-call `usage_metadata`, captured just before this event is
-    # emitted. None when the provider didn't report usage for that call.
-    token_usage: dict[str, int] | None = None
+    # NOTE (#2403): this event carries no token usage on purpose. It used to
+    # carry the usage of the model call that DECIDED the call, which the trace
+    # UI rendered on the tool row — reading as if the tool had consumed the
+    # whole prompt (17.5k tokens for a call that consumes none). A tool call
+    # costs nothing by itself, so the row shows latency only.
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):
@@ -310,7 +321,16 @@ class FinalRuntimeEvent(RuntimeEventBase):
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
     model_name: str | None = None
+    # Billed usage, summed across every model call of the turn. This is what
+    # the provider charges: a ReAct turn re-sends the whole context on each
+    # call, so the same history is legitimately counted once per call.
     token_usage: dict[str, int] | None = None
+    # Size of the context at the end of the turn — the `input_tokens` of the
+    # turn's LAST model call (#2403). Together with the previous turn's value
+    # this yields what a turn genuinely ADDED, as opposed to what it was
+    # billed: `new_input(T) = context_tokens(T) - (context_tokens(T-1) +
+    # output_tokens(T-1))`. None when no model call reported an input count.
+    context_tokens: int | None = None
     finish_reason: FinishReason | None = None
 
     # Same tolerant coercion as `ChatMetadata.finish_reason` (fred-core): a raw
@@ -678,6 +698,52 @@ class DocumentSearchPort(ABC):
         """
 
 
+class DocumentSimilarityPort(ABC):
+    """
+    Capability-safe targeted similarity / comparison search (KF-SIMILARITY-SEARCH).
+
+    The comparison counterpart of `DocumentSearchPort`: instead of answering a
+    question from wherever the corpus scope allows, it ranks the passages most
+    similar to an ANCHOR passage, restricted to documents named ON THE CALL.
+    That difference - where targeting lives - is the whole point. Conversational
+    search fixes its scope once per conversation; this is re-aimed per query,
+    which is what document-to-document comparison needs ("for THIS passage, find
+    the closest passage IN THAT document").
+
+    Same doctrine as `DocumentSearchPort` (RFC AGENT-CAPABILITY §3.8, §10):
+    scope parameters only, never a caller-supplied context, identity, or access
+    token - auth and identity come solely from the adapter's privately-captured
+    per-turn binding, and Knowledge Flow's per-document ReBAC is the real
+    authorization gate. The adapter still bounds `document_uids` by the session
+    binding's own scope, so naming a uid cannot widen past the conversation.
+
+    Returns `DocumentSearchResult` rather than a near-identical twin: the result
+    of both modes is the same thing - ranked `VectorSearchHit`s a capability
+    feeds to the model and rides on its tool artifact's `sources`.
+    """
+
+    @abstractmethod
+    async def find_similar(
+        self,
+        anchor: str,
+        *,
+        document_uids: Sequence[str],
+        top_k: int = 10,
+        rerank: bool = True,
+        min_score: float | None = None,
+    ) -> DocumentSearchResult:
+        """
+        Rank the passages most similar to `anchor` within `document_uids`,
+        best-first.
+
+        `document_uids` is REQUIRED and must be non-empty: an untargeted call is
+        a caller bug, not an invitation to search the whole corpus. `rerank`
+        runs the cross-encoder over the candidate pool; `min_score` drops
+        matches below a relevance threshold. Raises `DocumentPortCallError` on
+        transport failure.
+        """
+
+
 class AgentAssetPort(ABC):
     """
     Capability-safe storage for one agent instance's configuration assets
@@ -829,6 +895,28 @@ class DocumentPortCallError(Exception):
         self.status_code = status_code
 
 
+class DocumentScopeRefusedError(Exception):
+    """
+    Raised by a document port adapter when EVERY document the caller named lies
+    outside the conversation's scope, so nothing was searched.
+
+    Why this is not just an empty result: a comparison tool that answers "no
+    matches" when it never looked is worse than one that errors. The model has
+    no way to tell the two apart, reports "nothing in that document resembles
+    this passage", and the user believes it. Distinct from
+    `DocumentPortCallError` because nothing failed downstream - naming it that
+    would put a transport story ("the service returned...") on a scope decision
+    the adapter made locally.
+
+    `requested_uids` is what the model asked for, so the capability can tell it
+    which documents it may not reach.
+    """
+
+    def __init__(self, message: str, *, requested_uids: Sequence[str] = ()) -> None:
+        super().__init__(message)
+        self.requested_uids = tuple(requested_uids)
+
+
 class DocumentTreePort(ABC):
     """
     Capability-safe folder/document tree listing over the platform corpus
@@ -848,15 +936,18 @@ class DocumentTreePort(ABC):
         *,
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
         max_chars: int = 6000,
     ) -> DocumentTreeResult:
         """
         Return the caller's authorized folder/document tree as rendered text.
 
-        `library_tag_ids` is the capability's already-narrowed library scope
-        (None = "no capability-side narrowing"); the adapter further bounds it
-        by the session binding before calling Knowledge Flow, completing
-        `turn_option ⊆ capability_config ⊆ session_binding`. Raises
+        `library_tag_ids` / `document_uids` are the capability's already-narrowed
+        scope (None = "no capability-side narrowing at that level"); the adapter
+        further bounds them by the session binding before calling Knowledge Flow,
+        completing `turn_option ⊆ capability_config ⊆ session_binding`. A
+        document scope prunes the listing to those leaves and drops the folders
+        left empty, so a one-document selection renders one document. Raises
         `DocumentPortCallError` on transport failure.
 
         No business-label filtering here, deliberately: a folder tree renders
@@ -928,8 +1019,9 @@ class DocumentMarkdownResult(FrozenModel):
     - `DocumentSummaryResult` is a lossy overview — this is the document
       verbatim, nothing dropped;
     - `DocumentRawContent` is the original uploaded bytes (a PDF/DOCX blob the
-      model cannot read as text) — this is the markdown Knowledge Flow parsed at
-      ingestion (`output.md`), directly usable by the model.
+      model cannot read as text) — this is text the model can read directly:
+      the markdown Knowledge Flow parsed at ingestion (`output.md`) for a corpus
+      document, or a session attachment's own extracted text.
 
     Pagination is the whole point (it is why `document_summarize`'s "half
     answer" failure mode cannot recur here): `text` is one bounded window
@@ -947,14 +1039,17 @@ class DocumentMarkdownResult(FrozenModel):
 
 class DocumentMarkdownPort(ABC):
     """
-    Capability-safe paginated read of a corpus document's FULL parsed markdown
-    by uid (DOCREAD-01). Same doctrine as `DocumentSummarizePort`: takes SCOPE
+    Capability-safe paginated read of a document's FULL text by uid
+    (DOCREAD-01) — a corpus document's parsed markdown, or a session
+    attachment's text rebuilt from its vectors, resolved server-side under one
+    uid. Same doctrine as `DocumentSummarizePort`: takes SCOPE
     PARAMETERS only (the uid plus the page window) and NEVER a caller-supplied
     context, identity, or access token — auth/identity come solely from the
-    adapter's privately-captured per-turn binding, and Knowledge Flow's own
-    per-document ReBAC is the real authorization gate. Document uids are
-    internal working identifiers: tools use them freely but never surface them
-    to the end user.
+    adapter's privately-captured per-turn binding. Knowledge Flow is the real
+    authorization gate, per source: per-document ReBAC for a corpus document,
+    and chunk-level session ownership (`scope`/`user_id`) for an attachment,
+    which has no ReBAC tuple to check. Document uids are internal working
+    identifiers: tools use them freely but never surface them to the end user.
     """
 
     @abstractmethod
@@ -1012,6 +1107,83 @@ class DocumentExtractionPort(ABC):
         """
         Exhaustively extract every item matching `instruction` from the document.
         Raises `DocumentPortCallError` on transport failure.
+        """
+
+
+# Shared timeout band for `PlatformSqlPort.execute_read` (OPSCAP-01-PG). The
+# capability's config FieldSpec and the runtime adapter's server-side clamp
+# must read the same bounds (one shared source, never two derived views) —
+# the adapter still re-clamps because IT is the enforcement point.
+PLATFORM_SQL_TIMEOUT_DEFAULT_S: Final = 15.0
+PLATFORM_SQL_TIMEOUT_MIN_S: Final = 1.0
+PLATFORM_SQL_TIMEOUT_MAX_S: Final = 120.0
+
+
+class SqlQueryResult(FrozenModel):
+    """Typed result of one read-only platform SQL query (OPSCAP-01-PG).
+
+    `rows` are positional tuples aligned with `columns` (column names appear
+    once, never per row); the adapter caps rows server-side and sets
+    `row_limit_hit` when more rows existed than were returned.
+    """
+
+    columns: tuple[str, ...] = ()
+    rows: tuple[tuple[Any, ...], ...] = ()
+    row_limit_hit: bool = False
+
+
+class PlatformSqlPortError(Exception):
+    """
+    Typed execution failure raised by platform SQL port adapters.
+
+    Same doctrine as `DocumentPortCallError`: a failing SQL tool must surface
+    a clean `is_error` tool result carrying the server's own message (so the
+    agent can fix its query) without the capability importing the driver
+    stack. Adapters map driver/server errors onto this exception and keep the
+    message topology-free — the server's syntax/column/timeout text only,
+    never a DSN, host, or driver repr.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        timed_out: bool = False,
+        sqlstate: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+        self.sqlstate = sqlstate
+
+
+class PlatformSqlPort(ABC):
+    """
+    Capability-safe read-only SQL over the platform database (OPSCAP-01-PG).
+
+    Deliberately generic: nothing Postgres-, pool-, or policy-specific in the
+    contract — all enforcement (single statement by construction, READ ONLY
+    transaction, session-level read-only default, row cap, timeout clamp)
+    lives in the runtime adapter, reusable by any future capability wanting
+    read-only platform SQL and re-implementable against another backend. Same
+    doctrine as `DocumentSearchPort`: the port takes the SQL text and scope
+    parameters only — never a caller-supplied context, identity, credential,
+    or DSN; the pod's own database credentials stay private to the adapter.
+    """
+
+    @abstractmethod
+    async def execute_read(
+        self,
+        sql: str,
+        *,
+        timeout_s: float | None = None,
+    ) -> SqlQueryResult:
+        """
+        Execute exactly one read-only SQL statement and return its rows
+        (adapter-capped, `row_limit_hit` set when more existed). `timeout_s`
+        is clamped by the adapter to its allowed band; `None` means the
+        adapter default. Raises `PlatformSqlPortError` on any server/driver
+        failure (syntax error, rejected write, statement-timeout cancel),
+        carrying the server's message so the agent can self-correct.
         """
 
 
@@ -1080,6 +1252,17 @@ class RuntimeServices:
     # `document_extract` capability's single-call path. Same doctrine/optionality
     # as the other document ports.
     document_extraction: DocumentExtractionPort | None = None
+    # Targeted similarity / comparison search (KF-SIMILARITY-SEARCH): powers the
+    # `document_similarity` capability. Separate from `document_search` because
+    # targeting lives on the call rather than the conversation - see the port's
+    # docstring. Same doctrine/optionality as the other document ports.
+    document_similarity: DocumentSimilarityPort | None = None
+    # Read-only SQL over the platform database (OPSCAP-01-PG): powers the
+    # `platform_postgres` capability. Tier B — the adapter reuses the pod's own
+    # `storage.postgres` credentials on a dedicated small pool; read-only is
+    # enforced server-side in the adapter, never here. Appended after
+    # `document_similarity` for the same positional-safety reason noted above.
+    platform_sql: PlatformSqlPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

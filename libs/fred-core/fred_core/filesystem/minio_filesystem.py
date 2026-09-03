@@ -131,9 +131,14 @@ class MinioFilesystem(BaseFilesystem):
         resolved = self._resolve_path(path)
         logger.info("[MINIO_READ] bucket=%s path=%s", self.bucket_name, resolved)
         obj = self.client.get_object(self.bucket_name, resolved)
-        data = obj.read()
-        obj.close()
-        return data
+        try:
+            return obj.read()
+        finally:
+            # release_conn() — not just close() — returns the urllib3 connection to
+            # the pool. Without it every read leaks a connection; after a few (e.g.
+            # a multi-file zip download) the pool is exhausted and later reads fail.
+            obj.close()
+            obj.release_conn()
 
     async def write(self, path: str, data: bytes | str) -> None:
         """

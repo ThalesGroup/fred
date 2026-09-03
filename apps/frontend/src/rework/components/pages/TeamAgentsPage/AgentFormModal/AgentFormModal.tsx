@@ -99,6 +99,66 @@ function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
 }
 
 /**
+ * The capability ids `template` advertises to THIS team.
+ *
+ * Server-side, `available_capabilities` is already filtered to what the team
+ * `can_use` (CAPAB-01), so this set doubles as the authorization boundary: an
+ * admin-gated capability the team is not enabled for is simply absent. Both
+ * the default seeding and the submit payload narrow through it, so the two
+ * cannot drift apart.
+ */
+function advertisedCapabilityIds(template: AgentTemplateSummary | undefined): Set<string> {
+  return new Set((template?.available_capabilities ?? []).map((cap) => cap.id));
+}
+
+/**
+ * The capabilities a NEW instance of `template` starts with ticked: its
+ * declared defaults, narrowed to what it advertises to this team.
+ *
+ * Because `advertisedCapabilityIds` is already `can_use`-filtered, a default
+ * the team is not enabled for is neither seeded nor rendered — there is no
+ * pre-ticked box the save would 403 on, and no second authorization signal is
+ * needed on the wire.
+ *
+ * Why this exists at all: the form always submits an explicit `capability_ids`
+ * for a template that has capabilities, and the backend reads an explicit `[]`
+ * as "none" — which bypasses its own template-default path. Seeding here is
+ * what makes a template's declared defaults actually reach a new instance.
+ */
+export function defaultCapabilitySelection(template: AgentTemplateSummary | undefined): string[] {
+  const advertised = advertisedCapabilityIds(template);
+  return (template?.default_capability_ids ?? []).filter((capabilityId) => advertised.has(capabilityId));
+}
+
+/**
+ * The reasoning settings a NEW instance of `template` starts with (#2473):
+ * whether its Reasoning card is pre-ticked (REASON-01 level 3) and whether the
+ * nested "start conversations in Boost" switch is pre-set (Amendment B).
+ *
+ * Deliberately NOT narrowed by platform state, mirroring the card it seeds.
+ * The Reasoning card is rendered unconditionally in `AgentFormBody` and the
+ * form never reads `reasoning_enabled_model_ids`; levels 1-2 are enforced live
+ * on the send path, where an agent that offers reasoning on a deployment with
+ * no reasoning-enabled model simply gets no composer control. Suppressing the
+ * pre-tick here instead would make it vanish based on platform state invisible
+ * from this form — the "I turned it on and nothing happened" confusion the
+ * absent-not-inert rule exists to prevent.
+ *
+ * A seed, not a lock: the operator can untick either before saving, and both
+ * are submitted explicitly on create, so this is what makes a template's
+ * declared reasoning defaults actually reach a new instance.
+ */
+export function defaultReasoningSelection(template: AgentTemplateSummary | undefined): {
+  reasoningEnabled: boolean;
+  reasoningDefaultOn: boolean;
+} {
+  return {
+    reasoningEnabled: template?.reasoning_enabled ?? false,
+    reasoningDefaultOn: template?.reasoning_default_on ?? false,
+  };
+}
+
+/**
  * Builds the submit payload using the selected template contract so stale
  * capability keys from previous UI versions cannot leak into create or edit
  * requests.
@@ -110,7 +170,7 @@ export function buildAgentFormSubmitPayload(
   // Only active capabilities are advertised by the template; drop selections and
   // config slices for ids the template no longer exposes, and for capabilities
   // that are not currently ticked, so deselected config never reaches the pod.
-  const availableCapabilityIds = new Set((selectedTemplate?.available_capabilities ?? []).map((cap) => cap.id));
+  const availableCapabilityIds = advertisedCapabilityIds(selectedTemplate);
   const effectiveCapabilityIds = form.selectedCapabilityIds.filter((id) => availableCapabilityIds.has(id));
   const effectiveCapabilityConfig = Object.fromEntries(
     Object.entries(form.capabilityConfigValues).filter(([id]) => effectiveCapabilityIds.includes(id)),
@@ -251,10 +311,12 @@ export default function AgentFormModal({
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       usageStatement: "",
-      reasoningEnabled: false,
-      reasoningDefaultOn: false,
+      // #2473: seeded from the template like `selectedCapabilityIds` below,
+      // instead of the hardcoded `false` pair that made a template's declared
+      // reasoning defaults unreachable.
+      ...defaultReasoningSelection(tpl),
       tuningValues: defaultTuningValues,
-      selectedCapabilityIds: [],
+      selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
       capabilityAssetFiles: {},
       capabilityBlockingErrors: {},

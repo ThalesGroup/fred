@@ -15,26 +15,28 @@
 // PPT-filler preview routing state.
 //
 // The `ppt_preview` chat part lives in the message stream; this slice holds the
-// small cross-component UI state the side panel and the chat cards share:
+// one piece of cross-component UI state the side panel and the chat cards share:
+// which deck the pane should render. A chat-part renderer sits far from the panel
+// host in the tree, so Redux replaces prop-drilling (mirrors writableDocumentSlice).
 //
-//   - `current`      — the preview the pane should render right now.
-//   - `openRequestId`— a monotonic counter. Bumping it is the signal for the chat
-//                      page to OPEN the ppt_filler side panel (the host owns the
-//                      column's open/closed state; a slice value can't call it, so
-//                      the page subscribes to this counter and opens on change).
-//
-// Mirrors the Kea `usePptPreview` hook's open/select behaviour, but as Redux state
-// so a chat-part renderer (which is far from the panel host in the tree) can drive
-// the panel without prop-drilling.
+// Opening the panel is NOT this slice's job: the card dispatches the
+// capability-agnostic `requestSidePanelOpen` for that, and the chat page stays the
+// single open-state authority.
 
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { PptPreviewPartData } from "./types";
 
 export interface PptPreviewState {
-  /** The preview the side panel should render, or null before any deck exists. */
+  /** The conversation this state belongs to; a write from another one replaces it. */
+  sessionId: string | null;
+  /**
+   * The deck the pane renders. Only an explicit open moves it: the pane keys its
+   * pdf.js worker on this value, and that lifecycle does not survive a value that
+   * churns with re-renders.
+   */
   current: PptPreviewPartData | null;
-  /** Monotonic; incrementing it asks the chat page to open the ppt_filler panel. */
-  openRequestId: number;
+  /** This conversation produced at least one deck (drives the launcher). */
+  produced: boolean;
 }
 
 // Local root-state shape — avoids a circular import with common/store.tsx. The
@@ -43,46 +45,51 @@ interface PptPreviewRootState {
   pptPreview: PptPreviewState;
 }
 
-const initialState: PptPreviewState = { current: null, openRequestId: 0 };
+const initialState: PptPreviewState = { sessionId: null, current: null, produced: false };
+
+/** A write from another conversation starts that conversation's state from scratch. */
+function rebase(state: PptPreviewState, sessionId: string): void {
+  if (state.sessionId === sessionId) return;
+  state.sessionId = sessionId;
+  state.current = null;
+  state.produced = false;
+}
 
 export const pptPreviewSlice = createSlice({
   name: "pptPreview",
   initialState,
   reducers: {
     /**
-     * Select this preview AND request the panel to open (bumps `openRequestId`).
-     * Dispatched by a card's "Open preview" button and by the card auto-open
-     * heuristic when a freshly filled deck arrives live.
+     * Every rendered card registers its deck, history replay included: that is how
+     * the launcher knows this conversation produced one. It seeds `current` only
+     * while the pane has nothing, so later re-renders cannot move what it shows.
      */
-    openPreview(state, action: PayloadAction<PptPreviewPartData>) {
-      state.current = action.payload;
-      state.openRequestId += 1;
+    registerPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {
+      rebase(state, action.payload.sessionId);
+      state.produced = true;
+      if (state.current === null) state.current = action.payload.preview;
     },
 
-    /**
-     * Update the current preview WITHOUT requesting an open — e.g. a re-fill of a
-     * deck whose panel is already open. The panel remounts on the new `version`;
-     * the open request is not re-fired so a closed panel stays closed.
-     */
-    setPreview(state, action: PayloadAction<PptPreviewPartData>) {
-      state.current = action.payload;
-    },
-
-    /** Clear the current preview (e.g. on session switch). */
-    clearPreview(state) {
-      state.current = null;
+    /** Show this deck in the pane - a card's Open button, or a live fill. */
+    openPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {
+      rebase(state, action.payload.sessionId);
+      state.produced = true;
+      state.current = action.payload.preview;
     },
   },
 });
 
-export const { openPreview, setPreview, clearPreview } = pptPreviewSlice.actions;
+export const { registerPreview, openPreview } = pptPreviewSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
-/** The preview the side panel should render, or null. */
+/** The deck the pane should render, whichever conversation it came from. */
 export const selectCurrentPreview = (state: PptPreviewRootState): PptPreviewPartData | null => state.pptPreview.current;
 
-/** The open-request counter the chat page subscribes to. */
-export const selectPptOpenRequestId = (state: PptPreviewRootState): number => state.pptPreview.openRequestId;
+/** Did the registered conversation produce a deck at all? */
+export const selectPptPreviewProduced = (state: PptPreviewRootState): boolean => state.pptPreview.produced;
+
+/** The conversation this state belongs to, or null. */
+export const selectPptPreviewSessionId = (state: PptPreviewRootState): string | null => state.pptPreview.sessionId;
 
 export default pptPreviewSlice.reducer;

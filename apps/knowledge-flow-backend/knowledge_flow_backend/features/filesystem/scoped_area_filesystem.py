@@ -70,13 +70,17 @@ class ScopedAreaFilesystem:
     - one router keeps the public MCP service thin and the permission rules in one place
 
     Permission model (the team box is sealed by ReBAC):
-    - **enter the box:** `CAN_READ` on the team is required to touch anything under it
-    - **`shared/`:** read needs `CAN_READ`; write/delete/mkdir need `CAN_UPDATE_RESOURCES`
+    - **enter the box:** `CAN_ACCESS_FILES` (real membership) is required to touch
+      anything under it. Deliberately not `CAN_READ`: a PUBLIC team grants that
+      to everyone through `public`, so marketplace visibility would double as
+      file access.
+    - **`shared/`:** read needs `CAN_ACCESS_FILES`; write/delete/mkdir need
+      `CAN_UPDATE_RESOURCES`
     - **`users/{uid}/`:** the path uid MUST equal the acting user (personal-in-team)
     - **`agents/{agent_id}/users/{uid}/`:** same ownership rule as `users/`
     - **`agents/{agent_id}/config/`:** agent-config assets (#1903) — read needs
-      `CAN_READ` (any member chatting with the agent fetches them); write/delete
-      need `CAN_UPDATE_RESOURCES`, same as `shared/`
+      `CAN_ACCESS_FILES` (any member chatting with the agent fetches them);
+      write/delete need `CAN_UPDATE_RESOURCES`, same as `shared/`
 
     The acting `team_id` always arrives as the first path segment (injected upstream from
     the verified session context); this router never derives it from agent-supplied state.
@@ -109,8 +113,8 @@ class ScopedAreaFilesystem:
         self,
         user: KeycloakUser,
     ) -> List[FilesystemResourceInfoResult]:
-        """List the team ids the user can read, as `/teams` directory entries."""
-        readable_refs = await self.rebac.lookup_user_resources(user, TeamPermission.CAN_READ)
+        """List the team ids whose filesystem the user may enter, as `/teams` entries."""
+        readable_refs = await self.rebac.lookup_user_resources(user, TeamPermission.CAN_ACCESS_FILES)
         if isinstance(readable_refs, RebacDisabledResult):
             return []
         readable_ids = sorted({ref.id for ref in readable_refs if ref.id})
@@ -146,15 +150,16 @@ class ScopedAreaFilesystem:
         Raises FileNotFoundError for directory-only / malformed paths and PermissionError
         when the caller lacks the required team permission or owns a different uid.
 
-        `check_membership` may be set False by callers that already verified `CAN_READ` on
-        the team (e.g. listing/grep fan-out), to avoid a redundant ReBAC round-trip.
+        `check_membership` may be set False by callers that already verified
+        `CAN_ACCESS_FILES` on the team (e.g. listing/grep fan-out), to avoid a redundant
+        ReBAC round-trip.
         """
         if not segments:
             raise FileNotFoundError("Team path must include a team id")
         team_id = segments[0]
         # Box-entry gate: membership is required to touch anything in the team.
         if check_membership:
-            await self._ensure_team(user, team_id, TeamPermission.CAN_READ)
+            await self._ensure_team(user, team_id, TeamPermission.CAN_ACCESS_FILES)
         if len(segments) < 2:
             raise FileNotFoundError(f"/{AREA_TEAMS}/{team_id} is a directory")
 
@@ -208,7 +213,7 @@ class ScopedAreaFilesystem:
             return await self._list_readable_teams(user)
 
         team_id = segments[0]
-        await self._ensure_team(user, team_id, TeamPermission.CAN_READ)
+        await self._ensure_team(user, team_id, TeamPermission.CAN_ACCESS_FILES)
 
         if len(segments) == 1:
             return [dir_entry(SUBAREA_USERS), dir_entry(SUBAREA_SHARED), dir_entry(SUBAREA_AGENTS)]
@@ -243,7 +248,7 @@ class ScopedAreaFilesystem:
             return dir_entry(AREA_TEAMS)
 
         team_id = segments[0]
-        await self._ensure_team(user, team_id, TeamPermission.CAN_READ)
+        await self._ensure_team(user, team_id, TeamPermission.CAN_ACCESS_FILES)
         if len(segments) == 1:
             return dir_entry(team_id)
 
@@ -429,7 +434,7 @@ class ScopedAreaFilesystem:
             return matches
 
         team_id = segments[0]
-        await self._ensure_team(user, team_id, TeamPermission.CAN_READ)
+        await self._ensure_team(user, team_id, TeamPermission.CAN_ACCESS_FILES)
         sub = segments[1] if len(segments) > 1 else None
 
         # Fan out the broad cases into the caller's allowed scopes only.

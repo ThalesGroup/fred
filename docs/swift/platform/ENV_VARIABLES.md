@@ -68,8 +68,10 @@ Note:
 | --------------------- | ------------ | ----------------------------------------------------------------- |
 | `LANGFUSE_PUBLIC_KEY` | agentic      | Langfuse public key.                                              |
 | `LANGFUSE_SECRET_KEY` | agentic      | Langfuse secret key.                                              |
-| `LANGFUSE_HOST`       | agentic      | Langfuse host URL used by current runtime code.                   |
+| `LANGFUSE_HOST`       | agentic      | Langfuse host URL used by current runtime code. Read by the Langfuse SDK itself — when unset the SDK silently defaults to Langfuse Cloud, so a local server receives nothing. |
 | `LANGFUSE_BASE_URL`   | agentic      | Legacy naming in template; current runtime reads `LANGFUSE_HOST`. |
+| `LANGFUSE_CAPTURE_CONTENT` | agentic | **Local debugging only.** Exports prompts, model answers, and tool payloads to Langfuse, overriding `observability.langfuse.capture_content`. Breaks the content exclusion of `OBSERVABILITY-AND-AUDIT.md` §7 — never set on a shared or production deployment. Default off. |
+| `LANGFUSE_MAX_CONTENT_CHARS` | agentic | Total characters exported per payload when content capture is on (default 100000), overriding `observability.langfuse.max_content_chars`. Raise it when traces show `…[truncated N chars]`. Only knob that works when `tracer` is not `langfuse` but credentials are present, since `build_default_tracer` never reads configuration.yaml. |
 
 ## 2) Startup Configuration and Feature-Switch Variables
 
@@ -131,6 +133,9 @@ These variables are important but are not Fred-owned switches in the same sense 
 | `VITE_BACKEND_URL_KNOWLEDGE`     | frontend runtime config               | Knowledge-flow URL override in frontend.                                                                                         |
 | `VITE_BACKEND_URL_CONTROL_PLANE` | frontend runtime config               | Control-plane URL override in frontend.                                                                                          |
 | `VITE_WEBSOCKET_URL`             | frontend runtime config               | Websocket URL override in frontend.                                                                                              |
+| `FRONTEND_ENABLE_APPLICATIONS`   | derived frontend server runtime config | Strict `true`/`false` switch for `/apps` and `/app-services`; defaults to `false`. The Fred Helm chart derives it from control-plane `platform.frontend.feature_flags.enableApplications`, which remains the one authoritative deployment setting. Set it directly only for local or standalone-container parity. |
+| `FRONTEND_APPLICATIONS_JSON`     | frontend server runtime config        | Server-side JSON array registering the applications this deployment serves: `app_id`, `ui_upstream` (required, proxied at `/apps/<app_id>/`), optional `service_upstream` (proxied at `/app-services/<app_id>/`), and `service_required`. Never exposed as browser configuration. |
+| `FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE` | frontend server runtime config | Max request-body size nginx accepts on `/app-services/<app_id>/`; positive nginx size, defaults to `10m`, rejected at startup if malformed. Each application service must enforce its own equal-or-smaller limit. |
 
 ### 3.2 Declared But Not Currently Consumed In Active Runtime Code
 

@@ -123,7 +123,7 @@ export default function ReleaseNotesContent() {
           <ButtonGroup
             items={tabItems}
             size="small"
-            color="primary"
+            color="secondary"
             variant="tabs"
             aria-label={t("rework.releaseNotes.versionsAria")}
           />

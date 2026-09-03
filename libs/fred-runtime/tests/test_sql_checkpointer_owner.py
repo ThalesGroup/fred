@@ -27,11 +27,13 @@ All tests are offline — a temporary SQLite database, no external services.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+from fred_sdk.contracts.context import ToolContentKind
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy import (
@@ -177,6 +179,29 @@ async def test_injected_identity_not_leaked_into_checkpoint_metadata(checkpointe
     assert tuple_ is not None
     assert "__fred_user_id" not in tuple_.metadata
     assert "__fred_team_id" not in tuple_.metadata
+
+
+@pytest.mark.asyncio
+async def test_tool_content_kind_round_trips_without_msgpack_warning(
+    checkpointer, caplog
+):
+    # ToolContentKind (fred_sdk.contracts.context) must be msgpack-allowlisted
+    # alongside its pre-rename path, or LangGraph blocks deserialization on load.
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"]["tool_kind"] = ToolContentKind.TEXT
+    checkpoint["channel_versions"]["tool_kind"] = 1
+
+    with caplog.at_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus"):
+        await checkpointer.aput(
+            _config("thread-tool-kind"), checkpoint, {}, {"tool_kind": 1}
+        )
+        tuple_ = await checkpointer.aget_tuple(_config("thread-tool-kind"))
+
+    assert tuple_ is not None
+    assert tuple_.checkpoint["channel_values"]["tool_kind"] == ToolContentKind.TEXT
+    assert not any(
+        "Blocked deserialization" in record.message for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio

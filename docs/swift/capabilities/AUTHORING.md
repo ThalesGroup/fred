@@ -59,6 +59,7 @@ Contract surface (import from here, never re-declare):
 | `libs/fred-runtime/fred_runtime/capabilities/document_access/` (`DocumentAccessCapability`, #1906) | **Canonical real capability**: three live tools (vector search, `list_document_tree`, `summarize_document`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree` / `document_summarize`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial. Implements `tools()` — works on ReAct and Graph agents. |
 | `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. Its own tool loading is a separate, pre-existing path (`FredMcpToolProvider`) already common to ReAct and Graph — it legitimately overrides `middleware()` only for its prompt fragment. |
 | `libs/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. Implements only `middleware()` (its tool schema is built per turn from the parsed template — a genuine ReAct-specific need) and declares `execution_models=("react",)` — selecting it on a Graph agent fails loudly at assembly rather than silently contributing nothing. |
+| `libs/fred-capability-platform-ops/` (`PlatformPostgresCapability`, #2458) | **First capability package of the admin-ops family** (same `libs/fred-capability-*` packaging as `ppt-filler`): two tools (`postgres_list_tables`, `postgres_run_query`) reaching the platform database through the typed `RuntimeServices.platform_sql` port (`PlatformSqlPort`, fred-sdk) — Tier B credentials never enter the package; transport/server failures rendered as `is_error` tool results via the SDK-typed `PlatformSqlPortError`. Implements `tools()` only — works on ReAct and Graph agents. |
 
 ---
 
@@ -233,6 +234,36 @@ fall back to a generic capability icon in the admin catalog.
 
 ---
 
+## Ships a side panel? Declare its launcher (#2459)
+
+A side panel is declared in the capability's frontend plugin
+(`apps/frontend/src/rework/features/capabilities/<id>/plugin.ts`), keyed by the
+manifest's `SidePanelSpec.widget`. The value is a spec, not a bare component:
+
+```ts
+sidePanels: {
+  ppt_preview_pane: { Component: PptPreviewPane, icon: "slideshow", useHasContent: useHasPptPreview },
+},
+```
+
+- `icon` - the glyph of the panel's launcher in the chat page's floating rail, from
+  the same `materialIcons` set as the manifest icon above. Reuse the glyph the
+  capability's own chat card and pane header already carry, so the launcher reads as
+  the same thing they open (`slideshow` for the ppt_filler deck, `edit_document` for
+  the writable_document editor).
+- `useHasContent` - a hook answering "does this panel have anything to show for the
+  OPEN conversation?". Omit it and the launcher is always offered; a capability that
+  produces something on demand should implement it, or every session that merely
+  ACTIVATES the capability gets a button onto an empty panel. Scope the answer to the
+  conversation in the URL - capability slices are global, so state from a previous
+  conversation otherwise lights the launcher up on a fresh chat. Read the id with
+  `useOpenSessionId()` (`features/capabilities/useOpenSessionId.ts`), and answer from
+  the capability's own list endpoint when it has one: `writable_document` does, so its
+  launcher is right as soon as the conversation loads, while `ppt_filler` has to wait
+  for its chat cards to render and register their deck.
+
+---
+
 ## Ships a router? Regenerate its API slice (#1979)
 
 A capability whose manifest declares a `router` gets its own OpenAPI doc and its own
@@ -245,6 +276,23 @@ cd apps/frontend && make update-<id>-capability-api    # e.g. update-demo-echo-c
 
 The generated slice + dumped schema are `.prettierignore`d (see `apps/frontend/Makefile`
 and `apps/frontend/.prettierignore`). Never hand-edit them.
+
+**Skip every query until the capability is routed.** `createCapabilityBaseQuery`
+resolves the pod's base URL from `capabilityRoutingSlice` at request time and fails
+loudly when it is not there yet. On a hard page load that answer lands after the
+first render, so a query fired too early gets its failure cached against args that
+never change again - the capability then looks empty for the whole page load, while a
+client-side navigation into the same page works (routing is already in the store).
+Guard every hook on the capability's own API:
+
+```ts
+const routed = useCapabilityRouted(CAPABILITY_ID);
+const { currentData } = useListThingsQuery({ sessionId }, { skip: !sessionId || !routed });
+```
+
+Prefer `currentData` over `data` for anything scoped to the open conversation: `data`
+deliberately keeps the last resolved result across an arg change, so on a session
+switch it answers for the conversation the user just left.
 
 ---
 

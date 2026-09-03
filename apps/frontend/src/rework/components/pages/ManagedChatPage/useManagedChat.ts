@@ -35,6 +35,7 @@ import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
+import type { AttachmentSource } from "@rework/types/attachments";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -468,7 +469,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, [bindSessionId, composer.bindSession, createSessionRow, sessionId]);
 
   const handleAddAttachments = useCallback(
-    (files: File[], source: "picker" | "drop") => {
+    (files: File[], source: AttachmentSource) => {
       const sid = ensureSessionForAttachments();
       void attachments.addFiles(files, source, sid);
     },

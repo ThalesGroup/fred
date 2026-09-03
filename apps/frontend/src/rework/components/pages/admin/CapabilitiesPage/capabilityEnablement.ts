@@ -18,6 +18,10 @@
 
 import type { CapabilityEnablementItem, FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
+/** The subset of i18next's `t` these helpers need — keeps this module free of
+ * a react-i18next import, so it stays testable without a provider. */
+type TFunc = (key: string, options?: { defaultValue?: string }) => string;
+
 /**
  * Per-team enablement state for one capability (RFC §8.5 tri-state).
  *
@@ -47,6 +51,149 @@ export function teamCapabilityState(capability: EnablementFacts, teamId: string)
 /** Whether the capability is effectively active for the team (explicit or inherited). */
 export function isCapabilityOnForTeam(capability: EnablementFacts, teamId: string): boolean {
   return teamCapabilityState(capability, teamId) !== "off";
+}
+
+/**
+ * Whether this capability carries a REQUIRED team setting (#2408).
+ *
+ * Mirrors the backend's `team_settings_has_required_fields` (`enablement.py`):
+ * such a capability can be neither default-on nor class-enabled for all
+ * personal spaces, because nobody has filled the settings for the teams that
+ * would inherit it (RFC §8.2/§8.4) — both writes 409. Surfaced here so the
+ * admin controls can be disabled with an explanation instead of failing.
+ */
+export function requiresTeamSettings(capability: Pick<CapabilityEnablementItem, "team_settings_fields">): boolean {
+  return (capability.team_settings_fields ?? []).some((field) => field.required);
+}
+
+/**
+ * The `default_capability_ids` of a `kind="agent"` capability that the team
+ * cannot use yet — the client-side mirror of `enablement.py`'s
+ * `agent_capability_missing_dependencies` (RFC §8.6 `depends_on` gate, #2004
+ * item 5). A non-empty answer is exactly what makes the enable write 409
+ * (#2408), so the drawer can disable the grant and name the blockers up front.
+ *
+ * **Fails open on an unknown dependency**: an id with no row in
+ * `allCapabilities` is skipped rather than counted as missing. A dependency
+ * can be absent (a pod stopped advertising it, a stale client), and the
+ * backend remains the sole authority — blocking on a row we cannot evaluate
+ * would forbid a grant the server would happily accept.
+ *
+ * Known asymmetry, accepted: the backend counts an id with no ReBAC grant at
+ * all as missing, so a template declaring a default capability no pod
+ * advertises 409s for every team while this returns `[]` and the row stays
+ * enabled-looking. The click is still explained — with no locally-known
+ * blockers the toast falls through to the backend's own sentence, which names
+ * the offending ids. Guessing "missing" from an absent row would instead
+ * block every legitimate grant the moment the list is incomplete.
+ */
+export function missingAgentDependenciesForTeam(
+  capability: Pick<CapabilityEnablementItem, "kind" | "default_capability_ids">,
+  allCapabilities: CapabilityEnablementItem[],
+  teamId: string,
+): string[] {
+  if (capability.kind !== "agent") {
+    return [];
+  }
+  const missing: string[] = [];
+  for (const depId of capability.default_capability_ids ?? []) {
+    const dep = allCapabilities.find((candidate) => candidate.id === depId);
+    if (!dep) continue;
+    if (teamCapabilityState(dep, teamId) === "off") {
+      missing.push(depId);
+    }
+  }
+  return missing;
+}
+
+/**
+ * Personal-class counterpart of `missingAgentDependenciesForTeam`, mirroring
+ * `_require_agent_capability_dependencies_usable_by_all_personal_spaces`
+ * (`enablement.py`): there is no single team to evaluate, so a dependency
+ * counts as usable only when it has ORG-level personal access — `personal_on`
+ * or `default_on`, and not `personal_disabled`. Same fail-open rule for an
+ * unknown dependency id.
+ */
+export function missingAgentDependenciesForPersonalSpaces(
+  capability: Pick<CapabilityEnablementItem, "kind" | "default_capability_ids">,
+  allCapabilities: CapabilityEnablementItem[],
+): string[] {
+  if (capability.kind !== "agent") {
+    return [];
+  }
+  const missing: string[] = [];
+  for (const depId of capability.default_capability_ids ?? []) {
+    const dep = allCapabilities.find((candidate) => candidate.id === depId);
+    if (!dep) continue;
+    const scope = capabilityPersonalScopeChoice(dep);
+    const usable = (scope === "enabled" || dep.default_on) && scope !== "disabled";
+    if (!usable) {
+      missing.push(depId);
+    }
+  }
+  return missing;
+}
+
+/**
+ * The `default_capability_ids` of a `kind="agent"` capability that are not
+ * themselves platform-wide `default_on` — the client mirror of
+ * `agent_capability_missing_platform_dependencies` (`enablement.py`), the
+ * third face of the `depends_on` gate (RFC §8.6, #2470).
+ *
+ * `default_on` is the only satisfying marker, deliberately stricter than the
+ * personal-space variant above: default-on reaches every team, present and
+ * future, so a dependency merely granted to the teams that exist today would
+ * still leave tomorrow's team inheriting a template it cannot use.
+ *
+ * Same fail-open-on-unknown-row rule as its two siblings: an id with no row in
+ * `allCapabilities` is skipped rather than counted missing — the backend stays
+ * the sole authority, and blocking on a row we cannot evaluate would forbid a
+ * toggle the server would accept.
+ */
+export function missingAgentDependenciesForPlatform(
+  capability: Pick<CapabilityEnablementItem, "kind" | "default_capability_ids">,
+  allCapabilities: CapabilityEnablementItem[],
+): string[] {
+  if (capability.kind !== "agent") {
+    return [];
+  }
+  const missing: string[] = [];
+  for (const depId of capability.default_capability_ids ?? []) {
+    const dep = allCapabilities.find((candidate) => candidate.id === depId);
+    if (!dep) continue;
+    if (!dep.default_on) {
+      missing.push(depId);
+    }
+  }
+  return missing;
+}
+
+/**
+ * Human-readable name for one capability row. Catalog `name`s are i18n keys
+ * for first-party capabilities and plain strings for out-of-tree ones, so the
+ * key is looked up with itself as the default value.
+ *
+ * Takes `t` rather than calling `useTranslation`: this module is deliberately
+ * framework-free so the enablement rules stay unit-testable without rendering.
+ */
+export function capabilityLabel(t: TFunc, capability: Pick<CapabilityEnablementItem, "name">): string {
+  return t(capability.name, { defaultValue: capability.name });
+}
+
+/**
+ * Comma-joined labels for a list of dependency ids, for the hints and the
+ * "Enable all" dialog. Dependency ids are opaque, so they have to be resolved
+ * to what the admin actually sees in the catalog; an id with no row falls back
+ * to the raw id — the same fail-open direction the three
+ * `missingAgentDependencies*` predicates take.
+ */
+export function dependencyLabels(t: TFunc, ids: string[], allCapabilities: CapabilityEnablementItem[]): string {
+  return ids
+    .map((depId) => {
+      const dep = allCapabilities.find((candidate) => candidate.id === depId);
+      return dep ? capabilityLabel(t, dep) : depId;
+    })
+    .join(", ");
 }
 
 /**

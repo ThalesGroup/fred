@@ -20,6 +20,13 @@ port and differ only in tool intent and how the pagination footer is worded, so
 the config model, length resolution, error shaping, and page-to-tool-result
 formatting live here once.
 
+`document_tool_failure` has outgrown that pair - `document_similarity` uses it
+too, since the error shaping is about the document ports in general, not about
+paginated reading. It stays here rather than moving to a new module: two other
+capabilities (`document_access`, `document_summarize`) still carry their own
+private copies, and folding all four into one home is a cleanup of its own, not
+something to smuggle into a feature change.
+
 Doctrine (RFC §3.5, §3.8, §10), identical to `document_summarize`:
 - the capability reaches the platform ONLY through the typed
   `RuntimeServices.document_markdown` port; the per-turn binding and the raw
@@ -39,7 +46,10 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.runtime import DocumentMarkdownResult
+from fred_sdk.contracts.runtime import (
+    DocumentMarkdownResult,
+    DocumentScopeRefusedError,
+)
 from pydantic import BaseModel, Field
 
 _KF_SERVICE = "Knowledge Flow"
@@ -136,6 +146,35 @@ def document_tool_failure(
     )
 
 
+def document_scope_refusal(
+    *,
+    tool_ref: str,
+    action: str,
+    exc: DocumentScopeRefusedError,
+) -> tuple[str, ToolInvocationResult]:
+    """Shape a turn-scope refusal for the model — never as a service failure.
+
+    Nothing failed downstream: the user narrowed this turn to a selection the
+    named document is not in. Told as a transport error the model retries;
+    told as an empty result it reports the document as empty.
+    """
+
+    uids = ", ".join(exc.requested_uids) or "that document"
+    message = (
+        f"Cannot {action} ({uids}): the user has restricted this conversation to "
+        "a specific set of documents, and this one is not in it. Nothing was "
+        "read - this is NOT an empty or unreadable document. Work from a "
+        "document that is in scope (search and the document tree return exactly "
+        "those), or tell the user the document they mean is outside the current "
+        "selection. Never repeat the identifier to the user."
+    )
+    return message, ToolInvocationResult(
+        tool_ref=tool_ref,
+        is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+    )
+
+
 def _pagination_footer(result: DocumentMarkdownResult, *, exhaustive: bool) -> str:
     """Machine-readable page/continuation banner appended to the tool content.
 
@@ -194,12 +233,14 @@ async def read_document_page(
         )
 
     started = time.monotonic()
+    action = "extract from the document" if exhaustive else "read the document"
     try:
         result = await port.fetch_markdown(
             document_uid, offset=offset, max_chars=max_chars
         )
+    except DocumentScopeRefusedError as exc:
+        return document_scope_refusal(tool_ref=tool_ref, action=action, exc=exc)
     except Exception as exc:
-        action = "extract from the document" if exhaustive else "read the document"
         return document_tool_failure(
             tool_ref=tool_ref,
             action=action,

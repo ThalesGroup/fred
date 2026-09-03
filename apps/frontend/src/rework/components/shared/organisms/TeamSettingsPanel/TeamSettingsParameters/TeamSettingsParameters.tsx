@@ -15,6 +15,7 @@
 import styles from "./TeamSettingsParameters.module.scss";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -38,8 +39,13 @@ interface TeamSettingsParametersProps {
 }
 
 interface TeamSettingsParametersForm {
+  name: string;
   description: string;
 }
+
+// Mirrors `UpdateTeamRequest.name` server-side, so the field cannot submit a
+// value the backend would reject on length alone.
+const MAX_TEAM_NAME_LENGTH = 180;
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -60,15 +66,28 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   // The image the user just picked, pending crop. Non-null opens the editor.
   const [cropFile, setCropFile] = useState<File | null>(null);
 
-  const { register, getValues, watch, reset } = useForm<TeamSettingsParametersForm>({
+  // Set by a failed rename only; the field's own value is form state.
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+
+  const { register, getValues, watch, setValue } = useForm<TeamSettingsParametersForm>({
     defaultValues: {
+      name: team.name,
       description: team.description || "",
     },
   });
 
+  // Each field re-syncs on its own value, never through a shared `reset`:
+  // saving the description refetches the whole team, and a reset would wipe a
+  // rename the user had typed but not submitted yet.
   useEffect(() => {
-    reset({ description: team.description || "" });
-  }, [team.description, reset]);
+    setValue("description", team.description || "");
+  }, [team.description, setValue]);
+
+  useEffect(() => {
+    setValue("name", team.name);
+    setRenameError(null);
+  }, [team.name, setValue]);
 
   const handleSaveDescription = () => {
     const newDescription = getValues().description;
@@ -81,6 +100,39 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
   const descriptionValue = watch("description");
+
+  // A rename is committed by an explicit button rather than on blur like the
+  // description: it renames the team everywhere, and it can be refused (team
+  // names are globally unique), so it needs a deliberate action and somewhere
+  // to put the refusal.
+  const nameValue = watch("name");
+  const trimmedName = nameValue.trim();
+  const canRename = trimmedName.length > 0 && trimmedName !== team.name;
+
+  const handleSaveName = async () => {
+    // The in-flight guard is not just double-click hygiene: a second PATCH
+    // would let a late 409 pin "name already taken" onto a name the user has
+    // since changed.
+    if (!canRename || isRenaming) return;
+    setRenameError(null);
+    setIsRenaming(true);
+    try {
+      await updateTeam({
+        teamId: team.id,
+        updateTeamRequest: { name: trimmedName },
+      }).unwrap();
+    } catch (error) {
+      // 409 is the one failure the user can act on: another team holds the name.
+      const status = (error as { status?: number } | undefined)?.status;
+      setRenameError(
+        status === 409
+          ? t("rework.teamSettings.parameters.name.alreadyTaken")
+          : t("rework.teamSettings.parameters.name.saveError"),
+      );
+    } finally {
+      setIsRenaming(false);
+    }
+  };
   const defaultAvatarUrl = defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined;
   const avatarImageUrl = team.avatar_image_url ?? defaultAvatarUrl;
 
@@ -102,7 +154,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   // by a single disabled "manual only" button rather than a two-state control
   // that refuses every click — one inert, locked state reads as the fact it
   // is, where a greyed-out toggle still reads as a choice.
-  const visibility = team.visibility ?? "public";
+  // #2433: private is the platform default — mirror it when the field is absent.
+  const visibility = team.visibility ?? "private";
   const isPrivate = visibility === "private";
   const handleSelectVisibility = (index: number) => {
     const newVisibility = VISIBILITIES[index];
@@ -156,6 +209,27 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   return (
     <div className={styles["team-settings-parameters-container"]}>
       <PageHeader title={t("rework.teamSettings.parameters.title")} />
+      <div className={`${styles["form-section"]} ${styles["team-name-section"]}`}>
+        <TextInput
+          label={t("rework.teamSettings.parameters.name.label")}
+          explanation={t("rework.teamSettings.parameters.name.support")}
+          maxLength={MAX_TEAM_NAME_LENGTH}
+          value={nameValue}
+          error={renameError ?? undefined}
+          {...register("name", { onChange: () => setRenameError(null) })}
+        />
+        <div className={styles["team-name-actions"]}>
+          <Button
+            color="primary"
+            variant="filled"
+            size="small"
+            disabled={!canRename || isRenaming}
+            onClick={handleSaveName}
+          >
+            {t("rework.teamSettings.parameters.name.save")}
+          </Button>
+        </div>
+      </div>
       <div className={`${styles["form-section"]} ${styles["team-images-section"]}`}>
         <div className={styles["team-avatar"]}>
           <span className={styles["team-avatar-title"]}>{t("rework.teamSettings.parameters.teamAvatar.title")}</span>

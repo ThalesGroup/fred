@@ -19,6 +19,7 @@ import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAudit
 // KEA CUTOVER 2026 — temporary, delete this import and its route below a few
 // weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
 import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
+import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
@@ -38,14 +39,16 @@ import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPag
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import TeamApplicationHostPage from "@components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx";
+import TeamApplicationsPage from "@components/pages/TeamApplicationsPage/TeamApplicationsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
+import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { Protected } from "@core/guards/Protected";
-import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
@@ -58,17 +61,6 @@ const basename = getConfig().frontend_basename;
 const ManagedChatPageRoute = () => {
   const { agentInstanceId } = useParams<{ agentInstanceId: string }>();
   return <ManagedChatPage key={agentInstanceId} />;
-};
-
-// Bare `/` should land on the canonical personal-space URL (`personal-<uid>`,
-// not the bare `"personal"` alias) so the address bar and the team selection
-// check agree from the first paint. A static `<Navigate>` here never
-// resolves the real id: CTRLP-10 residual, see
-// docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md §4.3.
-const HomeIndexRoute = () => {
-  const { activeTeam, isLoading } = useFrontendBootstrap();
-  if (isLoading) return null;
-  return <Navigate to={`/team/${activeTeam?.id ?? "personal"}/agents`} replace />;
 };
 
 // Bare `/admin` has no page of its own — land on the first page the caller
@@ -108,8 +100,11 @@ export const routes: RouteObject[] = [
     element: <MainLayout />,
     children: [
       {
+        // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
+        // in the Home nav panel; the personal-space agents page is reached from
+        // there rather than being the app's landing route.
         index: true,
-        element: <HomeIndexRoute />,
+        element: <Navigate to="/home" replace />,
       },
       {
         // Landing behind the mainNavBar Home entry (#2298). The team switcher
@@ -133,6 +128,24 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/resources",
         element: <TeamResourcesPage />,
+      },
+      {
+        path: "team/:teamId/apps",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationsPage />
+          </FrontendFeatureGate>
+        ),
+      },
+      {
+        // Every deeper segment belongs to the selected build-time application.
+        // The host resolves the team catalog before touching its local loader.
+        path: "team/:teamId/apps/:appId/*",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationHostPage />
+          </FrontendFeatureGate>
+        ),
       },
       {
         path: "team/:teamId/usage",
@@ -166,6 +179,17 @@ export const routes: RouteObject[] = [
       {
         path: "admin",
         element: <AdminIndexRoute />,
+      },
+      {
+        // Platform-wide platform prompt: the first block of every agent's system
+        // prompt. Org-admin only, matching the backend's
+        // `require_manage_any` gate on both routes.
+        path: "admin/platform-prompt",
+        element: (
+          <Protected requires="admin">
+            <PlatformPromptPage />
+          </Protected>
+        ),
       },
       {
         path: "admin/teams",

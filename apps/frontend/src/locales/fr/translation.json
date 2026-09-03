@@ -231,12 +231,31 @@
         }
       }
     },
+    "document_similarity": {
+      "name": "Comparer des documents",
+      "description": "Capacité à trouver les passages les plus proches d'un passage donné, à l'intérieur de documents précis.",
+      "fields": {
+        "default_top_k": {
+          "title": "Résultats par appel",
+          "description": "Nombre de correspondances renvoyées par défaut par l'outil find_similar_passages, les meilleures d'abord. L'agent peut en demander moins ou plus, jusqu'à 50."
+        },
+        "rerank": {
+          "title": "Réordonner les correspondances",
+          "description": "Réordonne les passages candidats avec le cross-encoder avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
+        },
+        "min_score": {
+          "title": "Pertinence minimale",
+          "description": "Écarte les correspondances sous ce seuil de pertinence (0 à 1). Laisser vide pour renvoyer toutes les correspondances, même faibles - utile quand « rien ne correspond » est justement la réponse."
+        }
+      }
+    },
     "writable_document": {
       "name": "Générer un document texte (Word)",
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
       "panel": {
         "writable_document_pane": {
-          "title": "Document"
+          "title": "Document",
+          "launcher": "Viewer texte"
         }
       },
       "untitled": "Document",
@@ -258,6 +277,36 @@
       },
       "code": {
         "plainText": "Texte brut"
+      }
+    },
+    "html_artifact": {
+      "name": "Générer une page web (HTML/CSS)",
+      "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat.",
+      "panel": {
+        "html_artifact_pane": {
+          "title": "Artefact HTML",
+          "launcher": "Viewer HTML/CSS"
+        }
+      },
+      "untitled": "Artefact HTML",
+      "close": "Fermer le panneau",
+      "download": "Télécharger",
+      "downloadHtml": "HTML",
+      "downloadPdf": "PDF",
+      "downloadPng": "PNG",
+      "openInNewTab": "Ouvrir dans un nouvel onglet",
+      "copy": "Copier dans le presse-papier",
+      "copied": "Copié dans le presse-papier",
+      "copyFailed": "Impossible de copier.",
+      "exportFailed": "Impossible d'exporter le {{format}}.",
+      "fitWidth": "Ajuster la largeur",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "resetZoom": "Réinitialiser le zoom",
+      "empty": "Aucun artefact pour l'instant. Demandez à l'assistant de créer une page ou un composant.",
+      "card": {
+        "aria": "Artefact HTML",
+        "open": "Ouvrir l'aperçu"
       }
     },
     "ppt_filler": {
@@ -307,7 +356,18 @@
       },
       "panel": {
         "ppt_preview_pane": {
-          "title": "Aperçu de la présentation"
+          "title": "Aperçu de la présentation",
+          "launcher": "Viewer PPT"
+        }
+      }
+    },
+    "platform_postgres": {
+      "name": "Base de données plateforme (SQL lecture seule)",
+      "description": "Capacité d'administration : répondre aux questions d'exploitation par des requêtes SQL en lecture seule sur la base Postgres de la plateforme.",
+      "fields": {
+        "statement_timeout_s": {
+          "title": "Délai maximal d'exécution (secondes)",
+          "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
         }
       }
     }
@@ -327,10 +387,14 @@
     },
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
-      "total_one": "Total : {{count}} token",
-      "total_other": "Total : {{count}} tokens",
-      "cached_one": "{{count}} token servi depuis le cache du fournisseur",
-      "cached_other": "{{count}} tokens servis depuis le cache du fournisseur"
+      "cached_one": "{{count, number}} token servi depuis le cache du fournisseur",
+      "cached_other": "{{count, number}} tokens servis depuis le cache du fournisseur",
+      "received_one": "{{count, number}} token reçu",
+      "received_other": "{{count, number}} tokens reçus",
+      "sent_one": "{{count, number}} token envoyé",
+      "sent_other": "{{count, number}} tokens envoyés",
+      "total_one": "Total : {{count, number}} token",
+      "total_other": "Total : {{count, number}} tokens"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
@@ -401,8 +465,11 @@
       "searchPolicyRowLabel": "Recherche",
       "searchPolicyTitle": "Politique de recherche",
       "reasoningRowLabel": "Raisonnement",
-      "reasoningOff": "Rapide",
-      "reasoningOn": "Boost",
+      "reasoningModelsSection": "Modèles",
+      "reasoningEffortSection": "Effort",
+      "reasoningOff": "Faible",
+      "reasoningOn": "Élevé",
+      "reasoningOnMenu": "Élevé (Raisonnement)",
       "reasoningHint": "Active le raisonnement pour les questions approfondies (augmente le temps de réponse et la consommation de tokens).",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
       "modelNotEnabledForTeam": "Ce modèle n'est pas activé pour cette équipe — le message échouera. Demandez à un administrateur de la plateforme de l'activer."
@@ -1025,10 +1092,12 @@
           "tool": "Capacités",
           "agent": "Agents",
           "model": "Modèles",
+          "app": "Apps",
           "aria": "Filtrer par type de fonctionnalité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
+        "emptyApps": "Aucune application n'est encore installée sur cette plateforme.",
         "col": {
           "capability": "Fonctionnalité",
           "enabledTeams": "Équipes activées",
@@ -1066,6 +1135,8 @@
         "defaultOffConfirm": {
           "title": "Désactiver l'activation par défaut ?",
           "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette fonctionnalité.",
+          "appTitle": "Désactiver l'application par défaut ?",
+          "appMessage": "Désactiver l'activation par défaut retire l'accès hérité à l'application pour toutes les équipes. Les autorisations explicites restent inchangées.",
           "confirm": "Désactiver",
           "cancel": "Annuler",
           "impact": "Cela suspendra {{count}} agent(s) actuellement fonctionnel(s).",
@@ -1098,6 +1169,8 @@
           "defaultSuspendedToast": "{{team}} suit désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
           "defaultError": "Impossible de remettre la fonctionnalité au défaut de la plateforme.",
           "rowControlAria": "Accès pour {{team}}",
+          "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour cette équipe.",
+          "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour cette équipe.",
           "personal": {
             "label": "Tous les espaces personnels",
             "hint": "S'applique d'un coup à l'espace personnel de chaque utilisateur — passés, futurs, et ceux qui ne se connectent jamais.",
@@ -1108,14 +1181,29 @@
             "disableError": "Impossible de désactiver la fonctionnalité pour les espaces personnels.",
             "defaultToast": "Les espaces personnels suivent désormais le défaut de la plateforme.",
             "defaultSuspendedToast": "Les espaces personnels suivent désormais le défaut de la plateforme — {{count}} instance(s) suspendue(s).",
-            "defaultError": "Impossible de remettre le défaut des espaces personnels."
+            "defaultError": "Impossible de remettre le défaut des espaces personnels.",
+            "dependencyHint": "Nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut).",
+            "dependencyConflict": "Cet agent nécessite d'abord l'activation de {{deps}} pour tous les espaces personnels (ou par défaut)."
           }
         },
+        "defaultOnRequiresSettingsHint": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
+        "defaultOnConflict": "Cette fonctionnalité a des réglages d'équipe obligatoires : elle ne peut pas être activée par défaut. Activez-la équipe par équipe.",
         "defaultOffReasoningToast": "Le raisonnement a été désactivé avec le modèle. Réactivez le modèle, puis le raisonnement, pour le rétablir.",
         "reasoningHint": "Indique si ce modèle s'exécute avec le raisonnement activé, pour toutes les équipes. Indépendant de l'accès : activer un modèle n'active pas son raisonnement — mais désactiver le modèle éteint son raisonnement.",
         "reasoningOffToast": "Raisonnement désactivé pour ce modèle.",
         "reasoningOnToast": "Raisonnement activé pour ce modèle.",
-        "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle."
+        "reasoningToggleError": "Impossible de modifier le réglage de raisonnement de ce modèle.",
+        "grantAllConfirm": {
+          "title": "Activer aussi les fonctionnalités requises ?",
+          "messageTeam": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette équipe ne peut pas encore l'utiliser : activer l'agent seul le laisserait inopérant.",
+          "messagePersonal": "{{agent}} a besoin de {{deps}} pour fonctionner. Les espaces personnels ne peuvent pas encore l'utiliser : activer l'agent seul le laisserait inopérant.",
+          "messagePlatform": "{{agent}} a besoin de {{deps}} pour fonctionner. Cette fonctionnalité n'est pas activée par défaut : chaque équipe hériterait donc d'un agent inutilisable.",
+          "confirm": "Tout activer",
+          "cancel": "Annuler",
+          "depFailed": "Impossible d'activer {{dep}} — {{agent}} n'a pas été modifié.",
+          "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
+          "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
+        }
       },
       "platformModelBindings": {
         "openButton": "Liaison de modèle plateforme",
@@ -1240,7 +1328,7 @@
         },
         "topByConversations": {
           "title": "Agents les plus sollicités",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         },
         "total": "Nombre d'agents total"
       },
@@ -1258,6 +1346,53 @@
       "documents": {
         "deltaLabel": "Variation sur la période",
         "total": "Documents téléversés"
+      },
+      "engagement": {
+        "agentsPerUser": {
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "medianLabel": "Médiane d'agents par utilisateur",
+          "title": "Agents par utilisateur",
+          "valueLabel": "Utilisateurs"
+        },
+        "agentsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
+          "title": "Agents par utilisateur dans le temps",
+          "valueLabel": "Médiane d'agents par utilisateur ({{window}})"
+        },
+        "conversationDepth": {
+          "empty": "Aucune conversation sur cette période.",
+          "medianLabel": "Médiane de messages par conversation",
+          "title": "Profondeur des conversations",
+          "valueLabel": "Conversations"
+        },
+        "conversationDepthTrend": {
+          "empty": "Pas assez de conversations sur cette période pour tracer une tendance.",
+          "title": "Profondeur des conversations dans le temps",
+          "valueLabel": "Médiane de messages par conversation ({{window}})"
+        },
+        "conversationsPerUser": {
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "medianLabel": "Médiane de conversations par utilisateur",
+          "title": "Conversations par utilisateur",
+          "valueLabel": "Utilisateurs"
+        },
+        "conversationsPerUserTrend": {
+          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
+          "title": "Conversations par utilisateur dans le temps",
+          "valueLabel": "Médiane de conversations par utilisateur ({{window}})"
+        },
+        "description": "Ne couvre que les utilisateurs actifs sur la période sélectionnée — ceux ayant démarré au moins une conversation. Les utilisateurs inactifs ne sont pas comptés.",
+        "trendTitleWithWindow": "{{title}} ({{window}})",
+        "trendWindow": {
+          "day_one": "{{count}} jour glissant",
+          "day_other": "{{count}} jours glissants",
+          "hour_one": "{{count}} heure glissante",
+          "hour_other": "{{count}} heures glissantes",
+          "minute_one": "{{count}} minute glissante",
+          "minute_other": "{{count}} minutes glissantes",
+          "second_one": "{{count}} seconde glissante",
+          "second_other": "{{count}} secondes glissantes"
+        }
       },
       "error": "Impossible de charger les données.",
       "loading": "Chargement...",
@@ -1283,6 +1418,7 @@
         "administration": "Administration de la plateforme",
         "agents": "Agents",
         "conversations": "Conversations & Messages",
+        "engagement": "Engagement",
         "overview": "Vue d'ensemble",
         "resources": "Ressources",
         "tokenUsage": "Consommation de tokens",
@@ -1363,7 +1499,7 @@
         },
         "mostActiveAgents": {
           "title": "Agents les plus actifs",
-          "valueLabel": "Conversations"
+          "valueLabel": "Messages"
         }
       }
     },
@@ -1415,6 +1551,7 @@
     "collapse": "Réduire",
     "create": "Créer",
     "delete": "Supprimer",
+    "documentIncludedByFolder": "Inclus par la sélection du dossier",
     "documents": "documents",
     "expand": "Développer",
     "gcu": {
@@ -1504,8 +1641,102 @@
       "searchPlaceholder": "Rechercher une équipe",
       "searchClear": "Effacer la recherche",
       "yourTeams": "Vos équipes",
+      "sort": {
+        "aria": "Trier les équipes",
+        "recent": "Récemment consultées",
+        "alpha": "Ordre alphabétique"
+      },
       "pageTitle": "Accueil",
-      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer."
+      "pageSubtitle": "Sélectionnez un espace dans le panneau de gauche pour commencer.",
+      "greeting": "Bonjour, que faisons-nous aujourd'hui ?",
+      "greetingNamed": "Bonjour {{name}}, que faisons-nous aujourd'hui ?",
+      "subtitle": "Accédez à n'importe quel agent, équipe ou prompt à partir d'ici.",
+      "tabs": {
+        "aria": "Sections de l'accueil",
+        "quickAccess": "Accès rapide",
+        "activity": "Votre activité",
+        "trending": "Tendances"
+      },
+      "responsible": {
+        "title": "IA responsable",
+        "footprintInfo": {
+          "aria": "Comment est calculée cette estimation ?",
+          "title": "D'où vient cette estimation ?",
+          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA à partir de la quantité de texte traité (ce qu'on appelle les « tokens »). Plus vous échangez de texte avec l'IA, plus la consommation estimée augmente.",
+          "convert": "Cette énergie est ensuite convertie en CO₂ selon l'électricité utilisée pour faire fonctionner l'IA.",
+          "limitsTitle": "Ce qu'il faut garder en tête",
+          "limit1": "C'est une estimation, pas une mesure exacte.",
+          "limit2": "La consommation réelle dépend des serveurs, du modèle d'IA et de la région où il fonctionne.",
+          "limit3": "L'objectif est de donner un ordre de grandeur pour sensibiliser, pas un chiffre précis.",
+          "confirm": "J'ai compris"
+        },
+        "cleanupTool": {
+          "aria": "Nettoyer",
+          "confirmAll": "Tout supprimer",
+          "confirm": "Supprimer ({{count}})",
+          "cancel": "Annuler",
+          "toast": "{{count}} élément(s) supprimé(s)"
+        },
+        "cleanupConversations": {
+          "title": "Nettoyer les conversations inactives",
+          "subtitle": "Ces conversations n'ont plus d'activité depuis plus de 5 jours. Tout est sélectionné — décochez ce que vous souhaitez conserver.",
+          "empty": "Aucune conversation inactive à nettoyer."
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 des prompts les plus utilisés",
+        "uses": "usages",
+        "weekDelta": "▲ {{count}} · 7 j",
+        "empty": "Aucun prompt n'a encore été publié dans la marketplace.",
+        "periodDelta": "▲ {{count}} · {{days}} j"
+      },
+      "period": {
+        "label": "Période",
+        "days": "{{count}} j",
+        "d7": "7 derniers jours",
+        "d30": "30 derniers jours",
+        "d90": "90 derniers jours"
+      },
+      "search": {
+        "placeholder": "Rechercher un agent, une équipe, un prompt…",
+        "empty": "Aucun résultat.",
+        "groups": {
+          "agents": "Agents",
+          "teams": "Équipes",
+          "prompts": "Prompts"
+        }
+      },
+      "recentAgents": {
+        "title": "Derniers agents consultés"
+      },
+      "topAgents": {
+        "title": "Les agents que vous avez le plus utilisés",
+        "unit": "conv.",
+        "empty": "Aucun agent utilisé sur cette période."
+      },
+      "topTeams": {
+        "title": "Votre activité au sein de vos équipes",
+        "unit": "conv.",
+        "personalSpace": "Espace personnel",
+        "empty": "Vous n'êtes membre d'aucune équipe.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Éditeur",
+          "team_analyst": "Analyste",
+          "team_member": "Membre"
+        }
+      },
+      "activity": {
+        "title": "Votre activité",
+        "conversations": "Nouvelles conversations",
+        "messages": "Messages envoyés",
+        "agents": "Agents utilisés",
+        "deltaUp": "▲ {{pct}} % ({{abs}})",
+        "deltaDown": "▼ {{pct}} % ({{abs}})",
+        "deltaFlat": "stable",
+        "vsPrevious": "vs période précédente",
+        "periodCaption": "sur les {{count}} derniers jours"
+      }
     },
     "mainNav": {
       "ariaLabel": "Navigation principale",
@@ -1636,6 +1867,8 @@
         "deleteFolderMessageEmpty": "Supprimer le dossier vide « {{name}} » ?",
         "deleteFolderMessageUnknownCount": "Supprimer « {{name}} » et tout son contenu ? Cette action est irréversible.",
         "deleteFolderMessageWithDocs": "Supprimer « {{name}} » et ses {{count}} document(s) ? Cette action est irréversible.",
+        "deleteFoldersMessage": "Supprimer {{count}} dossier(s) et tout leur contenu ? Cette action est irréversible.",
+        "deleteMixedMessage": "Supprimer {{folderCount}} dossier(s) avec tout leur contenu et retirer {{docCount}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
         "shareTitle": "Copier dans l'espace d'équipe",
@@ -1760,8 +1993,12 @@
       },
       "title": "Ressources",
       "toast": {
+        "bulkExcludeError": "Impossible d'exclure la sélection de la recherche",
+        "bulkExcludeNothing": "Les éléments sélectionnés sont déjà exclus de la recherche",
+        "bulkExcludedFromSearch": "{{count}} document(s) exclu(s) de la recherche",
         "deleteFolderError": "Impossible de supprimer le dossier",
         "deleteFolderSuccess": "Dossier supprimé",
+        "downloadEmpty": "Les dossiers sélectionnés ne contiennent aucun document à télécharger",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
         "processStarted": "Traitement lancé",
@@ -1803,7 +2040,8 @@
           "platformRoles": "Rôles plateforme",
           "selftest": "Auto-test",
           "tasks": "Activité",
-          "teams": "Equipes"
+          "teams": "Equipes",
+          "platformPrompt": "Prompt global de la plateforme"
         },
         "title": "Espace administration"
       },
@@ -1830,6 +2068,7 @@
       "team": {
         "marketplace": "Marketplace",
         "menu": {
+          "apps": "Apps",
           "resources": "Ressources"
         },
         "teamLabel": "Equipe",
@@ -2046,6 +2285,10 @@
     "teamCard": {
       "join": "Rejoindre",
       "inviteOnly": "Sur invitation",
+      "invitationMail": {
+        "subject": "[{{site}}] Demande pour rejoindre l'équipe {{team}}",
+        "body": "Bonjour,\n\nJe souhaite rejoindre l'équipe {{team}} sur {{site}}.\n\nInformations utilisateur : {{user}}\n\nAller à la page de l'équipe {{team}} : {{agentsUrl}}\nGérer les membres de l'équipe {{team}} : {{membersUrl}}"
+      },
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
@@ -2139,6 +2382,13 @@
       },
       "parameters": {
         "title": "Paramètres",
+        "name": {
+          "label": "Nom de l'équipe",
+          "support": "Ce nom identifie votre équipe partout dans la plateforme. Il doit être unique.",
+          "save": "Renommer l'équipe",
+          "alreadyTaken": "Ce nom est déjà utilisé par une autre équipe.",
+          "saveError": "Impossible de renommer l'équipe."
+        },
         "description": {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
@@ -2232,6 +2482,7 @@
             "actionsIntegration": "Actions et intégration"
           },
           "actionsIntegrationEmpty": "Aucune capacité dans cette section pour le moment.",
+          "notSupported": "Cet agent ne prend pas en charge la sélection de capacités.",
           "packs": {
             "teamResources": {
               "title": "Accès aux ressources de l'équipe",
@@ -2252,6 +2503,10 @@
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
+            },
+            "webPage": {
+              "title": "Générer une page web (HTML/CSS)",
+              "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat."
             },
             "reasoning": {
               "title": "Raisonnement",
@@ -2753,6 +3008,35 @@
           "errors": "Erreurs"
         }
       }
+    },
+    "platformPrompt": {
+      "title": "Prompt global de la plateforme",
+      "subtitle": "La personnalité et les instructions standardisées de cette plateforme. C'est le premier bloc du prompt système de chaque agent, avant les instructions propres à chaque agent.",
+      "editor": {
+        "title": "Prompt global",
+        "badge": "Modifiable",
+        "subtitle": "La personnalité de votre plateforme et ses règles propres. Envoyé en premier, avant tout le reste, à chaque appel de chaque agent."
+      },
+      "field": {
+        "label": "Texte du prompt",
+        "explanation": "Restez concis : chaque caractère est du contexte permanent."
+      },
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "reset": "Annuler les modifications",
+      "suppressed": "Le prompt global de la plateforme est enregistré vide : aucun bloc n'est envoyé. Ce n'est pas la même chose que de n'en avoir jamais enregistré.",
+      "lastUpdated": "Dernière modification par {{who}} le {{when}}.",
+      "unknownAuthor": "un utilisateur inconnu",
+      "saved": "Prompt global de la plateforme enregistré.",
+      "saveFailed": "Impossible d'enregistrer le prompt global de la plateforme.",
+      "instructions": {
+        "title": "Instructions globales de la plateforme",
+        "badge": "Lecture seule",
+        "subtitle": "Livrées avec la plateforme et rendues juste après votre prompt, pour tous les agents. Elles ne changent qu'avec un déploiement.",
+        "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon — utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
+        "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
+      },
+      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
     }
   },
   "runtime": {
@@ -2776,10 +3060,22 @@
     "chatContextPreviewTitle": "Aperçu du contexte de conversation"
   },
   "teamAppsPage": {
-    "headerInfoTooltip": "Seuls les propriétaires de l'équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
+    "headerInfoTooltip": "Les applications sont disponibles uniquement pour les membres autorisés de l'équipe.",
     "headerSubtitle": "Apps de l'équipe",
-    "noAppDescription": "Les propriétaires de l'équipe n'ont configuré aucune application pour ce groupe pour le moment.",
-    "noAppTitle": "Aucune app"
+    "title": "Applications",
+    "subtitle": "Applications disponibles pour cette équipe.",
+    "loading": "Chargement des applications…",
+    "loadError": "Impossible de charger les applications.",
+    "noAppDescription": "Aucune application n'est disponible pour cette équipe.",
+    "noAppTitle": "Aucune app",
+    "host": {
+      "catalog-loading": "Chargement de l'application…",
+      "connecting": "Connexion à l'application…",
+      "unavailable": "Cette application n'est pas disponible.",
+      "protocol-mismatch": "Cette application utilise une version du protocole applicatif Fred non prise en charge par ce déploiement.",
+      "unreachable": "L'application n'a pas répondu. Elle est peut-être en cours de démarrage ou mal configurée.",
+      "render": "L'application s'est arrêtée de manière inattendue. Fred reste disponible."
+    }
   },
   "unauthorized": {
     "message": "Vous n'êtes pas autorisé à voir cette page.",

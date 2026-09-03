@@ -29,9 +29,14 @@ Contained Tier-1 shape (does NOT touch the execution loop):
   in `FredMcpToolProvider`, driven by `definition.default_mcp_servers` — which
   agent assembly derives from the selected capability ids that resolve to
   `McpCapability` registry entries (see `fred_runtime.app.agent_app`).
-- the capability's ONLY runtime contribution is a prompt-fragment middleware
-  carrying the catalog server's `agent_instructions` (RFC §3.8 AC4), delivered
-  through `awrap_model_call` exactly like `DynamicPromptMiddleware`.
+- the capability's ONLY runtime contribution is `prompt_group()`: the catalog
+  server's title + `agent_instructions`, consumed by
+  `build_capability_agent_block` (`assembly.py`) and inlined into the ReAct
+  tool-prompt suffix (`react_tool_binding.build_runtime_tool_prompt_suffix`),
+  immediately after that server's own tool group (#2455). Before #2455 this
+  was a prompt-fragment middleware (`_McpInstructionsMiddleware`) appended to
+  every model call instead — removed once delivery moved to the static
+  prompt, to avoid sending the same text twice.
 
 How to use:
 - `register_mcp_capabilities(registry, servers)` at pod boot registers one
@@ -40,12 +45,12 @@ How to use:
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
-    CapabilityContext,
     CapabilityManifest,
     ChatControlSpec,
     EmptyModel,
@@ -54,14 +59,12 @@ from fred_sdk.contracts.capability import (
 __all__ = [
     "MCP_CAPABILITY_SCHEMA_VERSION",
     "McpCapability",
+    "McpPromptGroup",
     "McpServerConfig",
     "build_mcp_capability",
     "register_mcp_capabilities",
 ]
 from fred_sdk.contracts.models import MCPServerConfiguration
-from langchain.agents.middleware import AgentMiddleware
-from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
@@ -143,39 +146,22 @@ class McpServerConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class _McpInstructionsMiddleware(AgentMiddleware):
+@dataclass(frozen=True, slots=True)
+class McpPromptGroup:
     """
-    Append one MCP server's non-negotiable `agent_instructions` to the system
-    prompt (the prompt-fragment delivery path, #1978 AC4).
+    One active MCP server's tool-prompt grouping metadata (#2455).
 
-    Mirrors `DynamicPromptMiddleware`: the static composed system prompt reaches
-    `create_agent`; this middleware overlays the capability fragment per model
-    call so it survives across turns without being persisted.
+    Carries what `build_runtime_tool_prompt_suffix`
+    (`react/react_tool_binding.py`) needs to render this server's tools as
+    their own headed group in the static system prompt, with
+    `agent_instructions` inlined immediately after the group's tool list —
+    replacing the `_McpInstructionsMiddleware` per-model-call prompt-fragment
+    delivery removed 2026-08-27 (`RUNTIME-EXECUTION-CONTRACT.md` §8.63).
     """
 
-    def __init__(self, fragment: str, *, server_id: str) -> None:
-        super().__init__()
-        self._fragment = fragment
-        self._server_id = server_id
-
-    @property
-    def name(self) -> str:
-        # Unique per MCP server. An agent may select several MCP capabilities,
-        # each contributing one of these instances; `create_agent` rejects a
-        # middleware list with duplicate `.name`s ("Please remove duplicate
-        # middleware instances."), and the base default is the shared class
-        # name. Keying on the catalog server id keeps every instance distinct.
-        return f"McpInstructions[{self._server_id}]"
-
-    async def awrap_model_call(
-        self,
-        request: ModelRequest,
-        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
-    ) -> ModelResponse:
-        base = request.system_prompt or ""
-        merged = f"{base}\n\n{self._fragment}" if base else self._fragment
-        request = request.override(system_message=SystemMessage(content=merged))
-        return await handler(request)
+    server_id: str
+    title: str
+    agent_instructions: str | None
 
 
 class McpCapability(AgentCapability[McpServerConfig, McpServerConfig, EmptyModel]):
@@ -266,14 +252,20 @@ class McpCapability(AgentCapability[McpServerConfig, McpServerConfig, EmptyModel
 
         return controls
 
-    def middleware(
-        self, ctx: CapabilityContext[McpServerConfig, EmptyModel]
-    ) -> Sequence[AgentMiddleware]:
-        del ctx
-        fragment = (self._server.agent_instructions or "").strip()
-        if not fragment:
-            return []
-        return [_McpInstructionsMiddleware(fragment, server_id=self._server.id)]
+    def prompt_group(self) -> McpPromptGroup:
+        """
+        This server's title + `agent_instructions` for the grouped tool-prompt
+        suffix (#2455) — collected by `build_capability_agent_block`
+        (`assembly.py`) into `CapabilityAgentBlock.mcp_prompt_groups`, in the
+        same id-sorted order every other capability contribution uses.
+        """
+
+        agent_instructions = (self._server.agent_instructions or "").strip() or None
+        return McpPromptGroup(
+            server_id=self._server.id,
+            title=self._server.prompt_group_title or self._server.id,
+            agent_instructions=agent_instructions,
+        )
 
 
 def build_mcp_capability(server: MCPServerConfiguration) -> McpCapability:

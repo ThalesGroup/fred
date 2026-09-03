@@ -191,6 +191,57 @@ class AgentTemplateSummary(BaseModel):
             "metadata-driven form."
         ),
     )
+    supports_capabilities: bool = Field(
+        default=True,
+        description=(
+            "Whether this template genuinely participates in capability "
+            "selection, unfiltered by the team's can_use grants — unlike "
+            "available_capabilities, which an empty team grant also empties. "
+            "False means the frontend should say so, not imply zero grants."
+        ),
+    )
+    default_capability_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Capability ids this template activates by default (RFC "
+            "AGENT-CAPABILITY §2), verbatim from the pod's "
+            "`definition.default_mcp_servers` — MCP-derived and native ids "
+            "alike. Unlike `available_capabilities` this list is NOT filtered "
+            "by the team's `can_use`: intersect the two client-side to get "
+            "the defaults a team may actually activate. The agent-creation "
+            "form uses it to pre-tick a new instance's capabilities so a "
+            "template's declared defaults are not silently dropped by an "
+            "explicit empty selection.\n\n"
+            "Affects NEW instances only. An instance enrolled before this "
+            "field existed persisted a genuine `selected_capability_ids: []` "
+            "(the form always submitted an explicit selection), which is "
+            "indistinguishable from a deliberate 'no capabilities' — so "
+            "`materialize_default_capability_selections` skips it by design "
+            "(it backfills `None` rows only). Such instances do not gain "
+            "their template's defaults retroactively and must be re-ticked "
+            "by hand."
+        ),
+    )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description=(
+            "Does this template offer per-question reasoning (REASON-01 level "
+            "3)? Verbatim from the pod's `default_tuning`. The agent-creation "
+            "form pre-ticks its Reasoning card from it, as "
+            "`default_capability_ids` pre-ticks capabilities — a seed the "
+            "operator can untick, never a lock. False for pods predating "
+            "#2473."
+        ),
+    )
+    reasoning_default_on: bool = Field(
+        default=False,
+        description=(
+            "Does this template start new conversations with the composer's "
+            "reasoning toggle already ON (REASON-01 Amendment B)? Verbatim "
+            "from the pod's `default_tuning`; only meaningful alongside "
+            "`reasoning_enabled`. False for pods predating #2473."
+        ),
+    )
 
 
 class ManagedAgentInstanceSummary(BaseModel):
@@ -454,6 +505,43 @@ class SessionListItem(BaseModel):
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class InactiveSessionItem(BaseModel):
+    """One of the caller's conversations that has gone quiet — home dashboard
+    cleanup tool (#2298). Carries the resolved agent display name (unlike the
+    sidebar `SessionListItem`) so the cleanup list needs no extra lookup."""
+
+    session_id: str
+    team_id: TeamId
+    title: str | None = None
+    agent_name: str | None = None
+    updated_at: datetime | None = None
+
+
+class InactiveSessionsResponse(BaseModel):
+    sessions: list[InactiveSessionItem]
+
+
+class BulkDeleteSessionRef(BaseModel):
+    """A (session, space) pair to delete. team_id is required because a session
+    is only addressable within its team; ownership is still enforced per session
+    server-side, so a wrong pair simply fails rather than deleting anything."""
+
+    session_id: str
+    team_id: TeamId
+
+
+class BulkDeleteSessionsRequest(BaseModel):
+    sessions: list[BulkDeleteSessionRef]
+
+
+class BulkDeleteSessionsResponse(BaseModel):
+    """Partial-success report: bulk delete never aborts the whole batch on one
+    failure (a since-deleted or non-owned session just lands in `failed`)."""
+
+    deleted: list[str]
+    failed: list[str]
 
 
 class SessionAttachmentSummary(BaseModel):
@@ -879,3 +967,11 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # deployment before this feature). V1 is chat-only — no
     # language/embedding/image sibling field exists here.
     platform_chat_model_binding: ModelBinding | None = None
+    # Platform-wide platform prompt, resolved fresh on this same per-turn call —
+    # same trust boundary as the two fields above: it becomes the FIRST block
+    # of the composed system prompt, ahead of every agent template, so a stale or
+    # client-forwarded copy is exactly what must never reach the pod. `None`
+    # means no admin has ever saved one and the pod falls back to its
+    # `config/platform_prompt.json`; `""` is an admin deliberately suppressing
+    # the block, and the two are NOT interchangeable.
+    platform_prompt: str | None = None

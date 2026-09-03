@@ -41,6 +41,12 @@ type TuningFieldRendererProps = {
   /** Effective values (current input or declared default) of every sibling field
    * in the same form — drives the `ui.visible_when` conditional display. */
   allValues?: Record<string, unknown>;
+  /** Controlled prompt-picker mode, lifted so it survives this field being
+   * unmounted/remounted when the form switches sections (otherwise a cleared
+   * field would auto-reopen the library on return). null = auto, true = picker
+   * forced open, false = write-from-scratch. Omit to fall back to local state. */
+  pickerExplicit?: boolean | null;
+  onPickerExplicitChange?: (value: boolean | null) => void;
 };
 
 export function TuningFieldRenderer({
@@ -51,6 +57,8 @@ export function TuningFieldRenderer({
   error,
   teamId,
   allValues,
+  pickerExplicit: pickerExplicitProp,
+  onPickerExplicitChange,
 }: TuningFieldRendererProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
@@ -62,7 +70,11 @@ export function TuningFieldRenderer({
   // null = auto: picker shown when field is empty, textarea shown when field has value.
   // true = user explicitly opened picker from editing mode.
   // false = user explicitly chose to write from scratch (override auto-picker for empty fields).
-  const [pickerExplicit, setPickerExplicit] = useState<boolean | null>(null);
+  // Controlled by the form when it wants this decision to persist across section
+  // switches (the field unmounts then); otherwise kept in local state.
+  const [localPickerExplicit, setLocalPickerExplicit] = useState<boolean | null>(null);
+  const pickerExplicit = pickerExplicitProp !== undefined ? pickerExplicitProp : localPickerExplicit;
+  const setPickerExplicit = onPickerExplicitChange ?? setLocalPickerExplicit;
 
   const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
     { teamId: teamId ?? "" },
@@ -188,7 +200,15 @@ export function TuningFieldRenderer({
           value={String(fieldValue)}
           rows={field.ui?.max_lines ?? 4}
           placeholder={field.ui?.placeholder ?? undefined}
-          onChange={(e) => onChange(field.key, e.target.value)}
+          onChange={(e) => {
+            onChange(field.key, e.target.value);
+            // Clearing the field WHILE EDITING must not re-trigger the
+            // auto-picker: the auto-open (pickerExplicit === null && empty) is
+            // only meant for the initial empty state. Once the user has emptied
+            // it themselves, lock into write mode — they can still reopen the
+            // library from the "pick from library" button above.
+            if (e.target.value.trim() === "") setPickerExplicit(false);
+          }}
           disabled={disabled || isLoadingDetail}
           error={error}
         />

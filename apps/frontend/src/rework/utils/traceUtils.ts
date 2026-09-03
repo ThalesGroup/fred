@@ -20,7 +20,6 @@ import type {
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
-import type { TokenUsage } from "@rework/types/conversation";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -214,19 +213,6 @@ export function toolResultLatencyMs(result: ChatMessage): number | null {
   return toolResultPart(result)?.latency_ms ?? null;
 }
 
-// Usage of the model call that decided to make this tool call (TRACE-01) —
-// carried on the tool_call message's metadata, not the result's.
-export function toolCallTokenUsage(call: ChatMessage): TokenUsage | null {
-  const tu = call.metadata?.token_usage;
-  if (!tu) return null;
-  return {
-    input_tokens: tu.input_tokens ?? 0,
-    output_tokens: tu.output_tokens ?? 0,
-    total_tokens: tu.total_tokens ?? 0,
-    cache_read_tokens: tu.cache_read_tokens,
-  };
-}
-
 export function toolResultContent(result: ChatMessage): string {
   return toolResultPart(result)?.content ?? "";
 }
@@ -253,11 +239,35 @@ const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
   "hitl_response",
 ]);
 
-/** All chat parts (ui_parts) carried on a message, unknown kinds included. */
+/** Key-order-independent identity, so the same part from two carriers matches. */
+function canonicalPart(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalPart).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalPart(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+const isUiPart = (p: { type?: unknown } | undefined): boolean =>
+  typeof p?.type === "string" && !MESSAGE_PART_TYPES.has(p.type);
+
+/**
+ * All chat parts (ui_parts) carried on a message, unknown kinds included.
+ *
+ * Two carriers: a streamed message holds them inline in `parts`, a stored one on
+ * `metadata.ui_parts`. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.59.
+ */
 export function uiPartsOf(msg: ChatMessage): RawUiPart[] {
-  return (msg.parts ?? []).filter(
-    (p) => typeof p?.type === "string" && !MESSAGE_PART_TYPES.has(p.type),
-  ) as unknown as RawUiPart[];
+  const inline = (msg.parts ?? []).filter(isUiPart) as unknown as RawUiPart[];
+  const stored = ((msg.metadata?.ui_parts ?? []) as unknown as RawUiPart[]).filter(isUiPart);
+  // The common cases by far, and the only ones a session ever hits today: a turn
+  // is either streaming or replayed, never both. Skips the canonical keying.
+  if (stored.length === 0) return inline;
+  if (inline.length === 0) return stored;
+
+  const seen = new Set(inline.map(canonicalPart));
+  return [...inline, ...stored.filter((p) => !seen.has(canonicalPart(p)))];
 }
 
 export function formatLatencyMs(ms: number | null): string {
@@ -499,13 +509,6 @@ export function secondaryTextForEntry(entry: TraceEntry): string {
     return formatLatencyMs(toolResultLatencyMs(entry.result));
   }
   return "";
-}
-
-// Token usage to show alongside the latency (TRACE-01). Only tool steps
-// carry it — reasoning/note/error entries don't have a paired tool_call.
-export function tokenUsageForEntry(entry: TraceEntry): TokenUsage | null {
-  if (entry.kind === "combo") return toolCallTokenUsage(entry.call);
-  return null;
 }
 
 /**

@@ -1308,7 +1308,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 #### Open UX issues
 
 - Not yet design-reviewed against a live stack. First functional pass only.
-- **Gradient animation colours** — the Chat button's conic-gradient uses hardcoded hex stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes). Intentional branding colours not in the design token system — confirm with designer whether they should be tokenised or kept as-is. Shared with the composer's `Boost` text (`ReasoningChip.module.css`), minus the white stops and peach.
+- **Gradient animation colours** — the spectrum stops (`#37c9e4`, `#6f78fc`, `#e4ae66`, `#db47ae` — saturated and moderately darkened 2026-08-21 from the original pastels, same hues: the pastels washed out on the light theme, a fully darkened pass sank into the dark one, so these sit halfway between; one gradient serves both themes) are intentional branding colours outside the semantic token system — confirm with designer whether they should be folded into it or kept as-is. Since 2026-08-27 they live once in `styles/gradients.css` as `--gradient-spectrum-stops` (full, for borders) and `--gradient-spectrum-stops-core` (saturated run only, for gradients clipped to text), with the rotating-border recipe in the `spectrum-border` SCSS mixin. Three consumers: this Chat button, the Home page's recently-used agent tiles (same "start a conversation with this agent" affordance), and the composer's `Boost` text.
 
 #### Resolved
 
@@ -1329,7 +1329,8 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only` | No button; muted label (`on-surface-retreat`) |
+| `invite_only`, team is `public`, at least one admin has an email | "Join" button (`mail` icon) - opens the user's mail client on a `mailto:` prefilled for the team admins (#2453, see below) |
+| `invite_only`, any other case | No button; muted label (`on-surface-retreat`) |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -1341,6 +1342,83 @@ so keeping both would duplicate the signal.
 system to route requests to team admins was never built) and `closed` (a
 second muted label, indistinguishable in practice from `invite_only`) were
 dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
+
+**Ask for an invitation (#2453, 2026-08-27).** A public invite-only team is
+discoverable but not joinable, and the muted label alone left the visitor with
+no next step. The card restores the pre-TEAM-09 escape hatch: a `mailto:`
+addressed to every team admin whose `UserSummary.email` resolved, prefilled
+with the subject, the caller's identity, and two links: the team's agents page
+for context (what `main` sent) plus a deep link to its members page, where the
+recipients - the admins - actually add the sender by hand. The wording is the
+pre-TEAM-09 one (`rework.teamCard.invitationMail.*`) plus that second line, and
+now lives in the locale files instead of hardcoded French as it did then.
+
+The button reuses the `join` label - it is the same intent, and a second,
+longer label wrapped the card's footer onto two lines; the `mail` icon and the
+draft that opens are what distinguish it from the instant `open` join.
+
+Two guards decide whether the button replaces the label:
+
+- **public only.** A private team keeps the label: the UI does not offer a
+  non-member a private team's admin addresses. This is a product rule about
+  what the card *proposes*, not a disclosure guarantee - `GET /teams` puts
+  `admins` (email included) in the payload for every team it returns, and
+  `MarketplaceTeams` records that private teams reach the client at all when
+  authorization is disabled. Withholding them from the wire is a server-side
+  question, still open. `TeamCard` checks `visibility` itself rather than
+  trusting `MarketplaceTeams`' filter: it is a shared component, and the check
+  is `=== "public"` so a payload with no `visibility` fails closed (#2433).
+- **a reachable address.** `admins` falls back to a bare `UserSummary(id=...)`
+  when the Keycloak lookup returns nothing, so an admin list can render with no
+  email at all. With no recipient there is nothing to open, so the label stays
+  rather than producing an empty `mailto:`.
+
+Mechanics worth keeping: the draft opens with `window.open(..., "_blank",
+"noopener,noreferrer")` rather than a `location.href` assignment, so a webmail
+registered as the `mailto:` handler opens beside the app instead of replacing
+it (a native client takes over the throwaway tab and the browser drops it);
+`noopener` makes `window.open` return `null` by spec, so there is nothing to
+test for a fallback - the click is the user gesture popup blockers key off.
+Recipients are comma-separated (RFC 6068) and
+percent-encoded, since the addresses come from a directory sync and nothing
+guarantees they are URL-safe; `URLSearchParams`' `+` is rewritten to `%20` or
+mail clients render it literally in the subject; the team link prepends the
+router basename (`normalizeBasename`, shared with `buildDocumentViewerPath`)
+because a mailed URL inherits nothing from the router; and the identity line
+degrades to whichever of `name` / `preferred_username` Keycloak returned.
+
+No server-side request flow is involved: this is a client-side mail draft, the
+same as before TEAM-09. Nothing routes an invitation request through the API.
+
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge and squashed the avatars into ellipses on the way. Three
+changes, none of them resizing an avatar: the button never shrinks (it must
+keep its whole label), `AvatarGroup` gained a `max` prop (default 4, so its
+other consumer is unchanged) and the card drops to `max={2}` whenever a button
+shares the footer, and an avatar is now `flex-shrink: 0` - a fixed-size circle
+should clip, never deform. `.teamCardAdmins` does that clipping as a last
+resort for an unusually long translation; the row runs right-to-left, so the
+overflow falls off the left and the "+N" badge stays visible.
+
+Two `AvatarGroup` fixes came out of the same pass, and apply everywhere it is
+used. The "+N" badge now goes through the same `Tooltip` wrapper as the other
+avatars: `.userAvatarContainer > *` puts the 2px ring on the direct child, so
+under the global `box-sizing: border-box` a bare badge paid for that ring out
+of its own 2rem while a wrapped avatar grew by it - the badge rendered 4px
+smaller than its neighbours. That wrapper also gives the badge a tooltip
+listing the hidden names, one per line (a `content` tooltip, so it owns its own
+padding).
+
+**Footer layout.** The card is a fixed 290px, so the admin avatars and the join
+button compete for one line: a team with five admins pushed the button past the
+card's right edge. The button never shrinks (it must keep its whole label) and
+the avatar row is the half that gives up width - `AvatarGroup` gained a `max`
+prop (default 4, so its other consumer is unchanged) and the card drops to
+`max={2}` whenever a button shares the footer, collapsing the rest into "+N".
+`.teamCardAdmins` clips as a last resort for an unusually long translation; the
+avatars run right-to-left, so the overflow falls off the left and the badge
+stays visible.
 
 ---
 
@@ -1387,8 +1465,9 @@ plain group-level color pattern is what every `ButtonGroup` consumer
 follows now.
 
 **Visibility control (TEAM-10, 2026-07-26).** New `ButtonGroup`
-(`public`/`private`, default `public`) gating marketplace discoverability
-— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30 for the full ReBAC
+(`public`/`private`; default `public` at the time — new teams default to
+`private` since 2026-08-26, #2433) gating marketplace discoverability
+— see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §30/§44 for the full ReBAC
 mechanism. No client-side write of `joining_mode` ever accompanies a
 visibility PATCH — the resulting `joining_mode`, if it changes, comes back
 from the server on refetch.
@@ -2319,7 +2398,9 @@ Opt-in **floating-card** variant (`floating` prop, push layout, 2026-08-06): the
 into a card inset from every edge — single `outline-muted` 1px border, `--radius-m` (16px)
 corners, subtle `--shadow-s` — dropping the flush edge border and the header divider. Width stays
 fixed during the open animation so content doesn't reflow. First consumer: the document-scope
-panel (see "Document-scope side panel"). Default panels stay flush.
+panel (see "Document-scope side panel"). Default push panels stay flush: full page height, square
+corners, a 1px `outline-muted` left divider, no top/bottom inset (2026-09-01 — previously a
+`--radius-m` rounded card with a small top/bottom margin and a transparent left edge).
 
 #### Open UX issues
 
@@ -2556,14 +2637,19 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 **Location:** `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
 **Status:** `Functional`
 
-Page composition (`.page` is a **flex column**, 2026-08-06): a full-width `topBar` (holding
-`SessionTitleEditor`) sits on top and always spans the whole page; below it a `.contentRow` (flex
-row) holds the main column (`chatArea` scroll container + sticky composer) on the left and the
-push drawers (capability / attachments / document-scope) on the right. Pulling the header out of
-the main column means an opening push drawer reflows only the content row — the panel slides
-**under** the full-width header instead of shrinking it. (Before this, the header lived inside the
-main column and shrank whenever a push drawer opened.) The `data-picker-top-boundary` attribute
-stays on the header so the composer's anchored pickers still stop just below it. The composer is
+Page composition (`.page` is a **flex row**, 2026-09-01): `[ .pageBody (flex:1) ][ launcher rail ]`.
+`.pageBody` (flex row) holds the `.leftStack` on the left and the push drawers (capability /
+attachments / document-scope) on the right. `.leftStack` is a flex column — the `topBar` (holding
+`SessionTitleEditor`) above, the `.contentRow` → main column (`chatArea` scroll container + sticky
+composer) below. An opening push drawer reflows the **whole left stack, header included**, so the
+drawer spans the full page height for better viewer visualization (changed 2026-09-01 — previously
+the drawers lived inside `.contentRow` and reflowed only the content, the panel sliding **under**
+the full-width header; before that again the header lived inside the main column and shrank on
+open). The `topBar` is an inset rounded card — `--radius-s` corners, 12px top/left/right margin,
+flush bottom (2026-09-01). The launcher rail is a **page-root in-flow column** at the far right
+(see "Capability side-panel launcher rail"), not part of `.pageBody`. The
+`data-picker-top-boundary` attribute stays on the header so the composer's anchored pickers still
+stop just below it. The composer is
 built once (a single `composer` element) and placed either centered in the empty "new
 conversation" state or in the sticky `inputOverlay` mid-conversation — same structure both times
 (2026-08-06, see `RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` —
@@ -2881,6 +2967,36 @@ gate as upload/new-folder), with a confirmation dialog. Deletion cascades
 server-side: sub-folders and the untagging of contained documents are the
 backend's `delete_tag_for_user`. Errors surface as a toast with the backend
 detail. (Found live 2026-07-20: no delete affordance existed at all.)
+
+### `DocumentWorkspace` — bulk actions extend to selected folders (#2446, 2026-08-26)
+
+Folder rows have always rendered a selection checkbox, but ticking one did
+nothing: the contextual `BulkActionsBar` (delete / download / exclude-from-
+search) and every bulk handler read `selectedDocs` (documents only). Selecting
+a folder now drives the same bar, with each action applied **recursively to the
+folder's subtree**; a mixed selection (files + folders) shows the union, applied
+to both. The selected-count label counts every selected row.
+
+- **Delete** — one `deleteTag` per selected folder (the backend cascades to
+  sub-folders + their documents, same path as the single-folder delete) plus the
+  existing untag path for loose documents. The confirmation warns generically
+  ("… and all their content? This cannot be undone.") once folders are involved,
+  rather than recomputing a precise recursive count (that would cost one browse
+  per subtree tag — the single-folder delete keeps its live count).
+- **Download** — resolves each folder's descendant documents on click and zips
+  them under their folder-relative path, preserving the tree; loose documents sit
+  at the archive root.
+- **Exclude from search** — a folder-containing selection can't be resolved to a
+  single include/exclude direction cheaply, so it offers **exclude only**: on
+  click it resolves the subtree's documents and forces every non-tabular one
+  non-retrievable (one summary toast, not one per document). The directional
+  include/exclude toggle is unchanged for file-only selections.
+
+Descendant documents are fetched **only when the action fires**, never on
+selection, so ticking a folder box stays instant even for a large subtree; each
+heavy action (download / exclude / delete) shows an in-button spinner while it
+runs (`BulkActionsBar` gained `deleteLoading` and `searchToggle.loading`,
+mirroring the existing `downloadLoading`).
 
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
@@ -3468,3 +3584,111 @@ root card above the table was tried on 2026-08-21 and removed the same day
   option silently missing.
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
+
+## Team applications host
+
+### `TeamApplicationsPage`
+
+**Location:** `src/rework/components/pages/TeamApplicationsPage/`
+
+The collaborative-team application index renders one responsive card per
+authorized application, each carrying the catalog's localized name and
+description and a validated Material icon with a `widgets` fallback. Every
+listed application is already registered and granted, so cards have no
+partially-available state. Loading, load-error, empty, and personal-space
+states are explicit.
+
+The team sidebar adds exactly one **Apps** entry when the deployment gate is on,
+the space is collaborative, and the catalog returned at least one application.
+It never adds one navigation item per application.
+
+### `TeamApplicationHostPage`
+
+**Location:** `src/rework/components/pages/TeamApplicationHostPage/`
+
+The wildcard host fills the normal Fred content area and keeps the Fred shell
+mounted. It renders the application in an iframe and reaches it only over
+postMessage: catalog loading, unavailability, handshake in progress, protocol
+mismatch, and unreachable frame each have a distinct contained state, and an
+error boundary keeps a failing frame from taking down the shell. A frame that
+never completes the handshake is treated as broken rather than pending, and
+concurrent proxied requests are capped so one frame cannot exhaust the tab.
+
+The platform-admin Capabilities page exposes applications through its **Apps**
+filter, which appears only while the deployment gate is on. App rows reuse
+default-on and collaborative-team matrix controls but omit personal-space and
+agent-health controls.
+
+#### Host constraints
+
+- Application-owned information architecture remains outside the generic host
+  contract; the host specifies containment and failure behavior only.
+
+---
+
+### Capability side-panel launcher rail (2026-08-28)
+
+**Location:** `src/rework/features/capabilities/CapabilitySidePanelHost.tsx`,
+`src/rework/features/capabilities/<id>/plugin.ts`
+
+**Status:** `Functional`
+
+The launcher rail on the chat page's right edge, one small icon button per side panel
+a session's active capabilities declare. **Since 2026-09-01 it is a page-root in-flow
+column** — extracted into `CapabilityLauncherRail` (a flex sibling of `.pageBody`, not
+inside it), `flex-shrink: 0`, full page height, 12px top/right/bottom margin — so it
+reserves its own space at the far right and reflows the chat body left, rather than
+floating over it as an absolutely-positioned overlay. Opening a panel retires the whole
+rail (returns `null`), so the body-side push drawer takes the full width. Earlier
+behaviour (#2459):
+
+- **A launcher appears only once its panel has something to show.** The rail used to
+  render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`
+  put two buttons onto empty panels from the first message. Each plugin now answers for
+  the open conversation through a `useHasContent` hook on its `sidePanels` spec
+  (ppt_filler: a deck was rendered; writable_document: the list API or a live snapshot
+  holds a document); a panel that omits the hook stays always-on. The rail is invisible
+  chrome until the agent actually produces something.
+- **Each panel carries its own glyph** instead of the `edit_note` the host hardcoded for
+  every one of them. `ppt_filler` → `slideshow`, `writable_document` → `edit_document`
+  (a new entry in `materialIcons`, the page-with-a-pencil glyph) - each the one that
+  capability's own card and pane header already carry, so the launcher reads as the
+  thing it opens. The whole writable_document surface moved off `edit_note` to
+  `edit_document` in the same pass (2026-08-28). Colour stays the rail's neutral
+  `on-surface-retreat`: the launchers sit in the same floating-chrome band as the trace
+  and attachments buttons, and tinting only these two would break that band.
+- **The rail dropped to 68px from the top** (2026-08-28, superseded 2026-09-01). Back when
+  the rail was absolutely positioned, its top offset was tuned against the two-line top bar;
+  in-flow at the page root this offset is gone (the 12px top margin replaces it).
+- **The rail retires entirely while a panel is open** (2026-08-28, still current). When it was
+  an absolutely-positioned overlay this avoided landing on the open drawer's close button;
+  now that it is an in-flow column, retiring also hands its width back to the body so the
+  drawer fills the page. Moving the remaining launchers into the drawer's `headerActions` was
+  tried the same day and dropped: closing the open panel to reach another one is cheap, and
+  one home for the launchers beats two (developer decision).
+- **The drawer's own title band is gone for both panes** (2026-08-28). A pane that
+  names the artefact it holds does not also need the drawer naming the panel above
+  it - two title rows said the same thing twice and ate the top of the column. A
+  panel declares `ownsHeader: true` on its `sidePanels` spec; the host then passes
+  `InlineDrawer`'s new `hideHeader` (the drawer keeps `title` as its accessible
+  name) plus `flushBody`, and the pane renders its own close button. `demo_echo`,
+  which has no header of its own, keeps the drawer's.
+- **Switching conversations closes any open push drawer** (2026-08-28). Opening one
+  is a statement about one conversation and every panel reads the open session, so
+  a drawer carried across sat there empty. A capability whose new conversation
+  warrants its panel asks for it again through the open-request counter.
+- **Both panes' header bands were trimmed** (2026-08-28) - `PptPreviewPane` and
+  `WritableDocumentPane` share the same title + actions row, padded down from
+  `8px/16px` to `4px/12px`; the editor toolbar under it lost the same 4px. Two
+  stacked bands (the drawer's own header, then the pane's) were eating the top of
+  the panel. The download controls keep `size="small"`: those components are shared
+  with the chat cards, where the smaller tier would have broken alignment.
+
+Both capability slices now stamp the conversation their state belongs to, so a deck or a
+document from a previous conversation can no longer light a launcher up on a fresh chat.
+The writable_document editor applies the same scoping to its TAB STRIP (2026-08-28): its
+document set merges the API list with the live snapshots, and the snapshots outlive the
+conversation that produced them (the slice only drops them when the next conversation
+upserts one of its own). A conversation whose documents all come from the API never
+upserts, so the previous conversation's document showed up as an extra tab - someone
+else's document, in an editor that autosaves.

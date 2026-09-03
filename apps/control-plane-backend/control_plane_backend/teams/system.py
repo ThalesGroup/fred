@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fred_core import JoiningMode, KeycloakUser, TeamPermission
+from fred_core import JoiningMode, KeycloakUser, TeamPermission, TeamVisibility
 from fred_core.common import TeamId, personal_team_id
 
 from control_plane_backend.teams.schemas import (
@@ -56,12 +56,18 @@ async def build_personal_team(
         name="Equipe personnelle",
         member_count=1,
         joining_mode=JoiningMode.INVITE_ONLY,
+        # #2433: stated explicitly rather than inherited from the schema
+        # default — a personal space is genuinely private (never listed in
+        # the marketplace, unreadable to non-members), and this DTO promises
+        # its literals unconditionally (see `my_relations` below).
+        visibility=TeamVisibility.PRIVATE,
         is_member=True,
         admins=[],
         permissions=[
             TeamPermission("can_read"),
             TeamPermission("can_update_resources"),
             TeamPermission("can_update_agents"),
+            TeamPermission("can_access_files"),
         ],
         # Matches the hardcoded `permissions` above rather than a live
         # `_get_user_roles_in_team` lookup: the owner's `team_editor` tuple

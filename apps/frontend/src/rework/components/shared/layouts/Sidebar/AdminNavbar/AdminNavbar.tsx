@@ -28,7 +28,6 @@ export default function AdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
   const { canAdmin, canObservePlatform } = useUserCapabilities();
-
   const allItems: (NavigationMenuItemProps & { visible: boolean })[] = [
     {
       type: "link",
@@ -58,6 +57,13 @@ export default function AdminNavbar() {
       icon: { category: "outlined", type: "analytics", filled: false },
       linkProps: { to: "/admin/analytics" },
       visible: canAdmin || canObservePlatform,
+    },
+    {
+      type: "link",
+      label: t("rework.sidebar.admin.menu.platformPrompt"),
+      icon: { category: "outlined", type: "auto_awesome", filled: false },
+      linkProps: { to: "/admin/platform-prompt" },
+      visible: canAdmin,
     },
     {
       type: "link",

@@ -64,6 +64,10 @@ class TeamVisibility(str, Enum):
 
 
 class TeamMetadataPatch(BaseModel):
+    # A rename rides the same patch as every other mutable field. The unique
+    # constraint on `teammetadata.name` is what actually rejects a collision -
+    # callers map the resulting IntegrityError to their own 409.
+    name: str | None = Field(default=None, min_length=1, max_length=180)
     description: str | None = Field(default=None, max_length=180)
     joining_mode: JoiningMode | None = None
     visibility: TeamVisibility | None = None
@@ -79,6 +83,8 @@ class TeamMetadataPatch(BaseModel):
     def to_store_values(self) -> dict[str, str | bool | None]:
         values: dict[str, str | bool | None] = {}
         payload = self.model_dump(exclude_unset=True, mode="json")
+        if "name" in payload:
+            values["name"] = payload["name"]
         if "description" in payload:
             values["description"] = payload["description"]
         if "joining_mode" in payload:
@@ -98,13 +104,15 @@ class TeamMetadataPatch(BaseModel):
 
 class TeamMetadata(BaseModel):
     id: TeamId
-    # AUTHZ-05 review item 9: the team's name, set once at creation
-    # (`TeamMetadataStore.create`) and immutable afterwards — no Keycloak
-    # group backs it anymore.
+    # The team's identity lives here - no Keycloak group backs it anymore.
+    # Set at creation and renameable afterwards by a team_admin through the
+    # team PATCH surface; globally unique either way.
     name: str
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
-    visibility: TeamVisibility = TeamVisibility.PUBLIC
+    # Private by default (#2433) — mirrors `TeamMetadataRow.visibility`, the
+    # column default that actually applies on `create()`.
+    visibility: TeamVisibility = TeamVisibility.PRIVATE
     banner_object_storage_key: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
@@ -195,9 +203,9 @@ class TeamMetadataStore:
     ) -> TeamMetadata:
         """Create one team's metadata row (AUTHZ-05 review item 9).
 
-        `name` is set once, here, and never patched afterwards — `upsert`
-        only touches the mutable fields (description, privacy, banner,
-        retention). Callers must ensure `team_id` does not already exist
+        `name` can be changed afterwards through `upsert` (a team_admin
+        rename); it stays globally unique either way, enforced by the column's
+        own constraint. Callers must ensure `team_id` does not already exist
         (`create_team`'s own name-uniqueness check does this); a duplicate
         id raises the underlying integrity error rather than silently
         overwriting an existing team.

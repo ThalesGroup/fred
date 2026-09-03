@@ -14,7 +14,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import NamedTuple
 
 
 def resolve_interval(since: datetime, until: datetime) -> tuple[str, str]:
@@ -33,3 +34,61 @@ def resolve_interval(since: datetime, until: datetime) -> tuple[str, str]:
     if diff_days <= 3:
         return "1h", "%Y-%m-%d %H:00"
     return "1d", "%Y-%m-%d"
+
+
+# How many buckets a trend point pools before taking its median (issue #2428).
+# Expressed in buckets, not in hours or days, so the window always follows
+# whatever `resolve_interval` picked: 7 daily buckets → a 7-day window, 7 hourly
+# buckets → a 7-hour one. There is deliberately no "unsmoothed" special case.
+TREND_WINDOW_BUCKETS = 7
+
+# Duration of one bucket, keyed by the `fixed_interval` strings above. Kept next
+# to `resolve_interval` so a new interval cannot be added there without the
+# trend window noticing (a missing key raises rather than silently mis-sizing
+# the window).
+_BUCKET_DURATIONS: dict[str, timedelta] = {
+    "1s": timedelta(seconds=1),
+    "1m": timedelta(minutes=1),
+    "1h": timedelta(hours=1),
+    "1d": timedelta(days=1),
+}
+
+
+class TrendInterval(NamedTuple):
+    """Bucket interval and trailing window, resolved together.
+
+    The window is `TREND_WINDOW_BUCKETS × interval` by construction, so the two
+    cannot drift apart — every trend preset resolves both in this one call
+    rather than picking an interval and then guessing a window beside it.
+    """
+
+    interval: str  # OpenSearch `fixed_interval`, e.g. "1d"
+    date_fmt: str  # strftime format for the row labels
+    bucket: timedelta  # duration of one bucket
+    window: str  # wire form of the trailing window, same style as `interval`
+    window_buckets: int  # the same window, in buckets — what the reducer pools
+    lookback: timedelta  # how far before `since` the query must reach
+
+
+def resolve_trend_interval(since: datetime, until: datetime) -> TrendInterval:
+    """Resolve the bucket interval and the trailing window for a trend preset.
+
+    `lookback` is exactly the window, which is what makes the first point of the
+    range honest: the earliest bucket the query returns starts at or before
+    `since - window`, so the seven buckets pooled into the first displayed point
+    are all fully covered by the query range — none of them is clipped.
+    """
+    interval, date_fmt = resolve_interval(since, until)
+    bucket = _BUCKET_DURATIONS[interval]
+    return TrendInterval(
+        interval=interval,
+        date_fmt=date_fmt,
+        bucket=bucket,
+        # "1d" → "7d": the frontend localizes the unit letter, so the count and
+        # the unit never have to be hardcoded there. `window_buckets` is the
+        # same number handed to the reducer, so the label and the actual pooling
+        # width come from this single spot.
+        window=f"{TREND_WINDOW_BUCKETS}{interval[1:]}",
+        window_buckets=TREND_WINDOW_BUCKETS,
+        lookback=TREND_WINDOW_BUCKETS * bucket,
+    )

@@ -82,54 +82,12 @@
      rather than widening the row's `gap`, which would push the chevron out
      too and re-open the space the mockup keeps tight. */
   margin-left: var(--spacing-2xs);
-  /* One step fainter than retreat in both themes — the colour contrast alone
-     separates the model name from the reasoning state. */
-  color: var(--on-surface-muted);
+  /* Uniform muted styling for the effort word in BOTH modes (Faible/Élevé):
+     no gradient, no per-mode accent — the word alone carries the state, one
+     step fainter than the model name so the colour contrast still separates
+     the two. */
+  color: var(--on-surface-retreat);
   line-height: 1;
-}
-
-/* Boost is a live mode, not a resting state: it steps forward instead of
-   retreating, wearing the same spectrum as the Chat button's rotating border
-   (AgentCard.module.scss) so the one "this is the AI doing more" signal reads
-   the same in both places.
-
-   design-token exception: same rationale as that border — no semantic token
-   family covers this sequence.
-
-   Two deliberate departures from the border version. It is a LINEAR gradient,
-   not conic: a conic sweep across ~40px of text reads as an arbitrary smear
-   rather than a sweep. And the border's white stops are dropped — white is
-   what makes the highlight travel around a border, but in text it is a hole,
-   invisible on the light theme. What is left is the saturated run
-   (cyan → violet → pink), which keeps the identity and stays readable in both
-   themes.
-
-   The WORD still carries the state on its own, so this is reinforcement and
-   never the only signal — a colour-blind reader reads "Boost" vs "Rapide".
-
-   2026-08-21: stops saturated and moderately darkened (same hues) — the
-   original pastels were near-invisible on the light surface, and a fully
-   darkened pass sank into the dark one. These sit halfway between the two so
-   the single gradient reads on both themes. */
-.state[data-on] {
-  background: linear-gradient(90deg, #37c9e4, #6f78fc, #db47ae);
-  background-clip: text;
-  -webkit-background-clip: text;
-  /* Fallback first: any engine that ignores background-clip: text keeps a
-     solid, readable colour instead of transparent (invisible) text. */
-  color: var(--primary);
-  font-weight: 500;
-  -webkit-text-fill-color: transparent;
-}
-
-/* Forced-colours users get the system palette, not our spectrum — a gradient
-   clipped to text is exactly what that mode exists to override. */
-@media (forced-colors: active) {
-  .state[data-on] {
-    background: none;
-    -webkit-text-fill-color: currentcolor;
-    color: highlight;
-  }
 }
 
 .chevron {
@@ -148,6 +106,15 @@
   max-width: 260px;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+}
+
+/* Section heading inside the menu ("Modèles", "Effort") — a quiet label that
+   groups the rows below it, one step above the muted body so it reads as a
+   heading without competing with the selectable rows. */
+.sectionTitle {
+  padding: var(--spacing-xs) var(--spacing-s) var(--spacing-3xs);
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
 }
 
 .menu {

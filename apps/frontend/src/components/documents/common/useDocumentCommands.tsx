@@ -18,15 +18,14 @@ import {
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   TagWithItemsId,
   DocumentMetadata,
-  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation,
   useMutateDocumentLabelsMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
-import { downloadFile } from "../../../utils/downloadUtils";
-import { useLazyDownloadRawContentBlobQuery } from "../../../slices/knowledgeFlow/knowledgeFlowApi.blob";
+import { downloadFile, fetchAuthedBlob } from "../../../utils/downloadUtils";
+import { collectDescendantTags, rewriteTagUnderFolder, type TagNode } from "../../../shared/utils/tagTree";
 
 type DocumentRefreshers = {
   refetchTags?: () => Promise<any>;
@@ -41,7 +40,6 @@ export interface DocumentPreviewTarget {
 export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefreshers = {}) {
   const { t } = useTranslation();
   const { showSuccess, showError, showInfo } = useToast();
-  const [] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
   const [updateRetrievable] =
@@ -49,7 +47,6 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();
   const [mutateLabelsMutation] = useMutateDocumentLabelsMutation();
   const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
-  const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const refresh = useCallback(
     async (tagId?: string) => {
@@ -186,9 +183,14 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   // directly: zipping N documents needs every blob before any of them can
   // be saved, so it can't go through `download`'s fetch+save-immediately
   // shape.
+  // Plain authed fetch, NOT an RTK Query lazy trigger: the lazy hook has a single
+  // subscription, so firing it concurrently for N documents (a bulk zip download)
+  // drops all but the last request and the whole download fails. A direct fetch
+  // per document is independent — the same path FilesystemWorkspace already uses.
   const fetchBlob = useCallback(
-    (doc: DocumentMetadata) => triggerDownloadBlob({ documentUid: doc.identity.document_uid }).unwrap(),
-    [triggerDownloadBlob],
+    (doc: DocumentMetadata) =>
+      fetchAuthedBlob(`/knowledge-flow/v1/raw_content/${encodeURIComponent(doc.identity.document_uid)}`),
+    [],
   );
   const download = useCallback(
     async (doc: DocumentMetadata) => {
@@ -206,22 +208,29 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     [fetchBlob, showError],
   );
   // Corpus folder rename (RFC §13.8) — reuses the existing tag-update path
-  // (`PUT /tags/{tag_id}`) already used elsewhere in this hook, no new
-  // endpoint. `refresh` re-derives the tag tree so the renamed node's new
-  // path/name shows up without a manual reload.
-  const renameTag = useCallback(
-    async (tag: TagWithItemsId, newName: string) => {
+  // (`PUT /tags/{tag_id}`), no new endpoint. A folder is a path PREFIX, not a
+  // single tag: renaming it must rewrite the leading segment of EVERY tag
+  // at-or-under the node (the tag ending there AND every descendant), else the
+  // descendants keep the old path and re-materialize the old folder — the rename
+  // then appears to do nothing. `refresh` re-derives the tag tree afterward.
+  const renameFolder = useCallback(
+    async (node: TagNode, newName: string) => {
+      const oldFull = node.full;
+      const cut = oldFull.lastIndexOf("/");
+      const parentPath = cut >= 0 ? oldFull.slice(0, cut) : "";
+      const newFull = parentPath ? `${parentPath}/${newName}` : newName;
+      const tags = collectDescendantTags(node);
       try {
-        await updateTag({
-          tagId: tag.id,
-          tagUpdate: {
-            name: newName,
-            path: tag.path,
-            description: tag.description,
-            type: tag.type,
-            item_ids: tag.item_ids,
-          },
-        }).unwrap();
+        // Independent per-id updates (each carries its final name/path), so order
+        // does not matter; a mid-way failure leaves a partial rename the user can
+        // retry (no folder-rename transaction exists server-side).
+        for (const tag of tags) {
+          const { name, path } = rewriteTagUnderFolder(tag, oldFull, newFull);
+          await updateTag({
+            tagId: tag.id,
+            tagUpdate: { name, path, description: tag.description, type: tag.type, item_ids: tag.item_ids },
+          }).unwrap();
+        }
         await refresh();
       } catch (e: any) {
         showError?.({
@@ -239,14 +248,18 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   // index and the content-store filename lookup. Supersedes the earlier
   // cosmetic title-only rename (identity.title, browser-display only) for
   // the Corpus "Renommer" action.
+  // `tagId` is the folder currently being viewed: callers must pass it (like
+  // removeFromLibrary does) so `refresh` reloads that folder's page and the
+  // renamed row shows its new name. Without it refetchDocs is a no-op and the
+  // rename succeeds server-side while the UI keeps showing the old name.
   const renameDocument = useCallback(
-    async (doc: DocumentMetadata, newName: string) => {
+    async (doc: DocumentMetadata, newName: string, tagId?: string) => {
       try {
         await renameDocumentMutation({
           documentUid: doc.identity.document_uid,
           bodyRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePut: { name: newName },
         }).unwrap();
-        await refresh();
+        await refresh(tagId);
       } catch (e: any) {
         showError?.({
           summary: t("validation.error"),
@@ -286,7 +299,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     toggleRetrievable,
     removeFromLibrary,
     bulkRemoveFromLibraryForTag,
-    renameTag,
+    renameFolder,
     renameDocument,
     mutateLabels,
     preview,

@@ -2230,6 +2230,93 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
     assert turns[0]["is_error"] is False
 
 
+def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
+    """
+    `agent.turn_completed` must carry `dims.session_id` (issue #2426).
+
+    Why this exists:
+    - control-plane's `conversation_depth` preset groups turns by
+      `dims.session_id`; without the dim the whole preset returns nothing, and
+      nothing else in this suite asserts the dim reaches the KPI writer
+    - the ring-buffer record sources `session_id` from the same `turn_dims`
+      dict, and `KpiTurnRecord` requires that key while the surrounding `cast`
+      hides its loss from the type checker — so it needs a runtime assertion
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+    """
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    async def _fake_iterate(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        yield {"kind": "final", "sequence": 0, "content": "pong"}
+
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+
+    with TestClient(app) as client:
+        container = get_pod_container_from_app(app)
+        container.kpi_turns_buffer.clear()
+        # `_emit_turn_completed` reads the writer off the runtime context, which
+        # only exists once the app has started — hence patching inside the
+        # TestClient block. `RuntimeConfig` is a frozen dataclass, so the seam
+        # is the accessor rather than the field.
+        recording = _RecordingKPIWriter()
+        monkeypatch.setattr(
+            type(get_runtime_context()),
+            "get_kpi_writer",
+            lambda _self: recording,
+        )
+
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "ping",
+                "session_id": "session-depth",
+            },
+        )
+        assert resp.status_code == 200
+
+        with container._kpi_turns_lock:
+            turns = list(container.kpi_turns_buffer)
+
+    turn_completed = [e for e in emitted if e.get("name") == "agent.turn_completed"]
+    assert len(turn_completed) == 1
+    assert turn_completed[0]["dims"]["session_id"] == "session-depth"
+    # Deliberately NOT carried — see RUNTIME-EXECUTION-CONTRACT.md §8.58.
+    assert "exchange_id" not in turn_completed[0]["dims"]
+    assert "user_id" not in turn_completed[0]["dims"]
+
+    assert len(turns) == 1
+    assert turns[0]["session_id"] == "session-depth"
+
+
 def test_execute_route_propagates_checkpoint_and_observability_context(
     monkeypatch, tmp_path
 ) -> None:
@@ -2400,6 +2487,82 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
     assert context["execution_action"] == "execute"
 
 
+def test_local_registry_invoker_drains_runtime_events_after_final(monkeypatch) -> None:
+    """
+    Ensure an in-process nested invocation lets the runtime generator finish.
+
+    The runtime generator owns cleanup in its ``finally`` block. Returning from
+    LocalRegistryAgentInvoker.invoke() as soon as the first FinalRuntimeEvent is
+    observed can close the async generator prematurely and run that cleanup from
+    a different asyncio context.
+    """
+
+    seen: dict[str, bool] = {
+        "continued_after_final": False,
+        "cleaned_up": False,
+    }
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        _ = (
+            definition,
+            request,
+            access_token,
+            team_id,
+            registry,
+            exchange_id,
+        )
+        try:
+            yield {"kind": "final", "sequence": 0, "content": "ok"}
+            seen["continued_after_final"] = True
+        finally:
+            seen["cleaned_up"] = True
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+    )
+
+    result = asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="alice",
+                    tenant="tenant-a",
+                    environment=PortableEnvironment.DEV,
+                    session_id="session-1",
+                    user_id="alice",
+                    team_id="fredlab",
+                ),
+            )
+        )
+    )
+
+    assert result.content == "ok"
+    assert result.is_error is False
+    assert seen["continued_after_final"] is True
+    assert seen["cleaned_up"] is True
+
+
 def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     """
     RFC AGENT-INVOKE: a per-call ``InvocationScope`` narrows the callee's retrieval.
@@ -2491,6 +2654,59 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
     assert isinstance(context, dict)
     assert "selected_document_uids" not in context
     assert "search_policy" not in context
+
+
+def test_nested_invocation_preserves_actor_when_user_id_is_none(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        *,
+        access_token,
+        team_id,
+        registry,
+        exchange_id=None,
+        **_kwargs,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        seen["context"] = dict(request.context or {})
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+    )
+
+    result = asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="marc",
+                    tenant="default",
+                    environment=PortableEnvironment.DEV,
+                    user_id=None,
+                ),
+            )
+        )
+    )
+
+    assert result.is_error is False
+    context = seen["context"]
+    assert isinstance(context, dict)
+    assert context["actor"] == "marc"
+    assert context["user_id"] is None
 
 
 def test_local_registry_invoker_forwards_platform_binding_to_nested_iterate_call(
@@ -2875,7 +3091,6 @@ async def _write_react_v2_checkpoint(
     checkpointer,
     *,
     thread_id: str,
-    checkpoint_ns: str = "",
     channel_values: dict[str, Any],
 ):
     """
@@ -2883,6 +3098,10 @@ async def _write_react_v2_checkpoint(
     (the same `aput` production code uses, `graph_runtime.py::_store_pending_checkpoint`'s
     non-legacy counterpart) — no `runtime_kind`/`pending` markers, since ReAct
     V2's `create_agent()` never stamps those (#2179).
+
+    Always UNNAMESPACED, like production: LangGraph resets `checkpoint_ns` to
+    `""` on every root-graph run, so a compiled ReAct agent's checkpoints can
+    only ever land there (`test_langgraph_resets_root_checkpoint_namespace`).
     """
 
     checkpoint = empty_checkpoint()
@@ -2890,10 +3109,7 @@ async def _write_react_v2_checkpoint(
     checkpoint["channel_values"] = channel_values
     checkpoint["channel_versions"] = {key: checkpoint_id for key in channel_values}
     return await checkpointer.aput(
-        checkpoint_config(
-            thread_id=thread_id,
-            checkpoint_ns=checkpoint_ns,
-        ),
+        checkpoint_config(thread_id=thread_id),
         checkpoint,
         {"source": "update", "step": 0, "parents": {}},
         dict(checkpoint["channel_versions"]),
@@ -2905,7 +3121,6 @@ async def _write_react_v2_interrupt(
     *,
     thread_id: str,
     interrupt_id: str,
-    checkpoint_ns: str = "",
     task_id: str = "task-1",
     channel_values: dict[str, Any] | None = None,
 ):
@@ -2922,7 +3137,6 @@ async def _write_react_v2_interrupt(
     stored_config = await _write_react_v2_checkpoint(
         checkpointer,
         thread_id=thread_id,
-        checkpoint_ns=checkpoint_ns,
         channel_values=channel_values or {"messages": []},
     )
     await checkpointer.aput_writes(
@@ -3000,7 +3214,6 @@ def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
                 checkpointer,
                 thread_id="session-react-v2",
                 interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3051,7 +3264,6 @@ def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
             _write_react_v2_checkpoint(
                 checkpointer,
                 thread_id="session-react-v2-done",
-                checkpoint_ns=definition.agent_id,
                 channel_values={"messages": []},
             )
         )
@@ -3154,7 +3366,6 @@ def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> Non
                 checkpointer,
                 thread_id="session-react-input-resume",
                 interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3298,7 +3509,6 @@ def test_resume_reuses_exchange_id_from_the_interrupted_turn(
                 checkpointer,
                 thread_id="session-exchange-continuity",
                 interrupt_id="xxh3-routing-hash-not-a-real-checkpoint-id",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3441,7 +3651,6 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         resume_a = client.post(
@@ -3464,7 +3673,6 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-b",
-                checkpoint_ns=definition.agent_id,
             )
         )
         assert "interrupt-a" != "interrupt-b"
@@ -3548,7 +3756,6 @@ def test_resume_replay_after_success_does_not_execute_again(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         payload = {
@@ -3612,7 +3819,6 @@ def test_resume_rejects_non_matching_interrupt_id_variants(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-real",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3660,7 +3866,6 @@ def test_resume_rejects_token_belonging_to_another_thread(
                 checkpointer,
                 thread_id="session-thread-a",
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         asyncio.run(
@@ -3668,7 +3873,6 @@ def test_resume_rejects_token_belonging_to_another_thread(
                 checkpointer,
                 thread_id="session-thread-b",
                 interrupt_id="interrupt-b",
-                checkpoint_ns=definition.agent_id,
             )
         )
 
@@ -3719,14 +3923,13 @@ async def test_concurrent_duplicate_resumes_have_exactly_one_winner(
             checkpointer,
             thread_id="session-concurrent",
             interrupt_id="interrupt-a",
-            checkpoint_ns=definition.agent_id,
         )
 
         async def _attempt():
             try:
                 claim = await agent_app_module._claim_hitl_resume_before_invocation(
                     session_id="session-concurrent",
-                    checkpoint_ns=definition.agent_id,
+                    checkpoint_ns="",
                     interrupt_id="interrupt-a",
                 )
                 return "ok" if claim is not None else "none"
@@ -3779,7 +3982,6 @@ async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
             checkpointer,
             thread_id=session_id,
             interrupt_id="interrupt-a",
-            checkpoint_ns=definition.agent_id,
         )
 
         payload = {
@@ -3868,7 +4070,6 @@ def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         payload = {
@@ -3945,7 +4146,6 @@ def test_resume_start_failure_releases_the_claim_for_a_retry(
                 checkpointer,
                 thread_id=session_id,
                 interrupt_id="interrupt-a",
-                checkpoint_ns=definition.agent_id,
             )
         )
         payload = {
@@ -4051,7 +4251,6 @@ async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
             checkpointer,
             thread_id=session_id,
             interrupt_id="interrupt-a",
-            checkpoint_ns=definition.agent_id,
         )
         payload = {
             "agent_id": "rags.sample.echo",
@@ -4451,17 +4650,19 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
 def test_capability_block_delivers_mcp_agent_instructions_for_active_server() -> None:
     """
     Ensure `_build_capability_block` delivers an active MCP server's catalog
-    `agent_instructions` as a prompt-fragment middleware.
+    `agent_instructions` as an `McpPromptGroup`.
 
     Why this exists:
     - #1978 moved `agent_instructions` delivery off `_apply_runtime_tuning`
-      (which no longer touches the system prompt for MCP at all) and onto each
-      MCP server's own capability `_McpInstructionsMiddleware` — assembled by
-      `_build_capability_block` from the agent's selected capabilities. #1988
-      dropped the `mcp:` id prefix: the capability id IS the catalog server
-      id (`server.id`). The instructions must stay enforced even when an
-      operator overrides `prompts.system`, since they are delivered as a
-      separate middleware layer, not folded into `system_prompt_template`.
+      (which no longer touches the system prompt for MCP at all) and onto
+      each MCP server's own capability, assembled by `_build_capability_block`
+      from the agent's selected capabilities. #1988 dropped the `mcp:` id
+      prefix: the capability id IS the catalog server id (`server.id`). #2455
+      moved delivery again, off a per-model-call middleware fragment and onto
+      `block.mcp_prompt_groups`, inlined into the static ReAct tool-prompt
+      suffix — the instructions must stay enforced even when an operator
+      overrides `prompts.system`, since they are never folded into
+      `system_prompt_template` itself.
 
     How to use it:
     - run in the default offline fred-runtime test suite
@@ -4471,7 +4672,6 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     """
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
-    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
     from fred_sdk.contracts.capability import TeamScopePolicy
     from fred_sdk.contracts.models import (
         AgentTuning,
@@ -4520,11 +4720,7 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     )
 
     assert block is not None
-    fragments = [
-        mw._fragment
-        for mw in block.middleware
-        if isinstance(mw, _McpInstructionsMiddleware)
-    ]
+    fragments = [group.agent_instructions for group in block.mcp_prompt_groups]
     assert fragments == ["Always cite retrieved claims."]
 
 
@@ -4547,7 +4743,6 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     """
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
-    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
@@ -4596,12 +4791,11 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
         agent_instance_id=None,
     )
 
-    fragments = [
-        mw._fragment
-        for mw in (block.middleware if block is not None else ())
-        if isinstance(mw, _McpInstructionsMiddleware)
+    server_ids = [
+        group.server_id
+        for group in (block.mcp_prompt_groups if block is not None else ())
     ]
-    assert fragments == []
+    assert server_ids == ["mcp-storage"]
 
 
 def test_build_capability_block_for_graph_agent_returns_tools() -> None:
@@ -4682,6 +4876,10 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
         agent_id: str = "test.graph_capability"
         role: str = "test"
         description: str = "test"
+        # This test specifically exercises the Graph capability-block build
+        # path — opt back in from GraphAgentDefinition's False default (see
+        # AgentDefinition.supports_capabilities).
+        supports_capabilities: bool = True
 
         def build_graph(self) -> GraphDefinition:
             return GraphDefinition(
@@ -4796,6 +4994,10 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         agent_id: str = "test.graph_capability_react_only"
         role: str = "test"
         description: str = "test"
+        # This test specifically exercises the Graph capability-block build
+        # path — opt back in from GraphAgentDefinition's False default (see
+        # AgentDefinition.supports_capabilities).
+        supports_capabilities: bool = True
 
         def build_graph(self) -> GraphDefinition:
             return GraphDefinition(
@@ -4918,6 +5120,10 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
         agent_id: str = "test.graph_capability_hitl_gated"
         role: str = "test"
         description: str = "test"
+        # This test specifically exercises the Graph capability-block build
+        # path — opt back in from GraphAgentDefinition's False default (see
+        # AgentDefinition.supports_capabilities).
+        supports_capabilities: bool = True
 
         def build_graph(self) -> GraphDefinition:
             return GraphDefinition(
@@ -4968,30 +5174,169 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
         )
 
 
-def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name() -> (
+def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent() -> (
     None
 ):
     """
-    Ensure two selected MCP servers with `agent_instructions` yield middleware
-    with DISTINCT `.name`s.
+    A `GraphAgentDefinition` that leaves `supports_capabilities` at its False
+    default (the honest "this agent doesn't support capabilities" signal, see
+    `AgentDefinition.supports_capabilities`) must never build a block or raise
+    — not even when the managed instance's saved tuning still names a
+    HITL-gated, otherwise Graph-incompatible capability. This is exactly the
+    live-broken-instance case the field was introduced to fix: an agent
+    instance whose capability selection was saved back when the picker (still
+    driven by pod-wide registration, not the definition's own declaration)
+    wrongly offered it. `_effective_capability_ids` and `_build_capability_block`
+    both discard the stale selection instead of erroring on it.
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent -q`
+    """
+    from collections.abc import Mapping as _Mapping
+
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_sdk.contracts.capability import (
+        AgentCapability,
+        CapabilityContext,
+        CapabilityManifest,
+        EmptyModel,
+        HitlSpec,
+    )
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        GraphAgentDefinition,
+        GraphDefinition,
+        GraphNodeDefinition,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+    from langchain_core.tools import BaseTool
+    from langchain_core.tools import tool as lc_tool
+    from pydantic import BaseModel
+
+    class _NoConfig(BaseModel):
+        pass
+
+    class _HitlGatedCapability(AgentCapability[_NoConfig, _NoConfig, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="document_extract",
+            version="1.0.0",
+            name="cap.document_extract.name",
+            description="cap.document_extract.description",
+            icon="Build",
+        )
+        ConfigModel = _NoConfig
+
+        def tools(
+            self, ctx: CapabilityContext[_NoConfig, EmptyModel]
+        ) -> list[BaseTool]:
+            del ctx
+
+            @lc_tool
+            def gated_probe(text: str) -> str:
+                """Echo text back."""
+                return text
+
+            return [gated_probe]
+
+        def hitl_specs(self) -> list[HitlSpec]:
+            return [HitlSpec(tool="gated_probe", require=True)]
+
+    class _MinInput(BaseModel):
+        message: str = ""
+
+    class _MinState(BaseModel):
+        message: str = ""
+
+    class _MinGraphAgent(GraphAgentDefinition):
+        agent_id: str = "test.graph_capability_unsupported_stale_selection"
+        role: str = "test"
+        description: str = "test"
+        # Deliberately NOT overriding `supports_capabilities` — this mirrors
+        # a real GraphAgentDefinition subclass like Eva, which relies on the
+        # False default rather than declaring it.
+
+        def build_graph(self) -> GraphDefinition:
+            return GraphDefinition(
+                state_model_name="MinState",
+                entry_node="n",
+                nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+            )
+
+        def input_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def state_model(self) -> type[BaseModel]:
+            return _MinState
+
+        def output_model(self) -> type[BaseModel]:
+            return _MinInput
+
+        def build_initial_state(
+            self, input_model: BaseModel, binding: BoundRuntimeContext
+        ) -> BaseModel:
+            return _MinState(message=getattr(input_model, "message", ""))
+
+        def node_handlers(self) -> _Mapping[str, object]:
+            return {}
+
+        def build_output(self, state: BaseModel) -> BaseModel:
+            return _MinInput(message=getattr(state, "message", ""))
+
+    definition = _MinGraphAgent()
+    assert definition.supports_capabilities is False
+    registry = CapabilityRegistry()
+    registry.register(_HitlGatedCapability())
+    # Mirrors the actual saved tuning on the live-broken Eva instance this bug
+    # was reported against: a HITL-gated, non-MCP capability selected while
+    # the picker was still (wrongly) offering it.
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=["document_extract"],
+    )
+
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is None
+
+
+def test_capability_block_orders_mcp_prompt_groups_by_server_id() -> None:
+    """
+    Ensure `block.mcp_prompt_groups` comes back id-sorted, not in selection
+    order.
 
     Why this exists:
-    - `create_agent` rejects a middleware list with duplicate `.name`s
-      ("Please remove duplicate middleware instances."). `AgentMiddleware.name`
-      defaults to the class name, so before the per-server `.name` override two
-      `_McpInstructionsMiddleware` instances collided and blew up executor
-      build for any agent selecting >1 MCP server with `agent_instructions`.
-    - guards the fix: `.name` keys on the catalog server id.
+    - `build_runtime_tool_prompt_suffix` (#2455) renders each group's `Tools
+      for {title}:` header in `mcp_prompt_groups` iteration order, with no
+      sort of its own — it trusts the caller. `_build_capability_block`
+      inherits `build_capability_agent_block`'s `sorted(capability id)` rule
+      (RFC §5.3: "a UI reorder must not change behavior"), and since an MCP
+      server's capability id IS its catalog server id (#1988), that's the
+      same guarantee this test pins.
+    - superseded assertion: before #2455 moved `agent_instructions` delivery
+      off a per-model-call middleware fragment, this test guarded
+      `_McpInstructionsMiddleware` instances against `create_agent`'s
+      duplicate-`.name` rejection — a hazard specific to that mechanism and
+      structurally impossible now that it no longer exists.
 
     How to use it:
     - run in the default offline fred-runtime test suite
 
     Example:
-    - `pytest tests/test_agent_app.py::test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name -q`
+    - `pytest tests/test_agent_app.py::test_capability_block_orders_mcp_prompt_groups_by_server_id -q`
     """
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
-    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
@@ -5030,7 +5375,10 @@ def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name()
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
-        selected_capability_ids=["mcp-search", "mcp-storage"],
+        # Reverse-alphabetical selection order, on purpose: the assertion
+        # below only holds if the block sorts by id rather than preserving
+        # this order.
+        selected_capability_ids=["mcp-storage", "mcp-search"],
     )
 
     block = _build_capability_block(
@@ -5045,12 +5393,8 @@ def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name()
     )
 
     assert block is not None
-    names = [
-        mw.name for mw in block.middleware if isinstance(mw, _McpInstructionsMiddleware)
-    ]
-    assert names == ["McpInstructions[mcp-search]", "McpInstructions[mcp-storage]"]
-    # The invariant create_agent enforces: no duplicate middleware names.
-    assert len(set(names)) == len(names)
+    server_ids = [group.server_id for group in block.mcp_prompt_groups]
+    assert server_ids == ["mcp-search", "mcp-storage"]
 
 
 def test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server() -> None:

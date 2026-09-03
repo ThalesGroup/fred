@@ -36,6 +36,9 @@ from fred_sdk.contracts.capability import (
     ChatControlsResponse,
     StoredCapabilityConfig,
 )
+from fred_sdk.contracts.capability.manifest import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_sdk.contracts.models import TeamScopePolicy
 from pydantic import ValidationError
 
@@ -56,9 +59,12 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
+from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    BulkDeleteSessionRef,
+    BulkDeleteSessionsResponse,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptCategoryRequest,
@@ -69,6 +75,8 @@ from control_plane_backend.product.schemas import (
     FrontendBootstrap,
     FrontendConfig,
     FrontendUserAuthConfig,
+    InactiveSessionItem,
+    InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     MarketplacePromptDetail,
@@ -180,6 +188,7 @@ class _RuntimeTemplatePayload:
         kind: str,
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
+        supports_capabilities: bool = True,
         default_capability_ids: list[str] | None = None,
         max_chat_input_chars: int | None = None,
     ) -> None:
@@ -193,6 +202,7 @@ class _RuntimeTemplatePayload:
             description=description,
         )
         self.available_capabilities = available_capabilities or []
+        self.supports_capabilities = supports_capabilities
         # The capability ids activated when an instance's `selected_capability_ids`
         # is None (CAPAB-01 / #1980, RFC §8.1 amendment): the plain catalog ids of
         # `definition.default_mcp_servers`, mirrored on the wire as
@@ -237,6 +247,27 @@ class _RuntimeTemplatePayload:
             and raw_max_chat_input_chars > 0
             else None
         )
+        parsed_capabilities = [
+            CapabilityCatalogEntry.model_validate(entry)
+            for entry in data.get("available_capabilities", [])
+            if isinstance(entry, dict)
+        ]
+        quarantined_capability_ids = {
+            entry.id
+            for entry in parsed_capabilities
+            if entry.kind == "app"
+            or entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+        }
+        if quarantined_capability_ids:
+            logger.warning(
+                "Ignoring product-application entries advertised by an agent runtime: %s",
+                sorted(quarantined_capability_ids),
+            )
+        available_capabilities = [
+            entry
+            for entry in parsed_capabilities
+            if entry.id not in quarantined_capability_ids
+        ]
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -246,11 +277,11 @@ class _RuntimeTemplatePayload:
             default_tuning=tuning,
             # Pod-installed capabilities (#1974) — the same SDK wire model the
             # pod serializes, never a hand-declared parallel copy.
-            available_capabilities=[
-                CapabilityCatalogEntry.model_validate(entry)
-                for entry in data.get("available_capabilities", [])
-                if isinstance(entry, dict)
-            ],
+            available_capabilities=available_capabilities,
+            # Unfiltered by team can_use, unlike available_capabilities above —
+            # the only way to tell "team has zero usable capabilities" apart
+            # from "template doesn't support selection" once that's narrowed.
+            supports_capabilities=bool(data.get("supports_capabilities", True)),
             # Ids of `definition.default_mcp_servers` (the servers activated when
             # `selected_capability_ids is None`) — MCP-derived and native ids
             # alike (RFC §2), read verbatim off the pod's own wire field rather
@@ -259,7 +290,10 @@ class _RuntimeTemplatePayload:
             default_capability_ids=[
                 cid
                 for cid in data.get("default_capability_ids", [])
-                if isinstance(cid, str) and cid
+                if isinstance(cid, str)
+                and cid
+                and cid not in quarantined_capability_ids
+                and not cid.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
             ],
             # Optional during rolling upgrades: older runtime pods do not
             # advertise this deployment policy yet.
@@ -1576,6 +1610,23 @@ async def list_agent_templates(
                     available_capabilities=filter_entries_by_usable(
                         template.available_capabilities, usable_ids
                     ),
+                    supports_capabilities=template.supports_capabilities,
+                    # Unfiltered on purpose: this is the template's DECLARED
+                    # default list, and `available_capabilities` above is
+                    # already narrowed to what this team `can_use`. The
+                    # agent-creation form intersects the two, so a default the
+                    # team is not enabled for is never pre-ticked (and never
+                    # rendered) — same result as filtering here, without
+                    # making the field lie about what the template declares.
+                    default_capability_ids=list(template.default_capability_ids),
+                    # REASON-01 level 3 + Amendment B (#2473), read off the
+                    # pod's `default_tuning`. Unfiltered by platform state on
+                    # purpose: this is what the template DECLARES. Levels 1-2
+                    # are send-path gates (`_platform_reasoning_control`), so a
+                    # declared True on a deployment with no reasoning-enabled
+                    # model simply never produces a composer control.
+                    reasoning_enabled=template.default_tuning.reasoning_enabled,
+                    reasoning_default_on=template.default_tuning.reasoning_default_on,
                 )
             )
     return templates
@@ -3374,10 +3425,12 @@ async def get_runtime_binding_for_team(
         all_team_settings,
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
+        platform_prompt,
     ) = await asyncio.gather(
         deps.get_team_capability_settings_store().list_for_team(team_id),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
         resolve_platform_chat_model_binding(deps),
+        resolve_platform_prompt_text(deps),
     )
     team_capability_settings = {
         cap_id: settings
@@ -3394,6 +3447,7 @@ async def get_runtime_binding_for_team(
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_prompt=platform_prompt,
     )
 
 
@@ -4128,6 +4182,114 @@ async def list_sessions(
         limit=limit,
     )
     return [_record_to_item(r) for r in records]
+
+
+# Home cleanup tool (#2298). Per-team scan cap: a user's own session count in one
+# space is small, but bound it so a runaway space can't produce an unbounded scan.
+_INACTIVE_SESSION_SCAN_LIMIT = 500
+# Bound concurrent deletes so a large selection can't saturate the DB pool or the
+# runtime erase fan-out.
+_BULK_DELETE_CONCURRENCY = 5
+
+
+def _as_aware_utc(dt: datetime) -> datetime:
+    """Treat a naive timestamp as UTC (SQLite may hand back naive datetimes)."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+async def list_inactive_sessions(
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+    *,
+    inactive_days: int,
+) -> InactiveSessionsResponse:
+    """The caller's conversations that have gone quiet, across every space they
+    belong to (personal + each team) — home dashboard cleanup tool (#2298).
+
+    "Inactive" = no activity for more than `inactive_days` (updated_at older than
+    the cutoff). Deliberately NOT period-scoped: a cleanup tool should surface
+    every stale conversation, however old, so the user can clear as much as
+    possible — the home period selector doesn't apply here. The agent display
+    name is resolved here (one batch lookup per space) so the cleanup list needs
+    no extra call.
+    """
+    now = _utcnow()
+    cutoff = now - timedelta(days=inactive_days)
+
+    teams = await list_teams_from_service(user, deps.team_dependencies)
+
+    async def _for_team(team_id: TeamId) -> list[InactiveSessionItem]:
+        sessions = await list_sessions(
+            team_id, deps, user_id=user.uid, limit=_INACTIVE_SESSION_SCAN_LIMIT
+        )
+        inactive = [
+            s
+            for s in sessions
+            if s.updated_at is not None and _as_aware_utc(s.updated_at) <= cutoff
+        ]
+        if not inactive:
+            return []
+        agents = await deps.get_agent_instance_store().list_by_team(team_id)
+        name_by_id = {a.agent_instance_id: a.display_name for a in agents}
+        return [
+            InactiveSessionItem(
+                session_id=s.session_id,
+                team_id=team_id,
+                title=s.title,
+                agent_name=(
+                    name_by_id.get(s.agent_instance_id) if s.agent_instance_id else None
+                ),
+                updated_at=s.updated_at,
+            )
+            for s in inactive
+        ]
+
+    # Scan every space concurrently — independent per-team reads.
+    per_team = await asyncio.gather(*[_for_team(team.id) for team in teams])
+    sessions = [item for group in per_team for item in group]
+    # Newest-first, so each per-space group in the dialog reads consistently.
+    sessions.sort(key=lambda s: s.updated_at or now, reverse=True)
+    return InactiveSessionsResponse(sessions=sessions)
+
+
+async def bulk_delete_sessions(
+    user: KeycloakUser,
+    refs: list[BulkDeleteSessionRef],
+    *,
+    authorization: str,
+    deps: ProductServiceDependencies,
+) -> BulkDeleteSessionsResponse:
+    """Delete several of the caller's conversations in one action (home cleanup
+    tool). Reuses the single-session governed delete primitive per item, so each
+    goes through the same deferred-erase lifecycle; ownership is enforced there,
+    so a foreign/already-gone session lands in `failed` rather than aborting the
+    batch. Concurrency is bounded (`_BULK_DELETE_CONCURRENCY`)."""
+    semaphore = asyncio.Semaphore(_BULK_DELETE_CONCURRENCY)
+
+    async def _delete(ref: BulkDeleteSessionRef) -> tuple[str, bool]:
+        async with semaphore:
+            try:
+                await delete_or_defer_session(
+                    team_id=ref.team_id,
+                    session_id=ref.session_id,
+                    user_id=user.uid,
+                    authorization=authorization,
+                    deps=deps,
+                )
+                return ref.session_id, True
+            except Exception:
+                logger.warning(
+                    "[control-plane][home] bulk delete failed for session %s in team %s",
+                    ref.session_id,
+                    ref.team_id,
+                    exc_info=True,
+                )
+                return ref.session_id, False
+
+    results = await asyncio.gather(*[_delete(ref) for ref in refs])
+    deleted = [sid for sid, ok in results if ok]
+    failed = [sid for sid, ok in results if not ok]
+    return BulkDeleteSessionsResponse(deleted=deleted, failed=failed)
 
 
 async def update_session_activity(

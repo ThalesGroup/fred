@@ -26,6 +26,7 @@ from contextlib import suppress
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend
+from fred_core.sql import require_tables
 from prometheus_client import start_http_server
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -35,6 +36,7 @@ from knowledge_flow_backend.common.config_loader import (
     load_configuration,
 )
 from knowledge_flow_backend.features.scheduler.worker import run_worker
+from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,19 @@ async def main() -> None:
         return
     if scheduler_backend != SchedulerBackend.TEMPORAL:
         raise ValueError(f"Scheduler backend '{scheduler_backend}' not supported; expected 'temporal'.")
+
+    # #2314: same startup schema guard as the API lifespan (main.py) — the
+    # worker deploys and restarts independently, its activities write the same
+    # tables, and nothing creates tables at runtime anymore. Without this it
+    # would boot green against an unmigrated database and burn Temporal
+    # retries on UndefinedTableError mid-task instead of failing here.
+    await require_tables(
+        app_context.get_pg_async_engine(),
+        sorted(REQUIRED_TABLES),
+        component="knowledge-flow-worker",
+        migrate_command="make db-upgrade (apps/knowledge-flow-backend)",
+        version_table="alembic_version_knowledge_flow",
+    )
 
     # Unlike the API entrypoints, the Temporal worker has no FastAPI app to pass
     # to `Instrumentator().instrument(app)`. We still expose Prometheus metrics

@@ -8,27 +8,10 @@
   user-select: none;
 }
 
-.stacked {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--spacing-3xs);
-}
-
-.breakdownRow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-2xs);
-}
-
 .segment {
   opacity: 0.8;
 }
 
 .sep {
   opacity: 0.4;
-}
-
-.total {
-  opacity: 0.9;
-  font-weight: 500;
 }

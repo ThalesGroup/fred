@@ -42,6 +42,7 @@ from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.runtime import TracerPort
 from langchain_core.tools import BaseTool, StructuredTool
 
+from ..capabilities.mcp import McpPromptGroup
 from .react_tool_resolution import FredRuntimeToolSpec
 from .react_tool_utils import normalize_payload
 
@@ -67,53 +68,89 @@ class BoundTool:
     runtime_name: str
     description: str
     tool: BaseTool
+    # Originating MCP catalog server id, `None` for non-MCP tools. Lets
+    # `build_runtime_tool_prompt_suffix` group the tool listing by server
+    # (#2455).
+    mcp_server_id: str | None = None
 
 
-#: The anti-repetition rule, stated on purpose (`AGENT-THINKING-API-RFC.md`
-#: §C.10 q4, precondition 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` §9).
-#:
-#: Amendment C §C.7 measured that a reasoning model on a tool loop re-issues the
-#: same call with byte-identical arguments in 12/12 turns with a generic prompt,
-#: and 0/12 with an explicit anti-repetition instruction. In production the
-#: defect was invisible — but only by accident: `build_tool_failure_recovery_suffix()`
-#: (`react_prompting.py`), written for a completely different problem (#2073,
-#: agents echoing raw tool-error text), happens to say "retry with CORRECTED
-#: arguments" and "answer from what other calls have ALREADY returned", and
-#: those two clauses were carrying the whole protection.
-#:
-#: That was a load-bearing dependency nobody had written down: rewording #2073's
-#: suffix would have silently re-exposed a measured defect with no test to catch
-#: it. This constant makes the protection intentional and greppable, and
-#: `test_react_prompting.py` ties it to reasoning drift by name so it cannot be
-#: deleted as boilerplate.
-TOOL_REPETITION_RULE = (
-    "- Never repeat a tool call you have already made in this turn with the "
-    "same arguments — its result has not changed. Re-read the result you "
-    "already have instead, and either call a DIFFERENT tool, call this one "
-    "with genuinely different arguments, or answer from what you have."
-)
+def _tool_summary(description: str) -> str:
+    """
+    One-line summary of a tool's description: its opening paragraph, with
+    internal newlines/indentation collapsed to single spaces.
+
+    Why this exists:
+    - the `tools` API parameter already carries the full description (used
+      for argument-schema generation); repeating it in the prompt body would
+      duplicate everything the provider sends per call. Only the opening
+      paragraph survives — the model still needs to know what a tool *does*
+      to decide which one to call, but not *how* to call it (#2412).
+    - `partition("\n\n")` matches how FastApiMCP itself joins `summary +
+      "\n\n" + docstring` (`convert.py`), and — unlike a first-*line* cut —
+      tolerates a hand-wrapped opening sentence spanning two source lines,
+      which is this repo's normal docstring style.
+    - `.strip()` up front means a description opening with a blank line
+      doesn't yield an empty summary; every step here is IndexError-safe on
+      an empty string, no extra branch needed.
+    """
+
+    first_paragraph = description.strip().partition("\n\n")[0]
+    return " ".join(first_paragraph.split())
 
 
-def build_runtime_tool_prompt_suffix(bound_tools: Sequence[BoundTool]) -> str:
+def build_runtime_tool_prompt_suffix(
+    bound_tools: Sequence[BoundTool],
+    *,
+    mcp_prompt_groups: Sequence[McpPromptGroup] = (),
+    capability_tools: Sequence[BaseTool] = (),
+) -> str:
     """
     Render the tool-availability suffix appended to the ReAct system prompt.
 
     Why this exists:
     - the model should see the exact tools and names it may call in this runtime
     - one renderer keeps the prompt contract stable as tool bindings evolve
-    - it carries `TOOL_REPETITION_RULE` (see that constant): the explicit
-      anti-repetition instruction reasoning models need on a tool loop, stated
-      here deliberately rather than inherited by accident from #2073's
-      tool-failure suffix
+    - each tool's rendered line is a one-line summary, not its full
+      description (see `_tool_summary`) — a tool's docstring should open with
+      a self-contained summary paragraph that includes any cross-tool
+      disambiguation cue ("use this instead of X for...", "call before doing
+      Y"), since text placed after the first blank line is still sent to the
+      model via `tools`, but only once it is already deciding to call that
+      specific tool, not while comparing it against the others
+    - when `mcp_prompt_groups` is given, tools tagged with a matching
+      `mcp_server_id` (see `BoundTool`) render under that group's `Tools for
+      {title}:` header, with the group's `agent_instructions` inlined
+      immediately after — replacing the `_McpInstructionsMiddleware`
+      per-model-call delivery removed 2026-08-27 (#2455,
+      `RUNTIME-EXECUTION-CONTRACT.md` §8.63). Untagged tools, or tools whose
+      tag matches no given group, render under a flat `Other tools:` bucket
+      ahead of the named groups — or, when no group renders at all (the
+      default for every caller that doesn't pass `mcp_prompt_groups`, e.g.
+      Deep agents), as today's plain flat list with no extra heading.
+    - `capability_tools` covers tools a native Fred capability contributes via
+      `tools(ctx)` (e.g. `document_access`'s `list_document_tree`,
+      `document_verbatim`'s `read_document`) — these reach the model's actual
+      tool-calling set through `ToolCarrierMiddleware`
+      (`fred_runtime.capabilities.assembly`), never through `bound_tools`, so
+      without this parameter they were invisible in this directory even
+      though the model could call them (#2455 follow-up, same day: found by
+      inspecting the rendered prompt after the MCP grouping work landed).
+      They join the `Other tools:` bucket — no per-capability header yet,
+      unlike MCP servers, since capability tools carry no analogous
+      group/title tag today. A tool name already present in `bound_tools` is
+      skipped here rather than rendered twice.
 
     How to use:
     - call after binding tools and append the returned text to the system prompt
 
     Example:
-    - `system_prompt += build_runtime_tool_prompt_suffix(bound_tools)`
+    - `system_prompt += build_runtime_tool_prompt_suffix(bound_tools, mcp_prompt_groups=block.mcp_prompt_groups, capability_tools=block.tools)`
     """
 
-    if not bound_tools:
+    bound_names = {bound_tool.runtime_name for bound_tool in bound_tools}
+    extra_tools = [tool for tool in capability_tools if tool.name not in bound_names]
+
+    if not bound_tools and not extra_tools:
         return (
             "\n\nTool availability:\n"
             "- No external tool is available in this session.\n"
@@ -121,18 +158,44 @@ def build_runtime_tool_prompt_suffix(bound_tools: Sequence[BoundTool]) -> str:
             "- Answer directly without repeating capability disclaimers.\n"
         )
 
-    lines = ["\n\nAvailable tools (exact names):"]
+    groups_by_id = {group.server_id: group for group in mcp_prompt_groups}
+    grouped_tools: dict[str, list[BoundTool]] = {}
+    ungrouped_names: list[str] = []
+    ungrouped_summaries: dict[str, str] = {}
     for bound_tool in bound_tools:
-        lines.append(f"- {bound_tool.runtime_name}: {bound_tool.description}")
-    lines.extend(
-        [
-            "Tool calling rules:",
-            "- Use only the tools listed above.",
-            "- Follow each tool's JSON argument schema exactly.",
-            "- Never invent tool names or tool results.",
-            TOOL_REPETITION_RULE,
-        ]
-    )
+        if bound_tool.mcp_server_id in groups_by_id:
+            grouped_tools.setdefault(bound_tool.mcp_server_id, []).append(bound_tool)
+        else:
+            ungrouped_names.append(bound_tool.runtime_name)
+            ungrouped_summaries[bound_tool.runtime_name] = _tool_summary(
+                bound_tool.description
+            )
+    for tool in extra_tools:
+        ungrouped_names.append(tool.name)
+        ungrouped_summaries[tool.name] = _tool_summary(tool.description)
+
+    lines = ["\n\n# Available tools (exact names)"]
+
+    if ungrouped_names:
+        if grouped_tools:
+            lines.append("\nOther tools:")
+        for name in ungrouped_names:
+            lines.append(f"- {name}: {ungrouped_summaries[name]}")
+
+    for group in mcp_prompt_groups:
+        tools_in_group = grouped_tools.get(group.server_id)
+        if not tools_in_group:
+            # An active capability whose tools didn't resolve this turn — no
+            # empty header for the model to puzzle over.
+            continue
+        lines.append(f"\nTools for {group.title}:")
+        for bound_tool in tools_in_group:
+            lines.append(
+                f"- {bound_tool.runtime_name}: {_tool_summary(bound_tool.description)}"
+            )
+        if group.agent_instructions:
+            lines.append(f"\n{group.agent_instructions}")
+
     return "\n".join(lines)
 
 
@@ -234,14 +297,23 @@ class ReActToolBinder:
                     attributes=attributes,
                     parent=active_agent_span.get(),
                 )
+                # A tool span without its arguments and result shows only that
+                # a tool ran and how long it took — not enough to tell a bad
+                # retrieval from a bad answer, which is the usual reason for
+                # opening a trace at all.
+                if self._tracer.captures_content:
+                    span.set_io(input=normalized_payload)
             try:
                 rendered_result, artifact = await spec.invoke(normalized_payload)
                 if span is not None:
                     span.set_attribute("status", "ok")
+                    if self._tracer is not None and self._tracer.captures_content:
+                        span.set_io(output=rendered_result)
                 return (rendered_result, artifact)
-            except Exception:
+            except Exception as exc:
                 if span is not None:
                     span.set_attribute("status", "error")
+                    span.set_attribute("error_type", type(exc).__name__)
                 raise
             finally:
                 if span is not None:
@@ -258,4 +330,5 @@ class ReActToolBinder:
                 args_schema=cast(Any, spec.args_schema),
                 response_format="content_and_artifact",
             ),
+            mcp_server_id=spec.mcp_server_id,
         )

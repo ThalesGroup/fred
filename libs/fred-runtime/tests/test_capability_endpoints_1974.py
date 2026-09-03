@@ -234,6 +234,7 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
             "document_access",
             "document_extract",
             "document_label_search",
+            "document_similarity",
             "document_summarize",
             "document_verbatim",
         ]
@@ -257,6 +258,46 @@ class _MinGraphAgent(GraphAgentDefinition):
     """The smallest valid `GraphAgentDefinition` — for catalog-filtering tests only."""
 
     agent_id: str = "test.graph_catalog_filter"
+    role: str = "test"
+    description: str = "test"
+    # This test specifically exercises the execution_models filter for a Graph
+    # agent that DOES participate in capability selection — opt back in from
+    # GraphAgentDefinition's False default (see AgentDefinition.supports_capabilities).
+    supports_capabilities: bool = True
+
+    def build_graph(self) -> GraphDefinition:
+        return GraphDefinition(
+            state_model_name="MinGraphState",
+            entry_node="n",
+            nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+        )
+
+    def input_model(self) -> type[BaseModel]:
+        return _MinGraphInput
+
+    def state_model(self) -> type[BaseModel]:
+        return _MinGraphState
+
+    def output_model(self) -> type[BaseModel]:
+        return _MinGraphInput
+
+    def build_initial_state(
+        self, input_model: BaseModel, binding: BoundRuntimeContext
+    ) -> BaseModel:
+        return _MinGraphState(message=getattr(input_model, "message", ""))
+
+    def node_handlers(self) -> Mapping[str, object]:
+        return {}
+
+    def build_output(self, state: BaseModel) -> BaseModel:
+        return _MinGraphInput(message=getattr(state, "message", ""))
+
+
+class _MinGraphOptedOutAgent(GraphAgentDefinition):
+    """The smallest valid `GraphAgentDefinition` that leaves `supports_capabilities`
+    at its False default — for the opt-out-honesty test only, mirrors Eva."""
+
+    agent_id: str = "test.graph_capabilities_opted_out"
     role: str = "test"
     description: str = "test"
 
@@ -357,6 +398,48 @@ def test_templates_hide_react_only_capabilities_from_graph_templates(
         assert "demo_echo" in graph_ids
 
 
+def test_templates_hide_all_capabilities_for_definition_that_opts_out(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    `available_capabilities` must be `[]` for a definition that declares
+    `supports_capabilities=False` (`GraphAgentDefinition`'s default),
+    regardless of what happens to be registered on this pod — this is exactly
+    the Eva bug: `available_capabilities` used to be computed purely from the
+    pod's `capability_registry`, so a Graph agent's list was only accidentally
+    empty when the pod happened to have nothing graph-compatible registered.
+    Register something real (below, `demo_echo`, which passes the
+    `execution_models` filter that `test_templates_hide_react_only_capabilities_from_graph_templates`
+    covers) and the honest-opt-out definition must still advertise nothing.
+    """
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+        raising=True,
+    )
+    graph_definition = _MinGraphOptedOutAgent()
+    app = create_agent_app(
+        registry={graph_definition.agent_id: graph_definition},
+        config=_build_test_config(tmp_path),
+    )
+    client = TestClient(app)
+    with client:
+        # `demo_echo` is already present via the default entry-point discovery
+        # (see `test_templates_hide_react_only_capabilities_from_graph_templates`
+        # above) — no need to register it manually, and this pod's registry is
+        # never empty by the time a real deployment runs, which is exactly the
+        # point: this must be `[]` because the definition opts out, not because
+        # nothing happens to be registered.
+        response = client.get("/pod/v1/agents/templates")
+        assert response.status_code == 200
+        by_id = {t["template_agent_id"]: t for t in response.json()}
+
+        assert by_id[graph_definition.agent_id]["available_capabilities"] == []
+
+
 def test_default_capability_id_unknown_fails_pod_boot(tmp_path, monkeypatch) -> None:
     """
     A template's `default_mcp_servers` names a capability id uniformly (RFC
@@ -410,6 +493,69 @@ def test_default_capability_ids_include_native_capability(
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200
         assert response.json()[0]["default_capability_ids"] == ["document_access"]
+
+
+def test_template_default_tuning_carries_reasoning_defaults(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    #2473: a template's declared reasoning defaults reach control-plane on
+    `default_tuning`, so the agent form can pre-tick its Reasoning card.
+
+    `_definition_to_agent_tuning` projected only role/description/tags/fields
+    before this, so both fields were pinned False on the wire no matter what a
+    definition declared — one of the three independent reasons a template could
+    not express "this agent's job needs reasoning".
+    """
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+        raising=True,
+    )
+    definition = _EchoAgent().model_copy(
+        update={"reasoning_enabled": True, "reasoning_default_on": True}
+    )
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+    with TestClient(app) as client:
+        response = client.get("/pod/v1/agents/templates")
+        assert response.status_code == 200
+        tuning = response.json()[0]["default_tuning"]
+        assert tuning["reasoning_enabled"] is True
+        assert tuning["reasoning_default_on"] is True
+
+
+def test_template_default_tuning_reasoning_off_by_default(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    A definition declaring neither field advertises both False — the platform
+    default, so #2473 changes nothing for the templates that did not opt in.
+    """
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+        raising=True,
+    )
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+    with TestClient(app) as client:
+        response = client.get("/pod/v1/agents/templates")
+        assert response.status_code == 200
+        tuning = response.json()[0]["default_tuning"]
+        assert tuning["reasoning_enabled"] is False
+        assert tuning["reasoning_default_on"] is False
 
 
 # ---------------------------------------------------------------------------

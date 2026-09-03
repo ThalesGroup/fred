@@ -38,7 +38,7 @@ The shipped product model is:
 
 The v2 runtime adapter maps bare agent writes to the current agent instance's own
 `agents/{agent_instance_id}/users/{uid}` subtree and rejects writes outside that subtree.
-Knowledge Flow enforces team `CAN_READ`, team `CAN_UPDATE_RESOURCES` for `shared/` writes,
+Knowledge Flow enforces team `CAN_ACCESS_FILES`, team `CAN_UPDATE_RESOURCES` for `shared/` writes,
 and uid ownership for `users/{uid}` and `agents/{agent}/users/{uid}`.
 
 Provenance is path-derived. Share-by-copy exists and writes into

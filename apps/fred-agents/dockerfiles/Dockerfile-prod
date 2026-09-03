@@ -26,6 +26,8 @@ COPY libs/fred-runtime /workspace/libs/fred-runtime
 COPY libs/fred-sdk /workspace/libs/fred-sdk
 COPY libs/fred-capability-writable-document /workspace/libs/fred-capability-writable-document
 COPY libs/fred-capability-ppt-filler /workspace/libs/fred-capability-ppt-filler
+COPY libs/fred-capability-platform-ops /workspace/libs/fred-capability-platform-ops
+COPY libs/fred-capability-html-artifact /workspace/libs/fred-capability-html-artifact
 
 RUN make dev VENV=/app/venv TARGET=/app/target
 
@@ -57,6 +59,8 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-runtime /workspace/libs/fred-runti
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-writable-document /workspace/libs/fred-capability-writable-document
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-ppt-filler /workspace/libs/fred-capability-ppt-filler
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-platform-ops /workspace/libs/fred-capability-platform-ops
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-html-artifact /workspace/libs/fred-capability-html-artifact
 
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy
@@ -71,6 +75,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /workspace/libs/fred-runtime/ale
 # are mounted at /app/config, while the default catalogs can ship in-image.
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/models_catalog.yaml /app/config/models_catalog.yaml
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/mcp_catalog.yaml /app/config/mcp_catalog.yaml
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/platform_prompt.json /app/config/platform_prompt.json
 
 USER ${USER_NAME}
 

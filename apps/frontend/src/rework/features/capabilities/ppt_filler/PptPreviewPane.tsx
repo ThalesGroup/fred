@@ -15,8 +15,8 @@
 // PptPreviewPane
 // --------------
 // The ppt_filler capability's side panel (CapabilitySidePanel) — a read-only pane
-// that renders the filled deck as a PDF. It reads the "current" preview from the
-// slice (set by a card's Open button / auto-open), fetches the bytes with the live
+// that renders the filled deck as a PDF. It reads the deck the OPEN conversation
+// registered (every rendered card registers one), fetches the bytes with the live
 // bearer (usePptPreview), and draws every page vertically with react-pdf.
 //
 // pdf.js worker rule (this exact bug was fought before — see the Kea `pdfWorker.ts`
@@ -33,24 +33,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
-import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import type { CapabilitySidePanelProps } from "../types";
-import { selectCurrentPreview } from "./pptPreviewSlice";
+import { useSessionPptPreview } from "./useSessionPptPreview";
 import { usePptPreview } from "./usePptPreview";
 import PptxDownloadButton from "./PptxDownloadButton";
 import styles from "./PptPreviewPane.module.css";
 
 const PDF_SCALE = 0.95;
 
+/** react-pdf remount key when this conversation has no deck. */
+const NO_PREVIEW_KEY = "none";
+
 // Resolved by Vite to the bundled pdf.js worker asset. Kept as a URL (not a
 // `workerSrc` string) so we can spawn a fresh module Worker per Document mount.
 const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
-export function PptPreviewPane(_props: CapabilitySidePanelProps) {
+export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
   const { t } = useTranslation();
-  const current = useSelector(selectCurrentPreview);
+  const current = useSessionPptPreview();
   const { objectUrl, isLoading, error } = usePptPreview(current);
 
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -74,13 +77,26 @@ export function PptPreviewPane(_props: CapabilitySidePanelProps) {
 
   // A re-fill (or switching decks) changes this key → react-pdf remounts the
   // <Document> and we provision a fresh worker for it.
-  const remountKey = current ? `${current.preview_id}:${current.version}` : "none";
+  //
+  // The blob URL is part of it because pdf.js caches one PDFWorker per PORT: a
+  // second `getDocument` on a port whose worker is still tearing down throws
+  // "PDFWorker.fromPort - the worker is being destroyed". Keying on the deck alone
+  // let a new `file` reuse the port of the load it replaces, which is exactly that.
+  const remountKey = current ? `${current.preview_id}:${current.version}:${objectUrl ?? ""}` : NO_PREVIEW_KEY;
 
   // Provision a fresh worker for THIS remount before the child <Document> reads
   // GlobalWorkerOptions (useMemo runs during render, ahead of child effects). The
   // effect below terminates the exact instance this run created.
   const workerRef = useRef<Worker | null>(null);
   useMemo(() => {
+    if (!objectUrl) {
+      // Nothing to load this round (no deck, or a re-fill in flight). Releasing
+      // the port is what lets the outgoing worker's cleanup see itself orphaned
+      // and terminate at once, instead of lingering until the pane unmounts.
+      pdfjs.GlobalWorkerOptions.workerPort = null;
+      workerRef.current = null;
+      return;
+    }
     if (typeof Worker === "undefined") {
       pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
       workerRef.current = null;
@@ -153,6 +169,18 @@ export function PptPreviewPane(_props: CapabilitySidePanelProps) {
         {current?.pptx_download_url && (
           <PptxDownloadButton href={current.pptx_download_url} fileName={current.file_name} />
         )}
+        <IconButton
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "close" }}
+          aria-label="Close panel"
+          // Blur first: closing flips aria-hidden on the drawer, which the browser
+          // blocks while a descendant still holds focus (InlineDrawer does the same).
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onClose();
+          }}
+        />
       </div>
 
       <div className={styles.body} ref={contentRef}>

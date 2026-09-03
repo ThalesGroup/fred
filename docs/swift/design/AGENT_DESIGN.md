@@ -559,8 +559,8 @@ packaged Markdown under `fred_sdk.resources.prompts`, registered in
 `GLOBAL_BASE_PROMPT_RESOURCES`/`GLOBAL_BASE_PROMPT_MARKDOWN` — `fred-sdk` is
 the single source of truth for the *content*. `fred-runtime` **injects** the
 bundle at execution time (`build_global_base_prompt_suffix()` in
-`react_prompting`, appended in `ReActRuntime`/`DeepAgentRuntime` after the
-tool and guardrail suffixes) rather than baking it into any agent's
+`react_prompting`, composed by `compose_system_prompt` after the two
+platform-wide blocks) rather than baking it into any agent's
 `system_prompt_template` or `FieldSpec` default — so it never appears in the
 agent editor and still applies when an operator overrides the whole prompt.
 Tool-specific non-negotiable behavior belongs in runtime-enforced contracts

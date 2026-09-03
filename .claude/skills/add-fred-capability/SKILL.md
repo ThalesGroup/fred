@@ -132,6 +132,11 @@ registration (`InvalidExecutionModelError`) for ANY `middleware()`-only capabili
 `execution_models` contains `"graph"` — never mentioned (kept the default) or written
 out explicitly, both fail the same way.
 
+A separate, earlier gate sits on the agent side: `GraphAgentDefinition.supports_capabilities`
+defaults `False`, so a Graph agent's picker offers no capability at all — yours included —
+until that specific agent definition opts in. `execution_models` above only decides
+compatibility once the picker is shown; it does not make one appear.
+
 ---
 
 ## Step 4 — Register + boot invariants (RFC §4, §7.1)

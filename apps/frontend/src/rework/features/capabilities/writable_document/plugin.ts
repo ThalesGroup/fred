@@ -21,13 +21,22 @@ import type { CapabilityUiPlugin } from "../types";
 import { WritableDocumentAutoOpenProbe } from "./WritableDocumentAutoOpenProbe";
 import { WritableDocumentCardRenderer } from "./WritableDocumentCardRenderer";
 import { WritableDocumentPane } from "./WritableDocumentPane";
+import { useHasWritableDocuments } from "./useHasWritableDocuments";
 
 export const writableDocumentCapability: CapabilityUiPlugin = {
   id: "writable_document",
   // Keyed by the backend chat part's `type` discriminator (#1977).
   partRenderers: { writable_document: WritableDocumentCardRenderer },
-  // Keyed by the backend manifest's SidePanelSpec.widget (#1979).
-  sidePanels: { writable_document_pane: WritableDocumentPane },
+  // Keyed by the backend manifest's SidePanelSpec.widget. `edit_document` is the
+  // glyph the whole writable_document surface uses - card, Open button, pane header.
+  sidePanels: {
+    writable_document_pane: {
+      Component: WritableDocumentPane,
+      icon: "edit_document",
+      useHasContent: useHasWritableDocuments,
+      ownsHeader: true,
+    },
+  },
   // A conversation that already holds documents re-opens straight in the editor.
   sessionProbes: [WritableDocumentAutoOpenProbe],
 };

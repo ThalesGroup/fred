@@ -1,3 +1,111 @@
+**v2.1.39** — 2026-09-01
+
+- **Summary**
+
+  Agents can now build a web page and show it live beside the chat, saved as
+  HTML, PDF or PNG. A new ops agent answers questions about the platform's own
+  database in read-only SQL, and agents can find passages similar to a document
+  you point them at.
+
+- **Features**
+
+  - Agents can produce a web page (HTML/CSS) rendered live in a sandboxed viewer beside the chat, with zoom, fit-to-width, copy and download as HTML, PDF or PNG (#2478)
+  - A new "Platform ops" agent template answers questions about the platform database with read-only SQL, grounded on the real schema (#2458)
+  - Agents can find passages across the corpus similar to a document you name, for targeted document-to-document comparison (#2461)
+
+- **Improvements**
+
+  - Capability viewers now span the full page height and push the conversation aside instead of floating over it, with the launcher rail in its own column (#2485)
+  - Home focuses the search field on load and shows real team avatars in its results (#2484)
+  - An agent template can declare the capabilities and reasoning settings a new agent starts with, so enrolling one takes no extra clicks (#1974, #2473)
+  - An agent template that needs other capabilities can be enabled in one click: the admin page grants the missing ones, then the template - for a team, for personal spaces, or platform-wide (#2470)
+  - Conversation tiles in the side panel are spaced apart instead of touching edge to edge (#2461)
+
+- **Bug Fixes**
+
+  - Large Markdown tables came back shuffled and cut off, so agents answered row questions wrong; a document's table is now returned whole and in order (#1645)
+  - Renaming a folder in Resources did nothing - the old name came straight back (#2483)
+  - Downloading several files at once from Resources failed, or produced a zip where all but one file were empty (#2483)
+  - An agent waiting on your confirmation failed to resume, with a conflict error (#2479)
+
+- **Deployment note**
+
+  Additive - no action needed. The new capabilities are admin-gated and stay off
+  until enabled for a team; the platform ops agent reads the platform database
+  read-only, through the pod's existing credentials.
+
+**v2.1.38** — 2026-08-28
+
+- **Summary**
+
+  Capability side panels now follow the conversation you are in: a launcher
+  appears only once there is something to open, and reloading a conversation
+  brings its cards back. Asking an agent to correct an existing deck no longer
+  crashes the preview.
+
+- **Improvements**
+
+  - Capability side panels offer a launcher only once they hold something to open, each with its own icon, and no longer carry a deck or a document over from a previous conversation (#2459)
+
+- **Bug Fixes**
+
+  - A conversation reloaded from history came back without its capability cards - a generated deck, a written document, a link, a map (#2462)
+  - Asking an agent to correct an existing deck crashed the slide preview (#2468)
+  - The home page greeted you with a raw account identifier instead of your first name (#2471)
+
+**v2.1.37** — 2026-08-27
+
+- **Summary**
+
+  Home is now a dashboard: one search field over every agent, team and prompt
+  you can reach, your recent agents, and your own usage. Teams can publish
+  prompts to a community marketplace. New teams start private, and a public
+  invite-only team can be asked for an invitation by mail.
+
+- **Features**
+
+  - Home opens on a tabbed dashboard: a search field over every agent, team and prompt you can reach, plus your recently used agents (#2436)
+  - Your activity tab tracks your conversations, messages and agents used over 7, 30 or 90 days, with your token footprint and a one-click cleanup of idle conversations (#2436)
+  - Teams can publish prompts to a community marketplace, where anyone can browse them, copy one, or import it into their own spaces (#2317)
+  - A Platform roles admin page grants and revokes platform admin and observer rights, with a protected primary admin and an audit trail (#2405)
+  - Analytics gains an Engagement section: conversations per user, conversation depth and agents per user, each with a median, a distribution and a trend (#2426)
+  - Folders can be selected in Resources and deleted, downloaded or excluded from search in bulk, along with everything underneath them (#2446)
+  - A public invite-only team can be asked for an invitation: its card opens a mail to the team admins, prefilled (#2453)
+
+- **Improvements**
+
+  - New teams are private by default and stay invisible outside their members until an admin publishes them (#2443)
+  - The chat composer's reasoning menu now names the answering model and the effort level in two separate sections (#2450)
+  - The two general-purpose assistants are renamed and described in plain language, and no longer need admin or ops capabilities to be enabled for a team (#2409, #2429)
+  - Local Langfuse traces can capture prompts, answers and tool payloads, off by default (#2442)
+
+- **Security**
+
+  - Routine dependency updates: aiohttp, cryptography, pyasn1 (#2401)
+
+- **Bug Fixes**
+
+  - "Most talked-to agents" called its message counts conversations, under-counted busy agents and merged two agents sharing a name into one line (#2431)
+  - A Mermaid diagram with malformed syntax showed a parse error instead of the diagram; common defects are now repaired before rendering (#2382)
+  - Enabling a capability on an agent failed with a generic error when its team lacked a required one; the blocking dependency is now named up front (#2408)
+  - Voice dictation never worked on air-gapped deployments; a small Whisper model now ships in the image (#2406)
+  - Renaming a document in Resources kept showing the old name until a reload (#2407)
+  - The agent form reopened the prompt library every time the prompt field was emptied (#2438)
+  - A chat turn that failed to start reported "[object Object]" instead of the real error (#2449)
+  - Conversation tiles in the side panel pushed the date to the far right, and the delete button shifted the tile on hover (#2448, #2402)
+  - Two agents used in the same conversation could resume from each other's saved state (#2415)
+  - Token badges charged each tool call the whole prompt; a message now shows what it actually added (#2403)
+  - A knowledge-flow upgrade could wedge its migration job on a table the service had already created at startup (#2314)
+
+- **Deployment note**
+
+  Existing teams keep their current visibility - only teams created after the
+  upgrade start private. Knowledge-flow now refuses to start until its
+  migrations have run and the tables are present, so let the migration job finish first - the chart ships
+  every migration job off by default, fred-agents included, so enable it in your
+  values or run the upgrade yourself (#2456). Chart config maps and secrets are
+  ordinary release resources again, so `helm uninstall` removes them (#2440).
+
 **v2.1.36** — 2026-08-20
 
 - **Summary**

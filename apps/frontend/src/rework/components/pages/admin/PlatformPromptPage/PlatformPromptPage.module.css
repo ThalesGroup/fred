@@ -1,0 +1,205 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Two panes side by side, one per prompt block, in the order the model sees
+ * them: the editable platform prompt on the left, the read-only platform
+ * instructions on the right. The page itself never scrolls — each pane owns
+ * its own scroll region, so an admin can read the instructions without losing
+ * sight of the editor.
+ *
+ * `flex: 1` claims MainLayout's `.content` real available height instead of
+ * auto-sizing to the content; `min-height: 0` lets this flex item actually
+ * shrink to that height rather than growing to fit its children — without it a
+ * flex item's implicit `min-height: auto` makes it grow and the whole page
+ * scrolls. Same reasoning, and same pair of declarations, as
+ * `CapabilitiesPage.module.css`. */
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  width: 100%;
+  max-width: 1440px;
+  min-height: 0;
+}
+
+/* `minmax(0, 1fr)` rather than `1fr`: a grid track's default `min-width: auto`
+ * refuses to shrink below its content, which the long unwrapped lines of the
+ * instructions markdown would otherwise force — pushing the page sideways
+ * instead of scrolling inside the pane. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  flex: 1;
+  gap: var(--spacing-l);
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+  min-width: 0;
+  min-height: 0;
+}
+
+.paneHead {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.paneTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.paneTitle {
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+/* Says which of the two panes you can act on, at a glance. */
+.badge {
+  flex: none;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-full);
+  padding: 0 var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  white-space: nowrap;
+}
+
+.paneSubtitle,
+.notice,
+.meta {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.notice {
+  flex: none;
+}
+
+/* Degraded state, not decoration: it means the page cannot show what agents
+ * actually receive, so it must not read like the ordinary hint above it. */
+.warning {
+  flex: none;
+  margin: 0;
+  border-left: 2px solid var(--warning, var(--error));
+  padding-left: var(--spacing-xs);
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+/* Holds the TextArea atom, whose root is `height: 100%` — that percentage
+ * needs a parent with a resolved height, which this flex item has and the
+ * page's auto-sized column did not (the editor grew to the whole viewport). */
+.editorSlot {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The TextArea atom's root declares no width, so as a flex child it sizes to
+ * its widest content — the one-line explanation hint — and spills past the
+ * pane's right edge. Pin it to the track and let the hint's own ellipsis
+ * handle the overflow, which is what the atom already styles it for. */
+.editorSlot > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.paneFooter {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-left: auto;
+}
+
+/* Markdown shipped with the platform, shown verbatim. The only scroll region
+ * in this pane: it absorbs the height the head and the note leave instead of
+ * pushing the pane taller. Read-only — there is no editor here on purpose. */
+.instructionsBody {
+  flex: 1;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-s);
+  min-height: 0;
+  overflow: auto;
+  color: var(--on-surface-retreat);
+  /* Body font, not monospace: this is markdown prose (headings, bullets), and
+   * a mono face made it read as a code dump. `pre-wrap` still preserves the
+   * exact line breaks agents receive. */
+  font: var(--font-body-medium);
+  /* Long-form reading zone — opts back into selection against the page-wide
+   * `user-select: none` chrome default (styles/index.css). An admin has to be
+   * able to copy this text: it is the only place the shipped instructions are
+   * readable, and there is no editor here to select from as there is for the
+   * prompt beside it. Same opt-in as `MarkdownRenderer`/`AssistantTurn`. */
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Why nobody can edit the block above. Sits under it, not in the head, so it
+ * reads as a conclusion once you have seen the content. */
+.instructionsNote {
+  flex: none;
+  margin: 0;
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* Too narrow for two readable columns: stack the panes and let the page scroll
+ * instead, since squeezing both into one viewport height leaves neither
+ * usable. Each pane keeps a floor so its own scroll region stays meaningful. */
+@media (max-width: 1100px) {
+  .page {
+    overflow-y: auto;
+  }
+
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    flex: none;
+  }
+
+  .pane {
+    min-height: 24rem;
+  }
+}

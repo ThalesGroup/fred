@@ -149,7 +149,9 @@ class Team(BaseModel):
     my_relations: list[UserTeamRelation] = Field(default_factory=list)
     description: str | None = None
     joining_mode: JoiningMode = JoiningMode.INVITE_ONLY
-    visibility: TeamVisibility = TeamVisibility.PUBLIC
+    # Private by default (#2433) — kept in lockstep with `TeamMetadata` /
+    # `TeamMetadataRow` in fred-core so the OpenAPI default tells the truth.
+    visibility: TeamVisibility = TeamVisibility.PRIVATE
     avatar_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
@@ -227,6 +229,16 @@ class CreateTeamRequest(BaseModel):
     name: str = Field(min_length=1, max_length=180)
     initial_team_admin_ids: list[str] = Field(min_length=1)
 
+    @field_validator("name")
+    @classmethod
+    def _trim_name(cls, value: str) -> str:
+        """Stored trimmed, exactly like a rename: `"Ops "` and `"Ops"` are the
+        same name to a reader, and the unique index would let both through."""
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Team name cannot be empty.")
+        return trimmed
+
 
 class RescueTeamAdminRequest(BaseModel):
     """AUTHZ-05 review item 9 (RFC §32): `POST /teams/{team_id}/rescue-admin`.
@@ -252,6 +264,9 @@ class GrantTeamMemberRoleRequest(BaseModel):
 
 
 class UpdateTeamRequest(BaseModel):
+    # A team_admin may rename their own team through this surface (the route is
+    # gated on `can_update_info`, which is exactly `team_admin` in schema.fga).
+    name: str | None = Field(default=None, min_length=1, max_length=180)
     description: str | None = Field(default=None, max_length=180)
     joining_mode: JoiningMode | None = None
     visibility: TeamVisibility | None = None
@@ -263,6 +278,16 @@ class UpdateTeamRequest(BaseModel):
     # is enforced server-side in `update_team` (422 via `RetentionUpdateError`).
     team_delete_grace: str | None = Field(default=None, min_length=1)
     max_idle: str | None = Field(default=None, min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def _reject_blank_name(cls, value: str | None) -> str:
+        """Unlike the other fields here, an explicit ``null`` is not "clear the
+        value" - a team always has a name. Only ever reached for a
+        client-supplied value: pydantic skips validators on unset defaults."""
+        if value is None or not value.strip():
+            raise ValueError("Team name cannot be empty.")
+        return value.strip()
 
     @field_validator("team_delete_grace", "max_idle")
     @classmethod

@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useEffect } from "react";
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import { recordTeamVisit } from "@shared/utils/teamRecency.ts";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
+import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
+import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
+import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
+import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
+import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -47,6 +55,12 @@ export default function TeamContentNavbar() {
   const navigate = useNavigate();
 
   const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
+
+  // Record every entry into a team so the Home nav-panel switcher can offer a
+  // "recently viewed" sort. Client-only (localStorage), best-effort.
+  useEffect(() => {
+    if (teamId) recordTeamVisit(teamId);
+  }, [teamId]);
 
   // "Back" from a focused view (settings / usage) always returns to the team's
   // main content view — a fixed, predictable destination. `navigate(-1)` was
@@ -70,6 +84,16 @@ export default function TeamContentNavbar() {
   // construction: a personal space is never `canOpenTeamSettings`.
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
+  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
+  const { data: teamApplications, isError: applicationsError } = useTeamApplications(
+    teamId,
+    isPersonalTeam || inSettings || inUsage,
+  );
+  // Every entry the Control Plane returns is already registered and authorized
+  // for this team; Fred no longer compiles application code, so there is no
+  // second, build-time compatibility question to ask here.
+  const showApplications =
+    applicationsEnabled && !isPersonalTeam && !applicationsError && (teamApplications?.items?.length ?? 0) > 0;
 
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
@@ -100,6 +124,25 @@ export default function TeamContentNavbar() {
   })();
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 
+  // Team avatar (28×28, 4px): the custom image when set, else colour-tinted
+  // square initials (same fallback as the Home team list). The personal space
+  // reuses that list's round user avatar (UserAvatar) — the "this is you"
+  // signal — sized down to fit this compact header.
+  const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
+  const teamAvatar = isPersonalTeam ? (
+    <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
+  ) : selectedTeam?.avatar_image_url ? (
+    <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
+  ) : (
+    <TeamInitials
+      className={styles.teamPanelAvatar}
+      name={teamDisplayName}
+      size="small"
+      shape="square"
+      color={teamColor(teamDisplayName)}
+    />
+  );
+
   const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
@@ -120,6 +163,14 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
+  if (showApplications) {
+    navigationItems.push({
+      type: "link",
+      label: t("rework.sidebar.team.menu.apps"),
+      icon: { category: "outlined", type: "widgets", filled: true },
+      linkProps: { to: `/team/${teamId}/apps` },
+    });
+  }
 
   // Launching and cancelling evaluation campaigns requires agent-update rights
   // (AGENT-EVALUATION-RFC §8.4), not member administration — so the Evaluations
@@ -215,10 +266,15 @@ export default function TeamContentNavbar() {
           team, or the usage dashboard for the personal space. */}
       <div className={styles.teamPanelHeader}>
         <div className={styles.teamPanelHeaderText}>
-          {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.teamLabel")}</span>}
-          <span className={styles.teamPanelName}>
-            {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
-          </span>
+          <div className={styles.teamPanelIdentity}>
+            {teamAvatar}
+            <div className={styles.teamPanelTitle}>
+              {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.teamLabel")}</span>}
+              <span className={styles.teamPanelName}>
+                {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+              </span>
+            </div>
+          </div>
           {showRoleLabel && <span className={styles.teamPanelRoles}>{roleLabel}</span>}
         </div>
         {!isPersonalTeam && canOpenTeamSettings && !inSettings && (
