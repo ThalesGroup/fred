@@ -175,7 +175,7 @@ ReAct **and** Graph agents; every other row is `middleware()`-only — ReAct age
 | Edit conversation state (edit notice, attachment note) | `before_model` returning a state-update dict `[T2]` |
 | Contribute a system-prompt fragment | `wrap_model_call` / `modify_model_request` editing the prompt |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
-| Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4) |
+| Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4). Inside a sub-agent (`ctx.invocation_depth` ≥ 1) no human can be reached: a `require` spec hides the tool from the model and anything else that would gate is refused with an error tool result, never an interrupt (RUNTIME-EXECUTION-CONTRACT.md §8.64) |
 
 Chat-time controls: return `ChatControlSpec`s from `chat_controls(config)` (computed at
 session-prep, never persisted — RFC §3.3, §3.7). Chat parts: extend the `UiPart` union

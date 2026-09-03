@@ -4001,6 +4001,11 @@ See "Note of intention" below.
   every cross-agent caller. Tracked as MEMORY-02 in the same RFC (proposed
   fix: `checkpoint_ns` derived from the executing agent, `thread_id` kept as
   `session_id`).
+- **A child can never pause for a human.** No longer a hang risk — at
+  `invocation_depth` ≥ 1 the HITL gate hides unconditionally approval-gated
+  tools from the child's model and refuses anything that would still have
+  interrupted (§8.64) — but still a capability limit: work that genuinely
+  needs a human decision cannot be delegated through `invoke_agent`.
 
 ### Real-world adopter — fred-rags "move to cloud"
 
@@ -4560,3 +4565,60 @@ POC, to be settled with POC data — see issue #2531 and
 [`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5.
 Until then it is a local/POC surface: an admin must enable it per team
 (`ADMIN_GATED`), and no agent selects it by default.
+
+### 8.64 ✅ A sub-agent can never hang on human approval — issue #2526 (2026-09-03)
+
+Closes the follow-up §8.63 left open ("a child cannot be resumed, and
+therefore cannot be paused for human approval"). Design:
+[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.6,
+option B.
+
+**The problem.** A child runs inside its parent's synchronous tool call,
+checkpointer-free (§8.63). An `interrupt()` there has nowhere to persist and no
+UI channel to reach, so the parent would block with the SSE stream silent —
+until #2526 the only mitigation was operational advice ("enable `subagent`
+only on agents with no approval-gated tools").
+
+**`invocation_depth` now reaches the ReAct middleware frame**, from the same
+trusted source as the capability block's: `_iterate_runtime_event_payloads` →
+`ReActRuntime` → `build_tool_loop_compiled_react_agent` →
+`build_react_platform_middleware_frame(invocation_depth=…)` →
+`FredHitlMiddleware`. It is never read from a request, exactly like §8.63's
+counter. Nothing else in the frame consumes it.
+
+**At depth ≥ 1 the one existing gate stops interrupting**, in two layers:
+
+- `awrap_model_call` removes the **unconditionally** gated tools from
+  `request.tools` — a capability `HitlSpec` with `require`, or the operator's
+  exact `always_require_tools` list — so the child's model is never offered a
+  tool it could only be refused. A `when` predicate is deliberately excluded:
+  it can only be answered per call, against real arguments.
+- `aafter_model` answers any call that would still have gated (a `when`
+  predicate, or a hidden tool the model called anyway) with an **error tool
+  result** — "requires human approval, which is unavailable in a sub-agent" —
+  instead of raising the interrupt. LangChain's model→tools edge only
+  dispatches calls that have no `ToolMessage` yet, so the refused calls never
+  execute while the ungated ones in the same batch still run; a fully refused
+  batch routes straight back to the model. This second layer is what makes the
+  hang structurally impossible, whatever the first layer missed.
+
+**Depth 0 is unchanged, byte for byte.** The hidden-tool set is empty at depth
+0, so the request reaches the model untouched, and the interrupt path is the
+same code it always was. Every pre-existing HITL test passes unmodified.
+
+**Deliberately NOT a second middleware, and not the capability's job.** The
+gated set is only ever complete inside `FredHitlMiddleware` — capability
+`HitlSpec`s are merged there by `capabilities/assembly.py`, and the operator
+list is known nowhere else. `CapabilityContext` exposes neither, so a
+`subagent`-side implementation would have needed a new context field and a
+second place that knows about HITL (RFC §5.6). The `subagent` capability's
+child framing therefore stays generic — "Tools that need a human approval are
+unavailable or will refuse" — and never enumerates tool names.
+
+**Known cosmetic consequence.** `FredHitlMiddleware` is the innermost
+`wrap_model_call` of the frame, so the tool hiding runs *inside*
+`TracingKpiMiddleware`: a depth ≥ 1 trace span lists tools the model never
+saw. Accepted rather than reordering the frame, which would move the gate's
+`after_model` relative to the capability block and `ToolCallLimitMiddleware`
+and so change depth-0 behaviour. The `[LLM][CALL]` log is unaffected (it does
+not carry tools).

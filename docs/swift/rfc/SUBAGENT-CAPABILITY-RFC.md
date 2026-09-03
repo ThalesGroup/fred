@@ -251,43 +251,13 @@ conversation while fan-out is concurrent in one pod (§6.4).
 > has the same shape. **Decision: unbounded for the POC, to be settled with POC
 > data on #2531.**
 
-### 5.6 HITL
+### 5.6 HITL — shipped
 
-Approval-gated tools are **stripped from the child's tool list**, and the child's
-framing says so. Without a checkpointer an interrupt has nowhere to persist and
-no UI channel to reach: the parent's tool call would hang inside a synchronous
-request, with the SSE stream silent.
-
-Stripping rather than failing at call time is a deliberate product choice —
-sub-agents are for long independent work, where a stop-and-ask has no one to ask.
-
-**Decided 2026-09-03: option B below, in `FredHitlMiddleware`.** Code check: the
-`subagent` capability's `tools()` cannot do it. Approval bindings are
-assembled runtime-side (`assembly.py:410-424`) from every capability's
-`hitl_specs()`, and the operator `always_require_tools` list is only known to
-`FredHitlMiddleware._requires_human_approval`. `CapabilityContext` exposes
-neither. Two placements:
-
-- **Option A — assembly strip.** A runtime flag (depth ≥ 1) makes
-  `build_capability_block` drop every tool that has a `HitlSpec`. Simple, but
-  blind to the operator list, and it drops tools whose spec has a `when`
-  predicate that gates only some arguments.
-- **Option B — middleware.** At depth ≥ 1, `FredHitlMiddleware` (already in
-  the child's stack, already owning the full gated set: capability specs +
-  operator list) does two things: in `wrap_model_call` it overrides
-  `request.tools` to hide unconditionally gated tools from the model; in
-  `after_model`, any call that would have interrupted returns an error tool
-  result ("requires human approval, unavailable in a sub-agent") instead of
-  calling `interrupt()`. The second part is the safety net that makes a
-  child unable to hang, whatever the first part missed. Depth reaches the
-  frame builder as one more argument next to `capability_hitl`.
-
-A *new* middleware inside the `subagent` package was considered and rejected:
-it would need a new `CapabilityContext` field to learn the gated set, and
-would be a second place that knows about HITL. With B, the framing no longer
-needs to name the removed tools — the generic sentence in §5.2 suffices —
-which removes the coupling between the parent's `tools()` and the child's
-HITL set.
+Decided 2026-09-03 (option B: `FredHitlMiddleware`, depth threaded to the
+frame) and implemented. The durable what/why is
+`../design/RUNTIME-EXECUTION-CONTRACT.md` §8.64: unconditionally gated tools
+hidden from a child's model, anything else that would gate refused with an
+error tool result, depth 0 unchanged. Nothing open here.
 
 ## 6. The tool
 
@@ -319,8 +289,9 @@ model a decision it cannot get right or wrong.
 ### 6.3 Dynamic description, and the cache rule
 
 `tools()` runs once per turn (`assembly.py:367`), so the tool description is
-built per turn and carries the remaining depth, any stripped approval-gated
-tools, and the parallelism instruction (§6.4). The capability itself needs no
+built per turn and carries the remaining depth and the parallelism instruction
+(§6.4) — never the approval-gated tools, which §5.6 shipped as a runtime-side
+concern the capability cannot and need not see. The capability itself needs no
 `middleware()` hook (HITL handling under §5.6 option B lives in the runtime's
 existing middleware), which is why it declares
 `execution_models=("react","graph")` rather than misusing the ReAct-only flag.
