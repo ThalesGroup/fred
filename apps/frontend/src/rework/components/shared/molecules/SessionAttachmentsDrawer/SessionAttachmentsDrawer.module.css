@@ -14,19 +14,33 @@
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-xs);
-  cursor: pointer;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-s);
   background: var(--surface-container-low);
   padding: var(--spacing-xs);
-  width: 100%;
   color: var(--on-surface);
-  text-align: left;
 }
 
 .row:hover {
   border-color: var(--outline-muted);
   background: var(--surface-container-high);
+}
+
+/* Opens the preview: fills the row up to the action buttons so the whole line
+ * stays clickable, minus the controls that must not live inside a button. */
+.rowPreview {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .rowIcon {

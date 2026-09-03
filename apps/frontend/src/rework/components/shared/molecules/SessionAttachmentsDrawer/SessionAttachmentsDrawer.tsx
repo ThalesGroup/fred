@@ -85,35 +85,35 @@ export function SessionAttachmentsDrawer({
               const sizeLabel = formatBytes(attachment.sizeBytes);
               const timestampLabel = formatTimestamp(attachment.createdAt);
               const metaLabel = [attachment.mime, sizeLabel, timestampLabel].filter(Boolean).join(" · ");
+              // A <button> cannot nest another, so the delete control sits beside
+              // the preview target instead of inside it.
               return (
-                <button
-                  key={attachment.attachmentId}
-                  type="button"
-                  className={styles.row}
-                  onClick={() => setPreviewAttachmentId(attachment.attachmentId)}
-                >
-                  <span className={styles.rowIcon} aria-hidden>
-                    <Icon category="outlined" type="attach_file" />
-                  </span>
-                  <span className={styles.rowBody}>
-                    <span className={styles.rowName} title={attachment.name}>
-                      {attachment.name}
+                <div key={attachment.attachmentId} className={styles.row}>
+                  <button
+                    type="button"
+                    className={styles.rowPreview}
+                    onClick={() => setPreviewAttachmentId(attachment.attachmentId)}
+                  >
+                    <span className={styles.rowIcon} aria-hidden>
+                      <Icon category="outlined" type="attach_file" />
                     </span>
-                    <span className={styles.rowMeta}>{metaLabel}</span>
-                  </span>
+                    <span className={styles.rowBody}>
+                      <span className={styles.rowName} title={attachment.name}>
+                        {attachment.name}
+                      </span>
+                      <span className={styles.rowMeta}>{metaLabel}</span>
+                    </span>
+                  </button>
                   <span className={styles.rowButtons}>
                     <IconButton
                       variant="icon"
                       size="2xs"
                       icon={{ category: "outlined", type: "delete" }}
                       aria-label={t("chatbot.sessionAttachments.deleteAria", { name: attachment.name })}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDelete(attachment.attachmentId);
-                      }}
+                      onClick={() => onDelete(attachment.attachmentId)}
                     />
                   </span>
-                </button>
+                </div>
               );
             })
           )}

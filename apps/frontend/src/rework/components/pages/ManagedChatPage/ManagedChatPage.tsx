@@ -39,6 +39,8 @@ import { selectSidePanelOpenRequest } from "../../../features/capabilities/sideP
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
+import { usePastedFiles } from "./usePastedFiles";
+import type { AttachmentSource } from "@rework/types/attachments";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import {
   useEffectiveChatModelQuery,
@@ -219,11 +221,11 @@ export default function ManagedChatPage() {
   // unacknowledged, adds from both entry points (picker and drop) are parked
   // here and only forwarded once the user accepts the dialog. Cancel drops them.
   const { requiresAcknowledgement, acknowledge } = useUploadWarningAcknowledgement();
-  const [pendingAttachments, setPendingAttachments] = useState<{ files: File[]; source: "picker" | "drop" } | null>(
+  const [pendingAttachments, setPendingAttachments] = useState<{ files: File[]; source: AttachmentSource } | null>(
     null,
   );
 
-  const addAttachments = (files: File[], source: "picker" | "drop") => {
+  const addAttachments = (files: File[], source: AttachmentSource) => {
     if (requiresAcknowledgement) {
       setPendingAttachments({ files, source });
       return;
@@ -236,6 +238,10 @@ export default function ManagedChatPage() {
     const selected = Array.from(files ?? []);
     if (selected.length > 0) addAttachments(selected, "picker");
   };
+
+  // Page-wide like drop: a paste event only reaches the focused element, so
+  // the composer alone would miss every Ctrl+V made with the focus elsewhere.
+  usePastedFiles({ enabled: allowChatAttachments, onFiles: (files) => addAttachments(files, "paste") });
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!allowChatAttachments) return;
