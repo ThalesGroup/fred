@@ -1585,6 +1585,11 @@ delete prompt) now gets the inverted emphasis for free — the three call
 sites that used to pass the override triplet by hand had it removed since
 it's now redundant with the default.
 
+`AdminTeamsPage` joined that list (2026-09-03): each row of "Existing teams"
+carries a `delete` icon button, and its dialog names the team and spells out
+that the registry entry and every access relation attached to it go with it,
+with no undo. The page had been create-only until then.
+
 #### Open UX issues
 
 - Not yet design-reviewed. First functional pass only.

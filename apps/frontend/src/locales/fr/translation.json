@@ -2264,6 +2264,19 @@
           "admins": "Administrateur(s)"
         }
       },
+      "deleteTeam": {
+        "action": "Supprimer l'équipe {{name}}",
+        "dialogTitle": "Supprimer {{name}} ?",
+        "dialogMessage": "L'équipe est définitivement retirée du registre, ainsi que toutes les relations d'accès qui la référencent. Les membres perdent l'accès immédiatement. Cette action est irréversible.",
+        "confirm": "Supprimer l'équipe",
+        "cancel": "Annuler",
+        "successSummary": "Équipe supprimée",
+        "errors": {
+          "summary": "Échec de la suppression de l'équipe",
+          "fallbackDetail": "Impossible de supprimer l'équipe. Veuillez réessayer.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour supprimer des équipes."
+        }
+      },
       "createTeam": {
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",

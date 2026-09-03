@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
@@ -22,11 +22,13 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import {
   useCreateTeamMutation,
+  useDeleteTeamMutation,
   useListAllTeamsQuery,
   useListUsersQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -35,14 +37,15 @@ import styles from "./AdminTeamsPage.module.css";
 
 // AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
 // bootstrap action — there is no other way to give a freshly created team its
-// first team_admin. The existing-teams list below is read-only (registry
-// governance view, item 9's `can_list_all_teams`) — this page still has no
-// edit/delete affordance for a team, only creation and registry visibility.
+// first team_admin. Deletion is the same kind of registry-level action
+// (`can_delete_team`): it drops the registry entry and every relation pointing
+// at the team, so it always goes through a critical-action confirmation.
 export default function AdminTeamsPage() {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
+  const { showConfirmationDialog } = useConfirmationDialog();
 
   const [name, setName] = useState("");
   const [selectedAdmins, setSelectedAdmins] = useState<UserSummary[]>([]);
@@ -51,6 +54,31 @@ export default function AdminTeamsPage() {
   const { data: allUsers } = useListUsersQuery();
   const { data: allTeams } = useListAllTeamsQuery();
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
+  const [deleteTeam] = useDeleteTeamMutation();
+
+  const handleDelete = useCallback(
+    (team: Team) => {
+      showConfirmationDialog({
+        criticalAction: true,
+        title: t("rework.adminTeams.deleteTeam.dialogTitle", { name: team.name }),
+        message: t("rework.adminTeams.deleteTeam.dialogMessage", { name: team.name }),
+        confirmButtonLabel: t("rework.adminTeams.deleteTeam.confirm"),
+        cancelButtonLabel: t("rework.adminTeams.deleteTeam.cancel"),
+        onConfirm: () =>
+          void runMutationAction({
+            action: () => deleteTeam({ teamId: team.id }).unwrap(),
+            onSuccess: () => showSuccess({ summary: t("rework.adminTeams.deleteTeam.successSummary") }),
+            onError: (error) =>
+              notifyApiError(error, {
+                summary: t("rework.adminTeams.deleteTeam.errors.summary"),
+                fallbackDetail: t("rework.adminTeams.deleteTeam.errors.fallbackDetail"),
+                forbiddenDetail: t("rework.adminTeams.deleteTeam.errors.forbiddenDetail"),
+              }),
+          }),
+      });
+    },
+    [showConfirmationDialog, runMutationAction, deleteTeam, showSuccess, notifyApiError, t],
+  );
 
   const teamColumns = useMemo(
     (): DataTableColumn<Team>[] => [
@@ -67,8 +95,23 @@ export default function AdminTeamsPage() {
           />
         ),
       },
+      {
+        // Fixed track, not "auto": the header is empty while the cell holds an
+        // icon button, and DataTable resolves header and body tracks separately.
+        label: "",
+        size: "3rem",
+        cellRenderer: (team) => (
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "delete" }}
+            aria-label={t("rework.adminTeams.deleteTeam.action", { name: team.name })}
+            onClick={() => handleDelete(team)}
+          />
+        ),
+      },
     ],
-    [t],
+    [t, handleDelete],
   );
 
   const suggestions = useMemo(() => {

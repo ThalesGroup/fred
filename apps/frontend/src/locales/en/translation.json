@@ -2264,6 +2264,19 @@
           "admins": "Admin(s)"
         }
       },
+      "deleteTeam": {
+        "action": "Delete team {{name}}",
+        "dialogTitle": "Delete {{name}}?",
+        "dialogMessage": "This permanently removes the team from the registry, along with every access relation attached to it. Members lose access immediately. This cannot be undone.",
+        "confirm": "Delete team",
+        "cancel": "Cancel",
+        "successSummary": "Team deleted",
+        "errors": {
+          "summary": "Failed to delete team",
+          "fallbackDetail": "Could not delete the team. Please try again.",
+          "forbiddenDetail": "You are not allowed to delete teams."
+        }
+      },
       "createTeam": {
         "title": "Create team",
         "nameLabel": "Team name",
