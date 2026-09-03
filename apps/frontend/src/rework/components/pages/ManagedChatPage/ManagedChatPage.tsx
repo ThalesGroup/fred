@@ -39,6 +39,7 @@ import { selectSidePanelOpenRequest } from "../../../features/capabilities/sideP
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
+import type { AttachmentSource } from "@rework/types/attachments";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import {
   useEffectiveChatModelQuery,
@@ -219,11 +220,11 @@ export default function ManagedChatPage() {
   // unacknowledged, adds from both entry points (picker and drop) are parked
   // here and only forwarded once the user accepts the dialog. Cancel drops them.
   const { requiresAcknowledgement, acknowledge } = useUploadWarningAcknowledgement();
-  const [pendingAttachments, setPendingAttachments] = useState<{ files: File[]; source: "picker" | "drop" } | null>(
+  const [pendingAttachments, setPendingAttachments] = useState<{ files: File[]; source: AttachmentSource } | null>(
     null,
   );
 
-  const addAttachments = (files: File[], source: "picker" | "drop") => {
+  const addAttachments = (files: File[], source: AttachmentSource) => {
     if (requiresAcknowledgement) {
       setPendingAttachments({ files, source });
       return;
@@ -236,6 +237,10 @@ export default function ManagedChatPage() {
     const selected = Array.from(files ?? []);
     if (selected.length > 0) addAttachments(selected, "picker");
   };
+
+  // Clipboard files are already filtered by RichInputField; a paste that only
+  // carries text never reaches this handler.
+  const handlePasteFiles = (files: File[]) => addAttachments(files, "paste");
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!allowChatAttachments) return;
@@ -313,6 +318,7 @@ export default function ManagedChatPage() {
       onTranscribeAudio={handleTranscribeAudio}
       voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
       onVoiceInputError={reportVoiceInputError}
+      onPasteFiles={allowChatAttachments ? handlePasteFiles : undefined}
       focusEndRequestId={focusEndRequestId}
       showSendButton
       aboveTextSlot={

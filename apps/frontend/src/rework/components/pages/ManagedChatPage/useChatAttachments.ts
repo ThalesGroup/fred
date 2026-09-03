@@ -25,7 +25,7 @@ import {
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { taskEventReceived, taskRegistered } from "../../../features/tasks/taskSlice";
-import type { ChatAttachment, ChatImageContext, SessionAttachment } from "@rework/types/attachments";
+import type { AttachmentSource, ChatAttachment, ChatImageContext, SessionAttachment } from "@rework/types/attachments";
 
 const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -222,7 +222,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   );
 
   const addFiles = useCallback(
-    async (files: File[], source: "picker" | "drop", activeSessionId?: string | null) => {
+    async (files: File[], source: AttachmentSource, activeSessionId?: string | null) => {
       const uniqueFiles = files.filter((file) => file.size > 0);
       const ingestionSessionId = activeSessionId ?? sessionId;
       for (const file of uniqueFiles) {

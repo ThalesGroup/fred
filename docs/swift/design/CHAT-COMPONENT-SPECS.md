@@ -792,6 +792,16 @@ uploading.
 - `Shift+Enter` → newline
 - `onInterrupt` — called when the user clicks the stop button during
   streaming (replaces the send button while `isStreaming`)
+- Paste carrying files — with `onPasteFiles` set, a paste that carries files
+  (a screenshot, a file copied in the OS file manager) goes to the caller
+  instead of the textarea. `clipboardFiles.ts` decides: real text next to the
+  files wins, because Word and Excel put a rendered PNG in the clipboard
+  alongside the copied cells; the paths a file manager leaves in `text/plain`
+  are not real text. Files the browser names generically (`image.png` for every
+  screenshot) are renamed by paste time — session attachments are resolved by
+  name downstream, so two pastes must not share one. `ManagedChatPage` passes
+  the handler only while the agent exposes `attach_files`, so paste is gated
+  like drop and reuses the same upload-warning and ingestion path.
 
 ### 8.4 Props
 
@@ -804,6 +814,7 @@ interface RichInputFieldProps {
   disabled?: boolean;
   sendDisabled?: boolean;
   placeholder?: string;
+  onPasteFiles?: (files: File[]) => void;
   aboveTextSlot?: ReactNode;
   topSlot?: ReactNode;
   leftSlot?: ReactNode;
