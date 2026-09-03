@@ -27,6 +27,10 @@ class DocumentTreeRequest(BaseModel):
         default=None,
         description="Restrict the listing to these folder tag ids (and their descendants), when set.",
     )
+    document_uids: Optional[List[str]] = Field(
+        default=None,
+        description="Restrict the listing to these documents, dropping the folders left empty, when set.",
+    )
     max_chars: int = Field(
         default=6000,
         ge=500,

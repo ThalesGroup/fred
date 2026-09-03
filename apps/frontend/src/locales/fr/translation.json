@@ -1551,6 +1551,7 @@
     "collapse": "Réduire",
     "create": "Créer",
     "delete": "Supprimer",
+    "documentIncludedByFolder": "Inclus par la sélection du dossier",
     "documents": "documents",
     "expand": "Développer",
     "gcu": {

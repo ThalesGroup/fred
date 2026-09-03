@@ -4558,3 +4558,64 @@ tuple — §8.60), `list_document_tree`, `list_documents_by_label` (labels are a
 metadata-store notion), the tabular tools (#2418) and `ppt_filler`'s raw-bytes
 fetch (an attachment keeps no blob).
 
+
+---
+
+### 8.65 ✅ The turn's document scope reaches the read tools and the tree — issue #2510 (2026-09-03)
+
+**The composer's selection used to narrow retrieval only.** The document-scope
+picker sends the user's pick twice — as `turn_options["document_access"]
+.document_uids` and as `RuntimeContext.selected_document_uids` — and two of the
+six document tools read it: `search_documents_using_vectorization` and
+`find_similar_passages`. `list_document_tree` narrowed by library and ignored
+documents; `read_document`, `summarize_document` and `extract_from_document`
+narrowed by nothing at all. Ticking one file therefore produced a listing of the
+whole corpus, a model asking which document was meant, and a reading tool that
+would accept any uid it had ever seen.
+
+**Three seams, one selection.**
+
+- `DocumentTreePort.tree` takes `document_uids`; `DocumentTreeAdapter`
+  intersects it with the binding, `KfDocumentClient` puts it on the wire, and
+  `DocumentTreeRequest` / `CorpusTreeService` narrow the resolved leaves and
+  drop the folders left empty (`prune_empty_folders`). Without a document scope
+  the listing is byte-for-byte what it was, empty folders included.
+- `DocumentMarkdownAdapter`, `DocumentSummarizeAdapter` and
+  `DocumentExtractionAdapter` bound the model-supplied uid by the same selection
+  (`_ensure_uid_in_turn_scope`) and raise `DocumentScopeRefusedError` — the
+  seam `DocumentSimilarityAdapter` already had, for uids of exactly the same
+  provenance. The capabilities render it through `document_scope_refusal`, never
+  as a Knowledge Flow failure: a scope decision told as a transport error gets
+  retried, and told as an empty result gets reported as an empty document.
+- `build_document_scope_suffix` names the selection in the per-turn system
+  prompt, beside the attachment suffix. Without a referent for "this document"
+  the model listed the tree and asked which file was meant while exactly one was
+  ticked. Uids, not display names: `RuntimeContext` carries the selection as
+  uids, and they are what the tools take.
+
+**Library and document scope UNION, they do not intersect.** Vector search
+already merges library hits with document hits, so ticking a library plus one
+file elsewhere means "that library, plus that file". The tree now follows the
+same rule rather than inventing an intersection nobody asked for.
+
+**The gate refuses only what it can prove.** A false refusal is worse than a
+missed one here: the model reports a document the user picked as unreachable.
+So two cases pass through, both by design — a selection that includes a library
+(its documents cannot be enumerated pod-side, and refusing them would refuse the
+user's own pick), and a uid among the conversation's attached files
+(`get_attachment_uids`, read from the same `attachments_markdown` the model is
+told to quote from — the picker lists the corpus, so an attachment is never in
+the selection). What remains enforced is the case that produced the bug: a
+documents-only selection, with a stale uid from a wider earlier turn.
+
+**Two known gaps, tracked rather than papered over.**
+
+- With `bind_libraries=True`, the pinned library is always sent as the tree's
+  library scope and Knowledge Flow unions it with the document scope, so ticking
+  one file still lists the whole bound library. Separating "the user picked this
+  library" from "the agent is pinned to it" needs a second wire field, not a
+  behaviour change here.
+- `narrow_scope_ids` reads an empty intersection (`config.document_uids`
+  disjoint from the turn's pick) as "no bound at this level" and re-widens to the
+  session selection. Pre-existing on the search path, now shared by the tree;
+  `DocumentSimilarityAdapter` is the one caller that handles it explicitly.
