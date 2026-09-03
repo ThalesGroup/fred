@@ -330,3 +330,47 @@ async def test_no_turns_returns_empty_without_a_second_query() -> None:
     assert result.rows == []
     assert result.series == []
     assert len(store.client.bodies) == 1
+
+
+@pytest.mark.asyncio
+async def test_personal_space_agents_are_never_labelled_with_their_scope_id() -> None:
+    """A personal team id embeds the owner's uid and has no registry row, so
+    resolving it would print a user identifier into an admin chart."""
+    store = _FakeStore(
+        [
+            _top_response(
+                [("id-a", "Alpha", 2), ("id-b", "Beta", 1)],
+                teams={"id-a": "personal-3f9c1ab2-4d5e", "id-b": "team-swift"},
+            ),
+            _series_response([("2026-08-01T00:00:00.000Z", {"id-a": 2, "id-b": 1})]),
+        ]
+    )
+
+    result = await _run(store)
+
+    assert result.series == ["Alpha", "Beta - Swiftpost"]
+
+
+@pytest.mark.asyncio
+async def test_colliding_names_with_no_team_id_still_split() -> None:
+    """The shape of every event emitted before the team_id dim existed: two
+    instances share a name and neither carries a team, so the id suffix is the
+    only thing keeping them from collapsing into one summed line."""
+    store = _FakeStore(
+        [
+            _top_response(
+                [("id-aaaa1111", "Support", 7), ("id-bbbb2222", "Support", 4)]
+            ),
+            _series_response(
+                [("2026-08-01T00:00:00.000Z", {"id-aaaa1111": 7, "id-bbbb2222": 4})]
+            ),
+        ]
+    )
+
+    result = await _run(store)
+
+    assert result.series == ["Support (id-aaaa1)", "Support (id-bbbb2)"]
+    assert result.rows[-1].values == {
+        "Support (id-aaaa1)": 7.0,
+        "Support (id-bbbb2)": 4.0,
+    }

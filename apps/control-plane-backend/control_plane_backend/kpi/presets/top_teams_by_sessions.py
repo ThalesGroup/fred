@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from typing import Any
 
@@ -24,9 +23,7 @@ from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import LabelValuePoint, LabelValueResponse
-from control_plane_backend.kpi.utils import resolve_team_names
-
-logger = logging.getLogger(__name__)
+from control_plane_backend.kpi.presets.team_names import resolve_team_names
 
 TOP_N = 20
 
