@@ -1,6 +1,6 @@
 # RFC — Sub-agent Capability: an agent delegates work to fresh-context copies of itself
 
-**Status:** Tier 1 slice 1 (#2525) shipped 2026-09-03; §5.6 HITL, §5.2 prompt mode, §7 token accounting and §6.5 `sources`/`ui_parts` still open (#2526-#2529). Tiers 2-3 not specified.
+**Status:** Tier 1 slice 1 (#2525) shipped 2026-09-03; §5.6 HITL shipped (#2526); §5.2 prompt mode, §7 token accounting and §6.5 `sources`/`ui_parts` still open (#2527-#2529). Tiers 2-3 not specified.
 **Author:** Florian Muller
 **Date:** 2026-09-03
 **Area:** `fred-sdk` (contracts), `fred-runtime` (invoker, capability block), new capability package
@@ -172,7 +172,7 @@ sidesteps it rather than pretending to fix it.
 
 Two consequences, both accepted:
 
-- **No resume, therefore no HITL** (§5.6).
+- **No resume, therefore no interrupt**: gated tools are hidden or refused (§5.6).
 - Revisiting this is the first thing follow-up messaging requires (§11.1).
 
 The child keeps the parent's `session_id` in its portable context, so KPI
