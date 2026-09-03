@@ -204,6 +204,12 @@ export function RichInputField({
     (e: ClipboardEvent<HTMLTextAreaElement>) => {
       if (!onPasteFiles) return;
       const files = clipboardAttachments(e.clipboardData);
+      // What the browser exposed vs. what was kept: browsers and file managers
+      // differ on how many files one copy yields, so this is the first thing
+      // to check when "I pasted N files and see fewer".
+      console.debug(
+        `[RichInputField] paste — types=${Array.from(e.clipboardData?.types ?? []).join(",")} files=${e.clipboardData?.files.length ?? 0} attached=${files.length}`,
+      );
       if (files.length === 0) return;
       e.preventDefault();
       onPasteFiles(files);

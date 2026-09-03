@@ -806,7 +806,10 @@ uploading.
   processor for must fail there, with the same 400 as the same file picked from
   disk. `ManagedChatPage` passes
   the handler only while the agent exposes `attach_files`, so paste is gated
-  like drop and reuses the same upload-warning and ingestion path.
+  like drop and reuses the same upload-warning and ingestion path. A
+  multi-file batch (paste, drop or picker) registers every chip before the
+  first ingestion starts and ingests concurrently — `useChatAttachments.addFiles`
+  used to go one file at a time, which hid file N behind file N-1's ingestion.
 
 ### 8.4 Props
 

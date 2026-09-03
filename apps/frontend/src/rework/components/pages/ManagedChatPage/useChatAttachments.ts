@@ -223,11 +223,10 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
 
   const addFiles = useCallback(
     async (files: File[], source: AttachmentSource, activeSessionId?: string | null) => {
-      const uniqueFiles = files.filter((file) => file.size > 0);
       const ingestionSessionId = activeSessionId ?? sessionId;
-      for (const file of uniqueFiles) {
-        if (!ingestionSessionId) continue;
+      if (!ingestionSessionId) return;
 
+      const ingestFile = async (file: File) => {
         const id = uuidv4();
         const localTaskId = `chat-attachment-${id}`;
         const isImage = file.type.startsWith("image/");
@@ -320,7 +319,12 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             ),
           );
         }
-      }
+      };
+
+      // Every chip and task is registered before the first await, so a
+      // multi-file batch shows all its files at once and ingests them
+      // concurrently — one at a time hid file N behind file N-1's ingestion.
+      await Promise.all(files.filter((file) => file.size > 0).map(ingestFile));
     },
     [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
   );
