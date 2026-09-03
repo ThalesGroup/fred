@@ -215,15 +215,15 @@ def _build_run_subagent_tool(
             )
         )
         if result.is_error:
-            message = result.content or "The sub-agent failed with no message."
+            failure = result.content or "The sub-agent failed with no message."
             logger.info(
                 "sub-agent failed agent=%s session=%s: %s",
                 agent_id,
                 identity.session_id,
-                message[:200],
+                failure[:200],
             )
             return (
-                f"The sub-agent failed: {message}",
+                f"The sub-agent failed: {failure}",
                 ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
             )
         if len(result.content) > MAX_SUBAGENT_CONTENT_CHARS:
