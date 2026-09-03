@@ -77,7 +77,15 @@ disconnects and the fan-out is cancelled — emits nothing, because the emission
 awaited invocation and `CancelledError` is not routed through the runtime's `execution_error`
 path; tokens the gateway already billed for that partial child are lost from both metrics. And a
 child that raises before producing a `final` event has no `token_usage` to report, so it is
-counted (`finish_reason="error"`) with no token counters rather than with zeros.
+counted (`finish_reason="error"`) with no token counters rather than with zeros. Note what the
+first of those two costs: a child has no timeout, so one that hangs is ended only by the client
+disconnecting — meaning the metric is blind to exactly the pathology it would be most useful for.
+
+**Read the latency as a queueing time, not as the child's own work.** Siblings of one fan-out run
+concurrently on one event loop, so a wide fan-out inflates every child's measured wall clock with
+its siblings' contention. Nothing on the event records the fan-out width, so the value cannot be
+normalised by it: a rise means "children got slower" *or* "fan-out got wider", and `_count` is the
+only proxy for telling them apart.
 
 **Grafana.** Dashboards are not versioned in this repository (Stream 1 is an infrastructure-owned
 Grafana over Google Managed Prometheus), so the panel is created from this spec. The KPI names are

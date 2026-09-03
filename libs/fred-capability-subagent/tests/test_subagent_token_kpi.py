@@ -221,3 +221,38 @@ async def test_no_kpi_writer_is_not_an_error():
 
     assert content == "done"
     assert artifact.is_error is False
+
+
+@pytest.mark.asyncio
+async def test_the_promoted_labels_are_never_conditional():
+    """Every dim that becomes a Prometheus label must be on every event.
+
+    `PrometheusKPIStore` freezes a metric's label tuple from the first event a
+    process emits and silently fills a later missing dim with "" — so a dim that
+    is present only sometimes either vanishes for the pod's whole lifetime or
+    merges real series into a blank one.
+    """
+
+    kpi = _RecordingKPIWriter()
+    # The thinnest identity the runtime can hand a capability, a child that
+    # failed, and no token usage at all — still all three labels.
+    ctx = CapabilityContext(
+        identity=CapabilityIdentity(user_id="alice", agent_id=AGENT_ID),
+        config=SubAgentConfig(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(
+            agent_invoker=_StubInvoker(
+                AgentInvocationResult(agent_id=AGENT_ID, content="boom", is_error=True)
+            ),
+            kpi_writer=kpi,
+        ),
+    )
+    tool = SubAgentCapability().tools(ctx)[0]
+    assert isinstance(tool, StructuredTool)
+    assert tool.coroutine is not None
+
+    await tool.coroutine(prompt="Do the thing.")
+
+    dims = kpi.events[0]["dims"]
+    for label in ("template_agent_id", "finish_reason", "invocation_depth"):
+        assert dims[label], f"{label} must be set on every event"
