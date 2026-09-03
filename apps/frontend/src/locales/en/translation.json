@@ -2261,13 +2261,14 @@
         "empty": "No teams yet.",
         "table": {
           "name": "Team",
-          "admins": "Admin(s)"
+          "admins": "Admin(s)",
+          "actions": "Actions"
         }
       },
       "deleteTeam": {
         "action": "Delete team {{name}}",
         "dialogTitle": "Delete {{name}}?",
-        "dialogMessage": "This permanently removes the team from the registry, along with every access relation attached to it. Members lose access immediately. This cannot be undone.",
+        "dialogMessage": "{{name}} is removed from the registry and every access relation involving it is dropped. Members lose access immediately, and the team's document libraries, agents and prompts are left with no owner - their content stays on disk but nobody can reach it. This cannot be undone.",
         "confirm": "Delete team",
         "cancel": "Cancel",
         "successSummary": "Team deleted",

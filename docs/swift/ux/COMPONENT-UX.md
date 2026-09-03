@@ -1586,9 +1586,13 @@ sites that used to pass the override triplet by hand had it removed since
 it's now redundant with the default.
 
 `AdminTeamsPage` joined that list (2026-09-03): each row of "Existing teams"
-carries a `delete` icon button, and its dialog names the team and spells out
-that the registry entry and every access relation attached to it go with it,
-with no undo. The page had been create-only until then.
+carries a `delete` icon button, and the page had been create-only until then.
+The copy states the full blast radius rather than just the registry row -
+`delete_all_relations_of_reference` drops every tuple where the team is the
+subject too, so the team's libraries, agents and prompts are left owner-less
+with their content still on disk. A dialog that said only "access relations"
+would read as an access-control cleanup, which is the understatement that
+makes a destructive action feel safe.
 
 #### Open UX issues
 

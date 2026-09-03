@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
@@ -54,31 +54,28 @@ export default function AdminTeamsPage() {
   const { data: allUsers } = useListUsersQuery();
   const { data: allTeams } = useListAllTeamsQuery();
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
-  const [deleteTeam] = useDeleteTeamMutation();
+  const [deleteTeam, { isLoading: isDeleting }] = useDeleteTeamMutation();
 
-  const handleDelete = useCallback(
-    (team: Team) => {
-      showConfirmationDialog({
-        criticalAction: true,
-        title: t("rework.adminTeams.deleteTeam.dialogTitle", { name: team.name }),
-        message: t("rework.adminTeams.deleteTeam.dialogMessage", { name: team.name }),
-        confirmButtonLabel: t("rework.adminTeams.deleteTeam.confirm"),
-        cancelButtonLabel: t("rework.adminTeams.deleteTeam.cancel"),
-        onConfirm: () =>
-          void runMutationAction({
-            action: () => deleteTeam({ teamId: team.id }).unwrap(),
-            onSuccess: () => showSuccess({ summary: t("rework.adminTeams.deleteTeam.successSummary") }),
-            onError: (error) =>
-              notifyApiError(error, {
-                summary: t("rework.adminTeams.deleteTeam.errors.summary"),
-                fallbackDetail: t("rework.adminTeams.deleteTeam.errors.fallbackDetail"),
-                forbiddenDetail: t("rework.adminTeams.deleteTeam.errors.forbiddenDetail"),
-              }),
-          }),
-      });
-    },
-    [showConfirmationDialog, runMutationAction, deleteTeam, showSuccess, notifyApiError, t],
-  );
+  const handleDelete = (team: Team) => {
+    showConfirmationDialog({
+      criticalAction: true,
+      title: t("rework.adminTeams.deleteTeam.dialogTitle", { name: team.name }),
+      message: t("rework.adminTeams.deleteTeam.dialogMessage", { name: team.name }),
+      confirmButtonLabel: t("rework.adminTeams.deleteTeam.confirm"),
+      cancelButtonLabel: t("rework.adminTeams.deleteTeam.cancel"),
+      onConfirm: () =>
+        void runMutationAction({
+          action: () => deleteTeam({ teamId: team.id }).unwrap(),
+          onSuccess: () => showSuccess({ summary: t("rework.adminTeams.deleteTeam.successSummary") }),
+          onError: (error) =>
+            notifyApiError(error, {
+              summary: t("rework.adminTeams.deleteTeam.errors.summary"),
+              fallbackDetail: t("rework.adminTeams.deleteTeam.errors.fallbackDetail"),
+              forbiddenDetail: t("rework.adminTeams.deleteTeam.errors.forbiddenDetail"),
+            }),
+        }),
+    });
+  };
 
   const teamColumns = useMemo(
     (): DataTableColumn<Team>[] => [
@@ -96,22 +93,27 @@ export default function AdminTeamsPage() {
         ),
       },
       {
-        // Fixed track, not "auto": the header is empty while the cell holds an
-        // icon button, and DataTable resolves header and body tracks separately.
-        label: "",
-        size: "3rem",
+        // Fixed track, not "auto": header and body render as separate grids, so
+        // an auto track over icon-button cells drifts out of alignment.
+        label: t("rework.adminTeams.existingTeams.table.actions"),
+        size: "6rem",
         cellRenderer: (team) => (
           <IconButton
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "delete" }}
             aria-label={t("rework.adminTeams.deleteTeam.action", { name: team.name })}
+            // The dialog closes before the request settles, so the row survives
+            // the click - a second confirm would 404 on an already-deleted team.
+            disabled={isDeleting}
             onClick={() => handleDelete(team)}
           />
         ),
       },
     ],
-    [t, handleDelete],
+    // handleDelete is deliberately not a dep: it reads no component state, only
+    // hook callbacks and `t`, so a captured copy behaves like a fresh one.
+    [t, isDeleting],
   );
 
   const suggestions = useMemo(() => {
@@ -165,7 +167,7 @@ export default function AdminTeamsPage() {
       <section className={styles.existingTeamsSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
         {allTeams && allTeams.length > 0 ? (
-          <DataTable columns={teamColumns} data={allTeams} />
+          <DataTable columns={teamColumns} data={allTeams} rowKey={(team) => team.id} />
         ) : (
           <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
         )}

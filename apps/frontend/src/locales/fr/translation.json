@@ -2261,13 +2261,14 @@
         "empty": "Aucune équipe pour l'instant.",
         "table": {
           "name": "Équipe",
-          "admins": "Administrateur(s)"
+          "admins": "Administrateur(s)",
+          "actions": "Actions"
         }
       },
       "deleteTeam": {
         "action": "Supprimer l'équipe {{name}}",
         "dialogTitle": "Supprimer {{name}} ?",
-        "dialogMessage": "L'équipe est définitivement retirée du registre, ainsi que toutes les relations d'accès qui la référencent. Les membres perdent l'accès immédiatement. Cette action est irréversible.",
+        "dialogMessage": "{{name}} est retirée du registre et toutes les relations d'accès qui la concernent sont supprimées. Les membres perdent l'accès immédiatement, et les bibliothèques de documents, agents et prompts de l'équipe se retrouvent sans propriétaire : leur contenu reste stocké mais devient inaccessible. Cette action est irréversible.",
         "confirm": "Supprimer l'équipe",
         "cancel": "Annuler",
         "successSummary": "Équipe supprimée",

@@ -148,10 +148,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneTeam", id: "LIST" },
       ],
     },
+    // Wider than its sibling team mutations on purpose: an updated team keeps
+    // its members/sessions/agents/prompts, a deleted one does not. The store
+    // only refreshes through tags (no refetchOnMount), so every per-team list
+    // left untagged here would keep serving a dead team's rows from cache.
     deleteTeamControlPlaneV1TeamsTeamIdDelete: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
+        { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneSession", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePrompt", id: `LIST-${arg.teamId}` },
       ],
     },
     // TEAM-09: self-service join — same tags as updateTeam so the marketplace

@@ -13,11 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Team deletion drops the registry row AND every ReBAC relation pointing at
-// it — there is no undo on the backend, so the guarantee under test is that
-// the request cannot leave the client without a confirmed dialog. The real
-// ConfirmationDialogProvider is mounted (not stubbed) so the assertions run
-// against the dialog users actually see.
+// Team deletion has no undo on the backend, so the guarantee under test is
+// that the request cannot leave the client unconfirmed. The real
+// ConfirmationDialogProvider is mounted rather than stubbed, so the
+// assertions run against the dialog users actually see.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -53,14 +52,19 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     ],
   }),
   useCreateTeamMutation: () => [vi.fn(), { isLoading: false }],
+  // The request leaves on the trigger call, not on `unwrap()`. Recording it
+  // there is what makes "no request without a confirm" a real assertion
+  // rather than an assertion about awaiting.
   useDeleteTeamMutation: () => [
-    (args: { teamId: string }) => ({
-      unwrap: async () => {
-        h.deleted.push(args.teamId);
-        if (h.deleteFails) throw new Error("boom");
-        return null;
-      },
-    }),
+    (args: { teamId: string }) => {
+      h.deleted.push(args.teamId);
+      return {
+        unwrap: async () => {
+          if (h.deleteFails) throw new Error("boom");
+          return null;
+        },
+      };
+    },
     { isLoading: false },
   ],
 }));
@@ -96,7 +100,7 @@ afterEach(() => {
 });
 
 // The dialog renders through `<Portal id="modal-portal">`, i.e. outside the
-// test container — query it from the document.
+// test container, so it is queried from the document.
 const dialog = () => document.querySelector('[role="alertdialog"]');
 
 const deleteButton = (teamName: string) =>
@@ -117,8 +121,8 @@ function render() {
   );
 }
 
-describe("AdminTeamsPage — team deletion", () => {
-  it("never deletes on the bare click — the dialog intercepts it", () => {
+describe("AdminTeamsPage team deletion", () => {
+  it("never deletes on the bare click - the dialog intercepts it", () => {
     render();
     const button = deleteButton("Swiftpost");
     expect(button, "each team row carries a delete action").toBeTruthy();
@@ -129,7 +133,7 @@ describe("AdminTeamsPage — team deletion", () => {
     expect(dialog()).not.toBeNull();
   });
 
-  it("states the action is irreversible and names the team", () => {
+  it("names the team in both the title and the consequences copy", () => {
     render();
     act(() => deleteButton("Swiftpost")!.click());
 
