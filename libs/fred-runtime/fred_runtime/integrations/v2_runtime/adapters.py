@@ -1280,6 +1280,33 @@ def _narrow_scope_ids(
     return [value for value in inner if value in allowed]
 
 
+def _ensure_uid_in_turn_scope(
+    runtime_context: RuntimeContext | None, document_uid: str
+) -> None:
+    """Refuse a model-named uid that the turn's document selection excludes.
+
+    The uid comes from the MODEL - a search hit, the tree, or a turn taken
+    before the user narrowed the scope - so this seam is the only thing keeping
+    a document the user took out of the conversation out of the answer.
+    An empty selection bounds nothing. A non-empty one bounds attachments too,
+    exactly as it already does on the search path (Knowledge Flow restricts the
+    session branch to the same uids).
+
+    Documents only: a library-level selection is NOT enforced here, because
+    resolving a library to its documents needs the tag store this pod does not
+    have. Search and the tree still narrow to the selected libraries, so a
+    stale uid from an earlier turn is the only way past it - closing that means
+    moving the scope onto Knowledge Flow's read endpoints.
+    """
+
+    selected = get_document_uids(runtime_context)
+    if selected and document_uid not in selected:
+        raise DocumentScopeRefusedError(
+            "the requested document is not part of this conversation's scope",
+            requested_uids=[document_uid],
+        )
+
+
 class DocumentSearchAdapter(DocumentSearchPort):
     """
     Runtime adapter behind `RuntimeServices.document_search` (CAPAB-01 #1906).
@@ -1633,9 +1660,9 @@ class DocumentTreeAdapter(DocumentTreePort):
     Same shape as `DocumentSearchAdapter`: the per-turn binding is captured
     PRIVATELY (through `_VectorSearchAgentShim` + `KfDocumentClient`, which own
     the access token and its refresh) and only the capability-safe `tree(...)`
-    surface is exposed. The caller-supplied `library_tag_ids` are the
-    capability's already-narrowed scope; this adapter intersects them with the
-    session binding's own library scope and stamps the owner_filter/team_id
+    surface is exposed. The caller-supplied `library_tag_ids` / `document_uids`
+    are the capability's already-narrowed scope; this adapter intersects them
+    with the session binding's own scope and stamps the owner_filter/team_id
     seam, so the Knowledge Flow listing can never leak folders across team
     boundaries.
     """
@@ -1657,11 +1684,15 @@ class DocumentTreeAdapter(DocumentTreePort):
         *,
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
         max_chars: int = 6000,
     ) -> DocumentTreeResult:
         runtime_context = self._binding.runtime_context
         effective_libs = _narrow_scope_ids(
             get_document_library_tags_ids(runtime_context), library_tag_ids
+        )
+        effective_uids = _narrow_scope_ids(
+            get_document_uids(runtime_context), document_uids
         )
         team_id = self._settings.team_id
         scoped_team = bool(team_id) and not is_personal_team_id(team_id)
@@ -1669,6 +1700,7 @@ class DocumentTreeAdapter(DocumentTreePort):
             result = await self._client.tree(
                 working_directory=working_directory,
                 tag_ids=effective_libs,
+                document_uids=effective_uids,
                 max_chars=max_chars,
                 owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
                 team_id=team_id if scoped_team else None,
@@ -1710,11 +1742,11 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
     """
     Runtime adapter behind `RuntimeServices.document_summarize`.
 
-    No scope narrowing here: the caller already holds a concrete
-    `document_uid` (from a search hit, tree listing, or the conversation's
-    attached-files context), and Knowledge Flow's own per-document ReBAC is
-    the real authorization gate. The binding/token stay private;
-    `KfDocumentClient` applies the extended summarize read timeout.
+    The uid is model-supplied, so `_ensure_uid_in_turn_scope` bounds it by the
+    turn's document selection before anything is fetched; Knowledge Flow's own
+    per-document ReBAC remains the authorization gate underneath. The
+    binding/token stay private; `KfDocumentClient` applies the extended
+    summarize read timeout.
     """
 
     def __init__(
@@ -1736,6 +1768,7 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
         instruction: str | None = None,
         max_chars: int = 2000,
     ) -> DocumentSummaryResult:
+        _ensure_uid_in_turn_scope(self._binding.runtime_context, document_uid)
         try:
             result = await self._client.summarize(
                 document_uid=document_uid,
@@ -1791,11 +1824,11 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
 
     Fetches a document's FULL text by uid (corpus markdown or a session
     attachment, resolved Knowledge Flow-side) and returns it one bounded page
-    at a time. Same doctrine as `DocumentSummarizeAdapter`: no
-    scope narrowing (the caller already holds a concrete uid and KF is the
-    gate - per-document ReBAC for corpus, chunk-level session ownership for an
-    attachment), the per-turn binding/token stay private (through
-    `_VectorSearchAgentShim` + `KfDocumentClient`).
+    at a time. Same doctrine as `DocumentSummarizeAdapter`: the model-supplied
+    uid is bounded by the turn's document selection here, and KF is the
+    authorization gate underneath - per-document ReBAC for corpus, chunk-level
+    session ownership for an attachment. The per-turn binding/token stay
+    private (through `_VectorSearchAgentShim` + `KfDocumentClient`).
 
     Pagination is done adapter-side because Knowledge Flow's markdown endpoint
     has no page parameter today (the KF client stays wire-format only). To avoid
@@ -1824,6 +1857,7 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
         offset: int = 0,
         max_chars: int = DEFAULT_MARKDOWN_PAGE_CHARS,
     ) -> DocumentMarkdownResult:
+        _ensure_uid_in_turn_scope(self._binding.runtime_context, document_uid)
         full = self._cache.get(document_uid)
         if full is None:
             try:
@@ -1844,7 +1878,8 @@ class DocumentExtractionAdapter(DocumentExtractionPort):
     Runtime adapter behind `RuntimeServices.document_extraction` (DOCREAD-01
     Phase 2). Delegates the whole exhaustive map-reduce to Knowledge Flow in one
     call (`KfDocumentClient.extract`, extended read timeout). Same doctrine as
-    `DocumentSummarizeAdapter`: no scope narrowing, binding/token stay private.
+    `DocumentSummarizeAdapter`: the model-supplied uid is bounded by the turn's
+    document selection, binding/token stay private.
     """
 
     def __init__(
@@ -1862,6 +1897,7 @@ class DocumentExtractionAdapter(DocumentExtractionPort):
     async def extract(
         self, document_uid: str, *, instruction: str
     ) -> DocumentExtractionResult:
+        _ensure_uid_in_turn_scope(self._binding.runtime_context, document_uid)
         try:
             result = await self._client.extract(
                 document_uid=document_uid, instruction=instruction

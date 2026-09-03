@@ -2212,6 +2212,8 @@ export type DocumentTreeRequest = {
   working_directory?: string | null;
   /** Restrict the listing to these folder tag ids (and their descendants), when set. */
   tag_ids?: string[] | null;
+  /** Restrict the listing to these documents, dropping the folders left empty, when set. */
+  document_uids?: string[] | null;
   /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
   max_chars?: number;
   /** Filter by ownership: 'personal' for user-owned folders, 'team' for team-owned folders. */

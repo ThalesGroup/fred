@@ -936,15 +936,18 @@ class DocumentTreePort(ABC):
         *,
         working_directory: str | None = None,
         library_tag_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
         max_chars: int = 6000,
     ) -> DocumentTreeResult:
         """
         Return the caller's authorized folder/document tree as rendered text.
 
-        `library_tag_ids` is the capability's already-narrowed library scope
-        (None = "no capability-side narrowing"); the adapter further bounds it
-        by the session binding before calling Knowledge Flow, completing
-        `turn_option ⊆ capability_config ⊆ session_binding`. Raises
+        `library_tag_ids` / `document_uids` are the capability's already-narrowed
+        scope (None = "no capability-side narrowing at that level"); the adapter
+        further bounds them by the session binding before calling Knowledge Flow,
+        completing `turn_option ⊆ capability_config ⊆ session_binding`. A
+        document scope prunes the listing to those leaves and drops the folders
+        left empty, so a one-document selection renders one document. Raises
         `DocumentPortCallError` on transport failure.
 
         No business-label filtering here, deliberately: a folder tree renders

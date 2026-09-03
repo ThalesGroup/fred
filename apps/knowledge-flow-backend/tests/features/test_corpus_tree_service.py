@@ -117,3 +117,51 @@ async def test_empty_scope_returns_canonical_empty_tree():
 
     assert response.tree == "(empty)"
     assert response.truncated is False
+
+
+@pytest.mark.asyncio
+async def test_document_uids_narrows_the_listing_to_the_selected_leaves():
+    sales = _tag(tag_id="tag-1", full_path="Sales", item_ids=["doc-1", "doc-2"])
+    hr = _tag(tag_id="tag-2", full_path="HR", item_ids=["doc-3"])
+    docs = [
+        _document(uid="doc-1", name="Architecture.docx"),
+        _document(uid="doc-2", name="Budget.xlsx"),
+        _document(uid="doc-3", name="Onboarding.docx"),
+    ]
+    service = _tree_service(tags=[sales, hr], docs=docs)
+
+    response = await service.get_tree(_user(), DocumentTreeRequest(document_uids=["doc-2"]))
+
+    assert "Budget.xlsx [doc-2]" in response.tree
+    assert "Architecture.docx" not in response.tree
+    # The folder holding nothing selected is pruned, not rendered empty.
+    assert "HR" not in response.tree
+
+
+@pytest.mark.asyncio
+async def test_library_scope_and_document_scope_union_rather_than_intersect():
+    sales = _tag(tag_id="tag-1", full_path="Sales", item_ids=["doc-1"])
+    hr = _tag(tag_id="tag-2", full_path="HR", item_ids=["doc-2", "doc-3"])
+    docs = [
+        _document(uid="doc-1", name="Architecture.docx"),
+        _document(uid="doc-2", name="Onboarding.docx"),
+        _document(uid="doc-3", name="Payroll.xlsx"),
+    ]
+    service = _tree_service(tags=[sales, hr], docs=docs)
+
+    response = await service.get_tree(_user(), DocumentTreeRequest(tag_ids=["tag-1"], document_uids=["doc-2"]))
+
+    # The whole selected library, plus the separately named document.
+    assert "Architecture.docx [doc-1]" in response.tree
+    assert "Onboarding.docx [doc-2]" in response.tree
+    assert "Payroll.xlsx" not in response.tree
+
+
+@pytest.mark.asyncio
+async def test_a_folder_with_no_document_still_renders_without_a_document_scope():
+    empty = _tag(tag_id="tag-1", full_path="Archive", item_ids=[])
+    service = _tree_service(tags=[empty], docs=[])
+
+    response = await service.get_tree(_user(), DocumentTreeRequest())
+
+    assert "Archive [folder:tag-1]/" in response.tree

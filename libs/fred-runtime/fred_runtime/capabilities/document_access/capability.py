@@ -54,9 +54,11 @@ Doctrine (RFC §3.5, §3.8, §10):
   identity reach the tool through the middleware closure, never the tool schema
 
 Scoping precedence (`turn_option ⊆ capability_config ⊆ session_binding`):
-- HERE the tool narrows its stored-config scope (`config.library_tag_ids` /
+- HERE both tools narrow their stored-config scope (`config.library_tag_ids` /
   `config.document_uids`) by the per-turn `document_scope` selection
-  (`turn_options`), enforcing `turn_option ⊆ capability_config`;
+  (`turn_options`), enforcing `turn_option ⊆ capability_config`; a library
+  selection and a document selection each narrow on their own, and together
+  intersect;
 - the runtime adapter then bounds the result by the session binding's own scope,
   enforcing `⊆ session_binding` (see `DocumentSearchAdapter`).
 
@@ -742,6 +744,7 @@ class DocumentAccessCapability(
                 result: DocumentTreeResult = await port.tree(
                     working_directory=working_directory,
                     library_tag_ids=scoped_library_tag_ids,
+                    document_uids=scoped_document_uids,
                     max_chars=effective_max_chars,
                 )
             except Exception as exc:

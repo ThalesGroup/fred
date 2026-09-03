@@ -267,6 +267,37 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
     )
 
 
+def build_document_scope_suffix(binding: BoundRuntimeContext) -> str:
+    """
+    Tell the model that the user narrowed this turn to specific documents.
+
+    Without it the selection is invisible to the model: it has no referent for
+    "read this document", falls back to listing the tree, and asks the user
+    which file they mean while exactly one is selected. Derived per turn like
+    the attachment suffix, so deselecting removes the notice instead of leaving
+    a checkpointed system message behind.
+
+    Uids, not display names: `RuntimeContext` carries the selection as uids
+    only, and they are what the document tools take. The model is told never to
+    repeat them, as everywhere else.
+    """
+
+    uids = binding.runtime_context.selected_document_uids
+    if not uids:
+        return ""
+    listed = "\n".join(f"- {uid}" for uid in uids)
+    return (
+        "\n\nThe user has restricted this turn to the document(s) listed below, "
+        "and the document tools reach nothing else: search, the document tree "
+        "and the reading tools all return or accept only these. When the user "
+        'says "this document" or "the document", they mean one of them - read '
+        "it rather than asking which file is meant. Pass a listed value as "
+        "`document_uid`; these are internal working ids, so NEVER repeat one in "
+        "your answer - refer to a document by its display name.\n\n"
+        f"{listed}"
+    )
+
+
 def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) -> str:
     """
     Render the session's attached chat-context prompts as a system-prompt suffix.
@@ -331,9 +362,10 @@ def compose_system_prompt(
     - guardrails, then the global base output contract, then the tool-failure
       recovery notice — hard invariants
     - ``runtime_suffixes`` — runtime-specific system notices (e.g. Deep filesystem)
-    - selected chat-context prompts, then conversation attachments — per-turn user
-      context, placed last so it is freshest while the envelope in
-      ``build_context_prompt_suffix`` still subordinates it to the guardrails above.
+    - selected chat-context prompts, then the turn's document scope, then
+      conversation attachments — per-turn user context, placed last so it is
+      freshest while the envelope in ``build_context_prompt_suffix`` still
+      subordinates it to the guardrails above.
 
     How to use:
     - render the agent template first, then pass it here with the runtime's tool
@@ -349,6 +381,7 @@ def compose_system_prompt(
             build_tool_failure_recovery_suffix(),
             *runtime_suffixes,
             build_context_prompt_suffix(binding, agent_id=agent_id),
+            build_document_scope_suffix(binding),
             build_attachment_context_suffix(binding),
         ]
     )
