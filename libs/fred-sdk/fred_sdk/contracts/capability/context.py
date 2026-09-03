@@ -62,6 +62,11 @@ class CapabilityIdentity(BaseModel):
     - capabilities need the acting user/session/team/agent-instance without
       depending on the full platform `RuntimeContext`; this is the minimal
       identity slice the RFC names
+
+    `agent_id` is the template/definition id, `agent_instance_id` the managed
+    instance — the same pair the runtime carries as `template_agent_id` /
+    `agent_instance_id`. Both are optional: a capability that needs one must
+    fail loudly rather than guess.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -70,6 +75,7 @@ class CapabilityIdentity(BaseModel):
     session_id: str | None = None
     team_id: str | None = None
     agent_instance_id: str | None = None
+    agent_id: str | None = None
 
 
 StoredT = TypeVar("StoredT", bound=BaseModel)
@@ -106,6 +112,11 @@ class CapabilityContext(Generic[StoredT, TurnOptionsT]):
     - `team_settings`: typed per-team enablement settings (RFC §8.2);
       `EmptyModel` until Tier 3
     - `services`: platform ports (KF client, workspace fs, model factory, ...)
+    - `invocation_depth`: how many agent-to-agent invocations deep this turn
+      runs (0 = a user's own turn). Its own field rather than part of
+      `CapabilityIdentity`, which answers "who", not "how deep". Set by the
+      runtime from a counter carried privately on the invoker, never from the
+      request — a capability bounding recursion can trust it.
     """
 
     identity: CapabilityIdentity
@@ -113,3 +124,4 @@ class CapabilityContext(Generic[StoredT, TurnOptionsT]):
     turn_options: TurnOptionsT
     services: RuntimeServices
     team_settings: BaseModel = field(default_factory=EmptyModel)
+    invocation_depth: int = 0

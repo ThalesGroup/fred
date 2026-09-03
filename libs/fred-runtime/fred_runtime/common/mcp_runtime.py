@@ -76,6 +76,14 @@ MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
 # this is never a cross-user leak — at worst a harmless same-identity mix-up.
 # Closing it fully would need a lock held for an entire turn's tool-calling phase,
 # which would serialize concurrent turns for the same user; not worth it.
+#
+# Sub-agents (RUNTIME-EXECUTION-CONTRACT.md §8.63) make that race the NORMAL case,
+# not a rare one: a same-agent child shares agent_id, server set and token with its
+# parent and its siblings, so every fan-out turn hits this key concurrently. The
+# reasoning above still holds — same live user, no cross-user leak — but "rare" no
+# longer does. A cache MISS under fan-out is also an N-wide stampede: the lock is
+# released before the connect below, so N children each discover tools and only the
+# last write wins. Single-flighting the connect would close both.
 MCP_CLIENT_CACHE_TTL_SECS = 300.0
 _mcp_client_cache: dict[
     Tuple[str, Tuple[str, ...], str], Tuple[MultiServerMCPClient, List[BaseTool], float]

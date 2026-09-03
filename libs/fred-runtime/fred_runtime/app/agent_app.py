@@ -594,15 +594,88 @@ def _build_media_fetcher(*, binding: BoundRuntimeContext, settings: _PodAgentSet
     return _fetch_media
 
 
+@dataclass(frozen=True, slots=True)
+class _ParentTurn:
+    """
+    TRUSTED snapshot of the turn that owns an invoker, for its children.
+
+    Everything here is resolved by the runtime for the parent turn and is
+    forwarded ONLY to a same-agent child (see `LocalRegistryAgentInvoker`);
+    none of it is readable or forgeable through `AgentInvocationRequest`.
+    """
+
+    agent_id: str
+    tuning: AgentTuning | None
+    capability_registry: CapabilityRegistry | None
+    team_settings: Mapping[str, Mapping[str, Any]] | None
+    agent_instance_id: str | None
+    exchange_id: str | None
+    reasoning_enabled_model_ids: tuple[str, ...] | None
+    turn_options: Mapping[str, Mapping[str, Any]] | None
+    binding: BoundRuntimeContext
+    invocation_depth: int
+
+
+# Parent-turn context keys a same-agent child must NOT inherit: the user's own
+# conversation context (composed-prompt layers 7-8, which a child has no user
+# for), and the resume/auth fields a fresh one-shot turn re-derives — the access
+# token reaches the child as an explicit parameter, not through this dict.
+_CHILD_CONTEXT_DROPPED_KEYS = frozenset(
+    {
+        "context_prompt_text",
+        "attachments_markdown",
+        "checkpoint_id",
+        "interrupt_id",
+        "execution_action",
+        "access_token",
+    }
+)
+
+
+def _child_context_from_parent(parent: _ParentTurn) -> dict[str, Any]:
+    """
+    Build a same-agent child's execution context from the parent's binding.
+
+    The parent's `RuntimeContext` — not the caller-supplied `PortableContext`,
+    which carries none of them — is what holds the per-turn retrieval
+    selections a child must inherit so it can never search wider than its
+    parent was allowed to.
+    """
+
+    # Excluded at serialization, not filtered after: `attachments_markdown`
+    # alone can be tens of KB, and this runs once per child.
+    child = parent.binding.runtime_context.model_dump(
+        mode="json",
+        exclude_none=True,
+        exclude=set(_CHILD_CONTEXT_DROPPED_KEYS),
+    )
+    portable = parent.binding.portable_context
+    child["tenant"] = portable.tenant
+    is_service_agent = portable.baggage.get("is_service_agent")
+    if is_service_agent is not None:
+        child["is_service_agent"] = is_service_agent
+    return child
+
+
 class LocalRegistryAgentInvoker(AgentInvokerPort):
     """
     In-process AgentInvokerPort for pod-local agent execution.
 
     Why this exists:
     - TeamAgent nodes call context.invoke_agent(...) to dispatch sub-agents
+    - the `subagent` capability's `run_subagent` tool calls it to run a
+      fresh-context copy of the calling agent
     - when all agents are co-located in the same pod there is no need for HTTP
     - this invoker runs the sub-agent through the same runtime stack, sharing
       the caller's access token and registry
+
+    Same-agent children (the sub-agent case) additionally inherit the parent's
+    resolved tuning, capability registry, team settings, instance id, exchange
+    id, reasoning policy, turn options and per-turn retrieval selections, and
+    run checkpointer-free so they cannot load or overwrite the parent's state. A
+    child naming a DIFFERENT agent keeps the long-standing behaviour: it is
+    resolved on its own terms, with only the access token, registry and
+    platform chat binding shared.
 
     How to use it:
     - injected automatically by _build_runtime_services when a registry is present
@@ -615,9 +688,13 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         access_token: str | None,
         *,
         platform_chat_model_binding: ModelBinding | None = None,
+        parent_turn: _ParentTurn | None = None,
     ) -> None:
         self._registry = registry
         self._access_token = access_token
+        # TRUSTED — see `_ParentTurn`. Same private-attribute doctrine as the
+        # binding below: a request can neither read nor set any of it.
+        self._parent_turn = parent_turn
         # TRUSTED — the caller's own `BoundRuntimeContext.platform_chat_model_binding`
         # (see `_build_runtime_services`), carried privately on this invoker so a
         # nested `context.invoke_agent(...)` child inherits the same
@@ -637,7 +714,34 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 is_error=True,
             )
 
-        context_dict = request.context.model_dump(mode="json")
+        parent = self._parent_turn
+        # The one condition that drives everything below: a child of the SAME
+        # agent is this agent running again, so it inherits the parent turn's
+        # resolved state; any other agent is resolved on its own terms.
+        inherited = (
+            parent
+            if parent is not None and request.agent_id == parent.agent_id
+            else None
+        )
+        if inherited is not None:
+            trusted = inherited.binding.portable_context
+            claimed = request.context
+            if (
+                claimed.user_id != trusted.user_id
+                or claimed.session_id != trusted.session_id
+                or claimed.team_id != trusted.team_id
+            ):
+                return AgentInvocationResult(
+                    agent_id=request.agent_id,
+                    content=(
+                        "A same-agent child must run under the calling turn's own "
+                        "user, session and team."
+                    ),
+                    is_error=True,
+                )
+            context_dict = _child_context_from_parent(inherited)
+        else:
+            context_dict = request.context.model_dump(mode="json")
         context_dict.setdefault("execution_action", ExecutionGrantAction.EXECUTE.value)
         # RFC AGENT-INVOKE: apply the caller's per-call scope onto the callee's
         # retrieval context. These keys are read back when the callee's
@@ -656,11 +760,15 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 context_dict["search_policy"] = request.scope.search_policy
         execute_request = _AgentExecuteRequest.model_construct(
             agent_id=request.agent_id,
-            agent_instance_id=None,
+            agent_instance_id=inherited.agent_instance_id if inherited else None,
             message=request.message,
             context=context_dict,
             resume_payload=None,
             invocation_turns=request.prior_turns,
+            # Turn options narrow, never widen (DocumentAccessTurnOptions):
+            # a child that did not inherit them would search wider than the
+            # user's own turn was allowed to.
+            turn_options=dict(inherited.turn_options or {}) if inherited else {},
         )
 
         content_parts: list[str] = []
@@ -674,6 +782,20 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             # the parent turn's platform chat binding, never the request's
             # own `context` — that dict has no field for it at all.
             platform_chat_model_binding=self._platform_chat_model_binding,
+            # Depth counts call stack, not identity: it rises on EVERY
+            # re-entry, so an A→B→A cycle is bounded too.
+            invocation_depth=(parent.invocation_depth if parent else 0) + 1,
+            exchange_id=inherited.exchange_id if inherited else None,
+            tuning=inherited.tuning if inherited else None,
+            capability_registry=inherited.capability_registry if inherited else None,
+            team_settings=inherited.team_settings if inherited else None,
+            reasoning_enabled_model_ids=(
+                inherited.reasoning_enabled_model_ids if inherited else None
+            ),
+            # A sub-agent is one turn and is never resumed; without this it
+            # would map the parent's session_id to LangGraph's thread_id and
+            # load — then overwrite — the parent's own state mid-turn.
+            use_checkpointer=inherited is None,
         ):
             kind = payload.get("kind")
             if kind == "final":
@@ -688,6 +810,14 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 return AgentInvocationResult(
                     agent_id=request.agent_id,
                     content=payload.get("error_message", "Unknown error"),
+                    is_error=True,
+                )
+            elif kind == "execution_error":
+                # Terminal: no `final` follows. Without this branch the caller
+                # gets is_error=True with an empty message.
+                return AgentInvocationResult(
+                    agent_id=request.agent_id,
+                    content=payload.get("message", "Unknown error"),
                     is_error=True,
                 )
 
@@ -705,6 +835,8 @@ def _build_runtime_services(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
+    parent_turn: _ParentTurn | None = None,
+    use_checkpointer: bool = True,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -812,6 +944,9 @@ def _build_runtime_services(
             # None. `binding` is this same request's BoundRuntimeContext —
             # never the child's, and never a client-controlled value.
             platform_chat_model_binding=binding.platform_chat_model_binding,
+            # Same doctrine, wider payload: everything a same-agent child
+            # inherits from THIS turn (see `_ParentTurn`).
+            parent_turn=parent_turn,
         )
         if registry is not None
         else None
@@ -824,7 +959,10 @@ def _build_runtime_services(
         tool_invoker=tool_invoker,
         tool_provider=tool_provider,
         workspace_fs=workspace_fs,
-        checkpointer=runtime_config.checkpointer,
+        # Per-run substitution, not a change to the pod's checkpointer: a
+        # sub-agent turn is never resumed and must not touch its parent's
+        # thread state.
+        checkpointer=runtime_config.checkpointer if use_checkpointer else None,
         agent_invoker=agent_invoker,
         document_search=document_search,
         # #1903 capability ports: per-instance config assets (template fetch at
@@ -2982,6 +3120,7 @@ def _build_capability_block(
     agent_instance_id: str | None,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    invocation_depth: int = 0,
 ) -> CapabilityAgentBlock | None:
     """
     Assemble one agent's selected capabilities into the frame block (#1974).
@@ -3084,10 +3223,12 @@ def _build_capability_block(
             session_id=session_id,
             team_id=team_id,
             agent_instance_id=agent_instance_id,
+            agent_id=definition.agent_id,
         ),
         services=services,
         turn_options=turn_options,
         team_settings=team_settings,
+        invocation_depth=invocation_depth,
     )
     return build_capability_agent_block(capability_registry, contexts)
 
@@ -3246,6 +3387,8 @@ async def _iterate_runtime_event_payloads(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     platform_chat_model_binding: ModelBinding | None = None,
+    invocation_depth: int = 0,
+    use_checkpointer: bool = True,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -3266,6 +3409,12 @@ async def _iterate_runtime_event_payloads(
     - the user's JWT forwarded via the Authorization header
     - stored in RuntimeContext so KF tool adapters can use it for outbound calls
     - None in local dev when security is disabled
+
+    invocation_depth / use_checkpointer:
+    - both come from `LocalRegistryAgentInvoker`'s private state, never from the
+      request: depth bounds agent-to-agent recursion (capability-side, see
+      `CapabilityContext.invocation_depth`) and a sub-agent child runs
+      checkpointer-free so it cannot load or overwrite its parent's state
     """
 
     request_id = str(uuid4())
@@ -3419,6 +3568,19 @@ async def _iterate_runtime_event_payloads(
         team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,
+        use_checkpointer=use_checkpointer,
+        parent_turn=_ParentTurn(
+            agent_id=definition.agent_id,
+            tuning=tuning,
+            capability_registry=capability_registry,
+            team_settings=team_settings,
+            agent_instance_id=request.agent_instance_id,
+            exchange_id=exchange_id,
+            reasoning_enabled_model_ids=reasoning_enabled_model_ids,
+            turn_options=getattr(request, "turn_options", None) or None,
+            binding=binding,
+            invocation_depth=invocation_depth,
+        ),
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -3448,6 +3610,7 @@ async def _iterate_runtime_event_payloads(
             agent_instance_id=request.agent_instance_id,
             turn_options=getattr(request, "turn_options", None) or None,
             team_settings=team_settings,
+            invocation_depth=invocation_depth,
         )
         # Cheap correctness trace for "agent has no tools" reports: names each
         # link (registry present? selection? block built? how many middleware?)

@@ -243,6 +243,7 @@ def build_capability_contexts(
     services: RuntimeServices,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    invocation_depth: int = 0,
 ) -> dict[str, CapabilityContext[Any, Any]]:
     """
     Turn one agent's tuning-level capability selection into the typed
@@ -259,6 +260,10 @@ def build_capability_contexts(
     id. Each slice is validated against that capability's `TeamSettingsModel`
     and reaches the middleware as `CapabilityContext.team_settings` — never an
     LLM tool signature. A capability without a slice gets `EmptyModel`.
+
+    `invocation_depth` is how many agent-to-agent invocations deep this turn
+    runs; it comes from the invoker's private counter, never from the request,
+    so a capability can bound recursion on it.
     """
 
     contexts: dict[str, CapabilityContext[Any, Any]] = {}
@@ -281,6 +286,7 @@ def build_capability_contexts(
             config=config,
             turn_options=options.get(cap_id),
             team_settings=settings.get(cap_id),
+            invocation_depth=invocation_depth,
         )
     return contexts
 
@@ -293,6 +299,7 @@ def build_capability_context(
     config: BaseModel | Mapping[str, Any] | None = None,
     turn_options: BaseModel | Mapping[str, Any] | None = None,
     team_settings: BaseModel | Mapping[str, Any] | None = None,
+    invocation_depth: int = 0,
 ) -> CapabilityContext[Any, Any]:
     """
     Build one capability's typed context from raw slices (RFC §3.5, §3.8).
@@ -310,6 +317,7 @@ def build_capability_context(
         turn_options=_validated_slice(capability.TurnOptionsModel, turn_options),
         team_settings=_validated_slice(capability.TeamSettingsModel, team_settings),
         services=services,
+        invocation_depth=invocation_depth,
     )
 
 
