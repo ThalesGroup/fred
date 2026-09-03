@@ -165,3 +165,22 @@ async def test_a_folder_with_no_document_still_renders_without_a_document_scope(
     response = await service.get_tree(_user(), DocumentTreeRequest())
 
     assert "Archive [folder:tag-1]/" in response.tree
+
+
+@pytest.mark.asyncio
+async def test_selecting_a_folder_and_its_documents_lists_each_one_once():
+    """Ticking a folder and the files inside it is redundant, not duplicating:
+    the union collapses to the same set and every leaf renders once."""
+
+    sales = _tag(tag_id="tag-1", full_path="Sales", item_ids=["doc-1", "doc-2"])
+    docs = [
+        _document(uid="doc-1", name="Architecture.docx"),
+        _document(uid="doc-2", name="Budget.xlsx"),
+    ]
+    service = _tree_service(tags=[sales], docs=docs)
+
+    response = await service.get_tree(_user(), DocumentTreeRequest(tag_ids=["tag-1"], document_uids=["doc-1", "doc-2"]))
+
+    assert response.tree.count("Architecture.docx [doc-1]") == 1
+    assert response.tree.count("Budget.xlsx [doc-2]") == 1
+    assert response.tree.count("Sales [folder:tag-1]/") == 1

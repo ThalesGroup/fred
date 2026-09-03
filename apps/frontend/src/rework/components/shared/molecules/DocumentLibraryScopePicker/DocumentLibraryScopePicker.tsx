@@ -235,7 +235,13 @@ export function DocumentLibraryScopePicker({
                   <ul className={styles.documentList}>
                     {docs.map((doc) => {
                       const documentUid = doc.identity.document_uid;
-                      const checked = selectedDocumentUids?.includes(documentUid) ?? false;
+                      // Picking the folder already puts every document it holds
+                      // in scope (library and document picks union server-side),
+                      // so show them checked rather than leaving the user to tick
+                      // each one - and read-only, since unticking one cannot
+                      // carve an exception out of a folder-level pick.
+                      const includedByFolder = tagId !== null && selectedTagIds.includes(tagId);
+                      const checked = includedByFolder || (selectedDocumentUids?.includes(documentUid) ?? false);
                       // Same file-type icon/color as the Resources table (shared
                       // fileIconSpec), so a given extension reads identically here.
                       const docSpec = fileIconSpec(doc.file?.file_type);
@@ -247,11 +253,15 @@ export function DocumentLibraryScopePicker({
                       return (
                         <li key={documentUid} className={styles.documentItem}>
                           {documentSelectionEnabled ? (
-                            <label className={styles.documentToggle}>
+                            <label
+                              className={styles.documentToggle}
+                              title={includedByFolder ? t("rework.documentIncludedByFolder") : undefined}
+                            >
                               <input
                                 type="checkbox"
                                 className={styles.checkbox}
                                 checked={checked}
+                                disabled={includedByFolder}
                                 onChange={(event) => toggleDocumentSelection(documentUid, event.target.checked)}
                               />
                               {docIcon}
