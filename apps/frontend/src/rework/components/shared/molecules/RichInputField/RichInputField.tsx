@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ClipboardEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import { KeyboardEvent, ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
-import { clipboardAttachments } from "./clipboardFiles";
 import styles from "./RichInputField.module.css";
 
 // All three slots and the send button are optional so the component is usable
@@ -38,12 +37,6 @@ interface RichInputFieldProps {
   /** Runtime-published code-point limit; omitted for older runtime pods. */
   characterLimit?: number;
   placeholder?: string;
-  /**
-   * Receives the files carried by a paste. When set, a file paste replaces the
-   * default text paste; leave it out where attachments are not accepted, so a
-   * paste keeps its normal behaviour.
-   */
-  onPasteFiles?: (files: File[]) => void;
   /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
   aboveTextSlot?: ReactNode;
   /** Rendered in the bottom-left area — context pickers, scope selectors, attachment chips. */
@@ -95,7 +88,6 @@ export function RichInputField({
   characterCount,
   characterLimit,
   placeholder,
-  onPasteFiles,
   aboveTextSlot,
   topSlot,
   leftSlot,
@@ -198,23 +190,6 @@ export function RichInputField({
       }
     },
     [disabled, sendDisabled, onSend],
-  );
-
-  const handlePaste = useCallback(
-    (e: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (!onPasteFiles) return;
-      const files = clipboardAttachments(e.clipboardData);
-      // What the browser exposed vs. what was kept: browsers and file managers
-      // differ on how many files one copy yields, so this is the first thing
-      // to check when "I pasted N files and see fewer".
-      console.debug(
-        `[RichInputField] paste — types=${Array.from(e.clipboardData?.types ?? []).join(",")} files=${e.clipboardData?.files.length ?? 0} attached=${files.length}`,
-      );
-      if (files.length === 0) return;
-      e.preventDefault();
-      onPasteFiles(files);
-    },
-    [onPasteFiles],
   );
 
   const hasText = value.trim().length > 0;
@@ -387,7 +362,6 @@ export function RichInputField({
             resize();
           }}
           onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
         />
 
         <CharacterLimitNotice

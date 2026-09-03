@@ -39,6 +39,7 @@ import { selectSidePanelOpenRequest } from "../../../features/capabilities/sideP
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
+import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import {
@@ -238,9 +239,9 @@ export default function ManagedChatPage() {
     if (selected.length > 0) addAttachments(selected, "picker");
   };
 
-  // Clipboard files are already filtered by RichInputField; a paste that only
-  // carries text never reaches this handler.
-  const handlePasteFiles = (files: File[]) => addAttachments(files, "paste");
+  // Page-wide like drop: a paste event only reaches the focused element, so
+  // the composer alone would miss every Ctrl+V made with the focus elsewhere.
+  usePastedFiles({ enabled: allowChatAttachments, onFiles: (files) => addAttachments(files, "paste") });
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!allowChatAttachments) return;
@@ -318,7 +319,6 @@ export default function ManagedChatPage() {
       onTranscribeAudio={handleTranscribeAudio}
       voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
       onVoiceInputError={reportVoiceInputError}
-      onPasteFiles={allowChatAttachments ? handlePasteFiles : undefined}
       focusEndRequestId={focusEndRequestId}
       showSendButton
       aboveTextSlot={
