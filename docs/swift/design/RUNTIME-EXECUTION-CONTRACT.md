@@ -3977,6 +3977,11 @@ must uphold these, regardless of transport:
   runtime forces and validates a schema-conformant result with a bounded
   retry (2 attempts); on persistent mismatch the call still returns
   (`structured=None`) rather than hanging.
+- **The result carries what the callee cited and produced, not only its text.**
+  `AgentInvocationResult.sources` and `.ui_parts` are filled from the callee's
+  `final` event (§8.64) — a callee is a full agent, so a caller that renders
+  its answer can render its citations and its parts alongside. Both are empty
+  when the callee produced none.
 
 ### Boundary — same pod only
 
@@ -4560,3 +4565,48 @@ POC, to be settled with POC data — see issue #2531 and
 [`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5.
 Until then it is a local/POC surface: an admin must enable it per team
 (`ADMIN_GATED`), and no agent selects it by default.
+
+### 8.64 ✅ A callee's `sources` and `ui_parts` reach its caller — issue #2529 (2026-09-03)
+
+`AgentInvocationResult` has carried `sources` and `ui_parts` since §14 was
+written, but `LocalRegistryAgentInvoker` filled only `content`: the callee's
+citations and its produced parts (a link, a map, an HTML artifact, a
+PowerPoint preview) were read off its `final` event, discarded, and the caller
+got the text alone. Both fields are now populated from that same payload —
+`AgentInvocationResult(sources=payload["sources"], ui_parts=payload["ui_parts"])`.
+Types already matched: `FinalRuntimeEvent` and `AgentInvocationResult` declare
+the same `tuple[VectorSearchHit, ...]` / `tuple[UiPart, ...]`, and the payload
+is a JSON dump of the former, so the model re-validates it. Every caller of
+`invoke_agent` benefits, `fred-rags` included; nothing about the request shape
+changed.
+
+`run_subagent` passes both straight onto its `ToolInvocationResult`, so a
+research child's citations and a document-producing child's parts ride the
+parent's tool-result line. **A sub-agent is not a reduced agent** — that is
+the rule this entry exists to state. The transport was already there:
+`react_runtime.py` copies a tool artifact's `sources`/`ui_parts` onto the
+`tool_result` event and merges them into the turn's `final`, so no frontend
+work was needed. The content cap is unchanged and now explicitly covers the
+whole result: an over-cap answer is refused with its parts, never delivered
+half.
+
+**Ownership stays the parent's, and there is nothing else it could be.** A
+same-agent child inherits the parent's literal `session_id` and `exchange_id`
+(§8.63) and never streams or persists a turn of its own — its events are
+consumed in-process by the invoker. So a child's part is persisted exactly
+once, in the parent's `final` history row, under the parent's exchange. No
+part type carries an exchange or session field, so nothing downstream can
+distinguish "produced by a child" from "produced by the parent" — a
+limitation, not a bug, and one no code path could currently express.
+
+**Duplicate rendering: latent, not live.** The same parts are emitted on two
+events — the `tool_result` for that call and the turn's aggregated `final` —
+and deduplication happens only *within* the aggregate, never across the two.
+Today only the `final` copy renders, so the user sees each part once; the
+frontend already stages the tool-result copy without rendering it. Anything
+that later renders parts on a tool-result line will double them.
+
+**Cost note.** Every part now crosses the SSE stream twice and is re-serialized
+on each merge, which matters for a large part (an HTML artifact's whole body)
+multiplied by fan-out. Recorded on #2531 with the rest of the fan-out
+economics; no bound is added here.
