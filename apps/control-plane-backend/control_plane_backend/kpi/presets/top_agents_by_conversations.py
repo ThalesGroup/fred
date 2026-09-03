@@ -21,7 +21,7 @@ from typing import Any
 
 from fastapi import Request
 from fred_core import KeycloakUser
-from fred_core.common import TeamId
+from fred_core.common import TeamId, is_personal_team_id
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
@@ -29,6 +29,7 @@ from control_plane_backend.kpi.presets.common import (
     MultiSeriesPoint,
     MultiSeriesTimeSeriesResponse,
 )
+from control_plane_backend.kpi.presets.team_names import resolve_team_names
 from control_plane_backend.kpi.utils import resolve_interval
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,33 @@ def _filters(team_id: TeamId | None) -> list[dict[str, Any]]:
     return filters
 
 
+def _build_labels(
+    id_to_name: dict[str, str],
+    id_to_team_id: dict[str, str],
+    team_names: dict[str, str],
+) -> dict[str, str]:
+    """agent_instance_id -> the label its series is drawn under.
+
+    Instance names are not unique across teams, so a cross-team chart qualifies
+    each one with its owning team. Pass an empty `team_names` to keep bare
+    names, which is what a team-scoped request does.
+    """
+    qualified: dict[str, str] = {}
+    for instance_id, name in id_to_name.items():
+        team_name = team_names.get(id_to_team_id.get(instance_id, ""))
+        qualified[instance_id] = f"{name} - {team_name}" if team_name else name
+
+    # Two instances can still land on one label. The id stays the accumulation
+    # key throughout, so only the display label needs breaking apart.
+    label_counts = Counter(qualified.values())
+    return {
+        instance_id: f"{label} ({instance_id[:8]})"
+        if label_counts[label] > 1
+        else label
+        for instance_id, label in qualified.items()
+    }
+
+
 async def query_top_agents_by_conversations(
     store: OpenSearchKPIStore,
     *,
@@ -66,7 +94,7 @@ async def query_top_agents_by_conversations(
     team_id: TeamId | None = None,
 ) -> MultiSeriesTimeSeriesResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
-    del user, request
+    del user
 
     interval, date_fmt = resolve_interval(since, until)
 
@@ -75,8 +103,9 @@ async def query_top_agents_by_conversations(
     }
 
     # Phase 1: top N agent instances by turn count.
-    # A top_hits sub-agg reads agent_instance_name from the most-recent event —
-    # this is the deleted-instance safety net: the name was persisted at emit time.
+    # A top_hits sub-agg reads the instance's name and owning team from its
+    # most-recent event: both were persisted at emit time, so a since-deleted
+    # instance still labels its own line.
     top_body: dict[str, Any] = {
         "size": 0,
         "query": {"bool": {"filter": [time_filter, *_filters(team_id)]}},
@@ -88,11 +117,16 @@ async def query_top_agents_by_conversations(
                     "order": {"_count": "desc"},
                 },
                 "aggs": {
-                    "latest_name": {
+                    "latest_dims": {
                         "top_hits": {
                             "size": 1,
                             "sort": [{"@timestamp": {"order": "desc"}}],
-                            "_source": {"includes": ["dims.agent_instance_name"]},
+                            "_source": {
+                                "includes": [
+                                    "dims.agent_instance_name",
+                                    "dims.team_id",
+                                ]
+                            },
                         }
                     }
                 },
@@ -114,24 +148,30 @@ async def query_top_agents_by_conversations(
             interval=interval,
         )
 
-    # agent_instance_id → name (agent_instance_name if stored, else the id).
+    # agent_instance_id → name / owning team, both read from that instance's
+    # most recent event (the deleted-instance safety net: they were persisted
+    # at emit time).
     id_to_name: dict[str, str] = {}
+    id_to_team_id: dict[str, str] = {}
     for bucket in top_buckets:
         instance_id = str(bucket["key"])
-        hits = bucket.get("latest_name", {}).get("hits", {}).get("hits", [])
+        hits = bucket.get("latest_dims", {}).get("hits", {}).get("hits", [])
         dims = hits[0]["_source"].get("dims", {}) if hits else {}
         id_to_name[instance_id] = dims.get("agent_instance_name") or instance_id
+        # A personal space has no registry row, so its id would resolve to
+        # itself - and that id embeds the owner's uid. Never label with it.
+        event_team_id = str(dims.get("team_id") or "")
+        if event_team_id and not is_personal_team_id(event_team_id):
+            id_to_team_id[instance_id] = event_team_id
 
-    # Instance names are not unique — two live instances may share one. Keying
-    # the series by name would merge them into a single line whose counts are
-    # the sum of both, so the id stays the accumulation key throughout and the
-    # name is only ever a display label. Colliding names get a short id suffix
-    # so the chart still shows two distinguishable lines.
-    name_counts = Counter(id_to_name.values())
-    id_to_label: dict[str, str] = {
-        instance_id: f"{name} ({instance_id[:8]})" if name_counts[name] > 1 else name
-        for instance_id, name in id_to_name.items()
-    }
+    # Empty when the caller already scoped to one team: every series would
+    # otherwise repeat the filter it set.
+    team_names = (
+        {}
+        if team_id is not None
+        else await resolve_team_names(request, sorted(set(id_to_team_id.values())))
+    )
+    id_to_label = _build_labels(id_to_name, id_to_team_id, team_names)
 
     # Phase 2: time-series breakdown per instance.
     series_body: dict[str, Any] = {

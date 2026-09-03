@@ -3222,8 +3222,10 @@ never summarizing. The map phase runs with **bounded concurrency
 exponential + jitter) so a throttling provider slows the extraction rather than
 failing the turn (DOCREAD-01 #2). Document text is resolved through
 `SummarizeService.get_document_text`, so the corpus/session-attachment access
-rules stay single-sourced. `document_verbatim`'s positional read stays on the
-paginated `document_markdown` port; only exhaustive extraction moved.
+rules stay single-sourced (that resolution moved to
+`ContentService.get_markdown_preview` in §8.63). `document_verbatim`'s
+positional read stays on the paginated `document_markdown` port; only
+exhaustive extraction moved.
 
 Wiring mirrors the summarize path: `KfDocumentClient.extract` (extended read
 timeout), `DocumentExtractionAdapter`, injected in `agent_app.py`'s turn-time
@@ -4217,7 +4219,7 @@ use it" text, response schemas, and error blocks are carried solely by the
 `tools` parameter, not duplicated into the prompt body (2026-08-27). Issue
 #2412's item 2 (the MCP response-schema flags experiment above) is still
 open. Issue #2412's item 3 (block reordering) **was** taken the same day —
-see §8.65.
+see §8.67.
 
 ---
 
@@ -4524,7 +4526,124 @@ predating this entry advertises templates control-plane reads unchanged.
 
 ---
 
-### 8.64 ✅ ReAct tool listing grouped by MCP server; `agent_instructions` moved off per-model-call middleware — issue #2455 (2026-08-27)
+### 8.64 ✅ `read_document` resolves session attachments too — issue #2495 (2026-09-02)
+
+**One resolution point instead of a corpus-only reader and a fallback nobody
+else could reach.** `DocumentMarkdownPort` reaches Knowledge Flow through
+`GET /markdown/{document_uid}`, which resolved text via
+`ContentService.get_markdown_preview`: a metadata-store record plus a preview
+artifact (`output.md`). A session attachment (fast ingest,
+`POST /fast/ingest`) has neither — vectors only, no metadata record, no ReBAC
+tuple — so `read_document` returned 403/404 on exactly the files the
+attachment prompt suffix told the model to name. Its siblings did not:
+`summarize_document` and `extract_from_document` both resolved through
+`SummarizeService.get_document_text`, which fell back to rebuilding the text
+from the session vectors.
+
+**The fallback moved down, not sideways.** Reconstruction is now
+`BaseVectorStore.get_own_session_document_text`, beside the two other
+session-ownership decisions (`is_own_session_chunk`,
+`may_delete_session_document`), and `ContentService.get_markdown_preview` is
+the single reader that applies it. `SummarizeService._get_document_markdown`,
+`_reconstruct_attachment_text` and `get_document_text` are gone; summarize and
+extract call the content service directly. Net effect on the port: an
+attachment uid now pages like any other document, and `DocumentMarkdownAdapter`
+is unchanged (it still paginates adapter-side and memoises per uid per turn).
+
+**Scoped to the metadata seam, deliberately.** The fallback fires only when the
+corpus *metadata* resolution fails (`FileNotFoundError` / `AuthorizationError`)
+— the exact signature of an attachment. A corpus document whose preview is not
+ready still fails fast and pays no chunk scan, which is the behaviour the
+previous fallback (wrapped around the whole preview call) did not have.
+
+**A clipped attachment now says so.** Fast ingest drops WHOLE PAGES past its
+60k-char cap and recorded that only in the upload response, never in the
+vectors — so a rebuilt attachment was indistinguishable from a complete one,
+and `read_document`'s footer would tell the model "END OF DOCUMENT reached...
+you now have the complete text". `fast_ingest` now stamps `truncated` into each
+chunk's metadata and the reconstruction appends a plain-text notice when it is
+set. Attachments ingested before this carry no flag and stay silent, as they
+were. The notice is in-band rather than a new `DocumentMarkdownResult` field:
+it reaches summarize and extract by the same path, with no wire change.
+
+**Security is unchanged and now single-sourced.** Reconstruction joins only
+chunks whose own `scope == "session"` and `user_id` match the caller, so a
+corpus document a user was denied READ on is never readable back through its
+vectors; an empty reconstruction re-raises the original denial rather than
+returning an empty document.
+
+**Still corpus-only** (each for its own structural reason, not an oversight):
+`find_similar_passages` (Knowledge Flow runs it with
+`include_session_scope=False` and its controller gates every uid on a ReBAC
+tuple — §8.60), `list_document_tree`, `list_documents_by_label` (labels are a
+metadata-store notion), the tabular tools (#2418) and `ppt_filler`'s raw-bytes
+fetch (an attachment keeps no blob).
+
+
+---
+
+### 8.65 ✅ The turn's document scope reaches the read tools and the tree — issue #2510 (2026-09-03)
+
+**The composer's selection used to narrow retrieval only.** The document-scope
+picker sends the user's pick twice — as `turn_options["document_access"]
+.document_uids` and as `RuntimeContext.selected_document_uids` — and two of the
+six document tools read it: `search_documents_using_vectorization` and
+`find_similar_passages`. `list_document_tree` narrowed by library and ignored
+documents; `read_document`, `summarize_document` and `extract_from_document`
+narrowed by nothing at all. Ticking one file therefore produced a listing of the
+whole corpus, a model asking which document was meant, and a reading tool that
+would accept any uid it had ever seen.
+
+**Three seams, one selection.**
+
+- `DocumentTreePort.tree` takes `document_uids`; `DocumentTreeAdapter`
+  intersects it with the binding, `KfDocumentClient` puts it on the wire, and
+  `DocumentTreeRequest` / `CorpusTreeService` narrow the resolved leaves and
+  drop the folders left empty (`prune_empty_folders`). Without a document scope
+  the listing is byte-for-byte what it was, empty folders included.
+- `DocumentMarkdownAdapter`, `DocumentSummarizeAdapter` and
+  `DocumentExtractionAdapter` bound the model-supplied uid by the same selection
+  (`_ensure_uid_in_turn_scope`) and raise `DocumentScopeRefusedError` — the
+  seam `DocumentSimilarityAdapter` already had, for uids of exactly the same
+  provenance. The capabilities render it through `document_scope_refusal`, never
+  as a Knowledge Flow failure: a scope decision told as a transport error gets
+  retried, and told as an empty result gets reported as an empty document.
+- `build_document_scope_suffix` names the selection in the per-turn system
+  prompt, beside the attachment suffix. Without a referent for "this document"
+  the model listed the tree and asked which file was meant while exactly one was
+  ticked. Uids, not display names: `RuntimeContext` carries the selection as
+  uids, and they are what the tools take.
+
+**Library and document scope UNION, they do not intersect.** Vector search
+already merges library hits with document hits, so ticking a library plus one
+file elsewhere means "that library, plus that file". The tree now follows the
+same rule rather than inventing an intersection nobody asked for.
+
+**The gate refuses only what it can prove.** A false refusal is worse than a
+missed one here: the model reports a document the user picked as unreachable.
+So two cases pass through, both by design — a selection that includes a library
+(its documents cannot be enumerated pod-side, and refusing them would refuse the
+user's own pick), and a uid among the conversation's attached files
+(`get_attachment_uids`, read from the same `attachments_markdown` the model is
+told to quote from — the picker lists the corpus, so an attachment is never in
+the selection). What remains enforced is the case that produced the bug: a
+documents-only selection, with a stale uid from a wider earlier turn.
+
+**Two known gaps, tracked rather than papered over.**
+
+- With `bind_libraries=True`, the pinned library is always sent as the tree's
+  library scope and Knowledge Flow unions it with the document scope, so ticking
+  one file still lists the whole bound library. Separating "the user picked this
+  library" from "the agent is pinned to it" needs a second wire field, not a
+  behaviour change here.
+- `narrow_scope_ids` reads an empty intersection (`config.document_uids`
+  disjoint from the turn's pick) as "no bound at this level" and re-widens to the
+  session selection. Pre-existing on the search path, now shared by the tree;
+  `DocumentSimilarityAdapter` is the one caller that handles it explicitly.
+
+---
+
+### 8.66 ✅ ReAct tool listing grouped by MCP server; `agent_instructions` moved off per-model-call middleware — issue #2455 (2026-08-27)
 
 **What changed.** `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`)
 now groups the flat tool list by originating MCP server when the caller
@@ -4614,7 +4733,7 @@ drift, unrelated to this change, flagged here rather than silently fixed.
 
 ---
 
-### 8.65 ✅ System-prompt block order: agent template moved to last static block — issue #2412 item 3 (2026-08-27)
+### 8.67 ✅ System-prompt block order: agent template moved to last static block — issue #2412 item 3 (2026-08-27)
 
 **What changed.** `compose_system_prompt` (`react_prompting.py`) used to emit
 
@@ -4681,7 +4800,7 @@ before/after token measurement on a bare "Hello" turn, and the
 item 2) — both are reporting/measurement deliverables on the issue, not
 runtime behavior this doc tracks. *(Amended 2026-08-28: item 2 turned out to
 be a runtime-behavior change after all — it shrinks the `tools` API
-parameter, not the prompt — and landed as §8.67.)*
+parameter, not the prompt — and landed as §8.69.)*
 
 **Follow-up (2026-08-28): the new boundary needed a marker.** Moving the
 agent template out of first position surfaced a rendering gap the old order
@@ -4701,7 +4820,7 @@ position.
 
 ---
 
-### 8.66 ✅ Mermaid output contract condensed, ~45% smaller (2026-08-27, re-measured 2026-08-31 after rebase)
+### 8.68 ✅ Mermaid output contract condensed, ~45% smaller (2026-08-27, re-measured 2026-08-31 after rebase)
 
 **What changed.** `mermaid_output_contract.md`
 (`fred_sdk/resources/prompts/`) — the unconditional, per-agent-turn output
@@ -4760,7 +4879,7 @@ inspection.
 
 ---
 
-### 8.67 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
+### 8.69 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
 
 **What changed.** No MCP tool description carries response documentation any
 more. Two steps, landed together in knowledge-flow's `main.py`:
@@ -4803,7 +4922,7 @@ API and `mcp.types.Tool` is not frozen (`model_config['frozen']` is False,
 verified). `compat/fastapi_mcp_patch.py` stays reserved for the two genuine
 upstream monkey patches; this is ordinary post-processing of our own object.
 
-**Where the cost actually was.** Not in the system prompt. Since §8.64's
+**Where the cost actually was.** Not in the system prompt. Since §8.66's
 `_tool_summary` (`react_tool_binding.py`) the prompt keeps only each
 description's opening paragraph — it already cut at the first `\n\n`, ahead
 of `### Responses:`. The full description travels in the **`tools` API
@@ -4870,7 +4989,7 @@ consolidation phase's scope-discipline rule — each is its own change):
    `read_file_page` / `download_file`, or `ls` / `glob` / `grep`. This change
    did not cause it and does not worsen it — what step 2 removed from those
    tools was boilerplate carrying no signal — but it does expose it: post-
-   §8.64 the opening paragraph is *all* the model sees when choosing between
+   §8.66 the opening paragraph is *all* the model sees when choosing between
    tools, and here that paragraph is three words. Write real docstrings on
    these 21 routes before adding any further tool to either server.
 4. **Seven routes have auto-generated `operation_id`s**, which become the
@@ -4894,17 +5013,17 @@ consolidation phase's scope-discipline rule — each is its own change):
 
 ---
 
-### 8.68 ✅ Two platform-wide prompt blocks lead the system prompt — issue TBD (2026-08-28, renamed and extended 2026-08-31)
+### 8.70 ✅ Two platform-wide prompt blocks lead the system prompt — issue TBD (2026-08-28, renamed and extended 2026-08-31)
 
 **What changed.** A single, org-admin-editable text now applies to every agent
 on the deployment, rendered as the **first block** of the composed system
 prompt — ahead of the guardrails, the global output contract, the tools, and
 the agent's own template. `compose_system_prompt` (`react_prompting.py`) gained
 `build_platform_prompt_prefix(binding)` at position 0; the block order is
-otherwise exactly as §8.65 left it.
+otherwise exactly as §8.67 left it.
 
 Before this, the only platform-wide text was `GLOBAL_BASE_PROMPT_MARKDOWN`
-(§8.66) — shipped in fred-sdk, deliberately not editable. Teams could already
+(§8.68) — shipped in fred-sdk, deliberately not editable. Teams could already
 express their own intent through their agents' `system_prompt_template`; what
 was missing was the platform operator's own layer above both.
 
@@ -4963,7 +5082,7 @@ already expressible. Updates are overwrite-with-audit (`updated_by` /
 `updated_at`), not versioned history, matching `platform_model_binding`.
 
 **Cost note.** This text is re-sent on every model call of every agent, so it
-is permanent context for the whole deployment — the same budget §8.67 just
+is permanent context for the whole deployment — the same budget §8.69 just
 freed. `SetPlatformPromptRequest` caps it at 20 000 characters and the editor
 shows the counter, so the cost is visible while typing rather than discovered
 in a Langfuse trace.
@@ -5238,7 +5357,7 @@ synthetic fixture values, not the shipped file) both pass unchanged.
 
 ---
 
-### 8.69 ✅ Per-agent `guardrails` removed from `ReActPolicy` — operating rules live in the agent template (2026-09-02)
+### 8.71 ✅ Per-agent `guardrails` removed from `ReActPolicy` — operating rules live in the agent template (2026-09-02)
 
 **What changed.** `GuardrailDefinition` and `ReActPolicy.guardrails` are gone
 from fred-sdk, and `build_guardrail_suffix` is gone from

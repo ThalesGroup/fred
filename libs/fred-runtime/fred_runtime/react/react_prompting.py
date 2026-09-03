@@ -151,7 +151,7 @@ def build_platform_prompt_prefix(binding: BoundRuntimeContext) -> str:
       the only platform-wide text was the static
       `GLOBAL_BASE_PROMPT_MARKDOWN` output contract, which is shipped in
       fred-sdk and deliberately not editable.
-    - it goes first, not last, for the reason §8.64 moved the agent template
+    - it goes first, not last, for the reason §8.67 moved the agent template
       last: this is the single most stable block on a deployment — identical
       for every agent, every session, every turn — so it extends the provider
       prefix cache rather than truncating it. Ordering is not precedence here;
@@ -294,6 +294,37 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
     )
 
 
+def build_document_scope_suffix(binding: BoundRuntimeContext) -> str:
+    """
+    Tell the model that the user narrowed this turn to specific documents.
+
+    Without it the selection is invisible to the model: it has no referent for
+    "read this document", falls back to listing the tree, and asks the user
+    which file they mean while exactly one is selected. Derived per turn like
+    the attachment suffix, so deselecting removes the notice instead of leaving
+    a checkpointed system message behind.
+
+    Uids, not display names: `RuntimeContext` carries the selection as uids
+    only, and they are what the document tools take. The model is told never to
+    repeat them, as everywhere else.
+    """
+
+    uids = binding.runtime_context.selected_document_uids
+    if not uids:
+        return ""
+    listed = "\n".join(f"- {uid}" for uid in uids)
+    return (
+        "\n\nThe user has picked the document(s) listed below for this turn. "
+        'When they say "this document" or "the document", they mean one of '
+        "them - read it rather than asking which file they mean. Pass a listed "
+        "value as `document_uid`; these are internal working ids, so NEVER "
+        "repeat one in your answer - refer to a document by its display name. "
+        "The user may also have selected whole libraries, whose documents are "
+        "in scope too and reachable through search and the document tree.\n\n"
+        f"{listed}"
+    )
+
+
 def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) -> str:
     """
     Render the session's attached chat-context prompts as a system-prompt suffix.
@@ -365,7 +396,7 @@ def compose_system_prompt(
       invariant, identical across every agent on a deployment. (Two blocks
       used to sit here: tool-failure recovery, folded into the platform
       instructions, and per-agent guardrails, folded into each agent's
-      template — RUNTIME-EXECUTION-CONTRACT §8.67/§8.68.)
+      template — RUNTIME-EXECUTION-CONTRACT §8.70/§8.71.)
     - **Tools** — ``tool_suffix``: what tools exist, grouped by MCP server
       with each server's ``agent_instructions`` inlined (#2455). Also
       near-identical across agents sharing the same tool set.
@@ -388,10 +419,10 @@ def compose_system_prompt(
       to the agent block instead of ending after the first few dozen
       characters).
     - **Per-turn user context, unchanged** — selected chat-context prompts,
-      then conversation attachments. Placed last because they are genuinely
-      volatile (change with the conversation, not just the agent), which
-      also keeps the cache boundary clean: everything before this point is
-      stable for the whole session.
+      then the turn's document scope, then conversation attachments. Placed
+      last because they are genuinely volatile (change with the conversation,
+      not just the agent), which also keeps the cache boundary clean:
+      everything before this point is stable for the whole session.
 
     How to use:
     - render the agent template first, then pass it here with the runtime's tool
@@ -416,6 +447,7 @@ def compose_system_prompt(
             agent_header,
             base_prompt,
             build_context_prompt_suffix(binding, agent_id=agent_id),
+            build_document_scope_suffix(binding),
             build_attachment_context_suffix(binding),
         ]
     ).lstrip("\n")

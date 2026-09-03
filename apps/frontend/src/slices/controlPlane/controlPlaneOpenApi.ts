@@ -2246,6 +2246,7 @@ export type CreateTeamRequest = {
   initial_team_admin_ids: string[];
 };
 export type UpdateTeamRequest = {
+  name?: string | null;
   description?: string | null;
   joining_mode?: JoiningMode | null;
   visibility?: TeamVisibility | null;

@@ -1551,6 +1551,7 @@
     "collapse": "Réduire",
     "create": "Créer",
     "delete": "Supprimer",
+    "documentIncludedByFolder": "Inclus par la sélection du dossier",
     "documents": "documents",
     "expand": "Développer",
     "gcu": {
@@ -2381,6 +2382,13 @@
       },
       "parameters": {
         "title": "Paramètres",
+        "name": {
+          "label": "Nom de l'équipe",
+          "support": "Ce nom identifie votre équipe partout dans la plateforme. Il doit être unique.",
+          "save": "Renommer l'équipe",
+          "alreadyTaken": "Ce nom est déjà utilisé par une autre équipe.",
+          "saveError": "Impossible de renommer l'équipe."
+        },
         "description": {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."

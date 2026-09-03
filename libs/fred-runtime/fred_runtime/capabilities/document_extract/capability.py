@@ -48,10 +48,14 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
+from fred_sdk.contracts.runtime import DocumentScopeRefusedError
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel
 
-from fred_runtime.capabilities.document_read_common import document_tool_failure
+from fred_runtime.capabilities.document_read_common import (
+    document_scope_refusal,
+    document_tool_failure,
+)
 
 
 class DocumentExtractConfig(BaseModel):
@@ -142,6 +146,12 @@ class DocumentExtractCapability(
             started = time.monotonic()
             try:
                 result = await port.extract(document_uid, instruction=what_to_extract)
+            except DocumentScopeRefusedError as exc:
+                return document_scope_refusal(
+                    tool_ref="extract_from_document",
+                    action="extract from the document",
+                    exc=exc,
+                )
             except Exception as exc:
                 message, artifact = document_tool_failure(
                     tool_ref="extract_from_document",
