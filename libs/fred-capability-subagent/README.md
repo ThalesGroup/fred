@@ -13,6 +13,14 @@ Design: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md` (issue #2525).
   conversation. The prompt the parent writes is everything the child knows.
 - **Config** `max_depth` (default 3, clamped to 1–5) — how many delegation
   hops deep the tool stays available.
+- **Config** `prompt_mode` (`append` default, or `replace`) — how the parent's
+  prompt reaches the child. `append` keeps the child's own agent template and
+  carries framing + prompt as its user message; `replace` sends framing +
+  prompt as the child's template layer
+  (`AgentInvocationRequest.system_prompt`) with a fixed trigger as the user
+  message, so the child inherits no persona, output language or business rule.
+  Guardrails, tool descriptions and the output contract are kept either way.
+  Both ship so they can be compared on real agents — RFC §5.2, issue #2527.
 
 The child is an ordinary agent turn: it runs concurrently with its siblings
 (LangGraph's tool node runs one message's tool calls in parallel), keeps the

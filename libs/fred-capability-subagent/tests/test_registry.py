@@ -51,7 +51,7 @@ def test_manifest_is_a_plain_tool_capability():
     assert manifest.side_panels == []
     assert manifest.tables == []
     assert manifest.router is None
-    assert [f.key for f in manifest.config_fields] == ["max_depth"]
+    assert [f.key for f in manifest.config_fields] == ["max_depth", "prompt_mode"]
 
 
 def test_no_owned_migrations():

@@ -22,13 +22,17 @@ against a stub invoker.
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
 import pytest
 from fred_capability_subagent.capability import (
     DEFAULT_MAX_DEPTH,
+    DEFAULT_PROMPT_MODE,
     MAX_MAX_DEPTH,
     MAX_SUBAGENT_CONTENT_CHARS,
     MIN_MAX_DEPTH,
+    PROMPT_MODES,
+    PromptMode,
     SubAgentCapability,
     SubAgentConfig,
 )
@@ -40,6 +44,7 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import AgentInvocationRequest, AgentInvocationResult
 from fred_sdk.contracts.runtime import AgentInvokerPort, RuntimeServices
 from langchain_core.messages import AIMessage
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -62,6 +67,7 @@ def _context(
     *,
     depth: int = 0,
     max_depth: int = DEFAULT_MAX_DEPTH,
+    prompt_mode: PromptMode = DEFAULT_PROMPT_MODE,
     invoker: AgentInvokerPort | None = None,
 ) -> CapabilityContext[SubAgentConfig, EmptyModel]:
     return CapabilityContext(
@@ -71,7 +77,7 @@ def _context(
             team_id="fredlab",
             agent_id=AGENT_ID,
         ),
-        config=SubAgentConfig(max_depth=max_depth),
+        config=SubAgentConfig(max_depth=max_depth, prompt_mode=prompt_mode),
         turn_options=EmptyModel(),
         services=RuntimeServices(agent_invoker=invoker),
         invocation_depth=depth,
@@ -80,6 +86,14 @@ def _context(
 
 def _tools(**kwargs):
     return SubAgentCapability().tools(_context(**kwargs))
+
+
+async def _run(tool: BaseTool, prompt: str) -> None:
+    """Run the tool for its effect on the stub invoker's recorded requests."""
+
+    coroutine = cast(StructuredTool, tool).coroutine
+    assert coroutine is not None
+    await coroutine(prompt=prompt)
 
 
 def test_tool_is_offered_below_max_depth():
@@ -141,6 +155,49 @@ async def test_child_answer_is_returned_with_the_framing_sent():
     assert request.message.endswith("Count the matching documents.")
     assert "sub-agent" in request.message
     assert request.context.session_id == "session-1"
+    # The default mode leaves the child's own template alone.
+    assert request.system_prompt is None
+
+
+@pytest.mark.asyncio
+async def test_replace_mode_moves_the_task_into_the_system_prompt():
+    invoker = _StubInvoker(AgentInvocationResult(agent_id=AGENT_ID, content="ok"))
+    tool = _tools(invoker=invoker, prompt_mode="replace")[0]
+
+    await _run(tool, "Count the matching documents.")
+
+    request = invoker.requests[0]
+    assert request.system_prompt is not None
+    assert request.system_prompt.endswith("Count the matching documents.")
+    assert "sub-agent" in request.system_prompt
+    # The user turn is a trigger, not a second copy of the task.
+    assert "Count the matching documents." not in request.message
+    assert request.message
+
+
+@pytest.mark.parametrize("mode", PROMPT_MODES)
+@pytest.mark.asyncio
+async def test_framings_are_byte_stable_across_builds(mode: PromptMode):
+    # Same context, same bytes: a framing that drifted between turns would
+    # invalidate the child's prompt cache on every call.
+    invoker = _StubInvoker(AgentInvocationResult(agent_id=AGENT_ID, content="ok"))
+    for _ in range(2):
+        tool = _tools(invoker=invoker, prompt_mode=mode)[0]
+        await _run(tool, "Task.")
+
+    first, second = invoker.requests
+    assert first.message == second.message
+    assert first.system_prompt == second.system_prompt
+
+
+def test_prompt_mode_is_offered_as_a_configurable_field():
+    field = next(
+        spec
+        for spec in SubAgentCapability.manifest.config_fields
+        if spec.key == "prompt_mode"
+    )
+    assert field.enum == ["append", "replace"]
+    assert field.default == DEFAULT_PROMPT_MODE
 
 
 @pytest.mark.asyncio
