@@ -34,6 +34,7 @@ from fred_runtime.app import create_agent_app
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
+    LinkPart,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -274,6 +275,59 @@ def test_same_agent_child_cannot_claim_another_identity(monkeypatch) -> None:
     )
     assert result.is_error is True
     assert "user, session and team" in result.content
+
+
+def test_child_sources_and_ui_parts_reach_the_caller(monkeypatch) -> None:
+    _record_turn(
+        monkeypatch,
+        payloads=[
+            {
+                "kind": "final",
+                "sequence": 0,
+                "content": "Two documents mention it.",
+                # As they arrive: a JSON dump of the child's `final` event.
+                "sources": [
+                    {
+                        "content": "the cited chunk",
+                        "uid": "doc-a",
+                        "title": "Handbook",
+                        "score": 0.42,
+                    }
+                ],
+                "ui_parts": [
+                    {"type": "link", "href": "/documents/doc-a", "kind": "citation"}
+                ],
+            }
+        ],
+    )
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    assert result.content == "Two documents mention it."
+    assert [hit.uid for hit in result.sources] == ["doc-a"]
+    (part,) = result.ui_parts
+    assert isinstance(part, LinkPart)
+    assert part.href == "/documents/doc-a"
+
+
+def test_a_child_that_cites_nothing_carries_nothing(monkeypatch) -> None:
+    _record_turn(monkeypatch)
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    assert result.content == "ok"
+    assert result.sources == ()
+    assert result.ui_parts == ()
 
 
 def test_execution_error_reaches_the_caller_with_its_message(monkeypatch) -> None:

@@ -799,9 +799,14 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         ):
             kind = payload.get("kind")
             if kind == "final":
+                # A callee is not a reduced agent: its citations and its parts
+                # travel with its answer. The payload is a JSON dump of the
+                # child's `final` event, so the model re-validates both.
                 return AgentInvocationResult(
                     agent_id=request.agent_id,
                     content=payload.get("content", ""),
+                    sources=payload.get("sources") or (),
+                    ui_parts=payload.get("ui_parts") or (),
                     is_error=False,
                 )
             if kind == "assistant_delta":
