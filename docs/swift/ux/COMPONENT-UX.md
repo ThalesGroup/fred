@@ -1329,7 +1329,7 @@ the team's `joining_mode`, gated on `!team.is_member`:
 | `joining_mode` | Footer content |
 | --- | --- |
 | `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only` | No button; muted label (`on-surface-retreat`) — the team is discoverable but not self-joinable |
+| `invite_only` | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired

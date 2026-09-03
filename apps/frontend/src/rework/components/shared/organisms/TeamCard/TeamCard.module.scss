@@ -110,6 +110,6 @@
    * the same footer slot must stay flush with the card's padding edge, so
    * it can't be solved with footer padding/gap. */
   margin-right: var(--spacing-xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
 }
