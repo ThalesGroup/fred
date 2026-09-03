@@ -799,7 +799,12 @@ uploading.
   alongside the copied cells; the paths a file manager leaves in `text/plain`
   are not real text. Files the browser names generically (`image.png` for every
   screenshot) are renamed by paste time — session attachments are resolved by
-  name downstream, so two pastes must not share one. `ManagedChatPage` passes
+  name downstream, so two pastes must not share one. No format is filtered on
+  the way in: the extension is kept, or derived from the mime type when the
+  clipboard gives no name, because fast ingestion dispatches on the extension
+  alone (`IngestionController._get_fast_text_processor`) — a format Fred has no
+  processor for must fail there, with the same 400 as the same file picked from
+  disk. `ManagedChatPage` passes
   the handler only while the agent exposes `attach_files`, so paste is gated
   like drop and reuses the same upload-warning and ingestion path.
 

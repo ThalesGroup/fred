@@ -45,6 +45,10 @@ describe("clipboardPrefersFiles", () => {
     expect(clipboardPrefersFiles("/home/simon/Documents/Q3 report.pdf")).toBe(true);
     expect(clipboardPrefersFiles("\\\\server\\share\\Q3 report.pdf")).toBe(true);
   });
+
+  it("ignores the marker lines a file manager puts in front of the copied paths", () => {
+    expect(clipboardPrefersFiles("x-special/nautilus-clipboard\ncopy\nfile:///home/simon/report.pdf")).toBe(true);
+  });
 });
 
 describe("clipboardFileName", () => {
@@ -60,10 +64,20 @@ describe("clipboardFileName", () => {
     expect(clipboardFileName("", "image/webp", PASTED_AT, 1)).toBe("pasted-20260903-142530-000-2.webp");
   });
 
-  it("maps mime types whose subtype is not the extension, and invents none for the rest", () => {
+  it("maps the mime types whose extension is not the subtype", () => {
     expect(clipboardFileName("", "image/svg+xml", PASTED_AT, 0)).toBe("pasted-20260903-142530-000.svg");
     expect(clipboardFileName("", "image/jpeg", PASTED_AT, 0)).toBe("pasted-20260903-142530-000.jpg");
-    expect(clipboardFileName("", "application/vnd.ms-excel", PASTED_AT, 0)).toBe("pasted-20260903-142530-000");
+    expect(clipboardFileName("", "application/vnd.ms-excel", PASTED_AT, 0)).toBe("pasted-20260903-142530-000.xls");
+    expect(clipboardFileName("", "application/pdf; charset=binary", PASTED_AT, 0)).toBe(
+      "pasted-20260903-142530-000.pdf",
+    );
+  });
+
+  it("keeps an extension for a format Fred has no processor for, so ingestion reports it like any upload", () => {
+    // No allow-list here: the 400 must come from the backend registry, not from
+    // a file the composer quietly stripped of its extension.
+    expect(clipboardFileName("", "application/x-tar", PASTED_AT, 0)).toBe("pasted-20260903-142530-000.tar");
+    expect(clipboardFileName("", "audio/mpeg", PASTED_AT, 0)).toBe("pasted-20260903-142530-000.mpeg");
   });
 
   it("separates two pastes taken within the same second", () => {
