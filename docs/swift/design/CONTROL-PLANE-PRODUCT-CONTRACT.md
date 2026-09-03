@@ -2551,6 +2551,15 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 `/team/:teamId/settings/activity`) remain the canonical, ack-capable place
 for this data; no replacement preset was added.
 
+**`top_agents_by_conversations` series carry their owning team (2026-09-03).**
+Agent instance names are not unique across teams, and the chart's previous
+tie-breaker was a truncated instance id - unreadable in a cross-team ranking.
+Each series label is now `"<agent name> - <team name>"`, resolved through the
+same `TeamMetadataStore` lookup `top_teams_by_sessions` uses (now shared as
+`kpi.utils.resolve_team_names`, falling back to the raw id for a team whose
+registry row is gone). A team-scoped request keeps bare names. Response model
+and route are unchanged - only the string values inside `series`/`rows`.
+
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
 
 **2026-08-16 — chat profile typing (#2365).** The pod catalog now projects

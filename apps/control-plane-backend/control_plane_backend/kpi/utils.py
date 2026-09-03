@@ -17,6 +17,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
+from fastapi import Request
+from fred_core.common import TeamId
+
+from control_plane_backend.teams.dependencies import get_team_service_dependencies
+
 
 def resolve_interval(since: datetime, until: datetime) -> tuple[str, str]:
     """Return (opensearch_fixed_interval, strftime_format) for the given range.
@@ -92,3 +97,27 @@ def resolve_trend_interval(since: datetime, until: datetime) -> TrendInterval:
         window_buckets=TREND_WINDOW_BUCKETS,
         lookback=TREND_WINDOW_BUCKETS * bucket,
     )
+
+
+async def resolve_team_names(request: Request, team_ids: list[str]) -> dict[str, str]:
+    """Return {team_id: display_name} for each id. Falls back to the id on any error.
+
+    A team's name lives in `team_metadata_store` — no Keycloak group backs it
+    anymore (AUTHZ-05 review item 9). Shared by every preset that shows a team
+    to a human rather than just aggregating on its id.
+    """
+    if not team_ids:
+        return {}
+    try:
+        deps = get_team_service_dependencies(request)
+        metadata_by_id = await deps.get_team_metadata_store().get_by_team_ids(
+            [TeamId(tid) for tid in team_ids]
+        )
+        return {
+            tid: metadata_by_id[TeamId(tid)].name
+            if TeamId(tid) in metadata_by_id
+            else tid
+            for tid in team_ids
+        }
+    except Exception:
+        return {tid: tid for tid in team_ids}
