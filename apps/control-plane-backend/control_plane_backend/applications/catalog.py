@@ -30,9 +30,11 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
 
+from fred_core.security.rebac.capability_authz import (
+    application_capability_id,
+)
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
     CAPABILITY_ID_PATTERN,
     TeamScopePolicy,
 )
@@ -213,7 +215,7 @@ class ApplicationSourceConfig(BaseModel):
     def capability_id(self) -> str:
         """Derived, never authored: team admission filters on exactly this id."""
 
-        return f"{APPLICATION_CAPABILITY_NAMESPACE_PREFIX}{self.app_id}"
+        return application_capability_id(self.app_id)
 
     def capability_entry(self) -> CapabilityCatalogEntry:
         """Project the application into the shared admin entitlement catalog.

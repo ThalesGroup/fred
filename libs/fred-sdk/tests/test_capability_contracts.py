@@ -27,6 +27,9 @@ import asyncio
 from typing import Any, Literal
 
 import pytest
+from fred_core.security.rebac.capability_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX as CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetSlot,
@@ -45,6 +48,9 @@ from fred_sdk.contracts.capability import (
     ToolCarrierMiddleware,
     UploadedFile,
     chat_part_kind,
+)
+from fred_sdk.contracts.capability.manifest import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
 )
 from fred_sdk.contracts.capability.manifest import (
     TeamScopePolicy as ManifestTeamScopePolicy,
@@ -497,6 +503,13 @@ def test_team_scope_policy_importable_from_both_paths() -> None:
     # importable from its original home (capability.manifest) and from the
     # capability package's public surface — both re-export the same enum.
     assert ManifestTeamScopePolicy is TeamScopePolicy
+
+
+def test_application_capability_prefix_preserves_compatibility_import() -> None:
+    assert (
+        APPLICATION_CAPABILITY_NAMESPACE_PREFIX
+        == CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX
+    )
 
 
 def test_mcp_server_configuration_team_scope_defaults_to_admin_gated() -> None:

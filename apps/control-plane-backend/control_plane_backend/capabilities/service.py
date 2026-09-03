@@ -29,6 +29,9 @@ from typing import Any, Mapping
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
 from fred_core.common import TeamId, is_personal_team_id
 from fred_core.security.models import Resource
+from fred_core.security.rebac.capability_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     RebacEngine,
@@ -37,7 +40,6 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
     MODEL_CAPABILITY_NAMESPACE_PREFIX,
     TeamScopePolicy,
 )

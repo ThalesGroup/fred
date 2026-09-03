@@ -64,7 +64,7 @@ class Resource(str, Enum):
 
 
 class AuthorizationError(PermissionError):
-    """Raised when a user is not authorized to perform an action.
+    """Raised when a principal is not authorized to perform an action.
 
     Inherits from the builtin `PermissionError` (not bare `Exception`) so that
     every call site's `except PermissionError` — the standard ReBAC-denial ->
@@ -81,9 +81,22 @@ class AuthorizationError(PermissionError):
         action: str,
         resource: Resource,
         message: Optional[str] = None,
+        *,
+        actor_uid: Optional[str] = None,
+        subject_type: Optional[Resource] = None,
+        subject_id: Optional[str] = None,
     ):
+        """Describe the actor, and optionally the checked ReBAC subject.
+
+        ``user_id`` retains its historical string contract: it names the user
+        actor when known and otherwise the checked subject. ``actor_uid`` is
+        the authoritative optional actor for non-user-subject checks.
+        """
         self.user_id = user_id
         self.action = action
         self.resource = resource
+        self.actor_uid = actor_uid
+        self.subject_type = subject_type
+        self.subject_id = subject_id
         default_message = f"Not authorized to {action} {resource.value}"
         super().__init__(message or default_message)
