@@ -370,6 +370,16 @@
           "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
         }
       }
+    },
+    "subagent": {
+      "name": "Déléguer à des sous-agents",
+      "description": "Capacité de confier une tâche autonome à une copie vierge de lui-même et d'en exploiter la réponse.",
+      "fields": {
+        "max_depth": {
+          "title": "Profondeur de délégation maximale",
+          "description": "Nombre de niveaux de sous-délégation autorisés (1 à 5). Chaque niveau multiplie le travail exécuté simultanément."
+        }
+      }
     }
   },
   "chatbot": {

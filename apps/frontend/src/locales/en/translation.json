@@ -370,6 +370,16 @@
           "description": "Maximum time a single SQL statement may run before the server cancels it (1–120 seconds)."
         }
       }
+    },
+    "subagent": {
+      "name": "Delegate to sub-agents",
+      "description": "Ability to hand a self-contained task to a fresh copy of itself and use the answer.",
+      "fields": {
+        "max_depth": {
+          "title": "Maximum delegation depth",
+          "description": "How many levels deep sub-agents may delegate again (1 to 5). Each level multiplies the work run at once."
+        }
+      }
     }
   },
   "chatbot": {

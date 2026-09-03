@@ -16,6 +16,7 @@ dependencies = [
   "fred-capability-ppt-filler>=0.1.0",
   "fred-capability-platform-ops>=0.1.0",
   "fred-capability-html-artifact>=0.1.0",
+  "fred-capability-subagent>=0.1.0",
   "uvicorn>=0.35",
 ]
 
@@ -55,6 +56,7 @@ fred-capability-writable-document = { path = "../../libs/fred-capability-writabl
 fred-capability-ppt-filler = { path = "../../libs/fred-capability-ppt-filler", editable = true }
 fred-capability-platform-ops = { path = "../../libs/fred-capability-platform-ops", editable = true }
 fred-capability-html-artifact = { path = "../../libs/fred-capability-html-artifact", editable = true }
+fred-capability-subagent = { path = "../../libs/fred-capability-subagent", editable = true }
 
 [dependency-groups]
 dev = [
