@@ -372,3 +372,36 @@ def test_remote_invoker_includes_invocation_turns_when_non_empty() -> None:
     assert len(turns_payload) == 1
     assert turns_payload[0]["user_message"] == "q1"
     assert turns_payload[0]["agent_name"] == "Specialist"
+
+
+def test_remote_invoker_refuses_a_system_prompt_override() -> None:
+    """The execute endpoint has no field for it, so it cannot cross the wire.
+
+    Adding one would make the override settable by any HTTP client; refusing
+    keeps a `replace`-mode child from silently losing its whole task.
+    """
+
+    config = RemoteSseAgentInvokerConfig(
+        endpoint_url="http://agent.example.com/v2/execute/stream"
+    )
+
+    def _must_not_be_called(*args, **kwargs):
+        raise AssertionError("the remote agent must not be called at all")
+
+    fake_client = MagicMock()
+    fake_client.stream = _must_not_be_called
+
+    invoker = RemoteSseAgentInvoker(config=config, client=fake_client)
+    result = asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id="ag",
+                message="hi",
+                context=_portable_context(),
+                system_prompt="FRAMING",
+            )
+        )
+    )
+
+    assert result.is_error is True
+    assert "system_prompt" in result.content

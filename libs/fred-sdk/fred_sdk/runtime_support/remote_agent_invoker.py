@@ -243,6 +243,19 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
         - the invoker aggregates RuntimeEvent streams until FinalRuntimeEvent
         """
 
+        if request.system_prompt is not None:
+            # The execute endpoint has no field for it, by design: an override
+            # an HTTP body could set would be forgeable by any client. Refuse
+            # rather than post a payload the receiver would ignore.
+            return AgentInvocationResult(
+                agent_id=request.agent_id,
+                content=(
+                    "A system_prompt override cannot cross the remote SSE "
+                    "transport; it is only supported for a pod-local callee."
+                ),
+                is_error=True,
+            )
+
         payload: dict[str, object] = {
             "agent_id": request.agent_id,
             "message": request.message,
