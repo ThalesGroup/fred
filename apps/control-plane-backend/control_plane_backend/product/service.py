@@ -59,6 +59,7 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
+from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
@@ -3424,10 +3425,12 @@ async def get_runtime_binding_for_team(
         all_team_settings,
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
+        platform_prompt,
     ) = await asyncio.gather(
         deps.get_team_capability_settings_store().list_for_team(team_id),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
         resolve_platform_chat_model_binding(deps),
+        resolve_platform_prompt_text(deps),
     )
     team_capability_settings = {
         cap_id: settings
@@ -3444,6 +3447,7 @@ async def get_runtime_binding_for_team(
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_prompt=platform_prompt,
     )
 
 

@@ -68,6 +68,7 @@ from .errors import (
     CapabilityConfigInvalidError,
     TurnOptionsInvalidError,
 )
+from .mcp import McpCapability, McpPromptGroup
 from .registry import CapabilityRegistry
 
 
@@ -320,6 +321,12 @@ class CapabilityAgentBlock:
     middleware: tuple[AgentMiddleware, ...]
     hitl: Mapping[str, CapabilityHitlBinding]
     tools: tuple[BaseTool, ...]
+    # Active MCP servers' tool-prompt grouping metadata, id-sorted (same order
+    # as everything else this loop produces) — consumed by
+    # `build_runtime_tool_prompt_suffix` to group the ReAct prompt's tool
+    # listing by server (#2455). Empty for Graph agents and any caller that
+    # never built a capability block.
+    mcp_prompt_groups: tuple[McpPromptGroup, ...] = ()
 
 
 def build_capability_agent_block(
@@ -361,10 +368,13 @@ def build_capability_agent_block(
     hitl: dict[str, CapabilityHitlBinding] = {}
     tools_by_name: dict[str, BaseTool] = {}
     tool_owner: dict[str, str] = {}
+    mcp_prompt_groups: list[McpPromptGroup] = []
     for cap_id in sorted(contexts):
         capability = registry.capability(cap_id)
         ctx = contexts[cap_id]
         capability_tools = tuple(capability.tools(ctx))
+        if isinstance(capability, McpCapability):
+            mcp_prompt_groups.append(capability.prompt_group())
         # These two are NOT mutually exclusive: a capability can implement
         # `tools()` for its plain tools AND override `middleware()` for a
         # genuine ReAct-only hook (RFC §3.2 — "implement tools() too; do not
@@ -421,5 +431,8 @@ def build_capability_agent_block(
                 tool=tools_by_name.get(spec.tool),
             )
     return CapabilityAgentBlock(
-        middleware=tuple(middleware), hitl=hitl, tools=tuple(tools_by_name.values())
+        middleware=tuple(middleware),
+        hitl=hitl,
+        tools=tuple(tools_by_name.values()),
+        mcp_prompt_groups=tuple(mcp_prompt_groups),
     )

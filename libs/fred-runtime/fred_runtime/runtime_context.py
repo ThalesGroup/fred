@@ -160,6 +160,16 @@ class RuntimeConfig:
     # `PodApplicationContext.initialize_platform_sql()`. None on the SQLite
     # dev escape hatch (Postgres-only enforcement).
     platform_sql: PlatformSqlPort | None = None
+    # The two head blocks from the pod's `config/platform_prompt.json`, threaded
+    # through from `AgentPodConfig.get_platform_prompt_file()` at boot.
+    # `default_platform_prompt` is the fallback used by
+    # `build_platform_prompt_prefix` when no platform admin has saved one — an
+    # admin-saved value overrides it and travels per turn on
+    # `BoundRuntimeContext.platform_prompt`, never through this field.
+    # `platform_instructions` is not overridable at all; it is rendered as the
+    # second block on every turn. Both are None when the pod shipped no file.
+    default_platform_prompt: str | None = None
+    platform_instructions: str | None = None
 
 
 class RuntimeContext:
@@ -202,6 +212,37 @@ class RuntimeContext:
         """
 
         return self._config.kpi_writer
+
+    def get_default_platform_prompt(self) -> str | None:
+        """
+        Return the pod-shipped default platform prompt, if the pod loaded a file.
+
+        Why this exists:
+        - `build_platform_prompt_prefix` needs the fallback without importing
+          pod config types
+
+        How to use it:
+        - call from prompt composition and from the endpoint that serves this
+          file to control-plane
+        """
+
+        return self._config.default_platform_prompt
+
+    def get_platform_instructions(self) -> str | None:
+        """
+        Return the pod-shipped platform operating instructions, if any.
+
+        Why this exists:
+        - `build_platform_instructions_prefix` renders this as the second block
+          of every system prompt, and it is pod config rather than a packaged
+          constant so an operator can see and version it next to the prompt it
+          accompanies
+
+        How to use it:
+        - call from prompt composition only; it is never overridable per turn
+        """
+
+        return self._config.platform_instructions
 
     def get_mcp_configuration(self) -> McpConfigurationLike | None:
         """
@@ -271,4 +312,25 @@ def get_runtime_context() -> RuntimeContext:
 
     if _RUNTIME_CONTEXT is None:
         raise RuntimeError("RuntimeContext has not been initialized.")
+    return _RUNTIME_CONTEXT
+
+
+def get_runtime_context_or_none() -> RuntimeContext | None:
+    """
+    Return the global runtime context, or `None` when none has been set.
+
+    Why this exists:
+    - the prompt composer reads purely optional pod-boot data (the two blocks of
+      `config/platform_prompt.json`) and must behave identically whether or not
+      a pod has booted — notably in unit tests that exercise prompt composition
+      without standing up a whole pod.
+    - the alternative is catching `RuntimeError` from `get_runtime_context()` at
+      each such call site, which turns a missing-initialization bug into
+      indistinguishable control flow. Callers that genuinely require the context
+      must keep using `get_runtime_context()` so they still fail loudly.
+
+    How to use it:
+    - only for optional reads with a defined "not configured" behavior.
+    """
+
     return _RUNTIME_CONTEXT

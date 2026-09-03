@@ -19,6 +19,7 @@ import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAudit
 // KEA CUTOVER 2026 — temporary, delete this import and its route below a few
 // weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
 import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
+import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
@@ -178,6 +179,17 @@ export const routes: RouteObject[] = [
       {
         path: "admin",
         element: <AdminIndexRoute />,
+      },
+      {
+        // Platform-wide platform prompt: the first block of every agent's system
+        // prompt. Org-admin only, matching the backend's
+        // `require_manage_any` gate on both routes.
+        path: "admin/platform-prompt",
+        element: (
+          <Protected requires="admin">
+            <PlatformPromptPage />
+          </Protected>
+        ),
       },
       {
         path: "admin/teams",

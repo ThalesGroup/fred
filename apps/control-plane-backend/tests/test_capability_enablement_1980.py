@@ -2668,6 +2668,14 @@ class _FakeReasoningStore:
         return set(self._enabled_model_ids)
 
 
+class _FakeNoPlatformPromptStore:
+    """No platform-prompt row saved — `get_runtime_binding_for_team` must then
+    carry `platform_prompt=None`, i.e. "fall back to the pod default"."""
+
+    async def get(self):
+        return None
+
+
 class _FakeNoPlatformModelBindingStore:
     """No `chat` binding set — `get_runtime_binding_for_team`
     now reads this store on the same per-turn call as the reasoning
@@ -2707,6 +2715,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_team_capability_settings_store=lambda: settings,
         get_model_reasoning_store=_FakeReasoningStore,
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2736,6 +2745,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
             {"model__openai__gpt-5.1", "model__mistral__small"}
         ),
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]

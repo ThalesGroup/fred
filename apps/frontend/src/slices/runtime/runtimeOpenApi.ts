@@ -108,6 +108,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/pod/v1/agents/models-catalog` }),
     }),
+    getPlatformPromptFilePodV1AgentsPlatformPromptGet: build.query<
+      GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse,
+      GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg
+    >({
+      query: () => ({ url: `/pod/v1/agents/platform-prompt` }),
+    }),
     listSessionsPodV1AgentsSessionsGet: build.query<
       ListSessionsPodV1AgentsSessionsGetApiResponse,
       ListSessionsPodV1AgentsSessionsGetApiArg
@@ -253,6 +259,9 @@ export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg = void;
 export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiResponse =
   /** status 200 Successful Response */ ModelCatalogResponse;
 export type GetModelsCatalogPodV1AgentsModelsCatalogGetApiArg = void;
+export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse =
+  /** status 200 Successful Response */ PlatformPromptFileResponse;
+export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg = void;
 export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId?: string | null;
@@ -727,6 +736,10 @@ export type ModelCatalogResponse = {
   default_chat_profile_id?: string | null;
   models: ModelCatalogEntry[];
 };
+export type PlatformPromptFileResponse = {
+  platform_instructions: string;
+  platform_prompt: string;
+};
 export type Channel =
   | "final"
   | "plan"
@@ -968,6 +981,8 @@ export type McpServerConfiguration = {
   id: string;
   /** react-i18next key for the name of the MCP server. */
   name: string;
+  /** Short, plain-English phrase completing 'Tools for {title}:' in the ReAct system prompt's grouped tool list (e.g. 'tabular action', 'document search'). Unlike `name`/`description`, this is NOT an i18n key — it is rendered directly into the model-facing system prompt, never through the frontend. Falls back to the raw catalog `id` when unset. */
+  prompt_group_title?: string | null;
   /** Local provider key when transport=inprocess. */
   provider?: string | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */
@@ -1058,6 +1073,8 @@ export const {
   useLazyGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
   useGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
   useLazyGetModelsCatalogPodV1AgentsModelsCatalogGetQuery,
+  useGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
+  useLazyGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,

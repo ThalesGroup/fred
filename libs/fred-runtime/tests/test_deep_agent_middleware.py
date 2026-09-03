@@ -104,7 +104,6 @@ def test_middleware_keeps_observability_first_then_filesystem_guards() -> None:
 class _FakePolicy:
     def __init__(self) -> None:
         self.system_prompt_template = "BASE-TEMPLATE"
-        self.guardrails: list[object] = []
         self.tool_approval = SimpleNamespace(enabled=False)
         self.tool_selection = SimpleNamespace(
             max_tool_calls_per_turn=None, allow_parallel_calls=False

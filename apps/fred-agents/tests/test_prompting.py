@@ -6,7 +6,10 @@ from fred_agents.sentinel import SENTINEL_AGENT
 from fred_agents.sql_expert import SQL_EXPERT_AGENT
 
 _EXPECTED_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
-_EXPECTED_FALLBACK_RULE = "If you are unsure the Mermaid will parse, do not return Mermaid, return a simpler Markdown list or table instead."
+_EXPECTED_FALLBACK_RULE = (
+    "If you are unsure the diagram will parse, return a Markdown list or "
+    "table instead of Mermaid."
+)
 
 
 def test_base_agents_do_not_bake_global_base_prompt_contract() -> None:

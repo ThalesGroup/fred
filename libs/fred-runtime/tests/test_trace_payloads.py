@@ -282,6 +282,36 @@ def test_a_tool_contributes_its_argument_schema() -> None:
     assert schema["required"] == ["sql"]
 
 
+def test_a_pydantic_schema_is_traced_as_the_provider_receives_it() -> None:
+    """
+    A pydantic args schema repeats the tool's whole docstring as its own
+    `description` and carries a `title` per field. `bind_tools` strips both
+    before the request leaves; a trace that keeps them doubles every tool
+    description on the page and overstates `chars_tools` by the same amount.
+    """
+
+    class _DocumentedArgs(BaseModel):
+        """Read a document's exact text VERBATIM, one page at a time."""
+
+        document_uid: str
+        offset: int = 0
+
+    tool = StructuredTool.from_function(
+        func=lambda **kwargs: None,
+        name="read_document",
+        description=_DocumentedArgs.__doc__ or "",
+        args_schema=_DocumentedArgs,
+    )
+
+    [entry] = serialize_tools([tool])
+    schema = json.loads(entry["parameters"])
+
+    assert "description" not in schema
+    assert "title" not in schema
+    assert all("title" not in field for field in schema["properties"].values())
+    assert schema["required"] == ["document_uid"]
+
+
 def test_a_provider_native_tool_dict_is_unwrapped_not_re_encoded() -> None:
     """`ModelRequest.tools` mixes LangChain tools and raw provider dicts."""
 

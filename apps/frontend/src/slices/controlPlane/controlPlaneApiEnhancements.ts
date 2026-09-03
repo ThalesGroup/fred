@@ -16,6 +16,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
+    "ControlPlanePlatformPrompt",
     "ControlPlanePlatformRole",
   ],
   endpoints: {
@@ -387,6 +388,17 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
       invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
     },
+    // Platform-wide platform prompt — a single row, so one LIST tag covers it,
+    // same shape as the platform model binding above.
+    getPlatformPromptControlPlaneV1AdminPlatformPromptGet: {
+      providesTags: [{ type: "ControlPlanePlatformPrompt" as const, id: "LIST" }],
+    },
+    putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
+    },
+    // Read-only and shipped with the platform: it can only change on deploy, so
+    // it carries no cache tag — nothing in this app can invalidate it.
+    getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: {},
   },
 });
 
@@ -494,4 +506,9 @@ export const {
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
     useDeletePlatformModelBindingMutation,
+  // Platform-wide platform prompt — the first block of every agent's system prompt.
+  useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
+  usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Read-only platform operating instructions, shown under the editable prompt.
+  useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
 } = enhancedControlPlaneApi;

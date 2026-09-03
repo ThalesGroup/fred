@@ -36,7 +36,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
-from typing import Dict, List, Tuple
+from typing import Dict, Final, List, Tuple
 
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
@@ -48,6 +48,15 @@ logger = logging.getLogger(__name__)
 
 # ✅ Only allow transports that Fred knows how to configure safely.
 SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
+
+# Key under which a fetched tool's originating MCP catalog server id is stashed
+# in `BaseTool.metadata` (issue #2455) — the one generic, already-present field
+# that survives `ContextAwareTool` wrapping and every merge/dedupe step
+# downstream untouched, so no new constructor parameter needs threading
+# through `MCPRuntime`/`McpToolkit`/`FredMcpToolProvider`. Consumed by
+# `react_tool_resolution.py` to group the ReAct prompt's tool listing by
+# server (`react_tool_binding.build_runtime_tool_prompt_suffix`).
+MCP_SERVER_ID_METADATA_KEY: Final[str] = "mcp_server_id"
 
 
 class MCPConnectionError(Exception):
@@ -303,7 +312,23 @@ async def get_connected_mcp_client_for_agent(
                 len(tools),
                 dur_ms,
             )
-            fetched_tools.extend(tools)
+            # Tag each tool with its originating server id so the ReAct prompt
+            # can group the tool listing later (#2455). `_get_or_connect_mcp_client`
+            # caches and reuses this exact tool-object list across concurrent
+            # requests (see its docstring), so tagging must be non-mutating —
+            # `model_copy` returns a new object, never touching the cached one.
+            tagged_tools = [
+                tool.model_copy(
+                    update={
+                        "metadata": {
+                            **(tool.metadata or {}),
+                            MCP_SERVER_ID_METADATA_KEY: server.id,
+                        }
+                    }
+                )
+                for tool in tools
+            ]
+            fetched_tools.extend(tagged_tools)
         except Exception as e:
             dur_ms = (time.perf_counter() - start) * 1000
             logger.warning(

@@ -15,16 +15,19 @@
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
+from fred_runtime.capabilities.mcp import McpPromptGroup
+from fred_runtime.react import react_prompting
 from fred_runtime.react.react_prompting import (
     build_attachment_context_suffix,
     build_context_prompt_suffix,
     build_document_scope_suffix,
     build_global_base_prompt_suffix,
-    build_tool_failure_recovery_suffix,
+    build_platform_instructions_prefix,
+    build_platform_prompt_prefix,
     compose_system_prompt,
 )
 from fred_runtime.react.react_tool_binding import (
-    TOOL_REPETITION_RULE,
     BoundTool,
     build_runtime_tool_prompt_suffix,
 )
@@ -34,7 +37,6 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 from langchain_core.tools import BaseTool
 
@@ -46,9 +48,11 @@ def _binding(
     *,
     context_prompt_text: str | None = None,
     language: str | None = None,
+    platform_prompt: str | None = None,
     selected_document_uids: list[str] | None = None,
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
+        platform_prompt=platform_prompt,
         runtime_context=RuntimeContext(
             attachments_markdown=attachments_markdown,
             context_prompt_text=context_prompt_text,
@@ -62,16 +66,6 @@ def _binding(
             tenant="team-1",
             environment=PortableEnvironment.DEV,
         ),
-    )
-
-
-def _definition() -> ReActAgentDefinition:
-    # ``compose_system_prompt`` only reads ``definition.policy().guardrails`` via
-    # ``build_guardrail_suffix``; a minimal stand-in keeps these tests focused on
-    # composition and ordering. Guardrail rendering is exercised elsewhere.
-    return cast(
-        ReActAgentDefinition,
-        SimpleNamespace(policy=lambda: SimpleNamespace(guardrails=[])),
     )
 
 
@@ -89,36 +83,13 @@ def test_global_base_prompt_suffix_starts_with_a_blank_separator() -> None:
     assert build_global_base_prompt_suffix().startswith("\n\n")
 
 
-def test_tool_failure_recovery_suffix_tells_model_not_to_surface_raw_errors() -> None:
-    # Regression for #2073: some capability tools catch their own exceptions and
-    # return a troubleshooting message as an ordinary tool result. Without this
-    # guidance the model has surfaced that raw text as its final answer instead
-    # of retrying or falling back to context already gathered.
-    suffix = build_tool_failure_recovery_suffix()
-
-    assert "never present that raw text as your final answer" in suffix
-    assert "retry the call with corrected arguments" in suffix
-    assert "answer from what other calls have already returned" in suffix
-    # Composed onto the end of the system prompt, so it must self-separate.
-    assert suffix.startswith("\n\n")
-
-
-def test_tool_prompt_suffix_carries_an_explicit_anti_repetition_rule() -> None:
-    """Precondition 2 of `MODEL-REASONING-ENABLEMENT-RFC.md` §9
-    (`AGENT-THINKING-API-RFC.md` §C.10 q4).
-
-    Amendment C §C.7 measured a reasoning model on a tool loop re-issuing the
-    same call with identical arguments in 12/12 turns under a generic prompt,
-    and 0/12 under an explicit anti-repetition instruction. In production the
-    defect was masked only by ACCIDENT — the #2073 tool-failure suffix happens
-    to contain two clauses that read as anti-repetition guidance, and nothing
-    tied them to this defect.
-
-    This test is that tie. It exists so a future rewording of #2073's suffix
-    (whose own test above pins its #2073 wording, not this property) cannot
-    silently re-expose a measured defect.
-    """
-
+def test_tool_prompt_suffix_has_no_calling_rules_or_repetition_text() -> None:
+    # The "Tool calling rules" block (generic hygiene lines + the anti-repetition
+    # instruction) was removed: reasoning continuity now threads the model's own
+    # reasoning within an open tool loop instead of stripping it
+    # (`thread_reasoning_within_open_turn`, `RUNTIME-EXECUTION-CONTRACT.md` §8.37),
+    # which is what the anti-repetition instruction existed to work around. Pin
+    # the absence so it isn't silently reintroduced.
     suffix = build_runtime_tool_prompt_suffix(
         [
             BoundTool(
@@ -129,17 +100,304 @@ def test_tool_prompt_suffix_carries_an_explicit_anti_repetition_rule() -> None:
         ]
     )
 
-    assert TOOL_REPETITION_RULE in suffix
-    # The property, not just the constant: an agent reading this must be told
-    # that repeating an identical call is pointless AND what to do instead.
-    assert "Never repeat a tool call" in suffix
-    assert "same arguments" in suffix
+    assert "Tool calling rules" not in suffix
+    assert "Never repeat a tool call" not in suffix
 
 
-def test_anti_repetition_rule_is_absent_when_no_tool_is_bound() -> None:
-    # The no-tools branch tells the model it cannot call anything at all, so a
-    # repetition rule there would be noise about an impossible action.
-    assert TOOL_REPETITION_RULE not in build_runtime_tool_prompt_suffix([])
+def test_tool_prompt_suffix_keeps_only_the_opening_paragraph() -> None:
+    # #2412: the `tools` API parameter already carries the full description on
+    # every call. Repeating it in the suffix duplicated it a second time, and
+    # that duplicate scaled with tool count. Only the summary (what the tool
+    # does, for orchestration) survives here — the full "how to use it" text
+    # stays solely in the `tools` parameter.
+    multi_line_description = "Locate a keyword across authorized tabular datasets.\n\nWhy this exists:\n- long explanation..."
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="search_tabular_values",
+                description=multi_line_description,
+                tool=cast(BaseTool, SimpleNamespace(name="search_tabular_values")),
+            )
+        ]
+    )
+
+    assert (
+        "- search_tabular_values: Locate a keyword across authorized tabular datasets."
+        in suffix
+    )
+    assert "Why this exists" not in suffix
+    assert "long explanation" not in suffix
+
+
+def test_tool_prompt_suffix_keeps_a_hand_wrapped_opening_sentence_whole() -> None:
+    # A summary sentence wrapped across two source lines (this repo's normal
+    # docstring style, e.g. `search_documents_using_vectorization`) must not
+    # be cut mid-sentence by the paragraph boundary — only a blank line ends
+    # the summary, and internal newlines/indentation collapse to one space so
+    # the rendered bullet stays on a single line.
+    wrapped_description = (
+        "Search the selected document libraries using semantic similarity\n"
+        "            (RAG) — call this BEFORE answering any factual question.\n"
+        "\n"
+        "            Longer explanation that must not appear in the suffix."
+    )
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="search_documents_using_vectorization",
+                description=wrapped_description,
+                tool=cast(
+                    BaseTool,
+                    SimpleNamespace(name="search_documents_using_vectorization"),
+                ),
+            )
+        ]
+    )
+
+    assert (
+        "- search_documents_using_vectorization: Search the selected document "
+        "libraries using semantic similarity (RAG) — call this BEFORE "
+        "answering any factual question."
+    ) in suffix
+    assert "Longer explanation" not in suffix
+
+
+def test_tool_prompt_suffix_handles_a_description_with_a_leading_blank_line() -> None:
+    # A description authored as `"""\nSummary text.\n\nDetail..."""` opens
+    # with a blank line before the real summary — a plausible triple-quoted
+    # docstring or admin-authored manifest override. `.strip()` must recover
+    # the summary instead of yielding an empty bullet.
+    leading_blank_description = "\n  Summary text.\n\nDetail that must not appear."
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="some_tool",
+                description=leading_blank_description,
+                tool=cast(BaseTool, SimpleNamespace(name="some_tool")),
+            )
+        ]
+    )
+
+    assert "- some_tool: Summary text." in suffix
+    assert "- some_tool: \n" not in suffix
+    assert "Detail that must not appear" not in suffix
+
+
+def _grouped_tool(name: str, server_id: str) -> BoundTool:
+    return BoundTool(
+        runtime_name=name,
+        description=f"Do {name} things.",
+        tool=cast(BaseTool, SimpleNamespace(name=name)),
+        mcp_server_id=server_id,
+    )
+
+
+def test_tool_prompt_suffix_groups_tools_by_mcp_server_with_a_title_header() -> None:
+    # #2455: tools tagged with a server id that matches a given McpPromptGroup
+    # render under that group's own "Tools for {title}:" header, not the flat
+    # list.
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            _grouped_tool("read_query", "mcp-tabular"),
+            _grouped_tool("search_documents", "mcp-text"),
+        ],
+        mcp_prompt_groups=[
+            McpPromptGroup(
+                server_id="mcp-tabular", title="tabular action", agent_instructions=None
+            ),
+            McpPromptGroup(
+                server_id="mcp-text", title="document search", agent_instructions=None
+            ),
+        ],
+    )
+
+    tabular_header = suffix.index("Tools for tabular action:")
+    text_header = suffix.index("Tools for document search:")
+    assert "- read_query:" in suffix[tabular_header:text_header]
+    assert "- search_documents:" not in suffix[tabular_header:text_header]
+    assert "- search_documents:" in suffix[text_header:]
+
+
+def test_tool_prompt_suffix_inlines_agent_instructions_immediately_after_its_group() -> (
+    None
+):
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            _grouped_tool("read_query", "mcp-tabular"),
+            _grouped_tool("search_documents", "mcp-text"),
+        ],
+        mcp_prompt_groups=[
+            McpPromptGroup(
+                server_id="mcp-tabular",
+                title="tabular action",
+                agent_instructions="Follow this order before answering.",
+            ),
+            McpPromptGroup(
+                server_id="mcp-text", title="document search", agent_instructions=None
+            ),
+        ],
+    )
+
+    header = suffix.index("Tools for tabular action:")
+    instructions = suffix.index("Follow this order before answering.")
+    next_header = suffix.index("Tools for document search:")
+    assert header < instructions < next_header
+
+
+def test_tool_prompt_suffix_skips_agent_instructions_block_when_none_declared() -> None:
+    suffix = build_runtime_tool_prompt_suffix(
+        [_grouped_tool("read_query", "mcp-tabular")],
+        mcp_prompt_groups=[
+            McpPromptGroup(
+                server_id="mcp-tabular", title="tabular action", agent_instructions=None
+            )
+        ],
+    )
+
+    assert suffix.rstrip().endswith("- read_query: Do read_query things.")
+
+
+def test_tool_prompt_suffix_places_ungrouped_tools_under_other_tools_when_a_group_is_present() -> (
+    None
+):
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="local_tool",
+                description="A native, non-MCP tool.",
+                tool=cast(BaseTool, SimpleNamespace(name="local_tool")),
+            ),
+            _grouped_tool("read_query", "mcp-tabular"),
+        ],
+        mcp_prompt_groups=[
+            McpPromptGroup(
+                server_id="mcp-tabular", title="tabular action", agent_instructions=None
+            )
+        ],
+    )
+
+    other_header = suffix.index("Other tools:")
+    tabular_header = suffix.index("Tools for tabular action:")
+    assert other_header < tabular_header
+    assert "- local_tool:" in suffix[other_header:tabular_header]
+
+
+def test_tool_prompt_suffix_keeps_flat_list_with_no_header_when_mcp_prompt_groups_is_empty() -> (
+    None
+):
+    # The Deep-agent call site never passes `mcp_prompt_groups` — a tagged
+    # tool must still render as a plain flat bullet, no "Other tools:" noise,
+    # byte-identical to a caller with no grouping concept at all.
+    suffix = build_runtime_tool_prompt_suffix(
+        [_grouped_tool("read_query", "mcp-tabular")]
+    )
+
+    assert "Other tools:" not in suffix
+    assert "Tools for" not in suffix
+    assert "- read_query: Do read_query things." in suffix
+
+
+def test_tool_prompt_suffix_skips_a_group_with_no_currently_bound_tools() -> None:
+    # An active capability whose tools didn't resolve this turn shouldn't
+    # leave an empty header for the model to puzzle over.
+    suffix = build_runtime_tool_prompt_suffix(
+        [_grouped_tool("read_query", "mcp-tabular")],
+        mcp_prompt_groups=[
+            McpPromptGroup(
+                server_id="mcp-tabular", title="tabular action", agent_instructions=None
+            ),
+            McpPromptGroup(
+                server_id="mcp-empty", title="nothing here", agent_instructions=None
+            ),
+        ],
+    )
+
+    assert "nothing here" not in suffix
+
+
+def test_tool_prompt_suffix_orders_groups_by_the_given_mcp_prompt_groups_sequence() -> (
+    None
+):
+    # Render order follows `mcp_prompt_groups` (the caller's, already
+    # id-sorted, order) — not the order tools happen to appear in `bound_tools`.
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            _grouped_tool("search_documents", "mcp-text"),
+            _grouped_tool("read_query", "mcp-tabular"),
+        ],
+        mcp_prompt_groups=[
+            McpPromptGroup(
+                server_id="mcp-tabular", title="tabular action", agent_instructions=None
+            ),
+            McpPromptGroup(
+                server_id="mcp-text", title="document search", agent_instructions=None
+            ),
+        ],
+    )
+
+    assert suffix.index("Tools for tabular action:") < suffix.index(
+        "Tools for document search:"
+    )
+
+
+def _capability_tool(name: str, description: str) -> BaseTool:
+    return cast(BaseTool, SimpleNamespace(name=name, description=description))
+
+
+def test_tool_prompt_suffix_includes_capability_tools_under_other_tools() -> None:
+    # #2455 follow-up (same day): a native Fred capability's tools (e.g.
+    # document_access's list_document_tree) reach the model's real
+    # tool-calling set through `ToolCarrierMiddleware`, never through
+    # `bound_tools` — without `capability_tools` they were invisible in this
+    # directory even though the model could call them.
+    suffix = build_runtime_tool_prompt_suffix(
+        [_grouped_tool("read_query", "mcp-tabular")],
+        mcp_prompt_groups=[
+            McpPromptGroup(
+                server_id="mcp-tabular", title="tabular action", agent_instructions=None
+            )
+        ],
+        capability_tools=[
+            _capability_tool("list_document_tree", "Browse the document tree.")
+        ],
+    )
+
+    other_header = suffix.index("Other tools:")
+    tabular_header = suffix.index("Tools for tabular action:")
+    assert other_header < tabular_header
+    assert (
+        "- list_document_tree: Browse the document tree."
+        in suffix[other_header:tabular_header]
+    )
+
+
+def test_tool_prompt_suffix_skips_a_capability_tool_already_in_bound_tools() -> None:
+    # A capability tool sharing a name with an already-bound tool must not be
+    # rendered twice.
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="read_document",
+                description="Read one document verbatim.",
+                tool=cast(BaseTool, SimpleNamespace(name="read_document")),
+            )
+        ],
+        capability_tools=[_capability_tool("read_document", "A duplicate entry.")],
+    )
+
+    assert suffix.count("- read_document:") == 1
+    assert "A duplicate entry." not in suffix
+
+
+def test_tool_prompt_suffix_treats_capability_only_tools_as_available() -> None:
+    # `bound_tools` empty but `capability_tools` non-empty must NOT trigger
+    # the "no external tool is available" branch.
+    suffix = build_runtime_tool_prompt_suffix(
+        [], capability_tools=[_capability_tool("read_document", "Read one document.")]
+    )
+
+    assert "No external tool is available" not in suffix
+    assert "- read_document: Read one document." in suffix
 
 
 def test_attachment_context_suffix_announces_current_files() -> None:
@@ -256,47 +514,168 @@ def test_context_prompt_suffix_renders_safe_tokens() -> None:
     assert "{response_language}" not in suffix
 
 
-def test_compose_system_prompt_folds_selected_prompt_and_attachment() -> None:
+def test_compose_system_prompt_folds_selected_prompt_and_attachment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Both ReAct and Deep delegate to this composer, so this single test locks
     # the #1915 fix and the previously-missing Deep attachment suffix at once.
+    # A pod file is installed because the platform instructions are pod config
+    # (`config/platform_prompt.json`), not a packaged constant — without one
+    # there is no instructions block to place in the ordering asserted below.
+    _with_pod_file(
+        monkeypatch, platform_instructions="# Platform operating instructions"
+    )
     prompt = compose_system_prompt(
         "BASE-TEMPLATE",
         binding=_binding(
             "## Attached files\n- report.pdf: conversation document",
             context_prompt_text="Always respond in Spanish.",
         ),
-        definition=_definition(),
         agent_id="agent-1",
         tool_suffix="\n\nTOOL-SUFFIX",
     )
 
-    assert prompt.startswith("BASE-TEMPLATE")
+    assert "BASE-TEMPLATE" in prompt
     assert "TOOL-SUFFIX" in prompt
     assert "Always respond in Spanish." in prompt
     assert "- report.pdf" in prompt
-    assert "never present that raw text as your final answer" in prompt
-    # Ordering: the global-base output contract and the tool-failure recovery
-    # notice (both hard invariants) precede the per-turn user context, and the
-    # selected prompt precedes the (freshest) attachment block.
-    assert prompt.index(_EXPECTED_MERMAID_FRAGMENT) < prompt.index(
-        "never present that raw text as your final answer"
+    assert "# Platform operating instructions" in prompt
+    # #2412 item 3 follow-up (2026-08-28): a fixed heading marks the
+    # boundary into the agent's own template, so it's visible where Fred's
+    # shared instructions end and the agent-specific block begins.
+    assert "# Agent instructions" in prompt
+    # Ordering (#2412 item 3, 2026-08-27): general instructions, then tools,
+    # then the agent's own template as the LAST static block — for
+    # recency (the agent's instructions should be closest to the model's
+    # answer) and provider prefix-cache reuse (the stable prefix shared
+    # across agents on a deployment now extends through "tools" instead of
+    # ending after the first few characters) — then the volatile per-turn
+    # tail: the selected prompt, then the freshest block, the attachment.
+    # 2026-08-31: the platform instructions lead, right under the (absent here)
+    # admin-editable platform prompt — the two platform-wide layers read as one
+    # section — and the Mermaid output contract stays after them.
+    assert prompt.index("# Platform operating instructions") < prompt.index(
+        _EXPECTED_MERMAID_FRAGMENT
     )
-    assert prompt.index(
-        "never present that raw text as your final answer"
-    ) < prompt.index("Always respond in Spanish.")
+    assert prompt.index(_EXPECTED_MERMAID_FRAGMENT) < prompt.index("TOOL-SUFFIX")
+    assert prompt.index("TOOL-SUFFIX") < prompt.index("# Agent instructions")
+    assert prompt.index("# Agent instructions") < prompt.index("BASE-TEMPLATE")
+    assert prompt.index("BASE-TEMPLATE") < prompt.index("Always respond in Spanish.")
     assert prompt.index("Always respond in Spanish.") < prompt.index("- report.pdf")
 
 
-def test_compose_system_prompt_places_runtime_suffixes_before_user_context() -> None:
-    # Runtime-specific notices (e.g. the Deep filesystem suffix) belong with the
-    # system invariants, ahead of the selected chat-context prompt.
+def test_compose_system_prompt_places_runtime_suffixes_before_the_agent_template() -> (
+    None
+):
+    # Runtime-specific static notices (e.g. the Deep filesystem suffix) are
+    # the "how to use the tools" block (#2412 item 3): after tools, still
+    # ahead of both the agent's own template and the per-turn user context.
     prompt = compose_system_prompt(
         "BASE-TEMPLATE",
         binding=_binding(context_prompt_text="Speak Spanish."),
-        definition=_definition(),
         agent_id="agent-1",
         runtime_suffixes=("\n\nFILESYSTEM-NOTICE",),
     )
 
     assert "FILESYSTEM-NOTICE" in prompt
-    assert prompt.index("FILESYSTEM-NOTICE") < prompt.index("Speak Spanish.")
+    assert prompt.index("FILESYSTEM-NOTICE") < prompt.index("BASE-TEMPLATE")
+    assert prompt.index("BASE-TEMPLATE") < prompt.index("Speak Spanish.")
+
+
+def test_compose_system_prompt_omits_agent_heading_when_template_is_empty() -> None:
+    # An agent with no configured `system_prompt_template` passes "" as
+    # `base_prompt` (`policy.system_prompt_template or ""` in the callers) —
+    # no dangling "# Agent instructions" heading with nothing under it.
+    prompt = compose_system_prompt(
+        "",
+        binding=_binding(),
+        agent_id="agent-1",
+        tool_suffix="\n\nTOOL-SUFFIX",
+    )
+
+    assert "# Agent instructions" not in prompt
+    assert "TOOL-SUFFIX" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Platform prompt (platform-wide first block)
+# ---------------------------------------------------------------------------
+
+
+def _with_pod_file(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    platform_prompt: str | None = None,
+    platform_instructions: str | None = None,
+) -> None:
+    """Stand in for a pod that loaded `config/platform_prompt.json`.
+
+    Both blocks come off the one file, so one helper sets whichever the test
+    cares about and leaves the other unconfigured.
+    """
+
+    monkeypatch.setattr(
+        react_prompting,
+        "get_runtime_context_or_none",
+        lambda: SimpleNamespace(
+            get_default_platform_prompt=lambda: platform_prompt,
+            get_platform_instructions=lambda: platform_instructions,
+        ),
+    )
+
+
+def test_platform_prompt_prefix_uses_the_admin_saved_value() -> None:
+    assert build_platform_prompt_prefix(_binding(platform_prompt="  BE HELPFUL  ")) == (
+        "\n\nBE HELPFUL"
+    )
+
+
+def test_platform_prompt_prefix_is_empty_when_the_pod_shipped_no_file() -> None:
+    # No runtime context is set in unit tests, so `get_runtime_context_or_none`
+    # returns None — the block must simply be absent, not raise.
+    assert build_platform_prompt_prefix(_binding()) == ""
+
+
+def test_platform_prompt_prefix_empty_admin_value_suppresses_the_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An admin who saves "" means "no platform prompt", which must NOT fall back
+    # to the pod file — that distinction is the whole point of `None` vs "",
+    # and it is the one an admin cannot express any other way.
+    _with_pod_file(monkeypatch, platform_prompt="POD-DEFAULT")
+    assert build_platform_prompt_prefix(_binding(platform_prompt="")) == ""
+
+
+def test_platform_prompt_prefix_falls_back_to_the_pod_file_when_never_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _with_pod_file(monkeypatch, platform_prompt="POD-DEFAULT")
+    assert build_platform_prompt_prefix(_binding()) == "\n\nPOD-DEFAULT"
+
+
+def test_platform_instructions_prefix_comes_from_the_same_pod_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The read-only block is pod config too, and is NOT overridable per turn:
+    # an admin-saved platform prompt must not displace it.
+    _with_pod_file(monkeypatch, platform_instructions="HOUSE-RULES")
+    assert build_platform_instructions_prefix() == "\n\nHOUSE-RULES"
+    assert build_platform_instructions_prefix() == "\n\nHOUSE-RULES"
+
+
+def test_platform_instructions_prefix_is_empty_when_the_pod_shipped_no_file() -> None:
+    assert build_platform_instructions_prefix() == ""
+
+
+def test_compose_system_prompt_puts_the_platform_prompt_first() -> None:
+    prompt = compose_system_prompt(
+        "BASE-TEMPLATE",
+        binding=_binding(platform_prompt="MASTER-BLOCK"),
+        agent_id="agent-1",
+        tool_suffix="TOOL-SUFFIX",
+    )
+
+    assert prompt.startswith("MASTER-BLOCK")
+    assert prompt.index("MASTER-BLOCK") < prompt.index(_EXPECTED_MERMAID_FRAGMENT)
+    assert prompt.index("MASTER-BLOCK") < prompt.index("TOOL-SUFFIX")
+    assert prompt.index("MASTER-BLOCK") < prompt.index("BASE-TEMPLATE")

@@ -36,8 +36,9 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
+
+from ..runtime_context import get_runtime_context_or_none
 
 # Matches only {simple_identifier} — same pattern as the validator so the two
 # surfaces stay in sync. Non-simple patterns ({}, {0}, {x.y}) are not touched.
@@ -140,30 +141,90 @@ def normalize_response_language(language: str | None) -> str:
     return normalized
 
 
-def build_guardrail_suffix(definition: ReActAgentDefinition) -> str:
+def build_platform_prompt_prefix(binding: BoundRuntimeContext) -> str:
     """
-    Render the prompt suffix for definition guardrails.
+    Render the platform-wide platform prompt — the FIRST block of the system prompt.
 
     Why this exists:
-    - guardrails are declared on the agent definition, but the model only sees the
-      final system prompt
-    - one helper turns guardrails into the exact text block appended to that prompt
+    - a platform admin needs one place to state how every agent on the
+      deployment must behave, ahead of any agent's own template. Before this,
+      the only platform-wide text was the static
+      `GLOBAL_BASE_PROMPT_MARKDOWN` output contract, which is shipped in
+      fred-sdk and deliberately not editable.
+    - it goes first, not last, for the reason §8.67 moved the agent template
+      last: this is the single most stable block on a deployment — identical
+      for every agent, every session, every turn — so it extends the provider
+      prefix cache rather than truncating it. Ordering is not precedence here;
+      the output contract that follows is subordinated by its own wording,
+      exactly as `build_context_prompt_suffix` already is.
+
+    Precedence:
+    - `binding.platform_prompt` (what a platform admin saved, resolved trusted
+      per managed turn) wins.
+    - `None` means no admin ever saved one — fall back to the shipped
+      `platform_prompt` field of the pod's `config/platform_prompt.json`. That
+      is the same file control-plane fetches over `GET /agents/platform-prompt`
+      to fill the admin editor, so what an admin reads there is what agents
+      actually receive.
+    - an admin-saved empty string is NOT `None`: it suppresses the block on
+      purpose, and must not silently resurrect the shipped default.
 
     How to use:
-    - call during prompt composition after the main system prompt template is
-      rendered
-
-    Example:
-    - `system_prompt += build_guardrail_suffix(definition)`
+    - first element of `compose_system_prompt`'s block list.
     """
 
-    guardrails = definition.policy().guardrails
-    if not guardrails:
+    text = binding.platform_prompt
+    if text is None:
+        runtime_context = get_runtime_context_or_none()
+        text = (
+            runtime_context.get_default_platform_prompt()
+            if runtime_context is not None
+            else None
+        )
+    if text is None or not text.strip():
         return ""
-    lines = ["", "Operating guardrails:"]
-    for guardrail in guardrails:
-        lines.append(f"- {guardrail.title}: {guardrail.description}")
-    return "\n".join(lines)
+    # Leading separator, like every other block in `compose_system_prompt`:
+    # each one owns the blank line that precedes it, none owns the one that
+    # follows. Being first is not an exception — the composer strips the
+    # resulting leading newlines once, for whichever block happens to lead.
+    return f"\n\n{text.strip()}"
+
+
+def build_platform_instructions_prefix() -> str:
+    """
+    Render the platform's operating instructions — the SECOND block, directly
+    under the admin-editable platform prompt.
+
+    Why this exists:
+    - the platform prompt above it carries personality and deployment-specific
+      intent, and an admin can rewrite it freely. The behaviour a coherent
+      platform depends on — call the tools you were given, never fake a call,
+      recover from a failed one, say when you don't know — must not be
+      rewritable along with it, so it lives here, shipped and read-only.
+    - it absorbed `build_tool_failure_recovery_suffix`'s hardcoded text
+      (removed 2026-08-31). That guidance was the same kind of rule living in a
+      third place; keeping it separate would have meant the admin UI's
+      "platform instructions" view showed only part of what agents are actually
+      told, which is worse than not showing it at all.
+
+    Not the same thing as `build_global_base_prompt_suffix` below: that one is
+    an OUTPUT/renderer contract (Mermaid syntax) and stays after the platform blocks.
+    This one is operating behaviour and leads the prompt with the platform
+    prompt, where the two platform-wide layers read as one section.
+
+    How to use:
+    - second element of `compose_system_prompt`'s block list.
+    """
+
+    runtime_context = get_runtime_context_or_none()
+    text = (
+        runtime_context.get_platform_instructions()
+        if runtime_context is not None
+        else None
+    )
+    if text is None or not text.strip():
+        return ""
+    return f"\n\n{text.strip()}"
 
 
 def build_global_base_prompt_suffix() -> str:
@@ -181,8 +242,8 @@ def build_global_base_prompt_suffix() -> str:
       the contract on any custom prompt
 
     How to use it:
-    - append the returned text during final system-prompt composition, after the
-      tool and guardrail suffixes (see ReActRuntime / DeepAgentRuntime)
+    - append the returned text during final system-prompt composition, after
+      the platform blocks (see `compose_system_prompt`)
 
     Example:
     - `system_prompt += build_global_base_prompt_suffix()`
@@ -191,40 +252,6 @@ def build_global_base_prompt_suffix() -> str:
     if not GLOBAL_BASE_PROMPT_MARKDOWN.strip():
         return ""
     return f"\n\n{GLOBAL_BASE_PROMPT_MARKDOWN}"
-
-
-def build_tool_failure_recovery_suffix() -> str:
-    """
-    Render the shared guidance for behaving after a tool call fails.
-
-    Why this exists:
-    - some capability tools (e.g. `summarize_document`) catch their own
-      exceptions and return a troubleshooting message as an ordinary tool
-      result instead of raising. Without explicit guidance the model has
-      surfaced that raw recovery text as its final answer instead of acting
-      on it, even when the message states exactly how to retry and other
-      already-gathered context was enough to answer (#2073).
-    - this is a hard invariant for every ReAct/Deep turn, not per-turn
-      context, so it is composed alongside the guardrails and global base
-      contract rather than passed in as a runtime suffix.
-
-    How to use:
-    - append the returned text during final system-prompt composition,
-      alongside the other hard-invariant suffixes.
-
-    Example:
-    - `system_prompt += build_tool_failure_recovery_suffix()`
-    """
-
-    return (
-        "\n\nIf a tool call fails or returns an error or troubleshooting "
-        "message, never present that raw text as your final answer to the "
-        "user. Instead: retry the call with corrected arguments when the "
-        "message explains what to fix, or answer from what other calls have "
-        "already returned if that is enough to address the request. Only "
-        "tell the user about a failure after you have genuinely exhausted "
-        "reasonable ways to obtain the requested information."
-    )
 
 
 def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
@@ -330,8 +357,8 @@ def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) 
         return ""
     return (
         "\n\nThe following instructions were selected for this conversation. Follow "
-        "them for every response where they do not conflict with your operating "
-        "guardrails or the output contract above:\n\n"
+        "them for every response where they do not conflict with the platform "
+        "instructions or the output contract above:\n\n"
         f"{rendered}"
     )
 
@@ -340,7 +367,6 @@ def compose_system_prompt(
     base_prompt: str,
     *,
     binding: BoundRuntimeContext,
-    definition: ReActAgentDefinition,
     agent_id: str,
     tool_suffix: str = "",
     runtime_suffixes: Sequence[str] = (),
@@ -349,39 +375,79 @@ def compose_system_prompt(
     Assemble the final system prompt shared by the ReAct and Deep runtimes.
 
     Why this exists:
-    - both runtimes need the identical suffix chain (tools, guardrails, global base
-      contract, tool-failure recovery notice, then the per-turn conversation context:
-      selected prompts and attachments). Each runtime used to hand-roll that chain,
-      and they had already drifted — attachments reached ReAct but not Deep, and
-      neither injected the selected chat-context prompts (#1915). One owner keeps
-      them from drifting again.
+    - both runtimes need the identical block chain (the two platform-wide
+      blocks, global base contract, tools, then the per-turn conversation
+      context: selected prompts and attachments). Each runtime
+      used to hand-roll that chain, and they had already drifted — attachments
+      reached ReAct but not Deep, and neither injected the selected chat-context
+      prompts (#1915). One owner keeps them from drifting again.
 
-    Ordering rationale (last suffix carries the most recency weight for the model):
-    - ``base_prompt`` — the rendered agent template
-    - ``tool_suffix`` — runtime tool descriptions (passed in; runtime-owned)
-    - guardrails, then the global base output contract, then the tool-failure
-      recovery notice — hard invariants
-    - ``runtime_suffixes`` — runtime-specific system notices (e.g. Deep filesystem)
-    - selected chat-context prompts, then the turn's document scope, then
-      conversation attachments — per-turn user context, placed last so it is
-      freshest while the envelope in ``build_context_prompt_suffix`` still
-      subordinates it to the guardrails above.
+    Ordering rationale (issue #2412 item 3, 2026-08-27 — supersedes the
+    "agent template first" chain this function shipped with; extended
+    2026-08-31 with the two platform blocks):
+    - **The platform** — ``build_platform_prompt_prefix`` (admin-editable
+      personality and standardised instructions), then
+      ``build_platform_instructions_prefix`` (shipped, read-only operating
+      behaviour). The most stable text on a deployment: identical for every
+      agent, every session, every turn, so it extends the provider prefix
+      cache rather than truncating it. Read as one section, which is why they
+      are adjacent.
+    - **General instructions** — the global base output contract. A hard
+      invariant, identical across every agent on a deployment. (Two blocks
+      used to sit here: tool-failure recovery, folded into the platform
+      instructions, and per-agent guardrails, folded into each agent's
+      template — RUNTIME-EXECUTION-CONTRACT §8.70/§8.71.)
+    - **Tools** — ``tool_suffix``: what tools exist, grouped by MCP server
+      with each server's ``agent_instructions`` inlined (#2455). Also
+      near-identical across agents sharing the same tool set.
+    - **Tool usage** — ``runtime_suffixes``: runtime-specific static notices
+      (e.g. Deep's filesystem-browsing context). Rare enough today to still
+      sit ahead of the agent block rather than needing its own numbered slot.
+    - **The agent** — ``base_prompt``, the rendered agent template, preceded
+      by a fixed ``# Agent instructions`` heading (#2412 item 3 follow-up,
+      2026-08-28) so the boundary is visible: without it, ``base_prompt``
+      landed directly after the tool/``agent_instructions`` block above with
+      no blank line or marker, making it hard to tell where Fred's shared
+      instructions end and this agent's own configured behavior begins. The
+      LAST *static* block: for a given agent instance, everything before it
+      is identical turn over turn (and largely identical across agents
+      sharing the deployment's tools), while the agent's own
+      instructions are what should carry the model's attention. Two reasons,
+      not just one: recency (the model's own instructions are furthest from
+      its answer under the old order) and provider prefix-cache reuse (the
+      stable prefix — general instructions + tools — now extends all the way
+      to the agent block instead of ending after the first few dozen
+      characters).
+    - **Per-turn user context, unchanged** — selected chat-context prompts,
+      then the turn's document scope, then conversation attachments. Placed
+      last because they are genuinely volatile (change with the conversation,
+      not just the agent), which also keeps the cache boundary clean:
+      everything before this point is stable for the whole session.
 
     How to use:
     - render the agent template first, then pass it here with the runtime's tool
       suffix and any runtime-specific suffixes.
     """
 
+    # No dangling heading when an agent has no configured template at all
+    # (`policy.system_prompt_template or ""` in the callers) — only mark the
+    # boundary when there is a template to introduce.
+    agent_header = "\n\n# Agent instructions\n\n" if base_prompt.strip() else ""
+
+    # `.lstrip("\n")`: every block carries its own leading blank line, so
+    # whichever one comes first would otherwise open the prompt with stray
+    # newlines.
     return "".join(
         [
-            base_prompt,
-            tool_suffix,
-            build_guardrail_suffix(definition),
+            build_platform_prompt_prefix(binding),
+            build_platform_instructions_prefix(),
             build_global_base_prompt_suffix(),
-            build_tool_failure_recovery_suffix(),
+            tool_suffix,
             *runtime_suffixes,
+            agent_header,
+            base_prompt,
             build_context_prompt_suffix(binding, agent_id=agent_id),
             build_document_scope_suffix(binding),
             build_attachment_context_suffix(binding),
         ]
-    )
+    ).lstrip("\n")

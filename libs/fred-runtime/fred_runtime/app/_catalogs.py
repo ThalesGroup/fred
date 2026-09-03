@@ -32,6 +32,7 @@ Example:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -47,8 +48,10 @@ logger = logging.getLogger(__name__)
 
 MCP_CATALOG_ENV = "FRED_MCP_CATALOG_FILE"
 MODELS_CATALOG_ENV = "FRED_MODELS_CATALOG_FILE"
+PLATFORM_PROMPT_ENV = "FRED_PLATFORM_PROMPT_FILE"
 MCP_CATALOG_DEFAULT_PATH = "./config/mcp_catalog.yaml"
 MODELS_CATALOG_DEFAULT_PATH = "./config/models_catalog.yaml"
+PLATFORM_PROMPT_DEFAULT_PATH = "./config/platform_prompt.json"
 
 
 class _CatalogFile(BaseModel):
@@ -211,6 +214,80 @@ def resolve_models_catalog_path() -> Path:
     return Path(MODELS_CATALOG_DEFAULT_PATH)
 
 
+class PlatformPromptFile(BaseModel):
+    """
+    Shape of `config/platform_prompt.json` — the two blocks that open every
+    agent's system prompt, in the order the model receives them.
+
+    Why one file with two fields:
+    - they are one thing, the head of the prompt, and reading them side by side
+      is the only way to see whether they contradict each other.
+
+    They differ in exactly one way, which the field names carry:
+    - `platform_prompt` is a STARTING POINT. A platform admin edits it in the
+      admin UI; the saved value lives in Postgres and reaches the runtime per
+      turn on `BoundRuntimeContext.platform_prompt`, after which this text is
+      no longer used.
+    - `platform_instructions` is SHIPPED. Nothing edits it; the admin UI renders
+      it read-only. It is what keeps agents coherent (call the tools you were
+      given, never fake a call, recover from a failed one) however the prompt
+      above it is rewritten.
+
+    Both are required under `extra="forbid"`: making either optional is what
+    would let a bad edit silently drop a block, since the runtime renders
+    nothing for an empty one and nothing else would fail.
+
+    `version` is not a schema version to branch on — it lets a future migration
+    tell a hand-edited file from a shipped default. `_comment` documents the
+    file for whoever opens it and is accepted but unused.
+
+    How to use:
+    - resolved and loaded once at pod boot by `apply_external_catalog_overrides`
+    - served to control-plane by `GET /agents/platform-prompt`
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    version: int
+    platform_prompt: str
+    platform_instructions: str
+    comment: str | None = Field(default=None, alias="_comment")
+
+
+def resolve_platform_prompt_path() -> Path:
+    """
+    Resolve the canonical platform-prompt file path for one pod startup.
+
+    Why this exists:
+    - same env-override contract as the two catalogs above, so operators have
+      one mental model for "pod-shipped config file" across all three.
+
+    How to use it:
+    - call during config bootstrap.
+
+    Example:
+    - `path = resolve_platform_prompt_path()`
+    """
+
+    return Path(os.getenv(PLATFORM_PROMPT_ENV, PLATFORM_PROMPT_DEFAULT_PATH))
+
+
+def load_platform_prompt_file(path: str | Path) -> PlatformPromptFile:
+    """
+    Read and validate `platform_prompt.json`.
+
+    Why this exists:
+    - one loader keeps the file's shape validated in a single place, for both
+      the prompt composer and the endpoint that serves it to control-plane.
+
+    How to use it:
+    - `file = load_platform_prompt_file("./config/platform_prompt.json")`
+    """
+
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    return PlatformPromptFile.model_validate(raw)
+
+
 def resolve_mcp_catalog_path() -> Path:
     """
     Resolve the canonical MCP catalog path for one pod startup.
@@ -256,6 +333,25 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
         "[fred-runtime][config] models catalog path resolved to %s",
         models_catalog_path,
     )
+
+    platform_prompt_path = resolve_platform_prompt_path()
+    if platform_prompt_path.exists():
+        config.set_platform_prompt_file(load_platform_prompt_file(platform_prompt_path))
+        logger.info(
+            "[fred-runtime][config] platform prompt file loaded from %s",
+            platform_prompt_path,
+        )
+    else:
+        # Optional, unlike models_catalog.yaml: a pod with no file contributes
+        # neither head block, and an admin-saved platform prompt (which arrives
+        # per turn, not from here) still applies. Logged at WARNING, not INFO:
+        # a pod running without the platform instructions has lost the tool
+        # discipline every agent depends on, which is worth noticing.
+        logger.warning(
+            "[fred-runtime][config] no platform prompt file at %s; this pod "
+            "contributes no platform prompt and no platform instructions",
+            platform_prompt_path,
+        )
 
     mcp_catalog_path = resolve_mcp_catalog_path()
     if not mcp_catalog_path.exists():
