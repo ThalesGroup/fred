@@ -17,6 +17,24 @@ include ../../scripts/makefiles/config/INFO-frontend.mk
 
 NODE_VERSION=22.13.0
 
+# Local application gateway configuration follows the backend config/.env
+# convention. Values already supplied by the invoking environment are restored
+# after the include so they keep precedence; make command-line values already do.
+FRONTEND_ENV_FILE ?= $(CURDIR)/config/.env
+FRONTEND_ENABLE_APPLICATIONS_ENV_ORIGIN := $(origin FRONTEND_ENABLE_APPLICATIONS)
+FRONTEND_ENABLE_APPLICATIONS_ENV_VALUE := $(value FRONTEND_ENABLE_APPLICATIONS)
+FRONTEND_APPLICATIONS_JSON_ENV_ORIGIN := $(origin FRONTEND_APPLICATIONS_JSON)
+FRONTEND_APPLICATIONS_JSON_ENV_VALUE := $(value FRONTEND_APPLICATIONS_JSON)
+
+-include $(FRONTEND_ENV_FILE)
+
+ifeq ($(FRONTEND_ENABLE_APPLICATIONS_ENV_ORIGIN),environment)
+override FRONTEND_ENABLE_APPLICATIONS := $(FRONTEND_ENABLE_APPLICATIONS_ENV_VALUE)
+endif
+ifeq ($(FRONTEND_APPLICATIONS_JSON_ENV_ORIGIN),environment)
+override FRONTEND_APPLICATIONS_JSON := $(FRONTEND_APPLICATIONS_JSON_ENV_VALUE)
+endif
+
 ##@ Common workflows
 ##> The commands you actually use day to day:
 ##>   make run             start the local dev server on http://localhost:5173
@@ -89,7 +107,7 @@ run-docker: ## Run the built image in a container, proxying backend calls to ser
 		-e FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=$(FRONTEND_KNOWLEDGE_FLOW_UPSTREAM) \
 		-e FRONTEND_CONTROL_PLANE_UPSTREAM=$(FRONTEND_CONTROL_PLANE_UPSTREAM) \
 		-e FRONTEND_ENABLE_APPLICATIONS=$(FRONTEND_ENABLE_APPLICATIONS) \
-		-e FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON)' \
+		-e FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON_VALUE)' \
 		-p $(FRONTEND_HOST_PORT):$(FRONTEND_CONTAINER_PORT) \
 		$(IMAGE_FULL)
 
@@ -101,7 +119,7 @@ docker-run: run-docker ## Alias for run-docker (kept for backward compatibility)
 .PHONY: run
 run: check-node node_modules ## Start the local Vite dev server on :5173 (HMR; proxies backend calls) — the everyday command
 	FRONTEND_ENABLE_APPLICATIONS=$(FRONTEND_ENABLE_APPLICATIONS) \
-		FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON)' \
+		FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON_VALUE)' \
 		VITE_DEV_USERNAME=$(shell whoami) npm run dev
 
 ##@ Code quality
@@ -266,3 +284,6 @@ FRONTEND_KNOWLEDGE_FLOW_UPSTREAM ?= http://host.docker.internal:8111
 FRONTEND_CONTROL_PLANE_UPSTREAM ?= http://host.docker.internal:8222
 FRONTEND_ENABLE_APPLICATIONS ?= false
 FRONTEND_APPLICATIONS_JSON ?= []
+# Shell-compatible .env files quote JSON to protect it while sourcing. GNU make
+# preserves those outer quotes, so remove them before recipes quote the raw JSON.
+FRONTEND_APPLICATIONS_JSON_VALUE = $(patsubst '%',%,$(strip $(FRONTEND_APPLICATIONS_JSON)))

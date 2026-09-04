@@ -78,6 +78,34 @@ _(none)_
 
 ---
 
+### `Select`
+
+**Location:** `src/rework/components/shared/molecules/Select/Select.tsx`
+**Status:** `Functional`
+
+Portaled listbox with virtual focus (DOM focus stays on the trigger,
+`aria-activedescendant` tracks the highlighted option).
+
+**Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
+the same token `TextInput` uses, so a `Select` and a text field placed in one
+toolbar match. It previously used `--outline-muted`: identical in the light
+theme (both resolve to `cold-grey-80`) but dimmer in the dark one
+(`cold-grey-20` against `cold-grey-30`), so the two controls disagreed only for
+dark-theme users. `--outline-muted` remains correct for containers and
+dividers; form controls take `--outline-retreat`.
+
+**Naming the trigger.** A visible `label` names it through `htmlFor`. Where a
+toolbar has no room for one, pass `ariaLabel` instead — without either, the
+button falls back to its own content and a screen reader announces the current
+value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
+over `label`, so pass one or the other.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
 ### `SearchInput`
 
 **Location:** `src/rework/components/shared/molecules/SearchInput/SearchInput.tsx`
@@ -1287,6 +1315,66 @@ row and making the list unreadable. Two changes:
 
 ---
 
+### `TeamAgentsPage` list search + sort
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/`
+**Status:** `Functional`
+
+A `SearchInput` (`size="small"`, capped at 320px) sits at the right of the page
+toolbar, after the create button — the same placement and component as the team
+prompts page, so the two team list pages read alike. It filters the already
+loaded list client-side: local `useState`, no debounce, no request. The list is
+fetched whole, so no query parameter and no control-plane change is involved.
+
+The predicate lives in `agentFilter.ts` rather than in the page: a
+case-insensitive substring match against the three fields `AgentCard` actually
+renders — `display_name`, `role`, `description` — joined per instance so a query
+cannot match across a field boundary. An empty or whitespace-only query returns
+everything, so the raw input value can be passed straight through. It is a pure
+function with its own unit test, matching how `toolPackLogic` is tested in this
+directory; `TeamAgentsPage.tsx` is an RTK Query container with no test of its
+own.
+
+Composition and states:
+
+- The search narrows what is left **after** the suspension filter (a suspended
+  agent stays hidden from members without `can_update_agents`).
+- A query matching nothing shows a dedicated message, never
+  `TeamAgentEmptyState` — that state means "this team has no agents yet" and is
+  driven by the unfiltered list. Guarding the message on a non-empty query keeps
+  the no-query behaviour untouched.
+- The toolbar (and so the field) is driven by the unfiltered list, so a search
+  that empties the grid never removes the field the user needs to correct it.
+- The memo sits above the page's early returns: a hook placed after them renders
+  a different hook count when a query errors. Note `eslint.config.mjs` registers
+  `eslint-plugin-react-hooks` but enables none of its rules, so lint will not
+  catch a regression here.
+
+Wording is deployment-configurable: the placeholder interpolates
+`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+
+**Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
+so the control does not resize as the picked option changes length) sits after
+the search field, offering Alphabetical (default), Recently created and Recently updated —
+`display_name`, `created_at`, `updated_at`, the three orderings available
+without touching the API. `sortAgents` (`agentSort.ts`, unit-tested like the
+filter) applies after the search so the visible list is always sorted, and:
+
+- copies before sorting — the list is RTK Query state, frozen by immer in dev,
+  so an in-place sort throws at runtime;
+- puts an agent with a null or unparseable date last in either date order,
+  rather than letting `NaN` scatter it;
+- compares names with `localeCompare` at base sensitivity, so an accented name
+  files next to its unaccented form instead of after `Z`;
+- returns 0 for ties, leaving `Array.sort`'s stability to preserve the incoming
+  order.
+
+The control carries no visible label, so it is named with `Select`'s
+`ariaLabel` prop — otherwise a screen reader announces the current value with
+no hint that it is the sort control.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
@@ -1328,9 +1416,8 @@ the team's `joining_mode`, gated on `!team.is_member`:
 
 | `joining_mode` | Footer content |
 | --- | --- |
-| `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only`, team is `public`, at least one admin has an email | "Join" button (`mail` icon) - opens the user's mail client on a `mailto:` prefilled for the team admins (#2453, see below) |
-| `invite_only`, any other case | No button; muted label (`on-surface-retreat`) |
+| `open` | "Join" button (`small`, `outlined`, `person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
+| `invite_only` | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -1343,52 +1430,10 @@ system to route requests to team admins was never built) and `closed` (a
 second muted label, indistinguishable in practice from `invite_only`) were
 dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
-**Ask for an invitation (#2453, 2026-08-27).** A public invite-only team is
-discoverable but not joinable, and the muted label alone left the visitor with
-no next step. The card restores the pre-TEAM-09 escape hatch: a `mailto:`
-addressed to every team admin whose `UserSummary.email` resolved, prefilled
-with the subject, the caller's identity, and two links: the team's agents page
-for context (what `main` sent) plus a deep link to its members page, where the
-recipients - the admins - actually add the sender by hand. The wording is the
-pre-TEAM-09 one (`rework.teamCard.invitationMail.*`) plus that second line, and
-now lives in the locale files instead of hardcoded French as it did then.
-
-The button reuses the `join` label - it is the same intent, and a second,
-longer label wrapped the card's footer onto two lines; the `mail` icon and the
-draft that opens are what distinguish it from the instant `open` join.
-
-Two guards decide whether the button replaces the label:
-
-- **public only.** A private team keeps the label: the UI does not offer a
-  non-member a private team's admin addresses. This is a product rule about
-  what the card *proposes*, not a disclosure guarantee - `GET /teams` puts
-  `admins` (email included) in the payload for every team it returns, and
-  `MarketplaceTeams` records that private teams reach the client at all when
-  authorization is disabled. Withholding them from the wire is a server-side
-  question, still open. `TeamCard` checks `visibility` itself rather than
-  trusting `MarketplaceTeams`' filter: it is a shared component, and the check
-  is `=== "public"` so a payload with no `visibility` fails closed (#2433).
-- **a reachable address.** `admins` falls back to a bare `UserSummary(id=...)`
-  when the Keycloak lookup returns nothing, so an admin list can render with no
-  email at all. With no recipient there is nothing to open, so the label stays
-  rather than producing an empty `mailto:`.
-
-Mechanics worth keeping: the draft opens with `window.open(..., "_blank",
-"noopener,noreferrer")` rather than a `location.href` assignment, so a webmail
-registered as the `mailto:` handler opens beside the app instead of replacing
-it (a native client takes over the throwaway tab and the browser drops it);
-`noopener` makes `window.open` return `null` by spec, so there is nothing to
-test for a fallback - the click is the user gesture popup blockers key off.
-Recipients are comma-separated (RFC 6068) and
-percent-encoded, since the addresses come from a directory sync and nothing
-guarantees they are URL-safe; `URLSearchParams`' `+` is rewritten to `%20` or
-mail clients render it literally in the subject; the team link prepends the
-router basename (`normalizeBasename`, shared with `buildDocumentViewerPath`)
-because a mailed URL inherits nothing from the router; and the identity line
-degrades to whichever of `name` / `preferred_username` Keycloak returned.
-
-No server-side request flow is involved: this is a client-side mail draft, the
-same as before TEAM-09. Nothing routes an invitation request through the API.
+An invite-only team offers no in-app join path: the card shows only the muted
+label. A `mailto:`-to-admins escape hatch existed briefly (#2453) and was
+removed — a non-member could not be given a team's admin addresses, and no
+server-side request flow was ever built to replace it.
 
 **Footer layout.** The card is a fixed 290px, so the admin avatars and the join
 button compete for one line: a team with five admins pushed the button past the
