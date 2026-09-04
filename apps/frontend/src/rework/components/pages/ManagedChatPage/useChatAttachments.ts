@@ -349,7 +349,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       // concurrently — one at a time hid file N behind file N-1's ingestion.
       await Promise.all(files.filter((file) => file.size > 0).map(ingestFile));
     },
-    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
+    [deleteFastArtifactsMutation, dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
   );
 
   const removeAttachment = useCallback(
