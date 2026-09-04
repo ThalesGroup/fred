@@ -535,6 +535,17 @@ describe("traceRows", () => {
     expect(traceRows([])).toEqual([]);
   });
 
+  // The flattened preview is cached on the message object. That is only sound
+  // because a streaming block arrives as a NEW object each delta (`upsertOne`
+  // rebuilds it rather than mutating in place) — if that ever changes, a live
+  // reasoning row would freeze at its first token.
+  it("reflects a growing block, which arrives as a new message object", () => {
+    const first = thoughtMsg("I will search", { phase: "planning" });
+    const grown = thoughtMsg("I will search the corpus", { phase: "planning" });
+    expect(traceRows([{ kind: "solo", message: first }])[0].reasoningText).toBe("I will search");
+    expect(traceRows([{ kind: "solo", message: grown }])[0].reasoningText).toBe("I will search the corpus");
+  });
+
   it("tags reasoning channels as the reasoning lane", () => {
     const planning = thoughtMsg("thinking", { phase: "planning" });
     const plan = msg({ channel: "plan", parts: [{ type: "text", text: "step 1" }] });

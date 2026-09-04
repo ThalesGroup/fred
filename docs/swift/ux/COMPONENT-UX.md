@@ -401,7 +401,10 @@ agents) so the decision is informed at the point it is made.
   `traceMessages` array on each SSE frame, so an ungated memo re-flattened the markdown of the
   WHOLE conversation's collapsed history on every token (measured at ~0.036 ms per KB of
   reasoning text, so ~3.5 ms per frame on a long conversation — main-thread time competing with
-  React's own render).
+  React's own render). What survives that gate — a turn that streamed in this session stays
+  open, by design — is covered by a `WeakMap` cache of the flattened preview text keyed on the
+  message object: `upsertOne` rebuilds a streaming block as a new object each delta, so the live
+  block misses the cache and every settled one hits (measured 0.035 ms → 0.001 ms per block).
 
   Three consequences worth knowing. The grouping card behind the tool rows is gone: rows of
   both kinds now sit directly in `.body` as one flat timeline, so the rail's end trimming

@@ -753,6 +753,24 @@ function isReasoningEntry(entry: TraceEntry): boolean {
   return channel === "thought" || channel === "plan" || channel === "observation";
 }
 
+// Flattened preview text, keyed on the message object itself.
+//
+// `toThreadMessages` rebuilds every exchange's `traceMessages` array on each SSE
+// frame, so this fold re-runs for every OPEN trace in the conversation on every
+// token — and a turn that streamed in this session stays open. The message
+// objects inside those arrays are the same ones, though: only the block still
+// streaming is rebuilt, and it is the only one that misses.
+const previewTextCache = new WeakMap<ChatMessage, string>();
+
+function previewTextForEntry(entry: TraceEntry): string {
+  if (entry.kind !== "solo") return "";
+  const cached = previewTextCache.get(entry.message);
+  if (cached !== undefined) return cached;
+  const text = plainPreviewText(detailTextForEntry(entry));
+  previewTextCache.set(entry.message, text);
+  return text;
+}
+
 /** The trace as one chronological list, each row tagged with how it renders. */
 export function traceRows(entries: TraceEntry[]): TraceRow[] {
   let toolIndex = 0;
@@ -763,7 +781,7 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
 
   return entries.map((entry) => {
     if (isReasoningEntry(entry)) {
-      const text = plainPreviewText(detailTextForEntry(entry));
+      const text = previewTextForEntry(entry);
       const row = {
         entry,
         lane: "reasoning" as const,
