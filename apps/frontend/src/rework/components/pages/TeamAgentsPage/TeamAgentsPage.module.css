@@ -8,7 +8,7 @@
 .title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
   padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
   color: var(--on-surface);
   font: var(--font-title-large);
