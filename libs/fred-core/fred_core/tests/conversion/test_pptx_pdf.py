@@ -168,11 +168,16 @@ async def test_convert_bytes_with_real_libreoffice() -> None:
 
     import io
 
-    from pptx import Presentation  # pyright: ignore[reportMissingImports]
+    from pptx import Presentation
+    from pptx.util import Emu
 
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    box = slide.shapes.add_textbox(0, 0, prs.slide_width, prs.slide_height)
+    # A default template always carries slide dimensions; the fallbacks keep the
+    # call typed without asserting on something the fixture does not test.
+    width = prs.slide_width or Emu(9144000)
+    height = prs.slide_height or Emu(6858000)
+    box = slide.shapes.add_textbox(Emu(0), Emu(0), width, height)
     box.text_frame.text = "Hello preview"
     buf = io.BytesIO()
     prs.save(buf)
