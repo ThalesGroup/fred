@@ -17,7 +17,7 @@
 // DocumentWorkspace) must arrive pre-listed when the drawer opens, so the user
 // only has to pick mode/profile and save — instead of landing on an empty
 // dropzone and re-picking the files they just dropped. Kept separate from
-// DocumentUploadDrawer.test.tsx, whose scheduleFile contract tests run without
+// DocumentUploadDrawer.test.tsx, whose scheduleFiles contract tests run without
 // a DOM.
 
 import { act } from "react";
@@ -43,7 +43,10 @@ vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 // Not under test here — and its bootstrap query (RTK) would need a Redux Provider.
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({ streamUploadOrProcessDocument: vi.fn() }));
+vi.mock("../../../../../slices/streamDocumentUpload", () => ({
+  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
+  streamUploadOrProcessDocument: vi.fn(),
+}));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // Precheck answers "allowed" so saves proceed; the denial path has its own
   // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.
