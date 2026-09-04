@@ -566,7 +566,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                 "[VECTOR][CLICKHOUSE] failed to fetch chunks for document_uid=%s",
                 document_uid,
             )
-            return []
+            raise RuntimeError("Failed to fetch chunks from ClickHouse.")
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         try:

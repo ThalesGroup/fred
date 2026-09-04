@@ -552,6 +552,29 @@ retry-safety reasoning as `may_delete_session_document`) or every chunk it
 does have carries the `scope="session"` marker, false — refusing the bypass
 — the moment one chunk lacks it (a real corpus document, chunks included).
 
+**A vector-store lookup failure must not read as "no chunks, therefore
+safe."** `is_session_scoped_document`/`may_delete_session_document` both
+treat an empty `get_chunks_for_document` result as "genuinely nothing there"
+(the retry-safety case). Every concrete vector store's `get_chunks_for_document`
+used to catch its own client's exceptions and return `[]` — meaning a real
+backend outage during a classification call was indistinguishable from "the
+vectors are already gone," and the platform-admin bypass would be granted on
+a document nobody actually classified. All five backends (OpenSearch,
+PGVector, ChromaDB, ClickHouse, in-memory) now raise instead of swallowing
+on a genuine fetch failure — only `NotImplementedError` (the backend never
+supports the capability) still resolves to a plain `False`/`""`. The
+exception then propagates out of `_authorize_fast_ingest_delete` uncaught
+into the app's generic exception handler (`fred_core.common.register_exception_handlers`),
+producing a 500 rather than a false authorization.
+
+**Vector deletion must be truthful too, the same way tabular cleanup now
+is.** `_delete_fast_vectors` calls `delete_vectors_for_document`; OpenSearch
+and ClickHouse already raised `RuntimeError` on failure, but PGVector and the
+in-memory store caught the exception and returned normally — silently
+leaving the vectors in place while `_delete_fast_ingest_artifacts` (and the
+route) reported success, the same false-erasure shape the tabular-cleanup
+fix above closes. Both now raise like their siblings.
+
 Reusing `MetadataService.delete_document_and_artifacts_trusted` here was
 considered and rejected: it also runs storage-quota release
 (`_delete_and_release`),

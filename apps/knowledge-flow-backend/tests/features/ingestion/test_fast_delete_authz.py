@@ -79,9 +79,10 @@ class _FakeVectorStore:
     the exact user_id it was asked to check -- a wrong-identifier bug (e.g.
     forwarding username instead of uid) would otherwise still pass these tests."""
 
-    def __init__(self, *, may_delete: bool, is_session_scoped: bool = False) -> None:
+    def __init__(self, *, may_delete: bool, is_session_scoped: bool = False, raises: bool = False) -> None:
         self._may_delete = may_delete
         self._is_session_scoped = is_session_scoped
+        self._raises = raises
         self.checked = False
         self.checked_user_id: str | None = None
         self.classified = False
@@ -89,11 +90,15 @@ class _FakeVectorStore:
     def may_delete_session_document(self, document_uid: str, user_id: str) -> bool:
         self.checked = True
         self.checked_user_id = user_id
+        if self._raises:
+            raise RuntimeError("simulated backend outage")
         assert document_uid == "doc-1"
         return self._may_delete
 
     def is_session_scoped_document(self, document_uid: str) -> bool:
         self.classified = True
+        if self._raises:
+            raise RuntimeError("simulated backend outage")
         assert document_uid == "doc-1"
         return self._is_session_scoped
 
@@ -344,3 +349,33 @@ async def test_platform_admin_deletes_a_genuine_text_attachment_with_no_metadata
     assert is_platform_bypass is True
     assert vector_store.classified is True
     assert vector_store.checked is False
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_bypass_propagates_a_vector_store_outage_instead_of_deleting() -> None:
+    """
+    P1: a vector-store outage during `is_session_scoped_document` must not
+    read as "no chunks, therefore session-scoped" -- the classification
+    itself has to fail loud so the endpoint returns non-2xx, never silently
+    authorize the platform bypass to delete a document it never actually
+    classified.
+    """
+    rebac = _FakeRebac(is_platform_admin=True)
+    vector_store = _FakeVectorStore(may_delete=False, is_session_scoped=False, raises=True)
+
+    with pytest.raises(RuntimeError):
+        await _authorize_fast_ingest_delete(rebac, _user("svc-control-plane"), "doc-1", vector_store)
+    assert vector_store.classified is True
+
+
+@pytest.mark.asyncio
+async def test_non_admin_delete_propagates_a_vector_store_outage_instead_of_authorizing() -> None:
+    """Same requirement for the non-bypass path: an outage during
+    `may_delete_session_document` must not read as "no chunks, therefore
+    safe retry" and authorize a possibly-non-owned delete."""
+    rebac = _FakeRebac(is_platform_admin=False)
+    vector_store = _FakeVectorStore(may_delete=False, raises=True)
+
+    with pytest.raises(RuntimeError):
+        await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
+    assert vector_store.checked is True

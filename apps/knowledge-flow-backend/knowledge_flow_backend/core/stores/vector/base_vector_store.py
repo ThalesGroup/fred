@@ -131,9 +131,12 @@ class BaseVectorStore(ABC):
         forever because there is nothing left to prove ownership over.
 
         Fails closed (returns False) when chunks exist but none belong to
-        `user_id`, or when the backend can't fetch chunks by document at all
-        (an unsupported backend can't distinguish "nothing to delete" from
-        "someone else's document").
+        `user_id`, or when the backend doesn't support this capability at all
+        (`NotImplementedError` — it can't distinguish "nothing to delete"
+        from "someone else's document"). A genuine lookup failure is NOT the
+        same thing and is not swallowed into False: every real store now
+        raises on a real fetch failure, and that exception propagates here
+        rather than reading as an empty, safe-to-delete result.
         """
         try:
             chunks = self.get_chunks_for_document(document_uid)
@@ -156,9 +159,13 @@ class BaseVectorStore(ABC):
         reasoning as `may_delete_session_document`) or every chunk it does have
         carries the session-scope marker.
 
-        Fails closed (returns False) when a chunk exists without that marker —
-        i.e. this document_uid is a corpus document, not an attachment — or
-        when the backend can't fetch chunks by document at all.
+        Fails closed (returns False) when a chunk exists without that marker
+        — i.e. this document_uid is a corpus document, not an attachment —
+        or when the backend doesn't support this capability at all
+        (`NotImplementedError`). A genuine lookup failure is NOT the same
+        thing: it must not read as "no chunks, therefore session-scoped" and
+        grant the platform-admin bypass on ambiguous data, so it propagates
+        instead of being swallowed here.
         """
         try:
             chunks = self.get_chunks_for_document(document_uid)
@@ -175,8 +182,10 @@ class BaseVectorStore(ABC):
         vectors are the only text there is and `is_own_session_chunk` is the
         only access gate. Returns "" when nothing is readable (unknown uid,
         someone else's attachment, corpus chunks, unsupported backend) so the
-        caller surfaces its own denial rather than an empty document. Chunks
-        are ordered by page: fast ingest stores one per page.
+        caller surfaces its own denial rather than an empty document; a
+        genuine lookup failure propagates instead, same as
+        `may_delete_session_document`. Chunks are ordered by page: fast
+        ingest stores one per page.
 
         The trailing notice matters for readers that promise completeness
         (`read_document`, `extract_from_document`): fast ingest DROPS whole
