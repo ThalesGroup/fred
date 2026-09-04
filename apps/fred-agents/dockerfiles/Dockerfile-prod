@@ -40,6 +40,14 @@ ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
+# libreoffice provides `soffice`, needed at RUNTIME by the PPT-filler preview
+# (fred-core convert_pptx_bytes_to_pdf). Only /app/venv is copied out of the build
+# stage, so it has to be installed here - without it the fill tool silently degrades
+# to a download-only chip and the user loses the preview.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libreoffice && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
 
