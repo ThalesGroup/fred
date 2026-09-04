@@ -267,6 +267,16 @@ _CSV_ATTACHMENT_NOTE = (
     "conversation search tool for this id, use the tabular/SQL tools for "
     "everything about it, including keyword/value lookups)"
 )
+# Used instead of `_CSV_ATTACHMENT_NOTE` when the calling agent instance has
+# no tabular MCP tool bound (see `tabular_tools_bound` /
+# `tabular_tools_available` below) — telling the model to call a tool it does
+# not have would just produce a tool-not-found error.
+_CSV_ATTACHMENT_NOTE_NO_TOOLS = (
+    " (a SQL-queryable dataset was built for this file, but no tabular/SQL "
+    "tool is enabled for this assistant - you cannot query or search it; "
+    "tell the user their assistant needs tabular/SQL capability enabled to "
+    "analyze this file)"
+)
 # `xls[xm]?` covers .xls, .xlsx, and .xlsm — all three are real configured
 # attachment suffixes (FastSpreadsheetProcessor).
 _EXCEL_ATTACHMENT_RE = re.compile(rf"\.xls[xm]?{_FILENAME_TERMINATOR}", re.IGNORECASE)
@@ -276,13 +286,23 @@ _EXCEL_ATTACHMENT_NOTE = (
 )
 
 
-def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
+def build_attachment_context_suffix(
+    binding: BoundRuntimeContext, *, tabular_tools_available: bool
+) -> str:
     """
     Render current conversation attachments as a per-turn system-prompt suffix.
 
     The frontend rebuilds ``attachments_markdown`` from current attachment state.
     Deriving this suffix on every invocation means deleting the final attachment
     removes the notice instead of leaving a checkpointed system message behind.
+
+    ``tabular_tools_available`` (see `react_tool_binding.tabular_tools_bound`)
+    must reflect whether the *calling agent instance* actually has the
+    tabular MCP server bound — the general-purpose agent template ships with
+    no default capabilities, so a CSV attachment's SQL dataset can exist
+    while this agent has no tool to query it. Telling the model to use a tool
+    it doesn't have would just produce a tool-not-found error instead of a
+    straight answer to the user.
     """
 
     attachments_markdown = binding.runtime_context.attachments_markdown
@@ -305,7 +325,12 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         if not line.lstrip().startswith("-"):
             return line
         if _CSV_ATTACHMENT_RE.search(line):
-            return f"{line}{_CSV_ATTACHMENT_NOTE}"
+            note = (
+                _CSV_ATTACHMENT_NOTE
+                if tabular_tools_available
+                else _CSV_ATTACHMENT_NOTE_NO_TOOLS
+            )
+            return f"{line}{note}"
         if _EXCEL_ATTACHMENT_RE.search(line):
             return f"{line}{_EXCEL_ATTACHMENT_NOTE}"
         return line
@@ -314,6 +339,16 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
     safe_attachments_markdown = "\n".join(safe_attachment_lines).strip()
     if not safe_attachments_markdown:
         return ""
+    csv_capability_sentence = (
+        "Pass a CSV attachment's uid to the tabular/SQL "
+        "tools for everything about it: exact counts, filters, or aggregates, and "
+        "keyword/value lookups too (e.g. search_tabular_values), not only "
+        "aggregate questions."
+        if tabular_tools_available
+        else "No tabular/SQL tool is enabled for this assistant, so a CSV "
+        "attachment's data cannot be queried or searched at all in this "
+        "session - say so plainly instead of guessing at its contents."
+    )
     return (
         "\n\nThe user has attached one or more files to this conversation. "
         "Treat them as scoped to the current conversation and the current user's "
@@ -327,10 +362,8 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         "before searching for it. CSV attachments are the one exception: they "
         "are NOT indexed for search at all, only as a SQL-queryable dataset — "
         "the conversation search tool will find nothing for a CSV attachment, so "
-        "never call it for one. Pass a CSV attachment's uid to the tabular/SQL "
-        "tools for everything about it: exact counts, filters, or aggregates, and "
-        "keyword/value lookups too (e.g. search_tabular_values), not only "
-        "aggregate questions. Excel attachments (XLS, XLSX) are text only for "
+        f"never call it for one. {csv_capability_sentence} "
+        "Excel attachments (XLS, XLSX) are text only for "
         "now: they are NOT loaded as SQL-queryable tables, so never pass their "
         "uid to the tabular/SQL tools - retrieve their content through the "
         "search tool. "
@@ -420,6 +453,7 @@ def compose_system_prompt(
     agent_id: str,
     tool_suffix: str = "",
     runtime_suffixes: Sequence[str] = (),
+    tabular_tools_available: bool,
 ) -> str:
     """
     Assemble the final system prompt shared by the ReAct and Deep runtimes.
@@ -476,7 +510,10 @@ def compose_system_prompt(
 
     How to use:
     - render the agent template first, then pass it here with the runtime's tool
-      suffix and any runtime-specific suffixes.
+      suffix and any runtime-specific suffixes. ``tabular_tools_available`` must
+      come from `react_tool_binding.tabular_tools_bound(bound_tools)` for this
+      call's resolved tools — it decides whether the attachment suffix may tell
+      the model to query a CSV attachment's SQL dataset.
     """
 
     # No dangling heading when an agent has no configured template at all
@@ -498,6 +535,8 @@ def compose_system_prompt(
             base_prompt,
             build_context_prompt_suffix(binding, agent_id=agent_id),
             build_document_scope_suffix(binding),
-            build_attachment_context_suffix(binding),
+            build_attachment_context_suffix(
+                binding, tabular_tools_available=tabular_tools_available
+            ),
         ]
     ).lstrip("\n")

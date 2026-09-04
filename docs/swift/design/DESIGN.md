@@ -544,6 +544,23 @@ nothing, since no vector chunk exists). `.xlsx`/`.xls`/`.xlsm` keep the
 original "text only, not SQL-queryable" wording, unaffected, until Excel
 gets the same treatment as CSV.
 
+The suffix only promises SQL-queryability when the calling agent instance
+actually has the tabular MCP server bound: `general_assistant` (#2429) ships
+with zero default capabilities, so a CSV attachment can carry a real
+`tabular_v1` dataset while the agent that sees it has no `read_query`/
+`search_tabular_values` tool to call. `compose_system_prompt` now takes a
+required `tabular_tools_available` flag, computed by each runtime
+(`react_runtime.py`, `deep_runtime.py`) via
+`react_tool_binding.tabular_tools_bound(bound_tools)` — checking
+`BoundTool.mcp_server_id == MCP_SERVER_KNOWLEDGE_FLOW_TABULAR` against the
+tools actually resolved for this run, the same bound-tool list the tool
+listing suffix and Deep's filesystem-availability notice
+(`_allows_standard_filesystem_tools`) already derive their own
+availability signals from. When the server isn't bound, both the per-line
+CSV annotation and the paragraph's CSV sentence switch to telling the model
+the dataset cannot be queried at all in this session, instead of pointing it
+at tools it doesn't have.
+
 **Known open gap.** The agent isn't guaranteed to call schema-discovery
 (`get_tabular_documents_schemas`) before its first `read_query` on an
 attachment — live-testing hit exactly this (a guessed SQL alias, `400`,
