@@ -866,7 +866,7 @@ rather than the drawer's roomier 16px/12px — these panels sit in a narrow colu
 beside the conversation; the settings and admin drawers keep the default),
 `flushBody` plus a body that carries
 the insets the drawer's own padding would double up (`0 16px 16px` — the header
-already leaves the top gap) and a `--spacing-m` column gap, and drag-to-resize
+already leaves the top gap) and a `--spacing-s` column gap, and drag-to-resize
 with a persisted width (`persistKey`, unique per panel; `width` seeds the
 first-ever value only).
 
@@ -920,7 +920,7 @@ push-drawer slot so it never stacks with the attachments, capability or
 document-scope panels. The shell supplies the header (title + close), the
 surface and the insets. Body, top to bottom: a `ButtonGroup` picking the space,
 a `SearchInput` and a category `Select` grouped together at 8px — both narrow
-the same list, so they sit tighter than the body's 16px between blocks — then
+the same list, so they sit tighter than the body's 12px between blocks — then
 the list of outlined tiles. Only the list scrolls.
 
 The three controls run one tier below the app default, the panel being a narrow
