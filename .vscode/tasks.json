@@ -61,7 +61,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run-prod"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod"
       ],
       "options": {
         "cwd": "${workspaceFolder}/apps/fred-agents"
