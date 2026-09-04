@@ -30,6 +30,7 @@ jobs:
       fred-runtime: ${{ steps.changes.outputs.fred-runtime }}
       fred-agents: ${{ steps.changes.outputs.fred-agents }}
       platform-ops: ${{ steps.changes.outputs.platform-ops }}
+      html-artifact: ${{ steps.changes.outputs.html-artifact }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -80,47 +81,51 @@ jobs:
           - sast
           # - detect-secret # todo: baseline not working, fix it and re enable this check
           - type-check
+        # Wrapped in ${{ }} so the expression is evaluated at matrix-expansion
+        # time and `should-run` holds a real true/false. An unwrapped condition
+        # is a non-empty string, which every `if:` reads as true - that is how
+        # all 40 combinations ran on every pull request.
         include:
           # Knowledge flow backend runs when knowledge-flow or fred-core changes
           - directory: apps/knowledge-flow-backend
-            condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           # Fred core runs when fred-core changes
           - directory: libs/fred-core
-            condition: needs.detect-changes.outputs.fred-core == 'true'
+            should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
           # Control plane backend runs when control-plane or fred-core changes
           - directory: apps/control-plane-backend
-            condition: needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           # Fred SDK runs when fred-sdk changes
           - directory: libs/fred-sdk
-            condition: needs.detect-changes.outputs.fred-sdk == 'true'
+            should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' }}
           # Fred Runtime runs when fred-runtime or fred-sdk changes
           - directory: libs/fred-runtime
-            condition: needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
+            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
           # Fred Agents runs when fred-agents, fred-runtime, or fred-sdk changes
           - directory: apps/fred-agents
-            condition: needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
+            should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
           # Platform-ops capability runs when it, fred-runtime, or fred-sdk changes
           - directory: libs/fred-capability-platform-ops
-            condition: needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
+            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
           # HTML-artifact capability runs when it, fred-runtime, or fred-sdk changes
           - directory: libs/fred-capability-html-artifact
-            condition: needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
+            should-run: ${{ needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
     name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
 
     steps:
       - uses: actions/checkout@v4
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python environment
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.directory }}
 
       - name: Run ${{ matrix.check }}
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: |
           cd ${{ matrix.directory }}/
           make ${{ matrix.check }}
