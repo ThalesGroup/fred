@@ -385,7 +385,7 @@ class FredHitlMiddleware(AgentMiddleware):
       inside its parent's tool call, checkpointer-free, with no UI channel, so
       asking would hang the parent. Unconditionally gated tools are hidden from
       its model and anything that would still have interrupted is refused with
-      an error tool result (SUBAGENT-CAPABILITY-RFC.md §5.6)
+      an error tool result (RUNTIME-EXECUTION-CONTRACT.md §8.64)
 
     How to use:
     - always part of the frame (the filesystem rewrite applies even when

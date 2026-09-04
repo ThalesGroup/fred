@@ -70,7 +70,7 @@ def build_react_platform_middleware_frame(
       the single FredHitlMiddleware gate (RFC §5.4) — never a second gate
     - `invocation_depth` is how many agent-to-agent invocations deep this turn
       is; at 1 or more the same gate refuses instead of interrupting, since a
-      sub-agent has no human to ask (SUBAGENT-CAPABILITY-RFC.md §5.6)
+      sub-agent has no human to ask (RUNTIME-EXECUTION-CONTRACT.md §8.64)
 
     Example:
     - `build_react_platform_middleware_frame(..., capability_middleware=block.middleware, capability_hitl=block.hitl)`

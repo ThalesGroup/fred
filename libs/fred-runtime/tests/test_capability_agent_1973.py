@@ -30,7 +30,7 @@ imported, not duplicated) and covers what the registry tests cannot:
   independent of the operator `enabled` toggle
 - the same gate at invocation depth ≥ 1, where no human can be reached:
   unconditionally gated tools hidden from the model, anything that would still
-  have interrupted refused instead (SUBAGENT-CAPABILITY-RFC.md §5.6)
+  have interrupted refused instead (RUNTIME-EXECUTION-CONTRACT.md §8.64)
 """
 
 from __future__ import annotations
@@ -676,7 +676,7 @@ async def test_hitl_cancel_still_replans_for_capability_tools() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sub-agent depth: no child can hang on a human (SUBAGENT-CAPABILITY-RFC §5.6)
+# Sub-agent depth: no child can hang on a human (RUNTIME-EXECUTION-CONTRACT §8.64)
 # ---------------------------------------------------------------------------
 
 

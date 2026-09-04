@@ -121,7 +121,7 @@ def build_tool_loop_compiled_react_agent(
       platform-resolved set
     - `invocation_depth` is the turn's agent-to-agent nesting level; the HITL
       gate refuses instead of interrupting from 1 upwards (a sub-agent has no
-      human to ask — SUBAGENT-CAPABILITY-RFC.md §5.6)
+      human to ask — RUNTIME-EXECUTION-CONTRACT.md §8.64)
 
     Example:
     - `build_tool_loop_compiled_react_agent(..., available_tool_names={"ls", "read_file"})`

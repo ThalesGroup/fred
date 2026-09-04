@@ -63,7 +63,7 @@ The frame, in `create_agent` middleware list order:
        which never interrupts: gated calls are refused with an error tool
        result, and it adds the INNERMOST `wrap_model_call` — the last word on
        what the model is offered — to hide the unconditionally gated tools
-       (SUBAGENT-CAPABILITY-RFC.md §5.6). A subclass rather than a flag
+       (RUNTIME-EXECUTION-CONTRACT.md §8.64). A subclass rather than a flag
        because `create_agent` registers model-call hooks per CLASS, so a
        depth-0 agent would otherwise pay for a hook that can do nothing.
        That hiding runs inside tracing, so a depth ≥ 1 span and its

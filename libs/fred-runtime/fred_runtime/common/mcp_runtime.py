@@ -78,7 +78,7 @@ MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
 # which would serialize concurrent turns for the same user; not worth it.
 # Sub-agents make that race the NORMAL case, not a rare one, and a miss an N-wide
 # connect stampede: same-agent children share this key with their parent and
-# siblings (RUNTIME-EXECUTION-CONTRACT.md §8.63, RFC SUBAGENT §5.5).
+# siblings (RUNTIME-EXECUTION-CONTRACT.md §8.63).
 MCP_CLIENT_CACHE_TTL_SECS = 300.0
 _mcp_client_cache: dict[
     Tuple[str, Tuple[str, ...], str], Tuple[MultiServerMCPClient, List[BaseTool], float]

@@ -4605,16 +4605,16 @@ one pod against a shared connection pool. `max_tool_calls_per_turn` is not that
 bound — it is per graph run, and a child is its own graph run, so it resets at
 every level; nor does the per-child content cap compose. Deliberate for the
 POC, to be settled with POC data — see issue #2531 and
-[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.5.
+[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §3.
 Until then it is a local/POC surface: an admin must enable it per team
 (`ADMIN_GATED`), and no agent selects it by default.
 
 ### 8.64 ✅ A sub-agent can never hang on human approval — issue #2526 (2026-09-03)
 
 Closes the follow-up §8.63 left open ("a child cannot be resumed, and
-therefore cannot be paused for human approval"). Design:
-[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.6,
-option B.
+therefore cannot be paused for human approval"). Of the two options weighed,
+the one built keeps the single existing gate and threads depth to it, rather
+than adding a second, capability-side gate.
 
 **The problem.** A child runs inside its parent's synchronous tool call,
 checkpointer-free (§8.63). An `interrupt()` there has nowhere to persist and no
@@ -4659,7 +4659,7 @@ gated set is only ever complete inside `FredHitlMiddleware` — capability
 `HitlSpec`s are merged there by `capabilities/assembly.py`, and the operator
 list is known nowhere else. `CapabilityContext` exposes neither, so a
 `subagent`-side implementation would have needed a new context field and a
-second place that knows about HITL (RFC §5.6). The `subagent` capability's
+second place that knows about HITL. The `subagent` capability's
 child framing therefore stays generic — "Tools that need a human approval are
 unavailable or will refuse" — and never enumerates tool names.
 
@@ -4792,9 +4792,8 @@ economics; no bound is added here.
 
 `AgentInvocationRequest` gains `system_prompt: str | None = None` (additive —
 the request-side half of §14's widening; §8.68 adds the result-side half).
-When set, it replaces **layer 1**
-of the callee's composed system prompt — the rendered agent template — and
-nothing else. Design: `../rfc/SUBAGENT-CAPABILITY-RFC.md` §6.7.
+When set, it replaces **layer 1** of the callee's composed system prompt — the rendered agent template — and
+nothing else.
 
 **Everything below layer 1 stays runtime-owned.** `compose_system_prompt`
 (`react_prompting.py`) takes the override as `base_prompt_override` and still
@@ -4831,9 +4830,9 @@ touch are what make that safe.
 `append` sends framing + the parent's prompt as the child's user message and
 leaves the child's own template in place; `replace` sends framing + the prompt
 as `system_prompt` and a short fixed trigger as the user message. Both modes
-ship so the RFC §5.2 evaluation can be run on real agents — persona/output-
-language retention, how often a child addresses a user, prompt tokens per
-child. The losing mode is deleted afterwards (#2527), not now.
+ship so the evaluation the RFC still has open (§2) can be run on real agents:
+persona/output-language retention, how often a child addresses a user, prompt
+tokens per child. The losing mode is deleted afterwards (#2527), not now.
 
 ### 8.68 ✅ Sub-agent token spend is measurable per child — issue #2528 (2026-09-03)
 
@@ -4841,7 +4840,7 @@ A child turn runs through `LocalRegistryAgentInvoker`, not `_stream`, so it
 emits no `agent.turn_completed` of its own — sub-agent spend was invisible
 rather than double-counted. The numbers existed and were discarded: the
 child's `final` event carries `token_usage` and the invoker read only
-`content`. Design: `../rfc/SUBAGENT-CAPABILITY-RFC.md` §7.
+`content`.
 
 **`AgentInvocationResult` gains `token_usage: dict[str, int] | None`**
 (additive, appended last). The invoker copies it verbatim from the `final`
@@ -4855,7 +4854,7 @@ whoever invoked it.
 last). It was already reaching `_iterate_runtime_event_payloads`; it now
 travels the last hop through `_build_capability_block` into every capability's
 identity, so a capability emitting a KPI can name the turn that produced it.
-RFC §5.1's carry table already listed `exchange_id` for exactly this purpose.
+The design's carry table listed `exchange_id` for exactly this purpose.
 
 **The `subagent` capability emits `agent.subagent_turn_completed`** through
 `RuntimeServices.kpi_writer`, once per finished child — failures included, a
