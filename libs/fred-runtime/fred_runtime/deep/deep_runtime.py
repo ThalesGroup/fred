@@ -276,7 +276,7 @@ def _build_deepagent_runtime_middleware(
             kpi=kpi,
             binding=binding,
         ),
-        ToolObservabilityMiddleware(kpi=kpi, binding=binding),
+        ToolObservabilityMiddleware(kpi=kpi, binding=binding, tracer=tracer),
     ]
     if filesystem_tools_enabled:
         return middleware

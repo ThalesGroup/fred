@@ -100,7 +100,7 @@ def build_react_platform_middleware_frame(
         # actually executes, i.e. strictly after FredHitl's `after_model`
         # gate has already let the call through (a HITL-refused proposal
         # never reaches here, so it never produces a "started" event).
-        ToolObservabilityMiddleware(kpi=kpi, binding=binding),
+        ToolObservabilityMiddleware(kpi=kpi, binding=binding, tracer=tracer),
         FredHitlMiddleware(
             binding=binding,
             approval_policy=approval_policy,
