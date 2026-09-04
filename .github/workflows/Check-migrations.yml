@@ -12,10 +12,11 @@ on:
       - swift
       - develop
 
-# A new push supersedes the run it interrupts, for pull requests only: on a base
-# branch each commit keeps its own verdict.
+# A pull request only needs its newest commit checked, so a push supersedes the
+# run it interrupts. A base-branch commit groups by sha instead: it keeps its own
+# run and its own verdict, and never waits behind the commit before it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least-privilege GITHUB_TOKEN: these jobs only check out the repo and run

@@ -4,12 +4,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# A new push supersedes the run it interrupts: keep only the latest commit of a
-# branch under check, so a work-in-progress series does not queue several full
-# job sets against the same runner pool.
+# A pull request only needs its newest commit checked, so a push supersedes the
+# run it interrupts. A base-branch commit groups by sha instead: it keeps its own
+# run and its own verdict, and never waits behind the commit before it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
