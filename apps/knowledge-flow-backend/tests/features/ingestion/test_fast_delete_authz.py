@@ -93,17 +93,21 @@ async def test_platform_admin_bypasses_document_ownership() -> None:
     rebac = _FakeRebac(is_platform_admin=True)
     vector_store = _FakeVectorStore(may_delete=False)
     # Admin: allowed even though it owns nothing, and the ownership check is skipped.
-    await _authorize_fast_ingest_delete(rebac, _user(), "doc-1", vector_store)
+    is_platform_bypass = await _authorize_fast_ingest_delete(rebac, _user(), "doc-1", vector_store)
     assert vector_store.checked is False
+    # Callers (e.g. `_delete_attachment_tabular_dataset`) must be told this was
+    # a bypass, not an ownership match — see the P1 regression tests below.
+    assert is_platform_bypass is True
 
 
 @pytest.mark.asyncio
 async def test_non_admin_owner_passes_ownership_check() -> None:
     rebac = _FakeRebac(is_platform_admin=False)
     vector_store = _FakeVectorStore(may_delete=True)
-    await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
+    is_platform_bypass = await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
     assert vector_store.checked is True
     assert vector_store.checked_user_id == "alice"
+    assert is_platform_bypass is False
 
 
 @pytest.mark.asyncio

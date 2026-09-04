@@ -110,8 +110,13 @@ from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE
 logger = logging.getLogger(__name__)
 
 
-async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, document_uid: str, vector_store: BaseVectorStore) -> None:
-    """Authorize a fast-ingest artifact delete.
+async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, document_uid: str, vector_store: BaseVectorStore) -> bool:
+    """Authorize a fast-ingest artifact delete. Returns whether the caller was
+    authorized via the platform-admin bypass rather than by owning the
+    document — the caller must thread this into every subsequent per-document
+    ownership check for this request (`_delete_attachment_tabular_dataset`),
+    not just this endpoint's own gate, or a platform-driven delete on
+    someone else's document silently no-ops downstream instead of acting.
 
     A platform service principal holding org-level ``can_manage_platform`` — e.g.
     the control-plane lifecycle worker erasing a session's fast-ingest attachments
@@ -142,14 +147,14 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     through to the chunk-count check at all for this document class.
     """
     if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
-        return
+        return True
     metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
     if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and read_tabular_artifact(metadata) is not None:
         if metadata.identity.uploaded_by == user.uid:
-            return
+            return False
         raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
     if await asyncio.to_thread(vector_store.may_delete_session_document, document_uid, user.uid):
-        return
+        return False
     raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
 
 
@@ -459,6 +464,7 @@ class IngestionController:
         user: KeycloakUser,
         document_uid: str,
         storage_key: str | None,
+        is_platform_bypass: bool,
     ) -> str:
         """
         Delete one fast-ingested document's retrieval artifacts.
@@ -468,6 +474,12 @@ class IngestionController:
 
         How to use:
         - call from the DELETE `/fast/delete/{document_uid}` route
+        - `is_platform_bypass` must be the value `_authorize_fast_ingest_delete`
+          already returned for this same request — e.g. scheduled conversation
+          erasure (CTRLP-12) authenticates as a minted platform service
+          bearer, never as the document's own uploader, so the tabular
+          cleanup below must honor the same bypass its caller was already
+          granted instead of re-deriving ownership and silently no-oping.
 
         Note: `storage_key` is accepted for backward-compatible call sites but ignored —
         chat attachments no longer store a raw copy in workspace storage (FILES-04).
@@ -475,10 +487,10 @@ class IngestionController:
 
         del storage_key
         backend = await self._delete_fast_vectors(document_uid=document_uid)
-        await self._delete_attachment_tabular_dataset(user=user, document_uid=document_uid)
+        await self._delete_attachment_tabular_dataset(user=user, document_uid=document_uid, is_platform_bypass=is_platform_bypass)
         return backend
 
-    async def _delete_attachment_tabular_dataset(self, *, user: KeycloakUser, document_uid: str) -> None:
+    async def _delete_attachment_tabular_dataset(self, *, user: KeycloakUser, document_uid: str, is_platform_bypass: bool) -> None:
         """
         Best-effort cleanup of one attachment's tabular dataset, if it has one.
 
@@ -497,6 +509,20 @@ class IngestionController:
           user's or team's tabular dataset by calling
           `DELETE /fast/delete/{their_document_uid}`. Same ownership test as
           `TabularService._resolve_owned_attachment_dataset`.
+        - `is_platform_bypass` is NOT re-derived here — it must be threaded in
+          from `_authorize_fast_ingest_delete`'s own decision for this same
+          request. A first version of this check required `uploaded_by ==
+          user.uid` unconditionally, with no accommodation for the endpoint's
+          own platform-admin bypass: scheduled conversation erasure (CTRLP-12)
+          authenticates as a minted service bearer, so `user.uid` never
+          equals the original uploader, and the endpoint returned HTTP 200
+          while silently skipping the actual Parquet/metadata cleanup —
+          erasure was reported complete with the artifact orphaned and
+          nothing left to make it retryable. `source_tag == "fast_ingest"`
+          stays a hard requirement regardless of bypass: this endpoint must
+          never touch a corpus tabular dataset even for a platform caller,
+          since that document class has its own deletion path with its own
+          quota/tag/ReBAC cleanup this narrow method deliberately skips.
         - Deletes the Parquet objects and metadata row directly rather than
           `MetadataService.delete_document_and_artifacts_trusted`: that
           method also releases storage-quota accounting
@@ -511,7 +537,9 @@ class IngestionController:
             metadata = await metadata_store.get_metadata_by_uid(document_uid)
             if metadata is None or read_tabular_artifact(metadata) is None:
                 return
-            if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.identity.uploaded_by != user.uid:
+            if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
+                return
+            if not is_platform_bypass and metadata.identity.uploaded_by != user.uid:
                 return
             content_store = context.get_content_store()
             artifacts_prefix = context.get_config().storage.tabular_store.artifacts_prefix
@@ -1412,20 +1440,22 @@ class IngestionController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await _authorize_fast_ingest_delete(get_rebac_engine(), user, document_uid, self.vector_store)
+            is_platform_bypass = await _authorize_fast_ingest_delete(get_rebac_engine(), user, document_uid, self.vector_store)
             try:
                 logger.info(
-                    "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s storage_key=%s backend=%s",
+                    "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s storage_key=%s backend=%s platform_bypass=%s",
                     user.uid,
                     document_uid,
                     session_id,
                     storage_key,
                     self._scheduler_backend(),
+                    is_platform_bypass,
                 )
                 await self._delete_fast_ingest_artifacts(
                     user=user,
                     document_uid=document_uid,
                     storage_key=storage_key,
+                    is_platform_bypass=is_platform_bypass,
                 )
                 logger.info(
                     "[FAST TEXT][INGEST] Deleted artifacts for doc_uid=%s user=%s session=%s storage_key=%s",

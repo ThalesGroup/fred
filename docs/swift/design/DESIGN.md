@@ -441,12 +441,12 @@ in another user's search. `TabularProcessor.process()` takes an explicit
 `False` regardless of the deployment's `pointer_chunks_enabled` setting.
 Corpus ingestion is unaffected (default unchanged).
 
-**Deletion — re-verifies ownership itself, deliberately.**
-`DELETE /fast/delete/{document_uid}` deletes the Parquet artifact
-(`content_store`, same prefix corpus re-ingestion pruning already uses) and
-the metadata record (`metadata_store.delete_metadata`, a raw store-level
-call) alongside the vector cleanup, when a `tabular_v1` artifact was
-produced. `_delete_attachment_tabular_dataset` re-checks
+**Deletion — re-verifies ownership itself, but honors the same bypass its
+caller already got.** `DELETE /fast/delete/{document_uid}` deletes the
+Parquet artifact (`content_store`, same prefix corpus re-ingestion pruning
+already uses) and the metadata record (`metadata_store.delete_metadata`, a
+raw store-level call) alongside the vector cleanup, when a `tabular_v1`
+artifact was produced. `_delete_attachment_tabular_dataset` re-checks
 `source_tag == "fast_ingest"` and `identity.uploaded_by == user.uid` before
 touching anything — the same test `_resolve_owned_attachment_dataset` uses,
 not a rubber stamp of the endpoint's upstream authorization. That upstream
@@ -456,9 +456,24 @@ chunks" as safe-to-retry; since a CSV attachment now *always* has zero
 chunks by construction (see above), that upstream check alone would let any
 authenticated user pass it for any CSV attachment uid, corpus or not —
 `_delete_attachment_tabular_dataset`'s own check is what actually stops a
-cross-tenant delete, not merely an extra safety net. Reusing
-`MetadataService.delete_document_and_artifacts_trusted` here was considered
-and rejected: it also runs storage-quota release (`_delete_and_release`),
+cross-tenant delete, not merely an extra safety net.
+
+`_authorize_fast_ingest_delete` also has its own platform-admin bypass
+(`can_manage_platform`, e.g. scheduled conversation erasure authenticating
+as a minted service bearer, never as the document's own uploader — CTRLP-12)
+— its return value (`is_platform_bypass: bool`) must be threaded into
+`_delete_attachment_tabular_dataset`'s own check too, or the two checks
+disagree: the endpoint lets the service account in, but the tabular cleanup
+then re-derives ownership independently, finds no `uploaded_by` match, and
+silently no-ops — HTTP 200, receipt marked `ok`, and the Parquet
+artifact/metadata row orphaned with no queue entry left to retry it (P1,
+caught in review before merge). `source_tag == "fast_ingest"` stays a hard
+requirement regardless of the bypass — this endpoint must never touch a
+corpus tabular dataset even for a platform caller.
+
+Reusing `MetadataService.delete_document_and_artifacts_trusted` here was
+considered and rejected: it also runs storage-quota release
+(`_delete_and_release`),
 which requires a live Postgres engine even to determine there is nothing to
 release for a tagless, quota-exempt attachment — infrastructure this narrow
 cleanup has no other reason to depend on.

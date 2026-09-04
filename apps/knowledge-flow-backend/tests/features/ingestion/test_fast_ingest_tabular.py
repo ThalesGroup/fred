@@ -164,7 +164,7 @@ async def test_delete_attachment_tabular_dataset_removes_metadata_and_parquet(tm
     assert await metadata_store.get_metadata_by_uid("doc-attachment") is not None
 
     controller = IngestionController.__new__(IngestionController)
-    await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-attachment")
+    await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-attachment", is_platform_bypass=False)
 
     assert await metadata_store.get_metadata_by_uid("doc-attachment") is None
 
@@ -174,27 +174,55 @@ async def test_delete_attachment_tabular_dataset_is_a_noop_for_text_only_attachm
     # A non-CSV attachment (or a CSV where tabular processing failed) never
     # got a `tabular_v1` artifact — nothing to clean up, and no error.
     controller = IngestionController.__new__(IngestionController)
-    await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-never-existed")
+    await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-never-existed", is_platform_bypass=False)
 
 
 @pytest.mark.asyncio
-async def test_delete_attachment_tabular_dataset_refuses_a_document_not_owned_by_the_caller(tmp_path: Path, metadata_store):
+async def test_delete_attachment_tabular_dataset_refuses_a_non_owner_without_platform_bypass(tmp_path: Path, metadata_store):
     """
     Regression: `_authorize_fast_ingest_delete`'s "no vector chunks = safe
     retry" rule (`may_delete_session_document`) was designed for an
     idempotent vector-only delete and passes for ANY document with zero
-    vector chunks — including a real corpus CSV dataset, since every shipped
-    config ships `pointer_chunks_enabled: false`. Without its own ownership
-    check, this method would let any authenticated user delete any other
-    user's or team's tabular dataset via `DELETE /fast/delete/{their_uid}`.
+    vector chunks — a CSV attachment always has zero (ATTACH-TAB-01 skips
+    vector-chunking for CSV entirely). Without its own ownership check, this
+    method would let any authenticated user delete any other user's
+    attachment via `DELETE /fast/delete/{their_uid}`.
     """
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
 
-    # A real, tagged corpus document uploaded by someone else — not a
-    # fast-ingest attachment at all, and it has zero vector chunks (the
-    # default, `pointer_chunks_enabled` off), so the caller's upstream
-    # `_authorize_fast_ingest_delete` check alone would let this through.
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-attachment", title="sales.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+    assert await metadata_store.get_metadata_by_uid("doc-attachment") is not None
+
+    controller = IngestionController.__new__(IngestionController)
+    await controller._delete_attachment_tabular_dataset(user=_user("attacker"), document_uid="doc-attachment", is_platform_bypass=False)
+
+    # Alice's attachment must survive completely untouched.
+    persisted = await metadata_store.get_metadata_by_uid("doc-attachment")
+    assert persisted is not None
+    assert read_tabular_artifact(persisted) is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_attachment_tabular_dataset_refuses_a_corpus_document_even_with_platform_bypass(tmp_path: Path, metadata_store):
+    """
+    `source_tag == "fast_ingest"` stays a hard requirement regardless of
+    `is_platform_bypass`: this narrow cleanup must never touch a corpus
+    tabular dataset even for a platform caller — that document class has its
+    own deletion path (quota release, tag/ReBAC cleanup) this one skips.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
     csv_path = tmp_path / "quarterly.csv"
     csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
     metadata = DocumentMetadata(
@@ -208,9 +236,44 @@ async def test_delete_attachment_tabular_dataset_refuses_a_document_not_owned_by
     assert await metadata_store.get_metadata_by_uid("doc-corpus") is not None
 
     controller = IngestionController.__new__(IngestionController)
-    await controller._delete_attachment_tabular_dataset(user=_user("attacker"), document_uid="doc-corpus")
+    await controller._delete_attachment_tabular_dataset(user=_user("platform-service"), document_uid="doc-corpus", is_platform_bypass=True)
 
     # The corpus document must survive completely untouched.
     persisted = await metadata_store.get_metadata_by_uid("doc-corpus")
     assert persisted is not None
     assert read_tabular_artifact(persisted) is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_attachment_tabular_dataset_platform_bypass_deletes_another_users_attachment(tmp_path: Path, metadata_store):
+    """
+    P1 regression (codex review): scheduled conversation erasure (CTRLP-12)
+    authenticates as a minted platform service bearer, never as the
+    attachment's own uploader — `_authorize_fast_ingest_delete` already
+    grants it a bypass, but this method used to re-derive ownership on its
+    own with no accommodation for that bypass, so `uploaded_by == user.uid`
+    was always false for the service account and cleanup silently no-oped.
+    Erasure was then reported HTTP 200 / receipt-ok while the Parquet
+    artifact and metadata row were orphaned with nothing left pointing at
+    them to make the gap retryable. `is_platform_bypass=True` must actually
+    delete the artifact, not skip it.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-alice", title="sales.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+    assert await metadata_store.get_metadata_by_uid("doc-alice") is not None
+
+    controller = IngestionController.__new__(IngestionController)
+    await controller._delete_attachment_tabular_dataset(user=_user("platform-service"), document_uid="doc-alice", is_platform_bypass=True)
+
+    assert await metadata_store.get_metadata_by_uid("doc-alice") is None
