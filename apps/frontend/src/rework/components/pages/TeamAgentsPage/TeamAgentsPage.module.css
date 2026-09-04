@@ -20,6 +20,23 @@
   margin-right: auto;
 }
 
+/* Caps the field so it stays a compact search box in a wide toolbar rather
+   than stretching across the freed space (matches the team prompts page). */
+.searchBar {
+  width: 100%;
+  max-width: 320px;
+}
+
+/* Shown in place of the list when a query matches nothing — distinct from
+   TeamAgentEmptyState, which means the team has no agents at all. */
+.emptySearch {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-l);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
 .bannerNotice {
   margin: 0 auto var(--spacing-l);
   border-radius: var(--radius-s);

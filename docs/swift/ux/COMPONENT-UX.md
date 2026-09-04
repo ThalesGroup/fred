@@ -1287,6 +1287,46 @@ row and making the list unreadable. Two changes:
 
 ---
 
+### `TeamAgentsPage` list search
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/`
+**Status:** `Functional`
+
+A `SearchInput` (`size="small"`, capped at 320px) sits at the right of the page
+toolbar, after the create button — the same placement and component as the team
+prompts page, so the two team list pages read alike. It filters the already
+loaded list client-side: local `useState`, no debounce, no request. The list is
+fetched whole, so no query parameter and no control-plane change is involved.
+
+The predicate lives in `agentFilter.ts` rather than in the page: a
+case-insensitive substring match against the three fields `AgentCard` actually
+renders — `display_name`, `role`, `description` — joined per instance so a query
+cannot match across a field boundary. An empty or whitespace-only query returns
+everything, so the raw input value can be passed straight through. It is a pure
+function with its own unit test, matching how `toolPackLogic` is tested in this
+directory; `TeamAgentsPage.tsx` is an RTK Query container with no test of its
+own.
+
+Composition and states:
+
+- The search narrows what is left **after** the suspension filter (a suspended
+  agent stays hidden from members without `can_update_agents`).
+- A query matching nothing shows a dedicated message, never
+  `TeamAgentEmptyState` — that state means "this team has no agents yet" and is
+  driven by the unfiltered list. Guarding the message on a non-empty query keeps
+  the no-query behaviour untouched.
+- The toolbar (and so the field) is driven by the unfiltered list, so a search
+  that empties the grid never removes the field the user needs to correct it.
+- The memo sits above the page's early returns: a hook placed after them renders
+  a different hook count when a query errors. Note `eslint.config.mjs` registers
+  `eslint-plugin-react-hooks` but enables none of its rules, so lint will not
+  catch a regression here.
+
+Wording is deployment-configurable: the placeholder interpolates
+`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
