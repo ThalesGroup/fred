@@ -1,14 +1,3 @@
-/* Carries the drawer body's insets (it is rendered `flushBody`) minus the top
-   one, and the column layout the drawer shell does not impose. */
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  padding: 0 var(--spacing-m) var(--spacing-m);
-  height: 100%;
-  min-height: 0;
-}
-
 /* The list is the only part that scrolls: the space picker, the search field
    and the category chips stay reachable however long the list gets. */
 .list {
@@ -36,8 +25,10 @@
   text-align: left;
 }
 
+/* A translucent state layer, not a surface token: the panel's own background
+   is surface-container-high, so painting that colour would make hover vanish. */
 .row:hover:not(:disabled) {
-  background: var(--surface-container-high);
+  background: var(--state-on-surface-hover);
 }
 
 .row:disabled {
@@ -45,7 +36,7 @@
 }
 
 .row[aria-busy="true"] {
-  background: var(--surface-container-high);
+  background: var(--state-on-surface-pressed);
 }
 
 .name {

@@ -209,12 +209,11 @@ sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface
   `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
   and bleed full width (negative horizontal margins cancel the popover padding).
 
-- **Composer sub-menu container (2026-08-03)** — the composer's anchored sub-menus now reuse
-  `MenuPopover` as their container instead of a bespoke `.pickerMenu` surface, so menus and
-  sub-menus in the composer are all the same component (mirrors `EnumSelectRow`). Each consumer
-  keeps only a positioning anchor (absolute placement) and passes its picker content as a single
-  `groups` entry; a `pickerSurface` className adds internal scroll for tall content. Applied to
-  `ComposerControlSlot` (prompt library) and `DocumentScopeControl` (document/library picker).
+- **Composer sub-menu container** — the composer's anchored sub-menus reused `MenuPopover`
+  as their container, each consumer keeping only a positioning anchor and a `pickerSurface`
+  className for internal scroll. Both consumers (document scope, then the prompt library)
+  have since moved into side panels, so the composer no longer anchors any sub-menu and the
+  `pickerSurface` surface was deleted 2026-09-04.
 
 - **Pickers stop below the session top bar** — `usePickerMenuMaxHeight` clamped the
   upward-growing pickers against a boundary element so an expanded tree could not slide
@@ -787,6 +786,41 @@ itself owns only `aria-invalid` and its send gating.
 
 ---
 
+### `ChatSidePanel` (2026-09-04)
+
+**Location:** `src/rework/components/shared/molecules/ChatSidePanel/`
+
+**Status:** `Functional`
+
+The one shell every chat side panel wears. Three panels — document scope,
+session attachments, prompt library — had drifted into three slightly different
+`InlineDrawer` configurations (two of them had independently grown the same
+"insets minus the top one" body rule). The shell fixes the treatment once:
+
+`layout="push"` so it reflows the conversation instead of covering it,
+`floating` (inset card, `outline-retreat` border, `--radius-l`, soft shadow),
+`background: --surface-container-high`, `flushBody` plus a body that carries
+the insets the drawer's own padding would double up (`0 16px 16px` — the header
+already leaves the top gap) and a `--spacing-m` column gap, and drag-to-resize
+with a persisted width (`persistKey`, unique per panel; `width` seeds the
+first-ever value only).
+
+One content-shaped option: `fill` caps the body at the drawer height so a child
+owns the scrolling and whatever sits above it stays pinned — the prompt panel's
+list under its space picker, the attachments list under its upload warning.
+Without it the content grows and the drawer scrolls as a whole, which is what
+the document-scope tree wants.
+
+Note for panel authors: the panel background is `--surface-container-high`, so
+a row's hover must be a translucent state layer (`--state-on-surface-hover`),
+never that same surface token — painting it makes hover disappear.
+
+A new chat panel should mount `ChatSidePanel`, not `InlineDrawer` directly, and
+take a `kind` in `ManagedChatPage`'s `activePushDrawer` union so it shares the
+single push-drawer slot.
+
+---
+
 ### Prompt library → insert into composer (`PromptSelectionChatPanel`, 2026-09-04)
 
 **Location:** `src/rework/components/shared/molecules/PromptSelectionChatPanel/`,
@@ -802,12 +836,11 @@ flat, with no search, no category filter, and no way to reach the caller's
 personal prompts from a team chat. `ContextPromptPicker` and the
 `usePickerMenuMaxHeight` hook that positioned it are deleted.
 
-**Panel.** `InlineDrawer layout="push"` — so it reflows the conversation rather
-than covering it — resizable with a persisted width, sharing `ManagedChatPage`'s
-single push-drawer slot so it never stacks with the attachments, capability or
-document-scope panels. The drawer supplies the header (title + close). Body,
-top to bottom: a `ButtonGroup` picking the space, a `SearchInput`, category
-`FilterChips`, then the list. Only the list scrolls.
+**Panel.** A `ChatSidePanel` (`fill`), sharing `ManagedChatPage`'s single
+push-drawer slot so it never stacks with the attachments, capability or
+document-scope panels. The shell supplies the header (title + close), the
+surface and the insets. Body, top to bottom: a `ButtonGroup` picking the space,
+a `SearchInput`, category `FilterChips`, then the list. Only the list scrolls.
 
 **Two spaces, two queries.** `GET /teams/{id}/prompts/context` returns personal
 **or** team prompts depending on the id passed, never both — deliberately (a
@@ -939,7 +972,7 @@ The composer's `document_scope` control (the resource/library picker) moved out 
 inline popover into a full-height right-side push panel (#2259).
 
 - The `document_scope` row in the "tune" popover is now a **launcher**: clicking it closes the
-  tune menu and opens `DocumentScopePanel` — an `InlineDrawer layout="push"` sharing
+  tune menu and opens `DocumentScopePanel` — a `ChatSidePanel` (see below) sharing
   `ManagedChatPage`'s single push-drawer slot (`activePushDrawer`), so it never stacks with the
   attachments / capability panels. The old inline `MenuPopover` + `usePickerMenuMaxHeight` anchor
   in `DocumentScopeControl` is gone; the row just computes the current-selection summary and calls

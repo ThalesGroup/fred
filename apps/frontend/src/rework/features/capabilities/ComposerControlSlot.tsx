@@ -19,10 +19,10 @@
 // one chat-turn-control registry (mirrors `CapabilitySidePanelHost` for the
 // side-panel slot).
 //
-// The chat-context-prompts row is NOT a capability control (PROMPT-05 is
-// orthogonal to AGENT-CAPABILITY-RFC) — it stays hard-mounted here, always
-// visible, exactly as it was in the former `SearchConfig`, so attaching a
-// chat-context prompt keeps working through the new slot.
+// The prompt-library row is NOT a capability control (PROMPT-05 is orthogonal
+// to AGENT-CAPABILITY-RFC) — it stays hard-mounted here, always visible. It
+// only opens the page's prompt-selection side panel; the picking itself no
+// longer happens in this popover.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

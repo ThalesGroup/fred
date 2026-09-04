@@ -59,9 +59,6 @@ type FormState = {
 };
 const emptyForm: FormState = { name: "", description: "", category_id: null, tags: [], text: "" };
 
-// Sentinel filter value for "prompts with no category" — distinct from `null`,
-// which means "no filter active" (the "Tous" chip).
-
 export default function PromptsPage() {
   const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
   const { canUpdateResources: canManage } = useTeamCapabilities(selectedTeam);

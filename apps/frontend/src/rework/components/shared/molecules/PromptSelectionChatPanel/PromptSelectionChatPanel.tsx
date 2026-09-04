@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
-import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
+import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
@@ -89,11 +89,11 @@ export default function PromptSelectionChatPanel({
 
   // Every query is skipped while closed: the panel is mounted for every chat,
   // but most sessions never open it.
-  const { data: teamPrompts = [], isLoading: isLoadingTeam } =
+  const { data: teamPrompts = [], isFetching: isFetchingTeam } =
     useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery({ teamId }, { skip: !open || !teamId });
   // `/prompts/context` returns one space per call and never leaks personal
   // prompts into a team's answer, so the personal side needs its own call.
-  const { data: personalPrompts = [], isLoading: isLoadingPersonal } =
+  const { data: personalPrompts = [], isFetching: isFetchingPersonal } =
     useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
       { teamId: personalTeamId ?? "" },
       { skip: !open || !personalTeamId || isPersonalChat },
@@ -105,25 +105,31 @@ export default function PromptSelectionChatPanel({
 
   const onTeamSide = isPersonalChat || space === "team";
   const prompts = onTeamSide ? teamPrompts : personalPrompts;
-  // Bootstrap may not have resolved the personal id yet; that is still loading,
-  // not an empty space.
-  const isLoading = onTeamSide ? isLoadingTeam : isLoadingPersonal || !personalTeamId;
+  // `isFetching`, not `isLoading`: on the render where the query un-skips it is
+  // still uninitialized, and `isLoading` is false there — the list would flash
+  // "no prompts" before the spinner. Bootstrap may also not have resolved the
+  // personal id yet; that is still loading, not an empty space.
+  const isLoading = onTeamSide ? isFetchingTeam : isFetchingPersonal || !personalTeamId;
+
+  const knownCategoryIds = useMemo(() => new Set(categories.map((cat) => cat.id)), [categories]);
 
   // Counts come from the whole space, not the searched subset, so a chip's
-  // number does not shift as the user types.
+  // number does not shift as the user types. A prompt whose category was
+  // deleted counts as uncategorised, matching how the filter treats it.
   const categoryCounts = useMemo(() => {
     const byId = new Map<string, number>();
     let noCategory = 0;
     for (const prompt of prompts) {
-      if (prompt.category_id) byId.set(prompt.category_id, (byId.get(prompt.category_id) ?? 0) + 1);
+      const id = prompt.category_id;
+      if (id && knownCategoryIds.has(id)) byId.set(id, (byId.get(id) ?? 0) + 1);
       else noCategory += 1;
     }
     return { byId, noCategory };
-  }, [prompts]);
+  }, [prompts, knownCategoryIds]);
 
   const visiblePrompts = useMemo(
-    () => filterPrompts(prompts, { search, categoryId: category }),
-    [prompts, search, category],
+    () => filterPrompts(prompts, { search, categoryId: category, knownCategoryIds }),
+    [prompts, search, category, knownCategoryIds],
   );
 
   const handlePick = async (prompt: ContextPromptSummary) => {
@@ -137,94 +143,87 @@ export default function PromptSelectionChatPanel({
   };
 
   return (
-    <InlineDrawer
+    <ChatSidePanel
       open={open}
       onClose={onClose}
       title={t("chatbot.promptSelectionPanel.title")}
-      layout="push"
-      floating
-      background="var(--surface-container-high)"
-      // The body below owns its insets: the drawer's own padding would put a
-      // gap above the space picker that the header already provides.
-      flushBody
-      resizable={{ persistKey: "prompt-selection-panel" }}
+      persistKey="prompt-selection-panel"
+      fill
     >
-      <div className={styles.body}>
-        {!isPersonalChat && (
-          <ButtonGroup
-            size="small"
-            color="secondary"
-            variant="radio"
-            fullWidth
-            aria-label={t("chatbot.promptSelectionPanel.spaceLabel")}
-            items={SPACES.map((value) => ({ label: t(`chatbot.promptSelectionPanel.space.${value}`) }))}
-            selectedIndex={SPACES.indexOf(space)}
-            onSelectedIndexChange={(index) => setSpace(SPACES[index])}
-          />
-        )}
-
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
-          clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
+      {!isPersonalChat && (
+        <ButtonGroup
           size="small"
+          color="secondary"
+          variant="radio"
+          fullWidth
+          aria-label={t("chatbot.promptSelectionPanel.spaceLabel")}
+          items={SPACES.map((value) => ({ label: t(`chatbot.promptSelectionPanel.space.${value}`) }))}
+          selectedIndex={SPACES.indexOf(space)}
+          onSelectedIndexChange={(index) => setSpace(SPACES[index])}
         />
+      )}
 
-        {categories.length > 0 && (
-          <FilterChips
-            options={[
-              {
-                id: NO_CATEGORY_FILTER_ID,
-                label: t("rework.promptCategories.noCategory"),
-                count: categoryCounts.noCategory,
-              },
-              ...categories.map((cat) => ({
-                id: cat.id,
-                label: cat.name,
-                count: categoryCounts.byId.get(cat.id) ?? 0,
-              })),
-            ]}
-            value={category}
-            onChange={setCategory}
-            allLabel={t("chatbot.promptSelectionPanel.allCategories")}
-            maxVisible={FILTER_VISIBLE}
-            showMoreLabel={(count) => `+${count}`}
-            showLessLabel="−"
-          />
-        )}
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
+        clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
+        size="small"
+      />
 
-        {isLoading ? (
-          <div className={styles.state}>
-            <Spinner size={20} />
-          </div>
-        ) : visiblePrompts.length === 0 ? (
-          <p className={styles.state}>
-            {/* A category chip can empty the list on its own, with the search
+      {categories.length > 0 && (
+        <FilterChips
+          options={[
+            {
+              id: NO_CATEGORY_FILTER_ID,
+              label: t("rework.promptCategories.noCategory"),
+              count: categoryCounts.noCategory,
+            },
+            ...categories.map((cat) => ({
+              id: cat.id,
+              label: cat.name,
+              count: categoryCounts.byId.get(cat.id) ?? 0,
+            })),
+          ]}
+          value={category}
+          onChange={setCategory}
+          allLabel={t("chatbot.promptSelectionPanel.allCategories")}
+          maxVisible={FILTER_VISIBLE}
+          showMoreLabel={(count) => `+${count}`}
+          showLessLabel="−"
+        />
+      )}
+
+      {isLoading ? (
+        <div className={styles.state}>
+          <Spinner size={20} />
+        </div>
+      ) : visiblePrompts.length === 0 ? (
+        <p className={styles.state}>
+          {/* A category chip can empty the list on its own, with the search
                 box untouched — "no match for this search" would be a lie. */}
-            {prompts.length === 0
-              ? t("chatbot.promptSelectionPanel.empty")
-              : t("chatbot.promptSelectionPanel.emptyFilters")}
-          </p>
-        ) : (
-          <ul className={styles.list}>
-            {visiblePrompts.map((prompt) => (
-              <li key={prompt.id}>
-                <button
-                  type="button"
-                  className={styles.row}
-                  disabled={insertingId !== null}
-                  aria-busy={insertingId === prompt.id}
-                  onClick={() => void handlePick(prompt)}
-                >
-                  <span className={styles.name}>{prompt.name}</span>
-                  {prompt.description && <span className={styles.description}>{prompt.description}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </InlineDrawer>
+          {prompts.length === 0
+            ? t("chatbot.promptSelectionPanel.empty")
+            : t("chatbot.promptSelectionPanel.emptyFilters")}
+        </p>
+      ) : (
+        <ul className={styles.list}>
+          {visiblePrompts.map((prompt) => (
+            <li key={prompt.id}>
+              <button
+                type="button"
+                className={styles.row}
+                disabled={insertingId !== null}
+                aria-busy={insertingId === prompt.id}
+                onClick={() => void handlePick(prompt)}
+              >
+                <span className={styles.name}>{prompt.name}</span>
+                {prompt.description && <span className={styles.description}>{prompt.description}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </ChatSidePanel>
   );
 }

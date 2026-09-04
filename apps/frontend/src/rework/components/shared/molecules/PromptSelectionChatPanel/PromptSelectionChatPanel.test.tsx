@@ -140,11 +140,26 @@ describe("PromptSelectionChatPanel", () => {
     expect(container.textContent).not.toContain("Weekly report");
   });
 
-  it("distinguishes an empty space from an empty search", async () => {
+  it("says the space is empty when it holds no prompt at all", () => {
     h.promptsByTeam[TEAM_ID] = [];
     mount();
-    expect(container.textContent).toContain("chatbot.promptSelectionPanel.empty");
-    expect(container.textContent).not.toContain("chatbot.promptSelectionPanel.emptySearch");
+    // Exact text, not a substring: "…empty" is a prefix of "…emptyFilters", so
+    // `toContain` cannot tell the two messages apart.
+    expect(container.querySelector("p")?.textContent).toBe("chatbot.promptSelectionPanel.empty");
+  });
+
+  it("says the filters match nothing when the space does hold prompts", async () => {
+    // Two different messages: "this space is empty" is not the same problem as
+    // "your query excluded everything", and only the second is the user's to fix.
+    mount();
+    const input = container.querySelector("input") as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "nothing matches this");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(container.querySelector("p")?.textContent).toBe("chatbot.promptSelectionPanel.emptyFilters");
   });
 
   it("closes only once the insert resolves", async () => {
