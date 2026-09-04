@@ -491,6 +491,29 @@ caught in review before merge). `source_tag == "fast_ingest"` stays a hard
 requirement regardless of the bypass — this endpoint must never touch a
 corpus tabular dataset even for a platform caller.
 
+**Both delete-side checks also require no tags — not just matching
+`source_tag` and `uploaded_by` (P1, codex review).** The read-side ownership
+check (`_resolve_owned_attachment_dataset`) already required this; the two
+delete-side checks didn't, and the gap was wider than a source_tag
+collision: the chunk-based fallback in `_authorize_fast_ingest_delete`
+(`may_delete_session_document`) doesn't inspect `source_tag` at all, so
+*any* tagged document with zero vector chunks — the default for every
+CSV/tabular corpus document platform-wide — would have passed this
+endpoint's authorization for *any* authenticated user before this fix, tags
+notwithstanding. `_authorize_fast_ingest_delete` now refuses a tagged
+document outright, before either its tabular-ownership branch or the
+chunk-based fallback ever runs; `_delete_attachment_tabular_dataset` gained
+the identical check as its own defense-in-depth, since the endpoint's
+platform-admin bypass returns before ever resolving metadata and so never
+reaches the tags check either. Combined with an operator-configured
+`document_sources` entry literally named "fast_ingest" (nothing reserves
+that string), the narrower version of this gap would otherwise have let a
+tagged document's original uploader delete it even after losing their real
+ReBAC `DocumentPermission.DELETE` on it (e.g. removed from the owning team)
+— a tagged document already has its own ReBAC-based protection this
+endpoint doesn't check, and must never be treated as the resource-less
+fast-ingest document class however its `source_tag` happens to read.
+
 Reusing `MetadataService.delete_document_and_artifacts_trusted` here was
 considered and rejected: it also runs storage-quota release
 (`_delete_and_release`),

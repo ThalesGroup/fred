@@ -145,10 +145,30 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     artifact is authorized purely by `uploaded_by` match, the same test
     `TabularService._resolve_owned_attachment_dataset` uses, never falling
     through to the chunk-count check at all for this document class.
+
+    A TAGGED document is refused outright, before either bypass runs at all
+    (P1, codex review) — this is deliberately broader than "skip the
+    tabular-ownership branch": the chunk-based fallback's "zero chunks =
+    safe retry" semantics were written for the genuinely resource-less
+    fast-ingest document class and don't check `source_tag` at all, so
+    without this guard *any* tagged document with zero vector chunks — the
+    default for every CSV/tabular corpus document platform-wide,
+    `pointer_chunks_enabled` being off everywhere shipped — would pass this
+    endpoint's authorization for *any* authenticated user, tagged or not,
+    owner or not. Combined with an operator-configured `document_sources`
+    entry literally named "fast_ingest" (nothing reserves that string), the
+    narrower tabular-ownership branch above would otherwise let that
+    document's original uploader delete it even after losing their real
+    ReBAC `DocumentPermission.DELETE` (e.g. removed from the owning team) —
+    a tagged document already has its own ReBAC-based protection this
+    endpoint doesn't check, and must never be treated as resource-less
+    however its `source_tag` happens to read.
     """
     if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
         return True
     metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
+    if metadata is not None and metadata.tags.tag_ids:
+        raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
     if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and read_tabular_artifact(metadata) is not None:
         if metadata.identity.uploaded_by == user.uid:
             return False
@@ -540,10 +560,16 @@ class IngestionController:
           while silently skipping the actual Parquet/metadata cleanup —
           erasure was reported complete with the artifact orphaned and
           nothing left to make it retryable. `source_tag == "fast_ingest"`
-          stays a hard requirement regardless of bypass: this endpoint must
-          never touch a corpus tabular dataset even for a platform caller,
-          since that document class has its own deletion path with its own
-          quota/tag/ReBAC cleanup this narrow method deliberately skips.
+          and no tags both stay hard requirements regardless of bypass: this
+          method must never touch a corpus tabular dataset even for a
+          platform caller, since that document class has its own deletion
+          path with its own quota/tag/ReBAC cleanup this narrow method
+          deliberately skips — `_authorize_fast_ingest_delete`'s own
+          platform-admin check runs before it ever resolves metadata, so a
+          tagged document reaching this function with `is_platform_bypass`
+          set has had no tags check applied yet; this one is what actually
+          stops it (P1, codex review — the same gap this method's ownership
+          check already closed for the non-bypass case above, but for tags).
         - Deletes the Parquet objects and metadata row directly rather than
           `MetadataService.delete_document_and_artifacts_trusted`: that
           method also releases storage-quota accounting
@@ -559,6 +585,8 @@ class IngestionController:
             if metadata is None or read_tabular_artifact(metadata) is None:
                 return
             if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
+                return
+            if metadata.tags.tag_ids:
                 return
             if not is_platform_bypass and metadata.identity.uploaded_by != user.uid:
                 return

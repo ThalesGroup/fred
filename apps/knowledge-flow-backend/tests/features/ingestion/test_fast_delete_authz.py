@@ -192,3 +192,67 @@ async def test_csv_attachment_non_owner_is_refused_even_with_zero_chunks(tmp_pat
     with pytest.raises(AuthorizationError):
         await _authorize_fast_ingest_delete(rebac, _user("mallory"), "doc-csv", vector_store)
     assert vector_store.checked is False
+
+
+@pytest.mark.asyncio
+async def test_tagged_document_denies_even_its_original_uploader_despite_matching_source_tag(tmp_path) -> None:
+    """
+    P1 (codex review): `source_tag` is an operator-configured, client-suppliable
+    string with nothing reserving "fast_ingest" against an operator naming a
+    real corpus `document_sources` entry the same way. Without this check, the
+    original uploader of a same-named but *tagged* corpus document could
+    delete it through the tabular-ownership bypass even after losing their
+    real ReBAC `DocumentPermission.DELETE` on it (e.g. removed from the
+    owning team) -- a tagged document already has its own ReBAC-based
+    protection this endpoint doesn't check, and must never be treated as the
+    resource-less fast-ingest document class however its `source_tag` reads.
+    """
+    csv_path = tmp_path / "quarterly.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="quarterly.csv", document_uid="doc-tagged", title="quarterly.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+
+    rebac = _FakeRebac(is_platform_admin=False)
+    # Would incorrectly authorize alice via the chunk-count fallback too
+    # (zero chunks by default for any tabular document) if the tags check
+    # didn't deny outright before either bypass is ever consulted.
+    vector_store = _FakeVectorStore(may_delete=True)
+
+    with pytest.raises(AuthorizationError):
+        await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-tagged", vector_store)
+    assert vector_store.checked is False
+
+
+@pytest.mark.asyncio
+async def test_tagged_document_with_zero_chunks_denies_any_caller_regardless_of_source_tag(tmp_path) -> None:
+    """
+    Broader than the source_tag-collision case above: the chunk-based
+    fallback doesn't check `source_tag` at all, so without the tags guard,
+    *any* tagged document with zero vector chunks -- the default for every
+    CSV/tabular corpus document platform-wide (`pointer_chunks_enabled` off
+    everywhere shipped) -- would pass this endpoint's authorization for any
+    authenticated user, not just a source_tag collision.
+    """
+    csv_path = tmp_path / "quarterly.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="quarterly.csv", document_uid="doc-tagged-normal", title="quarterly.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag="fred"),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+
+    rebac = _FakeRebac(is_platform_admin=False)
+    vector_store = _FakeVectorStore(may_delete=True)
+
+    with pytest.raises(AuthorizationError):
+        await _authorize_fast_ingest_delete(rebac, _user("bob"), "doc-tagged-normal", vector_store)
+    assert vector_store.checked is False

@@ -277,3 +277,41 @@ async def test_delete_attachment_tabular_dataset_platform_bypass_deletes_another
     await controller._delete_attachment_tabular_dataset(user=_user("platform-service"), document_uid="doc-alice", is_platform_bypass=True)
 
     assert await metadata_store.get_metadata_by_uid("doc-alice") is None
+
+
+@pytest.mark.asyncio
+async def test_delete_attachment_tabular_dataset_refuses_a_tagged_document_with_colliding_source_tag(tmp_path: Path, metadata_store):
+    """
+    P1 (codex review): unlike the corpus-document test above, this document's
+    `source_tag` *does* collide with `FAST_INGEST_SOURCE_TAG` — an operator
+    could configure a real `document_sources` entry literally named
+    "fast_ingest". Nothing but the tags check distinguishes it from a
+    genuine attachment at that point, and `_authorize_fast_ingest_delete`'s
+    own platform-admin bypass runs before it ever resolves metadata, so a
+    tagged document can reach this method with `is_platform_bypass=True`
+    having had no tags check applied yet — this one is what must stop it.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "quarterly.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="quarterly.csv", document_uid="doc-tagged", title="quarterly.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+    assert await metadata_store.get_metadata_by_uid("doc-tagged") is not None
+
+    controller = IngestionController.__new__(IngestionController)
+    # Both the (former) uploader without bypass, and a platform caller with
+    # bypass, must leave this document untouched.
+    await controller._delete_attachment_tabular_dataset(user=_user("alice"), document_uid="doc-tagged", is_platform_bypass=False)
+    await controller._delete_attachment_tabular_dataset(user=_user("platform-service"), document_uid="doc-tagged", is_platform_bypass=True)
+
+    persisted = await metadata_store.get_metadata_by_uid("doc-tagged")
+    assert persisted is not None
+    assert read_tabular_artifact(persisted) is not None
