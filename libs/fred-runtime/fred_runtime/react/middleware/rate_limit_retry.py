@@ -69,7 +69,7 @@ class RateLimitRetryMiddleware(AgentMiddleware):
     Retry a model call that came back rate-limited (HTTP 429).
 
     Why this exists, and why the provider SDK's own `max_retries` was not
-    enough on its own: `RUNTIME-EXECUTION-CONTRACT.md` §8.64.
+    enough on its own: `RUNTIME-EXECUTION-CONTRACT.md` §8.65.
 
     Boundary of this class:
     - 429 only. Any other failure propagates untouched — a retry loop that
