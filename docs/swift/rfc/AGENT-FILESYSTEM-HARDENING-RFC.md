@@ -250,26 +250,62 @@ is a UI/KF response signal, not an SDK listing contract.
 ## 6. Contract impact
 
 - `docs/swift/design/FILESYSTEM.md`: already rewritten as the as-built source.
-- `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`: the M2M workspace scope of §9.1 is
-  runtime execution context - a dated entry is required once §9.5 is decided.
-- `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`: required only if §9.5 lands on
-  candidate 1, where prepare-execution mints the scoped token.
+- `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`: the M2M workspace binding of §9.1
+  (`team_id`/`agent_instance_id`/`user_id`/`session_id`/`exchange_id`) travels as
+  `RuntimeContext` fields already defined there - no new field is added; a dated entry is
+  required once the runtime's M2M client wiring (§9.10) ships, documenting how the binding
+  is attached to the outbound Knowledge Flow call.
+- `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`: required once §9.5's internal
+  binding-validation endpoint exists - a dated entry documenting it, following the existing
+  service-agent team gate precedent (EVAL-03/RFC EVAL-AUTH, Solution A).
 - `fred-sdk` contracts: `WorkspaceFsPort` loses `delete` (§9.3) and `link_for` returns a
   durable reference (§9.6); update the docstrings and optionally `FsEntry`.
+- `fred-runtime`: `DeepAgentRuntime`'s `FredWorkspaceBackend` (§9.8) is new adapter code in
+  a later PR, not a `fred-sdk` change.
 - `knowledge-flow-backend` OpenAPI: the Workspace routes are new surface, and `/fs/share`
   is removed - regenerate the client in the same change.
 
 ## 7. Test plan
 
-- Runtime adapter tests: keep existing path isolation tests; add graph
-  `resolve_template` parity tests.
 - SDK tests: stale doc fixes do not need tests, but any helper behaviour change does.
-- Knowledge Flow tests: both actors per §9.7 - human read-only, agent read-write, and a
-  user token refused as an agent caller; reject a mismatched `agent_instance_id`;
-  preserve human `/fs` behaviour.
 - Frontend tests: reserved-character filenames in download/share/copy paths.
 - Large file tests: streaming or size-cap tests depending on FILES-05 decision.
 - Share-copy tests: concurrent collision test if atomicity is implemented.
+- Deep Agents adapter tests (§9.8 `edit`/`glob`/`grep` composition, bounded traversal
+  limits): scoped to that later PR, not this one.
+
+**§9.5 binding validation, split by the boundary each test actually exercises:**
+
+Control Plane tests:
+- only the exact configured Knowledge Flow M2M client can call the internal validator;
+- another `service_agent` client (e.g. the evaluation worker's) is refused;
+- a token with no `azp`/client-ID claim, an empty claim, or a claim that does not match
+  the configured expected client is refused, even carrying `service_agent`;
+- an unknown, unowned, or otherwise mismatched session is refused;
+- an unknown, wrong-team, disabled, or suspended agent instance is refused (the shared
+  usability predicate, §9.5);
+- a valid binding succeeds.
+
+Knowledge Flow tests:
+- only the exact configured runtime/agentic M2M client can present an agent binding;
+- another `service_agent` client, and every human JWT, are refused on `write`;
+- a token with no `azp`/client-ID claim, an empty claim, or a claim that does not match
+  the configured expected client is refused, even carrying `service_agent`;
+- a control-plane denial, timeout, connection failure, or malformed response all fail
+  closed, identically;
+- the Workspace operation is not performed after a validation failure - not even partially;
+- both actors per §9.7/§9.1a - human read-only (`list`/`read`/`link` only, `write`
+  rejected outright before any ReBAC check), agent read-write, a user token refused as an
+  agent caller, a mismatched `agent_instance_id` rejected, human `/fs` behaviour preserved;
+- the `workspace.binding_validation_latency_ms` KPI is emitted with only bounded
+  (`PROMETHEUS_ALLOWED_LABELS`) dimensions.
+
+Runtime tests:
+- keep existing path isolation tests; add graph `resolve_template` parity tests;
+- the outbound Workspace call authenticates with the runtime's M2M provider, never the
+  human's access token;
+- binding fields (`team_id`, `agent_instance_id`, `user_id`, `session_id`, `exchange_id`)
+  and trace context are propagated onto that call correctly.
 
 ## 8. Decision needed
 
@@ -305,23 +341,56 @@ Today those two collapse into one token, and that collapse *is* F1. Agent I/O cu
 travels on the end user's Keycloak token, so Knowledge Flow sees "Alice" and cannot tell
 whether Alice's browser or Alice's agent is writing.
 
-For agent I/O the target is a short-lived M2M token authenticating **the runtime**, with
-the workspace scope carried alongside it:
+For agent I/O the target is the runtime's own Keycloak M2M service identity - minted via
+the existing `M2MTokenProvider` (client-credentials grant), never the end user's token.
+The binding carried alongside that identity uses only names that already exist in this
+codebase's `RuntimeContext` - no new identity concept is introduced:
 
 ```text
-team_id             # required
-agent_instance_id   # required
-owner_user_id       # optional; delegated ownership, never impersonation
-run_id              # required when a run/job exists
+team_id             # required - RuntimeContext.team_id
+agent_instance_id   # required - RuntimeContext.agent_instance_id
+user_id             # required - RuntimeContext.user_id; mandatory in Workspace v1, see §9.4
+session_id          # required for interactive v1 agent operations - binds authorization
+                     # to the conversation, carries no partitioning meaning
+exchange_id         # required - audit and artifact attribution only, carries no
+                     # partitioning meaning
 ```
 
-`owner_user_id = alice` means "this runtime is acting on Alice's behalf", not "this
-caller is Alice". Knowledge Flow must **verify** that scope against the managed instance
-or job before honouring it: IDs asserted by a shared service account are not
-authorization by themselves. How that verification works is the one question this RFC
-leaves open - see §9.5.
+The physical storage partition is `team_id / agent_instance_id / user_id` - unchanged from
+the existing prefix (§2). `session_id` and `exchange_id` never widen or narrow that
+partition: two exchanges in the same session, or two sessions for the same `(team,
+instance, user)`, land in the same subtree by design - that is what keeps a `TODO.md`
+readable across turns (§9.4). They exist so a write can be authorized against a live
+conversation and attributed to the turn that produced it, nothing more.
 
-Human I/O is unchanged: the user's Keycloak token, the existing ReBAC checks.
+An ownerless scheduled execution - no `session_id`, no `user_id` - remains unsupported in
+v1 (§9.4); it is not parked under a service-account uid as a workaround.
+
+There is deliberately no `owner_user_id`, `run_id`, or `workspace_id` field. `owner_user_id`
+and `run_id` already name different things in this codebase: `ManagedAgentRuntimeBinding.
+owner_user_id` is the personal owner of an agent-instance *definition* (always `None`
+today, since `owner_scope` is fixed to `"team"`), and `run_id` already names a Temporal
+workflow or evaluation run. Reusing either name here would collide with an existing,
+differently-scoped meaning instead of adding one.
+
+Knowledge Flow must **verify** this binding against control-plane before honouring it -
+see §9.5. Human I/O is unchanged: the user's Keycloak token, the existing ReBAC checks -
+see §9.1a for the actor-permission boundary this makes explicit.
+
+### 9.1a Actor permissions
+
+| Actor | Operations | Scope |
+| --- | --- | --- |
+| Human (Keycloak user JWT) | `list`, `read`, `link` | that user's own workspace subtree only |
+| Runtime M2M actor with a verified binding | `list`, `read`, `write`, `link` | the bound `(team_id, agent_instance_id, user_id)` subtree only |
+
+A human JWT presented on the agent-write path is rejected as the wrong actor type, not
+merely left unauthorized by ReBAC - `write` never reaches a ReBAC check at all for a
+human-authenticated caller. Caller-supplied values never form a physical object-store
+prefix in either case: prefix derivation happens only after authorization succeeds, and
+only server-side. This is the same rule the rest of §9 already states for the namespace as
+a whole; this subsection names it as a per-actor, independently testable requirement - see
+§9.7.
 
 ### 9.2 The four operations, and what justifies each
 
@@ -358,6 +427,10 @@ None of these found a retained consumer. If one comes back "for parity" with `/f
 the stop signal `#2328` calls for: stop and re-evaluate the retained use cases rather than
 widen the contract.
 
+`edit`, `glob`, and `grep` stay excluded from *this remote list* for the same reason - no
+Knowledge Flow route exists for them - but a Deep Agents adapter may still compose them
+locally from `list`/`read`/`write` without adding a route; see §9.8.
+
 ### 9.4 Ownership and visibility in v1
 
 **Every workspace is user-scoped.** The physical prefix carries a mandatory `users/{uid}`
@@ -378,7 +451,7 @@ Two consequences of that, named rather than glossed:
 - **Agent-private scratch space has no home in v1.** Material the agent wants to keep to
   itself would need a sibling segment under the instance, outside `users/{uid}`. Not in
   this contract.
-- **Child agents inherit the parent's `agent_instance_id`, not just `owner_user_id`.**
+- **Child agents inherit the parent's `agent_instance_id` and `user_id`.**
   This is as-built, not a proposal: the graph runtime reads `agent_instance_id` from the
   portable baggage (`graph_runtime.py`), so a child lands in the *same* subtree as its
   parent. That is precisely what keeps a parent's `TODO.md` readable by its children -
@@ -386,46 +459,125 @@ Two consequences of that, named rather than glossed:
   the Deep Agents proof `#2328` is built on. Per-child isolation, if it is ever wanted,
   is a sibling segment, not a different instance id.
 
-### 9.5 Open question - how Knowledge Flow verifies the M2M binding
+### 9.5 How Knowledge Flow verifies the M2M binding
 
-This is the only design question this RFC still leaves open. The requirement is settled:
-Knowledge Flow must verify that the caller is entitled to the `(team_id,
-agent_instance_id, owner_user_id)` it presents, and must never accept it as asserted. The
-mechanism is not.
+Resolved. Knowledge Flow validates the binding through a narrow, internal control-plane
+endpoint, called before every M2M Workspace operation - not a signed token, and not a
+Knowledge-Flow-side registry.
 
-Two candidates, neither chosen:
+**Mechanism.** Knowledge Flow accepts a delegated Workspace binding only from the exact
+configured runtime/agentic M2M client, and control-plane accepts this internal
+binding-validation call only from the exact configured Knowledge Flow M2M client - at both
+boundaries, `service_agent` alone is necessary but not sufficient, since that role is
+shared by several FRED backend service identities and the evaluation worker
+(`fred_core/security/structure.py:41-44`). Exact caller identity comes from a
+signature-verified JWT client claim - `azp` / client ID - never from `preferred_username`
+or an unverified header: `preferred_username` identifies a human-readable account name, not
+which client authenticated, and an unverified header is not evidence at all. `KeycloakUser`
+(`fred_core/security/structure.py:20-26`) does not carry `azp` today - only `uid`,
+`username`, `roles`, `email` - so the implementing PR must either add the verified client
+claim to the typed authentication principal or expose an equivalent verified-client
+dependency; this RFC does not invent a Workspace-specific signed token to work around that
+gap. An M2M token with no `azp`/client-ID claim, an empty claim, or a claim that does not
+match the configured expected client fails closed at either boundary - even when the token
+carries `service_agent`. The role is a coarse identity marker only; it is never a
+substitute for the exact-client check above.
 
-1. **Per-execution token minted by control-plane**, carrying the binding as signed claims.
-   Knowledge Flow validates the signature and reads the claims; no callback, no registry
-   lookup on the write path. The cost is honest: this re-creates a grant-shaped artifact
-   very close to the one RUNTIME-07 rev. 2 deliberately dropped, so choosing it means
-   reopening that decision rather than quietly working around it.
-2. **Shared runtime service account plus a Knowledge-Flow-side lookup** against the agent
-   instance registry, checking that `agent_instance_id` belongs to `team_id` and, when a
-   `run_id` is present, that the run is live and owned by `owner_user_id`. No new signing
-   scheme, but it puts a lookup on every workspace write and requires a registry Knowledge
-   Flow can read - which it does not have today.
+With exact caller identity established at both boundaries, Knowledge Flow calls the
+control-plane endpoint passing `(team_id, agent_instance_id, user_id, session_id,
+exchange_id)`. Control-plane validates, against data it already owns:
 
-Agent writes must not be enabled on the Workspace routes before this is decided.
+- the session identified by `session_id` exists;
+- `session.user_id` is non-null and equals the presented `user_id`;
+- `session.team_id` equals the presented `team_id`;
+- the agent instance identified by `agent_instance_id` exists and belongs to `team_id`;
+- the session's own `agent_instance_id`, when the session has one recorded, equals the
+  presented `agent_instance_id`;
+- the instance passes the same usability predicate `prepare_execution` already applies -
+  `enabled` and not `suspended` (`product/service.py:3208-3226`, the `#1975` suspension
+  guard - today inline in `prepare_execution`, not a standalone function). No two
+  independent implementations of this rule: if it is not already extracted into one, the
+  implementing PR must extract it so `prepare_execution` and this validator call the same
+  predicate.
 
-### 9.6 `link` is a durable reference, not a signed URL
+`exchange_id` is logged by Knowledge Flow on every validated call for audit and artifact
+attribution - it is not one of the values control-plane independently validates; there is
+no per-exchange record to check it against.
 
-`link` returns a **durable, origin-relative Knowledge Flow reference**. Authorization is
-re-checked at access time against the caller's current identity, so a stale or leaked
-reference grants nothing on its own. A short-lived signed URL may exist afterwards as an
-internal delivery optimisation (a just-in-time redirect to object storage); it must never
-be the artifact identity, be persisted in agent or run state, or be what `link` returns.
+**Failure mode - fail closed.** An unknown session, a session with no `user_id`, a
+`user_id`/`team_id`/`agent_instance_id` mismatch, an unknown, wrong-team, disabled, or
+suspended instance, a caller that is not the exact configured client at either boundary, or
+a control-plane call that cannot be completed all produce the same outcome: the Workspace
+operation is refused. Never optimistic, never partially honoured.
 
-Steps 3 and 4 of that model are already shipped: `/fs/download` requires a Keycloak
+**Inline, awaited, cache-free.** The first implementation performs this validation inline -
+awaited before the Workspace operation it gates, on every M2M operation - and stays
+cache-free in v1. A cache is not part of the initial contract; it may be proposed later, in
+its own change, only after validation latency is measured against a real workload, and only
+with explicit revocation/invalidation semantics stated at that time - if proposed, its
+identity key must include at minimum `team_id`, `agent_instance_id`, `user_id`, and
+`session_id`.
+
+The implementation must use asynchronous HTTP I/O end to end and reuse one
+application-scoped `httpx.AsyncClient` rather than constructing one per request - the
+existing precedent for a pod-wide client of this shape is fred-runtime's own
+`initialize_control_plane_client()` (`fred_runtime/app/context.py:148-153`, built once at
+pod startup for control-plane runtime-binding calls), not the per-request `async with
+httpx.AsyncClient(...)` pattern used elsewhere in control-plane's own outbound calls. The
+call needs an explicit bounded timeout and must fail closed on timeout, connection error,
+or an invalid response - same failure mode as above, no special case. This RFC does not
+pick that number: the only existing precedent for a pod-to-control-plane binding-lookup
+client is fred-runtime's own `_CONTROL_PLANE_CLIENT_TIMEOUT = httpx.Timeout(10.0)`
+(`context.py:45`), set for a once-per-execution-preparation call - not evidence for a bound
+on a call made on every Workspace operation, which needs a tighter budget. The implementing
+PR chooses and justifies its own bound.
+
+The implementation must emit `workspace.binding_validation_latency_ms` and use only the
+existing bounded `status` dimension (`PROMETHEUS_ALLOWED_LABELS`,
+`fred_core/kpi/prometheus_kpi_store.py:60-75`) as a Prometheus label - `trace_id` and
+`correlation_id` stay in trace or audit data only; neither is in that allowlist today, and
+this metric must not add them. Verify the metric is Prometheus-visible under
+`PROMETHEUS_ALLOWED_LABELS` before shipping with writes enabled.
+
+This does not restore or generalize `ExecutionGrant`, and needs no new signing or
+cryptography beyond the exact-client-identity check above: every check is a live read
+against control-plane state at call time, consistent with `RUNTIME-EXECUTION-CONTRACT.md`
+§8.11's model of no control-plane-issued token.
+
+Agent writes must not ship gated behind "M2M PR later" as a deferred flag, and must not
+ship before this validation path is complete end to end - see §9.10.
+
+### 9.6 `link` is a durable, authenticated route - not a bearer capability
+
+`link` returns a **durable, origin-relative Knowledge Flow reference**. It is not a bearer
+capability: the href itself carries no embedded download credential, no token, nothing
+that stands in for authorization on its own. Every access re-authenticates the requester
+and re-evaluates their current ReBAC authorization, exactly like any other Knowledge Flow
+route. Stated precisely: a leaked or persisted URL grants nothing by itself. An
+authenticated requester receives only what
+their own current ReBAC authorization permits; the URL adds no authority. A short-lived
+signed URL may
+still exist afterwards as an internal delivery optimisation (a just-in-time redirect to
+object storage); it must never be the artifact identity, be persisted in agent or run
+state, or be what `link` itself returns.
+
+**This replaces the current 600-second HMAC `download_token.py` model** (`/fs/share`).
+Naming both designs' properties:
+
+| | `/fs/share` token (today) | `link` durable reference (this contract) |
+| --- | --- | --- |
+| Credential shape | HMAC token bound to `(path, uid, expiry)`, carried in the query string | none - the href alone grants nothing |
+| Expiry | 600 seconds from mint | none of its own - validity tracks the requester's live authorization |
+| What gates access | the token signature/expiry **and** live session ReBAC, both checked | live session ReBAC alone |
+| Observed failure | a valid owner's own link 403s roughly ten minutes after being posted into chat, because the token expires before the owner's actual authorization does | none of that class - the link stays usable exactly as long as the holder remains authorized |
+| What a leaked copy (chat export, screenshot, log) grants | nothing after 600 seconds, regardless of the holder's authorization at that later time | nothing by itself; an authenticated requester receives only what their own current ReBAC authorization permits - the URL adds no authority |
+
+Steps 3 and 4 of that comparison are already shipped: `/fs/download` requires a Keycloak
 session and re-runs ReBAC on every request, so the signed token has never been a
-standalone credential - it is bound to path + uid and is useless to anyone else.
-
-The problem is expiry, and it runs the opposite way to the usual signed-URL worry.
-`/fs/share` appends a token with a 600-second TTL, and `link_for` - what agents put in
-artifact chips - uses it. That href is persisted in the chat history, so ten minutes later
-the chip returns **403 to its own owner**, on a file they are still entitled to read: the
-presence of the token makes the request stricter than its absence. `ppt_preview` already
-uses the durable tokenless href and has none of this.
+standalone credential - it is bound to path + uid and useless to anyone else. The problem
+this contract fixes is expiry running the wrong way: `/fs/share`'s token makes the request
+*stricter* than its absence would, entitling a link to fail for its own rightful owner.
+`ppt_preview` already uses the durable tokenless href and has none of this.
 
 T3 therefore removes `/fs/share` and `download_token.py` and moves `link_for` onto the
 durable href, rather than porting the token machinery into Workspace.
@@ -438,3 +590,123 @@ its own M2M identity, is the newcomer. That both travel the same routes with the
 today is precisely the cause of `#2113`. Isolation tests must therefore cover **both**: the
 human read-only, the agent read-write, and the case that motivates §9.1 - a user token
 presented directly to a Workspace agent route must not be accepted as an agent caller.
+
+### 9.8 Deep Agents integration target
+
+Adapter implementation work for a later Deep Agent PR - not this documentation change, see
+§9.10. This section names the target and its operation mapping only.
+
+The integration target is `deepagents.backends.protocol.BackendProtocol`, via
+`CompositeBackend`, wired into `DeepAgentRuntime` (`fred_runtime/deep/deep_runtime.py`).
+Constructor shape, verified against the installed `deepagents==0.6.12`:
+
+```python
+CompositeBackend(
+    default=StateBackend(),
+    routes={"/workspace/": FredWorkspaceBackend(...)},
+)
+```
+
+`StateBackend` owns ephemeral scratch, unchanged from its existing LangGraph-thread-scoped
+semantics - no Workspace involvement. `FredWorkspaceBackend` owns durable `/workspace`
+only.
+
+**The remote Workspace API stays exactly the four operations of §9.2** - `list`, `read`,
+`write`, `link`. Nothing in this section adds a Knowledge Flow route.
+
+`BackendProtocol` does not derive `edit`, `glob`, or `grep` from `list`/`read`/`write` - it
+is an `ABC` with no enforced abstract methods; an unimplemented method raises
+`NotImplementedError` at call time, and nothing synthesizes a scan or an edit
+automatically (`StateBackend` implements its own `glob`/`grep` from scratch, over its own
+in-memory state, for the same reason). `FredWorkspaceBackend` will implement these methods
+itself, entirely client-side, by composing the four Workspace operations - no new remote
+surface:
+
+- `edit`: `read`, verify the expected match, `write` the replacement;
+- `glob`: bounded recursive `list` traversal against the pattern;
+- `grep`: bounded `list` + `read` traversal, with an explicit file-count limit and a
+  content-size limit per file, so a single tool call cannot force an unbounded scan of the
+  owner's subtree.
+
+`link` remains a separate Fred-authored tool, not a `BackendProtocol` method - the protocol
+has no equivalent operation for it (it is not one of
+`ls/read/grep/glob/write/edit/upload_files/download_files`).
+
+`execute` stays disabled - no conforming `SandboxBackendProtocol` backend exists for
+Workspace, and none is proposed here. No exposed filesystem tool may terminate in
+`NotImplementedError`: a tool the model can call must actually be served by
+`FredWorkspaceBackend`'s own implementation above, or it must not be exposed at all.
+`execute` is the one case that is not exposed, for exactly that reason.
+
+### 9.9 Convergence and migration
+
+The Workspace API is frozen at four operations - `list`, `read`, `write`, `link` (§9.2).
+`#2498` and `#2328` currently still say five; both need a wording correction to match,
+outside this RFC.
+
+Every `/fs` route this contract does not replace stays in temporary coexistence with
+Workspace until a named follow-up removes it - not indefinitely, and not as a second
+permanent implementation:
+
+| Route/component | Removal owner | Removal condition | External-consumer check |
+| --- | --- | --- | --- |
+| `/fs/share`, `download_token.py`, `link_for` (old form) | T3 follow-up | Workspace `link` ships; `ppt_filler` and every `LinkPart` producer re-pointed to it | Required - a public HTTP route; this repository's own search cannot rule out an out-of-repo caller |
+| `/fs/list`, `/fs/upload`, `/fs/delete`, `/fs/copy-to-shared`, `/fs/mkdir`, `/fs/rename`, `/fs/stats` | T3 follow-up + a dedicated frontend change | Mon espace/Espace d'equipe UI tabs removed; `ppt_filler`'s write path re-pointed to Workspace `write` | Required for the write-side routes; the UI-removal half is fully verifiable in this repository |
+| `/fs/stat`, `/fs/cat`, `/fs/page`, `/fs/edit`, `/fs/glob`, `/fs/grep` | T3 follow-up | No remaining UI or capability caller in this repository | Required, explicitly - these route names match `deepagents`' own native tool names, so an out-of-repo MCP/agent client is a real possibility a repository search cannot rule out |
+| `ctx.read_user`/`ctx.read_team` SDK helpers | Same change as the Mon espace/Espace d'equipe deletion | Their only targets are deleted | Not required - call sites are confined to this repository |
+
+No route above is claimed safe to delete on the strength of a repository search alone;
+each row's "External-consumer check" column says explicitly whether one is still owed.
+
+`writable_document` stays out of T3. It has its own router and its own table, and no
+reference to `WorkspaceFsPort`, `FredWorkspaceFs`, or `/fs` anywhere in its package -
+nothing in the current code makes it part of this migration.
+
+**What Workspace guarantees, and what it does not.** Workspace guarantees authorized,
+durable bytes: a write that succeeds is really there, under a namespace no caller can
+spoof, readable only by whoever the binding authorizes. It does not guarantee that an
+agent's own prose matches what it actually wrote - that a model's claim to have produced a
+file corresponds to a real `write` call at all. That is a separate, later invariant,
+enforced elsewhere: chat file UI is produced only from a verified, typed, server-side
+artifact publication (an actual tool result), never inferred from message text. Nothing in
+this contract changes that today, and nothing here proposes solving it with a
+natural-language classifier - it is out of scope for Workspace and named here only so it
+is not mistaken for solved.
+
+### 9.10 Implementation sequencing
+
+The first code PR is one functional vertical slice, not a sequence of
+independently-mergeable fragments:
+
+- the internal control-plane binding-validation endpoint (§9.5);
+- Knowledge Flow's `list`/`read`/`write`/`link` WorkspaceService;
+- the runtime's M2M client wiring (§9.1, §9.5);
+- `FredWorkspaceFs` migrated off the human bearer token and off caller-constructed
+  physical prefixes;
+- server-derived namespace end to end;
+- generated-contract regeneration for every public API this touches (below);
+- isolation and actor-permission tests (§9.1a, §9.7, §7);
+- validation-latency instrumentation (§9.5).
+
+**Generated contracts.** Required, unconditionally: `cd apps/frontend && make
+update-knowledge-flow-api` for the new WorkspaceService routes, and `cd apps/frontend &&
+make update-control-plane-api` for the internal binding-validation endpoint (§9.5) - it
+stays in control-plane's OpenAPI surface. Its M2M authorization (exact-client identity,
+above) is the security boundary; hiding a route from OpenAPI is not a security mechanism
+and is not a reason to skip regeneration. The generated frontend client may end up
+carrying a binding for this endpoint that no UI code calls - that is preferable to a
+hand-written duplicate transport DTO or a new shared contract invented solely to avoid
+regenerating. No hand-written DTO duplicates a generated one on either side of either
+call - the same rule this codebase already enforces for every other backend/frontend
+boundary.
+
+Agent writes must not ship disabled, waiting on a separate later M2M PR - and must not
+ship before every item above exists together. Both directions matter: shipping the
+WorkspaceService with writes flagged off invites the flag to become permanent load-bearing
+state; shipping writes before validation exists recreates the human-JWT-as-agent-credential
+gap this contract closes.
+
+Out of this first PR, named explicitly so scope does not drift into it: the Deep Agents
+`CompositeBackend` integration (§9.8), chat drawer changes, general artifact-truth
+enforcement (§9.9), `writable_document` migration, and unrelated dead-code cleanup. Each is
+either a later slice (§9.8) or explicitly out of scope for Workspace altogether (§9.9).
