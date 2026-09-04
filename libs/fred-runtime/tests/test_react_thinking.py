@@ -58,6 +58,8 @@ from fred_sdk.contracts.runtime import (
     ThoughtDeltaEvent,
     ThoughtEndEvent,
     ThoughtStartEvent,
+    ToolCallRuntimeEvent,
+    ToolResultRuntimeEvent,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
@@ -485,6 +487,78 @@ async def test_stream_reports_real_duration_ms_for_tool_use_thought() -> None:
     assert ends[0].conclusion == "Done"
     assert ends[0].duration_ms is not None
     assert ends[0].duration_ms >= 0
+
+
+@pytest.mark.asyncio
+async def test_stream_closes_the_reasoning_block_at_each_tool_round() -> None:
+    """
+    Reasoning must be cut into one block per ReAct round, not one per turn.
+
+    A block that stays open across tool calls swallows every later round's
+    reasoning, so it carries the rank of the turn's very first fragment and the
+    UI can only ever draw it above the tools — the chronology of "reasoned,
+    called a tool, reasoned again" is lost at the source.
+    """
+
+    tool_call = AIMessage(
+        content="",
+        tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}],
+    )
+    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+    final_message = AIMessage(content="done")
+
+    events = [
+        _stream_frame(
+            [{"type": "thinking", "thinking": [{"type": "text", "text": "first"}]}]
+        ),
+        ("updates", {"agent": {"messages": [tool_call]}}),
+        ("updates", {"tools": {"messages": [tool_result]}}),
+        _stream_frame(
+            [{"type": "thinking", "thinking": [{"type": "text", "text": "second"}]}]
+        ),
+        _stream_frame("done"),
+        ("updates", {"agent": {"messages": [final_message]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    native_starts = [
+        e
+        for e in collected
+        if isinstance(e, ThoughtStartEvent) and e.source == "model_native"
+    ]
+    # Two rounds of reasoning, so two distinct blocks — not one spanning both.
+    assert len(native_starts) == 2
+    assert native_starts[0].thought_id != native_starts[1].thought_id
+
+    # Each round's fragments belong to that round's own block.
+    deltas_by_block: dict[str, str] = {}
+    for event in collected:
+        if isinstance(event, ThoughtDeltaEvent):
+            deltas_by_block[event.thought_id] = (
+                deltas_by_block.get(event.thought_id, "") + event.delta
+            )
+    assert deltas_by_block[native_starts[0].thought_id] == "first"
+    assert deltas_by_block[native_starts[1].thought_id] == "second"
+
+    # Ordering is what the UI reads: the first block closes BEFORE the tool call,
+    # and the second opens only AFTER the tool result.
+    kinds = [type(e) for e in collected]
+    first_end = next(
+        i
+        for i, e in enumerate(collected)
+        if isinstance(e, ThoughtEndEvent)
+        and e.thought_id == native_starts[0].thought_id
+    )
+    tool_call_idx = kinds.index(ToolCallRuntimeEvent)
+    tool_result_idx = kinds.index(ToolResultRuntimeEvent)
+    second_start = collected.index(native_starts[1])
+    assert first_end < tool_call_idx
+    assert tool_result_idx < second_start
+
+    # Both blocks are closed by the end of the turn — neither spins forever.
+    closed_ids = {e.thought_id for e in collected if isinstance(e, ThoughtEndEvent)}
+    assert {s.thought_id for s in native_starts} <= closed_ids
 
 
 @pytest.mark.asyncio
