@@ -4635,3 +4635,64 @@ any one provider's error class — and there is now exactly one definition of
 exceeds the provider's limit several times over still needs a concurrency cap.
 That remains issue #2531 (see §8.63's closing note); this incident is a data
 point for it.
+
+### 8.65 ✅ A sub-agent turn is a nested, spanned subtree in the trace — issue #2525 follow-up (2026-09-04)
+
+**A sub-agent's work was in the trace but detached from it.** Observed live in a
+local Langfuse while exercising `run_subagent`: the child's model and tool spans
+landed in the parent's trace (correct — the trace is seeded on `exchange_id`,
+which a same-agent child inherits) but named a parent span id that Langfuse had
+never received, so they rendered as a flat row of orphans next to the parent's
+own `agent.stream`. Nothing on them said "sub-agent": `agent_id`, `agent_name`
+and `agent_instance_id` are identical by design for a same-agent child (§8.63),
+and the only discriminator was `request_id`, which the trace UI does not show.
+
+**Cause 1 — the child's root span was created but never exported.** Every branch
+of `LocalRegistryAgentInvoker.invoke`'s loop returns mid-iteration, which left
+`_iterate_runtime_event_payloads` — and the runtime `stream()` under *it* —
+suspended at a `yield`, so the `finally` that ends the turn's root span never ran
+deterministically. Langfuse exports an observation only on `end()`. **Both**
+levels now close explicitly: `contextlib.aclosing` around the turn generator in
+the invoker, and `_closing_event_stream` around `executor.stream(...)` inside
+`_iterate_runtime_event_payloads`. The inner one is not redundant — unwinding
+the outer frame drops its iterator *without* closing it, so closing only the
+outer level left the real span-ending `finally` on the same GC-dependent path.
+That deferred path is also why the reset of `active_agent_span` is now
+failure-tolerant and runs **after** `span.end()`: a generator finalized in
+another context makes `ContextVar.reset` raise, which silently cost the span its
+export. This was a resource-lifetime bug that happened to surface as a tracing
+one — the same suspended frames hold the child's runtime services.
+
+**Cause 2 — capability tools produced no span at all on ReAct.** Capability
+tools reach `create_agent()` inside `ToolCarrierMiddleware` and never pass
+through `ReActRuntimeToolResolver`/`ReActToolBinder`, which was the only place
+opening a tool span. So `run_subagent` — and every other capability tool — was
+a silent gap between two `v2.react.model` spans, while the same tools on a Graph
+agent were spanned (`_adapted_capability_tools` routes them through the
+resolver). `ToolObservabilityMiddleware` now opens a `v2.react.runtime_tool`
+span for every tool call it sees, skipping tools the binder already spans —
+marked with `SELF_TRACED_TOOL_METADATA_KEY` on the bound tool's `metadata`.
+Same argument #2011 already applied to the tool KPI timer and audit events:
+`awrap_tool_call` is the one chokepoint every tool call passes, whatever its
+source. Both call sites share one `tool_span` helper (`react_tracing.py`), which
+also owns the span name — previously a literal repeated across three modules
+that had already drifted apart once (see the next paragraph).
+
+**The child turn nests inside the call that opened it.** `ReActRuntime`'s
+`agent.stream`/`agent.invoke` span passed no `parent`, so the child's root
+landed as a *second root* in the trace rather than under the parent. It now
+passes `parent=active_agent_span.get()`, and `tool_span` makes the running tool
+span the active parent — so a `run_subagent` call contains the child's whole
+subtree. At the top of a turn the var is unset, so an ordinary turn is still a
+real root, which keeps the trace-level input/output (`_set_trace_io`) on the
+parent where the trace list reads it.
+
+**`v2.react.runtime_tool` is now a `tool` observation.** It was missing from
+`_TRACE_TOOL_SPAN_NAMES`, so ReAct tool calls reached Langfuse as generic spans
+(no tool icon, no agent-graph view) and the eval read-back categorized them as
+`other` rather than `tool`.
+
+**Still open:** a child turn is nested and spanned, but not *labelled* — telling
+depth apart still means reading the tree, not a field. `invocation_depth` is
+threaded through the invoker and would have to reach `PortableContext.baggage`
+to land on the span; that is a contract change, deliberately not bundled here.
