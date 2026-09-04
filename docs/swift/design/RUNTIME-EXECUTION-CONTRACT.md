@@ -3923,11 +3923,19 @@ GraphNodeContext.invoke_agent(
     prior_turns: tuple[ConversationTurn, ...] = (),
     output_schema: type[BaseModel] | None = None,
     scope: InvocationScope | None = None,
+    system_prompt: str | None = None,
 ) -> AgentInvocationResult
 ```
 
-`output_schema` and `scope` are optional and additive — every caller that
-never sets them keeps working unchanged.
+`output_schema`, `scope` and `system_prompt` are optional and additive — every
+caller that never sets them keeps working unchanged.
+
+`system_prompt` replaces the callee's rendered agent template — that layer
+only. Its tool descriptions, guardrails, output contract and recovery notice
+are still appended and no caller can drop them. This is a deliberate, public
+widening: any Graph node may run any agent registered in the pod with its
+authored template replaced, guardrails kept. ReAct-family callees only — a
+Graph callee composes no system prompt and is refused. Full entry: §8.64.
 
 ### Requesting several facts in one call — compose the schema, don't ask for a new primitive
 
@@ -4757,3 +4765,49 @@ that later renders parts on a tool-result line will double them.
 on each merge, which matters for a large part (an HTML artifact's whole body)
 multiplied by fan-out. Recorded on #2531 with the rest of the fan-out
 economics; no bound is added here.
+
+### 8.67 ✅ `AgentInvocationRequest.system_prompt` — a caller replaces the callee's template layer — issue #2527 (2026-09-03)
+
+`AgentInvocationRequest` gains `system_prompt: str | None = None` (additive;
+§14's shape was otherwise unchanged by §8.63). When set, it replaces **layer 1**
+of the callee's composed system prompt — the rendered agent template — and
+nothing else. Design: `../rfc/SUBAGENT-CAPABILITY-RFC.md` §6.7.
+
+**Everything below layer 1 stays runtime-owned.** `compose_system_prompt`
+(`react_prompting.py`) takes the override as `base_prompt_override` and still
+appends the runtime tool descriptions, the definition guardrails, the global
+base output contract, the tool-failure recovery notice and any
+runtime-specific suffixes. A caller can change what the callee *is asked to
+do*; it cannot remove what the platform requires of it. The override is used
+verbatim — it is caller text, not an agent template, so it goes through no
+token substitution.
+
+**This is a public, deliberate widening of the caller's power.** Any Graph node
+calling `context.invoke_agent(..., system_prompt=...)` — and any code holding
+`RuntimeServices.agent_invoker` — can now run any agent registered in the pod
+with its authored template replaced, guardrails kept. That was accepted rather
+than hidden: Graph agents are written by developers who own both sides of the
+call, and a private second channel would have been the second invocation path
+§14 exists to avoid. Identity, scope and the same-pod boundary are untouched —
+the callee still runs under the caller's delegated identity, and an override
+grants no access the caller does not already have.
+
+**ReAct-family callees only, and refused loudly otherwise.** A Graph callee
+composes no system prompt, so `LocalRegistryAgentInvoker` returns an error
+result naming the agent instead of accepting a field it would silently drop.
+
+**It travels as a parameter, never as context.** The invoker forwards it to
+`_iterate_runtime_event_payloads(system_prompt_override=...)`, which hands it
+to `ReActRuntime`. It is deliberately *not* on `_ParentTurn` (that dataclass is
+trusted parent state a caller must not reach) nor on `RuntimeContext` /
+`PortableContext`: it is caller-supplied per call, and the layers it cannot
+touch are what make that safe.
+
+**The `subagent` capability chooses per agent.** Its config gains
+`prompt_mode: "append" | "replace"` (default `append`, unchanged behaviour).
+`append` sends framing + the parent's prompt as the child's user message and
+leaves the child's own template in place; `replace` sends framing + the prompt
+as `system_prompt` and a short fixed trigger as the user message. Both modes
+ship so the RFC §5.2 evaluation can be run on real agents — persona/output-
+language retention, how often a child addresses a user, prompt tokens per
+child. The losing mode is deleted afterwards (#2527), not now.

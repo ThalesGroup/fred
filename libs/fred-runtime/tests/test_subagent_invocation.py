@@ -26,6 +26,7 @@ depends on.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -46,17 +47,69 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
+    GraphAgentDefinition,
+    GraphDefinition,
+    GraphNodeDefinition,
     MCPServerRef,
     ReActAgentDefinition,
 )
+from fred_sdk.graph.runtime import GraphNodeResult
 from langchain_core.messages import AIMessage
+from pydantic import BaseModel
 from test_agent_app import _build_test_config, _EchoAgent
 
 OTHER_AGENT_ID = "rags.sample.other"
 
 
+GRAPH_AGENT_ID = "rags.sample.graph"
+
+
 class _OtherAgent(_EchoAgent):
     agent_id: str = OTHER_AGENT_ID
+
+
+class _GraphIO(BaseModel):
+    message: str = ""
+
+
+class _GraphCallee(GraphAgentDefinition):
+    """Smallest valid Graph callee — it composes no system prompt to override."""
+
+    agent_id: str = GRAPH_AGENT_ID
+    role: str = "test"
+    description: str = "test"
+
+    def build_graph(self) -> GraphDefinition:
+        return GraphDefinition(
+            state_model_name="GraphIO",
+            entry_node="n",
+            nodes=(GraphNodeDefinition(node_id="n", title="N"),),
+        )
+
+    def input_model(self) -> type[BaseModel]:
+        return _GraphIO
+
+    def state_model(self) -> type[BaseModel]:
+        return _GraphIO
+
+    def output_model(self) -> type[BaseModel]:
+        return _GraphIO
+
+    def build_initial_state(
+        self, input_model: BaseModel, binding: BoundRuntimeContext
+    ) -> BaseModel:
+        del binding
+        return input_model
+
+    def node_handlers(self) -> Mapping[str, object]:
+        async def _n(state: BaseModel, ctx: object) -> GraphNodeResult:
+            del state, ctx
+            return GraphNodeResult()
+
+        return {"n": _n}
+
+    def build_output(self, state: BaseModel) -> BaseModel:
+        return state
 
 
 def _binding(*, session_id: str = "session-1") -> BoundRuntimeContext:
@@ -168,7 +221,7 @@ def _record_turn(monkeypatch, payloads: list[dict] | None = None) -> dict:
 
 
 def _invoker(parent: agent_app_module._ParentTurn | None):
-    definitions = [_EchoAgent(), _OtherAgent()]
+    definitions = [_EchoAgent(), _OtherAgent(), _GraphCallee()]
     return agent_app_module.LocalRegistryAgentInvoker(
         registry={d.agent_id: d for d in definitions},
         access_token="token-1",
@@ -229,6 +282,44 @@ def test_cross_agent_child_inherits_nothing_of_the_parent_turn(monkeypatch) -> N
     # Today's behaviour, byte for byte: the request's own context is the
     # callee's context.
     assert seen["request"].context["tenant"] == "forged-tenant"
+
+
+def test_system_prompt_override_reaches_the_child_turn(monkeypatch) -> None:
+    seen = _record_turn(monkeypatch)
+    parent_agent_id = _EchoAgent().agent_id
+
+    asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id, system_prompt="SUBAGENT-FRAMING")
+        )
+    )
+    assert seen["system_prompt_override"] == "SUBAGENT-FRAMING"
+    # It is a per-call parameter, not part of the child's context: nothing a
+    # later turn could read back off the request it was built from.
+    assert "system_prompt" not in seen["request"].context
+
+    # Absent by default, so every caller that never sets it is unchanged.
+    asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+    assert seen["system_prompt_override"] is None
+
+
+def test_system_prompt_override_is_refused_for_a_graph_callee(monkeypatch) -> None:
+    seen = _record_turn(monkeypatch)
+    invoker = _invoker(_parent_turn(agent_id=_EchoAgent().agent_id))
+
+    result = asyncio.run(
+        invoker.invoke(_child_request(GRAPH_AGENT_ID, system_prompt="FRAMING"))
+    )
+
+    # Loud, never a silently dropped field: a Graph agent composes no system
+    # prompt, so there is no layer to replace.
+    assert result.is_error is True
+    assert "no system prompt to override" in result.content
+    assert seen == {}
 
 
 def test_depth_rises_on_every_re_entry_and_a_request_cannot_lower_it(

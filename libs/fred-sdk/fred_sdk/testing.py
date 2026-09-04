@@ -106,6 +106,7 @@ class FakeGraphNodeContext:
         prior_turns: tuple[Any, ...] = (),
         output_schema: Any = None,
         scope: Any = None,
+        system_prompt: str | None = None,
     ) -> AgentInvocationResult:
         self.agent_calls.append(
             {
@@ -114,6 +115,7 @@ class FakeGraphNodeContext:
                 "output_schema": output_schema,
                 "scope": scope,
                 "prior_turns": prior_turns,
+                "system_prompt": system_prompt,
             }
         )
         if isinstance(self._agent_result, Mapping):

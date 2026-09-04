@@ -378,6 +378,10 @@
         "max_depth": {
           "title": "Profondeur de délégation maximale",
           "description": "Nombre de niveaux de sous-délégation autorisés (1 à 5). Chaque niveau multiplie le travail exécuté simultanément."
+        },
+        "prompt_mode": {
+          "title": "Instructions données aux sous-agents",
+          "description": "« append » conserve les instructions de cet agent dans le sous-agent et lui transmet la tâche déléguée comme message. « replace » ne donne au sous-agent que la tâche déléguée : il n'hérite alors ni de la personnalité, ni de la langue de réponse, ni des règles métier de ces instructions. Les garde-fous et les outils sont conservés dans les deux cas. « replace » ne fonctionne que sur les agents ReAct : un agent Graph doit conserver « append », sans quoi chacune de ses délégations est refusée."
         }
       }
     }

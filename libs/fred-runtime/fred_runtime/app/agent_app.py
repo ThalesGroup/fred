@@ -726,6 +726,19 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 content=f"Agent '{request.agent_id}' is not registered in this pod.",
                 is_error=True,
             )
+        if request.system_prompt is not None and isinstance(
+            definition, GraphAgentDefinition
+        ):
+            # A Graph agent composes no system prompt, so there is no layer to
+            # replace. Refuse loudly rather than accept a field we would drop.
+            return AgentInvocationResult(
+                agent_id=request.agent_id,
+                content=(
+                    f"Agent '{request.agent_id}' is a Graph agent and has no "
+                    "system prompt to override."
+                ),
+                is_error=True,
+            )
         if inherited is not None:
             trusted = inherited.binding.portable_context
             claimed = request.context
@@ -804,6 +817,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             # Depth counts call stack, not identity: it rises on EVERY
             # re-entry, so an A -> B -> A cycle is bounded too.
             invocation_depth=(parent.invocation_depth if parent else 0) + 1,
+            # Public, caller-supplied, and deliberately NOT part of the trusted
+            # `_ParentTurn` state: it replaces the callee's template layer only.
+            system_prompt_override=request.system_prompt,
             **inherited_turn,
         ):
             kind = payload.get("kind")
@@ -3429,6 +3445,7 @@ async def _iterate_runtime_event_payloads(
     usable_model_ids: tuple[str, ...] | None | Literal[_Unresolved.TOKEN] = (
         _Unresolved.TOKEN
     ),
+    system_prompt_override: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -3453,6 +3470,12 @@ async def _iterate_runtime_event_payloads(
     invocation_depth / use_checkpointer / usable_model_ids:
     - all three come from `LocalRegistryAgentInvoker`'s private state, never
       from the request (RUNTIME-EXECUTION-CONTRACT.md §8.63)
+
+    system_prompt_override:
+    - the ReAct-family callee's rendered template layer, replaced by the caller
+      for this turn (`AgentInvocationRequest.system_prompt`, §8.67). Unlike the
+      three above it IS caller-supplied — the runtime-owned suffixes it cannot
+      touch are what keep it safe.
     """
 
     request_id = str(uuid4())
@@ -3703,6 +3726,7 @@ async def _iterate_runtime_event_payloads(
                 services=services,
                 capability_block=capability_block,
                 invocation_depth=invocation_depth,
+                system_prompt_override=system_prompt_override,
             )
             runtime.bind(binding)
             await runtime.activate()

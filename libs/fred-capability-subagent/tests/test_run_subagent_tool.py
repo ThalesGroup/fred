@@ -22,14 +22,17 @@ against a stub invoker.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from fred_capability_subagent.capability import (
     DEFAULT_MAX_DEPTH,
+    DEFAULT_PROMPT_MODE,
     MAX_MAX_DEPTH,
     MAX_SUBAGENT_CONTENT_CHARS,
     MIN_MAX_DEPTH,
+    PROMPT_MODES,
+    PromptMode,
     SubAgentCapability,
     SubAgentConfig,
 )
@@ -44,9 +47,11 @@ from fred_sdk.contracts.context import (
     AgentInvocationResult,
     LinkKind,
     LinkPart,
+    ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import AgentInvokerPort, RuntimeServices
 from langchain_core.messages import AIMessage
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -69,6 +74,7 @@ def _context(
     *,
     depth: int = 0,
     max_depth: int = DEFAULT_MAX_DEPTH,
+    prompt_mode: PromptMode = DEFAULT_PROMPT_MODE,
     invoker: AgentInvokerPort | None = None,
 ) -> CapabilityContext[SubAgentConfig, EmptyModel]:
     return CapabilityContext(
@@ -78,7 +84,7 @@ def _context(
             team_id="fredlab",
             agent_id=AGENT_ID,
         ),
-        config=SubAgentConfig(max_depth=max_depth),
+        config=SubAgentConfig(max_depth=max_depth, prompt_mode=prompt_mode),
         turn_options=EmptyModel(),
         services=RuntimeServices(agent_invoker=invoker),
         invocation_depth=depth,
@@ -87,6 +93,14 @@ def _context(
 
 def _tools(**kwargs):
     return SubAgentCapability().tools(_context(**kwargs))
+
+
+async def _run(tool: BaseTool, prompt: str) -> tuple[str, ToolInvocationResult]:
+    """Call the tool the way its runtime does: `tools()` builds `StructuredTool`s."""
+
+    coroutine = cast(StructuredTool, tool).coroutine
+    assert coroutine is not None
+    return await coroutine(prompt=prompt)
 
 
 def test_tool_is_offered_below_max_depth():
@@ -139,7 +153,7 @@ async def test_child_answer_is_returned_with_the_framing_sent():
     )
     tool = _tools(invoker=invoker)[0]
 
-    content, artifact = await tool.coroutine(prompt="Count the matching documents.")
+    content, artifact = await _run(tool, "Count the matching documents.")
 
     assert content == "42 documents match."
     assert artifact.is_error is False
@@ -148,6 +162,49 @@ async def test_child_answer_is_returned_with_the_framing_sent():
     assert request.message.endswith("Count the matching documents.")
     assert "sub-agent" in request.message
     assert request.context.session_id == "session-1"
+    # The default mode leaves the child's own template alone.
+    assert request.system_prompt is None
+
+
+@pytest.mark.asyncio
+async def test_replace_mode_moves_the_task_into_the_system_prompt():
+    invoker = _StubInvoker(AgentInvocationResult(agent_id=AGENT_ID, content="ok"))
+    tool = _tools(invoker=invoker, prompt_mode="replace")[0]
+
+    await _run(tool, "Count the matching documents.")
+
+    request = invoker.requests[0]
+    assert request.system_prompt is not None
+    assert request.system_prompt.endswith("Count the matching documents.")
+    assert "sub-agent" in request.system_prompt
+    # The user turn is a trigger, not a second copy of the task.
+    assert "Count the matching documents." not in request.message
+    assert request.message
+
+
+@pytest.mark.parametrize("mode", PROMPT_MODES)
+@pytest.mark.asyncio
+async def test_framings_are_byte_stable_across_builds(mode: PromptMode):
+    # Same context, same bytes: a framing that drifted between turns would
+    # invalidate the child's prompt cache on every call.
+    invoker = _StubInvoker(AgentInvocationResult(agent_id=AGENT_ID, content="ok"))
+    for _ in range(2):
+        tool = _tools(invoker=invoker, prompt_mode=mode)[0]
+        await _run(tool, "Task.")
+
+    first, second = invoker.requests
+    assert first.message == second.message
+    assert first.system_prompt == second.system_prompt
+
+
+def test_prompt_mode_is_offered_as_a_configurable_field():
+    field = next(
+        spec
+        for spec in SubAgentCapability.manifest.config_fields
+        if spec.key == "prompt_mode"
+    )
+    assert field.enum == ["append", "replace"]
+    assert field.default == DEFAULT_PROMPT_MODE
 
 
 @pytest.mark.asyncio
@@ -168,8 +225,7 @@ async def test_child_sources_and_ui_parts_ride_the_tool_result():
     )
     tool = _tools(invoker=invoker)[0]
 
-    # `coroutine` is untyped on `BaseTool`; the tool is a `StructuredTool`.
-    content, artifact = await cast(Any, tool).coroutine(prompt="Who mentions it?")
+    content, artifact = await _run(tool, "Who mentions it?")
 
     assert content == "Two documents mention it."
     assert artifact.is_error is False
@@ -188,7 +244,7 @@ async def test_failing_child_becomes_a_tool_error_carrying_the_message():
     )
     tool = _tools(invoker=invoker)[0]
 
-    content, artifact = await tool.coroutine(prompt="Do the thing.")
+    content, artifact = await _run(tool, "Do the thing.")
 
     assert artifact.is_error is True
     assert "model provider timed out" in content
@@ -202,7 +258,7 @@ async def test_over_cap_answer_asks_for_a_shorter_one_instead_of_truncating():
     )
     tool = _tools(invoker=invoker)[0]
 
-    content, artifact = await tool.coroutine(prompt="Summarize everything.")
+    content, artifact = await _run(tool, "Summarize everything.")
 
     assert artifact.is_error is True
     assert "shorter answer" in content
@@ -228,7 +284,7 @@ async def test_a_refused_answer_renders_nothing_of_the_child():
     )
     tool = _tools(invoker=invoker)[0]
 
-    _, artifact = await cast(Any, tool).coroutine(prompt="Summarize everything.")
+    _, artifact = await _run(tool, "Summarize everything.")
 
     assert artifact.is_error is True
     assert artifact.sources == ()
@@ -239,7 +295,7 @@ async def test_a_refused_answer_renders_nothing_of_the_child():
 async def test_missing_invoker_port_fails_loud():
     tool = _tools()[0]
     with pytest.raises(RuntimeError, match="agent_invoker"):
-        await tool.coroutine(prompt="Do the thing.")
+        await _run(tool, "Do the thing.")
 
 
 @pytest.mark.asyncio

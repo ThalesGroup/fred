@@ -241,6 +241,7 @@ class GraphNodeContext(Protocol):
         prior_turns: tuple[ConversationTurn, ...] = (),
         output_schema: type[BaseModel] | None = None,
         scope: InvocationScope | None = None,
+        system_prompt: str | None = None,
     ) -> AgentInvocationResult:
         """Invoke another registered agent for one turn (RFC AGENT-INVOKE).
 
@@ -249,6 +250,9 @@ class GraphNodeContext(Protocol):
           validated payload is returned on ``AgentInvocationResult.structured``.
         - ``scope``: narrow the callee's retrieval world for this call only
           (documents/libraries/search policy). Narrows, never widens.
+        - ``system_prompt``: replace the callee's authored template for this
+          call — that layer only; its guardrails, tool descriptions and output
+          contract still apply. ReAct-family callees only.
         """
         raise NotImplementedError()
 

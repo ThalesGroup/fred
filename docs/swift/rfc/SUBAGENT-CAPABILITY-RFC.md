@@ -1,6 +1,6 @@
 # RFC — Sub-agent Capability: an agent delegates work to fresh-context copies of itself
 
-**Status:** Tier 1 slice 1 (#2525), §5.6 HITL (#2526) and the result surface (#2529) shipped 2026-09-03; §5.2 prompt mode and §7 token accounting still open (#2527-#2528). Tiers 2-3 not specified.
+**Status:** Tier 1 slice 1 (#2525), §5.6 HITL (#2526), the result surface (#2529) and §5.2 prompt mode (#2527 — both modes selectable, the evaluation itself still pending) shipped 2026-09-03; §7 token accounting still open (#2528). Tiers 2-3 not specified.
 **Author:** Florian Muller
 **Date:** 2026-09-03
 **Area:** `fred-sdk` (contracts), `fred-runtime` (invoker, capability block), new capability package
@@ -134,8 +134,10 @@ human approval are unavailable or will refuse (§5.6).
 **Two ways to handle layer 1 — both are to be evaluated in the POC**
 (decision 2026-09-03, developer review). The table above shows mode R.
 
-Mode A is live; mode R needs the `system_prompt` override of §6.7, and #2527
-closes this section's remaining question.
+Both modes are now selectable per agent, on the `subagent` capability's
+`prompt_mode` config (`append` = mode A, the default; `replace` = mode R,
+which uses the §6.7 override). The evaluation itself is still pending on
+#2527, and closes this section's remaining question.
 
 - **Mode R — replace.** Layer 1 becomes framing + the parent's `prompt`. A
   parent template written for a human ("the user will ask you…") cannot mislead

@@ -754,6 +754,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         services: RuntimeServices,
         capability_block: CapabilityAgentBlock | None = None,
         invocation_depth: int = 0,
+        system_prompt_override: str | None = None,
     ):
         super().__init__(definition=definition, services=services)
         self._model: BaseChatModel | None = None
@@ -765,6 +766,10 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         # source as the capability block's: a sub-agent (≥ 1) has no human to
         # ask, so the HITL gate refuses instead of interrupting.
         self._invocation_depth = invocation_depth
+        # Caller-supplied replacement for the rendered agent template
+        # (`AgentInvocationRequest.system_prompt`). Replaces that layer only —
+        # the runtime-owned suffixes below it still apply.
+        self._system_prompt_override = system_prompt_override
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
@@ -842,6 +847,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             definition=self.definition,
             agent_id=self.definition.agent_id,
             tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
+            base_prompt_override=self._system_prompt_override,
         )
         logger.debug(
             "[LLM][SYSTEM PROMPT] agent=%s total_len=%d",

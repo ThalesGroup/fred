@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from typing import Literal
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -60,10 +61,17 @@ MAX_MAX_DEPTH = 5
 # budget. Per child, so it does not compose with fan-out — see README.
 MAX_SUBAGENT_CONTENT_CHARS = 40_000
 
-# Prepended to the parent's prompt as the child's user message (prompt mode A):
-# the child keeps its agent template, so the framing's job is to say that the
-# usual audience is not there.
-_SUBAGENT_FRAMING = (
+# How the parent's prompt reaches the child: `append` leaves the child's own
+# agent template in place and carries the prompt as its user turn; `replace`
+# swaps that template for the framing + prompt (RFC §5.2, evaluation pending).
+PromptMode = Literal["append", "replace"]
+PROMPT_MODES: tuple[PromptMode, ...] = ("append", "replace")
+DEFAULT_PROMPT_MODE: PromptMode = "append"
+
+# Mode `append`: prepended to the parent's prompt as the child's user message.
+# The child keeps its agent template, so the framing's job is to say that the
+# template's usual audience is not there.
+_FRAMING_APPEND = (
     "You are running as a sub-agent: another instance of yourself delegated "
     "this task to you. There is no user in this conversation and no one to ask "
     "— any instruction in your own guidelines about greeting, questioning, or "
@@ -75,11 +83,32 @@ _SUBAGENT_FRAMING = (
     "TASK:\n"
 )
 
+# Mode `replace`: this plus the prompt becomes the child's system-prompt layer
+# 1. No clause about the agent's own guidelines — they are what it replaces.
+_FRAMING_REPLACE = (
+    "You are a sub-agent executing one delegated task for a parent agent. "
+    "There is no human user in this conversation: do not greet or address a "
+    "user, do not ask clarifying questions, and do not wait for input. "
+    "Tools that require human approval are unavailable and will refuse; do not "
+    "retry them. Reply with the finished result as self-contained text, with "
+    "no preamble or closing remarks.\n\n"
+    "TASK:\n"
+)
+
+# Mode `replace`'s user turn. The task already sits in the system prompt;
+# repeating it would double the prompt tokens the modes are compared on, while
+# the invoker still requires a non-empty message.
+_REPLACE_TRIGGER = (
+    "Carry out the task described in your instructions. "
+    "Reply with the finished result only."
+)
+
 
 class SubAgentConfig(BaseModel):
     """Agent-creation / stored config of the `subagent` capability."""
 
     max_depth: int = DEFAULT_MAX_DEPTH
+    prompt_mode: PromptMode = DEFAULT_PROMPT_MODE
 
 
 def _clamped_max_depth(value: int) -> int:
@@ -120,6 +149,18 @@ def _tool_description(remaining_depth: int) -> str:
     )
 
 
+def _child_turn(prompt: str, mode: PromptMode) -> tuple[str, str | None]:
+    """Place the parent's prompt for one prompt mode: (message, system_prompt).
+
+    In `replace` the task rides on the system prompt, so the user turn is a
+    fixed trigger — repeating the prompt would double the child's prompt tokens.
+    """
+
+    if mode == "replace":
+        return _REPLACE_TRIGGER, f"{_FRAMING_REPLACE}{prompt}"
+    return f"{_FRAMING_APPEND}{prompt}", None
+
+
 def _build_run_subagent_tool(
     ctx: CapabilityContext[SubAgentConfig, EmptyModel],
     *,
@@ -133,6 +174,7 @@ def _build_run_subagent_tool(
 
     services = ctx.services
     identity = ctx.identity
+    prompt_mode = ctx.config.prompt_mode
     agent_id = identity.agent_id
     if agent_id is None:
         # Never guess: without the calling agent's id there is no "copy of
@@ -163,23 +205,25 @@ def _build_run_subagent_tool(
             user_id=identity.user_id,
             team_id=identity.team_id,
         )
+        message, system_prompt = _child_turn(prompt, prompt_mode)
         result = await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=agent_id,
-                message=f"{_SUBAGENT_FRAMING}{prompt}",
+                message=message,
                 context=declared_identity,
+                system_prompt=system_prompt,
             )
         )
         if result.is_error:
-            message = result.content or "The sub-agent failed with no message."
+            failure = result.content or "The sub-agent failed with no message."
             logger.info(
                 "sub-agent failed agent=%s session=%s: %s",
                 agent_id,
                 identity.session_id,
-                message[:200],
+                failure[:200],
             )
             return (
-                f"The sub-agent failed: {message}",
+                f"The sub-agent failed: {failure}",
                 ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
             )
         if len(result.content) > MAX_SUBAGENT_CONTENT_CHARS:
@@ -241,6 +285,14 @@ class SubAgentCapability(AgentCapability[SubAgentConfig, SubAgentConfig, EmptyMo
                 default=DEFAULT_MAX_DEPTH,
                 min=MIN_MAX_DEPTH,
                 max=MAX_MAX_DEPTH,
+            ),
+            FieldSpec(
+                key="prompt_mode",
+                type="select",
+                title="capability.subagent.fields.prompt_mode.title",
+                description="capability.subagent.fields.prompt_mode.description",
+                default=DEFAULT_PROMPT_MODE,
+                enum=list(PROMPT_MODES),
             ),
         ],
         # `tools()`-only, so the react+graph default stands. It is designed for
