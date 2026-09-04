@@ -771,16 +771,18 @@ export type TraceSummary = {
  * `pendingToolCallIds` — see {@link statusForEntry}.
  */
 export function traceSummary(entries: TraceEntry[], pendingToolCallIds?: readonly string[] | null): TraceSummary {
-  const rows = traceRows(entries);
-
+  // Classifies entries directly rather than going through `traceRows`: the
+  // header needs lanes and durations, never display text, and this runs on
+  // every streamed delta — flattening markdown and diffing preambles here
+  // would put that cost on the per-token path for nothing.
   let reasoningMs: number | null = null;
-  for (const { entry, lane } of rows) {
-    if (lane !== "reasoning" || entry.kind !== "solo") continue;
+  for (const entry of entries) {
+    if (!isReasoningEntry(entry) || entry.kind !== "solo") continue;
     const duration = thoughtExtras(entry.message).duration_ms;
     if (duration != null) reasoningMs = (reasoningMs ?? 0) + duration;
   }
 
-  const toolCount = rows.filter((r) => r.lane === "step" && r.entry.kind === "combo").length;
+  const toolCount = entries.filter((e) => e.kind === "combo").length;
   const statuses = entries.map((e) => statusForEntry(e, pendingToolCallIds));
   const running = statuses.some((s) => s === "streaming" || s === "pending" || s === "awaiting_confirmation");
   const awaitingConfirmation = statuses.some((s) => s === "awaiting_confirmation");

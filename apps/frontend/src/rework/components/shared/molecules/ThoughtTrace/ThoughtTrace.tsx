@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
@@ -63,9 +64,12 @@ function useSummaryLabel(summary: TraceSummary): string {
 
 export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: ThoughtTraceProps) {
   const { t } = useTranslation();
-  const entries = groupTraceEntries(messages);
-  const rows = traceRows(entries);
-  const summary = traceSummary(entries, pendingToolCallIds);
+  // Memoized on `messages`: this whole fold — grouping, preview flattening,
+  // preamble diffing — runs on every streamed delta, and the page re-renders
+  // for reasons of its own on top of that.
+  const entries = useMemo(() => groupTraceEntries(messages), [messages]);
+  const rows = useMemo(() => traceRows(entries), [entries]);
+  const summary = useMemo(() => traceSummary(entries, pendingToolCallIds), [entries, pendingToolCallIds]);
   const label = useSummaryLabel(summary);
   const { expanded, toggle } = useTraceExpansion(done);
 

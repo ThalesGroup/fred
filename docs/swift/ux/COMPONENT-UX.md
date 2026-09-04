@@ -393,6 +393,11 @@ agents) so the decision is informed at the point it is made.
   tool. It now closes that block at each tool round — see `RUNTIME-EXECUTION-CONTRACT.md`
   §8.72. Turns stored before that date keep their single block and their old rendering.
 
+  `traceSummary()` deliberately classifies entries itself rather than calling `traceRows()`: the
+  header needs lanes and durations, never display text, and it runs on every streamed delta —
+  flattening markdown and diffing preambles there would put that cost on the per-token path for
+  nothing. `ThoughtTrace` memoizes its own fold on `messages` for the same reason.
+
   Three consequences worth knowing. The grouping card behind the tool rows is gone: rows of
   both kinds now sit directly in `.body` as one flat timeline, so the rail's end trimming
   moved there too — each row publishes where its own marker sits via `--trace-marker-y`
@@ -1179,11 +1184,23 @@ _(none)_
   phase opens — the latter already includes the first batch, and an answer arriving in one chunk
   would leave a budget of zero.
 
-  Reader override is read from the container's scroll position at each `scroll` event, not sniffed
-  from wheel/touch/key gestures: gestures miss scrollbar drags, keyboard scrolling and middle-click,
-  and they fire for nested scrollers (wide tables, code blocks) that never moved this view. `scroll`
-  does not bubble from an element, so only this container's own movement is seen — and scrolling
-  back down re-arms following for free.
+  Reader override is read from the container's `scroll` events, not sniffed from wheel/touch/key
+  gestures: gestures miss scrollbar drags, keyboard scrolling and middle-click, and they fire for
+  nested scrollers (wide tables, code blocks) that never moved this view. `scroll` does not bubble
+  from an element, so only this container's own movement is seen — and scrolling back down re-arms
+  following for free.
+
+  It keys on scroll **direction**, not on distance from the bottom. Distance alone is a race: the
+  follow write and the browser's scroll event are a frame apart, so content landing in between makes
+  a perfectly-followed view measure as far from the bottom, which would give up following for the
+  rest of the turn with nothing left to re-arm it. Growth never lowers `scrollTop` and following only
+  ever raises it, so an upward move is unambiguously the reader.
+
+  One more signal is needed because `hasAnswerText` only accumulates: a tool round *after* the model
+  has written text would otherwise leave the turn stuck in the answer phase, with its new trace rows
+  eating the freeze budget. A rise in the turn's trace-row count drops the anchor and resumes
+  following — which also covers a HITL resume, since that adds no user message and so leaves the key
+  unchanged.
 
   `ChatMessagesArea` lost its `useLayoutEffect`/`turnKey` bottom-jump in the same change; it is
   presentation only now. Two owners on one scroll container cannot be reasoned about, and the hook

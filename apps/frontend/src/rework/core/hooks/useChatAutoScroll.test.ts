@@ -17,6 +17,7 @@ import {
   ANSWER_FOLLOW_FRACTION,
   NEAR_BOTTOM_PX,
   isNearBottom,
+  resolveStuckToBottom,
   shouldFollowBottom,
   type ScrollIntentInput,
 } from "./useChatAutoScroll";
@@ -88,5 +89,34 @@ describe("isNearBottom", () => {
 
   it("reports a real scroll-up as away from the bottom", () => {
     expect(isNearBottom(400 - NEAR_BOTTOM_PX - 1, 1000, 600)).toBe(false);
+  });
+});
+
+describe("resolveStuckToBottom", () => {
+  // 1000 tall, 600 visible: the bottom is scrollTop 400.
+  const at = (wasStuck: boolean, previousTop: number, top: number, height = 1000) =>
+    resolveStuckToBottom(wasStuck, previousTop, top, height, 600);
+
+  it("gives up following as soon as the reader moves up", () => {
+    expect(at(true, 400, 300)).toBe(false);
+  });
+
+  it("re-arms when the reader comes back to the bottom", () => {
+    expect(at(false, 300, 400)).toBe(true);
+  });
+
+  it("stays given up while the reader scrolls down but not to the bottom", () => {
+    expect(at(false, 100, 200)).toBe(false);
+  });
+
+  // The race this function exists for: our own follow lands, and content that
+  // arrived in the meantime leaves the view measuring far from the bottom.
+  // Distance alone would give up here, with nothing left to re-arm it.
+  it("keeps following when content outran the follow write", () => {
+    expect(at(true, 400, 400, 2000)).toBe(true);
+  });
+
+  it("ignores a sub-pixel jitter upward", () => {
+    expect(at(true, 400, 399.5)).toBe(true);
   });
 });

@@ -46,6 +46,27 @@ export function isNearBottom(scrollTop: number, scrollHeight: number, clientHeig
 }
 
 /**
+ * Whether the view is still following the bottom, after one scroll event.
+ *
+ * Keyed on DIRECTION, not on distance alone. Distance alone is a race: our own
+ * follow write and the browser's scroll event are a frame apart, and content
+ * that lands in between makes a perfectly-followed view measure as far from the
+ * bottom — which would give up following for the rest of the turn with nothing
+ * left to re-arm it. Only a scroll that moves UP is the reader taking over;
+ * growth never lowers scrollTop, and following only ever raises it.
+ */
+export function resolveStuckToBottom(
+  wasStuck: boolean,
+  previousTop: number,
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+): boolean {
+  if (scrollTop < previousTop - 1) return false;
+  return isNearBottom(scrollTop, scrollHeight, clientHeight) ? true : wasStuck;
+}
+
+/**
  * Whether the view should be pushed to the bottom right now.
  *
  * The answer phase stops on its own without measuring any DOM node. The view is
@@ -82,6 +103,8 @@ export interface ChatAutoScrollInput {
   isStreaming: boolean;
   /** The turn has produced answer text, not just trace rows. */
   hasAnswerText: boolean;
+  /** Trace rows so far this turn — a rise means the turn went back to work. */
+  traceCount: number;
 }
 
 /**
@@ -93,7 +116,7 @@ export interface ChatAutoScrollInput {
  */
 export function useChatAutoScroll(
   containerRef: RefObject<HTMLDivElement | null>,
-  { turnKey, isStreaming, hasAnswerText }: ChatAutoScrollInput,
+  { turnKey, isStreaming, hasAnswerText, traceCount }: ChatAutoScrollInput,
 ): void {
   // Whether the view was at the bottom at the last scroll event. Read from
   // scroll events rather than sniffed from wheel/touch/key gestures: those miss
@@ -102,6 +125,7 @@ export function useChatAutoScroll(
   // `scroll` does not bubble from an element, so only this container's own
   // movement is seen.
   const stuckToBottomRef = useRef(true);
+  const previousTopRef = useRef(0);
   const answerStartHeightRef = useRef<number | null>(null);
   // Content height while the turn was still working. Sampled continuously so
   // the answer's budget is measured from the last trace-only height — taking it
@@ -134,11 +158,27 @@ export function useChatAutoScroll(
     const el = containerRef.current;
     if (!el) return;
     const onScroll = () => {
-      stuckToBottomRef.current = isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
+      stuckToBottomRef.current = resolveStuckToBottom(
+        stuckToBottomRef.current,
+        previousTopRef.current,
+        el.scrollTop,
+        el.scrollHeight,
+        el.clientHeight,
+      );
+      previousTopRef.current = el.scrollTop;
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [containerRef]);
+
+  // A tool round after the model has already written text puts the turn back to
+  // work. `hasAnswerText` cannot say so — the answer text only accumulates — so
+  // new trace rows drop the anchor and following resumes until the answer grows
+  // again. Also covers a HITL resume, which adds no user message and so does not
+  // change `turnKey`.
+  useEffect(() => {
+    answerStartHeightRef.current = null;
+  }, [traceCount]);
 
   // Content changes come from streamed text, not from React commits alone — a
   // ResizeObserver on the scrolled content sees every one of them. The
@@ -177,5 +217,6 @@ export function useChatAutoScroll(
     workHeightRef.current = null;
     stuckToBottomRef.current = true;
     el.scrollTop = el.scrollHeight;
+    previousTopRef.current = el.scrollTop;
   }, [containerRef, turnKey]);
 }
