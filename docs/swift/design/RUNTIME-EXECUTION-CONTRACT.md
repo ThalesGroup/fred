@@ -3935,9 +3935,9 @@ only. Its tool descriptions, guardrails, output contract and recovery notice
 are still appended and no caller can drop them. This is a deliberate, public
 widening: any Graph node may run any agent registered in the pod with its
 authored template replaced, guardrails kept. ReAct-family callees only — a
-Graph callee composes no system prompt and is refused. Full entry: §8.64.
+Graph callee composes no system prompt and is refused. Full entry: §8.67.
 
-`AgentInvocationResult.token_usage` (`dict[str, int] | None`, §8.64) carries the
+`AgentInvocationResult.token_usage` (`dict[str, int] | None`, §8.68) carries the
 callee's billed spend verbatim from its `final` event — `None` when the callee
 reported none, or when the call ended on an error event. A callee's turn emits no
 `agent.turn_completed`, so this is the only place its spend survives.
@@ -4502,8 +4502,15 @@ agent whose turns are inherently multi-step.
 
 The ReAct side of `invoke_agent` (§14). A `subagent` capability
 (`libs/fred-capability-subagent`) gives an agent one tool, `run_subagent`,
-that runs a fresh-context copy of the calling agent. Design and deferred
-tiers: `../rfc/SUBAGENT-CAPABILITY-RFC.md`.
+that runs a fresh-context copy of the calling agent. Still-open questions and
+the deferred tiers: `../rfc/SUBAGENT-CAPABILITY-RFC.md`.
+
+> **This entry records the first slice only.** Four of the limits it states
+> were closed by the entries that follow it, all on the same feature:
+> §8.64 (a child can never hang on human approval), §8.66 (the callee's
+> `sources`/`ui_parts`), §8.67 (`system_prompt`), §8.68 (per-child token
+> spend). Read this for how the sub-agent path was built; read §14 plus
+> §8.64–§8.68 for what it does today.
 
 **Same-agent children inherit the parent turn; cross-agent children do not.**
 Before this, a child invoked through `LocalRegistryAgentInvoker` reached
@@ -4515,7 +4522,10 @@ still be resolved on its own terms. A child naming the **same** `agent_id` now
 inherits all of those, plus the parent's `turn_options` and the selections on
 its `RuntimeContext` (`selected_document_uids`, `search_policy`, `language`,
 …), so a user who narrowed their agent to one folder gets children searching
-that folder rather than the whole corpus.
+that folder rather than the whole corpus. Inheriting `turn_options` blind rests
+on their own invariant — turn options *narrow, never widen*, as
+`DocumentAccessTurnOptions`' docstring states. A future turn option that grants
+rather than restricts would make this wrong and must revisit it.
 
 **A same-agent child runs the parent's own definition, not the registry
 template.** `_ParentTurn` carries it. The registry holds templates, and only
@@ -4561,9 +4571,14 @@ checkpointer. Without it the child would map the parent's `session_id` to
 LangGraph's `thread_id`, load the parent's checkpoint — seeing the whole
 conversation — and overwrite it mid-turn. Cross-agent children keep today's
 behaviour byte for byte; the MEMORY-02 gap in §14 stays open for them. Two
-consequences, both accepted: a child cannot be resumed, and therefore cannot
-be paused for human approval (HITL stripping is a follow-up — until it lands,
-enable `subagent` only on agents with no approval-gated tools).
+consequences, both accepted here: a child cannot be resumed, and therefore
+cannot be paused for human approval — which at the time left only the
+operational advice to enable `subagent` on agents with no approval-gated tools.
+**Superseded by §8.64**: such tools are now hidden from a child's model, or
+refused with an error tool result, so that restriction no longer applies.
+A child still writes no history row of its own — `_write_turn_history` runs
+only on the streaming path the invoker bypasses — so children never surface as
+phantom conversations in the session list, whatever `session_id` they carry.
 
 **`CapabilityIdentity` gains `agent_id`** (additive, default `None`): the
 template/definition id beside the `agent_instance_id` it already carried. A
@@ -4580,7 +4595,9 @@ invoker now returns the event's real `message`.
 accounting (`agent.subagent_turn_completed`), child `sources`/`ui_parts` on
 `AgentInvocationResult`, and the `system_prompt` override on
 `AgentInvocationRequest` — so §14's frozen request/result shapes are
-unchanged here.
+unchanged *here*. **All four shipped within the day**, in §8.64, §8.68, §8.66
+and §8.67 respectively; §14 now carries the widened request and result shapes
+and is the surface to read, not this paragraph.
 
 **And, explicitly, no bound on fan-out.** Depth bounds height; nothing bounds
 how many children one assistant message launches, and they run concurrently in
@@ -4773,8 +4790,9 @@ economics; no bound is added here.
 
 ### 8.67 ✅ `AgentInvocationRequest.system_prompt` — a caller replaces the callee's template layer — issue #2527 (2026-09-03)
 
-`AgentInvocationRequest` gains `system_prompt: str | None = None` (additive;
-§14's shape was otherwise unchanged by §8.63). When set, it replaces **layer 1**
+`AgentInvocationRequest` gains `system_prompt: str | None = None` (additive —
+the request-side half of §14's widening; §8.68 adds the result-side half).
+When set, it replaces **layer 1**
 of the callee's composed system prompt — the rendered agent template — and
 nothing else. Design: `../rfc/SUBAGENT-CAPABILITY-RFC.md` §6.7.
 
