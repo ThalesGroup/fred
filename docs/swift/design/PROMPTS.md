@@ -192,8 +192,9 @@ The shipped prompt UI has two parts:
 
 - `PromptsPage`: prompt-library CRUD, plus category management
   (`ManageCategoriesDialog`: Créer/Éditer/Supprimer)
-- chat composer prompt picker: `SearchConfig` opens `ContextPromptPicker`, and
-  selected prompts render as removable `ContextPromptChips`
+- chat composer prompt picker: the add menu's "Prompt library" row opens
+  `PromptSelectionChatPanel`, a right-side panel with a space picker, a search
+  field and category chips; picking a prompt inserts its text into the draft
 
 The context picker reads
 `GET /control-plane/v1/teams/{team_id}/prompts/context`, which returns only

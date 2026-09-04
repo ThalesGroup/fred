@@ -13,15 +13,9 @@
  * limitations under the License.
  */
 
-/* Floating launcher rail — matches the chat page's floating-chrome idiom
- * (position: absolute, zero layout impact). Sits below the top bar on the
- * right edge; each button opens one capability panel.
- * top clears ManagedChatPage's .topBar band, which is two lines tall (8px
- * padding + a 24px title line + a 20px agent-name line + 8px padding = 60px),
- * plus a breathing gap - a 48px offset sat on the band. */
 /* In-flow at the page root, to the right of the chat body: it reserves its own
-   column (reflowing the body left) instead of floating. Full page height, inset
-   12px on top/right/bottom; launchers stack from the top. */
+   column (reflowing the body left) rather than floating over it. Launchers
+   stack from the top, first-party ones above the capability-derived ones. */
 .rail {
   display: flex;
   flex-shrink: 0;
@@ -31,4 +25,13 @@
   border-radius: var(--radius-s);
   background-color: var(--surface-container-low);
   padding: var(--spacing-xs);
+}
+
+/* Footer group: tooling sits at the rail's bottom, away from the content
+   panels, and stays there however many launchers the top holds. */
+.railFooter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin-top: auto;
 }
