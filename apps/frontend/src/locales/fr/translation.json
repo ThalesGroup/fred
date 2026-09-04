@@ -543,7 +543,8 @@
       "clearSearch": "Effacer la recherche",
       "allCategories": "Toutes",
       "empty": "Aucun prompt dans cet espace.",
-      "emptyFilters": "Aucun prompt ne correspond aux filtres."
+      "emptyFilters": "Aucun prompt ne correspond aux filtres.",
+      "categoryLabel": "Catégorie"
     }
   },
   "comingSoon": {
