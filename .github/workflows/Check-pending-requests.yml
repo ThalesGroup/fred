@@ -4,6 +4,13 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# A new push supersedes the run it interrupts: keep only the latest commit of a
+# branch under check, so a work-in-progress series does not queue several full
+# job sets against the same runner pool.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

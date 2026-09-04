@@ -12,6 +12,12 @@ on:
       - swift
       - develop
 
+# A new push supersedes the run it interrupts, for pull requests only: on a base
+# branch each commit keeps its own verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Least-privilege GITHUB_TOKEN: these jobs only check out the repo and run
 # migration checks — no write access is required (CodeQL actions/missing-workflow-permissions).
 permissions:
