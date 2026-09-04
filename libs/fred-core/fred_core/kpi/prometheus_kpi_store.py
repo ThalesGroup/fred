@@ -57,6 +57,9 @@ logger = logging.getLogger(__name__)
 #   `_pdf_kpi_timer` call sites) — deliberately a distinct label from
 #   `runtime_stage` so a Grafana `runtime_stage` variable/query never mixes
 #   TURN-01's auth stages with Knowledge Flow's PDF pipeline stages.
+#   `invocation_depth` is the same narrow-closed-set pattern (1..5, no identity),
+#   emitted only by agent.subagent_turn_completed — see OBSERVABILITY-AND-AUDIT.md
+#   §3.1 for what a panel does with it.
 PROMETHEUS_ALLOWED_LABELS = frozenset(
     {
         "tool_name",
@@ -81,6 +84,7 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "runtime_stage",
         "rebac_operation",
         "pdf_stage",
+        "invocation_depth",
     }
 )
 

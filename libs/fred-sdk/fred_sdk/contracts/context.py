@@ -873,6 +873,12 @@ class AgentInvocationResult(FrozenModel):
     is_error: bool = False
     """True when the agent failed; ``content`` may contain an error description."""
 
+    token_usage: dict[str, int] | None = None
+    """Billed token usage of the invoked agent's turn, verbatim from its ``final``
+    event (``input_tokens``/``output_tokens``/``cache_read_tokens``). ``None`` when the
+    callee reported none, or when the invocation ended on an error event. Appended last
+    so no positional caller shifts."""
+
 
 class PublishedArtifact(FrozenModel):
     """

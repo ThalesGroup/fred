@@ -836,6 +836,10 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                         sources=payload.get("sources") or (),
                         ui_parts=payload.get("ui_parts") or (),
                         is_error=False,
+                        # SUBAGENT token accounting: a child turn emits no
+                        # `agent.turn_completed`, so this is the only place its
+                        # billed spend is still readable.
+                        token_usage=payload.get("token_usage"),
                     )
                 except ValidationError as exc:
                     logger.exception(
@@ -3161,6 +3165,7 @@ def _build_capability_block(
     session_id: str | None,
     team_id: str | None,
     agent_instance_id: str | None,
+    exchange_id: str | None = None,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     invocation_depth: int = 0,
@@ -3267,6 +3272,7 @@ def _build_capability_block(
             team_id=team_id,
             agent_instance_id=agent_instance_id,
             agent_id=definition.agent_id,
+            exchange_id=exchange_id,
         ),
         services=services,
         turn_options=turn_options,
@@ -3674,6 +3680,7 @@ async def _iterate_runtime_event_payloads(
             session_id=ctx.get("session_id"),
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
+            exchange_id=exchange_id,
             turn_options=getattr(request, "turn_options", None) or None,
             team_settings=team_settings,
             invocation_depth=invocation_depth,

@@ -34,7 +34,7 @@ operating the infrastructure. Not a product-usage or audit tool.
 **What is captured.** A bounded, explicitly-allow-listed set of dimensions per metric: which
 tool or route, success/failure/error-code, which model, which agent *type* (the catalog
 blueprint — e.g. "customer-support-bot" — not a specific team's configured copy of it), which
-pod/service.
+pod/service, and how many agent-to-agent hops deep a turn ran (`invocation_depth`, §3.1).
 
 **What is structurally excluded — by design, enforced in code, not by operator discipline:**
 - User identity (`user_id`), session identity (`session_id`, `exchange_id`).
@@ -48,6 +48,77 @@ pod/service.
 
 **Retention & access.** Whatever the Prometheus/Grafana deployment's own policy is — no
 Fred-specific retention requirement, since nothing identifying reaches this stream.
+
+### 3.1 Sub-agent turns are counted by their own metric — `agent.subagent_turn_completed`
+
+> **Anything summing `agent.turn_completed` alone under-counts token spend.** A sub-agent turn
+> (the `subagent` capability's `run_subagent`) runs through the invoker, not the streaming path,
+> and therefore emits **no** `agent.turn_completed`. Total spend for a period is
+> `agent.turn_completed` **plus** `agent.subagent_turn_completed`. This is deliberate: per-child
+> attribution is what makes a runaway sub-agent diagnosable, and two metrics can always be summed
+> while one folded number can never be split. That sum covers user turns and `run_subagent`
+> children, not every child: a Graph node or `TeamAgent` calling `invoke_agent` directly emits
+> neither metric — the emission lives in the `subagent` capability, not in the invoker — so those
+> invocations stay uncounted.
+
+Emitted once per finished child, by the capability, through `RuntimeServices.kpi_writer`.
+
+| | |
+|---|---|
+| Type / value | `timer`, ms of wall-clock time the parent's tool call spent waiting on the child |
+| Quantities | `input_tokens`, `output_tokens`, `cache_read_tokens` — the child's own `final` event, verbatim. Absent when the child reported none (a failed child usually does) |
+| Prometheus labels | `template_agent_id` (the child runs the parent's agent template), `finish_reason` (`stop` / `error` — a child that failed after burning tokens still counts), `invocation_depth` (the **child's** depth: 1 for a user's agent's own children, up to the clamped `max_depth` ceiling of 5), plus the `actor_type` / `service` every KPI event carries |
+| Store-only dims | `session_id`, `exchange_id`, `agent_instance_id`, `team_id` — all of them the **parent's**, so a child's spend is attributable to the turn that launched it. Stripped before Prometheus by `PROMETHEUS_ALLOWED_LABELS`, exactly as on `agent.turn_completed` |
+
+`invocation_depth` is the one dimension this metric adds to the allow-list. It qualifies on the
+same grounds as `runtime_stage` / `rebac_operation` / `pdf_stage`: a closed set of at most five
+values, no identity, no pivot back into raw logs — and without it a panel can only show total
+sub-agent spend, never which depth ran away.
+
+**Two residual under-counts, both known.** A child cancelled mid-flight — the parent's SSE client
+disconnects and the fan-out is cancelled — emits nothing, because the emission sits after the
+awaited invocation and `CancelledError` is not routed through the runtime's `execution_error`
+path; tokens the gateway already billed for that partial child are lost from both metrics. And a
+child that raises before producing a `final` event has no `token_usage` to report, so it is
+counted (`finish_reason="error"`) with no token counters rather than with zeros. Note what the
+first of those two costs: a child has no timeout, so one that hangs is ended only by the client
+disconnecting — meaning the metric is blind to exactly the pathology it would be most useful for.
+
+**Read the latency as a queueing time, not as the child's own work.** Siblings of one fan-out run
+concurrently on one event loop, so a wide fan-out inflates every child's measured wall clock with
+its siblings' contention. Nothing on the event records the fan-out width, so the value cannot be
+normalised by it: a rise means "children got slower" *or* "fan-out got wider", and `_count` is the
+only proxy for telling them apart.
+
+**Grafana.** Dashboards are not versioned in this repository (Stream 1 is an infrastructure-owned
+Grafana over Google Managed Prometheus), so the panel is created from this spec. The KPI names are
+sanitized on the way to Prometheus — `.` becomes `_`, and each quantity becomes its own counter:
+
+```promql
+# Sub-agent output tokens per second, split by depth and agent template.
+sum by (template_agent_id, invocation_depth) (
+  rate(agent_subagent_turn_completed_quantity_output_tokens_total[5m])
+)
+
+# Total output tokens/s including sub-agents — the number that is NOT under-counted.
+sum(rate(agent_turn_completed_quantity_output_tokens_total[5m]))
+  + sum(rate(agent_subagent_turn_completed_quantity_output_tokens_total[5m]))
+
+# Mean sub-agent turn latency (ms), by depth. Use the mean, not a quantile — see below.
+sum by (invocation_depth) (rate(agent_subagent_turn_completed_sum[5m]))
+  / sum by (invocation_depth) (rate(agent_subagent_turn_completed_count[5m]))
+```
+
+`input_tokens` and `cache_read_tokens` follow the same `_quantity_<name>_total` shape.
+
+> **Do not write `histogram_quantile` against this metric's buckets.**
+> `PrometheusKPIStore._get_metric` picks a bucket set from the metric *name*: `_ms` gets
+> millisecond buckets, `_seconds` gets second buckets, anything else gets `prometheus_client`'s
+> default seconds-scale buckets (0.005–10). A timer whose name carries neither suffix therefore
+> observes millisecond values into second-scale buckets and every observation lands in `+Inf`,
+> making any quantile meaningless. `agent.turn_completed` has the same shape, so this is a
+> property of the shared store, not of this metric — the `_sum`/`_count` mean above is correct
+> and is what a panel should use until the store selects buckets from `unit` rather than the name.
 
 ## 4. Stream 2 — Product analytics (owned by a separate track, referenced here)
 

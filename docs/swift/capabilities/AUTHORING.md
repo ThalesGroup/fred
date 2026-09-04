@@ -115,6 +115,27 @@ only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is t
   which answers "who", not "how deep". Enforcement belongs in `tools()`: return
   no tool past the limit, so a leaf turn is never shown a call it would only be
   refused (`subagent` is the reference).
+- **`ctx.identity.exchange_id`** — the turn's exchange id, so a capability that
+  emits a KPI can name the turn that produced it. Optional, like the ids above.
+
+### Emitting a KPI from a capability
+
+`ctx.services.kpi_writer` is the only sanctioned sink — never a logger, a store,
+or an HTTP call of your own (`docs/CONVENTIONS.md` §Performance & concurrency).
+Three rules, all of which `subagent`'s `agent.subagent_turn_completed` follows
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.68):
+
+- **The port is optional and abstract.** Skip when it is `None`, and wrap the
+  `emit(...)` in `try/except`: fail-open is a property of the platform's writer,
+  not of the `BaseKPIWriter` contract you are handed. A metric must never be able
+  to fail a turn.
+- **Identity dims are free; Prometheus labels are not.** Put `session_id`,
+  `exchange_id`, `agent_instance_id`, `team_id` on the event — the KPI store keeps
+  them and `PROMETHEUS_ALLOWED_LABELS` strips them before Prometheus. A dim you
+  want on a Grafana panel must be in that allow-list, which is a deliberate
+  decision and a closed, low-cardinality value set — never an id.
+- **Ship the panel with the metric.** Dashboards are not versioned here, so the
+  PromQL goes in `platform/OBSERVABILITY-AND-AUDIT.md` beside the metric's dims.
 
 ---
 

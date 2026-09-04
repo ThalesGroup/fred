@@ -22,9 +22,11 @@ What it is, why, and its open limits: README.md and
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 from typing import Literal
 
+from fred_core.kpi import KPIActor
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -60,6 +62,12 @@ MAX_MAX_DEPTH = 5
 # Cap on ONE child's answer, in characters, against the parent's 200k history
 # budget. Per child, so it does not compose with fan-out — see README.
 MAX_SUBAGENT_CONTENT_CHARS = 40_000
+
+# Per-child spend metric. A child turn emits no `agent.turn_completed` of its
+# own, so anything summing that metric alone under-counts by exactly this one —
+# see OBSERVABILITY-AND-AUDIT.md §3.
+SUBAGENT_TURN_COMPLETED_METRIC = "agent.subagent_turn_completed"
+_TOKEN_QUANTITY_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens")
 
 # How the parent's prompt reaches the child: `append` leaves the child's own
 # agent template in place and carries the prompt as its user turn; `replace`
@@ -161,6 +169,62 @@ def _child_turn(prompt: str, mode: PromptMode) -> tuple[str, str | None]:
     return f"{_FRAMING_APPEND}{prompt}", None
 
 
+def _emit_subagent_turn_completed(
+    ctx: CapabilityContext[SubAgentConfig, EmptyModel],
+    *,
+    agent_id: str,
+    elapsed_ms: float,
+    token_usage: dict[str, int] | None,
+    is_error: bool,
+) -> None:
+    """Emit one `agent.subagent_turn_completed` for one finished child.
+
+    Dims are the PARENT's, plus the child's depth: per-child attribution is what
+    makes a runaway sub-agent diagnosable. The identity dims stay store-only —
+    `PROMETHEUS_ALLOWED_LABELS` strips them before Prometheus sees them.
+    """
+
+    kpi = ctx.services.kpi_writer
+    if kpi is None:
+        return
+    identity = ctx.identity
+    quantities = (
+        {
+            key: token_usage[key]
+            for key in _TOKEN_QUANTITY_KEYS
+            if token_usage.get(key) is not None
+        }
+        if token_usage
+        else {}
+    )
+    try:
+        kpi.emit(
+            name=SUBAGENT_TURN_COMPLETED_METRIC,
+            type="timer",
+            value=elapsed_ms,
+            unit="ms",
+            dims={
+                "session_id": identity.session_id,
+                "team_id": identity.team_id,
+                "agent_instance_id": identity.agent_instance_id,
+                "exchange_id": identity.exchange_id,
+                "template_agent_id": agent_id,
+                # The CHILD's depth: the parent runs at `invocation_depth` and
+                # the invoker re-enters the turn path one level below it.
+                "invocation_depth": str(ctx.invocation_depth + 1),
+                "finish_reason": "error" if is_error else "stop",
+            },
+            quantities=quantities or None,
+            actor=KPIActor(type="human", user_id=identity.user_id),
+        )
+    except Exception:
+        # The port is the abstract `BaseKPIWriter`: fail-open is a property of
+        # the platform's writer, not of the contract a capability is handed.
+        logger.warning(
+            "subagent: could not emit %s", SUBAGENT_TURN_COMPLETED_METRIC, exc_info=True
+        )
+
+
 def _build_run_subagent_tool(
     ctx: CapabilityContext[SubAgentConfig, EmptyModel],
     *,
@@ -206,6 +270,7 @@ def _build_run_subagent_tool(
             team_id=identity.team_id,
         )
         message, system_prompt = _child_turn(prompt, prompt_mode)
+        started = time.perf_counter()
         result = await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=agent_id,
@@ -213,6 +278,15 @@ def _build_run_subagent_tool(
                 context=declared_identity,
                 system_prompt=system_prompt,
             )
+        )
+        # Once per child, failures included — a child that burned tokens then
+        # failed is exactly the runaway this metric exists to show.
+        _emit_subagent_turn_completed(
+            ctx,
+            agent_id=agent_id,
+            elapsed_ms=(time.perf_counter() - started) * 1000.0,
+            token_usage=result.token_usage,
+            is_error=result.is_error,
         )
         if result.is_error:
             failure = result.content or "The sub-agent failed with no message."

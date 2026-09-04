@@ -348,3 +348,37 @@ def test_prometheus_store_never_promotes_any_identity_label() -> None:
     assert label_names.isdisjoint(forbidden)
     assert "runtime_stage" in label_names
     assert "rebac_operation" in label_names
+
+
+def test_prometheus_store_promotes_invocation_depth_but_not_the_dims_beside_it() -> (
+    None
+):
+    """
+    `invocation_depth` (agent.subagent_turn_completed) is a closed set of at
+    most five values and carries no identity, so a Grafana panel can break
+    sub-agent token spend down by depth. The session/exchange/instance dims the
+    same event carries stay out, exactly as on `agent.turn_completed`.
+    """
+    delegate = _RecordingKPIStore()
+    store = PrometheusKPIStore(delegate=delegate)
+    metric_name = f"test.subagent_depth_{uuid4().hex}"
+    event = KPIEvent(
+        metric=Metric(name=metric_name, type="timer", value=2500.0, unit="ms"),
+        dims={
+            "invocation_depth": "1",
+            "template_agent_id": "customer-support-bot",
+            "finish_reason": "stop",
+            "session_id": "session-1",
+            "exchange_id": "exchange-1",
+            "agent_instance_id": "instance-1",
+        },
+    )
+
+    store.index_event(event)
+
+    resolved_name = store._resolve_metric_name(metric_name)
+    label_names = set(store._label_names[(resolved_name, "timer")])
+    assert {"invocation_depth", "template_agent_id", "finish_reason"} <= label_names
+    assert label_names.isdisjoint({"session_id", "exchange_id", "agent_instance_id"})
+    # The delegate (OpenSearch) still receives every dim.
+    assert delegate.events[0].dims["session_id"] == "session-1"

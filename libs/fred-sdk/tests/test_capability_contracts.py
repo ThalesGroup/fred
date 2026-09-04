@@ -594,3 +594,24 @@ def test_model_capability_id_distinguishes_provider_and_name() -> None:
     assert model_capability_id("ollama", "mistral") != model_capability_id(
         "ollama", "mixtral"
     )
+
+
+def test_capability_identity_exchange_id_is_additive_and_optional() -> None:
+    from fred_sdk.contracts.capability import CapabilityIdentity
+
+    # A capability that emits a KPI needs the turn's exchange id to correlate
+    # its event; every existing construction site must keep working without it.
+    assert CapabilityIdentity(user_id="alice").exchange_id is None
+    assert (
+        CapabilityIdentity(user_id="alice", exchange_id="exchange-1").exchange_id
+        == "exchange-1"
+    )
+
+
+def test_agent_invocation_result_token_usage_is_additive_and_optional() -> None:
+    from fred_sdk.contracts.context import AgentInvocationResult
+
+    # The callee's billed spend, verbatim from its `final` event.
+    assert AgentInvocationResult(agent_id="a").token_usage is None
+    usage = {"input_tokens": 12, "output_tokens": 3}
+    assert AgentInvocationResult(agent_id="a", token_usage=usage).token_usage == usage
