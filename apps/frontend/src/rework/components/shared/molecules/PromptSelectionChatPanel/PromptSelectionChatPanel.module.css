@@ -1,7 +1,10 @@
+/* Carries the drawer body's insets (it is rendered `flushBody`) minus the top
+   one, and the column layout the drawer shell does not impose. */
 .body {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-s);
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-m) var(--spacing-m);
   height: 100%;
   min-height: 0;
 }

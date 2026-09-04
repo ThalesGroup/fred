@@ -143,6 +143,9 @@ export default function PromptSelectionChatPanel({
       title={t("chatbot.promptSelectionPanel.title")}
       layout="push"
       floating
+      // The body below owns its insets: the drawer's own padding would put a
+      // gap above the space picker that the header already provides.
+      flushBody
       resizable={{ persistKey: "prompt-selection-panel" }}
     >
       <div className={styles.body}>
