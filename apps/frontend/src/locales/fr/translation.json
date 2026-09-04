@@ -2285,10 +2285,6 @@
     "teamCard": {
       "join": "Rejoindre",
       "inviteOnly": "Sur invitation",
-      "invitationMail": {
-        "subject": "[{{site}}] Demande pour rejoindre l'équipe {{team}}",
-        "body": "Bonjour,\n\nJe souhaite rejoindre l'équipe {{team}} sur {{site}}.\n\nInformations utilisateur : {{user}}\n\nAller à la page de l'équipe {{team}} : {{agentsUrl}}\nGérer les membres de l'équipe {{team}} : {{membersUrl}}"
-      },
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
