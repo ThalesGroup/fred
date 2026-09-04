@@ -196,24 +196,28 @@ export default function PromptSelectionChatPanel({
         />
       )}
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
-        clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
-        size="small"
-      />
-
-      {categories.length > 0 && (
-        <Select<string>
+      {/* Search and category are one group — both narrow the same list — so they
+          sit tighter than the panel body's own spacing between blocks. */}
+      <div className={styles.filters}>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
+          clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
           size="small"
-          compact
-          options={categoryOptions}
-          value={category ?? ALL_CATEGORIES}
-          onChange={(value) => setCategory(value === ALL_CATEGORIES ? null : value)}
-          ariaLabel={t("chatbot.promptSelectionPanel.categoryLabel")}
         />
-      )}
+
+        {categories.length > 0 && (
+          <Select<string>
+            size="small"
+            compact
+            options={categoryOptions}
+            value={category ?? ALL_CATEGORIES}
+            onChange={(value) => setCategory(value === ALL_CATEGORIES ? null : value)}
+            ariaLabel={t("chatbot.promptSelectionPanel.categoryLabel")}
+          />
+        )}
+      </div>
 
       {isLoading ? (
         <div className={styles.state}>

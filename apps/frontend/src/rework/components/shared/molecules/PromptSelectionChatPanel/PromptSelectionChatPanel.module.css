@@ -1,3 +1,11 @@
+/* The two narrowing controls, closer to each other than to the blocks around
+   them — the panel body's own gap separates groups, not their contents. */
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
 /* The list is the only part that scrolls: the space picker, the search field
    and the category chips stay reachable however long the list gets. */
 .list {

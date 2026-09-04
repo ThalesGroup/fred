@@ -916,7 +916,9 @@ personal prompts from a team chat. `ContextPromptPicker` and the
 push-drawer slot so it never stacks with the attachments, capability or
 document-scope panels. The shell supplies the header (title + close), the
 surface and the insets. Body, top to bottom: a `ButtonGroup` picking the space,
-a `SearchInput`, a category `Select`, then the list. Only the list scrolls.
+a `SearchInput` and a category `Select` grouped together at 8px — both narrow
+the same list, so they sit tighter than the body's 16px between blocks — then
+the list. Only the list scrolls.
 
 **Two spaces, two queries.** `GET /teams/{id}/prompts/context` returns personal
 **or** team prompts depending on the id passed, never both — deliberately (a
