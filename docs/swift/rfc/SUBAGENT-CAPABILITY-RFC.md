@@ -8,6 +8,8 @@ built is recorded in the compact docs, not here —
 surface), `../capabilities/AUTHORING.md` (what a capability author needs),
 `../platform/OBSERVABILITY-AND-AUDIT.md` §3.1 (the per-child metric), and
 `libs/fred-capability-subagent/README.md` (the package itself).
+Throughout, a `§8.6x` or `§14` reference is to the execution contract; a bare
+single-digit `§N` is a section of this RFC.
 **Author:** Florian Muller
 **Date:** 2026-09-03 (trimmed 2026-09-04)
 **Area:** `fred-sdk` (contracts), `fred-runtime` (invoker, capability block), the `subagent` capability package
