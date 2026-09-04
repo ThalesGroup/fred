@@ -851,7 +851,17 @@ class TabularService:
         )
 
         if isinstance(authorized_document_ref, RebacDisabledResult):
-            visible_documents = await self.metadata_store.get_all_metadata({})
+            # P1 (codex review): fast-ingest attachments (ATTACH-TAB-01) are
+            # deliberately session-scoped and were never meant to depend on
+            # ReBAC being enabled for that isolation — they carry no ReBAC
+            # tuple at all, by design, and are authorized purely by ownership
+            # metadata (`_resolve_owned_attachment_dataset` below). This
+            # unfiltered "ReBAC disabled -> show everything" listing predates
+            # that document class; without excluding it, a ReBAC-disabled
+            # deployment would enumerate every user's session-scoped
+            # attachments to every other user, bypassing the ownership check
+            # entirely instead of merely being unable to use it.
+            visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG]
         elif is_service_agent(user):
             # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
             # the evaluation worker holds no per-user document relations by design, so the

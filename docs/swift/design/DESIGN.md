@@ -430,6 +430,26 @@ datasets consequently never appear in a blind `list_documents`/`list_datasets`
 enumeration — harmless, since the agent is already handed the uid directly in
 the attachment prompt suffix and has no need to "discover" it.
 
+**Exception: `_resolve_authorized_datasets` does exclude attachments in one
+specific branch, on purpose (P1, codex review).** When ReBAC is globally
+*disabled* — a deployment mode predating ATTACH-TAB-01, where
+`lookup_user_resources` returns `RebacDisabledResult` and the method falls
+back to listing every metadata row unfiltered — that branch now filters out
+`source_tag == "fast_ingest"` records before returning them. Without this,
+a ReBAC-disabled deployment would enumerate every user's session-scoped
+attachment to every other user through the same blind
+`list_documents`/`list_datasets` path the paragraph above says attachments
+never appear in — true for the normal, ReBAC-enabled case (no tuple means
+`lookup_user_resources` never includes them), false for this one branch,
+which bypasses per-user filtering entirely rather than resolving it to
+"none." The ownership fallback above is unaffected either way: it never
+reads `self.rebac` at all, so an owner's own explicit-uid access keeps
+working whether ReBAC is enabled or disabled, and a non-owner's explicit-uid
+request still fails the ownership check regardless of what the final
+403-vs-404 branch's `has_user_permission` call would answer in that mode
+(it only picks the error type, never authorizes access on its own — see
+`_select_query_datasets`/`describe_documents`).
+
 **Pointer chunks stay off for attachments, unconditionally.**
 `TabularProcessor._emit_pointer_chunk` (§5 below) writes into the *shared*
 vector store using `flat_metadata_from(metadata)` — a corpus-oriented

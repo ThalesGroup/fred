@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, RebacDisabledResult
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents.document_structures import (
@@ -34,11 +34,11 @@ from knowledge_flow_backend.features.tabular.structures import TabularQueryReque
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 
-def _user() -> KeycloakUser:
+def _user(uid: str = "u-1") -> KeycloakUser:
     return KeycloakUser(
-        uid="u-1",
-        username="tester",
-        email="tester@example.com",
+        uid=uid,
+        username=uid,
+        email=f"{uid}@example.com",
         roles=["admin"],
     )
 
@@ -167,6 +167,25 @@ class _FakeRebac:
     async def has_user_permission(self, user, permission, resource_id):
         del user, permission
         return resource_id in self.readable_document_uids
+
+
+class _FakeRebacDisabled:
+    """Simulates a ReBAC-disabled deployment: `lookup_user_resources` returns
+    the marker `RebacDisabledResult()` rather than a real resource list.
+    `has_user_permission` intentionally answers `True` unconditionally here —
+    the adversarial case for the fix under test: even if the "forbidden vs.
+    not found" fallback in `describe_documents`/`_select_query_datasets`
+    also treats a disabled ReBAC as permit-all, it must never be reachable
+    for a fast-ingest attachment a non-owner explicitly names, because the
+    ownership check ahead of it is what actually decides access, not this."""
+
+    async def lookup_user_resources(self, user, permission):
+        del user, permission
+        return RebacDisabledResult()
+
+    async def has_user_permission(self, user, permission, resource_id):
+        del user, permission, resource_id
+        return True
 
 
 class _FakeTagService:
@@ -830,6 +849,117 @@ async def test_query_read_authorizes_an_owned_attachment_dataset_with_no_rebac_t
         ),
     )
     assert response.rows == [{"n": 2}]
+
+
+@pytest.mark.asyncio
+async def test_rebac_disabled_listing_excludes_fast_ingest_attachments(tmp_path, metadata_store):
+    """
+    P1 (codex review): the ReBAC-disabled branch of `_resolve_authorized_datasets`
+    lists every metadata record unconditionally (`get_all_metadata({})`) —
+    a deliberate "no authorization enforced" mode for corpus documents, predating
+    ATTACH-TAB-01. Fast-ingest attachments are session-scoped by design and were
+    never meant to depend on ReBAC being enabled for that isolation (they carry
+    no ReBAC tuple at all, ever); without excluding them here, a ReBAC-disabled
+    deployment would enumerate every user's session-scoped attachment to every
+    other user via `list_documents`/`list_datasets`.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    corpus_metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-corpus",
+        file_name="quarterly.csv",
+        content="city,amount\nParis,10\n",
+    )
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-alice-attachment",
+        file_name="sales.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+
+    # A completely different user, in a ReBAC-disabled deployment: the corpus
+    # document is visible (that mode's whole point), Alice's attachment must not be.
+    datasets = await service.list_datasets(_user("bob"))
+    visible_uids = {dataset.document_uid for dataset in datasets}
+    assert corpus_metadata.document_uid in visible_uids
+    assert "doc-alice-attachment" not in visible_uids
+
+
+@pytest.mark.asyncio
+async def test_rebac_disabled_still_denies_non_owner_explicit_attachment_query(tmp_path, metadata_store):
+    """
+    Closes the loop on the fix above: even with ReBAC fully disabled AND
+    `has_user_permission` answering `True` unconditionally (the worst case,
+    see `_FakeRebacDisabled`), a non-owner explicitly naming another user's
+    attachment uid in `query_read` must still be refused — the ownership
+    check (`_resolve_owned_attachment_dataset`), not ReBAC, is what actually
+    decides access for this document class, and that check never depends on
+    whether ReBAC itself is enabled.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    metadata = await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-alice-attachment",
+        file_name="sales.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+
+    # `has_user_permission` answers True unconditionally in this fake (see its
+    # docstring), so the caller is never flagged "forbidden" — it falls
+    # through to "not found" instead. Either way, the point under test is
+    # that mallory never gets alice's data back.
+    with pytest.raises(FileNotFoundError, match="doc-alice-attachment"):
+        await service.query_read(
+            _user("mallory"),
+            request=TabularQueryRequest(
+                sql="SELECT 1",
+                dataset_uids=[metadata.document_uid],
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_rebac_disabled_owner_can_still_query_their_own_attachment(tmp_path, metadata_store):
+    """The ownership fallback still works for the real owner even when ReBAC
+    is disabled — the fix above only removes attachments from blind
+    enumeration, it does not break explicit-uid access to one's own data."""
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    metadata = await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-alice-attachment",
+        file_name="sales.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+    dataset = await service._resolve_owned_attachment_dataset(_user("alice"), metadata.document_uid)
+    assert dataset is not None
+
+    response = await service.query_read(
+        _user("alice"),
+        request=TabularQueryRequest(
+            sql=f"SELECT COUNT(*) AS n FROM {dataset.query_alias}",
+            dataset_uids=[metadata.document_uid],
+        ),
+    )
+    assert response.rows == [{"n": 1}]
 
 
 @pytest.mark.asyncio
