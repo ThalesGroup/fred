@@ -437,44 +437,44 @@ jobs:
             backend-directory: libs/fred-runtime
             make-target: update-runtime-api
             slice-path: apps/frontend/src/slices/runtime/runtimeOpenApi.ts
-            condition: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: knowledge-flow
             backend-directory: apps/knowledge-flow-backend
             make-target: update-knowledge-flow-api
             slice-path: apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts
-            condition: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: control-plane
             backend-directory: apps/control-plane-backend
             make-target: update-control-plane-api
             slice-path: apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts
-            condition: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
     name: OpenAPI Drift - ${{ matrix.name }}
 
     steps:
       - name: Checkout code
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Node.js
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: actions/setup-node@v4
         with:
           node-version: "22.13.0"
 
       - name: Setup backend dependencies
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.backend-directory }}
 
       - name: Backup current slice
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: cp -f ${{ matrix.slice-path }} /tmp/openapi-backup.ts 2>/dev/null || true
 
       - name: Regenerate OpenAPI slice
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: |
           cd apps/frontend/
           make ${{ matrix.make-target }}
@@ -482,7 +482,7 @@ jobs:
           UV: uv
 
       - name: Check for drift
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: |
           if ! diff -q /tmp/openapi-backup.ts ${{ matrix.slice-path }} > /dev/null 2>&1; then
             echo "--- diff (committed vs freshly generated) ---"
