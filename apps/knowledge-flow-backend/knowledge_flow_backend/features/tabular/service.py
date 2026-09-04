@@ -1045,7 +1045,19 @@ class TabularService:
         """
 
         metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
-        if metadata is None or metadata.source_tag != FAST_INGEST_SOURCE_TAG:
+        if metadata is None:
+            return None
+        return self._as_owned_attachment_dataset(metadata, user=user)
+
+    @staticmethod
+    def _as_owned_attachment_dataset(metadata: DocumentMetadata, *, user: KeycloakUser) -> ResolvedDataset | None:
+        """
+        Apply the ATTACH-TAB-01 ownership check to one already-fetched
+        metadata row. Shared by the single-uid and batch resolvers so both
+        apply identical source_tag/uploaded_by/tags/artifact checks.
+        """
+
+        if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
             return None
         if metadata.identity.uploaded_by != user.uid:
             return None
@@ -1076,14 +1088,28 @@ class TabularService:
         - Pass a caller's `missing_uids`; the result contains only the ones
           that resolved. Every batch call site (`describe_documents`,
           `_select_query_datasets`) shares this instead of re-implementing
-          the gather-and-filter, so `_get_dataset_or_raise`'s single-uid
+          the fetch-and-filter, so `_get_dataset_or_raise`'s single-uid
           equivalent stays the only other caller of the per-uid primitive.
+
+        One `get_metadata_by_uids` call, not one concurrent
+        `get_metadata_by_uid` per uid: `dataset_uids` is an unbounded
+        caller-supplied list (`TabularQueryRequest`, `TabularSearchRequest`),
+        so fanning out a real lookup per uid would open as many concurrent
+        metadata-store round trips as the caller cared to request. The
+        store's batch method chunks internally (`_BULK_UPDATE_CHUNK_SIZE` for
+        Postgres), so this stays bounded regardless of how many uids are
+        requested.
         """
 
         if not document_uids:
             return {}
-        resolved = await asyncio.gather(*(self._resolve_owned_attachment_dataset(user, document_uid) for document_uid in document_uids))
-        return {document_uid: dataset for document_uid, dataset in zip(document_uids, resolved) if dataset is not None}
+        rows = await self.metadata_store.get_metadata_by_uids(document_uids)
+        resolved: dict[str, ResolvedDataset] = {}
+        for metadata in rows:
+            dataset = self._as_owned_attachment_dataset(metadata, user=user)
+            if dataset is not None:
+                resolved[metadata.document_uid] = dataset
+        return resolved
 
     async def _resolve_scope_tag_ids(
         self,

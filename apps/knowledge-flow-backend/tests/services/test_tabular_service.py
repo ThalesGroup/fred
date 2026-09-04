@@ -243,6 +243,7 @@ class _TrackingMetadataStore(BaseMetadataStore):
         self._delegate = delegate
         self.get_all_metadata_calls = 0
         self.get_metadata_by_uids_calls: list[list[str]] = []
+        self.get_metadata_by_uid_calls: list[str] = []
 
     async def get_all_metadata(self, filters: dict, session=None):
         self.get_all_metadata_calls += 1
@@ -253,6 +254,7 @@ class _TrackingMetadataStore(BaseMetadataStore):
         return await self._delegate.get_metadata_by_uids(document_uids, session=session)
 
     async def get_metadata_by_uid(self, document_uid: str, session=None) -> DocumentMetadata | None:
+        self.get_metadata_by_uid_calls.append(document_uid)
         return await self._delegate.get_metadata_by_uid(document_uid, session=session)
 
     async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
@@ -992,6 +994,45 @@ async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_
     assert [dataset.document_uid for dataset in datasets] == ["doc-visible"]
     assert tracking_store.get_all_metadata_calls == 0
     assert tracking_store.get_metadata_by_uids_calls == [["doc-visible"]]
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_resolves_owned_attachments_with_one_batch_lookup(tmp_path, metadata_store):
+    """
+    The ownership fallback used to run one concurrent
+    `get_metadata_by_uid` per requested uid — an unbounded caller-supplied
+    list (`dataset_uids`/`document_uids`) fanned out that many concurrent
+    metadata-store round trips at once. It must resolve through a single
+    batch `get_metadata_by_uids` call instead (chunked internally by the
+    store, so it stays bounded regardless of how many uids are requested).
+    """
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment-a",
+        file_name="a.csv",
+        content="city,amount\nParis,10\n",
+        uploaded_by="alice",
+    )
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment-b",
+        file_name="b.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    tracking_store = _TrackingMetadataStore(metadata_store)
+    service.metadata_store = tracking_store
+    # Attachments carry no ReBAC tuple by design, so an empty readable set
+    # still forces every uid through the ownership fallback being tested.
+    service.rebac = _FakeRebac(set())
+
+    schemas = await service.describe_documents(_user("alice"), ["doc-attachment-a", "doc-attachment-b"])
+
+    assert {schema.document_uid for schema in schemas} == {"doc-attachment-a", "doc-attachment-b"}
+    assert tracking_store.get_metadata_by_uid_calls == []
+    assert tracking_store.get_metadata_by_uids_calls == [["doc-attachment-a", "doc-attachment-b"]]
 
 
 @pytest.mark.asyncio
