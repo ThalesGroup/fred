@@ -6,11 +6,8 @@
 }
 
 .title {
-  /* Bottom-aligned, not centered: the sort Select stacks its label above its
-     trigger, so centering would sit the trigger lower than the search field
-     and the create button (same reason as the evaluations toolbar). */
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--spacing-m);
   padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
   color: var(--on-surface);
@@ -28,6 +25,12 @@
 .searchBar {
   width: 100%;
   max-width: 250px;
+}
+
+/* Fixed width so the control does not resize as the selected option changes
+   length — a toolbar that reflows on every pick is hard to aim at. */
+.sortSelect {
+  min-width: 300px;
 }
 
 /* Shown in place of the list when a query matches nothing — distinct from

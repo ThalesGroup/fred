@@ -2458,7 +2458,6 @@
         "searchPlaceholder": "Rechercher des {{agentsNicknamePlural}}...",
         "clearSearch": "Effacer la recherche",
         "emptySearch": "Aucun résultat pour cette recherche.",
-        "sortLabel": "Trier",
         "sort": {
           "name": "Alphabétique",
           "created": "Derniers créés",

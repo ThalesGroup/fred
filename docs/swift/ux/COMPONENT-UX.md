@@ -1325,8 +1325,9 @@ Composition and states:
 Wording is deployment-configurable: the placeholder interpolates
 `agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
 
-**Sort.** A labelled `Select` (`size="small"`, `compact`) sits after the search
-field, offering Alphabetical (default), Recently created and Recently updated —
+**Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 300px`
+so the control does not resize as the picked option changes length) sits after
+the search field, offering Alphabetical (default), Recently created and Recently updated —
 `display_name`, `created_at`, `updated_at`, the three orderings available
 without touching the API. `sortAgents` (`agentSort.ts`, unit-tested like the
 filter) applies after the search so the visible list is always sorted, and:
@@ -1340,9 +1341,11 @@ filter) applies after the search so the visible list is always sorted, and:
 - returns 0 for ties, leaving `Array.sort`'s stability to preserve the incoming
   order.
 
-The toolbar is `align-items: flex-end`, not centered: the `Select` stacks its
-label above its trigger, so centering would sit the trigger lower than the
-search field and the create button. Same reason as the evaluations toolbar.
+Dropping the label costs the trigger its explicit accessible name: `Select`
+exposes no `ariaLabel` prop, so the button falls back to its own content and a
+screen reader announces the current value ("Alphabetical") without saying it is
+the sort control. Adding an `ariaLabel` prop to the shared `Select` would close
+this for every consumer.
 
 ---
 

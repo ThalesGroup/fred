@@ -2458,7 +2458,6 @@
         "searchPlaceholder": "Search {{agentsNicknamePlural}}...",
         "clearSearch": "Clear search",
         "emptySearch": "No results for this search.",
-        "sortLabel": "Sort",
         "sort": {
           "name": "Alphabetical",
           "created": "Recently created",
