@@ -25,7 +25,7 @@
   flex-direction: column;
   gap: var(--spacing-3xs);
   cursor: pointer;
-  border: 1px solid transparent;
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: none;
   padding: var(--spacing-xs) var(--spacing-s);

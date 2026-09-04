@@ -181,11 +181,13 @@ export default function PromptSelectionChatPanel({
       onClose={onClose}
       title={t("chatbot.promptSelectionPanel.title")}
       persistKey="prompt-selection-panel"
+      width="340px"
       fill
     >
       {canPickSpace && (
         <ButtonGroup
-          size="small"
+          // 2xs, not xs: ButtonGroup's ladder skips that tier.
+          size="2xs"
           color="secondary"
           variant="radio"
           fullWidth
@@ -204,12 +206,12 @@ export default function PromptSelectionChatPanel({
           onChange={setSearch}
           placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
           clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
-          size="small"
+          size="xs"
         />
 
         {categories.length > 0 && (
           <Select<string>
-            size="small"
+            size="xs"
             compact
             options={categoryOptions}
             value={category ?? ALL_CATEGORIES}

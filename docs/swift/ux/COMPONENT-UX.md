@@ -921,7 +921,13 @@ document-scope panels. The shell supplies the header (title + close), the
 surface and the insets. Body, top to bottom: a `ButtonGroup` picking the space,
 a `SearchInput` and a category `Select` grouped together at 8px — both narrow
 the same list, so they sit tighter than the body's 16px between blocks — then
-the list. Only the list scrolls.
+the list of outlined tiles. Only the list scrolls.
+
+The three controls run one tier below the app default, the panel being a narrow
+column: `xs` for the search field and the select, `2xs` for the space picker —
+`ButtonGroup`'s ladder has no `xs`, and `2xs` keeps it the same 8px shorter than
+the fields that it already was. The drawer opens at 340px rather than the 480px
+default; that only seeds the first-ever width, a dragged one persists.
 
 **Two spaces, two queries.** `GET /teams/{id}/prompts/context` returns personal
 **or** team prompts depending on the id passed, never both — deliberately (a
