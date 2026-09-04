@@ -3,7 +3,6 @@
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-s);
-  margin-bottom: var(--spacing-s);
   border-bottom: 1px solid var(--outline-retreat);
   padding-bottom: var(--spacing-s);
 }

@@ -830,7 +830,10 @@ session attachments, prompt library — had drifted into three slightly differen
 
 `layout="push"` so it reflows the conversation instead of covering it,
 `floating` (12px inset card, `outline-muted` border, `--radius-m`, soft shadow),
-`background: --surface-container-high`, `flushBody` plus a body that carries
+`background: --surface-container-high`, `compactHeader` (a 12px/8px title band
+rather than the drawer's roomier 16px/12px — these panels sit in a narrow column
+beside the conversation; the settings and admin drawers keep the default),
+`flushBody` plus a body that carries
 the insets the drawer's own padding would double up (`0 16px 16px` — the header
 already leaves the top gap) and a `--spacing-m` column gap, and drag-to-resize
 with a persisted width (`persistKey`, unique per panel; `width` seeds the
