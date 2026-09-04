@@ -224,7 +224,6 @@ jobs:
           # - check: knip
           #   continue-on-error: true
     name: Code Quality - frontend - ${{ matrix.check }}
-    continue-on-error: ${{ matrix.continue-on-error == true }}
 
     steps:
       - uses: actions/checkout@v4
