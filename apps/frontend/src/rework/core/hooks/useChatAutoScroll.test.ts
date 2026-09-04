@@ -116,6 +116,14 @@ describe("resolveStuckToBottom", () => {
     expect(at(true, 400, 400, 2000)).toBe(true);
   });
 
+  // Answering a HITL prompt removes it from the thread: the page shortens and
+  // the browser clamps scrollTop downward with no reader involved. Direction
+  // alone read that as a scroll-up and killed the resume's autoscroll.
+  it("keeps following when removed content clamped the view downward", () => {
+    // Page shrank 1000 -> 800, so the bottom moved from scrollTop 400 to 200.
+    expect(at(true, 400, 200, 800)).toBe(true);
+  });
+
   it("ignores a sub-pixel jitter upward", () => {
     expect(at(true, 400, 399.5)).toBe(true);
   });

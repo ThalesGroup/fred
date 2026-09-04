@@ -1190,11 +1190,18 @@ _(none)_
   from an element, so only this container's own movement is seen — and scrolling back down re-arms
   following for free.
 
-  It keys on scroll **direction**, not on distance from the bottom. Distance alone is a race: the
-  follow write and the browser's scroll event are a frame apart, so content landing in between makes
-  a perfectly-followed view measure as far from the bottom, which would give up following for the
-  rest of the turn with nothing left to re-arm it. Growth never lowers `scrollTop` and following only
-  ever raises it, so an upward move is unambiguously the reader.
+  Neither distance nor direction decides it alone, because each has a case the other covers.
+  Distance alone is a race: the follow write and the browser's scroll event are a frame apart, so
+  content landing in between makes a perfectly-followed view measure as far from the bottom, which
+  would give up following for the rest of the turn with nothing left to re-arm it. Direction alone
+  misses content being *removed*: answering a HITL prompt takes it out of the thread, the page
+  shortens, and the browser clamps `scrollTop` downward with no reader involved — which read as a
+  scroll-up and killed the resume's autoscroll. So: at the bottom is following whatever moved the
+  view there; away from it, only an upward move is the reader.
+
+  A turn paused on a HITL gate counts as live, not finished. `waitResponse` goes false while the
+  gate is open, and treating that as idle stranded the reader above a prompt they had to act on,
+  with the resume then having nowhere to scroll back from.
 
   One more signal is needed because `hasAnswerText` only accumulates: a tool round *after* the model
   has written text would otherwise leave the turn stuck in the answer phase, with its new trace rows

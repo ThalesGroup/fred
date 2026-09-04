@@ -48,12 +48,19 @@ export function isNearBottom(scrollTop: number, scrollHeight: number, clientHeig
 /**
  * Whether the view is still following the bottom, after one scroll event.
  *
- * Keyed on DIRECTION, not on distance alone. Distance alone is a race: our own
- * follow write and the browser's scroll event are a frame apart, and content
- * that lands in between makes a perfectly-followed view measure as far from the
- * bottom — which would give up following for the rest of the turn with nothing
- * left to re-arm it. Only a scroll that moves UP is the reader taking over;
- * growth never lowers scrollTop, and following only ever raises it.
+ * Neither distance nor direction decides this alone, because each has a case the
+ * other covers.
+ *
+ * Distance alone is a race: the follow write and the browser's scroll event are
+ * a frame apart, and content landing in between makes a perfectly-followed view
+ * measure as far from the bottom — giving up for the rest of the turn with
+ * nothing left to re-arm it. Hence: away from the bottom without having moved
+ * up changes nothing.
+ *
+ * Direction alone misses content being REMOVED. Answering a HITL prompt takes
+ * it out of the thread, so the page shortens and the browser clamps scrollTop
+ * downward — no reader involved. Hence: at the bottom is following, whatever
+ * moved the view there.
  */
 export function resolveStuckToBottom(
   wasStuck: boolean,
@@ -62,8 +69,9 @@ export function resolveStuckToBottom(
   scrollHeight: number,
   clientHeight: number,
 ): boolean {
+  if (isNearBottom(scrollTop, scrollHeight, clientHeight)) return true;
   if (scrollTop < previousTop - 1) return false;
-  return isNearBottom(scrollTop, scrollHeight, clientHeight) ? true : wasStuck;
+  return wasStuck;
 }
 
 /**
@@ -105,6 +113,8 @@ export interface ChatAutoScrollInput {
   hasAnswerText: boolean;
   /** Trace rows so far this turn — a rise means the turn went back to work. */
   traceCount: number;
+  /** A HITL gate is open: the turn is paused, not finished. */
+  isAwaitingHuman: boolean;
 }
 
 /**
@@ -116,7 +126,7 @@ export interface ChatAutoScrollInput {
  */
 export function useChatAutoScroll(
   containerRef: RefObject<HTMLDivElement | null>,
-  { turnKey, isStreaming, hasAnswerText, traceCount }: ChatAutoScrollInput,
+  { turnKey, isStreaming, hasAnswerText, traceCount, isAwaitingHuman }: ChatAutoScrollInput,
 ): void {
   // Whether the view was at the bottom at the last scroll event. Read from
   // scroll events rather than sniffed from wheel/touch/key gestures: those miss
@@ -133,7 +143,12 @@ export function useChatAutoScroll(
   // answer arriving in one chunk would leave a budget of zero.
   const workHeightRef = useRef<number | null>(null);
 
-  const phase: ScrollPhase = !isStreaming ? "idle" : hasAnswerText ? "answer" : "work";
+  // A turn paused on a HITL gate is live, not finished: the prompt is the one
+  // thing the reader has to act on, so it is followed into view like any other
+  // work. Treating the pause as idle left them stranded above it, and the resume
+  // then had nowhere to scroll back from.
+  const live = isStreaming || isAwaitingHuman;
+  const phase: ScrollPhase = !live ? "idle" : hasAnswerText && !isAwaitingHuman ? "answer" : "work";
 
   const follow = useCallback(() => {
     const el = containerRef.current;

@@ -188,6 +188,7 @@ export default function ManagedChatPage() {
     isStreaming: chat.waitResponse,
     hasAnswerText: Boolean(lastTurn?.isStreaming && lastTurn.text),
     traceCount: lastTurn?.traceMessages.length ?? 0,
+    isAwaitingHuman: chat.pendingHitl != null,
   });
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
