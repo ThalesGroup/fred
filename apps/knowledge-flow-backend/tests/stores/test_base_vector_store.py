@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     BaseVectorStore,
     is_own_session_chunk,
+    is_session_chunk,
 )
 
 
@@ -18,6 +19,19 @@ def test_is_own_session_chunk_requires_session_scope_and_matching_user():
     assert is_own_session_chunk(other_user, "alice") is False
     assert is_own_session_chunk(corpus_chunk, "alice") is False
     assert is_own_session_chunk(no_metadata, "alice") is False
+
+
+def test_is_session_chunk_ignores_owner_and_only_checks_scope():
+    """Unlike `is_own_session_chunk`, no `user_id` is involved -- this is the
+    classification primitive a caller with no end-user identity of its own
+    (a platform-admin/service principal) uses."""
+    someone_elses_attachment = {"metadata": {"scope": "session", "user_id": "mallory"}}
+    corpus_chunk = {"metadata": {"scope": "library", "user_id": "alice"}}
+    no_metadata = {}
+
+    assert is_session_chunk(someone_elses_attachment) is True
+    assert is_session_chunk(corpus_chunk) is False
+    assert is_session_chunk(no_metadata) is False
 
 
 class _FakeChunkStore(BaseVectorStore):
@@ -60,6 +74,50 @@ def test_may_delete_session_document_true_when_no_chunks_left():
 def test_may_delete_session_document_fails_closed_when_unsupported():
     store = _FakeChunkStore(unsupported=True)
     assert store.may_delete_session_document("doc-1", "alice") is False
+
+
+def test_is_session_scoped_document_true_when_every_chunk_is_session_scoped():
+    store = _FakeChunkStore(
+        [
+            {"metadata": {"scope": "session", "user_id": "alice"}},
+            {"metadata": {"scope": "session", "user_id": "alice"}},
+        ]
+    )
+    assert store.is_session_scoped_document("doc-1") is True
+
+
+def test_is_session_scoped_document_false_for_a_corpus_document():
+    """The document_uid a platform-admin/service bypass is asked to delete
+    can be forged or mistaken -- a document whose chunks are not
+    session-scoped must be refused, not deleted just because the caller
+    holds can_manage_platform."""
+    store = _FakeChunkStore([{"metadata": {"scope": "library", "user_id": "alice"}}])
+    assert store.is_session_scoped_document("doc-1") is False
+
+
+def test_is_session_scoped_document_true_when_no_chunks_left():
+    """Same idempotent-retry reasoning as `may_delete_session_document`."""
+    store = _FakeChunkStore([])
+    assert store.is_session_scoped_document("doc-1") is True
+
+
+def test_is_session_scoped_document_false_for_a_mixed_chunk_set():
+    """A single-scope test list can't tell `all(...)` from `any(...)` apart --
+    only a mix of session and non-session chunks under the same document_uid
+    can. Fails closed: one real corpus/library chunk mixed in must deny the
+    whole document_uid, not just be outvoted by the session-scoped ones."""
+    store = _FakeChunkStore(
+        [
+            {"metadata": {"scope": "session", "user_id": "alice"}},
+            {"metadata": {"scope": "library", "user_id": "alice"}},
+        ]
+    )
+    assert store.is_session_scoped_document("doc-1") is False
+
+
+def test_is_session_scoped_document_fails_closed_when_unsupported():
+    store = _FakeChunkStore(unsupported=True)
+    assert store.is_session_scoped_document("doc-1") is False
 
 
 def _session_chunk(

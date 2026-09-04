@@ -20,6 +20,7 @@ controller's build/delete orchestration; `TabularService`'s ownership-based
 authorization fallback is covered in `tests/services/test_tabular_service.py`.
 """
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -150,6 +151,53 @@ async def test_build_attachment_tabular_dataset_deletes_the_orphaned_artifact_on
 
 
 @pytest.mark.asyncio
+async def test_build_attachment_tabular_dataset_offloads_orphan_cleanup_to_a_thread(monkeypatch, tmp_path: Path):
+    """
+    `content_store.list_objects`/`delete_object` are
+    blocking network calls (GCS/MinIO SDKs) — calling them directly inside
+    `async def` would stall the event loop for the round trip. The
+    metadata-save-failure cleanup must route through `asyncio.to_thread`
+    rather than call the (still-synchronous) helper directly.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+
+    async def _save_document_metadata(*args, **kwargs):
+        raise RuntimeError("simulated metadata-store outage")
+
+    controller = _controller_with_fake_metadata_service(_save_document_metadata)
+
+    calls: list[tuple] = []
+    real_to_thread = asyncio.to_thread
+
+    async def _tracking_to_thread(func, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.ingestion.ingestion_controller.asyncio.to_thread",
+        _tracking_to_thread,
+    )
+
+    with pytest.raises(RuntimeError, match="simulated metadata-store outage"):
+        await controller._build_attachment_tabular_dataset(
+            user=_user(),
+            document_uid="doc-orphan",
+            filename="sales.csv",
+            raw_path=csv_path,
+        )
+
+    matching = [call for call in calls if call[0] == controller._delete_tabular_artifact_objects]
+    assert len(matching) == 1
+    _, args, kwargs = matching[0]
+    assert args == ()
+    assert kwargs == {"document_uid": "doc-orphan"}
+
+
+@pytest.mark.asyncio
 async def test_build_attachment_tabular_dataset_does_not_collide_across_users_with_the_same_filename(tmp_path: Path, metadata_store):
     """
     Regression: an earlier version of this method built metadata via
@@ -202,6 +250,127 @@ async def test_delete_attachment_tabular_dataset_removes_metadata_and_parquet(tm
     controller = IngestionController.__new__(IngestionController)
     await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-attachment", is_platform_bypass=False)
 
+    assert await metadata_store.get_metadata_by_uid("doc-attachment") is None
+
+
+@pytest.mark.asyncio
+async def test_delete_attachment_tabular_dataset_raises_instead_of_swallowing_cleanup_failure(monkeypatch, tmp_path: Path, metadata_store):
+    """
+    A caught-and-logged failure here used to leave the Parquet
+    dataset behind while the caller returned normally, so `DELETE
+    /fast/delete/{uid}` reported HTTP 200 and control-plane recorded a
+    successful erasure receipt even though nothing was actually deleted and
+    there was nothing left to make the failure retryable. The failure must
+    propagate instead.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-attachment", title="sales.csv", uploaded_by="u-1"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user(), processed)
+
+    controller = IngestionController.__new__(IngestionController)
+    monkeypatch.setattr(
+        controller,
+        "_delete_tabular_artifact_objects",
+        lambda *, document_uid: (_ for _ in ()).throw(RuntimeError("simulated GCS outage")),
+    )
+
+    with pytest.raises(RuntimeError, match="simulated GCS outage"):
+        await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-attachment", is_platform_bypass=False)
+
+    # Nothing was cleaned up -- metadata (and therefore the artifact prefix a
+    # retry would look under) is still exactly where it was.
+    assert await metadata_store.get_metadata_by_uid("doc-attachment") is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_attachment_tabular_dataset_retry_succeeds_once_the_failure_clears(tmp_path: Path, metadata_store):
+    """
+    Companion to the raise-on-failure test above: once the transient failure
+    is gone, a retry of the same delete call must still converge -- the
+    classification early-returns and the underlying object-store/metadata
+    deletes are themselves idempotent, so nothing about surfacing the first
+    failure should make a clean retry unable to finish the job.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-attachment", title="sales.csv", uploaded_by="u-1"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user(), processed)
+
+    controller = IngestionController.__new__(IngestionController)
+
+    real_delete = controller._delete_tabular_artifact_objects
+    attempts = {"count": 0}
+
+    def _flaky_delete(*, document_uid: str) -> None:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise RuntimeError("simulated GCS outage")
+        real_delete(document_uid=document_uid)
+
+    controller._delete_tabular_artifact_objects = _flaky_delete
+
+    with pytest.raises(RuntimeError, match="simulated GCS outage"):
+        await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-attachment", is_platform_bypass=False)
+    assert await metadata_store.get_metadata_by_uid("doc-attachment") is not None
+
+    await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-attachment", is_platform_bypass=False)
+    assert await metadata_store.get_metadata_by_uid("doc-attachment") is None
+    assert attempts["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_delete_attachment_tabular_dataset_offloads_cleanup_to_a_thread(monkeypatch, tmp_path: Path, metadata_store):
+    """
+    Same offloading requirement as the build-failure cleanup above, for the
+    normal delete path.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-attachment", title="sales.csv", uploaded_by="u-1"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user(), processed)
+
+    calls: list[tuple] = []
+    real_to_thread = asyncio.to_thread
+
+    async def _tracking_to_thread(func, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.ingestion.ingestion_controller.asyncio.to_thread",
+        _tracking_to_thread,
+    )
+
+    controller = IngestionController.__new__(IngestionController)
+    await controller._delete_attachment_tabular_dataset(user=_user(), document_uid="doc-attachment", is_platform_bypass=False)
+
+    matching = [call for call in calls if call[0] == controller._delete_tabular_artifact_objects]
+    assert len(matching) == 1
+    _, args, kwargs = matching[0]
+    assert args == ()
+    assert kwargs == {"document_uid": "doc-attachment"}
     assert await metadata_store.get_metadata_by_uid("doc-attachment") is None
 
 

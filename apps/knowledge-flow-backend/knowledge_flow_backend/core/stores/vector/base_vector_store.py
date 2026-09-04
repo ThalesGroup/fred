@@ -35,6 +35,19 @@ def is_own_session_chunk(chunk: Dict[str, Any], user_id: str) -> bool:
     return metadata.get("scope") == "session" and metadata.get("user_id") == user_id
 
 
+def is_session_chunk(chunk: Dict[str, Any]) -> bool:
+    """True if a vector chunk is a session-scoped attachment chunk, regardless of owner.
+
+    Same `scope` marker as `is_own_session_chunk`, without the `user_id` match —
+    for a caller that must classify a document_uid as a genuine attachment
+    without acting as any particular end user (a platform-admin/service
+    principal, whose own uid never appears on an attachment chunk it didn't
+    upload itself).
+    """
+    metadata = chunk.get("metadata") or {}
+    return metadata.get("scope") == "session"
+
+
 @dataclass(frozen=True)
 class SearchFilter:
     """
@@ -129,6 +142,31 @@ class BaseVectorStore(ABC):
         if not chunks:
             return True
         return any(is_own_session_chunk(c, user_id) for c in chunks)
+
+    def is_session_scoped_document(self, document_uid: str) -> bool:
+        """True if `document_uid` is a genuine session-scoped attachment, for a
+        caller with no end-user identity of its own to match (the platform-admin
+        bypass — a service principal deleting on someone else's behalf).
+
+        Unlike `may_delete_session_document`, this does not check a `user_id`:
+        it is the classification primitive that authority uses to confirm a
+        document_uid is genuinely an attachment before it may delete it, never a
+        substitute for the per-user ownership check on the normal, non-bypass
+        path. True when the document has no chunks at all (same retry-safety
+        reasoning as `may_delete_session_document`) or every chunk it does have
+        carries the session-scope marker.
+
+        Fails closed (returns False) when a chunk exists without that marker —
+        i.e. this document_uid is a corpus document, not an attachment — or
+        when the backend can't fetch chunks by document at all.
+        """
+        try:
+            chunks = self.get_chunks_for_document(document_uid)
+        except NotImplementedError:
+            return False
+        if not chunks:
+            return True
+        return all(is_session_chunk(c) for c in chunks)
 
     def get_own_session_document_text(self, document_uid: str, user_id: str) -> str:
         """Rebuild a session attachment's text from the chunks `user_id` owns.

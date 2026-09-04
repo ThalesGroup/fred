@@ -115,67 +115,49 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     authorized via the platform-admin bypass rather than by owning the
     document — the caller must thread this into every subsequent per-document
     ownership check for this request (`_delete_attachment_tabular_dataset`),
-    not just this endpoint's own gate, or a platform-driven delete on
-    someone else's document silently no-ops downstream instead of acting.
+    or a platform-driven delete on someone else's document silently no-ops
+    downstream instead of acting.
 
-    A platform service principal holding org-level ``can_manage_platform`` — e.g.
-    the control-plane lifecycle worker erasing a session's fast-ingest attachments
-    at window expiry — bypasses the per-document ownership check. Authentication is
-    still enforced by the endpoint dependency (``get_current_user``); only the
-    ownership check is waived for that principal. Reuses the AUTHZ-01
-    ``can_manage_platform`` permission — no second bypass is forked.
-
-    Everyone else must own the document. Fast-ingested (session-scoped) documents
-    carry no ``parent`` tag and no ReBAC tuple at all — they were deliberately left
-    "resource-less" and authentication-gated, so a ``DocumentPermission.DELETE``
-    ReBAC check can never resolve to True for them, denying even the uploader.
-    Ownership is instead proven the same way ``summarize_document`` already
-    proves it for reads on this same document class: via the chunk's own
-    ``scope``/``user_id`` metadata (``base_vector_store.may_delete_session_document``),
-    which also allows a document with no chunks left at all — so a retry after
-    an earlier attempt already deleted the vectors but failed on a later
-    cleanup step can still converge instead of being denied forever.
-
-    A CSV attachment (ATTACH-TAB-01) never has vector chunks at all — the
-    text-chunk preview is skipped for it entirely, by design — so the
-    chunk-based check above would treat "zero chunks" as a safe retry for
-    *every* CSV attachment uid, not just this caller's own, silently
-    returning success to a non-owner instead of denying them. Checked first,
-    ahead of the chunk-based fallback: a document with a `tabular_v1`
-    artifact is authorized purely by `uploaded_by` match, the same test
-    `TabularService._resolve_owned_attachment_dataset` uses, never falling
-    through to the chunk-count check at all for this document class.
-
-    A TAGGED document is refused outright, before either bypass runs at all
-    (P1, codex review) — this is deliberately broader than "skip the
-    tabular-ownership branch": the chunk-based fallback's "zero chunks =
-    safe retry" semantics were written for the genuinely resource-less
-    fast-ingest document class and don't check `source_tag` at all, so
-    without this guard *any* tagged document with zero vector chunks — the
-    default for every CSV/tabular corpus document platform-wide,
-    `pointer_chunks_enabled` being off everywhere shipped — would pass this
-    endpoint's authorization for *any* authenticated user, tagged or not,
-    owner or not. Combined with an operator-configured `document_sources`
-    entry literally named "fast_ingest" (nothing reserves that string), the
-    narrower tabular-ownership branch above would otherwise let that
-    document's original uploader delete it even after losing their real
-    ReBAC `DocumentPermission.DELETE` (e.g. removed from the owning team) —
-    a tagged document already has its own ReBAC-based protection this
-    endpoint doesn't check, and must never be treated as resource-less
-    however its `source_tag` happens to read.
+    Fast-ingested attachments carry no ReBAC tuple, so a document-level READ
+    check can never resolve for them: classification (tagged documents
+    refused outright; otherwise CSV-tabular ownership via `uploaded_by`, or
+    vectors-only ownership via the chunk's own `scope`/`user_id`) always runs
+    first, for every caller including the platform-admin bypass
+    (`can_manage_platform`, e.g. the control-plane lifecycle worker erasing a
+    session's attachments). The bypass only ever waives *ownership* within a
+    branch, never the classification that reaches it — a forged or mistaken
+    `document_uid` naming a real corpus document (control-plane does not
+    itself verify that association) is refused regardless of caller. Full
+    rationale: DESIGN.md, "Session-Scoped Attachment Datasets".
     """
-    if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
-        return True
+    is_platform_admin = await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
     metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
+
+    def deny() -> AuthorizationError:
+        return AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
+
     if metadata is not None and metadata.tags.tag_ids:
-        raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
+        raise deny()
+
     if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and read_tabular_artifact(metadata) is not None:
+        if is_platform_admin:
+            return True
         if metadata.identity.uploaded_by == user.uid:
             return False
-        raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
+        raise deny()
+
+    if metadata is not None:
+        # Untagged, but not a recognized fast-ingest tabular artifact either —
+        # not classifiable as an attachment. Refuse regardless of caller.
+        raise deny()
+
+    if is_platform_admin:
+        if await asyncio.to_thread(vector_store.is_session_scoped_document, document_uid):
+            return True
+        raise deny()
     if await asyncio.to_thread(vector_store.may_delete_session_document, document_uid, user.uid):
         return False
-    raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
+    raise deny()
 
 
 STEP_UPLOAD_PREPARATION = "upload preparation"
@@ -516,7 +498,7 @@ class IngestionController:
                 exc_info=True,
             )
             try:
-                self._delete_tabular_artifact_objects(document_uid=document_uid)
+                await asyncio.to_thread(self._delete_tabular_artifact_objects, document_uid=document_uid)
             except Exception:
                 # Best-effort: a failure here must not mask the metadata-save
                 # error below, which is what the caller actually needs to see.
@@ -561,71 +543,38 @@ class IngestionController:
 
     async def _delete_attachment_tabular_dataset(self, *, user: KeycloakUser, document_uid: str, is_platform_bypass: bool) -> None:
         """
-        Best-effort cleanup of one attachment's tabular dataset, if it has one.
+        Delete one attachment's tabular dataset, if it has one. Raises on
+        failure rather than swallowing it — a caught-and-logged failure here
+        used to report a successful erasure upstream with the dataset still
+        orphaned and nothing left to retry it.
 
-        Why this exists:
-        - `_build_attachment_tabular_dataset` persists a metadata record and a
-          Parquet artifact alongside the vectors `_delete_fast_vectors`
-          already cleans up; deleting an attachment must not leave those
-          two behind.
-        - Re-verifies ownership itself rather than trusting the caller's
-          authorization: `_authorize_fast_ingest_delete`'s "no vector chunks
-          = safe retry" rule (`may_delete_session_document`) was designed for
-          an idempotent vector-only delete and passes for ANY document with
-          zero vector chunks — including any corpus CSV dataset whenever
-          `pointer_chunks_enabled` is off (the shipped default). Without this
-          method's own check, any authenticated user could delete any other
-          user's or team's tabular dataset by calling
-          `DELETE /fast/delete/{their_document_uid}`. Same ownership test as
-          `TabularService._resolve_owned_attachment_dataset`.
-        - `is_platform_bypass` is NOT re-derived here — it must be threaded in
-          from `_authorize_fast_ingest_delete`'s own decision for this same
-          request. A first version of this check required `uploaded_by ==
-          user.uid` unconditionally, with no accommodation for the endpoint's
-          own platform-admin bypass: scheduled conversation erasure (CTRLP-12)
-          authenticates as a minted service bearer, so `user.uid` never
-          equals the original uploader, and the endpoint returned HTTP 200
-          while silently skipping the actual Parquet/metadata cleanup —
-          erasure was reported complete with the artifact orphaned and
-          nothing left to make it retryable. `source_tag == "fast_ingest"`
-          and no tags both stay hard requirements regardless of bypass: this
-          method must never touch a corpus tabular dataset even for a
-          platform caller, since that document class has its own deletion
-          path with its own quota/tag/ReBAC cleanup this narrow method
-          deliberately skips — `_authorize_fast_ingest_delete`'s own
-          platform-admin check runs before it ever resolves metadata, so a
-          tagged document reaching this function with `is_platform_bypass`
-          set has had no tags check applied yet; this one is what actually
-          stops it (P1, codex review — the same gap this method's ownership
-          check already closed for the non-bypass case above, but for tags).
-        - Deletes the Parquet objects and metadata row directly rather than
-          `MetadataService.delete_document_and_artifacts_trusted`: that
-          method also releases storage-quota accounting
-          (`_delete_and_release`), which requires a Postgres engine even to
-          determine there is nothing to release for a tagless, quota-exempt
-          attachment — infrastructure this narrow cleanup has no other
-          reason to depend on.
+        Re-verifies ownership itself rather than trusting the caller's
+        authorization (same test as `TabularService._resolve_owned_attachment_dataset`),
+        including the tags check, since `_authorize_fast_ingest_delete`'s
+        chunk-count fallback was designed for a different document class and
+        `is_platform_bypass` must be threaded in rather than re-derived — see
+        `_authorize_fast_ingest_delete`'s docstring and DESIGN.md,
+        "Session-Scoped Attachment Datasets", for why.
+
+        Deletes the Parquet objects and metadata row directly rather than
+        `MetadataService.delete_document_and_artifacts_trusted`: that method
+        also releases storage-quota accounting, which requires a live
+        Postgres engine even to determine there is nothing to release for a
+        tagless, quota-exempt attachment.
         """
-        try:
-            context = ApplicationContext.get_instance()
-            metadata_store = context.get_metadata_store()
-            metadata = await metadata_store.get_metadata_by_uid(document_uid)
-            if metadata is None or read_tabular_artifact(metadata) is None:
-                return
-            if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
-                return
-            if metadata.tags.tag_ids:
-                return
-            if not is_platform_bypass and metadata.identity.uploaded_by != user.uid:
-                return
-            self._delete_tabular_artifact_objects(document_uid=document_uid)
-            await metadata_store.delete_metadata(document_uid)
-        except Exception:
-            logger.warning(
-                "[FAST TEXT][INGEST][DELETE] Failed to clean up tabular dataset for doc_uid=%s",
-                document_uid,
-                exc_info=True,
-            )
+        context = ApplicationContext.get_instance()
+        metadata_store = context.get_metadata_store()
+        metadata = await metadata_store.get_metadata_by_uid(document_uid)
+        if metadata is None or read_tabular_artifact(metadata) is None:
+            return
+        if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
+            return
+        if metadata.tags.tag_ids:
+            return
+        if not is_platform_bypass and metadata.identity.uploaded_by != user.uid:
+            return
+        await asyncio.to_thread(self._delete_tabular_artifact_objects, document_uid=document_uid)
+        await metadata_store.delete_metadata(document_uid)
 
     @staticmethod
     def _delete_tabular_artifact_objects(*, document_uid: str) -> None:
@@ -637,6 +586,11 @@ class IngestionController:
           own compensating cleanup: both need to remove a document's Parquet
           object(s) directly from `content_store`, independent of whatever
           state (or absence) the metadata row is in.
+        - Synchronous on purpose: `content_store.list_objects`/`delete_object`
+          are blocking network calls (GCS/MinIO SDKs). Both call sites run it
+          through `asyncio.to_thread` (P2, codex review) rather than await it
+          directly, so a slow object-store round trip doesn't stall the
+          event loop.
         """
         context = ApplicationContext.get_instance()
         content_store = context.get_content_store()

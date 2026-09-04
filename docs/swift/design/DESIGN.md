@@ -518,16 +518,39 @@ endpoint's authorization for *any* authenticated user before this fix, tags
 notwithstanding. `_authorize_fast_ingest_delete` now refuses a tagged
 document outright, before either its tabular-ownership branch or the
 chunk-based fallback ever runs; `_delete_attachment_tabular_dataset` gained
-the identical check as its own defense-in-depth, since the endpoint's
-platform-admin bypass returns before ever resolving metadata and so never
-reaches the tags check either. Combined with an operator-configured
-`document_sources` entry literally named "fast_ingest" (nothing reserves
-that string), the narrower version of this gap would otherwise have let a
-tagged document's original uploader delete it even after losing their real
-ReBAC `DocumentPermission.DELETE` on it (e.g. removed from the owning team)
-— a tagged document already has its own ReBAC-based protection this
-endpoint doesn't check, and must never be treated as the resource-less
-fast-ingest document class however its `source_tag` happens to read.
+the identical check as its own defense-in-depth. Combined with an
+operator-configured `document_sources` entry literally named "fast_ingest"
+(nothing reserves that string), the narrower version of this gap would
+otherwise have let a tagged document's original uploader delete it even
+after losing their real ReBAC `DocumentPermission.DELETE` on it (e.g.
+removed from the owning team) — a tagged document already has its own
+ReBAC-based protection this endpoint doesn't check, and must never be
+treated as the resource-less fast-ingest document class however its
+`source_tag` happens to read.
+
+**The platform-admin bypass classifies before it bypasses (P1, codex
+review).** The check above closed the gap for the non-bypass path, but the
+bypass itself still returned `True` on its very first line — before ever
+resolving metadata — so a platform-driven delete (scheduled conversation
+erasure, CTRLP-12) skipped the tags check and every other classification
+entirely. Control-plane never verifies server-side that a session
+attachment's `document_uid` (client-supplied at `create_session_attachment`
+time) actually names something the calling user fast-ingested, so a forged
+or merely mistaken value can name a real, tagged corpus document; the old
+bypass would have deleted its vectors outright for the service principal.
+`_authorize_fast_ingest_delete` now resolves metadata and evaluates the tags
+check and the tabular-ownership branch unconditionally, admin or not — the
+bypass (`is_platform_admin`, computed once up front) only ever waives the
+*ownership* half of a check, never the *classification* half. For the
+metadata-less case (every non-CSV attachment: fast_ingest never writes a
+metadata row for them), classification for a service principal can't reuse
+`may_delete_session_document` — its per-user match can never be satisfied by
+a service account, since the chunks belong to whichever end user actually
+uploaded the attachment. `BaseVectorStore.is_session_scoped_document` is the
+caller-agnostic sibling: true when the document has no chunks at all (same
+retry-safety reasoning as `may_delete_session_document`) or every chunk it
+does have carries the `scope="session"` marker, false — refusing the bypass
+— the moment one chunk lacks it (a real corpus document, chunks included).
 
 Reusing `MetadataService.delete_document_and_artifacts_trusted` here was
 considered and rejected: it also runs storage-quota release
@@ -535,6 +558,39 @@ considered and rejected: it also runs storage-quota release
 which requires a live Postgres engine even to determine there is nothing to
 release for a tagless, quota-exempt attachment — infrastructure this narrow
 cleanup has no other reason to depend on.
+
+**Tabular cleanup failure must not report a successful erasure (P1, codex
+review).** `_delete_attachment_tabular_dataset` used to catch every
+exception from the actual delete work and log-and-return, so a Parquet or
+metadata-store failure left the dataset behind while the route still
+returned HTTP 200 — control-plane's `ConversationErasureService.erase_session`
+would then record the attachment store `ok=True`, delete its own attachment
+row, and (for a full session erasure) go on to delete the session metadata
+row too, with nothing left pointing at the orphaned dataset to make it
+retryable. The classification early-returns ("nothing to clean up") stay
+silent — those are not failures — but the actual artifact/metadata delete
+now raises on error like every sibling cleanup step in this file. No
+control-plane change was needed for this: `_delete_knowledge_flow_attachment`
+already turns any non-2xx into `SessionAttachmentRequestError`, and
+`erase_session` already isolates each store's failure, retains its record,
+and skips deleting the session metadata row until every store reports
+`ok=True` (RFC §2.1 retry-safety) — this Knowledge Flow fix is what makes
+that existing control-plane machinery actually see the failure instead of a
+false 200.
+
+**Known open gap — the attachment-ownership predicate is hand-rolled three
+times.** `_authorize_fast_ingest_delete`'s tabular-ownership branch,
+`_delete_attachment_tabular_dataset`'s re-check, and
+`TabularService._as_owned_attachment_dataset` each independently test
+`source_tag == "fast_ingest"` + no tags + `uploaded_by` + artifact-present;
+`is_session_scoped_document` is also a near-duplicate of
+`may_delete_session_document` (chunk-scope check, minus the `user_id`
+match). A code-review pass on the classify-before-bypass fix flagged both as
+real drift risk (a future change to either predicate must be applied
+everywhere it's copied or silently diverges — as already happened once, per
+the tags-check history above) but judged consolidating either one too broad
+a change to bundle into a security fix. Deliberately left as-is here;
+revisit as a standalone simplification pass.
 
 **Prompt suffix.** `build_attachment_context_suffix`
 (`libs/fred-runtime/fred_runtime/react/react_prompting.py`) tells agents

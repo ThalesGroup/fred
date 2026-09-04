@@ -19,7 +19,10 @@ metadata instead, the same mechanism `summarize_document` already uses for
 reads on this document class).
 
 These tests pin the authorization decision:
-- an admin (holds can_manage_platform) skips the per-document ownership check;
+- an admin (holds can_manage_platform) skips the per-document ownership check,
+  but never the classification that confirms this document_uid is genuinely
+  an attachment -- a forged or mistaken document_uid naming a real corpus
+  document must be refused for the admin bypass exactly as for anyone else;
 - a non-admin owner (their own session-scoped chunks exist) passes;
 - a non-admin non-owner is refused;
 - a document with no chunks at all is allowed (idempotent no-op), so a retry
@@ -76,10 +79,12 @@ class _FakeVectorStore:
     the exact user_id it was asked to check -- a wrong-identifier bug (e.g.
     forwarding username instead of uid) would otherwise still pass these tests."""
 
-    def __init__(self, *, may_delete: bool) -> None:
+    def __init__(self, *, may_delete: bool, is_session_scoped: bool = False) -> None:
         self._may_delete = may_delete
+        self._is_session_scoped = is_session_scoped
         self.checked = False
         self.checked_user_id: str | None = None
+        self.classified = False
 
     def may_delete_session_document(self, document_uid: str, user_id: str) -> bool:
         self.checked = True
@@ -87,14 +92,26 @@ class _FakeVectorStore:
         assert document_uid == "doc-1"
         return self._may_delete
 
+    def is_session_scoped_document(self, document_uid: str) -> bool:
+        self.classified = True
+        assert document_uid == "doc-1"
+        return self._is_session_scoped
+
 
 @pytest.mark.asyncio
 async def test_platform_admin_bypasses_document_ownership() -> None:
+    """
+    Admin: allowed on a genuine attachment even though it owns nothing --
+    ownership is waived, but classification (`is_session_scoped_document`,
+    the caller-agnostic equivalent of `may_delete_session_document`) still
+    runs and must confirm this document_uid really is a session-scoped
+    attachment before the bypass grants anything.
+    """
     rebac = _FakeRebac(is_platform_admin=True)
-    vector_store = _FakeVectorStore(may_delete=False)
-    # Admin: allowed even though it owns nothing, and the ownership check is skipped.
+    vector_store = _FakeVectorStore(may_delete=False, is_session_scoped=True)
     is_platform_bypass = await _authorize_fast_ingest_delete(rebac, _user(), "doc-1", vector_store)
     assert vector_store.checked is False
+    assert vector_store.classified is True
     # Callers (e.g. `_delete_attachment_tabular_dataset`) must be told this was
     # a bypass, not an ownership match — see the P1 regression tests below.
     assert is_platform_bypass is True
@@ -255,4 +272,75 @@ async def test_tagged_document_with_zero_chunks_denies_any_caller_regardless_of_
 
     with pytest.raises(AuthorizationError):
         await _authorize_fast_ingest_delete(rebac, _user("bob"), "doc-tagged-normal", vector_store)
+    assert vector_store.checked is False
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_cannot_delete_a_tagged_corpus_document(tmp_path) -> None:
+    """
+    A session attachment's `document_uid` is client-
+    supplied to control-plane and never verified there against what Knowledge
+    Flow actually ingested -- a forged or mistaken value can name a real,
+    tagged corpus document. The platform-admin bypass (the scheduled
+    conversation-erasure principal) must never turn this endpoint into a
+    general corpus-document deletion path: classification (the tags check)
+    has to run and deny *before* CAN_MANAGE_PLATFORM is ever consulted for a
+    verdict, not after.
+    """
+    csv_path = tmp_path / "quarterly.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="quarterly.csv", document_uid="doc-tagged", title="quarterly.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag="fred"),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+
+    rebac = _FakeRebac(is_platform_admin=True)
+    vector_store = _FakeVectorStore(may_delete=True, is_session_scoped=True)
+
+    with pytest.raises(AuthorizationError):
+        await _authorize_fast_ingest_delete(rebac, _user("svc-control-plane"), "doc-tagged", vector_store)
+    assert vector_store.checked is False
+    assert vector_store.classified is False
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_cannot_delete_an_unclassifiable_document(tmp_path) -> None:
+    """
+    The metadata-less case -- a genuine text/pdf/image
+    fast-ingest attachment never gets a `DocumentMetadata` row (vectors
+    only), so a forged `document_uid` naming a real, untagged corpus-adjacent
+    document (or simply someone else's vectors, no tags at all) reaches the
+    same code path with `metadata is None`. The old code trusted
+    CAN_MANAGE_PLATFORM blindly here; the fix requires the vector store to
+    positively classify the chunks as session-scoped before the bypass may
+    act, using the same `scope` marker `may_delete_session_document` checks
+    for a specific owner, minus the owner match a service principal can never
+    satisfy.
+    """
+    rebac = _FakeRebac(is_platform_admin=True)
+    vector_store = _FakeVectorStore(may_delete=False, is_session_scoped=False)
+
+    with pytest.raises(AuthorizationError):
+        await _authorize_fast_ingest_delete(rebac, _user("svc-control-plane"), "doc-1", vector_store)
+    assert vector_store.classified is True
+    assert vector_store.checked is False
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_deletes_a_genuine_text_attachment_with_no_metadata_row(tmp_path) -> None:
+    """
+    Regression: scheduled erasure of a genuine, metadata-less text/pdf/image
+    attachment must keep working -- the fix must not overcorrect into denying
+    every platform-bypass delete that lacks a metadata row.
+    """
+    rebac = _FakeRebac(is_platform_admin=True)
+    vector_store = _FakeVectorStore(may_delete=False, is_session_scoped=True)
+
+    is_platform_bypass = await _authorize_fast_ingest_delete(rebac, _user("svc-control-plane"), "doc-1", vector_store)
+    assert is_platform_bypass is True
+    assert vector_store.classified is True
     assert vector_store.checked is False
