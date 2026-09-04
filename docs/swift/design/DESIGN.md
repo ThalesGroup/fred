@@ -615,6 +615,36 @@ the tags-check history above) but judged consolidating either one too broad
 a change to bundle into a security fix. Deliberately left as-is here;
 revisit as a standalone simplification pass.
 
+**The ReBAC-disabled listing exclusion needs the same tags check as every
+other classifier here.** `_resolve_authorized_datasets`'s `RebacDisabledResult`
+branch excluded any metadata row whose `source_tag == "fast_ingest"` from an
+otherwise-unfiltered listing — but, like every other attachment check in
+this file, `source_tag` alone can't tell a genuine attachment from a tagged
+corpus document that happens to share the same operator-configured source
+name. Fixed to also require the document be untagged before excluding it,
+matching `_as_owned_attachment_dataset`/`_authorize_fast_ingest_delete`.
+
+**Orphaned artifacts when the control-plane persist step fails after a
+successful `/fast/ingest`.** The frontend's upload flow calls Knowledge
+Flow's `/fast/ingest` (creating real vectors, and for CSV a `tabular_v1`
+dataset) and only then persists a `SessionAttachmentSummary` row in
+control-plane. If that second call fails, the attachment never gets a
+persisted record — so neither drawer deletion nor session-expiry erasure,
+both of which iterate persisted records, can ever find and clean up the
+Knowledge Flow artifacts, which are otherwise permanently orphaned.
+`useChatAttachments.ts`'s upload handler now calls `DELETE
+/fast/delete/{document_uid}` directly on this failure path, the same
+KF-facing route the frontend already calls for a normal, persisted delete.
+Best-effort: a cleanup failure here doesn't mask the original upload error
+already shown to the user. Known residual gap, not addressed: `fastIngest`
+and `readImageContext` run under one `Promise.all`, so if fast-ingest
+succeeds but the sibling image-preview read rejects (a `FileReader` error on
+an image file), the same orphan can still occur — narrower and rarer than
+the persist-failure path this fix targets. No automated test covers this
+fix; this repo has no existing pattern for testing a hook's async
+orchestration against mocked RTK Query mutations, and building one was
+judged out of scope for this fix.
+
 **Prompt suffix.** `build_attachment_context_suffix`
 (`libs/fred-runtime/fred_runtime/react/react_prompting.py`) tells agents
 `.csv` attachments are SQL-queryable *only* — not indexed for search at all,

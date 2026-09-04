@@ -895,6 +895,39 @@ async def test_rebac_disabled_listing_excludes_fast_ingest_attachments(tmp_path,
 
 
 @pytest.mark.asyncio
+async def test_rebac_disabled_listing_keeps_a_tagged_corpus_document_with_a_colliding_source_tag(tmp_path, metadata_store):
+    """
+    `source_tag` alone was checked here, not tags -- but `source_tag` is an
+    operator-configured, client-suppliable string (`document_sources`) with
+    nothing reserving "fast_ingest" against a real corpus source named the
+    same way (the same collision every other attachment-classification check
+    in this module already guards against). Excluding on source_tag alone
+    would have hidden a genuine tagged corpus document from a ReBAC-disabled
+    deployment's listing, contradicting that mode's whole point.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "quarterly.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="quarterly.csv", document_uid="doc-tagged-colliding", title="quarterly.csv"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata)
+    await MetadataService().save_document_metadata(_user(), processed)
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+
+    datasets = await service.list_datasets(_user("bob"))
+    visible_uids = {dataset.document_uid for dataset in datasets}
+    assert "doc-tagged-colliding" in visible_uids
+
+
+@pytest.mark.asyncio
 async def test_rebac_disabled_still_denies_non_owner_explicit_attachment_query(tmp_path, metadata_store):
     """
     Closes the loop on the fix above: even with ReBAC fully disabled AND

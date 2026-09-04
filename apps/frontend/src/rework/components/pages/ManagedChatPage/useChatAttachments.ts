@@ -19,6 +19,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import {
+  useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
   type FastIngestResponse,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -161,6 +162,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation();
   const [deletePersistedAttachmentMutation] =
     useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation();
+  const [deleteFastArtifactsMutation] = useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation();
 
   const persistedAttachments = useMemo(
     () =>
@@ -257,11 +259,18 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           },
         ]);
 
+        // Set as soon as fast-ingest succeeds, read in `catch` below: if the
+        // subsequent control-plane persist fails, this is the only record
+        // that Knowledge Flow artifacts exist at all -- no session-attachment
+        // row was ever created, so neither drawer deletion nor session-expiry
+        // erasure would ever find them to clean up otherwise.
+        let fastIngestResult: FastIngestResponse | null = null;
         try {
           const [imageContext, fastIngest] = await Promise.all([
             readImageContext(file),
             fastIngestAttachment(file, ingestionSessionId),
           ]);
+          fastIngestResult = fastIngest;
 
           await persistAttachmentMutation({
             teamId,
@@ -316,6 +325,22 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               attachment.id === id ? { ...attachment, status: "error", error: errorMessage } : attachment,
             ),
           );
+          // Fast-ingest succeeded (real KF vectors/tabular dataset exist) but
+          // the persist that would have made them reachable through the
+          // normal delete paths never landed -- clean them up directly
+          // instead of leaving a permanent, undiscoverable orphan. Best
+          // effort: a cleanup failure here must not mask the original error
+          // already surfaced above.
+          if (fastIngestResult?.document_uid) {
+            try {
+              await deleteFastArtifactsMutation({
+                documentUid: fastIngestResult.document_uid,
+                sessionId: ingestionSessionId,
+              }).unwrap();
+            } catch {
+              // Logged server-side; nothing actionable for the user here.
+            }
+          }
         }
       };
 

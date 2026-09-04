@@ -860,8 +860,14 @@ class TabularService:
             # that document class; without excluding it, a ReBAC-disabled
             # deployment would enumerate every user's session-scoped
             # attachments to every other user, bypassing the ownership check
-            # entirely instead of merely being unable to use it.
-            visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG]
+            # entirely instead of merely being unable to use it. `source_tag`
+            # alone is not enough: it is an operator-configured string
+            # (`document_sources`) nothing reserves against a real corpus
+            # source also named "fast_ingest" -- exclude only when the
+            # document is ALSO untagged, the same "genuinely an attachment"
+            # test used everywhere else in this file, so a same-named tagged
+            # corpus document stays visible.
+            visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
         elif is_service_agent(user):
             # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
             # the evaluation worker holds no per-user document relations by design, so the
