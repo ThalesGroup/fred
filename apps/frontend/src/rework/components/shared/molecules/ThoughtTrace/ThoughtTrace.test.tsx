@@ -100,6 +100,18 @@ describe("ThoughtTrace", () => {
     expect(html).not.toContain("rework.chatTrace.phase.");
   });
 
+  it("names each reasoning row by its own text, so successive rounds are distinguishable", () => {
+    const html = render(TRACE, false);
+    expect(html).toContain('aria-label="I should list the tabular documents first"');
+    // The generic label survives only for a block that has streamed nothing yet.
+    const empty = msg({
+      channel: "thought",
+      parts: [{ type: "text", text: "" }],
+      metadata: { extras: { thought_id: "t0", phase: "planning", source: "model_native" } },
+    });
+    expect(render([empty], false)).toContain('aria-label="rework.chatTrace.openReasoning"');
+  });
+
   it("keeps reasoning and tool steps in the order they happened", () => {
     const second = msg({
       channel: "thought",
@@ -111,8 +123,10 @@ describe("ThoughtTrace", () => {
     // hoisted both thoughts above both tools, an order that never occurred.
     const html = render([...TRACE.slice(0, 3), second, ...TRACE.slice(3)], false);
 
-    const order = [...html.matchAll(/I should list|the first query|>1<|>2</g)].map((m) => m[0]);
-    expect(order).toEqual(["I should list", ">1<", "the first query", ">2<"]);
+    // Matched on the rendered text node (leading `>`), not the aria-label that
+    // now repeats the same words.
+    const order = [...html.matchAll(/>I should list|>the first query|>1<|>2</g)].map((m) => m[0]);
+    expect(order).toEqual([">I should list", ">1<", ">the first query", ">2<"]);
   });
 
   it("numbers the two identical tool calls so they can be told apart", () => {

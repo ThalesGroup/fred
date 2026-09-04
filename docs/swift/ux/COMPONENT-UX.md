@@ -466,6 +466,11 @@ and no status dot. Successive rounds of weight-trimming, each from developer rev
   ("Model reasoning") and a "Model" chip. The title and chip are dropped for
   `source="model_native"`; authored titles are kept, since an author wrote them.
 
+The row is named by its own text (title, preview, conclusion) rather than a fixed "Open the
+full reasoning" label — a turn holds one row per ReAct round, so a static label would announce
+them all identically and the reasoning would never reach assistive tech. The generic label
+remains only for a block that has streamed nothing yet.
+
 The marker rides the first line of text rather than the row's centre, so a two-line preview
 does not drag it off the rail. Two variables carry that geometry, both set by `ThoughtTrace`
 on `.body`: `--trace-rail-x` (where the rail runs) and `--trace-line-h` (one line of row

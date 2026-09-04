@@ -48,12 +48,18 @@ export function ReasoningRow({ entry }: { entry: TraceEntry }) {
   // earn their place.
   const title = sourceForEntry(entry) === "model_native" ? null : extras.title;
 
+  // Named by its own content, like a tool row is. A turn now holds one reasoning
+  // row per ReAct round, so a fixed label would announce them all identically and
+  // the reasoning itself would never reach assistive tech. The generic label is
+  // kept only for a row that has no text yet — a block that just opened.
+  const spokenLabel = [title, text, extras.conclusion].filter(Boolean).join(". ");
+
   return (
     <button
       type="button"
       className={styles.row}
       onClick={() => openTrace(entry)}
-      aria-label={t("rework.chatTrace.openReasoning")}
+      aria-label={spokenLabel || t("rework.chatTrace.openReasoning")}
     >
       <span className={`${styles.marker} ${isStreaming ? styles.markerLive : ""}`} aria-hidden="true">
         <Icon category="outlined" type="settings" />
