@@ -18,7 +18,11 @@ import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
-import { useFastIngestKnowledgeFlowV1FastIngestPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
+  useFastIngestKnowledgeFlowV1FastIngestPostMutation,
+  type FastIngestResponse,
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
@@ -29,11 +33,6 @@ import type { AttachmentSource, ChatAttachment, ChatImageContext, SessionAttachm
 
 const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-
-interface FastIngestResponse {
-  document_uid?: string;
-  summary_md?: string;
-}
 
 interface SessionAttachmentApiPayload {
   attachment_id?: string;
@@ -163,6 +162,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation();
   const [deletePersistedAttachmentMutation] =
     useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation();
+  const [deleteFastArtifactsMutation] = useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation();
 
   const persistedAttachments = useMemo(
     () =>
@@ -183,9 +183,9 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       formData.append("scope", "session");
       formData.append("options_json", JSON.stringify({ include_summary: true }));
 
-      return (await fastIngestMutation({
+      return await fastIngestMutation({
         bodyFastIngestKnowledgeFlowV1FastIngestPost: formData as never,
-      }).unwrap()) as FastIngestResponse;
+      }).unwrap();
     },
     [fastIngestMutation],
   );
@@ -259,11 +259,18 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           },
         ]);
 
+        // Set as soon as fast-ingest succeeds, read in `catch` below: if the
+        // subsequent control-plane persist fails, this is the only record
+        // that Knowledge Flow artifacts exist at all -- no session-attachment
+        // row was ever created, so neither drawer deletion nor session-expiry
+        // erasure would ever find them to clean up otherwise.
+        let fastIngestResult: FastIngestResponse | null = null;
         try {
           const [imageContext, fastIngest] = await Promise.all([
             readImageContext(file),
             fastIngestAttachment(file, ingestionSessionId),
           ]);
+          fastIngestResult = fastIngest;
 
           await persistAttachmentMutation({
             teamId,
@@ -318,6 +325,22 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               attachment.id === id ? { ...attachment, status: "error", error: errorMessage } : attachment,
             ),
           );
+          // Fast-ingest succeeded (real KF vectors/tabular dataset exist) but
+          // the persist that would have made them reachable through the
+          // normal delete paths never landed -- clean them up directly
+          // instead of leaving a permanent, undiscoverable orphan. Best
+          // effort: a cleanup failure here must not mask the original error
+          // already surfaced above.
+          if (fastIngestResult?.document_uid) {
+            try {
+              await deleteFastArtifactsMutation({
+                documentUid: fastIngestResult.document_uid,
+                sessionId: ingestionSessionId,
+              }).unwrap();
+            } catch {
+              // Logged server-side; nothing actionable for the user here.
+            }
+          }
         }
       };
 

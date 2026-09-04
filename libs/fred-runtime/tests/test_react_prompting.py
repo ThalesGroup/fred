@@ -30,7 +30,9 @@ from fred_runtime.react.react_prompting import (
 from fred_runtime.react.react_tool_binding import (
     BoundTool,
     build_runtime_tool_prompt_suffix,
+    tabular_tools_bound,
 )
+from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -400,12 +402,28 @@ def test_tool_prompt_suffix_treats_capability_only_tools_as_available() -> None:
     assert "- read_document: Read one document." in suffix
 
 
+def test_tabular_tools_bound_is_true_when_the_tabular_mcp_server_is_bound() -> None:
+    assert tabular_tools_bound(
+        [_grouped_tool("read_query", MCP_SERVER_KNOWLEDGE_FLOW_TABULAR)]
+    )
+
+
+def test_tabular_tools_bound_is_false_without_the_tabular_mcp_server() -> None:
+    # `general_assistant` ships with zero default capabilities, so an
+    # agent instance can have other tools bound (or none at all) while never
+    # having tabular/SQL tools — this is exactly the gap the attachment
+    # suffix must detect rather than assume.
+    assert not tabular_tools_bound([])
+    assert not tabular_tools_bound([_grouped_tool("search_documents", "mcp-text")])
+
+
 def test_attachment_context_suffix_announces_current_files() -> None:
     suffix = build_attachment_context_suffix(
         _binding(
             "## Attached files for this conversation\n"
             "- report.pdf: conversation document"
-        )
+        ),
+        tabular_tools_available=True,
     )
 
     assert "The user has attached one or more files" in suffix
@@ -419,8 +437,14 @@ def test_attachment_context_suffix_announces_current_files() -> None:
 
 
 def test_attachment_context_suffix_is_absent_after_last_attachment_is_deleted() -> None:
-    assert build_attachment_context_suffix(_binding(None)) == ""
-    assert build_attachment_context_suffix(_binding("   ")) == ""
+    assert (
+        build_attachment_context_suffix(_binding(None), tabular_tools_available=True)
+        == ""
+    )
+    assert (
+        build_attachment_context_suffix(_binding("   "), tabular_tools_available=True)
+        == ""
+    )
 
 
 def test_attachment_context_suffix_drops_inline_image_data_urls() -> None:
@@ -429,7 +453,8 @@ def test_attachment_context_suffix_drops_inline_image_data_urls() -> None:
             "## Attached files\n"
             "- diagram.png: conversation image (image/png, 250000 bytes)\n"
             "  data: data:image/png;base64,AAAA"
-        )
+        ),
+        tabular_tools_available=True,
     )
 
     assert "diagram.png" in suffix
@@ -446,7 +471,8 @@ def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
             "## Attached files\n"
             "- diagram.png: conversation image (image/png, 250000 bytes)\n"
             "  data: data:image/png;base64,AAAA"
-        )
+        ),
+        tabular_tools_available=True,
     )
 
     # Regression for #1852: an attached image is vectorized/retrievable, so the
@@ -455,6 +481,140 @@ def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
     assert "documents AND images" in suffix
     assert "MUST first call the search tool" in suffix
     assert "do not claim you cannot see or analyze an attachment" in suffix
+
+
+def test_attachment_context_suffix_marks_csv_as_sql_queryable() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        ),
+        tabular_tools_available=True,
+    )
+
+    # ATTACH-TAB-01: fast ingest now builds a real `tabular_v1` dataset for
+    # CSV attachments (DESIGN.md, "Session-Scoped Attachment Datasets") and
+    # skips vector-chunking them entirely (a truncated markdown preview would
+    # compete with the deterministic SQL path) — so the prompt must tell
+    # agents CSV is SQL-only, never searchable.
+    assert "CSV attachments are the one exception" in suffix
+    assert "NOT indexed for search at all, only as a SQL-queryable dataset" in suffix
+    assert "never call it for one" in suffix
+    assert (
+        "Pass a CSV attachment's uid to the tabular/SQL tools for everything about it"
+        in suffix
+    )
+
+
+def test_attachment_context_suffix_warns_when_no_tabular_tool_is_bound() -> None:
+    # `general_assistant` ships with zero default capabilities — an
+    # instance can carry a CSV attachment with a real SQL dataset while it
+    # has no tabular/SQL tool bound. Telling the model to call a tool it
+    # doesn't have would just produce a tool-not-found error, so the suffix
+    # must say plainly that the data cannot be queried instead.
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        ),
+        tabular_tools_available=False,
+    )
+
+    assert "no tabular/SQL tool is enabled" in suffix
+    assert "cannot be queried or searched at all" in suffix
+    assert "SQL-queryable dataset ONLY" not in suffix
+    assert (
+        "Pass a CSV attachment's uid to the tabular/SQL tools for everything about it"
+        not in suffix
+    )
+
+
+def test_attachment_context_suffix_marks_excel_as_text_not_tabular() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- plan.xlsx [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        ),
+        tabular_tools_available=True,
+    )
+
+    # Excel attachments are not part of ATTACH-TAB-01 increment 1 — they keep
+    # the original "text only" guidance.
+    assert "Excel attachments (XLS, XLSX) are text only for now" in suffix
+    assert "NOT loaded as SQL-queryable tables" in suffix
+    assert "never pass their uid to the tabular/SQL tools" in suffix
+
+
+def test_attachment_context_suffix_annotates_each_line_inline_by_type() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document\n"
+            "- Plan_2026.XLSX [77aa1cfdbffe4847a4d2f087741f2899]: conversation document\n"
+            "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document"
+        ),
+        tabular_tools_available=True,
+    )
+
+    # A paragraph-level rule alone was ignored in live testing, so each
+    # CSV/Excel line carries its own annotation inline, next to the uid the
+    # model would otherwise mishandle.
+    assert (
+        "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document "
+        "(SQL-queryable dataset ONLY, not indexed for search" in suffix
+    )
+    # Case-insensitive extension match (.XLSX) is annotated too, with the
+    # Excel (not CSV) note.
+    assert (
+        "- Plan_2026.XLSX [77aa1cfdbffe4847a4d2f087741f2899]: conversation document "
+        "(markdown text, NOT a SQL dataset" in suffix
+    )
+    # Non-spreadsheet attachments keep their line untouched.
+    assert (
+        "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document\n"
+        in suffix
+        or suffix.endswith(
+            "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document"
+        )
+    )
+    assert suffix.count("SQL-queryable dataset ONLY") == 1
+    assert suffix.count("NOT a SQL dataset") == 1
+
+
+def test_attachment_context_suffix_annotates_xlsm_like_xlsx() -> None:
+    # .xlsm is a real configured attachment suffix (FastSpreadsheetProcessor)
+    # that a bare `xlsx?` pattern would silently miss.
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- budget.xlsm [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        ),
+        tabular_tools_available=True,
+    )
+
+    assert (
+        "- budget.xlsm [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document "
+        "(markdown text, NOT a SQL dataset" in suffix
+    )
+
+
+def test_attachment_context_suffix_does_not_annotate_a_filename_only_containing_csv() -> (
+    None
+):
+    # The annotation must only fire for a real ".csv" extension, matching the
+    # same `filename.lower().endswith(".csv")` gate `fast_ingest` uses to
+    # decide whether a tabular dataset was actually built — a filename that
+    # merely contains ".csv" mid-string must not be told it's SQL-queryable
+    # when no dataset exists for it.
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- export.csv.bak [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document"
+        ),
+        tabular_tools_available=True,
+    )
+
+    assert "SQL-queryable dataset ONLY" not in suffix
 
 
 def test_document_scope_suffix_names_the_selection() -> None:
@@ -533,6 +693,7 @@ def test_compose_system_prompt_folds_selected_prompt_and_attachment(
         ),
         agent_id="agent-1",
         tool_suffix="\n\nTOOL-SUFFIX",
+        tabular_tools_available=True,
     )
 
     assert "BASE-TEMPLATE" in prompt
@@ -575,6 +736,7 @@ def test_compose_system_prompt_places_runtime_suffixes_before_the_agent_template
         binding=_binding(context_prompt_text="Speak Spanish."),
         agent_id="agent-1",
         runtime_suffixes=("\n\nFILESYSTEM-NOTICE",),
+        tabular_tools_available=True,
     )
 
     assert "FILESYSTEM-NOTICE" in prompt
@@ -591,6 +753,7 @@ def test_compose_system_prompt_omits_agent_heading_when_template_is_empty() -> N
         binding=_binding(),
         agent_id="agent-1",
         tool_suffix="\n\nTOOL-SUFFIX",
+        tabular_tools_available=True,
     )
 
     assert "# Agent instructions" not in prompt
@@ -673,6 +836,7 @@ def test_compose_system_prompt_puts_the_platform_prompt_first() -> None:
         binding=_binding(platform_prompt="MASTER-BLOCK"),
         agent_id="agent-1",
         tool_suffix="TOOL-SUFFIX",
+        tabular_tools_available=True,
     )
 
     assert prompt.startswith("MASTER-BLOCK")

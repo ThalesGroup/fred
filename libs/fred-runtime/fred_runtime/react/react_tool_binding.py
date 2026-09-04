@@ -38,6 +38,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
+from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.runtime import TracerPort
 from langchain_core.tools import BaseTool, StructuredTool
@@ -72,6 +73,26 @@ class BoundTool:
     # `build_runtime_tool_prompt_suffix` group the tool listing by server
     # (#2455).
     mcp_server_id: str | None = None
+
+
+def tabular_tools_bound(bound_tools: Sequence[BoundTool]) -> bool:
+    """
+    Tell whether the tabular MCP server is actually bound to this agent
+    instance, i.e. whether it can run `read_query`/`search_tabular_values`
+    against a SQL-queryable attachment dataset.
+
+    Why this exists:
+    - `general_assistant` (the default agent template) ships with zero
+      default capabilities — operators tick tools on per instance — so a CSV
+      attachment can have a real dataset while the calling agent has no tool
+      to query it. The attachment prompt suffix must not promise a
+      capability this agent instance cannot use.
+    """
+
+    return any(
+        bound_tool.mcp_server_id == MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+        for bound_tool in bound_tools
+    )
 
 
 def _tool_summary(description: str) -> str:
