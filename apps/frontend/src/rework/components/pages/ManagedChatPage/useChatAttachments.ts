@@ -18,7 +18,10 @@ import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
-import { useFastIngestKnowledgeFlowV1FastIngestPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useFastIngestKnowledgeFlowV1FastIngestPostMutation,
+  type FastIngestResponse,
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
@@ -29,11 +32,6 @@ import type { AttachmentSource, ChatAttachment, ChatImageContext, SessionAttachm
 
 const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-
-interface FastIngestResponse {
-  document_uid?: string;
-  summary_md?: string;
-}
 
 interface SessionAttachmentApiPayload {
   attachment_id?: string;
@@ -183,9 +181,9 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       formData.append("scope", "session");
       formData.append("options_json", JSON.stringify({ include_summary: true }));
 
-      return (await fastIngestMutation({
+      return await fastIngestMutation({
         bodyFastIngestKnowledgeFlowV1FastIngestPost: formData as never,
-      }).unwrap()) as FastIngestResponse;
+      }).unwrap();
     },
     [fastIngestMutation],
   );

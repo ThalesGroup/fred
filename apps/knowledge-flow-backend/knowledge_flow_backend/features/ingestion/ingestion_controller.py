@@ -197,6 +197,27 @@ class QuotaPrecheckResponse(BaseModel):
     limit: Optional[int] = None
 
 
+class FastIngestResponse(BaseModel):
+    """Result of one fast-ingested chat attachment (`POST /fast/ingest`).
+
+    `tabular_available` is `True` only for a `.csv` attachment (ATTACH-TAB-01)
+    — non-CSV attachments never attempt a tabular build. It's never `False`
+    on a 200: a failed tabular build rejects the whole upload (422) rather
+    than returning a degraded success, since a CSV attachment has no vector
+    chunks to fall back to (DESIGN.md, "Session-Scoped Attachment Datasets").
+    """
+
+    document_uid: str
+    chunks: int
+    total_chars: int
+    truncated: bool
+    scope: str
+    summary_md: str
+    summary_chars: int
+    summary_truncated: bool
+    tabular_available: bool
+
+
 class ProcessingProgress(BaseModel):
     """
     Represents the progress of a file processing operation. It is used to report in
@@ -1219,7 +1240,7 @@ class IngestionController:
             session_id: Optional[str] = Form(None, description="Optional chat session id for scoping"),
             scope: str = Form("session", description="Logical scope label, default 'session'"),
             user: KeycloakUser = Depends(get_current_user),
-        ):
+        ) -> FastIngestResponse:
             """
             Why this exists:
             - Chat attachments need a lightweight ingestion path that stays responsive for the UI.
@@ -1413,17 +1434,17 @@ class IngestionController:
                     summary_md = summary_md[:summary_max_chars].rstrip() + "\n…"
                     summary_truncated = True
 
-            return {
-                "document_uid": document_uid,
-                "chunks": chunks,
-                "total_chars": result.total_chars,
-                "truncated": result.truncated,
-                "scope": scope,
-                "summary_md": summary_md,
-                "summary_chars": len(summary_md),
-                "summary_truncated": summary_truncated,
-                "tabular_available": tabular_available,
-            }
+            return FastIngestResponse(
+                document_uid=document_uid,
+                chunks=chunks,
+                total_chars=result.total_chars,
+                truncated=result.truncated,
+                scope=scope,
+                summary_md=summary_md,
+                summary_chars=len(summary_md),
+                summary_truncated=summary_truncated,
+                tabular_available=tabular_available,
+            )
 
         @router.delete(
             "/fast/delete/{document_uid}",

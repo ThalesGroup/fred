@@ -1164,7 +1164,8 @@ export type FastMarkdownKnowledgeFlowV1FastTextPostApiArg = {
   format?: string;
   bodyFastMarkdownKnowledgeFlowV1FastTextPost: BodyFastMarkdownKnowledgeFlowV1FastTextPost;
 };
-export type FastIngestKnowledgeFlowV1FastIngestPostApiResponse = /** status 200 Successful Response */ any;
+export type FastIngestKnowledgeFlowV1FastIngestPostApiResponse =
+  /** status 200 Successful Response */ FastIngestResponse;
 export type FastIngestKnowledgeFlowV1FastIngestPostApiArg = {
   bodyFastIngestKnowledgeFlowV1FastIngestPost: BodyFastIngestKnowledgeFlowV1FastIngestPost;
 };
@@ -2025,6 +2026,17 @@ export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
   file: string;
   /** JSON string of FastTextOptions */
   options_json?: string | null;
+};
+export type FastIngestResponse = {
+  document_uid: string;
+  chunks: number;
+  total_chars: number;
+  truncated: boolean;
+  scope: string;
+  summary_md: string;
+  summary_chars: number;
+  summary_truncated: boolean;
+  tabular_available: boolean;
 };
 export type BodyFastIngestKnowledgeFlowV1FastIngestPost = {
   file: string;
