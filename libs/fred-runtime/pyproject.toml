@@ -1,6 +1,6 @@
 [project]
 name = "fred-runtime"
-version = "3.5.0"
+version = "3.5.1"
 description = "Runtime adapters and infrastructure wiring for Fred v2 agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -91,6 +91,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["fred_runtime*"]
 
+[tool.setuptools.package-data]
+fred_runtime = ["migrations/*.mako"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra"
@@ -128,4 +131,4 @@ dev = [
 ]
 
 [tool.alembic]
-script_location = "%(here)s/alembic"
+script_location = "%(here)s/fred_runtime/migrations"
