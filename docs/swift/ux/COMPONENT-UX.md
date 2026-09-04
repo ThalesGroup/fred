@@ -1184,8 +1184,10 @@ _(none)_
   remaining distance each frame (`nextFollowTop`) catches up fast when a whole tool row lands and
   barely moves for a token, so the two do not read as different behaviours. Native
   `behavior: "smooth"` is not usable here — each call restarts its own animation and there is one
-  call per batch. The loop re-checks intent every frame (the reader can take over, or the answer
-  outgrow its budget, mid-animation) and stops once settled rather than burning a frame per token.
+  call per batch. The loop re-checks intent every frame through a ref, not through the closure it
+  started with — it runs uninterrupted for as long as content keeps arriving, so a loop begun in the
+  work phase went on deciding as if the turn were still working and the answer's freeze never came.
+  It stops once settled rather than burning a frame per token.
   `prefers-reduced-motion` gets the position without the journey, and the per-turn jump stays
   instant and cancels any animation in flight.
 

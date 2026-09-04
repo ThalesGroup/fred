@@ -194,6 +194,16 @@ export function useChatAutoScroll(
     });
   }, [containerRef, phase]);
 
+  // The running loop must read the CURRENT evaluate, not the one that started
+  // it. `evaluate` closes over `phase`; the loop runs uninterrupted for as long
+  // as content keeps arriving, so a loop started during the work phase went on
+  // deciding as if the turn were still working — and the answer phase's freeze
+  // never came.
+  const evaluateRef = useRef(evaluate);
+  useEffect(() => {
+    evaluateRef.current = evaluate;
+  });
+
   const follow = useCallback(() => {
     const el = containerRef.current;
     if (!el || !evaluate()) return;
@@ -212,7 +222,7 @@ export function useChatAutoScroll(
     const step = () => {
       frameRef.current = null;
       const node = containerRef.current;
-      if (!node || !evaluate()) return;
+      if (!node || !evaluateRef.current()) return;
 
       const target = node.scrollHeight - node.clientHeight;
       const next = nextFollowTop(node.scrollTop, target);
