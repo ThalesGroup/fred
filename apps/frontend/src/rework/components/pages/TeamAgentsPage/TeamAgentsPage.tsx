@@ -15,7 +15,10 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
-import { useState } from "react";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
+import type { OptionModel } from "@models/Option.model.ts";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
@@ -32,6 +35,8 @@ import {
 } from "./AgentFormModal/AgentFormModal.tsx";
 import DuplicateAgentDialog from "./DuplicateAgentDialog/DuplicateAgentDialog.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
+import { filterAgents } from "./agentFilter.ts";
+import { DEFAULT_AGENT_SORT, sortAgents, type AgentSortValue } from "./agentSort.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
@@ -118,6 +123,8 @@ export default function TeamAgentsPage() {
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editingInstance, setEditingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [duplicatingInstance, setDuplicatingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<AgentSortValue>(DEFAULT_AGENT_SORT);
 
   const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
@@ -140,6 +147,23 @@ export default function TeamAgentsPage() {
   } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery(
     { teamId: teamId || "" },
     { skip: !teamId || !canManageAgents },
+  );
+
+  // Must stay above the early returns below - a hook after them renders a
+  // different hook count when a query errors, which React refuses.
+  // A suspended agent stays hidden from chat-only members (they cannot fix it
+  // and must not see a broken agent); editors/owners keep seeing it with a
+  // warning and a locked enable toggle. The search narrows what is left.
+  const searchedInstances = useMemo(
+    () =>
+      sortAgents(
+        filterAgents(
+          managedInstances.filter((instance) => canManageAgents || !instance.suspension_reason),
+          search,
+        ),
+        sort,
+      ),
+    [managedInstances, canManageAgents, search, sort],
   );
 
   // Batched once for the whole list (not one query per card, #2096) — the
@@ -393,6 +417,14 @@ export default function TeamAgentsPage() {
     canManageAgents && !isLoadingTemplates && !isTemplatesError && availableTemplates.length === 0;
   const showEmptyState = !isLoadingInstances && managedInstances.length === 0;
   const hasAgents = managedInstances.length > 0;
+  const sortOptions: OptionModel<AgentSortValue>[] = [
+    { value: "name", key: "name", label: t("rework.teams.agents.sort.name") },
+    { value: "created_at:desc", key: "created", label: t("rework.teams.agents.sort.created") },
+    { value: "updated_at:desc", key: "updated", label: t("rework.teams.agents.sort.updated") },
+  ];
+  // Only a non-empty query earns the no-match message: an empty list under an
+  // empty query means something else entirely, and is left as it was.
+  const showNoSearchMatch = Boolean(search.trim()) && searchedInstances.length === 0;
 
   return (
     <div className={styles.teamAgentContainer}>
@@ -412,6 +444,27 @@ export default function TeamAgentsPage() {
               {t("rework.teams.agents.create", { agentsNicknameSingular })}
             </Button>
           )}
+          <div className={styles.searchBar}>
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={t("rework.teams.agents.searchPlaceholder", {
+                agentsNicknamePlural: agentsNicknamePlural.toLowerCase(),
+              })}
+              clearAriaLabel={t("rework.teams.agents.clearSearch")}
+              size="small"
+            />
+          </div>
+          <div className={styles.sortSelect}>
+            <Select<AgentSortValue>
+              size="small"
+              compact
+              options={sortOptions}
+              value={sort}
+              onChange={setSort}
+              ariaLabel={t("rework.teams.agents.sortLabel")}
+            />
+          </div>
         </div>
       )}
 
@@ -433,33 +486,29 @@ export default function TeamAgentsPage() {
           templatesUnavailable={false}
           onCreateAgent={() => setIsEnrollOpen(true)}
         />
+      ) : showNoSearchMatch ? (
+        <div className={styles.emptySearch}>{t("rework.teams.agents.emptySearch")}</div>
       ) : (
         <div className={styles.agentList}>
-          {managedInstances
-            // #1975 (RFC §3.9): a suspended agent is hidden from chat-only
-            // members (they cannot fix it and must not see a broken agent);
-            // editors/owners (`can_update_agents`) keep seeing it with a warning
-            // and a locked enable toggle so they can open the edit form and fix.
-            .filter((instance) => canManageAgents || !instance.suspension_reason)
-            .map((instance) => {
-              const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
-              return (
-                <AgentCard
-                  key={instance.agent_instance_id}
-                  instance={instance}
-                  templateDisplayName={template?.display_name || instance.template_id}
-                  runtimeId={template?.source_runtime_id}
-                  teamId={teamId}
-                  canManageAgents={canManageAgents}
-                  offline={templatesUnavailable}
-                  auditUserById={auditUserById}
-                  onEdit={() => setEditingInstance(instance)}
-                  onToggleEnabled={() => handleToggleEnabled(instance)}
-                  onDuplicate={() => setDuplicatingInstance(instance)}
-                  onDelete={() => handleDelete(instance)}
-                />
-              );
-            })}
+          {searchedInstances.map((instance) => {
+            const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
+            return (
+              <AgentCard
+                key={instance.agent_instance_id}
+                instance={instance}
+                templateDisplayName={template?.display_name || instance.template_id}
+                runtimeId={template?.source_runtime_id}
+                teamId={teamId}
+                canManageAgents={canManageAgents}
+                offline={templatesUnavailable}
+                auditUserById={auditUserById}
+                onEdit={() => setEditingInstance(instance)}
+                onToggleEnabled={() => handleToggleEnabled(instance)}
+                onDuplicate={() => setDuplicatingInstance(instance)}
+                onDelete={() => handleDelete(instance)}
+              />
+            );
+          })}
         </div>
       )}
 

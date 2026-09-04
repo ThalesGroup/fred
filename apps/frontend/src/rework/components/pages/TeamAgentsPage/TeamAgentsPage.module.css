@@ -8,7 +8,7 @@
 .title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
   padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
   color: var(--on-surface);
   font: var(--font-title-large);
@@ -18,6 +18,29 @@
    (matches the team prompts page header). */
 .titleText {
   margin-right: auto;
+}
+
+/* Caps the field so it stays a compact search box in a wide toolbar rather
+   than stretching across the freed space (matches the team prompts page). */
+.searchBar {
+  width: 100%;
+  max-width: 250px;
+}
+
+/* Fixed width so the control does not resize as the selected option changes
+   length — a toolbar that reflows on every pick is hard to aim at. */
+.sortSelect {
+  min-width: 200px;
+}
+
+/* Shown in place of the list when a query matches nothing — distinct from
+   TeamAgentEmptyState, which means the team has no agents at all. */
+.emptySearch {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-l);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .bannerNotice {
