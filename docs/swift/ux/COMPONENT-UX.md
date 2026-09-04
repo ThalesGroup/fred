@@ -356,26 +356,54 @@ agents) so the decision is informed at the point it is made.
   monospace on a light background. May be too visually heavy for secondary UI. Consider
   lowercase with a subtler pill, or icon-only at narrow widths.
 
-- **Reasoning preview length** — `ReasoningBlock` clamps the streaming preview to 2 lines.
+- **Reasoning preview length** — `ReasoningRow` clamps the streaming preview to 2 lines.
   Validate that 2 lines is the right budget for long model-native reasoning, or whether the
-  card should grow while streaming and clamp only once the block closes.
+  row should grow while streaming and clamp only once the block closes.
 
 #### Resolved
 
-- **Reasoning rendered as a tool step (2026-07-30, #2172)** — the trace was one flat list of
+- **Reasoning and tools shown in an order that never happened (2026-09-04, #2565)** — the
+  two-lane split below put every reasoning entry above every tool step, so a turn that
+  reasoned, called a tool, reasoned again and called another was displayed as all the
+  thinking then all the doing. `splitTraceEntries()` is replaced by `traceRows()`, which
+  returns one chronological list (entries already arrive in rank order, and a thought keeps
+  the rank of its `thought_start`) with each row tagged `reasoning` or `step`. `ThoughtTrace`
+  renders that single list, choosing `ReasoningRow` or `TraceEntryRow` per row.
+
+  Ordering alone was not enough: the runtime kept one model-native reasoning block open for
+  the whole turn, so every round's thinking collapsed into one entry ranked before the first
+  tool. It now closes that block at each tool round — see `RUNTIME-EXECUTION-CONTRACT.md`
+  §8.72. Turns stored before that date keep their single block and their old rendering.
+
+  Three consequences worth knowing. The grouping card behind the tool rows is gone: rows of
+  both kinds now sit directly in `.body` as one flat timeline, so the rail's end trimming
+  moved there too — each row publishes where its own marker sits via `--trace-marker-y`
+  (50% for a one-line tool row, the first text line for a reasoning row) rather than each
+  component hardcoding it. `traceSummary()` now sums the reasoning blocks instead of taking
+  the longest, since they no longer overlap. And `TraceEntryRow` no longer receives thought
+  entries at all, so its per-phase pill branch was dead code and was removed — the badge
+  survives only in `TraceDetailDrawer`.
+
+  A grouping background behind *consecutive* tool rows may come back; it was deliberately
+  left out here rather than guessed at.
+
+- **Reasoning rendered as a tool step (2026-07-30, #2172 — lane split superseded 2026-09-04)** — the trace was one flat list of
   look-alike rows, so the model-native reasoning block sat as row #1 of the tool pile and
   pulsed there for the whole turn (it is opened at the first reasoning token and closed only
   at the first answer delta, so it holds the lowest rank throughout — it read as a tool stuck
-  in "running"). The trace is now split into two lanes by `traceUtils.splitTraceEntries()`:
-  a reasoning lane rendered by `ReasoningBlock`, and a numbered tool-step lane rendered by
-  `TraceEntryRow`. Both lanes are chrome-free (no card border, no fill, no chips) and are
-  threaded by a single 1px timeline rail so the turn still reads as a process unfolding.
+  in "running"). Reasoning stopped being a tool row: it gained its own renderer, with no step
+  number and no status dot. That much still holds. The two-lane split it originally shipped
+  with does not — see the 2026-09-04 entry above. Both kinds of row remain chrome-free (no
+  card border, no fill, no chips), threaded by a single 1px timeline rail so the turn reads
+  as a process unfolding.
 
 - **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
   sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
-  replaces `thoughtSummaryLabel()` and returns structured data — reasoning wall-clock (max,
-  not sum: the model-native block brackets the tool calls), tool count, tool latency, running
-  flag — which the component formats through i18n as e.g. "Reasoning 16.4s · 4 tools".
+  replaces `thoughtSummaryLabel()` and returns structured data — reasoning wall-clock, tool
+  count, tool latency, running flag — which the component formats through i18n as e.g.
+  "Reasoning 16.4s · 4 tools". The wall-clock was the max of the blocks, not their sum,
+  because one model-native block bracketed the tool calls; since 2026-09-04 the blocks are
+  disjoint and it is their sum.
 
 - **Collapse behaviour (2026-07-30, #2172)** — `expanded` was initialised `true` and never
   collapsed; `done` only drove the pulse animation, despite a comment claiming otherwise. The
@@ -388,18 +416,22 @@ agents) so the decision is informed at the point it is made.
 - **Chevron legibility (2026-07-30)** — the `›` character is replaced by the `Icon` atom
   (`expand_more` / `expand_less`).
 
-- **Timeline guideline alignment (2026-07-30)** — the guideline moved into `.entries` and is
-  positioned off the step-number column width, and `TraceEntryRow` always renders the number
-  slot (empty for unnumbered notes) so every status dot sits on the same vertical line.
+- **Timeline guideline alignment (2026-07-30)** — the guideline is positioned off the
+  step-number column width, and `TraceEntryRow` always renders the number slot (empty for
+  unnumbered notes) so every status dot sits on the same vertical line. It lived on the
+  `.entries` card until that card was dropped on 2026-09-04; it is now `.body`'s own
+  `--trace-rail-x`.
 
 - **i18n (2026-07-30)** — the trace surface was hardcoded English inside a translated app.
-  Its static strings now live under `rework.chatTrace.*` (en + fr), including the reasoning
-  phase labels. Tool labels themselves stay English — they are generated by
-  `humanizeToolName()` from backend tool names (see #1774).
+  Its static strings now live under `rework.chatTrace.*` (en + fr). The `phase.*` keys were
+  removed on 2026-09-04 with the label they fed. Tool labels themselves stay English — they
+  are generated by `humanizeToolName()` from backend tool names (see #1774).
 
-- **Label chip style — partially (2026-06-18)** — thought rows now use subtle per-phase
-  tinted pills (see `TraceEntryRow`) rather than the flat uppercase label; reasoning detail
-  opens in the overlay drawer with markdown rendering instead of raw JSON.
+- **Label chip style — partially (2026-06-18)** — thought rows use subtle per-phase tinted
+  pills rather than the flat uppercase label; reasoning detail opens in the overlay drawer
+  with markdown rendering instead of raw JSON. Since 2026-09-04 the pill survives only in
+  `TraceDetailDrawer`: a reasoning row shows the reasoning itself, not a name for the kind
+  of reasoning it is.
 
 - **Repeated content-free "Done" rows (2026-07-22)** — every tool call previously produced
   two trace rows: a "Tool use" phase thought (title "Calling `<tool>`", secondary text always
@@ -411,30 +443,34 @@ agents) so the decision is informed at the point it is made.
 
 ---
 
-### `ReasoningBlock`
+### `ReasoningRow`
 
-**Location:** `src/rework/components/shared/molecules/ThoughtTrace/ReasoningBlock/ReasoningBlock.tsx`
+**Location:** `src/rework/components/shared/molecules/ThoughtTrace/ReasoningRow/ReasoningRow.tsx`
 **Status:** `Functional`
 
-The reasoning lane of a trace (#2172): one line per reasoning entry — sparkle marker on the
-timeline rail, phase label in small caps, duration, and a 2-line clamped preview of the
-streaming text. Clicking opens the existing `TraceDetailDrawer` for the full markdown.
+One reasoning entry, sequenced in the trace where it happened (#2172, reordered #2565): a
+`settings` marker on the timeline rail, a 2-line clamped preview of the streaming text, and
+the duration trailing right. Clicking opens `TraceDetailDrawer` for the full markdown.
 
-Deliberately not a `TraceEntryRow`: reasoning is not a tool step. Three weight decisions,
-all from developer review of the first cut, which was judged visually too heavy:
+Deliberately not a `TraceEntryRow`: reasoning is not a tool step, so it gets no step number
+and no status dot. Successive rounds of weight-trimming, each from developer review:
 
 - **No card chrome** — the first version had a bordered, filled card. Removed: the trace is
   secondary UI and must stay lighter than the answer next to it.
-- **No phase pill** — the phase renders as plain small-caps retreat text, not the tinted
-  `phaseBadge` chip (the chip survives in `TraceDetailDrawer`, where it is the header).
-- **One label, not three** — a model-native block used to show a phase chip, the backend
-  title ("Model reasoning") and a "Model" chip. The title and chip are dropped for
-  `source="model_native"` (they say nothing the phase doesn't); authored titles are kept,
-  since an author wrote them.
+- **No phase label (2026-09-04)** — the phase first shrank from a tinted `phaseBadge` chip to
+  plain small-caps text, then went entirely. It named the kind of reasoning where the row can
+  simply show the reasoning; with the model-native title already dropped, a header carrying
+  only a category label was pure weight. The chip survives in `TraceDetailDrawer`, where it
+  is the header and has room to mean something.
+- **One label, not three** — a model-native block used to show a phase chip, the backend title
+  ("Model reasoning") and a "Model" chip. The title and chip are dropped for
+  `source="model_native"`; authored titles are kept, since an author wrote them.
 
-The marker aligns on `--trace-rail-x`, the rail geometry `ThoughtTrace` sets on `.body` and
-cascades to both lanes — so the rail threads the reasoning marker and every step dot with no
-per-component magic numbers.
+The marker rides the first line of text rather than the row's centre, so a two-line preview
+does not drag it off the rail. Two variables carry that geometry, both set by `ThoughtTrace`
+on `.body`: `--trace-rail-x` (where the rail runs) and `--trace-line-h` (one line of row
+text). The row publishes its resulting marker position back as `--trace-marker-y`, which is
+how `ThoughtTrace` trims the rail when a reasoning row opens or closes the sequence.
 
 ---
 
@@ -481,14 +517,17 @@ per-component magic numbers.
 - **Row layout (2026-07-30)** — the two-row grid is replaced by a single flex line
   `[n] ● label · discriminator … latency`, with latency trailing right. The second grid row
   (which started at column 4 and skipped the dot/index columns) is gone, and with it the
-  primary-text-truncation question for thought entries: reasoning text now lives in
-  `ReasoningBlock`, not in this row.
+  primary-text-truncation question for thought entries: reasoning text lives in
+  `ReasoningRow`, not in this row.
 
-- **Per-phase colour coding (2026-06-18, RUNTIME-05 follow-up)** — thought rows now render
-  the phase as a subtle tinted pill (`.phaseBadge[data-phase=...]`): planning→tertiary,
-  tool_use→secondary, observation→primary, reflection→warning, synthesis→success
-  (each with its M3 `--on-*` text pairing). Non-thought rows keep the plain uppercase label.
-  Clicking a row opens the shared page-level detail drawer (state lifted via `traceDrawerContext`).
+- **Per-phase colour coding (2026-06-18, RUNTIME-05 follow-up; removed here 2026-09-04)** —
+  thought rows rendered the phase as a subtle tinted pill (`.phaseBadge[data-phase=...]`):
+  planning→tertiary, tool_use→secondary, observation→primary, reflection→warning,
+  synthesis→success. The branch is gone from this row: since the trace became one
+  chronological list, thought entries are routed to `ReasoningRow` and never reach here, so
+  the pill was unreachable code. It lives on in `TraceDetailDrawer`, which still owns
+  `phaseBadge.module.css`. Clicking a row opens the shared page-level detail drawer (state
+  lifted via `traceDrawerContext`).
 
 ---
 

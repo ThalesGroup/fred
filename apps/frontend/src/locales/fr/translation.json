@@ -1539,13 +1539,6 @@
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
-      "phase": {
-        "observation": "Observation",
-        "planning": "Planification",
-        "reflection": "Réflexion",
-        "synthesis": "Synthèse",
-        "tool_use": "Appel d'outil"
-      },
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
       "running": "en cours…",

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// ThoughtTrace × two lanes (#2172): reasoning must render as its own card, not
-// as row #1 of the tool pile, and the whole block must be hideable.
+// ThoughtTrace: one chronological sequence. Reasoning still renders differently
+// from a tool step (#2172), but the two now alternate in arrival order rather
+// than being stacked into a reasoning lane above a tool lane.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -89,11 +90,29 @@ describe("ThoughtTrace", () => {
     expect(render([], true)).toBe("");
   });
 
-  it("renders reasoning as its own card, not as a tool step row", () => {
+  it("renders reasoning as its own row, not as a tool step row", () => {
     const html = render(TRACE, false);
-    // Only the two tool steps are step rows; the reasoning card is a <button>.
+    // Only the two tool steps are step rows; the reasoning row is a <button>.
     expect(html.match(/role="button"/g)).toHaveLength(2);
-    expect(html).toContain("rework.chatTrace.phase.planning");
+    // Its marker is the settings glyph, and it carries no phase label: the row
+    // shows the reasoning itself, not a name for the kind of reasoning it is.
+    expect(html).toContain('data-icon="settings"');
+    expect(html).not.toContain("rework.chatTrace.phase.");
+  });
+
+  it("keeps reasoning and tool steps in the order they happened", () => {
+    const second = msg({
+      channel: "thought",
+      rank: 5,
+      parts: [{ type: "text", text: "the first query came back empty" }],
+      metadata: { extras: { thought_id: "t2", phase: "reflection", source: "model_native" } },
+    });
+    // Reasoning, tool, reasoning, tool — as streamed. The old two-lane split
+    // hoisted both thoughts above both tools, an order that never occurred.
+    const html = render([...TRACE.slice(0, 3), second, ...TRACE.slice(3)], false);
+
+    const order = [...html.matchAll(/I should list|the first query|>1<|>2</g)].map((m) => m[0]);
+    expect(order).toEqual(["I should list", ">1<", "the first query", ">2<"]);
   });
 
   it("numbers the two identical tool calls so they can be told apart", () => {

@@ -5391,3 +5391,34 @@ documents") was added to its `## Uncertainty` section.
 **Wire contract.** Unchanged — `guardrails` never crossed the runtime
 OpenAPI surface; `ReActAgentDefinition.preview()` simply drops its
 `- Guardrails: N` line.
+
+### 8.72 ✅ The model-native reasoning block closes at every tool round (2026-09-04)
+
+**What changed.** `react_runtime.stream()` closes the open `source="model_native"`
+thought when it emits a round of tool calls, not only when the first answer text
+arrives. A turn that reasons, calls a tool, reasons again and calls another now
+produces two `THOUGHT_START`/`THOUGHT_END` pairs instead of one.
+
+The closing sequence had been copied at three sites (first answer delta, end of
+stream, error path); it is now one nested helper, `_close_model_native_thought()`,
+which returns the event or `None` so each site stays a two-line yield.
+
+**Why.** The block was opened lazily on the first reasoning fragment and closed
+only on answer text. Tool calls did not end it, so in a multi-round ReAct loop
+every later round's reasoning accumulated into the block opened by the first one.
+The turn therefore persisted a single `thought` row carrying the rank of its
+earliest fragment — and since `THOUGHT_START` is what reserves the rank (§8.31),
+that row sorted before every tool call it had actually interleaved with. The
+frontend could not recover the chronology by reordering: the information that a
+thought came *after* a given tool was never recorded. This is what let the chat
+trace stop rendering reasoning and tool steps as two stacked lanes.
+
+**Wire contract.** Unchanged — `THOUGHT_*` shapes are frozen and no field moved.
+What changes is their *cardinality*: consumers must not assume at most one
+model-native block per turn. `duration_ms` is now per block, so a consumer
+wanting a turn total sums the blocks instead of taking the longest (the frontend's
+`traceSummary()` was switched accordingly).
+
+**Already-stored turns.** Sessions persisted before this date keep their single
+block and therefore their old rendering. There is no migration: the trace is a
+record of what was streamed.

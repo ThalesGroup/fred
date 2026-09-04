@@ -620,29 +620,25 @@ export function totalLatencyMs(entries: TraceEntry[]): number {
   }, 0);
 }
 
-// ── Trace lanes: reasoning vs tool steps ─────────────────────────────────────
+// ── Trace rows: one chronological sequence ───────────────────────────────────
 //
-// Reasoning and tool execution are two different species and must not be
-// rendered as one flat pile of look-alike rows (#2172). The model-native
-// reasoning block is opened on the first reasoning token and closed only when
-// the first answer delta arrives (react_runtime.py), so it holds the lowest
-// rank and stays "streaming" for the whole turn — as one more row in the tool
-// list it permanently squats the top of the pile and reads like a stuck tool.
-// Splitting it out is what makes the distinction visible.
+// A turn is reasoning, then a tool, then more reasoning, then another tool. The
+// trace shows it in that order: `groupTraceEntries` already returns entries by
+// rank, which is stream arrival order, and a thought keeps the rank of its
+// `thought_start` — so the sequence below is the real chronology, not a
+// reconstruction.
+//
+// Reasoning and tool steps still render differently (a card vs a numbered row),
+// because they remain two different species (#2172) — but they are no longer
+// hoisted into two separate lanes, which put every thought above every tool and
+// reported an order that never happened.
 
 /** A tool call paired with its result (or still awaiting one). */
 export type ToolEntry = Extract<TraceEntry, { kind: "combo" }>;
 
-/** One row of the step lane. `index` is the 1-based tool step number, null for
- *  notes and errors — they are sequenced with the tools but are not steps. */
-export type TraceStep = { entry: TraceEntry; index: number | null };
-
-export type TraceLanes = {
-  /** Reasoning entries (thought / plan / observation) — rendered as cards. */
-  reasoning: TraceEntry[];
-  /** Tool executions, plus system notes and errors, in arrival order. */
-  steps: TraceStep[];
-};
+/** One row of the trace. `index` is the 1-based tool step number — null for
+ *  reasoning, notes and errors, which are sequenced but are not steps. */
+export type TraceRow = { entry: TraceEntry; lane: "reasoning" | "step"; index: number | null };
 
 function isStepEntry(entry: TraceEntry): boolean {
   // Orphan tool_results (call never seen) land here too: they are tool activity.
@@ -655,24 +651,16 @@ function isReasoningEntry(entry: TraceEntry): boolean {
   return channel === "thought" || channel === "plan" || channel === "observation";
 }
 
-/** Splits a flat trace into its reasoning lane and its numbered step lane. */
-export function splitTraceEntries(entries: TraceEntry[]): TraceLanes {
-  const reasoning: TraceEntry[] = [];
-  const steps: TraceStep[] = [];
+/** The trace as one chronological list, each row tagged with how it renders. */
+export function traceRows(entries: TraceEntry[]): TraceRow[] {
   let toolIndex = 0;
 
-  for (const entry of entries) {
-    if (isReasoningEntry(entry)) {
-      reasoning.push(entry);
-    } else if (isStepEntry(entry)) {
-      steps.push({ entry, index: ++toolIndex });
-    } else {
-      // system_note / error — sequenced with the steps, but unnumbered.
-      steps.push({ entry, index: null });
-    }
-  }
-
-  return { reasoning, steps };
+  return entries.map((entry) => {
+    if (isReasoningEntry(entry)) return { entry, lane: "reasoning" as const, index: null };
+    if (isStepEntry(entry)) return { entry, lane: "step" as const, index: ++toolIndex };
+    // system_note / error — sequenced with the steps, but unnumbered.
+    return { entry, lane: "step" as const, index: null };
+  });
 }
 
 // Tool slugs whose result volume IS a row count. A completed call to one of
@@ -720,25 +708,25 @@ export type TraceSummary = {
  * Structured summary for the trace header. Returns data, not a string, so the
  * component formats it through i18n.
  *
- * `reasoningMs` is the MAX of the reasoning blocks' durations, not their sum:
- * the model-native block brackets the tool calls (and any nested reasoning), so
- * summing would count the same wall-clock twice. The former
- * `thoughtSummaryLabel()` had the opposite flaw — it advertised "Thought for
- * 856ms" while summing tool latencies only, next to a 16.4s reasoning row.
+ * `reasoningMs` is the SUM of the reasoning blocks' durations. It used to be
+ * their MAX, because one model-native block spanned the whole turn and bracketed
+ * the tool calls, so summing double-counted the same wall-clock. The runtime now
+ * closes that block at every tool round, making the blocks disjoint — a max
+ * would report only the longest stretch and hide the rest of the thinking.
  *
  * `pendingToolCallIds` — see {@link statusForEntry}.
  */
 export function traceSummary(entries: TraceEntry[], pendingToolCallIds?: readonly string[] | null): TraceSummary {
-  const { reasoning, steps } = splitTraceEntries(entries);
+  const rows = traceRows(entries);
 
   let reasoningMs: number | null = null;
-  for (const entry of reasoning) {
-    if (entry.kind !== "solo") continue;
+  for (const { entry, lane } of rows) {
+    if (lane !== "reasoning" || entry.kind !== "solo") continue;
     const duration = thoughtExtras(entry.message).duration_ms;
-    if (duration != null && (reasoningMs === null || duration > reasoningMs)) reasoningMs = duration;
+    if (duration != null) reasoningMs = (reasoningMs ?? 0) + duration;
   }
 
-  const toolCount = steps.filter((s) => s.entry.kind === "combo").length;
+  const toolCount = rows.filter((r) => r.lane === "step" && r.entry.kind === "combo").length;
   const statuses = entries.map((e) => statusForEntry(e, pendingToolCallIds));
   const running = statuses.some((s) => s === "streaming" || s === "pending" || s === "awaiting_confirmation");
   const awaitingConfirmation = statuses.some((s) => s === "awaiting_confirmation");

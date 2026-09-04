@@ -19,12 +19,12 @@ import type { TraceSummary } from "../../../../utils/traceUtils";
 import {
   formatLatencyMs,
   groupTraceEntries,
-  splitTraceEntries,
   traceEntryKey,
+  traceRows,
   traceSummary,
 } from "../../../../utils/traceUtils";
 import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
-import { ReasoningBlock } from "./ReasoningBlock/ReasoningBlock";
+import { ReasoningRow } from "./ReasoningRow/ReasoningRow";
 import { TraceEntryRow } from "./TraceEntryRow/TraceEntryRow";
 import styles from "./ThoughtTrace.module.css";
 
@@ -64,7 +64,7 @@ function useSummaryLabel(summary: TraceSummary): string {
 export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: ThoughtTraceProps) {
   const { t } = useTranslation();
   const entries = groupTraceEntries(messages);
-  const { reasoning, steps } = splitTraceEntries(entries);
+  const rows = traceRows(entries);
   const summary = traceSummary(entries, pendingToolCallIds);
   const label = useSummaryLabel(summary);
   const { expanded, toggle } = useTraceExpansion(done);
@@ -86,23 +86,21 @@ export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: Tho
         <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
       </button>
 
+      {/* One sequence, in the order the turn actually unfolded: reasoning and
+          tool steps alternate rather than being stacked into two lanes. */}
       {expanded && (
         <div className={styles.body}>
-          <ReasoningBlock entries={reasoning} continues={steps.length > 0} />
-
-          {/* No section header: the step numbers already say what this list is,
-              and the header text was pure visual weight. */}
-          {steps.length > 0 && (
-            <div className={`${styles.entries} ${reasoning.length === 0 ? styles.entriesLeading : ""}`}>
-              {steps.map(({ entry, index }) => (
-                <TraceEntryRow
-                  key={traceEntryKey(entry)}
-                  entry={entry}
-                  index={index}
-                  pendingToolCallIds={pendingToolCallIds}
-                />
-              ))}
-            </div>
+          {rows.map(({ entry, lane, index }) =>
+            lane === "reasoning" ? (
+              <ReasoningRow key={traceEntryKey(entry)} entry={entry} />
+            ) : (
+              <TraceEntryRow
+                key={traceEntryKey(entry)}
+                entry={entry}
+                index={index}
+                pendingToolCallIds={pendingToolCallIds}
+              />
+            ),
           )}
         </div>
       )}

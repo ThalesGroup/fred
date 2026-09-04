@@ -16,13 +16,13 @@ import {
   parseToolResultContent,
   primaryTextForEntry,
   secondaryTextForEntry,
-  splitTraceEntries,
   statusForEntry,
   stripDocumentUids,
   textOf,
   toolCopyText,
   toolDiscriminator,
   totalLatencyMs,
+  traceRows,
   traceSummary,
 } from "./traceUtils";
 
@@ -459,24 +459,24 @@ describe("totalLatencyMs", () => {
   });
 });
 
-// ── splitTraceEntries ─────────────────────────────────────────────────────────
+// ── traceRows ─────────────────────────────────────────────────────────────────
 
-describe("splitTraceEntries", () => {
-  it("returns empty lanes for an empty trace", () => {
-    expect(splitTraceEntries([])).toEqual({ reasoning: [], steps: [] });
+describe("traceRows", () => {
+  it("returns no rows for an empty trace", () => {
+    expect(traceRows([])).toEqual([]);
   });
 
-  it("routes reasoning channels to the reasoning lane, never to the steps", () => {
+  it("tags reasoning channels as the reasoning lane", () => {
     const planning = thoughtMsg("thinking", { phase: "planning" });
     const plan = msg({ channel: "plan", parts: [{ type: "text", text: "step 1" }] });
     const observation = msg({ channel: "observation", parts: [{ type: "text", text: "noted" }] });
-    const lanes = splitTraceEntries([
+    const rows = traceRows([
       { kind: "solo", message: planning },
       { kind: "solo", message: plan },
       { kind: "solo", message: observation },
     ]);
-    expect(lanes.reasoning).toHaveLength(3);
-    expect(lanes.steps).toEqual([]);
+    expect(rows.map((r) => r.lane)).toEqual(["reasoning", "reasoning", "reasoning"]);
+    expect(rows.every((r) => r.index === null)).toBe(true);
   });
 
   it("numbers tool steps 1-based in arrival order", () => {
@@ -484,26 +484,51 @@ describe("splitTraceEntries", () => {
       { kind: "combo" as const, call: toolCallMsg("c1", "read_query"), result: toolResultMsg("c1", "{}", true, 100) },
       { kind: "combo" as const, call: toolCallMsg("c2", "read_query"), result: toolResultMsg("c2", "{}", true, 200) },
     ];
-    const lanes = splitTraceEntries(entries);
-    expect(lanes.steps.map((s) => s.index)).toEqual([1, 2]);
+    expect(traceRows(entries).map((r) => r.index)).toEqual([1, 2]);
   });
 
-  it("keeps the reasoning block out of the step numbering", () => {
+  it("keeps reasoning out of the step numbering", () => {
     const planning = thoughtMsg("thinking", { phase: "planning" });
     const call = toolCallMsg("c1", "search");
     const result = toolResultMsg("c1", "found", true, 50);
-    const lanes = splitTraceEntries(groupTraceEntries([planning, call, result]));
-    expect(lanes.reasoning).toHaveLength(1);
-    expect(lanes.steps).toHaveLength(1);
-    expect(lanes.steps[0].index).toBe(1);
+    const rows = traceRows(groupTraceEntries([planning, call, result]));
+    expect(rows.map((r) => [r.lane, r.index])).toEqual([
+      ["reasoning", null],
+      ["step", 1],
+    ]);
   });
 
   it("sequences notes and errors with the steps but leaves them unnumbered", () => {
     const call = toolCallMsg("c1", "search");
     const result = toolResultMsg("c1", "found", true, 50);
     const failure = msg({ channel: "error", parts: [{ type: "text", text: "boom" }] });
-    const lanes = splitTraceEntries(groupTraceEntries([call, result, failure]));
-    expect(lanes.steps.map((s) => s.index)).toEqual([1, null]);
+    const rows = traceRows(groupTraceEntries([call, result, failure]));
+    expect(rows.map((r) => [r.lane, r.index])).toEqual([
+      ["step", 1],
+      ["step", null],
+    ]);
+  });
+
+  // The whole point of the rewrite: a turn that reasoned, called a tool,
+  // reasoned again and called another must render in that order — not as every
+  // thought hoisted above every tool, which is an order that never happened.
+  it("interleaves reasoning and tool steps in arrival order", () => {
+    const rows = traceRows(
+      groupTraceEntries([
+        thoughtMsg("first", { phase: "planning" }),
+        toolCallMsg("c1", "search"),
+        toolResultMsg("c1", "found", true, 50),
+        thoughtMsg("second", { phase: "reflection" }),
+        toolCallMsg("c2", "read_query"),
+        toolResultMsg("c2", "rows", true, 20),
+      ]),
+    );
+    expect(rows.map((r) => [r.lane, r.index])).toEqual([
+      ["reasoning", null],
+      ["step", 1],
+      ["reasoning", null],
+      ["step", 2],
+    ]);
   });
 });
 
@@ -520,15 +545,30 @@ describe("traceSummary", () => {
     });
   });
 
-  it("takes the MAX reasoning duration, not the sum — nested blocks share wall-clock", () => {
-    const outer = thoughtMsg("outer", { phase: "planning", duration_ms: 16400 });
-    const inner = thoughtMsg("inner", { phase: "reflection", duration_ms: 1200 });
+  // The runtime now closes the model-native block at every tool round, so the
+  // blocks are disjoint stretches of thinking. A max would report only the
+  // longest one and silently drop the rest.
+  it("sums the reasoning durations across the turn's blocks", () => {
+    const first = thoughtMsg("first", { phase: "planning", duration_ms: 16400 });
+    const second = thoughtMsg("second", { phase: "reflection", duration_ms: 1200 });
     expect(
       traceSummary([
-        { kind: "solo", message: outer },
-        { kind: "solo", message: inner },
+        { kind: "solo", message: first },
+        { kind: "solo", message: second },
       ]).reasoningMs,
-    ).toBe(16400);
+    ).toBe(17600);
+  });
+
+  it("ignores blocks that reported no duration rather than counting them as zero", () => {
+    const timed = thoughtMsg("timed", { phase: "planning", duration_ms: 900 });
+    const untimed = thoughtMsg("untimed", { phase: "reflection" });
+    expect(
+      traceSummary([
+        { kind: "solo", message: timed },
+        { kind: "solo", message: untimed },
+      ]).reasoningMs,
+    ).toBe(900);
+    expect(traceSummary([{ kind: "solo", message: untimed }]).reasoningMs).toBeNull();
   });
 
   it("counts tools and sums their latency separately from the reasoning duration", () => {
