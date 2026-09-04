@@ -356,11 +356,30 @@ agents) so the decision is informed at the point it is made.
   monospace on a light background. May be too visually heavy for secondary UI. Consider
   lowercase with a subtler pill, or icon-only at narrow widths.
 
-- **Reasoning preview length** — `ReasoningRow` clamps the streaming preview to 2 lines.
-  Validate that 2 lines is the right budget for long model-native reasoning, or whether the
-  row should grow while streaming and clamp only once the block closes.
-
 #### Resolved
+
+- **Consecutive reasoning rows read as the same row twice (2026-09-04, #2565)** — closes the
+  "reasoning preview length" open issue above. Reasoning models restate the task from scratch
+  at every round: in session `fausse-situation-thales-espagne`, two model-native blocks of one
+  turn shared **533 identical leading characters** and differed only after them. The 2-line
+  clamp showed roughly the first 150 — i.e. exactly the repeated part — so two genuinely
+  distinct blocks (distinct `thought_id`, rank and `duration_ms`) rendered as visual
+  duplicates. Dropping the phase label had removed the last thing telling them apart.
+
+  Two changes, both needed. `traceRows()` trims each reasoning row of the leading run of
+  **complete sentences** the previous row already carried (`stripRepeatedPreamble`), compared
+  against that row's *full* text, so the rows tile the whole reasoning with nothing lost
+  between them. Whole sentences only: blocks that merely open on the same few words share no
+  sentence and are left alone — a character-level trim rendered `demandé un document nommé…`
+  on this very session. And the clamp is gone: with the repeat removed, what is left is the
+  block's own content and all of it is shown, so the timeline holds the turn's entire
+  reasoning. The trace auto-collapses once the turn is done, so the height costs nothing
+  after the fact; the rendered markdown still lives in `TraceDetailDrawer`.
+
+  Not a duplicate-row bug: nothing in the data was duplicated, and `groupTraceEntries` still
+  has no thought-level dedup to match its `call_id` one. If true duplicates ever appear, the
+  tell is a React duplicate-key warning on `thought:<id>` — the keys collide, the texts here
+  did not.
 
 - **Reasoning and tools shown in an order that never happened (2026-09-04, #2565)** — the
   two-lane split below put every reasoning entry above every tool step, so a turn that
@@ -449,8 +468,12 @@ agents) so the decision is informed at the point it is made.
 **Status:** `Functional`
 
 One reasoning entry, sequenced in the trace where it happened (#2172, reordered #2565): a
-`settings` marker on the timeline rail, a 2-line clamped preview of the streaming text, and
-the duration trailing right. Clicking opens `TraceDetailDrawer` for the full markdown.
+`settings` marker on the timeline rail, the block's text, and the duration trailing right.
+Clicking opens `TraceDetailDrawer` for the rendered markdown.
+
+The text is supplied by `traceRows()`, not derived here: it is trimmed of the sentences the
+previous reasoning row already showed, which only the caller walking the sequence can know.
+It is shown unclamped — see the 2026-09-04 entry under `ThoughtTrace`.
 
 Deliberately not a `TraceEntryRow`: reasoning is not a tool step, so it gets no step number
 and no status dot. Successive rounds of weight-trimming, each from developer review:

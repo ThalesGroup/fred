@@ -21,6 +21,7 @@ import {
   textOf,
   toolCopyText,
   toolDiscriminator,
+  stripRepeatedPreamble,
   totalLatencyMs,
   traceRows,
   traceSummary,
@@ -459,6 +460,39 @@ describe("totalLatencyMs", () => {
   });
 });
 
+// ── stripRepeatedPreamble ─────────────────────────────────────────────────────
+
+describe("stripRepeatedPreamble", () => {
+  it("keeps the text when there is no previous block", () => {
+    expect(stripRepeatedPreamble("Only block.", null)).toBe("Only block.");
+  });
+
+  it("drops the whole sentences the previous block already carried", () => {
+    const previous = "I found the document. It is a fictional report.";
+    const current = "I found the document. It is a fictional report. The tool is unavailable.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("The tool is unavailable.");
+  });
+
+  // The failure the sentence rule exists to prevent: two blocks that merely open
+  // on the same few words share no complete sentence, and a character-level trim
+  // would have rendered "asked for a document." — a mutilated line.
+  it("keeps the text when the shared prefix holds no complete sentence", () => {
+    const previous = "The user wrote a filename. I will search for it.";
+    const current = "The user asked for a document. I will summarise it.";
+    expect(stripRepeatedPreamble(current, previous)).toBe(current);
+  });
+
+  it("keeps the text when the block is wholly contained in its predecessor", () => {
+    const previous = "First. Second. Third.";
+    expect(stripRepeatedPreamble("First. Second.", previous)).toBe("First. Second.");
+  });
+
+  it("cuts on ! and ? as well as .", () => {
+    expect(stripRepeatedPreamble("Done! Next step.", "Done! Other.")).toBe("Next step.");
+    expect(stripRepeatedPreamble("Which one? Then this.", "Which one? Other.")).toBe("Then this.");
+  });
+});
+
 // ── traceRows ─────────────────────────────────────────────────────────────────
 
 describe("traceRows", () => {
@@ -529,6 +563,28 @@ describe("traceRows", () => {
       ["reasoning", null],
       ["step", 2],
     ]);
+  });
+
+  // The real shape of the defect, from session fausse-situation-thales-espagne:
+  // two model-native blocks of one turn sharing 533 identical leading characters,
+  // differing only after them. Every character must still appear exactly once
+  // across the rows — nothing is dropped from the turn, only from the repeat.
+  it("trims a reasoning row of the sentences the previous row already showed", () => {
+    const shared = "The user asked for a document. I identified it and summarised it.";
+    const first = thoughtMsg(shared, { phase: "planning" });
+    const second = thoughtMsg(`${shared} However, the tool is unavailable.`, { phase: "planning" });
+    const rows = traceRows(groupTraceEntries([first, toolCallMsg("c1", "search"), second]));
+
+    expect(rows[0].reasoningText).toBe(shared);
+    expect(rows[2].reasoningText).toBe("However, the tool is unavailable.");
+    // Trimmed against the previous block's FULL text, so the rows tile the whole
+    // reasoning with no gap between them.
+    expect(`${rows[0].reasoningText} ${rows[2].reasoningText}`).toBe(`${shared} However, the tool is unavailable.`);
+  });
+
+  it("leaves step rows without reasoning text", () => {
+    const rows = traceRows(groupTraceEntries([toolCallMsg("c1", "search"), toolResultMsg("c1", "ok", true, 10)]));
+    expect(rows[0].reasoningText).toBeNull();
   });
 });
 

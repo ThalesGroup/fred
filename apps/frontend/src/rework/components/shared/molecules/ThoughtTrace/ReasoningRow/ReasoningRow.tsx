@@ -15,14 +15,7 @@
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { TraceEntry } from "../../../../../utils/traceUtils";
-import {
-  detailTextForEntry,
-  formatLatencyMs,
-  plainPreviewText,
-  sourceForEntry,
-  statusForEntry,
-  thoughtExtras,
-} from "../../../../../utils/traceUtils";
+import { formatLatencyMs, sourceForEntry, statusForEntry, thoughtExtras } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
 import styles from "./ReasoningRow.module.css";
 
@@ -33,14 +26,16 @@ import styles from "./ReasoningRow.module.css";
  * it gets no step number and no status dot. It shares the timeline geometry
  * though — the icon is its marker on the rail, the way the status dot is a tool
  * row's — so the two read as one sequence rather than two stacked lists.
+ *
+ * `text` is supplied rather than derived here: it is trimmed of whatever the
+ * previous reasoning row already showed, which only `traceRows` can know.
  */
-export function ReasoningRow({ entry }: { entry: TraceEntry }) {
+export function ReasoningRow({ entry, text }: { entry: TraceEntry; text: string }) {
   const { t } = useTranslation();
   const { openTrace } = useTraceDrawer();
 
   const extras = entry.kind === "solo" ? thoughtExtras(entry.message) : {};
   const isStreaming = statusForEntry(entry) === "streaming";
-  const text = plainPreviewText(detailTextForEntry(entry));
   const durationMs = extras.duration_ms ?? null;
 
   // Model-native blocks carry a generic backend title ("Model reasoning") that
@@ -68,7 +63,9 @@ export function ReasoningRow({ entry }: { entry: TraceEntry }) {
       <span className={styles.content}>
         {title && <span className={styles.title}>{title}</span>}
 
-        {/* Clamped preview only — the full markdown lives in the detail drawer. */}
+        {/* The whole block, not a preview: every line of the turn's reasoning must
+            be readable from the timeline. Markdown is flattened; the rendered
+            version lives in the detail drawer. */}
         {text && <span className={styles.preview}>{text}</span>}
 
         {extras.conclusion && <span className={styles.conclusion}>{extras.conclusion}</span>}

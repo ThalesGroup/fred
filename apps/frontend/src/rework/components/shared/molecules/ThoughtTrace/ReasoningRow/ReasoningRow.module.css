@@ -91,16 +91,18 @@
   white-space: nowrap;
 }
 
-/* Two clamped lines; the full markdown lives in the detail drawer. */
+/* Deliberately unclamped. A two-line clamp hid four fifths of each block, and
+   since reasoning models restate the task before adding anything new, the two
+   visible lines were the repeated part — consecutive rows read as duplicates of
+   each other. The repeat is now removed upstream (`stripRepeatedPreamble`) and
+   what remains is shown whole, so the timeline holds the turn's entire
+   reasoning. The trace collapses itself once the turn is done, so the height
+   costs nothing after the fact. */
 .preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
   line-height: var(--trace-line-h);
+  overflow-wrap: anywhere;
 }
 
 .conclusion {

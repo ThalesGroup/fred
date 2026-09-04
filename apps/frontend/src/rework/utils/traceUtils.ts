@@ -637,8 +637,48 @@ export function totalLatencyMs(entries: TraceEntry[]): number {
 export type ToolEntry = Extract<TraceEntry, { kind: "combo" }>;
 
 /** One row of the trace. `index` is the 1-based tool step number — null for
- *  reasoning, notes and errors, which are sequenced but are not steps. */
-export type TraceRow = { entry: TraceEntry; lane: "reasoning" | "step"; index: number | null };
+ *  reasoning, notes and errors, which are sequenced but are not steps.
+ *  `reasoningText` is the row's display text, null on a step row. */
+export type TraceRow = {
+  entry: TraceEntry;
+  lane: "reasoning" | "step";
+  index: number | null;
+  reasoningText: string | null;
+};
+
+/**
+ * `text` with the leading run of whole sentences `previousText` already carried
+ * removed — the repeated preamble, not a prefix of it.
+ *
+ * Reasoning models restate the task from scratch at every round: two blocks of
+ * one turn commonly share hundreds of identical leading characters and differ
+ * only at the end, so consecutive rows read as the same row twice.
+ *
+ * Only COMPLETE sentences are dropped, which is what keeps this safe. Two blocks
+ * that merely open on the same few words ("The user asked ") share no whole
+ * sentence, so nothing is removed and no line is ever cut mid-thought. Compared
+ * against the previous block's FULL text, not its trimmed display text, so the
+ * rows still tile the whole reasoning between them with nothing lost.
+ */
+export function stripRepeatedPreamble(text: string, previousText: string | null): string {
+  if (!previousText) return text;
+
+  let shared = 0;
+  while (shared < text.length && shared < previousText.length && text[shared] === previousText[shared]) shared++;
+
+  // Last sentence end inside the shared span. A sentence ends on .!? followed by
+  // whitespace or the end of the text.
+  let cut = 0;
+  for (let i = 0; i < shared; i++) {
+    const isTerminator = text[i] === "." || text[i] === "!" || text[i] === "?";
+    if (isTerminator && (i + 1 >= text.length || /\s/.test(text[i + 1]))) cut = i + 1;
+  }
+  // A block wholly contained in its predecessor keeps its text: an empty row
+  // would read as a rendering bug, and dropping it would lose the block itself.
+  if (cut === 0 || cut >= text.length) return text;
+
+  return text.slice(cut).trimStart();
+}
 
 function isStepEntry(entry: TraceEntry): boolean {
   // Orphan tool_results (call never seen) land here too: they are tool activity.
@@ -654,12 +694,26 @@ function isReasoningEntry(entry: TraceEntry): boolean {
 /** The trace as one chronological list, each row tagged with how it renders. */
 export function traceRows(entries: TraceEntry[]): TraceRow[] {
   let toolIndex = 0;
+  // Each reasoning row is trimmed against the previous one's FULL text — see
+  // stripRepeatedPreamble. Only this function sees the sequence, so it is the
+  // only place that can do it.
+  let previousReasoning: string | null = null;
 
   return entries.map((entry) => {
-    if (isReasoningEntry(entry)) return { entry, lane: "reasoning" as const, index: null };
-    if (isStepEntry(entry)) return { entry, lane: "step" as const, index: ++toolIndex };
+    if (isReasoningEntry(entry)) {
+      const text = plainPreviewText(detailTextForEntry(entry));
+      const row = {
+        entry,
+        lane: "reasoning" as const,
+        index: null,
+        reasoningText: stripRepeatedPreamble(text, previousReasoning),
+      };
+      previousReasoning = text;
+      return row;
+    }
+    if (isStepEntry(entry)) return { entry, lane: "step" as const, index: ++toolIndex, reasoningText: null };
     // system_note / error — sequenced with the steps, but unnumbered.
-    return { entry, lane: "step" as const, index: null };
+    return { entry, lane: "step" as const, index: null, reasoningText: null };
   });
 }
 
