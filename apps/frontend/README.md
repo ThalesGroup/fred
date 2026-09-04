@@ -230,8 +230,10 @@ Behaviour to keep in mind:
 - The archive is applied at container start. After replacing the zip under the
   same name, restart the pods; pointing the URL at a new name rolls them.
 
-Helm wiring (an `emptyDir` on `/usr/share/nginx/html/theme`, the URL and the
-key from a Secret through `extraEnvVars`) is in
+The archive is unpacked into `/var/lib/fred/theme`, outside the web root, and
+nginx tries it before the baked file for the three surfaces above. Helm wiring
+(the URL and the key from a Secret through `extraEnvVars`, plus an `emptyDir`
+for a pod with a read-only root filesystem) is in
 `deploy/charts/custom-values-examples/frontend-theme.yaml`.
 `make theme-container-smoke` exercises the whole path against a locally built
 image.

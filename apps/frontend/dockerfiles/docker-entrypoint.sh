@@ -24,14 +24,9 @@ set -eu
 #     "ui_upstream":"http://acme-forecast-ui:80",
 #     "service_upstream":"http://acme-forecast-api:8000",
 #     "service_required":true}]'
-# FRONTEND_THEME_URL points at a zip laid out like apps/frontend/public/
-# (images/, contrib/<brand>/, root *.md). Its files are served in place of the
-# baked ones for those three surfaces only, so a deployment brands the stock
-# image without rebuilding it. https:// (public, presigned, or an S3 object URL
-# signed with FRONTEND_THEME_S3_ACCESS_KEY + FRONTEND_THEME_S3_SECRET_KEY in
-# region FRONTEND_THEME_S3_REGION) or file:// for an archive mounted from a
-# volume. FRONTEND_THEME_REQUIRED=true makes a fetch or unpack failure fatal;
-# by default the container logs a warning and serves the stock assets.
+# FRONTEND_THEME_URL installs a branding archive over images/, contrib/ and the
+# root markdown at startup; FRONTEND_THEME_S3_* and FRONTEND_THEME_REQUIRED
+# tune it. Layout and variables: apps/frontend/README.md, "Theme overlay".
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
@@ -45,27 +40,32 @@ set -eu
 : "${FRONTEND_THEME_S3_SECRET_KEY:=}"
 : "${FRONTEND_THEME_S3_REGION:=us-east-1}"
 : "${FRONTEND_THEME_REQUIRED:=false}"
-FRONTEND_THEME_DIR=/usr/share/nginx/html/theme
+FRONTEND_THEME_DIR=/var/lib/fred/theme
 if [ -z "${FRONTEND_APPLICATIONS_JSON:-}" ]; then
     FRONTEND_APPLICATIONS_JSON='[]'
 fi
 
-fail_application_configuration() {
-    echo "Invalid application configuration: $1" >&2
+fail_configuration() {
+    echo "Invalid configuration: $1" >&2
     exit 1
 }
 
-case "${FRONTEND_ENABLE_APPLICATIONS}" in
-    true | false) ;;
-    *) fail_application_configuration "FRONTEND_ENABLE_APPLICATIONS must be either true or false" ;;
-esac
+require_boolean() {
+    case "$2" in
+        true | false) ;;
+        *) fail_configuration "$1 must be either true or false" ;;
+    esac
+}
+
+require_boolean FRONTEND_ENABLE_APPLICATIONS "${FRONTEND_ENABLE_APPLICATIONS}"
+require_boolean FRONTEND_THEME_REQUIRED "${FRONTEND_THEME_REQUIRED}"
 
 if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
     if ! printf '%s' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}" | grep -Eq '^[1-9][0-9]*[kKmMgG]?$'; then
-        fail_application_configuration "FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE must be a positive nginx size"
+        fail_configuration "FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE must be a positive nginx size"
     fi
     if ! command -v jq >/dev/null 2>&1; then
-        fail_application_configuration "jq is required to validate application registrations"
+        fail_configuration "jq is required to validate application registrations"
     fi
     if ! printf '%s' "${FRONTEND_APPLICATIONS_JSON}" | jq -e '
         # Origin only. nginx forwards the client path verbatim to a proxy_pass
@@ -92,19 +92,15 @@ if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
         )) and
         ([.[].app_id] | length == (unique | length))
     ' >/dev/null 2>&1; then
-        fail_application_configuration "FRONTEND_APPLICATIONS_JSON must list unique app_ids with a safe HTTP(S) ui_upstream, plus a service_upstream for every service_required application"
+        fail_configuration "FRONTEND_APPLICATIONS_JSON must list unique app_ids with a safe HTTP(S) ui_upstream, plus a service_upstream for every service_required application"
     fi
 fi
 
-case "${FRONTEND_THEME_REQUIRED}" in
-    true | false) ;;
-    *)
-        echo "Invalid theme configuration: FRONTEND_THEME_REQUIRED must be either true or false" >&2
-        exit 1
-        ;;
-esac
-
 theme_failure() {
+    [ -z "${work:-}" ] || rm -rf "${work}"
+    # An emptyDir outlives container restarts: drop a previous theme so the
+    # message below stays true instead of serving a stale brand.
+    find "${FRONTEND_THEME_DIR}" -mindepth 1 -delete 2>/dev/null || true
     if [ "${FRONTEND_THEME_REQUIRED}" = "true" ]; then
         echo "Theme installation failed: $1" >&2
         exit 1
@@ -112,39 +108,55 @@ theme_failure() {
     echo "Theme skipped, serving the stock assets: $1" >&2
 }
 
+# curl's config parser reads \ and " as escapes inside a quoted value.
+curl_config_value() {
+    printf '%s' "$1" | sed 's/[\\"]/\\&/g'
+}
+
 # Fetch FRONTEND_THEME_URL and copy its served surfaces into the overlay
-# directory. Symlinks are dropped: unzip recreates them and nginx would follow
-# one out of the web root.
+# directory. nginx only starts once this returns, so the fetch is bounded to
+# stay inside the default liveness window. Symlinks are dropped: unzip
+# recreates them and nginx would follow one out of the overlay.
 install_theme() {
     [ -n "${FRONTEND_THEME_URL}" ] || return 0
-    work=$(mktemp -d /tmp/fred-theme.XXXXXX)
+    # A presigned URL carries its credential in the query string: never log it.
+    theme_source=${FRONTEND_THEME_URL%%\?*}
+    work=$(mktemp -d /tmp/fred-theme.XXXXXX) || { theme_failure "cannot create a temporary directory"; return 0; }
     archive="${work}/theme.zip"
     if [ -n "${FRONTEND_THEME_S3_ACCESS_KEY}" ] && [ -n "${FRONTEND_THEME_S3_SECRET_KEY}" ]; then
         # The credential goes through a private config file, never the command line.
-        printf 'user = "%s:%s"\n' "${FRONTEND_THEME_S3_ACCESS_KEY}" "${FRONTEND_THEME_S3_SECRET_KEY}" > "${work}/curl.conf"
+        printf 'user = "%s:%s"\n' \
+            "$(curl_config_value "${FRONTEND_THEME_S3_ACCESS_KEY}")" \
+            "$(curl_config_value "${FRONTEND_THEME_S3_SECRET_KEY}")" > "${work}/curl.conf"
         set -- -K "${work}/curl.conf" --aws-sigv4 "aws:amz:${FRONTEND_THEME_S3_REGION}:s3"
     else
         set --
     fi
-    if ! curl "$@" -fsSL --retry 2 --max-time 120 -o "${archive}" "${FRONTEND_THEME_URL}"; then
-        rm -rf "${work}"
-        theme_failure "cannot download ${FRONTEND_THEME_URL}"
+    # A stalling store must not outlast the default liveness budget (3 x 10s):
+    # a last retry can start at 15s and run 10s, so the pod boots on the stock
+    # assets instead of crashlooping. Slow but working stores want a startupProbe.
+    if ! curl "$@" -fsSL --connect-timeout 5 --max-time 10 --retry 2 --retry-connrefused --retry-max-time 15 \
+        --max-filesize 64m -o "${archive}" "${FRONTEND_THEME_URL}"; then
+        theme_failure "cannot download ${theme_source}"
         return 0
     fi
-    # unzip relocates entries that escape the archive root and says so. Such an
-    # archive is malformed: refuse it instead of guessing where its files go.
-    if unzip -l "${archive}" 2>&1 | grep -q 'removing leading'; then
-        rm -rf "${work}"
-        theme_failure "archive contains entries escaping its root"
+    # unzip relocates entries with .. or absolute paths and says so (busybox or
+    # Info-ZIP wording). Refuse such an archive instead of guessing.
+    if unzip -l "${archive}" 2>&1 | grep -qE 'removing leading|path component|(^|[ /])\.\.(/|$)'; then
+        theme_failure "archive contains entries with '..' or absolute paths"
         return 0
     fi
     mkdir "${work}/unpacked"
     if ! unzip -oq "${archive}" -d "${work}/unpacked" >/dev/null 2>&1; then
-        rm -rf "${work}"
         theme_failure "cannot unpack the archive"
         return 0
     fi
     find "${work}/unpacked" -type l -delete
+    # Finder's "Compress" adds this folder next to the real one.
+    rm -rf "${work}/unpacked/__MACOSX"
+    # A zip stores each entry's mode, and 0000 is a valid one. Make the tree
+    # readable before anything copies from it or nginx opens it.
+    chmod -R u+rwX "${work}/unpacked"
     root="${work}/unpacked"
     # zip -r acme-theme/ wraps everything in one folder: look inside it.
     set -- "${root}"/*
@@ -154,31 +166,38 @@ install_theme() {
             *) root=$1 ;;
         esac
     fi
-    staging="${work}/theme"
+    # Assembled aside, then swapped in one go: a copy that fails halfway would
+    # otherwise leave the overlay mixing two brands.
+    staging="${work}/staging"
     mkdir "${staging}"
     for entry in "${root}"/*; do
         [ -e "${entry}" ] || continue
         name=$(basename "${entry}")
         if [ -d "${entry}" ] && { [ "${name}" = images ] || [ "${name}" = contrib ]; }; then
-            cp -R "${entry}" "${staging}/"
+            cp -R "${entry}" "${staging}/" || { theme_failure "cannot read ${name} from the archive"; return 0; }
         elif [ -f "${entry}" ] && [ "${name%.md}" != "${name}" ]; then
-            cp "${entry}" "${staging}/"
+            cp "${entry}" "${staging}/" || { theme_failure "cannot read ${name} from the archive"; return 0; }
         else
             echo "Theme entry ignored, not a served surface: ${name}" >&2
         fi
     done
-    if ! mkdir -p "${FRONTEND_THEME_DIR}" ||
-        ! find "${FRONTEND_THEME_DIR}" -mindepth 1 -delete ||
+    installed=$(find "${staging}" -type f | wc -l)
+    if [ "${installed}" -eq 0 ]; then
+        theme_failure "archive holds no images/, contrib/ or root markdown"
+        return 0
+    fi
+    if ! find "${FRONTEND_THEME_DIR}" -mindepth 1 -delete ||
         ! cp -R "${staging}/." "${FRONTEND_THEME_DIR}/"; then
-        rm -rf "${work}"
         theme_failure "cannot write ${FRONTEND_THEME_DIR}"
         return 0
     fi
     rm -rf "${work}"
-    echo "Theme installed from ${FRONTEND_THEME_URL}: $(find "${FRONTEND_THEME_DIR}" -type f | wc -l | tr -d ' ') files"
+    echo "Theme installed from ${theme_source}: ${installed} files"
 }
 
 install_theme
+# nginx has no use for the store credential.
+unset FRONTEND_THEME_S3_ACCESS_KEY FRONTEND_THEME_S3_SECRET_KEY
 
 # fred-agent-evaluator is optional: some platforms don't deploy it, so
 # FRONTEND_EVALUATION_UPSTREAM's hostname may not resolve. A literal
@@ -392,22 +411,18 @@ EOF
 fi
 
 cat <<'EOF'
-    # Deployment theme: files unpacked under /theme shadow the baked ones for
-    # these three surfaces only. index.html, config.json and the bundle never do.
-    location ^~ /images/ {
-        try_files /theme$uri $uri /index.html;
+    # Deployment theme: the overlay directory is tried first for these surfaces
+    # only, so index.html, config.json and the bundle are never overridable,
+    # and a missing asset is a real 404 rather than the SPA shell.
+    location ~ "^/(images|contrib)/|^/[^/]+\.md$" {
+EOF
+printf '        root %s;\n' "${FRONTEND_THEME_DIR}"
+cat <<'EOF'
+        try_files $uri @stock;
     }
 
-    location ^~ /contrib/ {
-        try_files /theme$uri $uri /index.html;
-    }
-
-    location ~ ^/[^/]+\.md$ {
-        try_files /theme$uri $uri /index.html;
-    }
-
-    location ^~ /theme/ {
-        return 404;
+    location @stock {
+        try_files $uri =404;
     }
 
     location / {

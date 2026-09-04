@@ -1,15 +1,17 @@
 # Brand the stock frontend image without rebuilding it: one zip in your object
 # storage, fetched by the container at startup and served in place of the baked
-# logos, icons and legal markdown. Archive layout and the full variable list:
+# logos, avatars and legal markdown. Archive layout and the full variable list:
 # apps/frontend/README.md, section "Theme overlay".
 applications:
   frontend:
     extraEnvVars:
+      # In-cluster S3 endpoint: the SigV4-signed request travels in plain HTTP
+      # inside the cluster network. Use https for anything that leaves it.
       - name: FRONTEND_THEME_URL
         value: "http://minio.data.svc.cluster.local:9000/fred-themes/acme-theme-1.0.zip"
-      # The key the control-plane already uses for its content_storage works;
-      # a read-only key scoped to the theme bucket is better. Drop both for a
-      # public or presigned URL.
+      # Dedicated Secret holding an S3 key. The one the control-plane uses for
+      # its content_storage works; a read-only key scoped to the theme bucket
+      # is better. Drop both variables for a public or presigned URL.
       - name: FRONTEND_THEME_S3_ACCESS_KEY
         valueFrom:
           secretKeyRef:
@@ -24,23 +26,41 @@ applications:
       # to the stock assets.
       # - name: FRONTEND_THEME_REQUIRED
       #   value: "true"
-    # Writable overlay target, required under readOnlyRootFilesystem.
+    # Optional: keeps the unpacked theme on an emptyDir rather than in the
+    # container's writable layer. Hardened pods (readOnlyRootFilesystem) need it,
+    # along with writable /tmp and /etc/nginx/conf.d.
     extraVolumes:
       - name: theme
-        emptyDir: {}
+        emptyDir:
+          sizeLimit: 256Mi
     extraVolumeMounts:
       - name: theme
-        mountPath: /usr/share/nginx/html/theme
+        mountPath: /var/lib/fred/theme
+    # The theme is fetched before nginx listens, within about 25 seconds. The
+    # default liveness probe (10s x 3) would kill a pod still waiting on a slow
+    # store; a startup probe holds it off for up to a minute.
+    probes:
+      startupProbe:
+        enabled: true
+        data:
+          httpGet:
+            path: /healthz.html
+            port: 8080
+          periodSeconds: 5
+          failureThreshold: 12
     configuration:
       config_json:
         properties:
-          # File names inside the archive's images/ folder. Logo and favicon
-          # names get ".svg" appended; avatars and banners keep their extension.
+          # File names inside the archive's images/ folder (suffix rules in the
+          # README section above).
           logoName: "acme-logo"
           logoNameDark: "acme-logo-dark"
           faviconName: "acme-favicon"
           faviconNameDark: "acme-favicon-dark"
           defaultTeamAvatarFile: "acme-team-avatar.png"
-          agentIconName: "customAgent"
+          # Browser tab and loading screen.
+          siteDisplayName: "Acme"
+          # Sidebar header lockup.
           siteTitle: "Acme"
+          siteSubtitle: "AI Hub"
           releaseBrand: "acme"

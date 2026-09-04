@@ -40,9 +40,10 @@ suffix=$$
 network="fred-theme-network-${suffix}"
 store="fred-theme-store-${suffix}"
 frontend="fred-theme-frontend-${suffix}"
+refused="fred-theme-refused-${suffix}"
 
 cleanup() {
-    docker rm -f "${frontend}" "${store}" >/dev/null 2>&1 || true
+    docker rm -f "${frontend}" "${refused}" "${store}" >/dev/null 2>&1 || true
     docker network rm "${network}" >/dev/null 2>&1 || true
     rm -rf "${test_directory}"
 }
@@ -67,12 +68,20 @@ with zipfile.ZipFile(f"{out}/theme.zip", "w") as z:
     link = zipfile.ZipInfo("images/link.svg")
     link.external_attr = 0o120777 << 16
     z.writestr(link, "../../../../etc/passwd")
+    # Stored with no permission bits at all: the entrypoint must still serve it.
+    locked = zipfile.ZipInfo("images/locked.svg")
+    locked.external_attr = 0o100000 << 16
+    z.writestr(locked, "<svg>locked</svg>")
+# A folder compressed from the macOS Finder: one wrapper folder plus __MACOSX.
 with zipfile.ZipFile(f"{out}/wrapped.zip", "w") as z:
     z.writestr("acme-theme/images/fred.svg", "<svg>wrapped-logo</svg>")
     z.writestr("acme-theme/gdpr.md", "# wrapped privacy")
+    z.writestr("__MACOSX/acme-theme/images/._fred.svg", "finder metadata")
 with zipfile.ZipFile(f"{out}/escaping.zip", "w") as z:
     z.writestr("images/../../escape.svg", "<svg>escape</svg>")
     z.writestr("images/fred.svg", "<svg>escape-logo</svg>")
+with zipfile.ZipFile(f"{out}/no-surfaces.zip", "w") as z:
+    z.writestr("README.txt", "nothing nginx would serve")
 with open(f"{out}/not-a-zip.zip", "w") as f:
     f.write("<html>bucket error page</html>")
 EOF
@@ -112,6 +121,18 @@ frontend_args() {
     done
 }
 
+wait_until_stopped() {
+    attempt=0
+    while [ "${attempt}" -lt 80 ]; do
+        if ! docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null | grep -F true >/dev/null; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.25
+    done
+    return 1
+}
+
 # Kept (no --rm) so a failed start still has logs for the diagnostic path.
 start_frontend() {
     docker rm -f "${frontend}" >/dev/null 2>&1 || true
@@ -136,14 +157,24 @@ start_frontend() {
     exit 1
 }
 
-# The container must refuse to start; its output is returned for assertions.
-refused_start() {
+# The container must stop on its own with the expected message; a container
+# that keeps serving is a failure, not a hang.
+expect_refused_start() {
+    message=$1
+    shift
+    docker rm -f "${refused}" >/dev/null 2>&1 || true
     # shellcheck disable=SC2046
-    if output=$(docker run --rm $(frontend_args) "$@" "${image}" 2>&1); then
+    docker run -d --name "${refused}" $(frontend_args) "$@" "${image}" >/dev/null
+    if ! wait_until_stopped "${refused}"; then
         echo "Frontend container started although it should have refused: $*" >&2
         exit 1
     fi
-    printf '%s' "${output}"
+    if ! docker logs "${refused}" 2>&1 | grep -qF "${message}"; then
+        docker logs "${refused}" >&2 || true
+        echo "Expected the refused container to say: ${message}" >&2
+        exit 1
+    fi
+    docker rm -f "${refused}" >/dev/null 2>&1 || true
 }
 
 body() {
@@ -152,6 +183,14 @@ body() {
 
 status() {
     curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}$1"
+}
+
+expect_status() {
+    actual=$(status "$1")
+    if [ "${actual}" != "$2" ]; then
+        echo "Expected $1 to answer $2, got ${actual}" >&2
+        exit 1
+    fi
 }
 
 expect_body() {
@@ -176,57 +215,77 @@ refute_body() {
 }
 
 expect_log() {
-    if ! docker logs "${frontend}" 2>&1 | grep -q "$1"; then
+    if ! docker logs "${frontend}" 2>&1 | grep -qF "$1"; then
         docker logs "${frontend}" >&2 || true
         echo "Expected the frontend log to mention: $1" >&2
         exit 1
     fi
 }
 
+expect_store_log() {
+    if ! docker logs "${store}" 2>&1 | grep -qF "$1"; then
+        docker logs "${store}" >&2 || true
+        echo "Expected the store log to mention: $1" >&2
+        exit 1
+    fi
+}
+
 theme_url="http://${store}:8080"
 
-# No theme configured: the stock assets are served, as before.
+# No theme configured: stock assets, real 404 for a missing asset, and the SPA
+# fallback still answers application routes.
 start_frontend
 stock_logo=$(body /images/fred.svg)
 stock_terms=$(body /gcu.md)
 expect_body /images/fred.svg '<svg'
 refute_body /images/fred.svg theme-logo
 refute_body /gcu.md 'theme terms'
-[ "$(status /theme/gcu.md)" = "404" ]
+expect_status /images/missing.svg 404
+expect_status /contrib/none/release.md 404
+expect_status /missing.md 404
+expect_status /teams 200
+body /teams | grep -qi '<!doctype'
 
 # Full theme over a signed request: the served surfaces are overridden, the
-# shell, its config and its bundle are not, and the symlink is dropped.
+# shell, its config and its bundle are not, the symlink is dropped, and the
+# unreadable entry is served anyway. The quote in the key must reach the store
+# intact through curl's config file.
 start_frontend \
-    -e "FRONTEND_THEME_URL=${theme_url}/theme.zip" \
-    -e 'FRONTEND_THEME_S3_ACCESS_KEY=theme-key' \
+    -e "FRONTEND_THEME_URL=${theme_url}/theme.zip?X-Amz-Signature=not-for-the-logs" \
+    -e 'FRONTEND_THEME_S3_ACCESS_KEY=theme"key' \
     -e 'FRONTEND_THEME_S3_SECRET_KEY=theme-secret'
 expect_body /images/fred.svg theme-logo
 expect_body /images/acme-logo.svg acme-logo
 expect_body /images/icons/customAgent.svg acme-agent
+expect_body /images/locked.svg locked
 expect_body /gcu.md 'theme terms'
 expect_body /contrib/acme/release.md 'acme release'
 refute_body / theme-shell
 refute_body /config.json '"theme"'
 refute_body /assets/theme.js theme-bundle
 refute_body /images/link.svg 'root:'
-[ "$(status /theme/gcu.md)" = "404" ]
-expect_log 'Theme installed from'
+expect_status /images/link.svg 404
+expect_log "Theme installed from ${theme_url}/theme.zip: "
 expect_log 'ignored, not a served surface: index.html'
-if ! docker logs "${store}" 2>&1 | grep -q '/theme.zip authorization="AWS4-HMAC-SHA256 Credential=theme-key/'; then
-    docker logs "${store}" >&2 || true
-    echo "The theme request was not SigV4-signed with the configured key" >&2
+if docker logs "${frontend}" 2>&1 | grep -qF 'X-Amz-Signature'; then
+    echo "The theme URL query string leaked into the frontend log" >&2
     exit 1
 fi
+# nginx serves public files; it must not keep the store credential.
+if docker exec "${frontend}" sh -c "tr '\\0' '\\n' < /proc/1/environ" |
+    grep -q '^FRONTEND_THEME_S3_SECRET_KEY='; then
+    echo "The theme store credential survived into the nginx environment" >&2
+    exit 1
+fi
+# nginx escapes the quote as \x22 in its access log.
+expect_store_log '/theme.zip?X-Amz-Signature=not-for-the-logs authorization="AWS4-HMAC-SHA256 Credential=theme\x22key/'
 
 # An archive made from a folder is unwrapped; without keys the request is anonymous.
 start_frontend -e "FRONTEND_THEME_URL=${theme_url}/wrapped.zip"
 expect_body /images/fred.svg wrapped-logo
 expect_body /gdpr.md 'wrapped privacy'
 [ "$(body /gcu.md)" = "${stock_terms}" ]
-if ! docker logs "${store}" 2>&1 | grep -q '/wrapped.zip authorization="-"'; then
-    echo "The anonymous theme request carried an Authorization header" >&2
-    exit 1
-fi
+expect_store_log '/wrapped.zip authorization="-"'
 
 # The same archive mounted from a volume, the ConfigMap or docker-compose path.
 start_frontend \
@@ -234,9 +293,10 @@ start_frontend \
     -e 'FRONTEND_THEME_URL=file:///tmp/theme.zip'
 expect_body /gcu.md 'theme terms'
 
-# Refused or unreachable archives keep the stock look by default...
+# Refused, empty or unreachable archives keep the stock look by default...
 for broken in \
-    "escaping.zip|archive contains entries escaping its root" \
+    "escaping.zip|archive contains entries with '..' or absolute paths" \
+    "no-surfaces.zip|archive holds no images/, contrib/ or root markdown" \
     "not-a-zip.zip|cannot unpack the archive" \
     "missing.zip|cannot download"; do
     archive=${broken%%|*}
@@ -247,29 +307,13 @@ for broken in \
 done
 
 # ...and stop the container when the theme is required.
-output=$(refused_start -e "FRONTEND_THEME_URL=${theme_url}/escaping.zip" -e 'FRONTEND_THEME_REQUIRED=true')
-case "${output}" in
-    *"Theme installation failed: archive contains entries escaping its root"*) ;;
-    *)
-        echo "Unexpected refusal output: ${output}" >&2
-        exit 1
-        ;;
-esac
-output=$(refused_start -e "FRONTEND_THEME_URL=${theme_url}/missing.zip" -e 'FRONTEND_THEME_REQUIRED=true')
-case "${output}" in
-    *"Theme installation failed: cannot download"*) ;;
-    *)
-        echo "Unexpected refusal output: ${output}" >&2
-        exit 1
-        ;;
-esac
-output=$(refused_start -e 'FRONTEND_THEME_REQUIRED=maybe')
-case "${output}" in
-    *"FRONTEND_THEME_REQUIRED must be either true or false"*) ;;
-    *)
-        echo "Unexpected refusal output: ${output}" >&2
-        exit 1
-        ;;
-esac
+expect_refused_start "Theme installation failed: archive contains entries with '..' or absolute paths" \
+    -e "FRONTEND_THEME_URL=${theme_url}/escaping.zip" -e 'FRONTEND_THEME_REQUIRED=true'
+expect_refused_start "Theme installation failed: archive holds no images/, contrib/ or root markdown" \
+    -e "FRONTEND_THEME_URL=${theme_url}/no-surfaces.zip" -e 'FRONTEND_THEME_REQUIRED=true'
+expect_refused_start "Theme installation failed: cannot download" \
+    -e "FRONTEND_THEME_URL=${theme_url}/missing.zip" -e 'FRONTEND_THEME_REQUIRED=true'
+expect_refused_start "FRONTEND_THEME_REQUIRED must be either true or false" \
+    -e 'FRONTEND_THEME_REQUIRED=maybe'
 
 echo "Theme container smoke checks passed"
