@@ -175,7 +175,7 @@ export default function ManagedChatPage() {
   // replaced or a new user turn starts — the two moments the view jumps to the
   // bottom — and never on a streaming token. `hasAnswerText` separates the two
   // phases: trace rows are followed to the bottom, answer text only until it
-  // has filled a third of the viewport.
+  // has filled ANSWER_FOLLOW_FRACTION of the viewport.
   const lastTurn = chat.threadMessages[chat.threadMessages.length - 1];
   const userTurnCount = useMemo(
     () => chat.threadMessages.reduce((n, m) => (m.role === "user" ? n + 1 : n), 0),

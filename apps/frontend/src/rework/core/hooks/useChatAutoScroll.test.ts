@@ -51,18 +51,19 @@ describe("shouldFollowBottom", () => {
   });
 
   describe("answer phase", () => {
-    // 600px viewport, so the view follows for the answer's first 200px and
-    // freezes after — leaving its first line two thirds of the way down.
+    // 600px viewport at ANSWER_FOLLOW_FRACTION = 3/4, so the view follows for
+    // the answer's first 450px and freezes after — leaving its first line a
+    // quarter of the way down.
     const answerAfter = (grown: number) =>
       shouldFollowBottom(input({ phase: "answer", answerStartHeight: 1000, scrollHeight: 1000 + grown }));
 
-    it("keeps following while the answer is shorter than a third of the viewport", () => {
+    it("keeps following while the answer is shorter than its share of the viewport", () => {
       expect(answerAfter(0)).toBe(true);
-      expect(answerAfter(199)).toBe(true);
+      expect(answerAfter(449)).toBe(true);
     });
 
-    it("freezes once the answer has filled that third", () => {
-      expect(answerAfter(200)).toBe(false);
+    it("freezes once the answer has filled that share", () => {
+      expect(answerAfter(450)).toBe(false);
       expect(answerAfter(5000)).toBe(false);
     });
 

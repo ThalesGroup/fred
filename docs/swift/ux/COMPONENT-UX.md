@@ -1175,8 +1175,9 @@ _(none)_
 
   `useChatAutoScroll` now owns this container's scroll position outright, in three phases. **Send /
   conversation opened** → jump to the bottom before paint. **Work** (trace rows, no answer text) →
-  follow the bottom. **Answer** → keep following, then freeze once the answer has filled a third of
-  the viewport, which leaves its first line two thirds of the way down.
+  follow the bottom. **Answer** → keep following, then freeze once the answer has filled
+  `ANSWER_FOLLOW_FRACTION` (3/4) of the viewport, which leaves its first line a quarter of the way
+  down.
 
   That stop needs no DOM anchor and no spacer: the view is at the bottom when the answer starts, so
   the content grown since the last trace-only height *is* the answer's height on screen. The

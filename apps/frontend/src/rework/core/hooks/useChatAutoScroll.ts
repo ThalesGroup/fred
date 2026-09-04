@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 /** How much of the viewport the answer may fill before the view stops moving. */
-export const ANSWER_FOLLOW_FRACTION = 1 / 3;
+export const ANSWER_FOLLOW_FRACTION = 3 / 4;
 
 /** Slack for "still at the bottom": sub-pixel rounding, and a hair of overscroll. */
 export const NEAR_BOTTOM_PX = 48;
@@ -80,9 +80,9 @@ export function resolveStuckToBottom(
  * The answer phase stops on its own without measuring any DOM node. The view is
  * at the bottom when the answer's first text lands, so the content grown since
  * the last trace-only height IS the answer's height on screen: following until
- * that exceeds a third of the viewport leaves the answer's first line two
- * thirds of the way down, reached gradually over its first lines rather than in
- * one jump.
+ * that exceeds ANSWER_FOLLOW_FRACTION of the viewport leaves the answer's first
+ * line a quarter of the way down, reached gradually over its first lines rather
+ * than in one jump.
  */
 export function shouldFollowBottom({
   phase,
