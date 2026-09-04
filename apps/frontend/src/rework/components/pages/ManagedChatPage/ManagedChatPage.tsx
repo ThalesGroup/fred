@@ -186,11 +186,12 @@ export default function ManagedChatPage() {
               label: t("chatbot.sessionAttachments.title"),
               icon: "attach_file" as const,
               badgeCount: attachmentsCount,
+              selected: attachmentsDrawerOpen,
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
             },
           ]
         : [],
-    [allowChatAttachments, attachmentsCount, t],
+    [allowChatAttachments, attachmentsCount, attachmentsDrawerOpen, t],
   );
   // The composer options menu always renders: even when an agent exposes no
   // search options, the prompt-library row is always available (personal +
@@ -209,8 +210,10 @@ export default function ManagedChatPage() {
   // dismissing the list under them.
   const insertContextPrompt = async (prompt: ContextPromptSummary): Promise<boolean> => {
     const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
-    if (!promptTeamId) return false;
     try {
+      // No owning team means no way to fetch the text — the same dead end as a
+      // failed request, so it gets the same toast rather than a silent no-op.
+      if (!promptTeamId) throw new Error("unknown prompt team");
       const detail = await fetchPrompt({ teamId: promptTeamId, promptId: prompt.id }).unwrap();
       const text = detail.text?.trim();
       // An empty record is a failed insert from the user's side, not a no-op:

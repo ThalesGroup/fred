@@ -41,7 +41,13 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: (
     arg: { teamId: string },
     opts: { skip?: boolean },
-  ) => ({ data: opts.skip ? undefined : (h.promptsByTeam[arg.teamId] ?? []), isLoading: false }),
+    // A skipped query is uninitialized, not idle — the panel reads both flags to
+    // avoid flashing "no prompts" on the render where skip flips.
+  ) => ({
+    data: opts.skip ? undefined : (h.promptsByTeam[arg.teamId] ?? []),
+    isFetching: false,
+    isUninitialized: Boolean(opts.skip),
+  }),
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: (
     arg: { teamId: string },
     opts: { skip?: boolean },
@@ -70,7 +76,7 @@ function mount(props: Partial<React.ComponentProps<typeof PromptSelectionChatPan
         open
         onClose={props.onClose ?? (() => {})}
         teamId={TEAM_ID}
-        personalTeamId={PERSONAL_ID}
+        personalTeamId={"personalTeamId" in props ? props.personalTeamId : PERSONAL_ID}
         isPersonalChat={props.isPersonalChat ?? false}
         onInsert={props.onInsert ?? (async () => true)}
       />,
@@ -118,6 +124,15 @@ describe("PromptSelectionChatPanel", () => {
 
     expect(container.textContent).toContain("My scratch prompt");
     expect(container.textContent).not.toContain("Weekly report");
+  });
+
+  it("hides the space picker until the personal id resolves", () => {
+    // Bootstrap may not have answered yet. Offering "My space" then would open
+    // a tab whose query is skipped and whose spinner could never clear.
+    mount({ personalTeamId: undefined });
+
+    expect(container.textContent).not.toContain("chatbot.promptSelectionPanel.space.personal");
+    expect(container.textContent).toContain("Weekly report");
   });
 
   it("hides the space picker in a personal chat", () => {

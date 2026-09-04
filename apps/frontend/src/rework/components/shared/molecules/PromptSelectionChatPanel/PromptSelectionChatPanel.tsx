@@ -89,27 +89,36 @@ export default function PromptSelectionChatPanel({
 
   // Every query is skipped while closed: the panel is mounted for every chat,
   // but most sessions never open it.
-  const { data: teamPrompts = [], isFetching: isFetchingTeam } =
-    useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery({ teamId }, { skip: !open || !teamId });
+  const {
+    data: teamPrompts = [],
+    isFetching: isFetchingTeam,
+    isUninitialized: isTeamUninitialized,
+  } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery({ teamId }, { skip: !open || !teamId });
   // `/prompts/context` returns one space per call and never leaks personal
   // prompts into a team's answer, so the personal side needs its own call.
-  const { data: personalPrompts = [], isFetching: isFetchingPersonal } =
-    useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
-      { teamId: personalTeamId ?? "" },
-      { skip: !open || !personalTeamId || isPersonalChat },
-    );
+  const {
+    data: personalPrompts = [],
+    isFetching: isFetchingPersonal,
+    isUninitialized: isPersonalUninitialized,
+  } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
+    { teamId: personalTeamId ?? "" },
+    { skip: !open || !personalTeamId || isPersonalChat },
+  );
   const { data: categories = [] } = useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery(
     { teamId: spaceTeamId ?? "" },
     { skip: !open || !spaceTeamId },
   );
 
-  const onTeamSide = isPersonalChat || space === "team";
+  // Switching spaces needs a personal id. Without one (bootstrap not resolved)
+  // the panel stays on the team side rather than offering a tab whose query is
+  // skipped and whose spinner could never clear.
+  const canPickSpace = !isPersonalChat && Boolean(personalTeamId);
+  const onTeamSide = !canPickSpace || space === "team";
   const prompts = onTeamSide ? teamPrompts : personalPrompts;
-  // `isFetching`, not `isLoading`: on the render where the query un-skips it is
-  // still uninitialized, and `isLoading` is false there — the list would flash
-  // "no prompts" before the spinner. Bootstrap may also not have resolved the
-  // personal id yet; that is still loading, not an empty space.
-  const isLoading = onTeamSide ? isFetchingTeam : isFetchingPersonal || !personalTeamId;
+  // `isFetching` alone is false on the render where `skip` flips, while the
+  // query is still uninitialized — the list would flash "no prompts" before the
+  // spinner. Both flags together cover the whole gap.
+  const isLoading = onTeamSide ? isFetchingTeam || isTeamUninitialized : isFetchingPersonal || isPersonalUninitialized;
 
   const knownCategoryIds = useMemo(() => new Set(categories.map((cat) => cat.id)), [categories]);
 
@@ -150,7 +159,7 @@ export default function PromptSelectionChatPanel({
       persistKey="prompt-selection-panel"
       fill
     >
-      {!isPersonalChat && (
+      {canPickSpace && (
         <ButtonGroup
           size="small"
           color="secondary"
