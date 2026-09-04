@@ -3731,8 +3731,7 @@ The launcher rail on the chat page's right edge, one small icon button per side 
 the conversation can open. **Since 2026-09-01 it is a page-root in-flow column** — a
 flex sibling of `.pageBody`, not inside it — `flex-shrink: 0`, full page height, 12px
 top/right/bottom margin, so it reserves its own space at the far right and reflows the
-chat body left rather than floating over it. Opening a capability panel retires the
-whole rail (returns `null`), so the body-side push drawer takes the full width.
+chat body left rather than floating over it.
 
 **Two sources feed it (2026-09-04).** It was `CapabilityLauncherRail`, built only from
 `sidePanelsForCapabilities()`. It now also takes a `launchers` array of first-party
@@ -3744,10 +3743,20 @@ would have lied about what the rail renders.
 A first-party launcher may carry a count, shown through `IconButton`'s `badgeCount`
 (M3 large badge — see `IconButton` below).
 
-**Known consequence, deliberately deferred:** the rail still retires entirely while a
-capability viewer is open, first-party launchers included. Since the attachments panel
-lost its top-bar trigger in the same change, its files are unreachable while a viewer is
-open. Suppressing only the capability entries and keeping the `launchers` would fix it.
+**The rail outlives an open panel (2026-09-04).** It used to return `null` the moment a
+capability viewer opened, so the body-side drawer took the full width and reaching
+another launcher meant closing the open one first. Now it keeps its own in-flow column
+beside the viewer, exactly as it already did for the attachments, prompt-library and
+document-scope panels — which also closes the hole the previous change opened, where
+losing the attachments' top-bar trigger left its files unreachable while a viewer was up.
+
+The open panel's launcher reads as selected through `IconButton`'s M3 filled `tonal`
+variant plus `aria-pressed`, and clicking it closes the panel — the launcher is both the
+way in and the way out. Clicking a different launcher switches viewers directly.
+
+The trade-off accepted here: a viewer is ~48px narrower, the rail keeping its column.
+One behavioural side effect worth knowing — the early return used to unmount every
+`useHasContent` hook while a viewer was open; they now stay mounted.
 
 Earlier behaviour (#2459):
 

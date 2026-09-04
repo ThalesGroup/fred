@@ -20,8 +20,8 @@
 //
 // A capability launcher is only offered once its panel has something to show:
 // the plugin's `useHasContent` hook answers for the open conversation. The rail
-// shows only while every capability panel is closed; opening one retires it
-// entirely, the capability viewer taking over the column.
+// stays put while a panel is open, the open one's launcher reading as selected
+// and toggling it shut.
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -63,14 +63,23 @@ const titleOf = (t: TFunction, entry: SidePanelEntry): string =>
 const launcherLabelOf = (t: TFunction, entry: SidePanelEntry): string =>
   t(`capability.${entry.capabilityId}.panel.${entry.widget}.launcher`, { defaultValue: titleOf(t, entry) });
 
-function RailButton({ label, icon, badgeCount, onOpen }: Omit<ChatLauncher, "key">) {
+function RailButton({
+  label,
+  icon,
+  badgeCount,
+  selected = false,
+  onOpen,
+}: Omit<ChatLauncher, "key"> & { selected?: boolean }) {
   return (
     <Tooltip text={label} placement="left">
       <IconButton
-        variant="icon"
+        // The open panel's launcher reads as selected through the M3 filled
+        // tonal variant, so the rail says which viewer is showing.
+        variant={selected ? "tonal" : "icon"}
         size="small"
         icon={{ category: "outlined", type: icon }}
         aria-label={label}
+        aria-pressed={selected}
         badgeCount={badgeCount}
         onClick={onOpen}
       />
@@ -83,11 +92,21 @@ function RailButton({ label, icon, badgeCount, onOpen }: Omit<ChatLauncher, "key
  * `useHasContent` runs in a stable hook slot — mapping the hooks inline would
  * reorder them the moment a session gains or loses a capability.
  */
-function PanelLauncher({ entry, label, onOpen }: { entry: SidePanelEntry; label: string; onOpen: () => void }) {
+function PanelLauncher({
+  entry,
+  label,
+  selected,
+  onToggle,
+}: {
+  entry: SidePanelEntry;
+  label: string;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   const useHasContent = entry.useHasContent ?? alwaysHasContent;
   if (!useHasContent()) return null;
 
-  return <RailButton label={label} icon={entry.icon} onOpen={onOpen} />;
+  return <RailButton label={label} icon={entry.icon} selected={selected} onOpen={onToggle} />;
 }
 
 export function ChatLauncherRail({
@@ -98,8 +117,10 @@ export function ChatLauncherRail({
 }: ChatLauncherRailProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
-  const active = entries.find((entry) => entryKey(entry) === activeKey) ?? null;
-  if ((entries.length === 0 && launchers.length === 0) || active !== null) return null;
+  // The rail outlives an open panel: it sits in its own in-flow column beside
+  // the viewer, so switching viewers — or reaching the attachments — no longer
+  // means closing what is open first.
+  if (entries.length === 0 && launchers.length === 0) return null;
 
   return (
     <div className={styles.rail}>
@@ -117,7 +138,10 @@ export function ChatLauncherRail({
           key={entryKey(entry)}
           entry={entry}
           label={launcherLabelOf(t, entry)}
-          onOpen={() => onActiveKeyChange(entryKey(entry))}
+          selected={entryKey(entry) === activeKey}
+          // Clicking the open one closes it, so the launcher is the way in and
+          // the way out.
+          onToggle={() => onActiveKeyChange(entryKey(entry) === activeKey ? null : entryKey(entry))}
         />
       ))}
     </div>

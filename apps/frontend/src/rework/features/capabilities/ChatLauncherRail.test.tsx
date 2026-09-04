@@ -22,7 +22,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatLauncherRail, type ChatLauncher } from "./ChatLauncherRail";
 
-const state = vi.hoisted(() => ({ entries: [] as unknown[] }));
+const state = vi.hoisted(() => ({ entries: [] as unknown[], clicks: [] as Array<() => void> }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
@@ -30,13 +30,34 @@ vi.mock("./sessionProbeRegistry", () => ({ sessionProbesForCapabilities: () => [
 
 vi.mock("./sidePanelRegistry", () => ({ sidePanelsForCapabilities: () => state.entries }));
 
-// Stubbed down to what the rail actually decides: which glyph, which label, and
-// what count it hands the badge. The badge's own rendering rules are
-// IconButton's, and are tested there.
+// Stubbed down to what the rail actually decides: which glyph, which label,
+// what count it hands the badge, whether the button reads as selected, and what
+// its click does. The badge's own rendering rules are IconButton's, tested
+// there. Click handlers are recorded because renderToStaticMarkup never fires
+// them.
 vi.mock("@shared/atoms/IconButton/IconButton", () => ({
-  default: ({ icon, badgeCount, ...rest }: { icon: { type: string }; badgeCount?: number; "aria-label": string }) => (
-    <button data-icon={icon.type} aria-label={rest["aria-label"]} data-badge={badgeCount} />
-  ),
+  default: ({
+    icon,
+    badgeCount,
+    onClick,
+    ...rest
+  }: {
+    icon: { type: string };
+    badgeCount?: number;
+    onClick?: () => void;
+    "aria-pressed"?: boolean;
+    "aria-label": string;
+  }) => {
+    if (onClick) state.clicks.push(onClick);
+    return (
+      <button
+        data-icon={icon.type}
+        aria-label={rest["aria-label"]}
+        aria-pressed={rest["aria-pressed"]}
+        data-badge={badgeCount}
+      />
+    );
+  },
 }));
 
 function StubPanel() {
@@ -73,6 +94,9 @@ const attachmentsLauncher = (badgeCount?: number): ChatLauncher => ({
 describe("ChatLauncherRail", () => {
   beforeEach(() => {
     state.entries = [];
+    // Handlers accumulate across renders; without this a test would click a
+    // button from the previous one.
+    state.clicks.length = 0;
   });
 
   it("offers no launcher while the panel has nothing to show", () => {
@@ -121,14 +145,46 @@ describe("ChatLauncherRail", () => {
     expect(render(null, [attachmentsLauncher()])).not.toContain("data-badge");
   });
 
-  it("retires the whole rail while a panel is open, other panels included", () => {
-    // Opening one panel closes the rail entirely; the body-side push drawer takes
-    // over. Reaching another launcher means closing the open panel first.
+  it("keeps every launcher reachable while a panel is open", () => {
+    // The rail owns its own in-flow column beside the viewer, so switching
+    // viewers - or reaching the attachments - no longer means closing first.
     state.entries = [
       entry("ppt_filler", "slideshow", () => true),
       entry("writable_document", "edit_document", () => true),
     ];
+    const html = render("writable_document:writable_document_pane", [attachmentsLauncher()]);
 
-    expect(render("writable_document:writable_document_pane")).not.toContain("<button");
+    expect(html).toContain('data-icon="slideshow"');
+    expect(html).toContain('data-icon="edit_document"');
+    expect(html).toContain('data-icon="attach_file"');
+  });
+
+  it("marks the open panel's launcher as selected, and only that one", () => {
+    state.entries = [
+      entry("ppt_filler", "slideshow", () => true),
+      entry("writable_document", "edit_document", () => true),
+    ];
+    const html = render("writable_document:writable_document_pane");
+
+    expect(html).toMatch(/data-icon="edit_document"[^>]*aria-pressed="true"/);
+    expect(html).toMatch(/data-icon="slideshow"[^>]*aria-pressed="false"/);
+  });
+
+  it("closes the open panel when its own launcher is clicked again", () => {
+    // The launcher is the way in and the way out; without this the open panel
+    // could only be dismissed from its own header.
+    const changes: (string | null)[] = [];
+    state.entries = [entry("ppt_filler", "slideshow", () => true)];
+
+    renderToStaticMarkup(
+      <ChatLauncherRail
+        capabilityIds={["ppt_filler"]}
+        activeKey="ppt_filler:ppt_filler_pane"
+        onActiveKeyChange={(key) => changes.push(key)}
+      />,
+    );
+    state.clicks[0]();
+
+    expect(changes).toEqual([null]);
   });
 });
