@@ -43,23 +43,26 @@
 
 /* The marker sits ON the rail (`--trace-rail-x`, set by ThoughtTrace) so the
    line threads it exactly like a tool row's status dot. The opaque background
-   masks the rail behind the glyph; the top margin centres the 12px disc on the
-   first line of text beside it. */
+   masks the rail behind the glyph; the top margin centres the disc on the first
+   line of text beside it. One `--marker-size` drives all three — the disc, its
+   offset onto the rail, and the glyph — so they cannot drift apart. */
 .marker {
+  --marker-size: 0.875rem;
+
   display: inline-flex;
   flex-shrink: 0;
   justify-content: center;
   align-items: center;
   z-index: 1;
-  margin-top: calc((var(--trace-line-h) - 12px) / 2);
-  margin-left: calc(var(--trace-rail-x, 6px) - 6px);
-  box-shadow: 0 0 0 1.5px var(--surface-container-lowest);
+  margin-top: calc((var(--trace-line-h) - var(--marker-size)) / 2);
+  margin-left: calc(var(--trace-rail-x, 6px) - var(--marker-size) / 2);
+  box-shadow: 0 0 0 1.5px var(--surface-main);
   border-radius: 50%;
-  background: var(--surface-container-lowest);
-  width: 12px;
-  height: 12px;
+  background: var(--surface-main);
+  width: var(--marker-size);
+  height: var(--marker-size);
   color: var(--on-surface-retreat);
-  font-size: 0.75rem;
+  font-size: var(--marker-size);
 }
 
 /* Only the marker pulses while reasoning streams — the whole row pulsing was
