@@ -51,9 +51,9 @@
         "title": "Sélecteur de mode de recherche"
       },
       "library_binding": {
-        "description": "Restreint définitivement cet agent aux librairies sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
-        "noLibraries": "Aucune librairie disponible.",
-        "title": "Lier à des librairies spécifiques"
+        "description": "Restreint définitivement cet agent aux bibliothèques sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
+        "noLibraries": "Aucune bibliothèque disponible.",
+        "title": "Lier à des bibliothèques spécifiques"
       },
       "library_scope_picker": {
         "description": "Sélectionnez les bibliothèques de documents que cet agent peut interroger. L'arborescence affiche les fichiers actuellement présents dans chaque bibliothèque."
@@ -534,7 +534,7 @@
     "voiceInputUnavailable": "L'enregistrement audio n'est pas disponible dans ce navigateur.",
     "welcomeFallback": "Bonjour",
     "promptSelectionPanel": {
-      "menuRow": "Librairie de prompts",
+      "menuRow": "Bibliothèque de prompts",
       "title": "Sélectionner un prompt à insérer",
       "spaceLabel": "Espace",
       "space": {
