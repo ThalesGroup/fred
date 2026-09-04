@@ -78,6 +78,28 @@ _(none)_
 
 ---
 
+### `Select`
+
+**Location:** `src/rework/components/shared/molecules/Select/Select.tsx`
+**Status:** `Functional`
+
+Portaled listbox with virtual focus (DOM focus stays on the trigger,
+`aria-activedescendant` tracks the highlighted option).
+
+**Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
+the same token `TextInput` uses, so a `Select` and a text field placed in one
+toolbar match. It previously used `--outline-muted`: identical in the light
+theme (both resolve to `cold-grey-80`) but dimmer in the dark one
+(`cold-grey-20` against `cold-grey-30`), so the two controls disagreed only for
+dark-theme users. `--outline-muted` remains correct for containers and
+dividers; form controls take `--outline-retreat`.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
 ### `SearchInput`
 
 **Location:** `src/rework/components/shared/molecules/SearchInput/SearchInput.tsx`
@@ -1344,8 +1366,7 @@ filter) applies after the search so the visible list is always sorted, and:
 Dropping the label costs the trigger its explicit accessible name: `Select`
 exposes no `ariaLabel` prop, so the button falls back to its own content and a
 screen reader announces the current value ("Alphabetical") without saying it is
-the sort control. Adding an `ariaLabel` prop to the shared `Select` would close
-this for every consumer.
+the sort control.
 
 ---
 
