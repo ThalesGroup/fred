@@ -55,7 +55,33 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: AuthorizationError
     ) -> JSONResponse:
         """Handle AuthorizationError by returning a 403 Forbidden response."""
-        logger.warning("Authorization denied for user %s: %s", exc.user_id, exc)
+        if (
+            exc.actor_uid is not None
+            and exc.subject_type not in (None, Resource.USER)
+            and exc.subject_id is not None
+        ):
+            logger.warning(
+                "Authorization denied for user %s (checked subject %s %s): %s",
+                exc.actor_uid,
+                exc.subject_type.value,
+                exc.subject_id,
+                exc,
+            )
+        elif exc.actor_uid is not None:
+            logger.warning("Authorization denied for user %s: %s", exc.actor_uid, exc)
+        elif (
+            exc.subject_type is not None
+            and exc.subject_type != Resource.USER
+            and exc.subject_id is not None
+        ):
+            logger.warning(
+                "Authorization denied for %s %s (no user actor): %s",
+                exc.subject_type.value,
+                exc.subject_id,
+                exc,
+            )
+        else:
+            logger.warning("Authorization denied for user %s: %s", exc.user_id, exc)
         return JSONResponse(
             status_code=403,
             content={"detail": _authorization_detail_for_client(exc)},

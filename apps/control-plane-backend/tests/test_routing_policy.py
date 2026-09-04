@@ -302,7 +302,7 @@ def _stub_catalog(monkeypatch: pytest.MonkeyPatch):
 class _FakeRebacElevatedCheck:
     """Fake for `_require_elevated_team_role`'s `has_permissions` BatchCheck —
     a distinct interface from the `has_permission` (singular) fakes below,
-    which back `_validate_write`'s `can_use_capability` checks instead.
+    which back `_validate_write`'s `can_team_use_capability` checks instead.
     `allowed` is the fixed `[can_update_info, can_update_resources,
     can_run_evaluations]` result, in `_ELEVATED_TEAM_ROLE_PERMISSIONS` order.
     """

@@ -45,6 +45,22 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
 )
 
+# Reserved id prefix for `kind="app"` catalog entries. Tools, templates,
+# models and applications share one flat `capability:<id>` namespace, so an
+# unprefixed app id can collide with any of them.
+APPLICATION_CAPABILITY_NAMESPACE_PREFIX = "app__"
+
+
+def application_capability_id(app_id: str) -> str:
+    """Capability id one registered application's team grants are written against.
+
+    Derived, never authored: team admission filters on exactly this id. The
+    input is not normalized -- an id needing repair is one no catalog
+    accepted, and failing closed beats resolving onto a neighbouring id.
+    """
+
+    return f"{APPLICATION_CAPABILITY_NAMESPACE_PREFIX}{app_id}"
+
 
 def team_capability_subject_and_context(
     team_id: str,
@@ -91,3 +107,21 @@ async def usable_capability_ids(rebac: RebacEngine, team_id: str) -> set[str] | 
     if isinstance(refs, RebacDisabledResult):
         return None
     return {ref.id for ref in refs}
+
+
+async def can_team_use_capability(
+    rebac: RebacEngine, team_id: str, *, capability_id: str
+) -> bool:
+    """One team, one capability: a single `Check` instead of a `ListObjects`.
+
+    Same subject and contextual edges as `usable_capability_ids`. With ReBAC
+    disabled the engine answers `True`, matching the unfiltered catalog.
+    """
+
+    team_ref, context = team_capability_subject_and_context(team_id)
+    return await rebac.has_permission(
+        team_ref,
+        CapabilityPermission.CAN_USE,
+        RebacReference(type=Resource.CAPABILITY, id=capability_id),
+        contextual_relations=context,
+    )

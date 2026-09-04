@@ -60,6 +60,9 @@ from fred_core import (
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.security.models import Resource
+from fred_core.security.rebac.capability_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_core.security.rebac.rebac_engine import (
     RebacDisabledResult,
     RebacReference,
@@ -70,7 +73,6 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_core.teams.metadata_store import TeamMetadata
 from fred_sdk.contracts.capability import CapabilityCatalogEntry, CapabilityManifest
 from fred_sdk.contracts.capability.manifest import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
     TeamScopePolicy,
 )
 from httpx import ASGITransport, AsyncClient
