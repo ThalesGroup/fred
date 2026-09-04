@@ -2462,7 +2462,8 @@
           "name": "Alphabétique",
           "created": "Derniers créés",
           "updated": "Derniers modifiés"
-        }
+        },
+        "sortLabel": "Trier"
       },
       "formAgent": {
         "advancedSettings": "Paramètres avancés",

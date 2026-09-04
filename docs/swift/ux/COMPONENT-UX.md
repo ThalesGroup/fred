@@ -94,6 +94,12 @@ theme (both resolve to `cold-grey-80`) but dimmer in the dark one
 dark-theme users. `--outline-muted` remains correct for containers and
 dividers; form controls take `--outline-retreat`.
 
+**Naming the trigger.** A visible `label` names it through `htmlFor`. Where a
+toolbar has no room for one, pass `ariaLabel` instead — without either, the
+button falls back to its own content and a screen reader announces the current
+value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
+over `label`, so pass one or the other.
+
 #### Open UX issues
 
 _(none)_
@@ -1363,10 +1369,9 @@ filter) applies after the search so the visible list is always sorted, and:
 - returns 0 for ties, leaving `Array.sort`'s stability to preserve the incoming
   order.
 
-Dropping the label costs the trigger its explicit accessible name: `Select`
-exposes no `ariaLabel` prop, so the button falls back to its own content and a
-screen reader announces the current value ("Alphabetical") without saying it is
-the sort control.
+The control carries no visible label, so it is named with `Select`'s
+`ariaLabel` prop — otherwise a screen reader announces the current value with
+no hint that it is the sort control.
 
 ---
 

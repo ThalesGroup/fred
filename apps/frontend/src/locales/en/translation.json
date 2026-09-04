@@ -2462,7 +2462,8 @@
           "name": "Alphabetical",
           "created": "Recently created",
           "updated": "Recently updated"
-        }
+        },
+        "sortLabel": "Sort"
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",

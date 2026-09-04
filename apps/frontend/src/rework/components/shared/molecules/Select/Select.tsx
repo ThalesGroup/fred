@@ -42,6 +42,10 @@ interface SelectProps<T> {
   size: ComponentSize;
   placeholder?: string;
   label?: string;
+  /** Accessible name for the trigger when no visible `label` is rendered —
+   * without either, a screen reader announces only the current value. Takes
+   * precedence over `label`, so pass one or the other. */
+  ariaLabel?: string;
   disabled?: boolean;
   error?: string;
   compact?: boolean;
@@ -52,6 +56,7 @@ export default function Select<T>({
   value,
   placeholder,
   label,
+  ariaLabel,
   disabled = false,
   error,
   onChange,
@@ -237,6 +242,7 @@ export default function Select<T>({
         className={styles["trigger"]}
         onClick={toggleMenu}
         onKeyDown={handleTriggerKeyDown}
+        aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={options.length > 0 ? `${baseId}-listbox` : undefined}

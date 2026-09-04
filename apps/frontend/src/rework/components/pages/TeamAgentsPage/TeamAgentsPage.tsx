@@ -456,7 +456,14 @@ export default function TeamAgentsPage() {
             />
           </div>
           <div className={styles.sortSelect}>
-            <Select<AgentSortValue> size="small" compact options={sortOptions} value={sort} onChange={setSort} />
+            <Select<AgentSortValue>
+              size="small"
+              compact
+              options={sortOptions}
+              value={sort}
+              onChange={setSort}
+              ariaLabel={t("rework.teams.agents.sortLabel")}
+            />
           </div>
         </div>
       )}
