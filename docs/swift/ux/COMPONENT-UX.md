@@ -78,6 +78,34 @@ _(none)_
 
 ---
 
+### `Select`
+
+**Location:** `src/rework/components/shared/molecules/Select/Select.tsx`
+**Status:** `Functional`
+
+Portaled listbox with virtual focus (DOM focus stays on the trigger,
+`aria-activedescendant` tracks the highlighted option).
+
+**Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
+the same token `TextInput` uses, so a `Select` and a text field placed in one
+toolbar match. It previously used `--outline-muted`: identical in the light
+theme (both resolve to `cold-grey-80`) but dimmer in the dark one
+(`cold-grey-20` against `cold-grey-30`), so the two controls disagreed only for
+dark-theme users. `--outline-muted` remains correct for containers and
+dividers; form controls take `--outline-retreat`.
+
+**Naming the trigger.** A visible `label` names it through `htmlFor`. Where a
+toolbar has no room for one, pass `ariaLabel` instead — without either, the
+button falls back to its own content and a screen reader announces the current
+value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
+over `label`, so pass one or the other.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
 ### `SearchInput`
 
 **Location:** `src/rework/components/shared/molecules/SearchInput/SearchInput.tsx`
@@ -1284,6 +1312,66 @@ row and making the list unreadable. Two changes:
 - All four nav panels went **240px → 272px**. They swap into the same sidebar
   grid column, so the width must stay identical across them or the column
   jumps when switching between Home / team / marketplace / admin.
+
+---
+
+### `TeamAgentsPage` list search + sort
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/`
+**Status:** `Functional`
+
+A `SearchInput` (`size="small"`, capped at 320px) sits at the right of the page
+toolbar, after the create button — the same placement and component as the team
+prompts page, so the two team list pages read alike. It filters the already
+loaded list client-side: local `useState`, no debounce, no request. The list is
+fetched whole, so no query parameter and no control-plane change is involved.
+
+The predicate lives in `agentFilter.ts` rather than in the page: a
+case-insensitive substring match against the three fields `AgentCard` actually
+renders — `display_name`, `role`, `description` — joined per instance so a query
+cannot match across a field boundary. An empty or whitespace-only query returns
+everything, so the raw input value can be passed straight through. It is a pure
+function with its own unit test, matching how `toolPackLogic` is tested in this
+directory; `TeamAgentsPage.tsx` is an RTK Query container with no test of its
+own.
+
+Composition and states:
+
+- The search narrows what is left **after** the suspension filter (a suspended
+  agent stays hidden from members without `can_update_agents`).
+- A query matching nothing shows a dedicated message, never
+  `TeamAgentEmptyState` — that state means "this team has no agents yet" and is
+  driven by the unfiltered list. Guarding the message on a non-empty query keeps
+  the no-query behaviour untouched.
+- The toolbar (and so the field) is driven by the unfiltered list, so a search
+  that empties the grid never removes the field the user needs to correct it.
+- The memo sits above the page's early returns: a hook placed after them renders
+  a different hook count when a query errors. Note `eslint.config.mjs` registers
+  `eslint-plugin-react-hooks` but enables none of its rules, so lint will not
+  catch a regression here.
+
+Wording is deployment-configurable: the placeholder interpolates
+`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+
+**Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
+so the control does not resize as the picked option changes length) sits after
+the search field, offering Alphabetical (default), Recently created and Recently updated —
+`display_name`, `created_at`, `updated_at`, the three orderings available
+without touching the API. `sortAgents` (`agentSort.ts`, unit-tested like the
+filter) applies after the search so the visible list is always sorted, and:
+
+- copies before sorting — the list is RTK Query state, frozen by immer in dev,
+  so an in-place sort throws at runtime;
+- puts an agent with a null or unparseable date last in either date order,
+  rather than letting `NaN` scatter it;
+- compares names with `localeCompare` at base sensitivity, so an accented name
+  files next to its unaccented form instead of after `Z`;
+- returns 0 for ties, leaving `Array.sort`'s stability to preserve the incoming
+  order.
+
+The control carries no visible label, so it is named with `Select`'s
+`ariaLabel` prop — otherwise a screen reader announces the current value with
+no hint that it is the sort control.
 
 ---
 

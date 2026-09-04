@@ -2454,7 +2454,16 @@
           "aria": "Filtrer par pod"
         },
         "title": "Agents de l'équipe",
-        "titlePersonal": "Vos agents personnels"
+        "titlePersonal": "Vos agents personnels",
+        "searchPlaceholder": "Rechercher des {{agentsNicknamePlural}}...",
+        "clearSearch": "Effacer la recherche",
+        "emptySearch": "Aucun résultat pour cette recherche.",
+        "sort": {
+          "name": "Alphabétique",
+          "created": "Derniers créés",
+          "updated": "Derniers modifiés"
+        },
+        "sortLabel": "Trier"
       },
       "formAgent": {
         "advancedSettings": "Paramètres avancés",

@@ -2454,7 +2454,16 @@
           "aria": "Filter by pod"
         },
         "title": "Team agents",
-        "titlePersonal": "Your personal agents"
+        "titlePersonal": "Your personal agents",
+        "searchPlaceholder": "Search {{agentsNicknamePlural}}...",
+        "clearSearch": "Clear search",
+        "emptySearch": "No results for this search.",
+        "sort": {
+          "name": "Alphabetical",
+          "created": "Recently created",
+          "updated": "Recently updated"
+        },
+        "sortLabel": "Sort"
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",
