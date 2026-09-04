@@ -143,6 +143,7 @@ export default function PromptSelectionChatPanel({
       title={t("chatbot.promptSelectionPanel.title")}
       layout="push"
       floating
+      background="var(--surface-container-high)"
       // The body below owns its insets: the drawer's own padding would put a
       // gap above the space picker that the header already provides.
       flushBody
@@ -152,7 +153,7 @@ export default function PromptSelectionChatPanel({
         {!isPersonalChat && (
           <ButtonGroup
             size="small"
-            color="primary"
+            color="secondary"
             variant="radio"
             fullWidth
             aria-label={t("chatbot.promptSelectionPanel.spaceLabel")}
