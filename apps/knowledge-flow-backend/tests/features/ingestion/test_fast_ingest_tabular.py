@@ -39,7 +39,7 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, read_tabular_artifact
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
 
 
 def _user(uid: str = "u-1") -> KeycloakUser:
@@ -111,6 +111,42 @@ async def test_build_attachment_tabular_dataset_raises_on_failure(tmp_path: Path
             filename="missing.csv",
             raw_path=missing_csv_path,
         )
+
+
+@pytest.mark.asyncio
+async def test_build_attachment_tabular_dataset_deletes_the_orphaned_artifact_on_metadata_save_failure(tmp_path: Path):
+    """
+    P2 (codex review): `TabularProcessor.process()` uploads the Parquet
+    object to `content_store` and only returns before metadata is ever
+    persisted -- a genuinely separate step (shared with corpus ingestion,
+    unchanged here) that can fail on its own after the artifact already
+    exists. Every cleanup path is metadata-driven, so an artifact with no
+    row pointing at it can never be found again -- this must delete the
+    just-uploaded artifact itself rather than leave it as a permanent orphan.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+
+    async def _save_document_metadata(*args, **kwargs):
+        raise RuntimeError("simulated metadata-store outage")
+
+    controller = _controller_with_fake_metadata_service(_save_document_metadata)
+
+    with pytest.raises(RuntimeError, match="simulated metadata-store outage"):
+        await controller._build_attachment_tabular_dataset(
+            user=_user(),
+            document_uid="doc-orphan",
+            filename="sales.csv",
+            raw_path=csv_path,
+        )
+
+    # The Parquet object the failed save would have orphaned must be gone.
+    artifacts_prefix = ApplicationContext.get_instance().get_config().storage.tabular_store.artifacts_prefix
+    prefix = document_artifact_prefix(artifacts_prefix=artifacts_prefix, document_uid="doc-orphan")
+    assert list(content_store.list_objects(prefix)) == []
 
 
 @pytest.mark.asyncio

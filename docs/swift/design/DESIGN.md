@@ -403,6 +403,21 @@ bespoke "trusted, tagless" write path was needed. Storage-quota adjustment
 and tag-timestamp updates are likewise no-ops for a tagless record; the
 `document.created_total` KPI still fires, which is fine.
 
+**Artifact-then-metadata ordering isn't atomic, so a metadata-save failure
+compensates rather than orphans (P2, codex review).**
+`TabularProcessor.process()` — unchanged, shared with corpus ingestion —
+uploads the Parquet object to `content_store` and only updates
+`metadata.extensions["tabular_v1"]` in memory before returning; persisting
+that metadata is a separate step `_build_attachment_tabular_dataset` does
+afterward, and it can fail on its own (a metadata-store outage) after the
+artifact already durably exists. Every cleanup path — delete, corpus audit
+— is metadata-driven, so an artifact with no row pointing at it can never
+be found again on its own. `_build_attachment_tabular_dataset` now deletes
+the just-uploaded artifact directly (`_delete_tabular_artifact_objects`,
+shared with the normal delete path) before re-raising, rather than leaving
+a permanent orphan; a failure in that compensating delete itself is logged
+and swallowed so it never masks the original metadata-save error.
+
 **Authorization — no OpenFGA tuple, ever.** Fast-ingested attachments are
 deliberately "resource-less" in ReBAC: no tuple, ownership proven via chunk
 metadata instead (`_authorize_fast_ingest_delete`,

@@ -489,6 +489,16 @@ class IngestionController:
           requires `source_tag` to resolve against the operator-configured
           `document_sources` registry (`resolve_source_type`), which a chat
           attachment was never meant to be a member of.
+        - Not atomic (P2, codex review): `TabularProcessor.process()` uploads
+          the Parquet object to `content_store` before returning — updating
+          `metadata.extensions["tabular_v1"]` in memory only, shared,
+          unchanged code also used by corpus ingestion — so metadata
+          persistence below is a genuinely separate step that can fail after
+          the artifact already exists. Every cleanup path (delete, corpus
+          audit) is metadata-driven, so an artifact with no metadata row
+          pointing at it can never be found again on its own. If persistence
+          fails here, the just-uploaded artifact is deleted directly before
+          re-raising, rather than left as a permanent orphan.
         """
         metadata = DocumentMetadata(
             identity=Identity(document_name=filename, document_uid=document_uid, title=filename, uploaded_by=user.uid),
@@ -497,7 +507,25 @@ class IngestionController:
             tags=Tagging(tag_ids=[]),
         )
         await asyncio.to_thread(self._tabular_processor.process, str(raw_path), metadata, emit_pointer_chunk=False)
-        await self.service.metadata_service.save_document_metadata(user, metadata)
+        try:
+            await self.service.metadata_service.save_document_metadata(user, metadata)
+        except Exception:
+            logger.warning(
+                "[FAST TEXT][INGEST] Metadata save failed after Parquet upload for doc_uid=%s; deleting the orphaned artifact",
+                document_uid,
+                exc_info=True,
+            )
+            try:
+                self._delete_tabular_artifact_objects(document_uid=document_uid)
+            except Exception:
+                # Best-effort: a failure here must not mask the metadata-save
+                # error below, which is what the caller actually needs to see.
+                logger.warning(
+                    "[FAST TEXT][INGEST] Failed to delete orphaned artifact for doc_uid=%s",
+                    document_uid,
+                    exc_info=True,
+                )
+            raise
 
     async def _delete_fast_ingest_artifacts(
         self,
@@ -590,11 +618,7 @@ class IngestionController:
                 return
             if not is_platform_bypass and metadata.identity.uploaded_by != user.uid:
                 return
-            content_store = context.get_content_store()
-            artifacts_prefix = context.get_config().storage.tabular_store.artifacts_prefix
-            prefix = document_artifact_prefix(artifacts_prefix=artifacts_prefix, document_uid=document_uid)
-            for stored_object in content_store.list_objects(prefix):
-                content_store.delete_object(stored_object.key)
+            self._delete_tabular_artifact_objects(document_uid=document_uid)
             await metadata_store.delete_metadata(document_uid)
         except Exception:
             logger.warning(
@@ -602,6 +626,24 @@ class IngestionController:
                 document_uid,
                 exc_info=True,
             )
+
+    @staticmethod
+    def _delete_tabular_artifact_objects(*, document_uid: str) -> None:
+        """
+        Delete every Parquet object under one document's tabular-artifact prefix.
+
+        Why this exists:
+        - Shared by the normal delete path and `_build_attachment_tabular_dataset`'s
+          own compensating cleanup: both need to remove a document's Parquet
+          object(s) directly from `content_store`, independent of whatever
+          state (or absence) the metadata row is in.
+        """
+        context = ApplicationContext.get_instance()
+        content_store = context.get_content_store()
+        artifacts_prefix = context.get_config().storage.tabular_store.artifacts_prefix
+        prefix = document_artifact_prefix(artifacts_prefix=artifacts_prefix, document_uid=document_uid)
+        for stored_object in content_store.list_objects(prefix):
+            content_store.delete_object(stored_object.key)
 
     async def _resolve_tag_owners(self, tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
         """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
