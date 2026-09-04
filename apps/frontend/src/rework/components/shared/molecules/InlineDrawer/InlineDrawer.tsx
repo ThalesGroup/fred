@@ -39,6 +39,11 @@ interface InlineDrawerProps {
   /** Drawer shell background (CSS color/token). Defaults to `--surface-container`. */
   background?: string;
   /**
+   * Open/close duration for the push layout (any CSS time, ideally a
+   * `--duration-*` token). Defaults to `--duration-medium-1` (250ms).
+   */
+  duration?: string;
+  /**
    * Layout mode.
    * - `"overlay"` (default): floats over the page with a dimming backdrop.
    * - `"push"`: takes layout space on the right; the host's main column reflows
@@ -84,6 +89,7 @@ export function InlineDrawer({
   headerActions,
   width = "480px",
   background,
+  duration,
   layout = "overlay",
   resizable,
   flushBody = false,
@@ -161,6 +167,7 @@ export function InlineDrawer({
           {
             "--drawer-width": drawerWidth,
             ...(background ? { "--drawer-background": background } : {}),
+            ...(duration ? { "--drawer-duration": duration } : {}),
           } as React.CSSProperties
         }
       >

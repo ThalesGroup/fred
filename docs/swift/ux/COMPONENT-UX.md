@@ -829,12 +829,26 @@ session attachments, prompt library — had drifted into three slightly differen
 "insets minus the top one" body rule). The shell fixes the treatment once:
 
 `layout="push"` so it reflows the conversation instead of covering it,
-`floating` (inset card, `outline-retreat` border, `--radius-l`, soft shadow),
+`floating` (12px inset card, `outline-muted` border, `--radius-m`, soft shadow),
 `background: --surface-container-high`, `flushBody` plus a body that carries
 the insets the drawer's own padding would double up (`0 16px 16px` — the header
 already leaves the top gap) and a `--spacing-m` column gap, and drag-to-resize
 with a persisted width (`persistKey`, unique per panel; `width` seeds the
 first-ever value only).
+
+**Open/close speed (2026-09-04).** These panels run at `--duration-short-3`
+(150ms) through `InlineDrawer`'s `duration` prop, against the 250ms default a
+capability viewer keeps. Note this is deliberately *faster* than M3 recommends
+for a panel (300–400ms) — a designer call: they are a quick detour from the
+conversation, not a context switch. The prop moved the drawer's hardcoded
+`250ms ease-out` onto the `--duration-*` / `--easing-*` tokens on the way.
+
+**The capability viewers wear the same card (2026-09-04).** `CapabilitySidePanelHost`
+passes the same `floating` + `surface-container-high` as this shell, so the
+right-hand column keeps one height, one corner radius and one surface whichever
+panel is showing. They are not on `ChatSidePanel` itself: a viewer needs
+`hideHeader`/`flushBody` for panes that own their header (`ownsHeader`), which
+this shell does not expose.
 
 One content-shaped option: `fill` caps the body at the drawer height so a child
 owns the scrolling and whatever sits above it stays pinned — the prompt panel's

@@ -58,6 +58,9 @@ export default function ChatSidePanel({
       layout="push"
       floating
       background="var(--surface-container-high)"
+      // Snappier than the 250ms default: these panels are a quick detour from
+      // the conversation, not a context switch.
+      duration="var(--duration-short-3)"
       // The body below owns its insets: the drawer's own padding would stack a
       // gap above the content on top of the one the header already leaves.
       flushBody

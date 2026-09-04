@@ -44,6 +44,9 @@
 
 /* Push: in-flow on the right; the sibling main column reflows. No backdrop. */
 .drawer[data-layout="push"] {
+  /* Overridable per instance through the `duration` prop; the chat's own panels
+     run faster than a capability viewer. */
+  --drawer-duration: var(--duration-medium-1);
   position: relative;
   flex-shrink: 0;
   visibility: hidden;
@@ -52,8 +55,8 @@
      only reappears once the panel is fully gone, never on top of it. */
   z-index: 3;
   transition:
-    width 250ms ease-out,
-    visibility 250ms;
+    width var(--drawer-duration) var(--easing-standard),
+    visibility var(--drawer-duration);
   /* Transparent shell — the panel below carries the visible surface (background
      + left divider) so the shell only reserves the animated width. */
   background: transparent;

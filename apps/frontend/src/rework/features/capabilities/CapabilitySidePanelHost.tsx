@@ -91,6 +91,11 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
           hideHeader={rendered?.ownsHeader ?? false}
           flushBody={rendered?.ownsHeader ?? false}
           layout="push"
+          // Same inset card as the chat's own panels (ChatSidePanel): equal
+          // height, corners and surface, so the column looks the same whichever
+          // panel is showing.
+          floating
+          background="var(--surface-container-high)"
           // One shared width across every capability panel (writable-document
           // editor, PPT preview, …) — the same behaviour the legacy chat's
           // ResizablePaneShell had with its single persisted pane width.
