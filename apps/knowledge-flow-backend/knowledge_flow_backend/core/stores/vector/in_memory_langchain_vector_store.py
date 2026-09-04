@@ -203,8 +203,10 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
 
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         """
-        Best-effort deletion: re-build store without records whose metadata.document_uid matches.
-        (LC in-memory store has no public delete API; we mutate the underlying dict.)
+        Re-build store without records whose metadata.document_uid matches.
+        (LC in-memory store has no public delete API; we mutate the underlying
+        dict.) Raises on failure rather than swallowing it -- a caller must be
+        able to tell a genuine deletion failure from a completed one.
         """
         try:
             to_delete = []
@@ -217,6 +219,7 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
             logger.info("✅ Deleted %d chunk(s) for document_uid=%s", len(to_delete), document_uid)
         except Exception:
             logger.exception("❌ Failed to delete vectors for document_uid=%s", document_uid)
+            raise RuntimeError("Failed to delete vectors from the in-memory vector store.")
 
     def get_document_chunk_count(self, *, document_uid: str) -> int:
         try:
@@ -366,7 +369,7 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
             return out
         except Exception:
             logger.exception("❌ [InMemory] Failed to fetch chunks for document_uid=%s", document_uid)
-            return []
+            raise RuntimeError("Failed to fetch chunks from the in-memory vector store.")
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         """

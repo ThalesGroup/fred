@@ -45,6 +45,9 @@ function mockMutationResult<T>(promise: Promise<T>): Promise<T> & { unwrap: () =
 // One deferred per fast-ingest call, settled by hand so the test controls
 // which file finishes first.
 const pendingIngests: Array<{ name: string; resolve: (value: unknown) => void }> = [];
+// Calls made through the mocked delete-fast-artifacts mutation, so a test can
+// assert Knowledge Flow cleanup fired (or didn't) without a real store.
+const deleteFastArtifactsCalls: Array<{ documentUid: string; sessionId?: string | null }> = [];
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useFastIngestKnowledgeFlowV1FastIngestPostMutation: () => [
     (args: { bodyFastIngestKnowledgeFlowV1FastIngestPost: FormData }) => {
@@ -55,14 +58,24 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
       return mockMutationResult(promise);
     },
   ],
+  useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation: () => [
+    (args: { documentUid: string; sessionId?: string | null }) => {
+      deleteFastArtifactsCalls.push(args);
+      return mockMutationResult(Promise.resolve({}));
+    },
+  ],
 }));
+const persistAttachmentBehavior = { rejectNext: false };
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery: () => ({
     data: [],
     isFetching: false,
   }),
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation: () => [
-    () => mockMutationResult(Promise.resolve({})),
+    () =>
+      persistAttachmentBehavior.rejectNext
+        ? mockMutationResult(Promise.reject(new Error("simulated control-plane persist failure")))
+        : mockMutationResult(Promise.resolve({})),
   ],
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation: () => [
     () => mockMutationResult(Promise.resolve({})),
@@ -89,6 +102,8 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
 
   beforeEach(() => {
     pendingIngests.length = 0;
+    deleteFastArtifactsCalls.length = 0;
+    persistAttachmentBehavior.rejectNext = false;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -138,5 +153,20 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     ]);
     expect(latest.attachments.map((attachment) => attachment.documentUid)).toEqual(["doc-a", "doc-b"]);
     expect(latest.hasUploadingAttachments).toBe(false);
+  });
+
+  it("cleans up the Knowledge Flow artifact when the control-plane persist fails", async () => {
+    persistAttachmentBehavior.rejectNext = true;
+
+    await act(async () => {
+      void latest.addFiles([pdf("a.pdf")], "paste", "session-1");
+    });
+
+    await act(async () => {
+      pendingIngests[0].resolve({ document_uid: "doc-a", summary_md: "a" });
+    });
+
+    expect(statuses()).toEqual([["a.pdf", "error"]]);
+    expect(deleteFastArtifactsCalls).toEqual([{ documentUid: "doc-a", sessionId: "session-1" }]);
   });
 });

@@ -2285,10 +2285,6 @@
     "teamCard": {
       "join": "Join",
       "inviteOnly": "Invite only",
-      "invitationMail": {
-        "subject": "[{{site}}] Request to join the {{team}} team",
-        "body": "Hello,\n\nI would like to join the {{team}} team on {{site}}.\n\nUser details: {{user}}\n\nGo to the {{team}} team page: {{agentsUrl}}\nManage the {{team}} team members: {{membersUrl}}"
-      },
       "memberCount": "{{count}} members"
     },
     "teamRoles": {
@@ -2454,7 +2450,16 @@
           "aria": "Filter by pod"
         },
         "title": "Team agents",
-        "titlePersonal": "Your personal agents"
+        "titlePersonal": "Your personal agents",
+        "searchPlaceholder": "Search {{agentsNicknamePlural}}...",
+        "clearSearch": "Clear search",
+        "emptySearch": "No results for this search.",
+        "sort": {
+          "name": "Alphabetical",
+          "created": "Recently created",
+          "updated": "Recently updated"
+        },
+        "sortLabel": "Sort"
       },
       "formAgent": {
         "advancedSettings": "Advanced settings",

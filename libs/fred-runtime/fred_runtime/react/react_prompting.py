@@ -254,13 +254,55 @@ def build_global_base_prompt_suffix() -> str:
     return f"\n\n{GLOBAL_BASE_PROMPT_MARKDOWN}"
 
 
-def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
+# Matches only a real filename extension — the extension must be followed by
+# the attachment line's own terminator (" [uid]", ": description", or
+# end-of-string), not just any non-word character. A plain `\b` would also
+# match e.g. "export.csv.bak" (word boundary between "v" and "."), annotating
+# a line the actual `.csv` tabular-build gate in `fast_ingest`
+# (`filename.lower().endswith(".csv")`) would never match.
+_FILENAME_TERMINATOR = r"(?=[\s:\[]|$)"
+_CSV_ATTACHMENT_RE = re.compile(rf"\.csv{_FILENAME_TERMINATOR}", re.IGNORECASE)
+_CSV_ATTACHMENT_NOTE = (
+    " (SQL-queryable dataset ONLY, not indexed for search - never call the "
+    "conversation search tool for this id, use the tabular/SQL tools for "
+    "everything about it, including keyword/value lookups)"
+)
+# Used instead of `_CSV_ATTACHMENT_NOTE` when the calling agent instance has
+# no tabular MCP tool bound (see `tabular_tools_bound` /
+# `tabular_tools_available` below) — telling the model to call a tool it does
+# not have would just produce a tool-not-found error.
+_CSV_ATTACHMENT_NOTE_NO_TOOLS = (
+    " (a SQL-queryable dataset was built for this file, but no tabular/SQL "
+    "tool is enabled for this assistant - you cannot query or search it; "
+    "tell the user their assistant needs tabular/SQL capability enabled to "
+    "analyze this file)"
+)
+# `xls[xm]?` covers .xls, .xlsx, and .xlsm — all three are real configured
+# attachment suffixes (FastSpreadsheetProcessor).
+_EXCEL_ATTACHMENT_RE = re.compile(rf"\.xls[xm]?{_FILENAME_TERMINATOR}", re.IGNORECASE)
+_EXCEL_ATTACHMENT_NOTE = (
+    " (markdown text, NOT a SQL dataset - use the conversation search tool, "
+    "never the tabular/SQL tools)"
+)
+
+
+def build_attachment_context_suffix(
+    binding: BoundRuntimeContext, *, tabular_tools_available: bool
+) -> str:
     """
     Render current conversation attachments as a per-turn system-prompt suffix.
 
     The frontend rebuilds ``attachments_markdown`` from current attachment state.
     Deriving this suffix on every invocation means deleting the final attachment
     removes the notice instead of leaving a checkpointed system message behind.
+
+    ``tabular_tools_available`` (see `react_tool_binding.tabular_tools_bound`)
+    must reflect whether the *calling agent instance* actually has the
+    tabular MCP server bound — the general-purpose agent template ships with
+    no default capabilities, so a CSV attachment's SQL dataset can exist
+    while this agent has no tool to query it. Telling the model to use a tool
+    it doesn't have would just produce a tool-not-found error instead of a
+    straight answer to the user.
     """
 
     attachments_markdown = binding.runtime_context.attachments_markdown
@@ -271,19 +313,60 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         for line in attachments_markdown.splitlines()
         if not line.lstrip().startswith("data:")
     ]
+
+    # A paragraph-level rule alone was ignored in live testing (the model
+    # still fed an attachment uid to the wrong tool). Models weigh an
+    # annotation glued to the data far more than a distant instruction, so
+    # repeat it on each CSV/Excel line, right next to the uid the model would
+    # pass to those tools. CSV attachments are real SQL-queryable datasets
+    # (DESIGN.md, "Session-Scoped Attachment Datasets") — only Excel still
+    # gets the "text only" annotation.
+    def _annotate(line: str) -> str:
+        if not line.lstrip().startswith("-"):
+            return line
+        if _CSV_ATTACHMENT_RE.search(line):
+            note = (
+                _CSV_ATTACHMENT_NOTE
+                if tabular_tools_available
+                else _CSV_ATTACHMENT_NOTE_NO_TOOLS
+            )
+            return f"{line}{note}"
+        if _EXCEL_ATTACHMENT_RE.search(line):
+            return f"{line}{_EXCEL_ATTACHMENT_NOTE}"
+        return line
+
+    safe_attachment_lines = [_annotate(line) for line in safe_attachment_lines]
     safe_attachments_markdown = "\n".join(safe_attachment_lines).strip()
     if not safe_attachments_markdown:
         return ""
+    csv_capability_sentence = (
+        "Pass a CSV attachment's uid to the tabular/SQL "
+        "tools for everything about it: exact counts, filters, or aggregates, and "
+        "keyword/value lookups too (e.g. search_tabular_values), not only "
+        "aggregate questions."
+        if tabular_tools_available
+        else "No tabular/SQL tool is enabled for this assistant, so a CSV "
+        "attachment's data cannot be queried or searched at all in this "
+        "session - say so plainly instead of guessing at its contents."
+    )
     return (
         "\n\nThe user has attached one or more files to this conversation. "
         "Treat them as scoped to the current conversation and the current user's "
-        "authorized access only. Every attached file — documents AND images — has "
-        "been ingested and indexed for retrieval: its text (for an image, an "
-        "extracted vision description) is searchable through your knowledge/document "
-        "search tool, scoped to this conversation. The raw image bytes are NOT "
-        "included in this prompt, so to answer any question about an attached file "
-        "you MUST first call the search tool to retrieve its content — do not claim "
-        "you cannot see or analyze an attachment before searching for it. "
+        "authorized access only. Every attached file except CSV — documents AND "
+        "images — has been ingested and indexed for retrieval: its text (for an "
+        "image, an extracted vision description) is searchable through your "
+        "knowledge/document search tool, scoped to this conversation. The raw "
+        "image bytes are NOT included in this prompt, so to answer any question "
+        "about an attached file you MUST first call the search tool to retrieve "
+        "its content — do not claim you cannot see or analyze an attachment "
+        "before searching for it. CSV attachments are the one exception: they "
+        "are NOT indexed for search at all, only as a SQL-queryable dataset — "
+        "the conversation search tool will find nothing for a CSV attachment, so "
+        f"never call it for one. {csv_capability_sentence} "
+        "Excel attachments (XLS, XLSX) are text only for "
+        "now: they are NOT loaded as SQL-queryable tables, so never pass their "
+        "uid to the tabular/SQL tools - retrieve their content through the "
+        "search tool. "
         "When a file line below shows a bracketed identifier, that is the "
         "file's internal document uid: pass exactly that value — never the "
         "file name — to document tools that take a document_uid (e.g. "
@@ -370,6 +453,7 @@ def compose_system_prompt(
     agent_id: str,
     tool_suffix: str = "",
     runtime_suffixes: Sequence[str] = (),
+    tabular_tools_available: bool,
 ) -> str:
     """
     Assemble the final system prompt shared by the ReAct and Deep runtimes.
@@ -426,7 +510,10 @@ def compose_system_prompt(
 
     How to use:
     - render the agent template first, then pass it here with the runtime's tool
-      suffix and any runtime-specific suffixes.
+      suffix and any runtime-specific suffixes. ``tabular_tools_available`` must
+      come from `react_tool_binding.tabular_tools_bound(bound_tools)` for this
+      call's resolved tools — it decides whether the attachment suffix may tell
+      the model to query a CSV attachment's SQL dataset.
     """
 
     # No dangling heading when an agent has no configured template at all
@@ -448,6 +535,8 @@ def compose_system_prompt(
             base_prompt,
             build_context_prompt_suffix(binding, agent_id=agent_id),
             build_document_scope_suffix(binding),
-            build_attachment_context_suffix(binding),
+            build_attachment_context_suffix(
+                binding, tabular_tools_available=tabular_tools_available
+            ),
         ]
     ).lstrip("\n")
