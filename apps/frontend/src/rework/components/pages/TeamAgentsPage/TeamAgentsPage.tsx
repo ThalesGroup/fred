@@ -16,6 +16,8 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
+import type { OptionModel } from "@models/Option.model.ts";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -34,6 +36,7 @@ import {
 import DuplicateAgentDialog from "./DuplicateAgentDialog/DuplicateAgentDialog.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import { filterAgents } from "./agentFilter.ts";
+import { DEFAULT_AGENT_SORT, sortAgents, type AgentSortValue } from "./agentSort.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
@@ -121,6 +124,7 @@ export default function TeamAgentsPage() {
   const [editingInstance, setEditingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [duplicatingInstance, setDuplicatingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<AgentSortValue>(DEFAULT_AGENT_SORT);
 
   const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
@@ -152,11 +156,14 @@ export default function TeamAgentsPage() {
   // warning and a locked enable toggle. The search narrows what is left.
   const searchedInstances = useMemo(
     () =>
-      filterAgents(
-        managedInstances.filter((instance) => canManageAgents || !instance.suspension_reason),
-        search,
+      sortAgents(
+        filterAgents(
+          managedInstances.filter((instance) => canManageAgents || !instance.suspension_reason),
+          search,
+        ),
+        sort,
       ),
-    [managedInstances, canManageAgents, search],
+    [managedInstances, canManageAgents, search, sort],
   );
 
   // Batched once for the whole list (not one query per card, #2096) — the
@@ -410,6 +417,11 @@ export default function TeamAgentsPage() {
     canManageAgents && !isLoadingTemplates && !isTemplatesError && availableTemplates.length === 0;
   const showEmptyState = !isLoadingInstances && managedInstances.length === 0;
   const hasAgents = managedInstances.length > 0;
+  const sortOptions: OptionModel<AgentSortValue>[] = [
+    { value: "name", key: "name", label: t("rework.teams.agents.sort.name") },
+    { value: "created_at:desc", key: "created", label: t("rework.teams.agents.sort.created") },
+    { value: "updated_at:desc", key: "updated", label: t("rework.teams.agents.sort.updated") },
+  ];
   // Only a non-empty query earns the no-match message: an empty list under an
   // empty query means something else entirely, and is left as it was.
   const showNoSearchMatch = Boolean(search.trim()) && searchedInstances.length === 0;
@@ -443,6 +455,14 @@ export default function TeamAgentsPage() {
               size="small"
             />
           </div>
+          <Select<AgentSortValue>
+            size="small"
+            compact
+            options={sortOptions}
+            value={sort}
+            onChange={setSort}
+            label={t("rework.teams.agents.sortLabel")}
+          />
         </div>
       )}
 
