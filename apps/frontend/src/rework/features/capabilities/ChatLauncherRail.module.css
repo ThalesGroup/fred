@@ -26,3 +26,12 @@
   background-color: var(--surface-container-low);
   padding: var(--spacing-xs);
 }
+
+/* Footer group: tooling sits at the rail's bottom, away from the content
+   panels, and stays there however many launchers the top holds. */
+.railFooter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin-top: auto;
+}

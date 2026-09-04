@@ -9,8 +9,8 @@
   display: flex;
   position: relative;
   /* Row so the launcher rail reserves its own column to the right of the body:
-     [ pageBody (flex:1) ][ rail ]. Overlay drawers (trace / debug) are fixed, so
-     they don't participate. */
+     [ pageBody (flex:1) ][ rail ]. The trace drawer is a fixed overlay, so it
+     doesn't participate. */
   flex-direction: row;
   background: var(--surface-main);
   height: 100%;
@@ -19,9 +19,10 @@
 }
 
 /* ── Page body — [ left stack (flex) ][ push drawer ] ────────────────────── */
-/* The flex row a push drawer (attachments / capability / document-scope) reflows
-   against: opening one takes layout space on the right, shifting the whole left
-   stack — header included — left, so the drawer spans the full page height. */
+/* The flex row a push drawer (attachments, capability viewer, document scope,
+   prompt library, debug) reflows against: opening one takes layout space on the
+   right, shifting the whole left stack — header included — left, so the drawer
+   spans the full page height. */
 .pageBody {
   display: flex;
   flex: 1 1 0;
@@ -193,12 +194,6 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   user-select: none;
-}
-
-.topBarActions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
 }
 
 /* ── Single scroll container — flexes to fill the space between the in-flow

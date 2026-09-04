@@ -524,7 +524,6 @@
     "startConversationVariantSearch": "Dans quoi veut-on plonger aujourd'hui, {{username}} ?",
     "stopRecording": "Arrêter l'enregistrement",
     "stopResponse": "Arrêter la réponse",
-    "toggleDebugDrawer": "Afficher ou masquer le tiroir de debug",
     "transcribingAudio": "Transcription de l'audio",
     "voiceInputErrorSummary": "Échec de la dictée vocale",
     "voiceInputPermissionDenied": "L'accès au microphone a été refusé.",

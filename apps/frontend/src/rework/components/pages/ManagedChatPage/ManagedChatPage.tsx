@@ -28,7 +28,6 @@ import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerC
 import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
-import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
@@ -95,7 +94,6 @@ export default function ManagedChatPage() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [debugOpen, setDebugOpen] = useState(false);
   // The capability side-panel and the session attachments drawer are both
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
   // a time so their widths never cumulate.
@@ -104,6 +102,7 @@ export default function ManagedChatPage() {
     | { kind: "capability"; key: string }
     | { kind: "document-scope" }
     | { kind: "prompt-library" }
+    | { kind: "debug" }
     | null
   >(null);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
@@ -402,6 +401,20 @@ export default function ManagedChatPage() {
     />
   );
 
+  // Admin tooling, so it sits at the rail's foot rather than among the
+  // conversation's own panels.
+  const debugLaunchers = isAdmin
+    ? [
+        {
+          key: "debug",
+          label: t("chatbot.debugRaw.title"),
+          icon: "build" as const,
+          selected: activePushDrawer?.kind === "debug",
+          onOpen: () => setActivePushDrawer((v) => (v?.kind === "debug" ? null : { kind: "debug" as const })),
+        },
+      ]
+    : [];
+
   return (
     <TraceDrawerProvider value={traceDrawerApi}>
       <div
@@ -457,17 +470,6 @@ export default function ManagedChatPage() {
                       {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
                     </span>
                   )}
-                  <div className={styles.topBarActions}>
-                    {isAdmin && (
-                      <IconButton
-                        variant="icon"
-                        size="small"
-                        icon={{ category: "outlined", type: "build" }}
-                        aria-label={t("chatbot.toggleDebugDrawer")}
-                        onClick={() => setDebugOpen((v) => !v)}
-                      />
-                    )}
-                  </div>
                 </div>
               </div>
             </div>
@@ -530,6 +532,14 @@ export default function ManagedChatPage() {
             onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
           />
 
+          {isAdmin && (
+            <DebugRawDrawer
+              open={activePushDrawer?.kind === "debug"}
+              onClose={() => setActivePushDrawer((v) => (v?.kind === "debug" ? null : v))}
+              messages={chat.messages}
+            />
+          )}
+
           <PromptSelectionChatPanel
             open={activePushDrawer?.kind === "prompt-library"}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : v))}
@@ -582,10 +592,10 @@ export default function ManagedChatPage() {
           activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
           onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
           launchers={attachmentsLaunchers}
+          footerLaunchers={debugLaunchers}
         />
 
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
-        {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
         <UploadWarningAckDialog
           open={pendingAttachments !== null}
           onConfirm={() => {

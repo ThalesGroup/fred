@@ -3755,7 +3755,14 @@ and a future native panel plugs in the same way. The rename followed: the old na
 would have lied about what the rail renders.
 
 A first-party launcher may carry a count, shown through `IconButton`'s `badgeCount`
-(M3 large badge — see `IconButton` below).
+(M3 large badge — see `IconButton` below), and reads as selected while its panel is
+the one showing.
+
+`footerLaunchers` is the same descriptor pushed to the rail's foot (`margin-top: auto`)
+— for tooling rather than conversation content. The raw-debug panel is the first: it
+was an admin-only `build` button in the chat header opening an overlay drawer, and is
+now a rail-footer launcher opening a `ChatSidePanel` like the rest, inside the single
+push-drawer slot so it never stacks with another panel.
 
 **The rail outlives an open panel (2026-09-04).** It used to return `null` the moment a
 capability viewer opened, so the body-side drawer took the full width and reaching

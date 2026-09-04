@@ -17,9 +17,13 @@
   font: var(--font-label-small);
 }
 
+/* Owns the vertical scroll now that the panel body is height-capped (`fill`),
+   so the toolbar above stays put while the dump scrolls. */
 .json {
+  flex: 1;
   margin: 0;
-  overflow-x: auto;
+  min-height: 0;
+  overflow: auto;
   color: var(--on-surface);
   font: 0.72rem/1.6 monospace;
   white-space: pre;

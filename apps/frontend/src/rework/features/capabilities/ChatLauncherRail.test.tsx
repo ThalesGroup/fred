@@ -73,13 +73,14 @@ const entry = (capabilityId: string, icon: string, useHasContent?: () => boolean
   ownsHeader: false,
 });
 
-const render = (activeKey: string | null = null, launchers?: ChatLauncher[]) =>
+const render = (activeKey: string | null = null, launchers?: ChatLauncher[], footerLaunchers?: ChatLauncher[]) =>
   renderToStaticMarkup(
     <ChatLauncherRail
       capabilityIds={["ppt_filler"]}
       activeKey={activeKey}
       onActiveKeyChange={() => undefined}
       launchers={launchers}
+      footerLaunchers={footerLaunchers}
     />,
   );
 
@@ -143,6 +144,24 @@ describe("ChatLauncherRail", () => {
     // Whether a count actually paints a badge is IconButton's rule, tested there.
     expect(render(null, [attachmentsLauncher(3)])).toContain('data-badge="3"');
     expect(render(null, [attachmentsLauncher()])).not.toContain("data-badge");
+  });
+
+  it("renders footer launchers after the rest, in their own group", () => {
+    // The group carries `margin-top: auto`, which is what puts admin tooling at
+    // the rail's foot however many launchers sit above it.
+    state.entries = [entry("ppt_filler", "slideshow", () => true)];
+    const html = render(null, [attachmentsLauncher()], [{ ...attachmentsLauncher(), key: "debug", icon: "build" }]);
+
+    expect(html.indexOf('data-icon="slideshow"')).toBeLessThan(html.indexOf('data-icon="build"'));
+    expect(html).toMatch(/_railFooter[^"]*"><span[^>]*><button data-icon="build"/);
+  });
+
+  it("renders a rail holding nothing but a footer launcher", () => {
+    // A chat with no capability panel and no attachments still shows admin
+    // tooling; the "nothing to show" guard must count the footer.
+    const html = render(null, [], [{ ...attachmentsLauncher(), key: "debug", icon: "build" }]);
+
+    expect(html).toContain('data-icon="build"');
   });
 
   it("keeps every launcher reachable while a panel is open", () => {

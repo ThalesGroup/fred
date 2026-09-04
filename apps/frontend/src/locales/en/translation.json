@@ -524,7 +524,6 @@
     "startConversationVariantSearch": "What should we dive into today, {{username}}?",
     "stopRecording": "Stop recording",
     "stopResponse": "Stop response",
-    "toggleDebugDrawer": "Toggle debug drawer",
     "transcribingAudio": "Transcribing audio",
     "voiceInputErrorSummary": "Voice dictation failed",
     "voiceInputPermissionDenied": "Microphone access was denied.",

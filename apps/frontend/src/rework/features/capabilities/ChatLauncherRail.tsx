@@ -39,6 +39,8 @@ export interface ChatLauncher {
   icon: IconType;
   /** Rendered as an M3 badge on the button; nothing shows below 1. */
   badgeCount?: number;
+  /** Reads as selected while its panel is the one showing. */
+  selected?: boolean;
   onOpen: () => void;
 }
 
@@ -50,6 +52,8 @@ export interface ChatLauncherRailProps {
   onActiveKeyChange: (key: string | null) => void;
   /** First-party launchers, pinned above the capability ones in order. */
   launchers?: ChatLauncher[];
+  /** First-party launchers pushed to the rail's bottom — tooling, not content. */
+  footerLaunchers?: ChatLauncher[];
 }
 
 const entryKey = (entry: SidePanelEntry): string => `${entry.capabilityId}:${entry.widget}`;
@@ -114,13 +118,14 @@ export function ChatLauncherRail({
   activeKey,
   onActiveKeyChange,
   launchers = [],
+  footerLaunchers = [],
 }: ChatLauncherRailProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
   // The rail outlives an open panel: it sits in its own in-flow column beside
   // the viewer, so switching viewers — or reaching the attachments — no longer
   // means closing what is open first.
-  if (entries.length === 0 && launchers.length === 0) return null;
+  if (entries.length === 0 && launchers.length === 0 && footerLaunchers.length === 0) return null;
 
   return (
     <div className={styles.rail}>
@@ -130,6 +135,7 @@ export function ChatLauncherRail({
           label={launcher.label}
           icon={launcher.icon}
           badgeCount={launcher.badgeCount}
+          selected={launcher.selected}
           onOpen={launcher.onOpen}
         />
       ))}
@@ -144,6 +150,20 @@ export function ChatLauncherRail({
           onToggle={() => onActiveKeyChange(entryKey(entry) === activeKey ? null : entryKey(entry))}
         />
       ))}
+      {footerLaunchers.length > 0 && (
+        <div className={styles.railFooter}>
+          {footerLaunchers.map((launcher) => (
+            <RailButton
+              key={launcher.key}
+              label={launcher.label}
+              icon={launcher.icon}
+              badgeCount={launcher.badgeCount}
+              selected={launcher.selected}
+              onOpen={launcher.onOpen}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
