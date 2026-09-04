@@ -538,6 +538,18 @@ open in `TABULAR-DATA-AGENTIC-ANALYSIS-RFC.md`, alongside a related,
 not-yet-designed pattern for per-row agentic analysis over a resolved row
 set — not solved here since neither has a decided direction yet.
 
+**Known open gap — no storage quota.** `POST /fast/ingest` performs no
+quota check for any attachment type; the tabular path specifically
+converts the entire uploaded CSV to Parquet with no size cap, unlike the
+text/vector path's bounded `FastTextOptions.max_chars`. `_evaluate_quota`
+(issue #2150) could gate it, but `MetadataService._resolve_storage_deltas`
+deliberately excludes every untagged document from accounting — a
+rationale ("no route can ever release the charge") that doesn't actually
+hold for this document class, which has a real delete path
+(`DELETE /fast/delete/{document_uid}`). Tracked in issue #2543, scoped to
+every fast-ingest attachment type, not CSV-specific — deliberately not
+fixed in this increment (resource accounting is its own unit of work).
+
 ## 3. Tabular Reads on GCS — Signed URLs
 
 Backend-internal tabular reads (DuckDB mounting Parquet, §2) need a
