@@ -68,15 +68,14 @@ interface DocumentUploadDrawerProps {
 }
 
 /**
- * Waits only until `file` is scheduled (its task_id known, via `onDiscovered`) or
- * its request settles with no task at all (upload-only mode, or a failure before
- * any task existed) — never until the file's full ingestion pipeline finishes.
- * The underlying request keeps running in the background regardless; a later
- * failure is reported by the failed task in the tray (once a task_id existed) or
- * by `onBackgroundError` (if it failed before one ever did).
+ * Resolves as soon as the first file in `files` is scheduled, not once the whole
+ * batch's ingestion finishes — the request keeps streaming in the background, so
+ * `onDiscovered`/`onBackgroundError` keep firing for the rest of the batch. Pass
+ * files that share `requestMetadata` (one request per batch cuts ReBAC/quota
+ * checks to one per batch instead of one per file, see streamUploadOrProcessDocument).
  */
-export function scheduleFile(
-  file: File,
+export function scheduleFiles(
+  files: File[],
   uploadMode: "upload" | "process",
   requestMetadata: Record<string, unknown>,
   onDiscovered: (task: ScheduledTask) => void,
@@ -85,28 +84,89 @@ export function scheduleFile(
   return new Promise<void>((resolve) => {
     let settled = false;
     let taskDiscovered = false;
+    // A total-batch-failure rejection restates the first per-file failure already
+    // reported below — track that to avoid a second, redundant toast for it.
+    let fileFailureReported = false;
     const settle = () => {
       if (settled) return;
       settled = true;
       resolve();
     };
 
-    streamUploadOrProcessDocument(file, uploadMode, requestMetadata, (task) => {
-      taskDiscovered = true;
-      onDiscovered(task);
-      settle();
-    })
+    streamUploadOrProcessDocument(
+      files,
+      uploadMode,
+      requestMetadata,
+      (task) => {
+        taskDiscovered = true;
+        onDiscovered(task);
+        settle();
+      },
+      (filename, message) => {
+        fileFailureReported = true;
+        onBackgroundError(`${filename}: ${message}`);
+      },
+    )
       .then(() => settle())
       .catch((err) => {
         settle();
         // A task_id already known means the backend fails that task explicitly
         // (visible in the tray/Activity) — reporting it here too would double it up.
-        // Only surface a toast for a failure that happened before any task existed.
-        if (!taskDiscovered) {
+        // Only surface a toast for a failure that hasn't already been reported per file.
+        if (!taskDiscovered && !fileFailureReported) {
           onBackgroundError(err instanceof Error ? err.message : String(err));
         }
       });
   });
+}
+
+// Bounds the per-request ReBAC/quota check burst a large drop throws at OpenFGA:
+// a pool slot frees on a batch's first task_id, which is still a valid bound on
+// concurrent checks (not just connections) since the backend runs both checks
+// before the streaming response starts at all.
+const UPLOAD_BATCH_SIZE = 8;
+const UPLOAD_CONCURRENCY = 4;
+
+/** Runs `worker` over `items` with at most `limit` calls in flight at once. */
+export async function runWithConcurrencyLimit<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
+/** Splits `files` into batches of at most `maxSize`, never putting two files
+ * with the same leaf name in the same batch — the backend correlates a
+ * batch's progress lines by that leaf name, so a collision would make two
+ * files' outcomes indistinguishable within one request. */
+export function chunkFilesByLeafName(files: File[], maxSize: number): File[][] {
+  const batches: File[][] = [];
+  let remaining = files;
+  while (remaining.length) {
+    const batch: File[] = [];
+    const leftover: File[] = [];
+    const namesInBatch = new Set<string>();
+    for (const file of remaining) {
+      const leafName = file.name.split("/").pop() || file.name;
+      if (batch.length < maxSize && !namesInBatch.has(leafName)) {
+        batch.push(file);
+        namesInBatch.add(leafName);
+      } else {
+        leftover.push(file);
+      }
+    }
+    batches.push(batch);
+    remaining = leftover;
+  }
+  return batches;
 }
 
 export function DocumentUploadDrawer({
@@ -290,37 +350,49 @@ export function DocumentUploadDrawer({
       }
     }
     try {
-      // Schedule every file concurrently rather than one-at-a-time: each
-      // `scheduleFile` already only waits for its own task_id to be discovered
-      // (see its doc comment), not the file's full ingestion pipeline, so a
-      // batch should close as soon as the slowest single file is scheduled —
-      // not after the sum of every file's upload time.
-      await Promise.all(
-        files.map((file) => {
-          const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-          // A file inside a dropped subdirectory attaches to that subdirectory's
-          // tag instead of the destination folder's (`base` keeps the latter).
-          const dirTagId = tagIdByDir.get(relativeDirSegments(file).join("/"));
-          const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
-          // Register each task the instant the server first reports its id (the first
-          // line of the stream), not after the whole upload finishes — so the tray
-          // lights up and starts its SSE subscription while the upload streams.
-          return scheduleFile(
-            file,
-            uploadMode,
-            requestMetadata,
-            ({ taskId, documentUid }) => {
-              dispatch(
-                taskRegistered({
-                  taskId,
-                  kind: "ingestion",
-                  target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
-                }),
-              );
-            },
-            (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
-          );
-        }),
+      // Group files that share the same destination tags into batches (same
+      // request metadata => one request can carry several files, see
+      // scheduleFiles' doc comment), then run those batches through a bounded
+      // pool rather than firing one request per file unbounded.
+      const groups = new Map<string, { requestMetadata: Record<string, unknown>; files: File[] }>();
+      for (const file of files) {
+        const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
+        // A file inside a dropped subdirectory attaches to that subdirectory's
+        // tag instead of the destination folder's (`base` keeps the latter).
+        const dirTagId = tagIdByDir.get(relativeDirSegments(file).join("/"));
+        const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
+        const groupKey = dirTagId ?? "";
+        const group = groups.get(groupKey);
+        if (group) group.files.push(file);
+        else groups.set(groupKey, { requestMetadata, files: [file] });
+      }
+
+      const batches: { requestMetadata: Record<string, unknown>; files: File[] }[] = [];
+      for (const group of groups.values()) {
+        for (const batchFiles of chunkFilesByLeafName(group.files, UPLOAD_BATCH_SIZE)) {
+          batches.push({ requestMetadata: group.requestMetadata, files: batchFiles });
+        }
+      }
+
+      // Register each task the instant the server first reports its id (its own
+      // line in the stream), not after the whole batch finishes — so the tray
+      // lights up and starts its SSE subscription while the upload streams.
+      await runWithConcurrencyLimit(batches, UPLOAD_CONCURRENCY, (batch) =>
+        scheduleFiles(
+          batch.files,
+          uploadMode,
+          batch.requestMetadata,
+          ({ taskId, documentUid, filename }) => {
+            dispatch(
+              taskRegistered({
+                taskId,
+                kind: "ingestion",
+                target: documentUid ? { type: "document", id: documentUid, label: filename } : null,
+              }),
+            );
+          },
+          (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
+        ),
       );
       onUploadComplete?.();
     } finally {

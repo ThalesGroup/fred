@@ -17,7 +17,7 @@
 // DocumentWorkspace) must arrive pre-listed when the drawer opens, so the user
 // only has to pick mode/profile and save — instead of landing on an empty
 // dropzone and re-picking the files they just dropped. Kept separate from
-// DocumentUploadDrawer.test.tsx, whose scheduleFile contract tests run without
+// DocumentUploadDrawer.test.tsx, whose scheduleFiles contract tests run without
 // a DOM.
 
 import { act } from "react";
