@@ -753,6 +753,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         definition: ReActAgentDefinition,
         services: RuntimeServices,
         capability_block: CapabilityAgentBlock | None = None,
+        invocation_depth: int = 0,
     ):
         super().__init__(definition=definition, services=services)
         self._model: BaseChatModel | None = None
@@ -760,6 +761,10 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         # id-sorted middleware stacks + HitlSpec bindings for the single
         # platform HITL gate. None when the agent selects no capabilities.
         self._capability_block = capability_block
+        # Agent-to-agent nesting level of this turn, from the same trusted
+        # source as the capability block's: a sub-agent (≥ 1) has no human to
+        # ask, so the HITL gate refuses instead of interrupting.
+        self._invocation_depth = invocation_depth
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
@@ -862,6 +867,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             available_tool_names=available_tool_names,
             max_tool_calls_per_turn=policy.tool_selection.max_tool_calls_per_turn,
             capability_block=self._capability_block,
+            invocation_depth=self._invocation_depth,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -910,6 +916,7 @@ def _create_compiled_react_agent(
     available_tool_names: set[str] | frozenset[str],
     max_tool_calls_per_turn: int | None = None,
     capability_block: CapabilityAgentBlock | None = None,
+    invocation_depth: int = 0,
 ) -> _CompiledReActAgent:
     """
     Create the compiled ReAct agent implementation used at runtime.
@@ -963,5 +970,6 @@ def _create_compiled_react_agent(
             capability_hitl=(
                 capability_block.hitl if capability_block is not None else None
             ),
+            invocation_depth=invocation_depth,
         ),
     )

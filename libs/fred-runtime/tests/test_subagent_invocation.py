@@ -31,6 +31,7 @@ from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import create_agent_app
+from fred_runtime.react import react_tool_loop
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
@@ -428,3 +429,57 @@ def test_cross_agent_child_runs_the_registry_template(monkeypatch) -> None:
 
     assert seen["definition"].agent_id == OTHER_AGENT_ID
     assert seen["definition"].default_mcp_servers == ()
+
+
+def test_child_hitl_gate_is_built_at_the_same_depth_as_its_capabilities(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Same trusted depth, both halves of the child's turn: the capability block
+    (which tools exist) and the middleware frame (which of them a human would
+    have to approve, and so cannot be offered — the child has no human).
+    """
+    seen: dict = {}
+    real_frame = react_tool_loop.build_react_platform_middleware_frame
+
+    def _capture_capability_block(capability_registry, tuning, **kwargs):
+        seen["block_depth"] = kwargs["invocation_depth"]
+        return None
+
+    def _capture_frame(**kwargs):
+        seen["frame_depth"] = kwargs["invocation_depth"]
+        return real_frame(**kwargs)
+
+    monkeypatch.setattr(
+        agent_app_module, "_build_capability_block", _capture_capability_block
+    )
+    monkeypatch.setattr(
+        react_tool_loop, "build_react_platform_middleware_frame", _capture_frame
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="Done.")])
+        ),
+    )
+
+    definition = _EchoAgent()
+    registry = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app):
+        services = agent_app_module._build_runtime_services(
+            definition,
+            _binding(),
+            team_id="fredlab",
+            registry=registry,
+            parent_turn=_parent_turn(agent_id=definition.agent_id, depth=1),
+        )
+        assert services.agent_invoker is not None
+        result = asyncio.run(
+            services.agent_invoker.invoke(_child_request(definition.agent_id))
+        )
+
+    assert result.is_error is False
+    assert seen["frame_depth"] == seen["block_depth"] == 2

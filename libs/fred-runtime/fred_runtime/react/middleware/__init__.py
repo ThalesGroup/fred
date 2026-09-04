@@ -35,14 +35,14 @@ The frame, in `create_agent` middleware list order:
     3. >>> CAPABILITY BLOCK INSERTION SLOT (#1973) <<<
        Capability middleware stacks are inserted here, sorted by capability id
        (RFC §5.3). Their `wrap_model_call` nests inside the platform prompt and
-       outside tracing, so observability always records the final request.
+       outside tracing, so observability records the request as they left it.
     4. RateLimitRetryMiddleware      — retries a model call the provider
        rate-limited (HTTP 429), with backoff + jitter, bounded by both an
        attempt count and a wall-clock budget. Sits just OUTSIDE tracing so
        each attempt is its own span / `llm.call_latency_ms` sample, and
        INSIDE the capability block so hygiene, prompt and capability
        middleware are computed once for the whole retried call.
-    5. TracingKpiMiddleware          — innermost `wrap_model_call`: the
+    5. TracingKpiMiddleware          — the
        `v2.react.model` span, `llm.call_latency_ms` KPI timer, and the
        `[LLM][CALL]`/`[LLM][RESPONSE]` logs measure/describe the bare model
        call, exactly as the legacy `reasoner` node did. The model itself is
@@ -58,7 +58,17 @@ The frame, in `create_agent` middleware list order:
        rewrite + the human tool-approval gate (RFC §5.4). ONE combined
        `interrupt()` per turn covering every gated call at once (#2177
        batching) with the `HumanInputRequest` payload; cancel jumps back to
-       the model without executing any tool of the batch.
+       the model without executing any tool of the batch. At invocation depth
+       ≥ 1 the frame builds its `SubAgentHitlMiddleware` subclass instead,
+       which never interrupts: gated calls are refused with an error tool
+       result, and it adds the INNERMOST `wrap_model_call` — the last word on
+       what the model is offered — to hide the unconditionally gated tools
+       (SUBAGENT-CAPABILITY-RFC.md §5.6). A subclass rather than a flag
+       because `create_agent` registers model-call hooks per CLASS, so a
+       depth-0 agent would otherwise pay for a hook that can do nothing.
+       That hiding runs inside tracing, so a depth ≥ 1 span and its
+       `chars_tools` attribute count tools the model never saw; the
+       alternative was reordering the frame and changing the depth-0 gate.
     8. ToolCallLimitMiddleware       — LangChain prebuilt, appended only when
        `max_tool_calls_per_turn` is set. Listed AFTER FredHitl on purpose:
        `after_model` hooks run in REVERSE list order, so the limit blocks
@@ -87,6 +97,7 @@ from .frame import build_react_platform_middleware_frame
 from .hitl import (
     CapabilityHitlBinding,
     FredHitlMiddleware,
+    SubAgentHitlMiddleware,
     build_tool_approval_request,
 )
 from .rate_limit_retry import ProviderRateLimitError, RateLimitRetryMiddleware
@@ -100,6 +111,7 @@ __all__ = [
     "FredHitlMiddleware",
     "ProviderRateLimitError",
     "RateLimitRetryMiddleware",
+    "SubAgentHitlMiddleware",
     "ToolObservabilityMiddleware",
     "TracingKpiMiddleware",
     "build_react_platform_middleware_frame",

@@ -3226,7 +3226,7 @@ Tuning knobs (concurrency, retry, input cap) are module constants pending live
 calibration against real provider limits, and the map remains inherently
 LLM-call-heavy on very large documents (slow-but-complete by design). Tests:
 `test_document_extractor.py` (exhaustive de-dupe, NONE handling, 429 retry;
-the 429 detector itself moved to `fred_core` in §8.64 and is tested there),
+the 429 detector itself moved to `fred_core` in §8.65 and is tested there),
 `test_capability_document_reading.py` (one-call path, empty/truncation/error
 shaping).
 
@@ -4002,6 +4002,11 @@ See "Note of intention" below.
   every cross-agent caller. Tracked as MEMORY-02 in the same RFC (proposed
   fix: `checkpoint_ns` derived from the executing agent, `thread_id` kept as
   `session_id`).
+- **A child can never pause for a human.** No longer a hang risk — at
+  `invocation_depth` ≥ 1 the HITL gate hides unconditionally approval-gated
+  tools from the child's model and refuses anything that would still have
+  interrupted (§8.64) — but still a capability limit: work that genuinely
+  needs a human decision cannot be delegated through `invoke_agent`.
 
 ### Real-world adopter — fred-rags "move to cloud"
 
@@ -4569,7 +4574,74 @@ POC, to be settled with POC data — see issue #2531 and
 Until then it is a local/POC surface: an admin must enable it per team
 (`ADMIN_GATED`), and no agent selects it by default.
 
-### 8.64 ✅ Provider rate limits (429) are retried, not fatal — issue #2535 (2026-09-04)
+### 8.64 ✅ A sub-agent can never hang on human approval — issue #2526 (2026-09-03)
+
+Closes the follow-up §8.63 left open ("a child cannot be resumed, and
+therefore cannot be paused for human approval"). Design:
+[`../rfc/SUBAGENT-CAPABILITY-RFC.md`](../rfc/SUBAGENT-CAPABILITY-RFC.md) §5.6,
+option B.
+
+**The problem.** A child runs inside its parent's synchronous tool call,
+checkpointer-free (§8.63). An `interrupt()` there has nowhere to persist and no
+UI channel to reach, so the parent would block with the SSE stream silent —
+until #2526 the only mitigation was operational advice ("enable `subagent`
+only on agents with no approval-gated tools").
+
+**`invocation_depth` now reaches the ReAct middleware frame**, from the same
+trusted source as the capability block's: `_iterate_runtime_event_payloads` →
+`ReActRuntime` → `build_tool_loop_compiled_react_agent` →
+`build_react_platform_middleware_frame(invocation_depth=…)` →
+`FredHitlMiddleware`. It is never read from a request, exactly like §8.63's
+counter. Nothing else in the frame consumes it.
+
+**At depth ≥ 1 the one existing gate stops interrupting**, in two layers:
+
+- `awrap_model_call` — added by a `SubAgentHitlMiddleware` subclass the frame
+  builds *only* at depth ≥ 1, because `create_agent` registers model-call
+  hooks per **class**: a depth-0 agent must not carry a hook it can never use
+  — removes the **unconditionally** gated tools from
+  `request.tools` — a capability `HitlSpec` with `require`, or the operator's
+  exact `always_require_tools` list — so the child's model is never offered a
+  tool it could only be refused. A `when` predicate is deliberately excluded:
+  it can only be answered per call, against real arguments.
+- `aafter_model` answers any call that would still have gated (a `when`
+  predicate, or a hidden tool the model called anyway) with an **error tool
+  result** — "requires human approval, which is unavailable in a sub-agent" —
+  instead of raising the interrupt. LangChain's model→tools edge only
+  dispatches calls that have no `ToolMessage` yet, so the refused calls never
+  execute while the ungated ones in the same batch still run; a fully refused
+  batch routes straight back to the model. This second layer is what makes the
+  hang structurally impossible, whatever the first layer missed.
+
+**Depth 0 is unchanged.** It builds the plain `FredHitlMiddleware`, so it
+registers no model-call hook at all and the interrupt path is the same code it
+always was; every pre-existing HITL test passes unmodified. The one thing it
+does gain is cheaper: the operator `always_require_tools` list is now resolved
+into a frozenset once per turn instead of being rebuilt on every tool call.
+
+**Deliberately NOT a second middleware, and not the capability's job.** The
+gated set is only ever complete inside `FredHitlMiddleware` — capability
+`HitlSpec`s are merged there by `capabilities/assembly.py`, and the operator
+list is known nowhere else. `CapabilityContext` exposes neither, so a
+`subagent`-side implementation would have needed a new context field and a
+second place that knows about HITL (RFC §5.6). The `subagent` capability's
+child framing therefore stays generic — "Tools that need a human approval are
+unavailable or will refuse" — and never enumerates tool names.
+
+**Two accepted observability consequences, at depth ≥ 1 only.** The gate is
+the innermost `wrap_model_call` of the frame, so the tool hiding runs *inside*
+`TracingKpiMiddleware`: the span's `tools` payload **and its `chars_tools`
+attribute** — the one tool-volume signal that survives with content capture
+off — count tools the model never saw. Accepted rather than reordering the
+frame, which would move the gate's `after_model` relative to the capability
+block and `ToolCallLimitMiddleware` and so change depth-0 behaviour;
+`llm.call_latency_ms` still brackets the real call, and the `[LLM][CALL]` log
+carries no tools. Second: a refusal is recorded by an app log only. The tool
+node never runs it, so `ToolObservabilityMiddleware` never fires and there is
+no `agent.tool_failed_total` for it — a counter here would need a deliberate
+`PROMETHEUS_ALLOWED_LABELS` decision rather than a drive-by one.
+
+### 8.65 ✅ Provider rate limits (429) are retried, not fatal — issue #2535 (2026-09-04)
 
 **One HTTP 429 used to abort the whole turn.** Observed live while exercising
 the sub-agent capability against Mistral (`mistral-small-latest`, `code=1300`,

@@ -3209,9 +3209,11 @@ def test_resume_builds_react_input_without_raising(monkeypatch, tmp_path) -> Non
     class _FakeReActRuntime(
         AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
     ):
-        def __init__(self, *, definition, services, capability_block=None):
+        def __init__(
+            self, *, definition, services, capability_block=None, invocation_depth=0
+        ):
             super().__init__(definition=definition, services=services)
-            _ = capability_block
+            _ = capability_block, invocation_depth
 
         async def build_executor(self, binding: BoundRuntimeContext):
             return _RecordingExecutor()
@@ -3473,9 +3475,11 @@ def _make_counting_react_runtime():
     class _RecordingReActRuntime(
         AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
     ):
-        def __init__(self, *, definition, services, capability_block=None):
+        def __init__(
+            self, *, definition, services, capability_block=None, invocation_depth=0
+        ):
             super().__init__(definition=definition, services=services)
-            _ = capability_block
+            _ = capability_block, invocation_depth
 
         async def build_executor(self, binding: BoundRuntimeContext):
             return _RecordingExecutor()
@@ -3901,9 +3905,11 @@ def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
     class _FlakyReActRuntime(
         AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
     ):
-        def __init__(self, *, definition, services, capability_block=None):
+        def __init__(
+            self, *, definition, services, capability_block=None, invocation_depth=0
+        ):
             super().__init__(definition=definition, services=services)
-            _ = capability_block
+            _ = capability_block, invocation_depth
 
         async def build_executor(self, binding: BoundRuntimeContext):
             nonlocal attempt
@@ -4095,9 +4101,11 @@ async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
     class _HangingReActRuntime(
         AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]
     ):
-        def __init__(self, *, definition, services, capability_block=None):
+        def __init__(
+            self, *, definition, services, capability_block=None, invocation_depth=0
+        ):
             super().__init__(definition=definition, services=services)
-            _ = capability_block
+            _ = capability_block, invocation_depth
 
         async def build_executor(self, binding: BoundRuntimeContext):
             return _HangingExecutor()

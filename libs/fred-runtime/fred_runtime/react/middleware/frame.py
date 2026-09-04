@@ -33,7 +33,7 @@ from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
-from .hitl import CapabilityHitlBinding, FredHitlMiddleware
+from .hitl import CapabilityHitlBinding, FredHitlMiddleware, SubAgentHitlMiddleware
 from .rate_limit_retry import RateLimitRetryMiddleware
 from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
@@ -51,6 +51,7 @@ def build_react_platform_middleware_frame(
     max_tool_calls_per_turn: int | None = None,
     capability_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
+    invocation_depth: int = 0,
 ) -> list[AgentMiddleware]:
     """
     Assemble the fixed platform middleware frame for one ReAct agent.
@@ -67,6 +68,9 @@ def build_react_platform_middleware_frame(
       inserted between DynamicPromptMiddleware and TracingKpiMiddleware
     - `capability_hitl` carries the capability `HitlSpec` bindings merged into
       the single FredHitlMiddleware gate (RFC §5.4) — never a second gate
+    - `invocation_depth` is how many agent-to-agent invocations deep this turn
+      is; at 1 or more the same gate refuses instead of interrupting, since a
+      sub-agent has no human to ask (SUBAGENT-CAPABILITY-RFC.md §5.6)
 
     Example:
     - `build_react_platform_middleware_frame(..., capability_middleware=block.middleware, capability_hitl=block.hitl)`
@@ -101,11 +105,15 @@ def build_react_platform_middleware_frame(
         # gate has already let the call through (a HITL-refused proposal
         # never reaches here, so it never produces a "started" event).
         ToolObservabilityMiddleware(kpi=kpi, binding=binding),
-        FredHitlMiddleware(
+        # Same gate either way; the sub-agent subclass adds the tool hiding.
+        # Chosen by class because `create_agent` registers model-call hooks
+        # per class — a depth-0 agent must not carry one it never uses.
+        (SubAgentHitlMiddleware if invocation_depth > 0 else FredHitlMiddleware)(
             binding=binding,
             approval_policy=approval_policy,
             available_tool_names=available_tool_names,
             capability_hitl=capability_hitl,
+            invocation_depth=invocation_depth,
         ),
     ]
     if max_tool_calls_per_turn is not None:
