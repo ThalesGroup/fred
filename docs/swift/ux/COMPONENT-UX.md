@@ -857,7 +857,10 @@ session attachments, prompt library — had drifted into three slightly differen
 "insets minus the top one" body rule). The shell fixes the treatment once:
 
 `layout="push"` so it reflows the conversation instead of covering it,
-`floating` (12px inset card, `outline-muted` border, `--radius-m`, soft shadow),
+`floating` (inset card, `outline-muted` border, `--radius-m`, soft shadow;
+12px from the page edges and the conversation, 8px on the right where the
+launcher rail sits — a gap to a neighbouring control is tighter than a gap to
+the page edge),
 `background: --surface-container-high`, `compactHeader` (a 12px/8px title band
 rather than the drawer's roomier 16px/12px — these panels sit in a narrow column
 beside the conversation; the settings and admin drawers keep the default),
