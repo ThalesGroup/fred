@@ -40,7 +40,7 @@ AGENT_ID = "v2.sample.assistant"
 ENDPOINT = "https://agents.example.com/v2/execute/stream"
 
 
-def _request() -> AgentInvocationRequest:
+def _request(system_prompt: str | None = None) -> AgentInvocationRequest:
     return AgentInvocationRequest(
         agent_id=AGENT_ID,
         message="do the thing",
@@ -53,6 +53,7 @@ def _request() -> AgentInvocationRequest:
             session_id="session-1",
             user_id="alice",
         ),
+        system_prompt=system_prompt,
     )
 
 
@@ -98,3 +99,31 @@ def test_token_usage_is_none_when_the_callee_reports_none() -> None:
 
     assert result.is_error is False
     assert result.token_usage is None
+
+
+def test_a_system_prompt_override_is_refused_without_reaching_the_transport() -> None:
+    """The execute endpoint carries no such field, so posting anyway would
+    silently drop the override instead of honouring it."""
+
+    requests: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, text='data: {"kind": "final", "sequence": 0}\n\n')
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_handler))
+    invoker = RemoteSseAgentInvoker(
+        config=RemoteSseAgentInvokerConfig(endpoint_url=ENDPOINT), client=client
+    )
+
+    async def _run() -> AgentInvocationResult:
+        try:
+            return await invoker.invoke(_request(system_prompt="You are terse."))
+        finally:
+            await client.aclose()
+
+    result = asyncio.run(_run())
+
+    assert result.is_error is True
+    assert "cannot cross the remote SSE" in result.content
+    assert requests == []
