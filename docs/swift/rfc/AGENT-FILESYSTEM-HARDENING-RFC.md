@@ -250,21 +250,23 @@ is a UI/KF response signal, not an SDK listing contract.
 ## 6. Contract impact
 
 - `docs/swift/design/FILESYSTEM.md`: already rewritten as the as-built source.
-- `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`: update if workspace principal fields
-  become part of runtime execution context or grant validation.
-- `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`: update if prepare-execution mints
-  a workspace-scoped principal or token.
-- `fred-sdk` contracts: update `WorkspaceFsPort` docstrings and optionally `FsEntry`.
-- `knowledge-flow-backend` OpenAPI: update if `/fs` accepts a new runtime principal header
-  or if upload/download streaming changes response types.
+- `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`: the M2M workspace scope of §9.1 is
+  runtime execution context - a dated entry is required once §9.5 is decided.
+- `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`: required only if §9.5 lands on
+  candidate 1, where prepare-execution mints the scoped token.
+- `fred-sdk` contracts: `WorkspaceFsPort` loses `delete` (§9.3) and `link_for` returns a
+  durable reference (§9.6); update the docstrings and optionally `FsEntry`.
+- `knowledge-flow-backend` OpenAPI: the Workspace routes are new surface, and `/fs/share`
+  is removed - regenerate the client in the same change.
 
 ## 7. Test plan
 
 - Runtime adapter tests: keep existing path isolation tests; add graph
   `resolve_template` parity tests.
 - SDK tests: stale doc fixes do not need tests, but any helper behaviour change does.
-- Knowledge Flow tests: reject agent principal writes to `shared`; reject mismatched
-  `agent_instance_id`; preserve human `/fs` behaviour.
+- Knowledge Flow tests: both actors per §9.7 - human read-only, agent read-write, and a
+  user token refused as an agent caller; reject a mismatched `agent_instance_id`;
+  preserve human `/fs` behaviour.
 - Frontend tests: reserved-character filenames in download/share/copy paths.
 - Large file tests: streaming or size-cap tests depending on FILES-05 decision.
 - Share-copy tests: concurrent collision test if atomicity is implemented.
@@ -281,7 +283,7 @@ Before implementation, decide:
 
 ---
 
-## 9. Workspace contract (2026-09-02) - the replacement for P1
+## 9. Workspace contract (2026-09-02, revised 2026-09-04) - the replacement for P1
 
 Scope of this section: the not-yet-built part of `#2328`. The `can_access_files` gate is
 already shipped (`#2476`) and is documented in `FILESYSTEM.md`, not here.
@@ -289,41 +291,150 @@ already shipped (`#2476`) and is documented in `FILESYSTEM.md`, not here.
 The model only ever sees `/workspace/...`. Knowledge Flow maps that onto the **existing**
 physical prefix `teams/{team}/agents/{instance}/users/{uid}/...`, with no new segment - so
 bytes already stored stay addressable and there is no migration. The namespace is derived
-server-side from the session context; it is never assembled by the caller. That is the
+server-side from the execution scope; it is never assembled by the caller. That is the
 whole point: today the SDK adapter builds team-rooted paths client-side, which is why the
 raw `/fs` boundary cannot tell one actor from another.
 
-### The five operations, and what justifies each
+### 9.1 Identity model
+
+The governing rule:
+
+> The bearer authenticates the caller; it does not identify the workspace owner.
+
+Today those two collapse into one token, and that collapse *is* F1. Agent I/O currently
+travels on the end user's Keycloak token, so Knowledge Flow sees "Alice" and cannot tell
+whether Alice's browser or Alice's agent is writing.
+
+For agent I/O the target is a short-lived M2M token authenticating **the runtime**, with
+the workspace scope carried alongside it:
+
+```text
+team_id             # required
+agent_instance_id   # required
+owner_user_id       # optional; delegated ownership, never impersonation
+run_id              # required when a run/job exists
+```
+
+`owner_user_id = alice` means "this runtime is acting on Alice's behalf", not "this
+caller is Alice". Knowledge Flow must **verify** that scope against the managed instance
+or job before honouring it: IDs asserted by a shared service account are not
+authorization by themselves. How that verification works is the one question this RFC
+leaves open - see §9.5.
+
+Human I/O is unchanged: the user's Keycloak token, the existing ReBAC checks.
+
+### 9.2 The four operations, and what justifies each
 
 | Operation | Consumer that justifies it |
 | --- | --- |
 | `list` (bounded, actor-scoped) | `TODO.md` proof (`ls` tool), `WorkspaceFsPort.ls`, Agents viewer |
 | `read` | `TODO.md` proof, `resolve_template`, `resources.fetch_text`, agent assets, Agents viewer |
 | `write` (create / replace) | `TODO.md` proof, `artifacts.publish_text`, ppt-filler, save-time asset store |
-| `delete` | `AgentConfigAssetsAdapter.delete` (idempotent replacement) |
-| `link` (signed download) | artifact chips, PPT preview, `link_for`, Agents viewer |
+| `link` (durable reference) | artifact chips, PPT preview, `link_for`, Agents viewer |
 
-### Deliberately excluded - this list is a stop signal
+This list was five operations until 2026-09-04. `delete` was dropped - see §9.3.
+
+### 9.3 Deliberately excluded - this list is a stop signal
 
 `edit` (the Deep adapter does read + replace + write), `glob`, `grep`, `mkdir`, `rename`,
 `copy_to_shared`, `stat`, paginated `cat`, per-type stats.
+
+`delete` joins them, for a reason worth writing down. Its only consumer was
+`AgentConfigAssetsAdapter.delete`, and agent config assets do not belong in Workspace at
+all: they live at `teams/{team}/agents/{instance}/config/{key}`, which is **instance-wide
+and has no `users/{uid}` segment**. They never fitted the Workspace prefix declared above.
+They keep their own path and their existing team-scoped ReBAC (read gated on membership,
+write on `CAN_UPDATE_RESOURCES`), outside this contract. No capability calls
+`WorkspaceFsPort.delete`, so removing it costs no retained use case.
+
+The SDK helpers `ctx.read_user` and `ctx.read_team` are excluded on the same grounds. They
+read *outside* the Workspace namespace - `teams/{team}/users/{uid}` and
+`teams/{team}/shared` - which are exactly the two tabs `#2328` deletes, and no capability
+calls either of them: only the adapter implements them. Keeping them would mean the
+contract has a hole through which an agent reaches the user's private space, to serve no
+retained use case.
 
 None of these found a retained consumer. If one comes back "for parity" with `/fs`, that is
 the stop signal `#2328` calls for: stop and re-evaluate the retained use cases rather than
 widen the contract.
 
-### Two actors, one namespace
+### 9.4 Ownership and visibility in v1
+
+**Every workspace is user-scoped.** The physical prefix carries a mandatory `users/{uid}`
+segment, and a team-owned or agent-owned workspace would need a new one - that is a
+migration, which this contract rules out. A scheduled run with no human owner is therefore
+**not supported in v1**; it is not stored under a service-account uid as a workaround.
+
+**Everything is private to the triple (team, instance, owner uid), and v1 has no
+visibility transition.** There is no `shared/` inside Workspace and no `copy_to_shared`.
+The consequence is worth stating plainly, because it diverges from the usual publish
+model: the agent writes directly into the owner's own subtree, and `/fs/download` already
+re-checks uid ownership there, so the owner can read those bytes from the moment they
+land. There is no agent-private state to publish out of, and `link` is therefore a
+*reference* to something the owner may already read - not a permission change.
+
+Two consequences of that, named rather than glossed:
+
+- **Agent-private scratch space has no home in v1.** Material the agent wants to keep to
+  itself would need a sibling segment under the instance, outside `users/{uid}`. Not in
+  this contract.
+- **Child agents inherit the parent's `agent_instance_id`, not just `owner_user_id`.**
+  This is as-built, not a proposal: the graph runtime reads `agent_instance_id` from the
+  portable baggage (`graph_runtime.py`), so a child lands in the *same* subtree as its
+  parent. That is precisely what keeps a parent's `TODO.md` readable by its children -
+  minting a fresh instance id per child would move it to a different subtree and break
+  the Deep Agents proof `#2328` is built on. Per-child isolation, if it is ever wanted,
+  is a sibling segment, not a different instance id.
+
+### 9.5 Open question - how Knowledge Flow verifies the M2M binding
+
+This is the only design question this RFC still leaves open. The requirement is settled:
+Knowledge Flow must verify that the caller is entitled to the `(team_id,
+agent_instance_id, owner_user_id)` it presents, and must never accept it as asserted. The
+mechanism is not.
+
+Two candidates, neither chosen:
+
+1. **Per-execution token minted by control-plane**, carrying the binding as signed claims.
+   Knowledge Flow validates the signature and reads the claims; no callback, no registry
+   lookup on the write path. The cost is honest: this re-creates a grant-shaped artifact
+   very close to the one RUNTIME-07 rev. 2 deliberately dropped, so choosing it means
+   reopening that decision rather than quietly working around it.
+2. **Shared runtime service account plus a Knowledge-Flow-side lookup** against the agent
+   instance registry, checking that `agent_instance_id` belongs to `team_id` and, when a
+   `run_id` is present, that the run is live and owned by `owner_user_id`. No new signing
+   scheme, but it puts a lookup on every workspace write and requires a registry Knowledge
+   Flow can read - which it does not have today.
+
+Agent writes must not be enabled on the Workspace routes before this is decided.
+
+### 9.6 `link` is a durable reference, not a signed URL
+
+`link` returns a **durable, origin-relative Knowledge Flow reference**. Authorization is
+re-checked at access time against the caller's current identity, so a stale or leaked
+reference grants nothing on its own. A short-lived signed URL may exist afterwards as an
+internal delivery optimisation (a just-in-time redirect to object storage); it must never
+be the artifact identity, be persisted in agent or run state, or be what `link` returns.
+
+Steps 3 and 4 of that model are already shipped: `/fs/download` requires a Keycloak
+session and re-runs ReBAC on every request, so the signed token has never been a
+standalone credential - it is bound to path + uid and is useless to anyone else.
+
+The problem is expiry, and it runs the opposite way to the usual signed-URL worry.
+`/fs/share` appends a token with a 600-second TTL, and `link_for` - what agents put in
+artifact chips - uses it. That href is persisted in the chat history, so ten minutes later
+the chip returns **403 to its own owner**, on a file they are still entitled to read: the
+presence of the token makes the request stricter than its absence. `ppt_preview` already
+uses the durable tokenless href and has none of this.
+
+T3 therefore removes `/fs/share` and `download_token.py` and moves `link_for` onto the
+durable href, rather than porting the token machinery into Workspace.
+
+### 9.7 Two actors, one namespace
 
 The human actor is not new - `/fs` is already called from the browser with the user's token
-(`AgentsWorkspace` → `useLsQuery`). The agent actor, with its server-derived namespace, is
-the newcomer. That both travel the same routes with the same token today is precisely the
-cause of `#2113`. Isolation tests must therefore cover **both**: the human read-only, the
-agent read-write.
-
-### Documented residual
-
-Without an agent principal, Knowledge Flow still cannot prove which `agent_instance_id` is
-calling: a user-token bearer can reach an agent workspace inside their own team, for their
-own uid. The residual is bounded (same team, same user) and must be named in the Workspace
-doc before agent writes are enabled. M2M co-signature stays a separate hardening step, not
-a prerequisite.
+(`AgentsWorkspace` -> `useLsQuery`). The agent actor, with its server-derived namespace and
+its own M2M identity, is the newcomer. That both travel the same routes with the same token
+today is precisely the cause of `#2113`. Isolation tests must therefore cover **both**: the
+human read-only, the agent read-write, and the case that motivates §9.1 - a user token
+presented directly to a Workspace agent route must not be accepted as an agent caller.
