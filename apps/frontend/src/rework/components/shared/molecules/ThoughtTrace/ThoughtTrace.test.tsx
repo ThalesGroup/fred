@@ -112,6 +112,22 @@ describe("ThoughtTrace", () => {
     expect(render([empty], false)).toContain('aria-label="rework.chatTrace.openReasoning"');
   });
 
+  // The thread is an aria-live region, so the name is read out — and re-read on
+  // every delta while the block streams. Bounded to roughly the three lines the
+  // row actually shows; the rest is one click away in the drawer.
+  it("bounds a long reasoning row's accessible name", () => {
+    const long = msg({
+      channel: "thought",
+      parts: [{ type: "text", text: "sentence ".repeat(400) }],
+      metadata: { extras: { thought_id: "t9", phase: "planning", source: "model_native" } },
+    });
+    // The root element carries an aria-label of its own; the row's is the long one.
+    const labels = [...render([long], false).matchAll(/aria-label="([^"]*)"/g)].map((m) => m[1]);
+    const label = labels.reduce((a, b) => (b.length > a.length ? b : a), "");
+    expect(label.length).toBeLessThan(280);
+    expect(label.endsWith("…")).toBe(true);
+  });
+
   it("keeps reasoning and tool steps in the order they happened", () => {
     const second = msg({
       channel: "thought",

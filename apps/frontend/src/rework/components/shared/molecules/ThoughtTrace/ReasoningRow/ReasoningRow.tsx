@@ -19,6 +19,16 @@ import { formatLatencyMs, sourceForEntry, statusForEntry, thoughtExtras } from "
 import { useTraceDrawer } from "../traceDrawerContext";
 import styles from "./ReasoningRow.module.css";
 
+/** Roughly the three clamped lines the row actually shows. */
+const LABEL_MAX_CHARS = 240;
+
+function truncateForLabel(text: string): string {
+  if (text.length <= LABEL_MAX_CHARS) return text;
+  const head = text.slice(0, LABEL_MAX_CHARS);
+  const lastSpace = head.lastIndexOf(" ");
+  return `${(lastSpace > 0 ? head.slice(0, lastSpace) : head).trimEnd()}…`;
+}
+
 /**
  * One reasoning entry, sequenced in the trace where it actually happened.
  *
@@ -47,7 +57,12 @@ export function ReasoningRow({ entry, text }: { entry: TraceEntry; text: string 
   // row per ReAct round, so a fixed label would announce them all identically and
   // the reasoning itself would never reach assistive tech. The generic label is
   // kept only for a row that has no text yet — a block that just opened.
-  const spokenLabel = [title, text, extras.conclusion].filter(Boolean).join(". ");
+  //
+  // Bounded to roughly what the clamped preview shows: the name has to match the
+  // visible label, and the thread is an aria-live region, so an unbounded one
+  // would have a screen reader read a whole reasoning block aloud — growing, and
+  // re-announced, on every streamed delta. The full text is in the drawer.
+  const spokenLabel = [title, truncateForLabel(text), extras.conclusion].filter(Boolean).join(". ");
 
   return (
     <button

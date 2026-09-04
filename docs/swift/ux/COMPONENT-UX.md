@@ -396,7 +396,12 @@ agents) so the decision is informed at the point it is made.
   `traceSummary()` deliberately classifies entries itself rather than calling `traceRows()`: the
   header needs lanes and durations, never display text, and it runs on every streamed delta —
   flattening markdown and diffing preambles there would put that cost on the per-token path for
-  nothing. `ThoughtTrace` memoizes its own fold on `messages` for the same reason.
+  nothing. `ThoughtTrace` memoizes its own fold on `messages` for the same reason, and computes
+  `traceRows()` only when the trace is expanded: `toThreadMessages` rebuilds every exchange's
+  `traceMessages` array on each SSE frame, so an ungated memo re-flattened the markdown of the
+  WHOLE conversation's collapsed history on every token (measured at ~0.036 ms per KB of
+  reasoning text, so ~3.5 ms per frame on a long conversation — main-thread time competing with
+  React's own render).
 
   Three consequences worth knowing. The grouping card behind the tool rows is gone: rows of
   both kinds now sit directly in `.body` as one flat timeline, so the rail's end trimming
@@ -497,7 +502,9 @@ and no status dot. Successive rounds of weight-trimming, each from developer rev
 The row is named by its own text (title, preview, conclusion) rather than a fixed "Open the
 full reasoning" label — a turn holds one row per ReAct round, so a static label would announce
 them all identically and the reasoning would never reach assistive tech. The generic label
-remains only for a block that has streamed nothing yet.
+remains only for a block that has streamed nothing yet. The name is capped near the three
+clamped lines the row actually shows: the thread is an `aria-live` region, so an unbounded name
+would have a screen reader read a whole reasoning block aloud, re-announced on every delta.
 
 The marker rides the first line of text rather than the row's centre, so a two-line preview
 does not drag it off the rail. Two variables carry that geometry, both set by `ThoughtTrace`

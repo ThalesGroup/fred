@@ -659,6 +659,10 @@ export type TraceRow = {
  * sentence, so nothing is removed and no line is ever cut mid-thought. Compared
  * against the previous block's FULL text, not its trimmed display text, so the
  * rows still tile the whole reasoning between them with nothing lost.
+ *
+ * Errs towards keeping text: a missed boundary repeats a preamble, a wrong one
+ * opens a row mid-sentence — which is the failure this whole function exists to
+ * avoid. See {@link isSentenceEnd}.
  */
 export function stripRepeatedPreamble(text: string, previousText: string | null): string {
   if (!previousText) return text;
@@ -666,18 +670,76 @@ export function stripRepeatedPreamble(text: string, previousText: string | null)
   let shared = 0;
   while (shared < text.length && shared < previousText.length && text[shared] === previousText[shared]) shared++;
 
-  // Last sentence end inside the shared span. A sentence ends on .!? followed by
-  // whitespace or the end of the text.
   let cut = 0;
-  for (let i = 0; i < shared; i++) {
-    const isTerminator = text[i] === "." || text[i] === "!" || text[i] === "?";
-    if (isTerminator && (i + 1 >= text.length || /\s/.test(text[i + 1]))) cut = i + 1;
-  }
+  for (let i = 0; i < shared; i++) if (isSentenceEnd(text, i)) cut = i + 1;
   // A block wholly contained in its predecessor keeps its text: an empty row
   // would read as a rendering bug, and dropping it would lose the block itself.
   if (cut === 0 || cut >= text.length) return text;
 
   return text.slice(cut).trimStart();
+}
+
+/**
+ * Abbreviations that end in `.` and are commonly followed by a capitalised word,
+ * where {@link isSentenceEnd}'s other rules would not catch them. Lowercase,
+ * internal dots kept ("e.g"), trailing dot dropped.
+ *
+ * Short on purpose: an abbreviation followed by a lowercase word or a digit
+ * ("e.g. the audit log", "Fig. 2") is already rejected without being listed, so
+ * only the ones that read like the start of a sentence need naming.
+ */
+const SENTENCE_ABBREVIATIONS = new Set([
+  "cf",
+  "e.g",
+  "eg",
+  "i.e",
+  "ie",
+  "vs",
+  "fig",
+  "no",
+  "dr",
+  "mr",
+  "mrs",
+  "ms",
+  "st",
+  "al",
+  "m",
+  "mme",
+]);
+
+/**
+ * Whether `text[i]` ends a sentence.
+ *
+ * A `.` alone is not enough. Reasoning text is full of "e.g. ", "cf. ", "Fig. 2",
+ * "No. 3" and numbered lists ("1. Read the file"), and cutting on one of those
+ * opens a row mid-sentence — the mangled line this module exists to avoid. Three
+ * rules, each covering a shape the others miss:
+ *
+ * - a new sentence begins on a capital, which rejects "e.g. the audit log";
+ * - a list marker is all digits, which rejects "1. Read the file";
+ * - the rest are named in {@link SENTENCE_ABBREVIATIONS}.
+ *
+ * Deliberately asymmetric: a missed boundary only repeats a preamble, a wrong
+ * one mutilates a line.
+ */
+function isSentenceEnd(text: string, i: number): boolean {
+  const ch = text[i];
+  if (ch !== "." && ch !== "!" && ch !== "?") return false;
+  // Must be followed by whitespace or the end of the text.
+  if (i + 1 >= text.length) return true;
+  if (!/\s/.test(text[i + 1])) return false;
+
+  // What follows has to look like a new sentence: a capital letter, or nothing.
+  let j = i + 1;
+  while (j < text.length && /\s/.test(text[j])) j++;
+  if (j < text.length && !/\p{Lu}/u.test(text[j])) return false;
+  if (ch !== ".") return true;
+
+  let start = i;
+  while (start > 0 && /[\p{L}\p{N}.]/u.test(text[start - 1])) start--;
+  const word = text.slice(start, i).toLowerCase();
+  if (/^\d+$/.test(word)) return false;
+  return !SENTENCE_ABBREVIATIONS.has(word);
 }
 
 function isStepEntry(entry: TraceEntry): boolean {
@@ -767,6 +829,10 @@ export type TraceSummary = {
  * the tool calls, so summing double-counted the same wall-clock. The runtime now
  * closes that block at every tool round, making the blocks disjoint — a max
  * would report only the longest stretch and hide the rest of the thinking.
+ * Authored blocks are disjoint too, since `context.thinking()` is entered and
+ * left in sequence; nesting two would inflate this figure, and there is no way
+ * to tell from a `duration_ms` alone, so it is left as a known limit of the
+ * header rather than guessed at.
  *
  * `pendingToolCallIds` — see {@link statusForEntry}.
  */

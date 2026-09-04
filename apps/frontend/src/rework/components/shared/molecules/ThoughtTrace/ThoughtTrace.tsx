@@ -16,7 +16,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
-import type { TraceSummary } from "../../../../utils/traceUtils";
+import type { TraceRow, TraceSummary } from "../../../../utils/traceUtils";
 import {
   formatLatencyMs,
   groupTraceEntries,
@@ -62,16 +62,22 @@ function useSummaryLabel(summary: TraceSummary): string {
   return parts.length > 0 ? parts.join(" · ") : t("rework.chatTrace.details");
 }
 
+/** Stable empty identity, so the collapsed memo never yields a new array. */
+const EMPTY_ROWS: TraceRow[] = [];
+
 export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: ThoughtTraceProps) {
   const { t } = useTranslation();
-  // Memoized on `messages`: this whole fold — grouping, preview flattening,
-  // preamble diffing — runs on every streamed delta, and the page re-renders
+  // Memoized: this fold runs on every streamed delta, and the page re-renders
   // for reasons of its own on top of that.
   const entries = useMemo(() => groupTraceEntries(messages), [messages]);
-  const rows = useMemo(() => traceRows(entries), [entries]);
   const summary = useMemo(() => traceSummary(entries, pendingToolCallIds), [entries, pendingToolCallIds]);
   const label = useSummaryLabel(summary);
   const { expanded, toggle } = useTraceExpansion(done);
+  // Only when open. `toThreadMessages` rebuilds every exchange's traceMessages
+  // array on each streamed frame, so this memo is invalidated for the WHOLE
+  // conversation on every token — and traceRows flattens markdown. Behind the
+  // toggle, a long history's collapsed traces cost nothing per token.
+  const rows = useMemo(() => (expanded ? traceRows(entries) : EMPTY_ROWS), [entries, expanded]);
 
   if (entries.length === 0) return null;
 

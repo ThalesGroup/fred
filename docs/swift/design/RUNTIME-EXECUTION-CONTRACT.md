@@ -5459,3 +5459,14 @@ uninteresting or harmful in use — see the tracking note on #2088.
 
 **Wire contract.** Unchanged. `THOUGHT_*` shapes are frozen; what changes is
 that a block can now carry text the model addressed to the user.
+
+**Consumer note — the openai-compat surface delivers the preamble twice.** The
+relocation assumes a consumer that purges the answer bubble on `tool_call`, which
+the frontend does. `fred_event_to_openai_chunk` maps both `assistant_delta` and
+`thought_delta` to content deltas, so a client of `app.openai_compat` (on in
+`fred-agents`' shipped config) receives the preamble once as content and again
+inside `<think>`. Suppressing the first copy is not possible: whether a round ends
+in tool calls is not known until after the text has streamed, and buffering it
+would cost every real answer its time-to-first-token. A client that wants the
+frontend's behaviour drops content deltas preceding a `tool_calls` chunk in the
+same round; the `<think>` copy is the one carrying `fred.thought` metadata.

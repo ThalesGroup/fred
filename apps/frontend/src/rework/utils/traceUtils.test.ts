@@ -476,6 +476,41 @@ describe("stripRepeatedPreamble", () => {
   // The failure the sentence rule exists to prevent: two blocks that merely open
   // on the same few words share no complete sentence, and a character-level trim
   // would have rendered "asked for a document." — a mutilated line.
+  // A `.` is not a sentence end on its own. Cutting after one of these opens a
+  // row mid-sentence — the mutilated line the whole function exists to prevent.
+  // Each prefix below holds NO real sentence end, so the only cut on offer is
+  // the wrong one; a passing case returns the text untouched.
+  it.each([
+    ["an abbreviation before a lowercase word", "Two sources agree, e.g. the audit log and "],
+    ["an abbreviation before a capital", "See cf. Section 4 and the appendix "],
+    ["a titled reference before a digit", "See Fig. 2 and the appendix "],
+    ["a numbered list marker", "1. Read the configuration file and "],
+    ["an ordinal before a digit", "Ranked No. 3 by score and "],
+    ["a person's title", "Escalated to Dr. Martin and the on-call "],
+  ])("does not cut inside %s", (_label, prefix) => {
+    expect(stripRepeatedPreamble(`${prefix}stop.`, `${prefix}go.`)).toBe(`${prefix}stop.`);
+  });
+
+  it("still cuts on a real sentence end that follows an abbreviation", () => {
+    const previous = "Checked the audit log, e.g. the last entry. Nothing matched.";
+    const current = "Checked the audit log, e.g. the last entry. Retrying with a wider range.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("Retrying with a wider range.");
+  });
+
+  // The length-based guard this replaced rejected these: "it" and "us" are as
+  // short as "cf", and they end sentences all the time.
+  it("cuts after a short final word", () => {
+    const previous = "I identified it and summarised it. Nothing else to add.";
+    const current = "I identified it and summarised it. However, the tool is unavailable.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("However, the tool is unavailable.");
+  });
+
+  it("cuts on ! and ?", () => {
+    const previous = "Found it! Now summarising.";
+    const current = "Found it! Now writing the report.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("Now writing the report.");
+  });
+
   it("keeps the text when the shared prefix holds no complete sentence", () => {
     const previous = "The user wrote a filename. I will search for it.";
     const current = "The user asked for a document. I will summarise it.";

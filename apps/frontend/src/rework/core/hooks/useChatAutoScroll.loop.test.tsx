@@ -23,6 +23,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatAutoScroll, type ChatAutoScrollInput } from "./useChatAutoScroll";
 
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 let container: HTMLDivElement;
 let root: Root;
 /** Pending animation frames, drained by `runFrames`. */
@@ -183,5 +189,32 @@ describe("useChatAutoScroll follow loop", () => {
     const answerTopOnScreen = answerTop - el.scrollTop;
     expect(answerTopOnScreen).toBeGreaterThan(600 / 4 - 20);
     expect(answerTopOnScreen).toBeLessThan(600 / 4 + 20);
+  });
+
+  // A model that writes, calls a tool, then writes again. The freeze is spent on
+  // the first stretch of text; the tool round has to hand back a fresh budget or
+  // the rest of the turn plays out below the fold.
+  it("resumes following when a tool round lands after the answer has started", () => {
+    const { el, grow } = makeScroller(600);
+    render(el, input());
+    act(() => grow(400));
+    runFrames(60);
+
+    // Answer text until the freeze bites.
+    render(el, input({ hasAnswerText: true }));
+    for (let i = 0; i < 60; i++) {
+      act(() => grow(10));
+      runFrames(3);
+    }
+    const frozenAt = el.scrollTop;
+    expect(frozenAt).toBeLessThan(el.scrollHeight - 600);
+
+    // A tool row lands: the turn is working again.
+    render(el, input({ hasAnswerText: true, traceCount: 1 }));
+    act(() => grow(120));
+    runFrames(60);
+
+    expect(el.scrollTop).toBeGreaterThan(frozenAt);
+    expect(el.scrollTop).toBe(el.scrollHeight - 600);
   });
 });

@@ -263,8 +263,14 @@ export function useChatAutoScroll(
   // new trace rows drop the anchor and following resumes until the answer grows
   // again. Also covers a HITL resume, which adds no user message and so does not
   // change `turnKey`.
+  //
+  // The work height goes with it. It is only sampled during the work phase, so
+  // leaving it would re-anchor the answer to a height from before the text it
+  // has already shown — a budget spent on arrival, and no resume at all. Null
+  // makes the next evaluate() anchor on the current height instead.
   useEffect(() => {
     answerStartHeightRef.current = null;
+    workHeightRef.current = null;
   }, [traceCount]);
 
   // Content changes come from streamed text, not from React commits alone — a
