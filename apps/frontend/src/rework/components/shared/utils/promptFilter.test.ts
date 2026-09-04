@@ -78,6 +78,24 @@ describe("filterPrompts", () => {
     expect(ids(filterPrompts(LIST, { search: "report", categoryId: "cat-report" }))).toEqual(["p-1"]);
   });
 
+  it("treats a prompt whose category no longer exists as uncategorised", () => {
+    // A category can be deleted while prompts still point at it; without this
+    // the prompt would answer to no chip at all.
+    const orphan = { id: "p-4", name: "Orphan", category_id: "cat-deleted" };
+    const known = new Set(["cat-report", "cat-hr"]);
+
+    expect(
+      ids(filterPrompts([orphan], { ...ALL, categoryId: NO_CATEGORY_FILTER_ID, knownCategoryIds: known })),
+    ).toEqual(["p-4"]);
+    // Without the set, the id is trusted as-is and the prompt is categorised.
+    expect(filterPrompts([orphan], { ...ALL, categoryId: NO_CATEGORY_FILTER_ID })).toEqual([]);
+  });
+
+  it("still excludes a live category from the uncategorised chip", () => {
+    const known = new Set(["cat-report", "cat-hr"]);
+    expect(filterPrompts([WEEKLY], { ...ALL, categoryId: NO_CATEGORY_FILTER_ID, knownCategoryIds: known })).toEqual([]);
+  });
+
   it("preserves the incoming order", () => {
     expect(ids(filterPrompts([LOOSE, WEEKLY], ALL))).toEqual(["p-3", "p-1"]);
   });

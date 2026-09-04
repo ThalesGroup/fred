@@ -33,6 +33,13 @@ export interface PromptFilterCriteria {
   search: string;
   /** `null` means every category. */
   categoryId: string | null;
+  /**
+   * The categories that actually exist. When given, a prompt pointing at a
+   * category outside this set counts as uncategorised rather than falling out
+   * of every chip — a category can be deleted while prompts still reference
+   * it. Omit to trust `category_id` as-is.
+   */
+  knownCategoryIds?: ReadonlySet<string>;
 }
 
 /** Case-insensitive substring match over name + description. */
@@ -43,13 +50,22 @@ function matchesSearch(prompt: FilterablePrompt, query: string): boolean {
     .some((field) => (field as string).toLowerCase().includes(query));
 }
 
-function matchesCategory(prompt: FilterablePrompt, categoryId: string | null): boolean {
+function matchesCategory(
+  prompt: FilterablePrompt,
+  categoryId: string | null,
+  knownCategoryIds?: ReadonlySet<string>,
+): boolean {
   if (!categoryId) return true;
-  if (categoryId === NO_CATEGORY_FILTER_ID) return !prompt.category_id;
-  return prompt.category_id === categoryId;
+  const { category_id: id } = prompt;
+  if (categoryId === NO_CATEGORY_FILTER_ID) {
+    return !id || (knownCategoryIds !== undefined && !knownCategoryIds.has(id));
+  }
+  return id === categoryId;
 }
 
 export function filterPrompts<T extends FilterablePrompt>(prompts: T[], criteria: PromptFilterCriteria): T[] {
   const query = criteria.search.trim().toLowerCase();
-  return prompts.filter((prompt) => matchesSearch(prompt, query) && matchesCategory(prompt, criteria.categoryId));
+  return prompts.filter(
+    (prompt) => matchesSearch(prompt, query) && matchesCategory(prompt, criteria.categoryId, criteria.knownCategoryIds),
+  );
 }

@@ -25,6 +25,7 @@ import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
+import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
 import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog.tsx";
 import PromptViewDialog from "./PromptViewDialog/PromptViewDialog.tsx";
 import DuplicatePromptDialog from "./DuplicatePromptDialog/DuplicatePromptDialog.tsx";
@@ -60,7 +61,6 @@ const emptyForm: FormState = { name: "", description: "", category_id: null, tag
 
 // Sentinel filter value for "prompts with no category" — distinct from `null`,
 // which means "no filter active" (the "Tous" chip).
-const NO_CATEGORY_FILTER_ID = "__no_category__";
 
 export default function PromptsPage() {
   const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
@@ -163,17 +163,10 @@ export default function PromptsPage() {
     return { byId, noCategory };
   }, [prompts]);
 
-  // Client-side filter: search text + active category
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return prompts.filter((p) => {
-      const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q);
-      const matchCategory =
-        !activeCategory ||
-        (activeCategory === NO_CATEGORY_FILTER_ID ? !p.category_id : p.category_id === activeCategory);
-      return matchSearch && matchCategory;
-    });
-  }, [prompts, search, activeCategory]);
+  const filtered = useMemo(
+    () => filterPrompts(prompts, { search, categoryId: activeCategory }),
+    [prompts, search, activeCategory],
+  );
 
   const isSubmitting = isCreating || isUpdating;
 
