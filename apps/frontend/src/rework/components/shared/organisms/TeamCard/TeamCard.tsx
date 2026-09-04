@@ -118,7 +118,7 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               className={styles.teamCardJoinAction}
               color={"primary"}
               variant={"outlined"}
-              size={"medium"}
+              size={"small"}
               icon={{ category: "outlined", type: "person_add" }}
               disabled={isJoining}
               onClick={handleJoinTeam}
