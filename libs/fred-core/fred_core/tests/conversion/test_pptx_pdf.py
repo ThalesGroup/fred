@@ -51,6 +51,52 @@ async def test_convert_bytes_returns_pdf_on_success(monkeypatch) -> None:
     assert pdf.startswith(b"%PDF")
 
 
+def test_export_filter_targets_impress(monkeypatch, tmp_path) -> None:
+    """A .pptx sent through Writer's PDF filter makes LibreOffice exit 0 and write
+    nothing, so the helper degrades to "conversion unavailable" with no error to log.
+    Pin the filter here: without a real soffice, nothing else catches that."""
+    monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: "/usr/bin/soffice")
+    captured: list[str] = []
+
+    def capturing_run(cmd, **kwargs):
+        captured.extend(cmd)
+        Path(cmd[cmd.index("--outdir") + 1], "deck.pdf").write_bytes(b"%PDF-1.5")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(f"{_MODULE}.subprocess.run", capturing_run)
+    src = tmp_path / "deck.pptx"
+    src.write_bytes(b"fake")
+
+    assert convert_pptx_file_to_pdf(src) is not None
+
+    export_filter = captured[captured.index("--convert-to") + 1]
+    assert export_filter.startswith("pdf:impress_pdf_Export:")
+    assert "writer_pdf_Export" not in export_filter
+
+
+def test_uses_a_private_profile_per_conversion(monkeypatch, tmp_path) -> None:
+    """Two conversions must not share a LibreOffice profile: the default one is
+    single-instance, and concurrent calls on it make soffice exit 0 writing nothing."""
+    monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: "/usr/bin/soffice")
+    profiles: list[str] = []
+
+    def capturing_run(cmd, **kwargs):
+        profiles.extend(a for a in cmd if a.startswith("-env:UserInstallation="))
+        Path(cmd[cmd.index("--outdir") + 1], "deck.pdf").write_bytes(b"%PDF-1.5")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(f"{_MODULE}.subprocess.run", capturing_run)
+    src = tmp_path / "deck.pptx"
+    src.write_bytes(b"fake")
+
+    convert_pptx_file_to_pdf(src)
+    convert_pptx_file_to_pdf(src)
+
+    assert len(profiles) == 2
+    assert all(p.startswith("-env:UserInstallation=file://") for p in profiles)
+    assert profiles[0] != profiles[1]
+
+
 @pytest.mark.asyncio
 async def test_convert_bytes_returns_none_on_timeout(monkeypatch) -> None:
     monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: "/usr/bin/soffice")
@@ -122,11 +168,16 @@ async def test_convert_bytes_with_real_libreoffice() -> None:
 
     import io
 
-    from pptx import Presentation  # pyright: ignore[reportMissingImports]
+    from pptx import Presentation
+    from pptx.util import Emu
 
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    box = slide.shapes.add_textbox(0, 0, prs.slide_width, prs.slide_height)
+    # A default template always carries slide dimensions; the fallbacks keep the
+    # call typed without asserting on something the fixture does not test.
+    width = prs.slide_width or Emu(9144000)
+    height = prs.slide_height or Emu(6858000)
+    box = slide.shapes.add_textbox(Emu(0), Emu(0), width, height)
     box.text_frame.text = "Hello preview"
     buf = io.BytesIO()
     prs.save(buf)

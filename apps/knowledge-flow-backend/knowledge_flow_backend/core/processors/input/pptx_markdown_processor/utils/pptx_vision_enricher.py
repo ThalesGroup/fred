@@ -21,8 +21,9 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from fred_core.conversion import convert_pptx_file_to_pdf
+
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
-    convert_pptx_to_pdf,
     render_pdf_pages_to_png,
 )
 
@@ -49,7 +50,9 @@ def enrich_slides_with_vision(
         logger.warning("[PROCESSOR][PPTX] No image describer available for vision enrichment.")
         return PptxVisionEnrichmentResult()
 
-    pdf_path = convert_pptx_to_pdf(pptx_path)
+    # Ingestion is batch work, not an agent turn: give a large deck room to convert
+    # rather than losing all its slide vision enrichment on the interactive default.
+    pdf_path = convert_pptx_file_to_pdf(pptx_path, timeout_seconds=300.0)
     if pdf_path is None:
         logger.warning("[PROCESSOR][PPTX] PPTX to PDF conversion failed; skipping vision enrichment.")
         return PptxVisionEnrichmentResult()
