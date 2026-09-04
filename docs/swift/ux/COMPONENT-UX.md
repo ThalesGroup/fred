@@ -1179,6 +1179,16 @@ _(none)_
   `ANSWER_FOLLOW_FRACTION` (3/4) of the viewport, which leaves its first line a quarter of the way
   down.
 
+  Following is animated, not written outright. A single `scrollTop` write per content change is a
+  series of small jumps, one per streamed batch; a requestAnimationFrame loop closing a share of the
+  remaining distance each frame (`nextFollowTop`) catches up fast when a whole tool row lands and
+  barely moves for a token, so the two do not read as different behaviours. Native
+  `behavior: "smooth"` is not usable here — each call restarts its own animation and there is one
+  call per batch. The loop re-checks intent every frame (the reader can take over, or the answer
+  outgrow its budget, mid-animation) and stops once settled rather than burning a frame per token.
+  `prefers-reduced-motion` gets the position without the journey, and the per-turn jump stays
+  instant and cancels any animation in flight.
+
   That stop needs no DOM anchor and no spacer: the view is at the bottom when the answer starts, so
   the content grown since the last trace-only height *is* the answer's height on screen. The
   trace-only height is sampled continuously during the work phase rather than read when the answer

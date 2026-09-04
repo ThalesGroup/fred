@@ -16,7 +16,10 @@ import { describe, expect, it } from "vitest";
 import {
   ANSWER_FOLLOW_FRACTION,
   NEAR_BOTTOM_PX,
+  FOLLOW_EASING,
+  FOLLOW_SNAP_PX,
   isNearBottom,
+  nextFollowTop,
   resolveStuckToBottom,
   shouldFollowBottom,
   type ScrollIntentInput,
@@ -127,5 +130,29 @@ describe("resolveStuckToBottom", () => {
 
   it("ignores a sub-pixel jitter upward", () => {
     expect(at(true, 400, 399.5)).toBe(true);
+  });
+});
+
+describe("nextFollowTop", () => {
+  it("covers a share of the remaining distance, not a fixed step", () => {
+    expect(nextFollowTop(0, 1000)).toBeCloseTo(1000 * FOLLOW_EASING);
+    expect(nextFollowTop(500, 1000)).toBeCloseTo(500 + 500 * FOLLOW_EASING);
+  });
+
+  // Otherwise the loop would run forever, a frame per token, on a view already
+  // where it belongs.
+  it("snaps to the target once within the snap distance", () => {
+    expect(nextFollowTop(1000 - FOLLOW_SNAP_PX, 1000)).toBe(1000);
+    expect(nextFollowTop(1000, 1000)).toBe(1000);
+  });
+
+  it("converges without overshooting", () => {
+    let top = 0;
+    for (let i = 0; i < 200; i++) top = nextFollowTop(top, 1000);
+    expect(top).toBe(1000);
+  });
+
+  it("eases upward too, when removed content lowered the target", () => {
+    expect(nextFollowTop(1000, 800)).toBeCloseTo(1000 - 200 * FOLLOW_EASING);
   });
 });

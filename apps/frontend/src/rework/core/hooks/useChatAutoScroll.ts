@@ -27,6 +27,28 @@ export const ANSWER_FOLLOW_FRACTION = 3 / 4;
 /** Slack for "still at the bottom": sub-pixel rounding, and a hair of overscroll. */
 export const NEAR_BOTTOM_PX = 48;
 
+/** Share of the remaining distance covered per frame while following. */
+export const FOLLOW_EASING = 0.22;
+
+/** Under this, snap: easing toward a sub-pixel target never arrives. */
+export const FOLLOW_SNAP_PX = 1;
+
+/**
+ * Next scroll position one frame closer to `target`.
+ *
+ * Exponential rather than a fixed step: the view catches up fast when a whole
+ * tool row lands at once, and barely moves when a token adds a few pixels — so
+ * the two do not read as different behaviours. The alternative, writing the
+ * target outright on every content change, is what made this a series of small
+ * jumps; native `behavior: "smooth"` is worse still, since each call restarts
+ * its animation and there is one call per streamed batch.
+ */
+export function nextFollowTop(current: number, target: number): number {
+  const remaining = target - current;
+  if (Math.abs(remaining) <= FOLLOW_SNAP_PX) return target;
+  return current + remaining * FOLLOW_EASING;
+}
+
 export type ScrollPhase = "idle" | "work" | "answer";
 
 export interface ScrollIntentInput {
@@ -142,6 +164,7 @@ export function useChatAutoScroll(
   // when the answer phase begins would already include its first batch, and an
   // answer arriving in one chunk would leave a budget of zero.
   const workHeightRef = useRef<number | null>(null);
+  const frameRef = useRef<number | null>(null);
 
   // A turn paused on a HITL gate is live, not finished: the prompt is the one
   // thing the reader has to act on, so it is followed into view like any other
@@ -150,24 +173,63 @@ export function useChatAutoScroll(
   const live = isStreaming || isAwaitingHuman;
   const phase: ScrollPhase = !live ? "idle" : hasAnswerText && !isAwaitingHuman ? "answer" : "work";
 
-  const follow = useCallback(() => {
+  // Re-evaluated every frame, not only when content lands: the reader can take
+  // over, and the answer can outgrow its budget, mid-animation. Sampling the
+  // work height here keeps it current for the whole work phase.
+  const evaluate = useCallback((): boolean => {
     const el = containerRef.current;
-    if (!el) return;
+    if (!el) return false;
 
     if (phase === "work") workHeightRef.current = el.scrollHeight;
     if (phase === "answer" && answerStartHeightRef.current === null) {
       answerStartHeightRef.current = workHeightRef.current ?? el.scrollHeight;
     }
 
-    const intent = shouldFollowBottom({
+    return shouldFollowBottom({
       phase,
       stuckToBottom: stuckToBottomRef.current,
       scrollHeight: el.scrollHeight,
       answerStartHeight: answerStartHeightRef.current,
       clientHeight: el.clientHeight,
     });
-    if (intent) el.scrollTop = el.scrollHeight;
   }, [containerRef, phase]);
+
+  const follow = useCallback(() => {
+    const el = containerRef.current;
+    if (!el || !evaluate()) return;
+
+    // Someone who asked the system for less motion gets the position, not the
+    // journey.
+    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+    if (frameRef.current !== null || typeof requestAnimationFrame !== "function") {
+      if (frameRef.current === null) el.scrollTop = el.scrollHeight;
+      return;
+    }
+
+    const step = () => {
+      frameRef.current = null;
+      const node = containerRef.current;
+      if (!node || !evaluate()) return;
+
+      const target = node.scrollHeight - node.clientHeight;
+      const next = nextFollowTop(node.scrollTop, target);
+      node.scrollTop = next;
+      // Settled: stop rather than burn a frame per token on a view already
+      // where it belongs. The next content change starts it again.
+      if (next !== target) frameRef.current = requestAnimationFrame(step);
+    };
+    frameRef.current = requestAnimationFrame(step);
+  }, [containerRef, evaluate]);
+
+  useEffect(
+    () => () => {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -228,6 +290,11 @@ export function useChatAutoScroll(
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    // Instant, and it wins: a new turn is not somewhere to ease towards.
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
     answerStartHeightRef.current = null;
     workHeightRef.current = null;
     stuckToBottomRef.current = true;
