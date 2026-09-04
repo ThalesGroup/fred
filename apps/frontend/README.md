@@ -187,6 +187,61 @@ In Kubernetes, frontend `config.json` is rendered from Helm values — no image
 rebuild needed. Use it for static frontend settings and branding only; do not add
 `user_auth` or control-plane `ui_settings` branding duplicates.
 
+### Theme overlay (branding assets without a rebuild)
+
+`config.json` selects assets by name, but the files themselves are baked into
+the image. A deployment ships its own logos, favicons, default avatars, agent
+icons and legal markdown as one **theme archive**: a zip laid out like
+`public/`, fetched by the container at startup and served in place of the baked
+files.
+
+```
+acme-theme-1.0.zip
+├── images/acme-logo.svg             # new name, referenced from properties: logoName: "acme-logo"
+├── images/icons/customAgent.svg     # agent icon silhouette (rendered as a CSS mask)
+├── images/default-team-avatar.png   # same name as a stock file: shadows it
+├── gcu.md  gcu.fr.md  gdpr.md  gdpr.fr.md
+├── release.md
+└── contrib/<brand>/...              # optional, the releaseBrand cascade still applies
+```
+
+Only `/images/**`, `/contrib/**` and root `*.md` files can be overridden;
+`index.html`, `config.json` and the bundle never are. Symlinks are dropped and
+an archive with entries escaping its root is refused. A zip made from a folder
+(`zip -r acme-theme.zip acme-theme/`) is accepted: the wrapper folder is skipped.
+
+| Variable                                                        | Meaning                                                                                                                                                                                                                                  |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FRONTEND_THEME_URL`                                            | `https://` (public bucket, presigned URL, or plain S3 object URL) or `file://` (archive mounted from a ConfigMap or volume). Unset: feature off, nothing changes.                                                                        |
+| `FRONTEND_THEME_S3_ACCESS_KEY` / `FRONTEND_THEME_S3_SECRET_KEY` | When both are set the request is SigV4-signed, so a private bucket on MinIO, SeaweedFS, AWS or GCS interop works with a plain object URL. The key the control-plane uses for its `content_storage` is enough; a read-only key is better. |
+| `FRONTEND_THEME_S3_REGION`                                      | Default `us-east-1`; S3-compatible stores ignore it.                                                                                                                                                                                     |
+| `FRONTEND_THEME_REQUIRED`                                       | `false` (default): a fetch or unpack failure logs one warning and the stock assets are served. `true`: the container exits.                                                                                                              |
+
+Behaviour to keep in mind:
+
+- Logo and favicon properties get `.svg` appended; avatars and banners carry
+  their extension. A property pointing at a missing file renders a broken
+  image, not a 404.
+- Browsers cache images: ship a new file name and update the property rather
+  than overwriting a file in place. Markdown is fetched with `cache: no-cache`,
+  so shadowing `gcu.md` in place is fine.
+- A new `gcu.md` does not re-prompt users. Bump `gcu_version` in the
+  control-plane configuration alongside it.
+- The archive is applied at container start. After replacing the zip under the
+  same name, restart the pods; pointing the URL at a new name rolls them.
+- nginx does not listen until the fetch returns, so it gives up after ~16s to
+  stay inside the default liveness window: an unreachable store costs a warning,
+  not a crashloop. Add the startup probe from the example values for a store
+  that is reachable but slow.
+
+The archive is unpacked into `/var/lib/fred/theme`, outside the web root, and
+nginx tries it before the baked file for the three surfaces above. Helm wiring
+(the URL and the key from a Secret through `extraEnvVars`, plus an `emptyDir`
+for a pod with a read-only root filesystem) is in
+`deploy/charts/custom-values-examples/frontend-theme.yaml`.
+`make theme-container-smoke` exercises the whole path against a locally built
+image.
+
 ## Chat UI
 
 The chat interface is built around the `rework/` component tree and communicates with agent pods via **SSE (Server-Sent Events)** — no WebSocket.

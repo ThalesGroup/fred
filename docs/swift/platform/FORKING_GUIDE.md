@@ -22,6 +22,12 @@ If this rule is broken, every merge becomes a manual conflict resolution exercis
 
 ## The `contrib/` mechanism
 
+Static content does not require a fork at all: the stock frontend image fetches
+a **theme archive** (logos, icons, legal markdown, `contrib/<brand>/` files)
+from your object storage at startup - see "Theme overlay" in
+`apps/frontend/README.md`. Keep the files in a fork only when you want them
+versioned next to your own code; the cascade below applies either way.
+
 Fred's frontend resolves content files through a brand-aware cascade. Set your brand name once in `apps/frontend/public/config.json`:
 
 ```json
@@ -66,7 +72,7 @@ apps/frontend/public/contrib/acme/
 └── release.md          # Brand-specific release notes
 ```
 
-These files are committed in your fork's git repository. The open source repository never touches the `contrib/` directory. Your files are never in conflict.
+These files are committed in your fork's git repository, or shipped in the theme archive instead (see above). The open source repository never touches the `contrib/` directory. Your files are never in conflict.
 
 Do not put anything fork-specific in the frontend `src/` tree. If you need a
 product page, use the application boundary below. If that boundary is
@@ -372,10 +378,11 @@ a mismatch shows as an explicit error state rather than a broken page.
 
 ## Checklist before your first clean merge
 
+- [ ] Brand assets travel in a theme archive (`FRONTEND_THEME_URL`) rather than in the fork, unless you need them versioned with your code
 - [ ] `apps/frontend/public/config.json` has `"releaseBrand": "<your-brand>"`
-- [ ] Legal content is in `apps/frontend/public/contrib/<your-brand>/gcu.md` (and language variants)
-- [ ] Privacy notice is in `apps/frontend/public/contrib/<your-brand>/gdpr.md`
-- [ ] Brand release notes (if any) are in `apps/frontend/public/contrib/<your-brand>/release.md`
+- [ ] Legal content is in `apps/frontend/public/contrib/<your-brand>/gcu.md` (and language variants), or in the theme archive
+- [ ] Privacy notice is in `apps/frontend/public/contrib/<your-brand>/gdpr.md`, or in the theme archive
+- [ ] Brand release notes (if any) are in `apps/frontend/public/contrib/<your-brand>/release.md`, or in the theme archive
 - [ ] No `.tsx`, `.ts`, `.scss`, or `.json` file from `src/` exists in your fork's overlay
 - [ ] Product UI code, if any, is its own container image serving under `/apps/<app_id>/`, with no file added to this repository
 - [ ] Each application is registered in both `platform.application_sources` and `FRONTEND_APPLICATIONS_JSON` under the same `app_id`
