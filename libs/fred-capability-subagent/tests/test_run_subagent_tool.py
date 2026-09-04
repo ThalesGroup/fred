@@ -22,6 +22,7 @@ against a stub invoker.
 from __future__ import annotations
 
 import asyncio
+from typing import Any, cast
 
 import pytest
 from fred_capability_subagent.capability import (
@@ -32,12 +33,18 @@ from fred_capability_subagent.capability import (
     SubAgentCapability,
     SubAgentConfig,
 )
+from fred_core.store import VectorSearchHit
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
     EmptyModel,
 )
-from fred_sdk.contracts.context import AgentInvocationRequest, AgentInvocationResult
+from fred_sdk.contracts.context import (
+    AgentInvocationRequest,
+    AgentInvocationResult,
+    LinkKind,
+    LinkPart,
+)
 from fred_sdk.contracts.runtime import AgentInvokerPort, RuntimeServices
 from langchain_core.messages import AIMessage
 from langgraph.graph import START, MessagesState, StateGraph
@@ -144,6 +151,35 @@ async def test_child_answer_is_returned_with_the_framing_sent():
 
 
 @pytest.mark.asyncio
+async def test_child_sources_and_ui_parts_ride_the_tool_result():
+    """A researching or document-producing child is not reduced to its text."""
+
+    invoker = _StubInvoker(
+        AgentInvocationResult(
+            agent_id=AGENT_ID,
+            content="Two documents mention it.",
+            sources=(
+                VectorSearchHit(
+                    content="the cited chunk", uid="doc-a", title="Handbook", score=0.42
+                ),
+            ),
+            ui_parts=(LinkPart(href="/documents/doc-a", kind=LinkKind.citation),),
+        )
+    )
+    tool = _tools(invoker=invoker)[0]
+
+    # `coroutine` is untyped on `BaseTool`; the tool is a `StructuredTool`.
+    content, artifact = await cast(Any, tool).coroutine(prompt="Who mentions it?")
+
+    assert content == "Two documents mention it."
+    assert artifact.is_error is False
+    assert [hit.uid for hit in artifact.sources] == ["doc-a"]
+    (part,) = artifact.ui_parts
+    assert isinstance(part, LinkPart)
+    assert part.href == "/documents/doc-a"
+
+
+@pytest.mark.asyncio
 async def test_failing_child_becomes_a_tool_error_carrying_the_message():
     invoker = _StubInvoker(
         AgentInvocationResult(
@@ -172,6 +208,31 @@ async def test_over_cap_answer_asks_for_a_shorter_one_instead_of_truncating():
     assert "shorter answer" in content
     # Never a silent truncation: the caller gets no fragment of the answer.
     assert long_answer[:100] not in content
+
+
+@pytest.mark.asyncio
+async def test_a_refused_answer_renders_nothing_of_the_child():
+    """Rejecting the answer rejects its parts too: nothing half-delivered."""
+
+    invoker = _StubInvoker(
+        AgentInvocationResult(
+            agent_id=AGENT_ID,
+            content="x" * (MAX_SUBAGENT_CONTENT_CHARS + 1),
+            sources=(
+                VectorSearchHit(
+                    content="the cited chunk", uid="doc-a", title="Handbook", score=0.42
+                ),
+            ),
+            ui_parts=(LinkPart(href="/documents/doc-a", kind=LinkKind.citation),),
+        )
+    )
+    tool = _tools(invoker=invoker)[0]
+
+    _, artifact = await cast(Any, tool).coroutine(prompt="Summarize everything.")
+
+    assert artifact.is_error is True
+    assert artifact.sources == ()
+    assert artifact.ui_parts == ()
 
 
 @pytest.mark.asyncio

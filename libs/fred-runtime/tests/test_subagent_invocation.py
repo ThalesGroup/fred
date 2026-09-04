@@ -26,15 +26,20 @@ depends on.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+from types import SimpleNamespace
 
+import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
+from fred_runtime import model_routing
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import create_agent_app
 from fred_runtime.react import react_tool_loop
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
+    LinkPart,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -141,6 +146,7 @@ def _record_turn(monkeypatch, payloads: list[dict] | None = None) -> dict:
         team_settings=None,
         reasoning_enabled_model_ids=None,
         use_checkpointer=True,
+        usable_model_ids=agent_app_module._Unresolved.TOKEN,
         **kwargs,
     ):
         seen["definition"] = definition
@@ -152,6 +158,7 @@ def _record_turn(monkeypatch, payloads: list[dict] | None = None) -> dict:
         seen["team_settings"] = team_settings
         seen["reasoning_enabled_model_ids"] = reasoning_enabled_model_ids
         seen["use_checkpointer"] = use_checkpointer
+        seen["usable_model_ids"] = usable_model_ids
         seen.update(kwargs)
         for payload in payloads or [{"kind": "final", "sequence": 0, "content": "ok"}]:
             yield payload
@@ -281,6 +288,165 @@ def test_same_agent_child_cannot_claim_another_identity(monkeypatch) -> None:
     )
     assert result.is_error is True
     assert "user, session and team" in result.content
+
+
+def test_child_sources_and_ui_parts_reach_the_caller(monkeypatch) -> None:
+    _record_turn(
+        monkeypatch,
+        payloads=[
+            {
+                "kind": "final",
+                "sequence": 0,
+                "content": "Two documents mention it.",
+                # As they arrive: a JSON dump of the child's `final` event.
+                "sources": [
+                    {
+                        "content": "the cited chunk",
+                        "uid": "doc-a",
+                        "title": "Handbook",
+                        "score": 0.42,
+                    }
+                ],
+                "ui_parts": [
+                    {"type": "link", "href": "/documents/doc-a", "kind": "citation"}
+                ],
+            }
+        ],
+    )
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    assert result.content == "Two documents mention it."
+    assert [hit.uid for hit in result.sources] == ["doc-a"]
+    (part,) = result.ui_parts
+    assert isinstance(part, LinkPart)
+    assert part.href == "/documents/doc-a"
+
+
+def test_a_part_this_process_cannot_rebuild_is_an_error_not_a_crash(
+    monkeypatch,
+) -> None:
+    _record_turn(
+        monkeypatch,
+        payloads=[
+            {
+                "kind": "final",
+                "sequence": 0,
+                "content": "here it is",
+                # A part kind no capability registered in this process.
+                "ui_parts": [{"type": "from_the_future", "payload": {}}],
+            }
+        ],
+    )
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    # Every other branch of this port returns an error result; so does this one.
+    assert result.is_error is True
+    assert "could not be read" in result.content
+
+
+def test_a_child_that_cites_nothing_carries_nothing(monkeypatch) -> None:
+    _record_turn(monkeypatch)
+    parent_agent_id = _EchoAgent().agent_id
+
+    result = asyncio.run(
+        _invoker(_parent_turn(agent_id=parent_agent_id)).invoke(
+            _child_request(parent_agent_id)
+        )
+    )
+
+    assert result.content == "ok"
+    assert result.sources == ()
+    assert result.ui_parts == ()
+
+
+def test_a_same_agent_child_carries_the_parent_s_model_authorization(
+    monkeypatch,
+) -> None:
+    parent_agent_id = _EchoAgent().agent_id
+    # Fail-closed and possibly empty: an empty tuple is "nothing allowed", the
+    # opposite of the None that means "ReBAC is off" — so it must survive the
+    # carry as itself.
+    parent = replace(
+        _parent_turn(agent_id=parent_agent_id),
+        binding=_binding().model_copy(update={"usable_model_ids": ()}),
+    )
+
+    seen = _record_turn(monkeypatch)
+    asyncio.run(_invoker(parent).invoke(_child_request(parent_agent_id)))
+    assert seen["usable_model_ids"] == ()
+
+    # A cross-agent child resolves its own: different agent, possibly a
+    # different team.
+    seen = _record_turn(monkeypatch)
+    asyncio.run(_invoker(parent).invoke(_child_request(OTHER_AGENT_ID)))
+    assert seen["usable_model_ids"] is agent_app_module._Unresolved.TOKEN
+
+
+def test_a_carried_authorization_snapshot_skips_the_rebac_query(monkeypatch) -> None:
+    """What the carry buys: one ReBAC round trip fewer per child, on the path
+    to its first model call."""
+
+    calls: list[str] = []
+
+    async def _counting_query(rebac, team_id):
+        calls.append(team_id)
+        return frozenset({"model__openai__gpt-5.1"})
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(rebac_engine=None)),
+    )
+    monkeypatch.setattr(
+        model_routing, "usable_model_capability_ids", _counting_query, raising=False
+    )
+
+    class _Stop(Exception):
+        pass
+
+    bindings: list[BoundRuntimeContext] = []
+
+    def _capture(definition, binding, **kwargs):
+        # Everything under test happens before the turn is assembled.
+        bindings.append(binding)
+        raise _Stop
+
+    monkeypatch.setattr(agent_app_module, "_build_runtime_services", _capture)
+
+    async def _drive(**kwargs) -> None:
+        stream = agent_app_module._iterate_runtime_event_payloads(
+            _EchoAgent(),
+            agent_app_module._AgentExecuteRequest(
+                agent_id=_EchoAgent().agent_id,
+                message="hi",
+                context={"user_id": "alice", "session_id": "session-1"},
+            ),
+            team_id="fredlab",
+            **kwargs,
+        )
+        with pytest.raises(_Stop):
+            await anext(stream)
+
+    asyncio.run(_drive(usable_model_ids=("model__mistral__large",)))
+    assert calls == []
+    assert bindings[-1].usable_model_ids == ("model__mistral__large",)
+
+    # Absent — a top-level turn — it still resolves its own.
+    asyncio.run(_drive())
+    assert calls == ["fredlab"]
+    assert bindings[-1].usable_model_ids == ("model__openai__gpt-5.1",)
 
 
 def test_execution_error_reaches_the_caller_with_its_message(monkeypatch) -> None:

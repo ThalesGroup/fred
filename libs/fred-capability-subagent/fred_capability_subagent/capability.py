@@ -194,12 +194,20 @@ def _build_run_subagent_tool(
                 ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
             )
         logger.info(
-            "sub-agent answered agent=%s session=%s chars=%d",
+            "sub-agent answered agent=%s session=%s chars=%d sources=%d parts=%d",
             agent_id,
             identity.session_id,
             len(result.content),
+            len(result.sources),
+            len(result.ui_parts),
         )
-        return result.content, ToolInvocationResult(tool_ref=_TOOL_REF)
+        # A sub-agent is not a reduced agent: what it cited and what it
+        # produced ride the parent's tool-result line with its answer.
+        return result.content, ToolInvocationResult(
+            tool_ref=_TOOL_REF,
+            sources=result.sources,
+            ui_parts=result.ui_parts,
+        )
 
     return StructuredTool.from_function(
         coroutine=_run_subagent,
