@@ -35,6 +35,7 @@ import { ChatLauncherRail } from "../../../features/capabilities/ChatLauncherRai
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
 import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
 import { conversationTokenTotals } from "./toThreadMessages";
+import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
@@ -169,6 +170,24 @@ export default function ManagedChatPage() {
   const attachmentsCount = chat.persistedAttachments.length;
 
   const conversationTokens = useMemo(() => conversationTokenTotals(chat.threadMessages), [chat.threadMessages]);
+
+  // Keeps the running turn in view. The key changes when the conversation is
+  // replaced or a new user turn starts — the two moments the view jumps to the
+  // bottom — and never on a streaming token. `hasAnswerText` separates the two
+  // phases: trace rows are followed to the bottom, answer text only until it
+  // has filled a third of the viewport.
+  const lastTurn = chat.threadMessages[chat.threadMessages.length - 1];
+  const userTurnCount = useMemo(
+    () => chat.threadMessages.reduce((n, m) => (m.role === "user" ? n + 1 : n), 0),
+    [chat.threadMessages],
+  );
+  useChatAutoScroll(scrollContainerRef, {
+    // Session id included: two conversations can hold the same number of turns,
+    // and switching between them must still land at the bottom.
+    turnKey: `${chat.sessionId ?? ""}:${userTurnCount}`,
+    isStreaming: chat.waitResponse,
+    hasAnswerText: Boolean(lastTurn?.isStreaming && lastTurn.text),
+  });
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.

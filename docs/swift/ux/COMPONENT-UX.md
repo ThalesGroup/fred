@@ -1159,9 +1159,49 @@ inline popover into a full-height right-side push panel (#2259).
 
 #### Open UX issues
 
-_(none — layout and scroll behaviour resolved 2026-05-18)_
+_(none)_
 
 #### Resolved
+
+- **The agent's turn streamed below the fold (2026-09-04, #2566)** — the container scrolled but
+  nothing drove it past a one-shot jump per user turn, so trace rows and then the answer grew off
+  screen while the viewport stayed put. Full autoscroll is not the fix either: pinning the view to
+  the bottom moves the line being read.
+
+  `useChatAutoScroll` now owns this container's scroll position outright, in three phases. **Send /
+  conversation opened** → jump to the bottom before paint. **Work** (trace rows, no answer text) →
+  follow the bottom. **Answer** → keep following, then freeze once the answer has filled a third of
+  the viewport, which leaves its first line two thirds of the way down.
+
+  That stop needs no DOM anchor and no spacer: the view is at the bottom when the answer starts, so
+  the content grown since the last trace-only height *is* the answer's height on screen. The
+  trace-only height is sampled continuously during the work phase rather than read when the answer
+  phase opens — the latter already includes the first batch, and an answer arriving in one chunk
+  would leave a budget of zero.
+
+  Reader override is read from the container's scroll position at each `scroll` event, not sniffed
+  from wheel/touch/key gestures: gestures miss scrollbar drags, keyboard scrolling and middle-click,
+  and they fire for nested scrollers (wide tables, code blocks) that never moved this view. `scroll`
+  does not bubble from an element, so only this container's own movement is seen — and scrolling
+  back down re-arms following for free.
+
+  `ChatMessagesArea` lost its `useLayoutEffect`/`turnKey` bottom-jump in the same change; it is
+  presentation only now. Two owners on one scroll container cannot be reasoned about, and the hook
+  is the one that also has to decide when *not* to move.
+
+- **Trace no longer collapses under the reader (2026-09-04, #2566)** — `ThoughtTrace` collapsed
+  itself on `done`, contracting the layout by tens of pixels at the exact moment the reader started
+  on the answer, every turn. `resolveTraceExpanded` takes a fourth input: a block that watched its
+  own turn stream stays open. Captured at mount rather than latched over time — `done` briefly goes
+  false on the *previous* turn during the pre-flight between `waitResponse` flipping and the new user
+  message landing, and a running latch would pin that history block open for good. History blocks
+  still mount collapsed, so opening a long conversation is unchanged.
+
+- **Streaming auto-scroll with user override (2026-05-18 — removed since, superseded 2026-09-04)** —
+  described a `useLayoutEffect` scrolling to bottom on every render during streaming, suspended
+  within 120px of the bottom. No such code was present by 2026-09-04: only a one-shot per-turn jump
+  remained. Kept as the record of a behaviour that was lost somewhere between the two dates, and is
+  now provided by `useChatAutoScroll` above.
 
 - **Scroll container promoted to `.chatColumn` (2026-05-18)** — `overflow-y: auto` was on `.area`
   (an inner element), which caused the scrollbar to stop at the top of the input field instead of

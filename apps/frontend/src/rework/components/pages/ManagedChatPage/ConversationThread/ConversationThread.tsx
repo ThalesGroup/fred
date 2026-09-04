@@ -57,7 +57,6 @@ export const ConversationThread = memo(function ConversationThread({
 }: ConversationThreadProps) {
   const { t } = useTranslation();
   useAssistantCopyInterception(scrollContainerRef);
-  const turnKey = messages.filter((m) => m.role === "user").length;
   // The pending tool call(s) this HITL prompt gates, if the runtime reported
   // any (see build_tool_approval_request's HumanInputRequest.pending_calls —
   // #2177: one prompt can batch several calls at once) — lets the trace row
@@ -67,13 +66,7 @@ export const ConversationThread = memo(function ConversationThread({
     pendingHitl?.payload.pending_calls?.map((c) => c.tool_call_id).filter((id): id is string => !!id) ?? null;
 
   return (
-    <ChatMessagesArea
-      isEmpty={messages.length === 0 && !isStreaming}
-      isLoading={isLoading}
-      emptyState={emptyState}
-      scrollContainerRef={scrollContainerRef}
-      turnKey={turnKey}
-    >
+    <ChatMessagesArea isEmpty={messages.length === 0 && !isStreaming} isLoading={isLoading} emptyState={emptyState}>
       {messages.map((msg) => {
         if (msg.role === "user" || msg.role === "hitl_response") {
           // hitl_response's `text` is the raw persisted choice_id ("proceed" /

@@ -26,13 +26,21 @@ export const TRACE_EXPANDED_PREFERENCE_KEY = "chatTraceExpanded";
  * 2. `preference` — the user's last explicit choice on any block, read once at
  *    mount. This is what makes "hide the whole thing for good" a one-click,
  *    durable action.
- * 3. auto — open while the turn streams (the live activity is the point),
- *    collapsed once the answer has landed.
+ * 3. auto — open while the turn streams, and it STAYS open once the answer
+ *    lands: collapsing on `done` contracted the layout by tens of pixels at the
+ *    exact moment the reader started on the answer, every turn. A trace that
+ *    mounted already finished — history — still opens collapsed, so a long
+ *    conversation is unchanged.
  */
-export function resolveTraceExpanded(override: boolean | null, preference: boolean | null, done: boolean): boolean {
+export function resolveTraceExpanded(
+  override: boolean | null,
+  preference: boolean | null,
+  done: boolean,
+  streamedHere = false,
+): boolean {
   if (override !== null) return override;
   if (preference !== null) return preference;
-  return !done;
+  return !done || streamedHere;
 }
 
 /**
@@ -46,8 +54,13 @@ export function useTraceExpansion(done: boolean): { expanded: boolean; toggle: (
   const [preference, setPreference] = useLocalStorageState<boolean | null>(TRACE_EXPANDED_PREFERENCE_KEY, null);
   const mountPreference = useRef(preference).current;
   const [override, setOverride] = useState<boolean | null>(null);
+  // Captured at mount, not latched over time. `done` comes from the LAST
+  // exchange's isStreaming, which briefly goes true on the previous turn during
+  // the pre-flight between `waitResponse` flipping and the new user message
+  // landing — a running latch would pin that history block open for good.
+  const streamedHere = useRef(!done).current;
 
-  const expanded = resolveTraceExpanded(override, mountPreference, done);
+  const expanded = resolveTraceExpanded(override, mountPreference, done, streamedHere);
 
   const toggle = useCallback(() => {
     const next = !expanded;
