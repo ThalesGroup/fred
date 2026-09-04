@@ -38,10 +38,12 @@ export function leafFileName(file: File): string {
  * appears in the stream (not after the whole batch finishes): `onTaskDiscovered`
  * (it got a task_id — the tray/Activity owns any later failure for that task
  * from here on), `onFileFailed` (it failed before ever getting one), or
- * `onFileResolved` (a plain success/finished line with no task_id at all —
- * upload-only mode, and the no-scheduler process path, never emit one). A file
- * can still fail *after* `onFileResolved` — that later failure still fires
- * `onFileFailed` when its line arrives.
+ * `onFileResolved` (its terminal `finished` line, with no task_id at all —
+ * upload-only mode, and the no-scheduler process path, never emit one). It
+ * fires only on that terminal line, not an earlier `success` one: the
+ * no-scheduler path emits an intermediate `success` line for the upload-prep
+ * step *before* actually processing the file, so treating that as done would
+ * let the caller consider the file finished while it's still being processed.
  */
 export async function streamUploadOrProcessDocument(
   files: File[],
@@ -123,7 +125,10 @@ export async function streamUploadOrProcessDocument(
             onFileFailed?.(eventFilename, message);
           } else if (event.status === "success" || event.status === "finished") {
             lastFailedByFilename.set(eventFilename, false);
-            onFileResolved?.(eventFilename);
+            // Only "finished" is terminal — an earlier "success" (e.g. the
+            // no-scheduler path's upload-prep step) can still be followed by
+            // a real failure later in this same file's processing.
+            if (event.status === "finished") onFileResolved?.(eventFilename);
           }
         }
       } catch {

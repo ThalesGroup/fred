@@ -95,12 +95,18 @@ describe("streamUploadOrProcessDocument", () => {
     expect(discovered).toEqual([]);
   });
 
-  it("calls onFileResolved for a plain success/finished line with no task_id, once per filename", async () => {
+  it("calls onFileResolved only on the terminal 'finished' line, not an earlier 'success' one", async () => {
+    // The no-scheduler process path (and upload-only mode) emits an
+    // intermediate "success" line for the upload-prep step before the file is
+    // actually processed — onFileResolved must not fire until "finished",
+    // or the caller (scheduleFiles) could consider the batch done while a
+    // file is still mid-processing (a real bug an external review caught).
     stubFetch([
       JSON.stringify({ step: "upload preparation", status: "success", filename: "a.pdf" }),
       JSON.stringify({ step: "processing", status: "success", filename: "a.pdf" }),
       JSON.stringify({ step: "finished", status: "finished", filename: "a.pdf" }),
       JSON.stringify({ step: "upload preparation", status: "success", filename: "b.pdf" }),
+      JSON.stringify({ step: "finished", status: "finished", filename: "b.pdf" }),
     ]);
 
     const resolved: string[] = [];
@@ -113,9 +119,7 @@ describe("streamUploadOrProcessDocument", () => {
       (filename) => resolved.push(filename),
     );
 
-    // Fires on every such line, not deduped by filename — the caller (scheduleFiles)
-    // only needs the first one per file to mark it done; repeats are harmless no-ops.
-    expect(resolved).toEqual(["a.pdf", "a.pdf", "a.pdf", "b.pdf"]);
+    expect(resolved).toEqual(["a.pdf", "b.pdf"]);
   });
 
   it("does not call onFileResolved for a filename that already has a task_id", async () => {
@@ -187,13 +191,20 @@ describe("streamUploadOrProcessDocument", () => {
     ]);
 
     const failed: { filename: string; message: string }[] = [];
+    const resolved: string[] = [];
     await expect(
-      streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process", {}, undefined, (filename, message) =>
-        failed.push({ filename, message }),
+      streamUploadOrProcessDocument(
+        [new File(["x"], "a.pdf")],
+        "process",
+        {},
+        undefined,
+        (filename, message) => failed.push({ filename, message }),
+        (filename) => resolved.push(filename),
       ),
     ).rejects.toThrow("scheduler down");
 
     expect(failed).toEqual([{ filename: "a.pdf", message: "scheduler down" }]);
+    expect(resolved).toEqual([]); // never reached "finished" — must not be reported resolved
   });
 
   it("ignores the batch-level 'done' summary line for per-file attribution (it carries no filename)", async () => {
