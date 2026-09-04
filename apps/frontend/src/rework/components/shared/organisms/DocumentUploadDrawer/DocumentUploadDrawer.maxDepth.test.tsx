@@ -50,6 +50,7 @@ vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
 vi.mock("../../../../../slices/streamDocumentUpload", () => ({
+  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
   streamUploadOrProcessDocument: () => Promise.resolve([]),
 }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({

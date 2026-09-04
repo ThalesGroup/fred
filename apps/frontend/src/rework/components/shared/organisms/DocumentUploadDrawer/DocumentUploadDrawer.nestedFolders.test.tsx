@@ -49,6 +49,7 @@ vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
 vi.mock("../../../../../slices/streamDocumentUpload", () => ({
+  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
   streamUploadOrProcessDocument: (files: File[], _mode: string, metadata: Record<string, unknown>) => {
     for (const file of files) probe.scheduled.push({ name: file.name, metadata });
     return Promise.resolve([]);

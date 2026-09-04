@@ -95,6 +95,40 @@ describe("streamUploadOrProcessDocument", () => {
     expect(discovered).toEqual([]);
   });
 
+  it("calls onFileResolved for a plain success/finished line with no task_id, once per filename", async () => {
+    stubFetch([
+      JSON.stringify({ step: "upload preparation", status: "success", filename: "a.pdf" }),
+      JSON.stringify({ step: "processing", status: "success", filename: "a.pdf" }),
+      JSON.stringify({ step: "finished", status: "finished", filename: "a.pdf" }),
+      JSON.stringify({ step: "upload preparation", status: "success", filename: "b.pdf" }),
+    ]);
+
+    const resolved: string[] = [];
+    await streamUploadOrProcessDocument(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.pdf")],
+      "upload",
+      {},
+      undefined,
+      undefined,
+      (filename) => resolved.push(filename),
+    );
+
+    // Fires on every such line, not deduped by filename — the caller (scheduleFiles)
+    // only needs the first one per file to mark it done; repeats are harmless no-ops.
+    expect(resolved).toEqual(["a.pdf", "a.pdf", "a.pdf", "b.pdf"]);
+  });
+
+  it("does not call onFileResolved for a filename that already has a task_id", async () => {
+    stubFetch([JSON.stringify({ task_id: "t-1", document_uid: "doc-1", filename: "a.pdf" })]);
+
+    const resolved: string[] = [];
+    await streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process", {}, undefined, undefined, (filename) =>
+      resolved.push(filename),
+    );
+
+    expect(resolved).toEqual([]);
+  });
+
   it("rejects with the backend's error when the file fails before any task_id exists", async () => {
     // Real case: an unsupported extension (e.g. .json) raises during "upload
     // preparation" — the backend reports a "failed" progress line with no

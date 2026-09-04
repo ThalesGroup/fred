@@ -20,17 +20,28 @@ export interface ScheduledTask {
   filename: string;
 }
 
+// A file picked out of a folder (webkitdirectory input, dropped directory)
+// carries its RELATIVE path in File.name — the backend echoes back (and expects
+// multipart parts named as) the leaf only. Both directions of that convention
+// share this helper.
+export function leafFileName(file: File): string {
+  return file.name.split("/").pop() || file.name;
+}
+
 /**
  * Streams a batch upload/process request for one or more files sharing the same
  * destination metadata — one request per batch lets the backend's ReBAC/quota
- * checks cover every file in it instead of repeating per file. Returns
- * one ScheduledTask per file the server scheduled for ingestion (task_id is
- * absent in upload-only mode and when the scheduler is disabled — `onFileFailed`
- * is what still reports a failure there, since `tasks` alone can't).
+ * checks cover every file in it instead of repeating per file. Returns one
+ * ScheduledTask per file the server scheduled for ingestion.
  *
- * `onTaskDiscovered`/`onFileFailed` fire per file as its own line appears in the
- * stream, not after the whole batch finishes, so callers can react (tray entry,
- * toast) without waiting on the slowest file in the batch.
+ * Every file gets exactly one outcome callback, fired the moment its own line
+ * appears in the stream (not after the whole batch finishes): `onTaskDiscovered`
+ * (it got a task_id — the tray/Activity owns any later failure for that task
+ * from here on), `onFileFailed` (it failed before ever getting one), or
+ * `onFileResolved` (a plain success/finished line with no task_id at all —
+ * upload-only mode, and the no-scheduler process path, never emit one). A file
+ * can still fail *after* `onFileResolved` — that later failure still fires
+ * `onFileFailed` when its line arrives.
  */
 export async function streamUploadOrProcessDocument(
   files: File[],
@@ -38,15 +49,12 @@ export async function streamUploadOrProcessDocument(
   metadata?: Record<string, any>,
   onTaskDiscovered?: (task: ScheduledTask) => void,
   onFileFailed?: (filename: string, message: string) => void,
+  onFileResolved?: (filename: string) => void,
 ): Promise<ScheduledTask[]> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
   for (const file of files) {
-    // A file picked out of a folder (webkitdirectory input, dropped directory)
-    // uploads under its RELATIVE path as the multipart filename per the HTML spec
-    // — the backend then 404s trying to write temp storage under the missing
-    // subdirectories. Pin each part's filename to its leaf name explicitly.
-    formData.append("files", file, file.name.split("/").pop() || file.name);
+    formData.append("files", file, leafFileName(file));
   }
   formData.append("metadata_json", JSON.stringify(metadata) || "{}");
 
@@ -71,12 +79,11 @@ export async function streamUploadOrProcessDocument(
   // these is that task's own failure to report, via the tray/Activity, forever
   // exempt from onFileFailed regardless of event order.
   const taskFilenames = new Set<string>();
-  // Last success/failure seen per filename that never got a task_id (upload-only
-  // mode, and the no-scheduler process path, never emit one at all) — "last
-  // wins" because a file can look done and then still fail later in the same
-  // request (e.g. its own task_run row failed to create, then the batch's
-  // scheduler submission failed too): an earlier success must not suppress that.
-  const lastOutcomeByFilename = new Map<string, { failed: boolean; message?: string }>();
+  // Last known failed/not per filename that never got a task_id — used only for
+  // the final "did anything in the batch actually succeed" decision below, since
+  // a later failure augments rather than invalidates an earlier success signal.
+  const lastFailedByFilename = new Map<string, boolean>();
+  let firstFailureMessage: string | null = null;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
@@ -98,21 +105,26 @@ export async function streamUploadOrProcessDocument(
           const task: ScheduledTask = {
             taskId: event.task_id,
             documentUid: typeof event.document_uid === "string" && event.document_uid ? event.document_uid : null,
-            filename: eventFilename ?? files[0]?.name ?? "",
+            filename: eventFilename ?? "",
           };
           if (eventFilename) taskFilenames.add(eventFilename);
           tasks.push(task);
           onTaskDiscovered?.(task);
-        } else if ((event.status === "failed" || event.status === "error") && eventFilename) {
+        } else if (eventFilename && !taskFilenames.has(eventFilename)) {
           // The stream's final line is a batch-level summary with no filename of
           // its own (`{step: "done", status, error}`) — every genuine per-file
-          // failure already has its own named line before that, so a status
-          // line with no filename carries nothing to attribute to any one file.
-          const message =
-            typeof event.error === "string" && event.error ? event.error : `Failed to process ${eventFilename}`;
-          lastOutcomeByFilename.set(eventFilename, { failed: true, message });
-        } else if ((event.status === "success" || event.status === "finished") && eventFilename) {
-          lastOutcomeByFilename.set(eventFilename, { failed: false });
+          // outcome already has its own named line before that, so a status line
+          // with no filename carries nothing to attribute to any one file.
+          if (event.status === "failed" || event.status === "error") {
+            const message =
+              typeof event.error === "string" && event.error ? event.error : `Failed to process ${eventFilename}`;
+            lastFailedByFilename.set(eventFilename, true);
+            firstFailureMessage ??= message;
+            onFileFailed?.(eventFilename, message);
+          } else if (event.status === "success" || event.status === "finished") {
+            lastFailedByFilename.set(eventFilename, false);
+            onFileResolved?.(eventFilename);
+          }
         }
       } catch {
         // non-JSON line — ignore
@@ -120,23 +132,10 @@ export async function streamUploadOrProcessDocument(
     }
   }
 
-  // Report every non-task-owned file whose last known status was a failure —
-  // including when the whole batch fails, so a second/third bad file isn't
-  // lost behind the one that gets thrown below.
-  const unresolvedFailures: { filename: string; message: string }[] = [];
-  for (const [filename, outcome] of lastOutcomeByFilename) {
-    if (outcome.failed && !taskFilenames.has(filename)) {
-      unresolvedFailures.push({ filename, message: outcome.message! });
-    }
-  }
-  for (const { filename, message } of unresolvedFailures) {
-    onFileFailed?.(filename, message);
-  }
-
-  // Nothing in the batch resolved — signal the total failure to the caller too.
-  const anyResolved = tasks.length > 0 || Array.from(lastOutcomeByFilename.values()).some((o) => !o.failed);
-  if (!anyResolved && unresolvedFailures.length > 0) {
-    throw new Error(unresolvedFailures[0].message);
+  // Nothing in the batch actually resolved — signal the total failure too.
+  const anyResolved = tasks.length > 0 || Array.from(lastFailedByFilename.values()).some((failed) => !failed);
+  if (!anyResolved && firstFailureMessage) {
+    throw new Error(firstFailureMessage);
   }
 
   return tasks;

@@ -43,7 +43,10 @@ vi.mock("@shared/molecules/Select/Select", () => ({ default: () => null }));
 // Not under test here — and its bootstrap query (RTK) would need a Redux Provider.
 vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({ default: () => null }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({ streamUploadOrProcessDocument: vi.fn() }));
+vi.mock("../../../../../slices/streamDocumentUpload", () => ({
+  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
+  streamUploadOrProcessDocument: vi.fn(),
+}));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // Precheck answers "allowed" so saves proceed; the denial path has its own
   // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.

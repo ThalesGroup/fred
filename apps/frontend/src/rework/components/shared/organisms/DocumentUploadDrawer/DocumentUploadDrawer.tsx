@@ -25,7 +25,11 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import { formatBytes } from "@shared/utils/formatBytes";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import { streamUploadOrProcessDocument, type ScheduledTask } from "../../../../../slices/streamDocumentUpload";
+import {
+  leafFileName,
+  streamUploadOrProcessDocument,
+  type ScheduledTask,
+} from "../../../../../slices/streamDocumentUpload";
 import {
   IngestionProcessingProfile,
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
@@ -68,11 +72,13 @@ interface DocumentUploadDrawerProps {
 }
 
 /**
- * Resolves as soon as the first file in `files` is scheduled, not once the whole
- * batch's ingestion finishes — the request keeps streaming in the background, so
- * `onDiscovered`/`onBackgroundError` keep firing for the rest of the batch. Pass
- * files that share `requestMetadata` (one request per batch cuts ReBAC/quota
- * checks to one per batch instead of one per file, see streamUploadOrProcessDocument).
+ * Resolves once every file in `files` has an outcome (task_id, reported
+ * failure, or plain success) — resolving on just the first would let the
+ * drawer close/refresh while the rest of the batch is still unaccounted for.
+ * Each outcome still fires its callback as its own line streams in, so the
+ * tray/toast never waits on the slowest file. A mid-stream transport failure
+ * reports whatever's still pending too, so it isn't silently dropped. Pass
+ * files sharing `requestMetadata` (see streamUploadOrProcessDocument).
  */
 export function scheduleFiles(
   files: File[],
@@ -83,14 +89,15 @@ export function scheduleFiles(
 ): Promise<void> {
   return new Promise<void>((resolve) => {
     let settled = false;
-    let taskDiscovered = false;
-    // A total-batch-failure rejection restates the first per-file failure already
-    // reported below — track that to avoid a second, redundant toast for it.
-    let fileFailureReported = false;
+    const pendingLeafNames = new Set(files.map(leafFileName));
     const settle = () => {
       if (settled) return;
       settled = true;
       resolve();
+    };
+    const markDone = (filename: string) => {
+      pendingLeafNames.delete(filename);
+      if (pendingLeafNames.size === 0) settle();
     };
 
     streamUploadOrProcessDocument(
@@ -98,32 +105,30 @@ export function scheduleFiles(
       uploadMode,
       requestMetadata,
       (task) => {
-        taskDiscovered = true;
         onDiscovered(task);
-        settle();
+        markDone(task.filename);
       },
       (filename, message) => {
-        fileFailureReported = true;
         onBackgroundError(`${filename}: ${message}`);
+        markDone(filename);
       },
+      markDone,
     )
       .then(() => settle())
       .catch((err) => {
-        settle();
-        // A task_id already known means the backend fails that task explicitly
-        // (visible in the tray/Activity) — reporting it here too would double it up.
-        // Only surface a toast for a failure that hasn't already been reported per file.
-        if (!taskDiscovered && !fileFailureReported) {
+        // Some files may already have an outcome (reported above, as their
+        // lines streamed in) even though the request as a whole then failed
+        // — only the ones still pending were never accounted for.
+        if (pendingLeafNames.size > 0) {
           onBackgroundError(err instanceof Error ? err.message : String(err));
         }
+        settle();
       });
   });
 }
 
-// Bounds the per-request ReBAC/quota check burst a large drop throws at OpenFGA:
-// a pool slot frees on a batch's first task_id, which is still a valid bound on
-// concurrent checks (not just connections) since the backend runs both checks
-// before the streaming response starts at all.
+// Bounds how many batched upload requests (and their ReBAC/quota checks) run
+// at once, and how many files each request carries.
 const UPLOAD_BATCH_SIZE = 8;
 const UPLOAD_CONCURRENCY = 4;
 
@@ -148,6 +153,16 @@ export async function runWithConcurrencyLimit<T>(
  * batch's progress lines by that leaf name, so a collision would make two
  * files' outcomes indistinguishable within one request. */
 export function chunkFilesByLeafName(files: File[], maxSize: number): File[][] {
+  const leafNames = files.map(leafFileName);
+  const hasCollision = new Set(leafNames).size !== leafNames.length;
+  if (!hasCollision) {
+    // The common case — a drop rarely repeats a filename — is a plain O(n)
+    // slice; the collision-safe grouping below is only needed when it does.
+    const batches: File[][] = [];
+    for (let i = 0; i < files.length; i += maxSize) batches.push(files.slice(i, i + maxSize));
+    return batches;
+  }
+
   const batches: File[][] = [];
   let remaining = files;
   while (remaining.length) {
@@ -155,7 +170,7 @@ export function chunkFilesByLeafName(files: File[], maxSize: number): File[][] {
     const leftover: File[] = [];
     const namesInBatch = new Set<string>();
     for (const file of remaining) {
-      const leafName = file.name.split("/").pop() || file.name;
+      const leafName = leafFileName(file);
       if (batch.length < maxSize && !namesInBatch.has(leafName)) {
         batch.push(file);
         namesInBatch.add(leafName);
@@ -326,6 +341,16 @@ export function DocumentUploadDrawer({
     } catch {
       // Precheck unavailable — let the enforcement path answer.
     }
+    // Each file's subdirectory key, computed once and reused below both to
+    // resolve folder tags and to group files by destination.
+    const dirKeyByFile = new Map<File, string>();
+    const dirSegmentsByFile = new Map<File, string[]>();
+    for (const file of files) {
+      const segments = relativeDirSegments(file);
+      dirSegmentsByFile.set(file, segments);
+      dirKeyByFile.set(file, segments.join("/"));
+    }
+
     // Mirror a dropped folder's structure first: one tag chain per distinct
     // subdirectory, resolved before any upload starts so a failed/forbidden tag
     // creation aborts the save with nothing half-uploaded (the drawer stays open
@@ -335,8 +360,8 @@ export function DocumentUploadDrawer({
     if (ensureFolderPath) {
       const chains = new Map<string, string[]>();
       for (const file of files) {
-        const segments = relativeDirSegments(file);
-        if (segments.length) chains.set(segments.join("/"), segments);
+        const key = dirKeyByFile.get(file)!;
+        if (key) chains.set(key, dirSegmentsByFile.get(file)!);
       }
       try {
         for (const [key, segments] of chains) tagIdByDir.set(key, await ensureFolderPath(segments));
@@ -354,12 +379,12 @@ export function DocumentUploadDrawer({
       // request metadata => one request can carry several files, see
       // scheduleFiles' doc comment), then run those batches through a bounded
       // pool rather than firing one request per file unbounded.
+      const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
       const groups = new Map<string, { requestMetadata: Record<string, unknown>; files: File[] }>();
       for (const file of files) {
-        const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
         // A file inside a dropped subdirectory attaches to that subdirectory's
         // tag instead of the destination folder's (`base` keeps the latter).
-        const dirTagId = tagIdByDir.get(relativeDirSegments(file).join("/"));
+        const dirTagId = tagIdByDir.get(dirKeyByFile.get(file)!);
         const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
         const groupKey = dirTagId ?? "";
         const group = groups.get(groupKey);
