@@ -51,9 +51,9 @@
         "title": "Sélecteur de mode de recherche"
       },
       "library_binding": {
-        "description": "Restreint définitivement cet agent aux librairies sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
-        "noLibraries": "Aucune librairie disponible.",
-        "title": "Lier à des librairies spécifiques"
+        "description": "Restreint définitivement cet agent aux bibliothèques sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
+        "noLibraries": "Aucune bibliothèque disponible.",
+        "title": "Lier à des bibliothèques spécifiques"
       },
       "library_scope_picker": {
         "description": "Sélectionnez les bibliothèques de documents que cet agent peut interroger. L'arborescence affiche les fichiers actuellement présents dans chaque bibliothèque."
@@ -418,9 +418,6 @@
       "copied": "Copié"
     },
     "contextPrompts": {
-      "rowLabel": "Prompts de l'équipe",
-      "title": "Bibliothèque de prompts",
-      "empty": "Aucun prompt disponible",
       "insertErrorSummary": "Impossible d'insérer le prompt",
       "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
@@ -476,7 +473,6 @@
     },
     "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
-    "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
       "tooltip": "Copier le message",
       "response": "Copier la réponse",
@@ -508,11 +504,11 @@
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
-      "empty": "Aucun fichier n'est attaché à cette conversation.",
-      "filePreviewTitle": "Aperçu du fichier",
-      "loading": "Chargement des fichiers...",
+      "empty": "Aucune pièce jointe dans cette conversation.",
+      "filePreviewTitle": "Aperçu de la pièce jointe",
+      "loading": "Chargement des pièces jointes...",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
-      "title": "Fichiers de conversation"
+      "title": "Pièces jointes"
     },
     "sessionTitleEditor": {
       "untitled": "Conversation sans titre",
@@ -528,14 +524,27 @@
     "startConversationVariantSearch": "Dans quoi veut-on plonger aujourd'hui, {{username}} ?",
     "stopRecording": "Arrêter l'enregistrement",
     "stopResponse": "Arrêter la réponse",
-    "toggleDebugDrawer": "Afficher ou masquer le tiroir de debug",
     "transcribingAudio": "Transcription de l'audio",
     "voiceInputErrorSummary": "Échec de la dictée vocale",
     "voiceInputPermissionDenied": "L'accès au microphone a été refusé.",
     "voiceInputStartFailed": "Impossible de démarrer l'enregistrement audio.",
     "voiceInputTranscriptionFailed": "Impossible de transcrire l'extrait audio.",
     "voiceInputUnavailable": "L'enregistrement audio n'est pas disponible dans ce navigateur.",
-    "welcomeFallback": "Bonjour"
+    "welcomeFallback": "Bonjour",
+    "promptSelectionPanel": {
+      "menuRow": "Bibliothèque de prompts",
+      "title": "Sélectionner un prompt à insérer",
+      "spaceLabel": "Espace",
+      "space": {
+        "team": "Équipe",
+        "personal": "Mon espace"
+      },
+      "searchPlaceholder": "Rechercher un prompt...",
+      "clearSearch": "Effacer la recherche",
+      "allCategories": "Toutes",
+      "empty": "Aucun prompt dans cet espace.",
+      "emptyFilters": "Aucun prompt ne correspond aux filtres."
+    }
   },
   "comingSoon": {
     "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
@@ -1551,6 +1560,7 @@
     "collapse": "Réduire",
     "create": "Créer",
     "delete": "Supprimer",
+    "documentIncludedByFolder": "Inclus par la sélection du dossier",
     "documents": "documents",
     "expand": "Développer",
     "gcu": {
@@ -2039,7 +2049,8 @@
           "platformRoles": "Rôles plateforme",
           "selftest": "Auto-test",
           "tasks": "Activité",
-          "teams": "Equipes"
+          "teams": "Equipes",
+          "platformPrompt": "Prompt global de la plateforme"
         },
         "title": "Espace administration"
       },
@@ -2283,10 +2294,6 @@
     "teamCard": {
       "join": "Rejoindre",
       "inviteOnly": "Sur invitation",
-      "invitationMail": {
-        "subject": "[{{site}}] Demande pour rejoindre l'équipe {{team}}",
-        "body": "Bonjour,\n\nJe souhaite rejoindre l'équipe {{team}} sur {{site}}.\n\nInformations utilisateur : {{user}}\n\nAller à la page de l'équipe {{team}} : {{agentsUrl}}\nGérer les membres de l'équipe {{team}} : {{membersUrl}}"
-      },
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
@@ -2380,6 +2387,13 @@
       },
       "parameters": {
         "title": "Paramètres",
+        "name": {
+          "label": "Nom de l'équipe",
+          "support": "Ce nom identifie votre équipe partout dans la plateforme. Il doit être unique.",
+          "save": "Renommer l'équipe",
+          "alreadyTaken": "Ce nom est déjà utilisé par une autre équipe.",
+          "saveError": "Impossible de renommer l'équipe."
+        },
         "description": {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
@@ -2445,7 +2459,16 @@
           "aria": "Filtrer par pod"
         },
         "title": "Agents de l'équipe",
-        "titlePersonal": "Vos agents personnels"
+        "titlePersonal": "Vos agents personnels",
+        "searchPlaceholder": "Rechercher des {{agentsNicknamePlural}}...",
+        "clearSearch": "Effacer la recherche",
+        "emptySearch": "Aucun résultat pour cette recherche.",
+        "sort": {
+          "name": "Alphabétique",
+          "created": "Derniers créés",
+          "updated": "Derniers modifiés"
+        },
+        "sortLabel": "Trier"
       },
       "formAgent": {
         "advancedSettings": "Paramètres avancés",
@@ -2473,6 +2496,7 @@
             "actionsIntegration": "Actions et intégration"
           },
           "actionsIntegrationEmpty": "Aucune capacité dans cette section pour le moment.",
+          "notSupported": "Cet agent ne prend pas en charge la sélection de capacités.",
           "packs": {
             "teamResources": {
               "title": "Accès aux ressources de l'équipe",
@@ -2998,6 +3022,35 @@
           "errors": "Erreurs"
         }
       }
+    },
+    "platformPrompt": {
+      "title": "Prompt global de la plateforme",
+      "subtitle": "La personnalité et les instructions standardisées de cette plateforme. C'est le premier bloc du prompt système de chaque agent, avant les instructions propres à chaque agent.",
+      "editor": {
+        "title": "Prompt global",
+        "badge": "Modifiable",
+        "subtitle": "La personnalité de votre plateforme et ses règles propres. Envoyé en premier, avant tout le reste, à chaque appel de chaque agent."
+      },
+      "field": {
+        "label": "Texte du prompt",
+        "explanation": "Restez concis : chaque caractère est du contexte permanent."
+      },
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "reset": "Annuler les modifications",
+      "suppressed": "Le prompt global de la plateforme est enregistré vide : aucun bloc n'est envoyé. Ce n'est pas la même chose que de n'en avoir jamais enregistré.",
+      "lastUpdated": "Dernière modification par {{who}} le {{when}}.",
+      "unknownAuthor": "un utilisateur inconnu",
+      "saved": "Prompt global de la plateforme enregistré.",
+      "saveFailed": "Impossible d'enregistrer le prompt global de la plateforme.",
+      "instructions": {
+        "title": "Instructions globales de la plateforme",
+        "badge": "Lecture seule",
+        "subtitle": "Livrées avec la plateforme et rendues juste après votre prompt, pour tous les agents. Elles ne changent qu'avec un déploiement.",
+        "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon — utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
+        "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
+      },
+      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
     }
   },
   "runtime": {

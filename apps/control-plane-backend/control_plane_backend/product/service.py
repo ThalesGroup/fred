@@ -25,6 +25,9 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.security.models import Resource
+from fred_core.security.rebac.capability_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
 from fred_core.tasks import ErasureReason
 from fred_sdk.contracts.capability import (
@@ -35,9 +38,6 @@ from fred_sdk.contracts.capability import (
     ChatControlsRequestItem,
     ChatControlsResponse,
     StoredCapabilityConfig,
-)
-from fred_sdk.contracts.capability.manifest import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
 )
 from fred_sdk.contracts.models import TeamScopePolicy
 from pydantic import ValidationError
@@ -51,7 +51,7 @@ from control_plane_backend.agent_instances.suspension import (
     reconcile_instance_suspension,
 )
 from control_plane_backend.capabilities.authz import (
-    can_use_capability,
+    can_team_use_capability,
     filter_entries_by_usable,
     usable_capability_ids,
 )
@@ -59,6 +59,7 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
+from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
@@ -187,6 +188,7 @@ class _RuntimeTemplatePayload:
         kind: str,
         default_tuning: ManagedAgentTuning | None = None,
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
+        supports_capabilities: bool = True,
         default_capability_ids: list[str] | None = None,
         max_chat_input_chars: int | None = None,
     ) -> None:
@@ -200,6 +202,7 @@ class _RuntimeTemplatePayload:
             description=description,
         )
         self.available_capabilities = available_capabilities or []
+        self.supports_capabilities = supports_capabilities
         # The capability ids activated when an instance's `selected_capability_ids`
         # is None (CAPAB-01 / #1980, RFC §8.1 amendment): the plain catalog ids of
         # `definition.default_mcp_servers`, mirrored on the wire as
@@ -275,6 +278,10 @@ class _RuntimeTemplatePayload:
             # Pod-installed capabilities (#1974) — the same SDK wire model the
             # pod serializes, never a hand-declared parallel copy.
             available_capabilities=available_capabilities,
+            # Unfiltered by team can_use, unlike available_capabilities above —
+            # the only way to tell "team has zero usable capabilities" apart
+            # from "template doesn't support selection" once that's narrowed.
+            supports_capabilities=bool(data.get("supports_capabilities", True)),
             # Ids of `definition.default_mcp_servers` (the servers activated when
             # `selected_capability_ids is None`) — MCP-derived and native ids
             # alike (RFC §2), read verbatim off the pod's own wire field rather
@@ -1445,7 +1452,9 @@ async def _apply_capability_selection(
             denied = [
                 cap_id
                 for cap_id in selected_ids
-                if not await can_use_capability(rebac, team_id, cap_id)
+                if not await can_team_use_capability(
+                    rebac, team_id, capability_id=cap_id
+                )
             ]
             if denied:
                 raise EnrollmentError(
@@ -1603,6 +1612,7 @@ async def list_agent_templates(
                     available_capabilities=filter_entries_by_usable(
                         template.available_capabilities, usable_ids
                     ),
+                    supports_capabilities=template.supports_capabilities,
                     # Unfiltered on purpose: this is the template's DECLARED
                     # default list, and `available_capabilities` above is
                     # already narrowed to what this team `can_use`. The
@@ -2656,10 +2666,11 @@ async def enroll_agent_instance(
     # exempt, same reasoning and same narrow allowlist as `list_agent_templates`
     # above (`capability_gate_exempt`) — never any `public=False` template,
     # which has its own, independent meaning.
-    if not capability_gate_exempt(source_agent_id) and not await can_use_capability(
+    gate_exempt = capability_gate_exempt(source_agent_id)
+    if not gate_exempt and not await can_team_use_capability(
         deps.team_dependencies.rebac,
         team_id,
-        template_capability_id(source_runtime_id, source_agent_id),
+        capability_id=template_capability_id(source_runtime_id, source_agent_id),
     ):
         raise EnrollmentError(
             f"Template {request.template_id!r} was not found on runtime source "
@@ -2797,10 +2808,12 @@ async def update_agent_instance(
     # `suspend_dependent_instances`/`set_capability_default_on` already
     # suspended for exactly that reason — unenroll (delete) is still always
     # allowed, only editing is blocked.
-    if not await can_use_capability(
+    if not await can_team_use_capability(
         deps.team_dependencies.rebac,
         team_id,
-        template_capability_id(record.source_runtime_id, record.source_agent_id),
+        capability_id=template_capability_id(
+            record.source_runtime_id, record.source_agent_id
+        ),
     ):
         raise EnrollmentError(
             "This agent's template access has been revoked for your team; it "
@@ -3417,10 +3430,12 @@ async def get_runtime_binding_for_team(
         all_team_settings,
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
+        platform_prompt,
     ) = await asyncio.gather(
         deps.get_team_capability_settings_store().list_for_team(team_id),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
         resolve_platform_chat_model_binding(deps),
+        resolve_platform_prompt_text(deps),
     )
     team_capability_settings = {
         cap_id: settings
@@ -3437,6 +3452,7 @@ async def get_runtime_binding_for_team(
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_prompt=platform_prompt,
     )
 
 

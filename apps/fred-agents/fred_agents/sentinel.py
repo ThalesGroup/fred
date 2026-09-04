@@ -52,7 +52,7 @@ class SentinelReActDefinition(ReActAgentDefinition):
 
     How to use it:
     - instantiate it once and register it in the pod registry
-    - extend it later if Sentinel needs additional declared tools or guardrails
+    - extend it later if Sentinel needs additional declared tools
 
     Example:
     - `definition = SentinelReActDefinition()`

@@ -38,7 +38,6 @@ How to use it:
 
 from fred_sdk import (
     FieldSpec,
-    GuardrailDefinition,
     MCPServerRef,
     UIHints,
     load_agent_prompt_markdown,
@@ -137,34 +136,6 @@ class PlatformOpsReActDefinition(ReActAgentDefinition):
         return ReActPolicy(
             system_prompt_template=self.system_prompt_template,
             tool_selection=PLATFORM_OPS_TOOL_SELECTION,
-            guardrails=(
-                GuardrailDefinition(
-                    guardrail_id="ground_on_schema",
-                    title="Ground queries on the discovered schema",
-                    description=(
-                        "List the available tables before the first query of a "
-                        "session and never invent tables or columns that the "
-                        "discovery tool did not report."
-                    ),
-                ),
-                GuardrailDefinition(
-                    guardrail_id="aggregate_in_sql",
-                    title="Aggregate in SQL, do not fetch raw rows",
-                    description=(
-                        "Answer with aggregate queries (GROUP BY, count, avg) "
-                        "rather than fetching raw rows; hitting the 200-row cap "
-                        "means the query must be rewritten."
-                    ),
-                ),
-                GuardrailDefinition(
-                    guardrail_id="fix_failed_queries",
-                    title="Fix failed queries, never retry unchanged",
-                    description=(
-                        "When a query fails, read the server's error message and "
-                        "correct the query instead of retrying it unchanged."
-                    ),
-                ),
-            ),
         )
 
 

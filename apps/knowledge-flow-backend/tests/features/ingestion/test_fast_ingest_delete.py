@@ -35,6 +35,7 @@ async def test_delete_fast_ingest_artifacts_deletes_vectors_and_ignores_storage_
         user=_build_user(),
         document_uid="doc-1",
         storage_key="uploads/file.txt",  # accepted for backward compat, ignored
+        is_platform_bypass=False,
     )
 
     assert backend == SchedulerBackend.MEMORY.value

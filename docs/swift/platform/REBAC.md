@@ -175,6 +175,28 @@ enablement. V1 applications are unavailable in personal teams even when a
 capability is default-on; application services still own any finer-grained
 object authorization.
 
+A first-party application backend — one deliberately admitted by devops and
+provisioned with its own OpenFGA credential — creates one process-lifetime
+`RebacSdk` with `rebac_sdk_factory`. The facade privately owns the engine and
+exposes only `check_user_team_permission`, `check_team_capability`, and
+`check_application_access`; callers receive no tuple writer, general query, or
+raw OpenFGA client. All three calls are authorization gates that return no data
+and raise on denial. An arm's-length backend instead keeps forwarding the
+caller's bearer to `GET /teams/{team_id}/applications` and requires its own id
+in the response. Every facade check rejects personal spaces locally before an
+OpenFGA call, including when a backend composes the two component checks.
+
+The SDK answers the two ReBAC questions above and does not read catalog or
+feature-gate state. `enableApplications: false` nevertheless withdraws the
+normal browser path for both tiers because the gateway returns 404 for
+`/apps` and `/app-services`. Parking one application (`enabled: false`) removes
+it from the arm's-length catalog while leaving its route and grant intact, so
+it does not change the SDK result and must not be treated as a security kill
+switch. Revoke the team's `app__<app_id>` grant to withdraw entitlement from
+both tiers; during an incident, also block or remove the gateway route. The
+trust-tier rationale and datastore boundary are recorded in
+[`CONTROL-PLANE-PRODUCT-CONTRACT.md` §46](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#46-contract-notes--team-applications-are-runtime-registered-frame-hosted-uis-2026-08-31).
+
 ### Personal teams — self-provisioned, never admin-writable (AUTHZ-08)
 
 A personal team (`personal-<uid>`, format decided by CTRLP-10) is a real ReBAC
@@ -341,6 +363,83 @@ security:
 And set `OPENFGA_API_TOKEN` in the environment.
 
 By default the backend will create the store (if missing) and push the Fred authorization model at startup. You can turn that off (with `create_store_if_needed` and `sync_schema_on_init`) if you manage OpenFGA yourself. In that case, we recommend you to pass a a static authorization model id with `authorization_model_id`.
+
+A first-party application backend has a stricter configuration than the
+general default:
+
+```yaml
+security:
+  profile: c3
+  user:
+    enabled: true
+    client_id: "my-application" # exact audience of incoming user JWTs
+    # realm_url: ...
+  m2m:
+    enabled: true
+    client_id: "my-application-service" # outbound service identity
+    # realm_url: ...
+    # secret_env_var: ...
+  rebac:
+    enabled: true
+    type: openfga
+    api_url: "http://openfga:8080"
+    store_name: "fred"
+    create_store_if_needed: false
+    sync_schema_on_init: false
+    authorization_model_id: null # or a deployment-pinned existing model
+    token_env_var: "MY_APPLICATION_OPENFGA_API_TOKEN"
+    timeout_millisec: 5000
+```
+
+These are three separate identities. `security.user.client_id` is the local
+resource-server audience: under `c3`, a caller token issued for another backend
+is rejected. `security.m2m` is this backend's Keycloak identity for outbound
+service calls; it neither validates the incoming bearer nor authenticates to
+OpenFGA. `security.rebac.token_env_var` names the backend's OpenFGA secret.
+Devops provisions a different secret for every admitted backend so one can be
+revoked without rotating every first-party service. No secret value belongs in
+YAML or application registration.
+
+Admission is an explicit operator sequence: generate a new key value, add it to
+OpenFGA's accepted pre-shared-key list, mount only that value into the admitted
+backend under its configured `token_env_var`, and remove that key from the
+accepted list when withdrawing the backend. A distinct environment-variable
+name alone does not prove that the underlying values differ. OpenFGA pre-shared
+keys are equivalent, unscoped API credentials; using one value per backend
+lets operators rotate or revoke one backend without changing every other
+backend. It does not provide per-key authorization or reduce what a stolen
+accepted key can access inside OpenFGA. The concrete deployment wiring belongs
+with the first backend admitted to this tier.
+
+The first-party factory fails startup unless `c3`, user authentication, M2M
+authentication, and OpenFGA are enabled, both store/schema ownership flags are
+`false`, a KPI writer is supplied, and `timeout_millisec` is between 1 and
+30,000. This prevents the SDK from silently falling back to the permissive
+no-op engine, prevents an application from creating a misspelled store or
+publishing Fred's authorization model, and bounds dependency stalls. It also
+initializes fred-core's process-local JWT verifier from `security.user`, so the
+C3 issuer and audience checks guard the user dependency that supplies `user`.
+The async factory resolves the configured store before startup completes;
+invalid credentials, an absent store, or an unavailable OpenFGA endpoint do
+not wait for the first request. Build the facade once with the process-level
+writer, reuse it across requests, and close it during shutdown:
+
+```python
+from fred_core.security.rebac.rebac_sdk import rebac_sdk_factory
+
+# Application startup: initialize once and retain on process state.
+sdk = await rebac_sdk_factory(configuration.security, kpi_writer=kpi_writer)
+
+# Request handling: reuse the retained facade.
+await sdk.check_application_access(user, team_id=team_id, app_id=app_id)
+
+# Application shutdown.
+await sdk.close()
+```
+
+An async context manager is equivalent. Do not build an SDK or OpenFGA client
+per request; that discards connection pooling and lifecycle ownership. The KPI
+writer records the existing OpenFGA call count, failure, and latency metrics.
 
 ### Full commented configuration
 

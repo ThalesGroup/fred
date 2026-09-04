@@ -144,6 +144,9 @@ from .react_tool_binding import (
 from .react_tool_binding import (
     build_runtime_tool_prompt_suffix as _build_runtime_tool_prompt_suffix,
 )
+from .react_tool_binding import (
+    tabular_tools_bound as _tabular_tools_bound,
+)
 from .react_tool_loop import build_tool_loop_compiled_react_agent
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver
@@ -834,9 +837,21 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         system_prompt = _compose_system_prompt(
             system_prompt,
             binding=binding,
-            definition=self.definition,
             agent_id=self.definition.agent_id,
-            tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
+            tool_suffix=_build_runtime_tool_prompt_suffix(
+                bound_tools,
+                mcp_prompt_groups=(
+                    self._capability_block.mcp_prompt_groups
+                    if self._capability_block is not None
+                    else ()
+                ),
+                capability_tools=(
+                    self._capability_block.tools
+                    if self._capability_block is not None
+                    else ()
+                ),
+            ),
+            tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
         logger.debug(
             "[LLM][SYSTEM PROMPT] agent=%s total_len=%d",

@@ -214,6 +214,17 @@ class MCPServerConfiguration(BaseModel):
             "system prompt after any operator override."
         ),
     )
+    prompt_group_title: str | None = Field(
+        default=None,
+        description=(
+            "Short, plain-English phrase completing 'Tools for {title}:' in "
+            "the ReAct system prompt's grouped tool list (e.g. 'tabular "
+            "action', 'document search'). Unlike `name`/`description`, this "
+            "is NOT an i18n key — it is rendered directly into the "
+            "model-facing system prompt, never through the frontend. Falls "
+            "back to the raw catalog `id` when unset."
+        ),
+    )
     config_fields: List[FieldSpec] = Field(
         default_factory=list,
         description=(
@@ -434,6 +445,8 @@ class ToolRefRequirement(FrozenModel):
 
     Available constants:
         TOOL_REF_KNOWLEDGE_SEARCH          — search document libraries
+        TOOL_REF_SIMILARITY_SEARCH         — compare an anchor passage against
+                                              explicit target documents
         TOOL_REF_ARTIFACTS_PUBLISH_TEXT    — publish a markdown report
         TOOL_REF_RESOURCES_FETCH_TEXT      — read a config or template file
         TOOL_REF_TRACES_SUMMARIZE_CONVERSATION — summarise an execution trace
@@ -761,57 +774,6 @@ class GraphDefinition(FrozenModel):
         return "\n".join(lines) + "\n"
 
 
-class GuardrailDefinition(FrozenModel):
-    """
-    One explicit rule your agent should keep following.
-
-    Why this exists:
-    - use a guardrail when you want one short rule to stay visible and explicit
-      instead of hiding it inside a long system prompt
-    - this is useful for rules such as grounding, uncertainty, or language
-
-    How to use it:
-    - write one guardrail per important rule
-    - `guardrail_id` is a slug you invent — pick a short lowercase name that
-      describes the rule, e.g. "grounding", "uncertainty", "scope". It does
-      not need to match anything else.
-    - keep `title` short (shown in inspection views)
-    - write `description` as a direct instruction the model can follow
-    - use guardrails for sharp, stable rules — not for tone or persona (those
-      belong in the system prompt)
-
-    Important:
-    - a guardrail is prompt-level guidance, not a hard technical sandbox
-
-    Example:
-    ```python
-    GuardrailDefinition(
-        guardrail_id="grounding",
-        title="Ground claims in corpus evidence",
-        description="Do not present unsupported claims as if they came from corpus evidence.",
-    )
-    ```
-    """
-
-    guardrail_id: str = Field(
-        ...,
-        min_length=1,
-        description=(
-            "Stable identifier for this rule, for example `grounding` or `uncertainty`."
-        ),
-    )
-    title: str = Field(
-        ...,
-        min_length=1,
-        description="Short label for the rule, for example `Ground claims in corpus evidence`.",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="The exact instruction the agent should follow.",
-    )
-
-
 class ToolSelectionPolicy(FrozenModel):
     """
     Declarative policy controlling how tool usage is explored in a ReAct turn.
@@ -888,13 +850,13 @@ class ReActPolicy(FrozenModel):
     This is the right abstraction when the developer wants to describe how the
     assistant should behave in general, not to script a workflow step by step.
 
-    Prompt vs guardrails:
-    - `system_prompt_template` is the broad strategy and tone
-    - `guardrails` are explicit operating constraints attached as policy data
+    `system_prompt_template` carries the whole behaviour — strategy, tone and
+    the sharp operating rules alike; the runtime adds the platform-wide blocks,
+    the tool listing and the output contract around it at execution time.
 
     Common policy shapes:
-    - "Prompt only": no tools, no approval, no guardrails
-    - "RAG helper": search tools + grounding/uncertainty guardrails
+    - "Prompt only": no tools, no approval
+    - "RAG helper": search tools + grounding rules in the template
     - "Operations copilot": tools + explicit approval on risky actions
     """
 
@@ -913,13 +875,6 @@ class ReActPolicy(FrozenModel):
         default_factory=ToolApprovalPolicy,
         description=(
             "When a tool call must pause for explicit human validation first."
-        ),
-    )
-    guardrails: tuple[GuardrailDefinition, ...] = Field(
-        default=(),
-        description=(
-            "Declarative behavioral constraints injected into runtime "
-            "operating guidance."
         ),
     )
 
@@ -1021,6 +976,25 @@ class AgentDefinition(FrozenModel, ABC):
     mode.  They must still be registered so the runtime can find and execute
     them, but they should not be presented as top-level chat models.
     """
+    supports_capabilities: bool = Field(
+        default=True,
+        description=(
+            "Whether this agent honestly participates in capability selection "
+            "(the platform's HITL-gated tool packs offered by agent-instance "
+            "creation/editing), as opposed to just happening to have some "
+            "compatible capability registered on its pod. Defaults to True on "
+            "the shared base — ReAct agents' whole execution model is tool/"
+            "capability selection, so every existing ReAct agent keeps working "
+            "unchanged. GraphAgentDefinition overrides this to False by default "
+            "(see there) since today's graph node functions do not consume "
+            "capability-provided tools; a graph agent author who deliberately "
+            "wants their agent to participate opts back in explicitly with "
+            "`supports_capabilities = True` on their own definition. This is "
+            "orthogonal to `declared_tool_refs` / `default_mcp_servers` (the "
+            "separate, older mechanism both agent kinds already use to declare "
+            "their own hardcoded tool needs) — do not conflate the two."
+        ),
+    )
 
     def preview(self) -> AgentPreview:
         return AgentPreview.none(note="No preview provided by this agent definition.")
@@ -1091,6 +1065,18 @@ class GraphAgentDefinition(AgentDefinition, ABC):
     """
 
     execution_category: ExecutionCategory = ExecutionCategory.GRAPH
+    supports_capabilities: bool = Field(
+        default=False,
+        description=(
+            "Graph agents default to False: no graph agent's node functions "
+            "consume capability-provided tools today (they use "
+            "`declared_tool_refs` / `default_mcp_servers` or direct calls "
+            "instead), so the honest default is 'not offered'. Override to "
+            "True on a specific GraphAgentDefinition subclass only if that "
+            "agent's own node functions genuinely read from the capability/"
+            "tool-selection surface at runtime."
+        ),
+    )
     declared_tool_refs: tuple[ToolRequirement, ...] = Field(
         default=(),
         description=(
@@ -1307,11 +1293,9 @@ class ReActAgentDefinition(AgentDefinition, ABC):
     def preview(self) -> AgentPreview:
         policy = self.policy()
         tool_count = len(self.declared_tool_refs)
-        guardrail_count = len(policy.guardrails)
         summary = (
             "ReAct runtime\n"
             f"- Declared tools: {tool_count}\n"
-            f"- Guardrails: {guardrail_count}\n"
             f"- Parallel tool calls: {'yes' if policy.tool_selection.allow_parallel_calls else 'no'}\n"
             f"- Human approval: {'yes' if policy.tool_approval.enabled else 'no'}\n"
         )

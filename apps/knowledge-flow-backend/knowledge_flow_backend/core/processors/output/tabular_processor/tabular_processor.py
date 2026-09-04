@@ -129,7 +129,7 @@ class TabularProcessor(BaseOutputProcessor):
 
         logger.info("Initializing TabularPipeline")
 
-    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
+    def process(self, file_path: str, metadata: DocumentMetadata, *, emit_pointer_chunk: bool = True) -> DocumentMetadata:
         """
         Convert one extracted CSV file into the active tabular backend.
 
@@ -143,6 +143,14 @@ class TabularProcessor(BaseOutputProcessor):
           `ProcessingStage.PREVIEW_READY` as done because the Parquet artifact
           can now serve tabular previews directly.
         - The method updates `metadata.extensions["tabular_v1"]`.
+        - Pass `emit_pointer_chunk=False` for a document with no `scope`/
+          `user_id` isolation of its own (e.g. a session-scoped chat
+          attachment): `_emit_pointer_chunk` writes via
+          `flat_metadata_from(metadata)`, which carries no such markers, so a
+          pointer chunk for that class of document would be visible to every
+          user's search regardless of the deployment's
+          `pointer_chunks_enabled` setting (DESIGN.md, "Session-Scoped
+          Attachment Datasets").
         """
         try:
             logger.info("Processing tabular file %s for document %s", file_path, metadata.document_uid)
@@ -159,7 +167,7 @@ class TabularProcessor(BaseOutputProcessor):
             metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
 
-            if self.tabular_config.pointer_chunks_enabled:
+            if emit_pointer_chunk and self.tabular_config.pointer_chunks_enabled:
                 self._emit_pointer_chunk(metadata, artifact)
 
             return metadata

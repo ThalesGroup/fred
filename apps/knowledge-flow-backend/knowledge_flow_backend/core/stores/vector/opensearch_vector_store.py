@@ -1257,7 +1257,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             return out
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunks for document_uid=%s", document_uid)
-            return []
+            raise RuntimeError("Failed to fetch chunks from OpenSearch.")
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         """

@@ -91,39 +91,6 @@ def _as_text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _coerce_text(value: object) -> str:
-    """
-    Convert a payload field to plain text without raising validation errors.
-
-    Why this exists:
-    - runtime tool payloads may be dicts, Pydantic models, or partial objects
-    - document-page parsing should stay defensive at the adapter boundary
-
-    How to use it:
-    - pass one raw field value from a runtime tool response
-    - receive a string or the empty string when the field is not text
-    """
-
-    return value if isinstance(value, str) else ""
-
-
-def _coerce_int(value: object) -> int | None:
-    """
-    Convert a payload field to an integer when possible.
-
-    Why this exists:
-    - filesystem pagination metadata should stay typed once it enters graph
-      state
-    - callers should not need repeated `isinstance` checks for every field
-
-    How to use it:
-    - pass one raw runtime-tool field
-    - receive an integer or `None` when the value is missing or invalid
-    """
-
-    return int(value) if isinstance(value, int | float) else None
-
-
 def _runtime_context_selected_uids(context: GraphNodeContext) -> list[str]:
     """
     Read the selected document uids from the bound runtime context.
@@ -232,36 +199,16 @@ def _allow_search_fallback(context: GraphNodeContext) -> bool:
     return _as_bool(context.tuning_values.get("settings.allow_search_fallback"), False)
 
 
-def _page_line_limit(context: GraphNodeContext) -> int:
-    """
-    Resolve the bounded filesystem line limit for one page read.
-
-    Why this exists:
-    - page size should be operator-tunable but still clamped to backend-safe
-      bounds
-    - every paginated read should use the same resolved limit
-
-    How to use it:
-    - call before invoking `read_file_page`
-    - the result is always between 20 and 500 lines
-    """
-
-    return max(
-        20,
-        min(500, _as_int(context.tuning_values.get("settings.page_line_limit"), 120)),
-    )
-
-
 def _page_max_chars(context: GraphNodeContext) -> int:
     """
     Resolve the bounded character budget for one page read.
 
     Why this exists:
     - large transcript pages must stay bounded before entering the model path
-    - the filesystem contract already exposes a safe upper bound we can mirror
+    - the port takes the same character budget, so one resolved value drives it
 
     How to use it:
-    - call before invoking `read_file_page`
+    - call before reading a page through `document_markdown`
     - the result is always between 4,000 and 50,000 characters
     """
 
@@ -526,33 +473,6 @@ def _line_range(page: DocumentPage) -> str:
     if page.end_line is None:
         return f"L{page.start_line}-L?"
     return f"L{page.start_line}-L{page.end_line}"
-
-
-def _normalize_page_payload(payload: object) -> dict[str, object]:
-    """
-    Normalize one runtime-tool page payload to a plain mapping.
-
-    Why this exists:
-    - `invoke_runtime_tool` may return dicts, Pydantic models, or similar
-      objects depending on runtime plumbing
-    - page parsing should work from one consistent mapping shape
-
-    How to use it:
-    - pass the raw result from `context.invoke_runtime_tool(...)`
-    - receive a best-effort `dict[str, object]`
-    """
-
-    if isinstance(payload, BaseModel):
-        return payload.model_dump(mode="python")
-    if hasattr(payload, "model_dump"):
-        model_dump = getattr(payload, "model_dump")
-        if callable(model_dump):
-            dumped = model_dump(mode="python")
-            if isinstance(dumped, dict):
-                return dumped
-    if isinstance(payload, dict):
-        return dict(payload)
-    return {}
 
 
 def _pseudo_hit_from_summary(summary: DocumentSegmentSummary) -> VectorSearchHit:
@@ -936,54 +856,56 @@ async def read_document_pages(
     context: GraphNodeContext,
     document_uid: str,
     *,
-    page_line_limit: int,
     page_max_chars: int,
     max_pages: int,
 ) -> list[DocumentPage]:
     """
-    Read one selected document through bounded filesystem pagination.
+    Read one selected document through the bounded `document_markdown` port.
 
     Why this exists:
     - exhaustive transcript coverage needs sequential reads instead of vector
       relevance sampling
-    - the helper centralizes pagination normalization and stop conditions
+    - the port paginates on characters, so line numbers are tracked here to keep
+      the `Lx-Ly` segment labels the digest and the coverage notes read
 
     How to use it:
     - pass the graph context plus one selected document uid and read bounds
     - continue summarization from the returned ordered page list
     """
 
-    path = f"/corpus/documents/{document_uid}/preview.md"
+    port = context.services.document_markdown
+    if port is None:
+        raise RuntimeError(
+            "The document_markdown port is required to read selected documents"
+        )
+
     pages: list[DocumentPage] = []
     offset = 0
+    lines_before = 0
 
     for page_index in range(max_pages):
-        raw_page = await context.invoke_runtime_tool(
-            "read_file_page",
-            {
-                "path": path,
-                "offset": offset,
-                "limit": page_line_limit,
-                "max_chars": page_max_chars,
-            },
+        result = await port.fetch_markdown(
+            document_uid,
+            offset=offset,
+            max_chars=page_max_chars,
         )
-        payload = _normalize_page_payload(raw_page)
+        text = result.text
+        newlines = text.count("\n")
+        # A window can end mid-line: that partial line is still the last one this
+        # page shows, so it counts for the label but not for the running total.
+        ends_mid_line = bool(text) and not text.endswith("\n")
         page = DocumentPage(
             document_uid=document_uid,
-            path=_coerce_text(payload.get("path")) or path,
             page_index=page_index,
-            start_line=_coerce_int(payload.get("start_line")),
-            end_line=_coerce_int(payload.get("end_line")),
-            total_lines=_coerce_int(payload.get("total_lines")),
-            has_more=_as_bool(payload.get("has_more"), False),
-            next_offset=_coerce_int(payload.get("next_offset")),
-            truncated=_as_bool(payload.get("truncated"), False),
-            content=_coerce_text(payload.get("content")).strip(),
+            start_line=lines_before + 1,
+            end_line=lines_before + newlines + (1 if ends_mid_line else 0),
+            has_more=result.next_offset is not None,
+            next_offset=result.next_offset,
+            content=text.strip(),
         )
         pages.append(page)
+        lines_before += newlines
 
-        if not page.has_more:
-            break
         if page.next_offset is None:
             break
         offset = page.next_offset
@@ -1290,7 +1212,6 @@ async def read_selected_documents_step(
     segment_summaries: list[DocumentSegmentSummary] = []
     source_refs: list[dict[str, object]] = []
     coverage_warnings = list(state.coverage_warnings)
-    page_line_limit = _page_line_limit(context)
     page_max_chars = _page_max_chars(context)
     max_pages = _max_pages_per_document(context)
 
@@ -1299,7 +1220,6 @@ async def read_selected_documents_step(
             pages = await read_document_pages(
                 context,
                 document_uid,
-                page_line_limit=page_line_limit,
                 page_max_chars=page_max_chars,
                 max_pages=max_pages,
             )
@@ -1332,10 +1252,6 @@ async def read_selected_documents_step(
         for page in pages:
             if not page.content:
                 continue
-            if page.truncated:
-                coverage_warnings.append(
-                    f"Document `{document_uid}` segment {_line_range(page)} was truncated by filesystem bounds."
-                )
             summary = await _summarize_document_page(context, page)
             segment_summaries.append(summary)
             source_refs.append(_pseudo_hit_from_summary(summary).model_dump())

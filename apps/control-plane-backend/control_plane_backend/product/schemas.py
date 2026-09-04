@@ -191,6 +191,15 @@ class AgentTemplateSummary(BaseModel):
             "metadata-driven form."
         ),
     )
+    supports_capabilities: bool = Field(
+        default=True,
+        description=(
+            "Whether this template genuinely participates in capability "
+            "selection, unfiltered by the team's can_use grants — unlike "
+            "available_capabilities, which an empty team grant also empties. "
+            "False means the frontend should say so, not imply zero grants."
+        ),
+    )
     default_capability_ids: list[str] = Field(
         default_factory=list,
         description=(
@@ -958,3 +967,11 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # deployment before this feature). V1 is chat-only — no
     # language/embedding/image sibling field exists here.
     platform_chat_model_binding: ModelBinding | None = None
+    # Platform-wide platform prompt, resolved fresh on this same per-turn call —
+    # same trust boundary as the two fields above: it becomes the FIRST block
+    # of the composed system prompt, ahead of every agent template, so a stale or
+    # client-forwarded copy is exactly what must never reach the pod. `None`
+    # means no admin has ever saved one and the pod falls back to its
+    # `config/platform_prompt.json`; `""` is an admin deliberately suppressing
+    # the block, and the two are NOT interchangeable.
+    platform_prompt: str | None = None

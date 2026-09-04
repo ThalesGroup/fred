@@ -103,6 +103,12 @@ export interface ChatTurnControlComposerState {
    * page owns the panel's open state (single push-drawer slot).
    */
   onOpenDocumentScopePanel?: () => void;
+  /**
+   * Opens the right-side prompt-library panel. The composer's prompt row calls
+   * this instead of expanding an anchored sub-menu; the page owns the panel's
+   * open state (single push-drawer slot).
+   */
+  onOpenPromptLibraryPanel?: () => void;
   searchPolicy: SearchPolicyName;
   onSearchPolicyChange: (value: SearchPolicyName) => void;
   ragScope: RagScopeName;

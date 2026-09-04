@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import mimetypes
 from io import BytesIO
 from typing import BinaryIO, Tuple
 
 import pandas as pd
-from fred_core import DocumentPermission, KeycloakUser
+from fred_core import AuthorizationError, DocumentPermission, KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, FileType, ProcessingStage, ProcessingStatus
 from tabulate import tabulate
 
@@ -202,20 +203,47 @@ class ContentService:
         content_type = mimetypes.guess_type(artifact_name)[0] or "application/octet-stream"
         return BytesIO(data), artifact_name.split("/")[-1], content_type
 
+    def _get_vector_store(self):
+        """Resolved lazily: only the session-attachment fallback below needs it."""
+        from knowledge_flow_backend.application_context import ApplicationContext
+
+        context = ApplicationContext.get_instance()
+        return context.get_create_vector_store(context.get_embedder())
+
+    def _session_attachment_text(self, user: KeycloakUser, document_uid: str) -> str:
+        return self._get_vector_store().get_own_session_document_text(document_uid, user.uid)
+
     async def get_markdown_preview(self, user: KeycloakUser, document_uid: str) -> str:
         """
         Return a markdown preview of the document.
         For CSV files, returns the first 200 rows as a markdown table.
         For other files, returns the generated markdown preview.
 
-        This method raises FileNotFoundError if no preview is found.
+        Resolves both document sources Fred exposes to agents under one uid:
+        corpus documents (metadata + preview artifact) and session attachments
+        (chat uploads, which exist only as vectors). It is the single resolution
+        point - the summarize and extract features read through it too.
 
-        The usage is to help the end user (if he is authorized) to quickly see
-        a preview of the document content without downloading the full file.
+        This method raises FileNotFoundError if no preview is found.
         """
-        document_metadata = await self.get_document_metadata(user, document_uid)
-        if not document_metadata:
-            raise FileNotFoundError(f"No metadata found for document {document_uid}")
+        try:
+            document_metadata = await self.get_document_metadata(user, document_uid)
+        except (FileNotFoundError, AuthorizationError):
+            # No corpus record the caller may read: either a session attachment
+            # (no metadata, no ReBAC tuple, so the check fails closed) or a uid
+            # they genuinely cannot reach. Reconstruction joins only the
+            # caller's OWN session chunks, so a denied corpus document is never
+            # readable back through its vectors - empty re-raises the denial.
+            try:
+                text = await asyncio.to_thread(self._session_attachment_text, user, document_uid)
+            except Exception:
+                # An unreachable or misconfigured vector store must not rewrite
+                # the caller's 403/404 into some unrelated status.
+                logger.warning("Session-attachment fallback failed for document %s", document_uid, exc_info=True)
+                text = ""
+            if text:
+                return text
+            raise
         if self._is_tabular_document(document_metadata):
             sql_indexed_status = document_metadata.processing.stages.get(ProcessingStage.SQL_INDEXED, ProcessingStatus.NOT_STARTED)
             if sql_indexed_status == ProcessingStatus.DONE and read_tabular_artifact(document_metadata) is not None:

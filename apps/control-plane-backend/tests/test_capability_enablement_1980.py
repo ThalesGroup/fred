@@ -2517,13 +2517,15 @@ async def test_authz_injects_personal_team_edge_only_for_personal_teams() -> Non
     """A personal-space subject gets BOTH the `team` and `personal_team`
     contextual edges; a regular team gets only `team` (RFC §8.4)."""
 
-    from control_plane_backend.capabilities.authz import _team_subject_and_context
+    from fred_core.security.rebac.capability_authz import (
+        team_capability_subject_and_context,
+    )
 
-    _, personal_ctx = _team_subject_and_context("personal-u1")
+    _, personal_ctx = team_capability_subject_and_context("personal-u1")
     relations = {r.relation.value for r in personal_ctx}
     assert relations == {"team", "personal_team"}
 
-    _, regular_ctx = _team_subject_and_context("team-a")
+    _, regular_ctx = team_capability_subject_and_context("team-a")
     assert {r.relation.value for r in regular_ctx} == {"team"}
 
 
@@ -2627,16 +2629,20 @@ async def test_catalog_filter_disabled_rebac_keeps_everything() -> None:
 
 
 @pytest.mark.asyncio
-async def test_can_use_capability_check() -> None:
-    from control_plane_backend.capabilities.authz import can_use_capability
+async def test_can_team_use_capability_check() -> None:
+    from control_plane_backend.capabilities.authz import can_team_use_capability
 
     rebac = _FilterRebac({"team-a": {"doc_access", "bank_core"}})
-    assert await can_use_capability(rebac, "team-a", "doc_access") is True
-    assert await can_use_capability(rebac, "team-a", "corp_drive") is False
-    # #1988: MCP-backed capabilities are gated like any other id — a granted
-    # MCP capability passes, a non-granted one is rejected.
-    assert await can_use_capability(rebac, "team-a", "bank_core") is True
-    assert await can_use_capability(rebac, "team-a", "market_data") is False
+    assert await can_team_use_capability(rebac, "team-a", capability_id="doc_access")
+    assert not await can_team_use_capability(
+        rebac, "team-a", capability_id="corp_drive"
+    )
+    # MCP-backed capabilities are gated like any other id — a granted MCP
+    # capability passes, a non-granted one is rejected.
+    assert await can_team_use_capability(rebac, "team-a", capability_id="bank_core")
+    assert not await can_team_use_capability(
+        rebac, "team-a", capability_id="market_data"
+    )
 
 
 @pytest.mark.asyncio
@@ -2645,13 +2651,15 @@ async def test_can_use_is_scoped_to_the_team_context() -> None:
     # usable while operating in team-b, even when the SAME user belongs to
     # both teams (the check subject is the team, not the user).
     from control_plane_backend.capabilities.authz import (
-        can_use_capability,
+        can_team_use_capability,
         usable_capability_ids,
     )
 
     rebac = _FilterRebac({"team-a": {"doc_access"}})
-    assert await can_use_capability(rebac, "team-a", "doc_access") is True
-    assert await can_use_capability(rebac, "team-b", "doc_access") is False
+    assert await can_team_use_capability(rebac, "team-a", capability_id="doc_access")
+    assert not await can_team_use_capability(
+        rebac, "team-b", capability_id="doc_access"
+    )
     assert await usable_capability_ids(rebac, team_id="team-b") == set()
 
 
@@ -2666,6 +2674,14 @@ class _FakeReasoningStore:
 
     async def list_enabled_model_ids(self) -> set[str]:
         return set(self._enabled_model_ids)
+
+
+class _FakeNoPlatformPromptStore:
+    """No platform-prompt row saved — `get_runtime_binding_for_team` must then
+    carry `platform_prompt=None`, i.e. "fall back to the pod default"."""
+
+    async def get(self):
+        return None
 
 
 class _FakeNoPlatformModelBindingStore:
@@ -2707,6 +2723,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_team_capability_settings_store=lambda: settings,
         get_model_reasoning_store=_FakeReasoningStore,
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2736,6 +2753,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
             {"model__openai__gpt-5.1", "model__mistral__small"}
         ),
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]

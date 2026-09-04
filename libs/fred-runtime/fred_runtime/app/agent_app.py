@@ -613,11 +613,14 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         self,
         registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
         access_token: str | None,
+        capability_registry: CapabilityRegistry | None = None,
         *,
         platform_chat_model_binding: ModelBinding | None = None,
+        platform_prompt: str | None = None,
     ) -> None:
         self._registry = registry
         self._access_token = access_token
+        self._capability_registry = capability_registry
         # TRUSTED — the caller's own `BoundRuntimeContext.platform_chat_model_binding`
         # (see `_build_runtime_services`), carried privately on this invoker so a
         # nested `context.invoke_agent(...)` child inherits the same
@@ -627,6 +630,12 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # or any other channel a caller/child could read or forge — the only way
         # to reach it is this private attribute on the invoker itself.
         self._platform_chat_model_binding = platform_chat_model_binding
+        # TRUSTED, same private channel and same reason: without it a nested
+        # `context.invoke_agent(...)` child would compose its prompt with
+        # `platform_prompt=None` and silently fall back to the pod default —
+        # including when an admin deliberately saved `""` to suppress the
+        # block, which is precisely the state that must not be undone.
+        self._platform_prompt = platform_prompt
 
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
         definition = self._registry.get(request.agent_id)
@@ -663,6 +672,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             invocation_turns=request.prior_turns,
         )
 
+        final_result: AgentInvocationResult | None = None
         content_parts: list[str] = []
         async for payload in _iterate_runtime_event_payloads(
             definition,
@@ -670,18 +680,30 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             access_token=self._access_token,
             team_id=request.context.team_id,
             registry=self._registry,
+            capability_registry=self._capability_registry,
             # Private trusted propagation (see __init__): the child inherits
             # the parent turn's platform chat binding, never the request's
             # own `context` — that dict has no field for it at all.
             platform_chat_model_binding=self._platform_chat_model_binding,
+            platform_prompt=self._platform_prompt,
         ):
             kind = payload.get("kind")
             if kind == "final":
-                return AgentInvocationResult(
+                final_result = AgentInvocationResult(
                     agent_id=request.agent_id,
-                    content=payload.get("content", ""),
+                    content=str(payload.get("content") or ""),
+                    structured=payload.get("structured"),
                     is_error=False,
                 )
+                continue
+            if kind == "execution_error":
+                final_result = AgentInvocationResult(
+                    agent_id=request.agent_id,
+                    content=str(payload.get("message") or ""),
+                    is_error=True,
+                )
+                continue
+
             if kind == "assistant_delta":
                 content_parts.append(payload.get("delta", ""))
             elif kind == "node_error":
@@ -690,6 +712,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                     content=payload.get("error_message", "Unknown error"),
                     is_error=True,
                 )
+        if final_result is not None:
+            return final_result
 
         return AgentInvocationResult(
             agent_id=request.agent_id,
@@ -705,6 +729,7 @@ def _build_runtime_services(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
+    capability_registry: CapabilityRegistry | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -805,6 +830,7 @@ def _build_runtime_services(
         LocalRegistryAgentInvoker(
             registry=registry,
             access_token=access_token,
+            capability_registry=capability_registry,
             # Private trusted propagation (LocalRegistryAgentInvoker
             # docstring): carries THIS turn's trusted platform chat binding
             # onto the invoker so a nested context.invoke_agent(...) child
@@ -812,6 +838,7 @@ def _build_runtime_services(
             # None. `binding` is this same request's BoundRuntimeContext —
             # never the child's, and never a client-controlled value.
             platform_chat_model_binding=binding.platform_chat_model_binding,
+            platform_prompt=binding.platform_prompt,
         )
         if registry is not None
         else None
@@ -979,11 +1006,14 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
-    # Capabilities installed on this pod (#1974, RFC §3.8): pod-scoped, so every
-    # template from one pod advertises the same set — mirrored per template the
-    # same way available_mcp_servers is, so control-plane aggregation and the
-    # agent-creation UI need no second fetch.
+    # Filtered by supports_capabilities below: [] outright for a template that
+    # opts out, so a coincidentally pod-registered capability is never offered.
     available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
+    # Mirrors AgentDefinition.supports_capabilities verbatim (unfiltered by team
+    # grants) — the only way control-plane can tell "this team has zero usable
+    # capabilities" apart from "this template doesn't support selection at all"
+    # once available_capabilities has been narrowed to the team's can_use set.
+    supports_capabilities: bool = True
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
     # filtering. `available_mcp_servers` above stays MCP-only (it carries full
@@ -1043,6 +1073,44 @@ class _ModelCatalogEntry(BaseModel):
     capability id apart. None means no profile named this model and the
     frontend falls back to that heuristic. First-declared wins, same
     first-seen rule as `description` above."""
+
+
+class _PlatformPromptFileResponse(BaseModel):
+    """This pod's `config/platform_prompt.json`, as `/agents/platform-prompt`
+    advertises it to control-plane.
+
+    Only the two texts cross the wire — `version` and `_comment` are for whoever
+    opens the file, not for a consumer to branch on.
+    """
+
+    platform_prompt: str
+    """The block a platform admin owns. What this pod composes into every system
+    prompt UNTIL an admin saves one in Postgres, after which the saved value
+    reaches the pod per turn on `BoundRuntimeContext.platform_prompt` and this is
+    unused. Control-plane serves it as the starting point of the admin editor.
+
+    Empty string when the pod shipped no file — the caller cannot tell that from
+    a deliberately empty `platform_prompt`, and does not need to: both mean this
+    pod contributes no platform-prompt block."""
+    platform_instructions: str
+    """The read-only block, rendered directly under the one above on every turn.
+    Nothing can edit it; the admin UI displays it so an admin can see exactly
+    what agents are told alongside their own prompt."""
+
+
+def _platform_prompt_file_field(config: AgentPodConfig, field: str) -> str | None:
+    """Read one field off the parsed `platform_prompt.json`, or `None`.
+
+    A pod may legitimately ship no file (`apply_external_catalog_overrides`
+    warns and continues), so this collapses "no file" and "field absent" into
+    the `None` both `RuntimeConfig` fields already use for "not configured".
+    """
+
+    parsed = config.get_platform_prompt_file()
+    if parsed is None:
+        return None
+    value = getattr(parsed, field, None)
+    return value if isinstance(value, str) else None
 
 
 class _ModelCatalogResponse(BaseModel):
@@ -1186,6 +1254,11 @@ class _ResolvedAgentInstance(BaseModel):
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
     # never read off the caller-supplied context either.
     platform_chat_model_binding: ModelBinding | None = None
+    # Platform-wide platform prompt, resolved fresh by control-plane on this same
+    # call — same trust boundary again: it becomes the FIRST block of the
+    # composed system prompt, ahead of every agent template. `None` means no admin
+    # ever saved one and the pod's shipped `config/platform_prompt.json` applies.
+    platform_prompt: str | None = None
 
 
 @dataclass(slots=True)
@@ -1222,6 +1295,10 @@ class _ResolvedExecutionTarget:
     # managed agent-instance execution only, and direct execution stays
     # pod-local routing.
     platform_chat_model_binding: ModelBinding | None = None
+    # Platform-wide platform prompt, resolved on the SAME per-turn call as the
+    # two fields above and for the same reason. `None` for direct (non-managed)
+    # template execution, where the pod default applies instead.
+    platform_prompt: str | None = None
 
 
 def _active_mcp_server_refs(
@@ -1466,6 +1543,7 @@ async def _resolve_agent_instance(
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
+        platform_prompt=resolution.platform_prompt,
     )
 
 
@@ -2744,6 +2822,7 @@ async def _stream(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     platform_chat_model_binding: ModelBinding | None = None,
+    platform_prompt: str | None = None,
 ) -> AsyncIterator[str]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -2791,6 +2870,7 @@ async def _stream(
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
+        platform_prompt=platform_prompt,
     ):
         collected.append(payload)
         yield _sse(json.dumps(payload, ensure_ascii=False))
@@ -2907,6 +2987,14 @@ def _effective_capability_ids(
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # A definition that declares it does not support capability selection
+        # (see AgentDefinition.supports_capabilities) never activates one —
+        # including a stale explicit selection saved before this field
+        # existed. Treat it exactly like "no selection made" so it falls
+        # through to the `default_mcp_servers` path below, the separate,
+        # still-active mechanism for an agent's own hardcoded MCP needs.
+        selected = None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
     if capability_registry is None:
@@ -2997,22 +3085,33 @@ def _build_capability_block(
 
     Returns None when the agent selects no capabilities.
 
-    MCP handling (#1978, #1988): an MCP-server capability delivers its catalog
-    `agent_instructions` as a prompt fragment via `middleware()`
-    (`_McpInstructionsMiddleware`). The effective selection mirrors
-    `_active_mcp_server_refs`: a `None` capability selection (template default)
-    activates the template's `default_mcp_servers` as capabilities so their
-    instructions are delivered — otherwise a default ReAct agent would silently
-    lose its non-negotiable grounding contract. This block is built identically
-    for both agent kinds (CAPAB-02), but a Graph agent reads only `block.tools`
-    — MCP tools reach it (a separate, already execution-model-agnostic path,
-    `FredMcpToolProvider`), the `agent_instructions` prompt fragment does NOT
-    (Graph never reads `block.middleware` at all). A Graph agent that needs an
-    MCP server's grounding instructions must currently author them into its own
-    system prompt — this is an explicit, known gap, not yet closed (CAPAB-02).
+    MCP handling (#1978, #1988): an MCP-server capability contributes its
+    catalog title + `agent_instructions` as one `McpPromptGroup` in
+    `block.mcp_prompt_groups` (#2455 — before 2026-08-27 this was a
+    per-model-call prompt-fragment middleware, `_McpInstructionsMiddleware`,
+    removed once delivery moved to the static ReAct prompt). The effective
+    selection mirrors `_active_mcp_server_refs`: a `None` capability selection
+    (template default) activates the template's `default_mcp_servers` as
+    capabilities so their instructions are delivered — otherwise a default
+    ReAct agent would silently lose its non-negotiable grounding contract.
+    This block is built identically for both agent kinds (CAPAB-02), but a
+    Graph agent reads only `block.tools` — MCP tools reach it (a separate,
+    already execution-model-agnostic path, `FredMcpToolProvider`),
+    `block.mcp_prompt_groups` does NOT (Graph never builds a ReAct tool-prompt
+    suffix). A Graph agent that needs an MCP server's grounding instructions
+    must currently author them into its own system prompt — this is an
+    explicit, known gap, not yet closed (CAPAB-02).
     """
 
     selected = tuning.selected_capability_ids if tuning is not None else None
+    if not definition.supports_capabilities:
+        # Mirrors the same guard in `_effective_capability_ids`: a definition
+        # that opts out of capability selection ignores any saved selection
+        # outright, including a stale one from before this field existed
+        # (e.g. an agent instance with capabilities saved while its template
+        # still let the picker offer them). Never raise for it below — just
+        # treat it as unselected.
+        selected = None
     capability_config = tuning.capability_config if tuning is not None else {}
     if capability_registry is None:
         # A None selection with no registry is inert; a real selection is a bug.
@@ -3246,6 +3345,7 @@ async def _iterate_runtime_event_payloads(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     platform_chat_model_binding: ModelBinding | None = None,
+    platform_prompt: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -3296,7 +3396,7 @@ async def _iterate_runtime_event_payloads(
     portable_context = PortableContext(
         request_id=request_id,
         correlation_id=correlation_id,
-        actor=ctx.get("user_id", "anonymous"),
+        actor=ctx.get("user_id") or ctx.get("actor") or "anonymous",
         tenant=ctx.get("tenant", "default"),
         environment=PortableEnvironment.DEV,
         trace_id=ctx.get("trace_id"),
@@ -3411,6 +3511,10 @@ async def _iterate_runtime_event_payloads(
         # chat_default_profile_id/agent_profile_overrides above, there is no
         # ctx.get(...) for it at all.
         platform_chat_model_binding=platform_chat_model_binding,
+        # TRUSTED, same channel and same reasoning as the binding above: no
+        # `ctx.get(...)` exists for it, so a request body can never prepend
+        # text ahead of every agent on this deployment.
+        platform_prompt=platform_prompt,
     )
 
     services = _build_runtime_services(
@@ -3419,6 +3523,7 @@ async def _iterate_runtime_event_payloads(
         team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,
+        capability_registry=capability_registry,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -3798,8 +3903,14 @@ def _build_agent_router(
                 # time regardless, but a picker that lists it first invites the
                 # exact "select it, save it, discover the incompatibility at
                 # first launch" flow the loud refusal exists to prevent.
+                #
+                # A definition opting out via supports_capabilities=False never
+                # offers one, regardless of pod registration — short-circuit
+                # rather than let that leak into the picker.
                 available_capabilities=(
-                    all_capability_entries
+                    []
+                    if not definition.supports_capabilities
+                    else all_capability_entries
                     if not isinstance(definition, GraphAgentDefinition)
                     else [
                         entry
@@ -3807,6 +3918,7 @@ def _build_agent_router(
                         if "graph" in entry.execution_models
                     ]
                 ),
+                supports_capabilities=definition.supports_capabilities,
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
@@ -3885,6 +3997,42 @@ def _build_agent_router(
             return _ModelCatalogResponse(models=[])
         catalog = load_model_catalog(catalog_path)
         return _project_model_catalog_response(catalog)
+
+    @router.get("/platform-prompt")
+    async def get_platform_prompt_file() -> _PlatformPromptFileResponse:
+        """
+        Return the two head blocks this pod ships in `config/platform_prompt.json`.
+
+        Why this endpoint exists:
+        - the admin UI shows both: the platform prompt an admin edits (this file
+          holds the value in force until one is saved to Postgres) and the
+          read-only platform instructions. Control-plane serves that page, runs
+          in a different container, and so cannot read this pod's filesystem —
+          exactly the situation `/agents/models-catalog` already solves for
+          `models_catalog.yaml`.
+        - without it the admin page would show an empty editor on a fresh
+          deployment while agents were already running on this file, which is
+          the one thing the page exists to make visible.
+
+        Serves the file parsed once at boot rather than re-reading it, unlike
+        `/models-catalog`: the prompt composer uses these same in-memory values
+        on every turn, so re-reading here could report a file that agents are
+        not actually using until the pod restarts.
+
+        Returns empty strings when the pod shipped no file — the caller
+        distinguishes that from an unreachable pod by the HTTP status.
+
+        How to use it:
+        - call from control-plane's `_fetch_platform_prompt_file`
+
+        Example:
+        - `GET /fred/agents/v2/agents/platform-prompt`
+        """
+        runtime_config = get_runtime_context().config
+        return _PlatformPromptFileResponse(
+            platform_prompt=runtime_config.default_platform_prompt or "",
+            platform_instructions=runtime_config.platform_instructions or "",
+        )
 
     @router.post("/capabilities/{capability_id}/validate-config")
     async def validate_capability_config(
@@ -4538,6 +4686,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_prompt=target.platform_prompt,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -4625,6 +4774,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_prompt=target.platform_prompt,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -4733,6 +4883,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
+                platform_prompt=target.platform_prompt,
             ),
             media_type="text/event-stream",
         )
@@ -4914,6 +5065,12 @@ def create_agent_app(
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
                     models_catalog_path=config.get_models_catalog_path(),
+                    default_platform_prompt=_platform_prompt_file_field(
+                        config, "platform_prompt"
+                    ),
+                    platform_instructions=_platform_prompt_file_field(
+                        config, "platform_instructions"
+                    ),
                     inprocess_toolkit_factory=build_inprocess_toolkit,
                     control_plane_url=config.platform.control_plane_url,
                     rebac_engine=rebac_engine,

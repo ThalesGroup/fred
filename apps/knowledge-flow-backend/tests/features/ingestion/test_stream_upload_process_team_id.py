@@ -115,7 +115,6 @@ async def _drain(controller: IngestionController, monkeypatch: pytest.MonkeyPatc
         background_tasks=None,
         kpi=_FakeKpi(),
         kpi_actor=SimpleNamespace(type="human"),
-        timer_dims={},
     )
     async for _ in event_stream:
         pass

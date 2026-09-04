@@ -32,6 +32,12 @@ logger = logging.getLogger(__name__)
 TABULAR_EXTENSION_KEY = "tabular_v1"
 TABULAR_MULTI_EXTENSION_KEY = "tabular_multi_v1"
 
+# `DocumentMetadata.source_tag` value stamped on every fast-ingested (chat
+# attachment) document — mirrors the vector chunks' own `source: "fast_ingest"`
+# metadata key. Shared so ingestion and the tabular authorization fallback
+# agree on one marker (DESIGN.md, "Session-Scoped Attachment Datasets").
+FAST_INGEST_SOURCE_TAG = "fast_ingest"
+
 
 class TabularArtifactV1(BaseModel):
     """

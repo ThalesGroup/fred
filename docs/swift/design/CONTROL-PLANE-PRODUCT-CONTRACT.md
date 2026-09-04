@@ -1402,7 +1402,8 @@ subset the V1 team-routing picker/write path consumes. Capability is never
 inferred from a profile-id prefix.
 
 **Runtime enforcement is fail-closed and differs by kind, deliberately.**
-`kind="tool"`/`kind="agent"` enforce at **write time** — `can_use_capability`
+`kind="tool"`/`kind="agent"` enforce at **write time** —
+`can_team_use_capability`
 gates tool selection and template enrollment, and both suspend/revive
 dependent agent instances on revocation/grant (`enablement.py`, `impact.py`).
 `kind="model"` has no equivalent write-time surface (model choice is a
@@ -2551,6 +2552,19 @@ client removed outright. The dedicated Activity surfaces (`/admin/tasks`,
 `/team/:teamId/settings/activity`) remain the canonical, ack-capable place
 for this data; no replacement preset was added.
 
+**`top_agents_by_conversations` series carry their owning team (2026-09-03).**
+Agent instance names are not unique across teams, and the chart's previous
+tie-breaker was a truncated instance id - unreadable in a cross-team ranking.
+Each series label is now `"<agent name> - <team name>"`, resolved through the
+same `TeamMetadataStore` lookup `top_teams_by_sessions` uses (now shared as
+`kpi.presets.team_names.resolve_team_names` - its own module, so `kpi/utils.py`
+stays the stdlib-only leaf ten presets import for `resolve_interval`). A team
+whose registry row is gone falls back to its raw id, logged so a store outage
+is not mistaken for a deleted team. Personal spaces are never qualified: their
+scope id embeds the owner's uid and has no registry row. A team-scoped request
+keeps bare names. Response model and route are unchanged - only the string
+values inside `series`/`rows`.
+
 ## 37. Contract Notes — TEAM-05, team routing policy (2026-07-30, issue #2118; simplified 2026-08, `llm-routing-simplify`)
 
 **2026-08-16 — chat profile typing (#2365).** The pod catalog now projects
@@ -3217,10 +3231,11 @@ one 401 retry, and rejects absolute, traversing, or protected-header inputs;
 the frame supplies only a relative path and an ordinary payload over
 `fred:request`. A 401 from an application service is that service's own
 entitlement decision and never ends the Fred session; only a token refresh that
-fails does, so one misconfigured application cannot log the user out.
-**No app receives Fred's store, Keycloak object, or raw token** — that remains
-true, and is now the property that makes moving the frame to a separate origin
-a configuration change rather than a redesign.
+fails does, so one misconfigured application cannot log the user out. **No
+application frame receives Fred's store, Keycloak object, or raw token**; the
+backend service receives the caller's bearer only on the proxied request leg.
+Keeping the credential out of frame code is the property that makes moving the
+frame to a separate origin a configuration change rather than a redesign.
 
 Two browser-facing prefixes exist, and only these:
 
@@ -3244,10 +3259,84 @@ on the service leg. Application services remain responsible for equal or
 smaller per-request limits, aggregate concurrency bounds, and authorization
 before consuming a request body.
 
-The gateway authorizes nothing; the control plane does. A gateway registration
-with no matching `application_sources` entry therefore proxies both prefixes
-for an application no team was granted, so the gateway list must stay a subset
-of the catalog.
+The gateway never authorizes. In the arm's-length tier the control plane is the
+entitlement authority; in the first-party tier the application backend checks
+entitlement locally through the narrow SDK described below. A gateway
+registration with no matching `application_sources` entry still proxies both
+prefixes, so the gateway list must stay a subset of the catalog.
+
+`app__<app_id>` is derived by `application_capability_id` (fred-core), which
+unlike `model_capability_id` does **not** normalize characters outside the id
+charset. A registered `app_id` is already constrained to a subset of
+`CAPABILITY_ID_PATTERN` at config load, so an id needing repair is one no
+catalog accepted; normalizing it on an authorization path could resolve it
+onto a neighbouring capability's id instead of failing closed.
+
+### Two application trust tiers (2026-09-04)
+
+An application backend authorizes each request in one of two ways, and the
+tier is a deployment decision, not something the application selects:
+
+| Boundary | Arm's-length | First-party |
+| --- | --- | --- |
+| Who | Independently deployed code, any language, with no Fred service or OpenFGA credential | A backend built and run inside the Fred perimeter; admission is an explicit devops act |
+| Entitlement | Forward the caller's bearer to `GET /teams/{team_id}/applications` and require its own id in the response | Ask the named checks on a process-lifetime `RebacSdk` created by `rebac_sdk_factory` |
+| Keycloak service identity | None required for entitlement | Its own enabled `security.m2m` client; this is for outbound service calls, not caller validation or OpenFGA |
+| OpenFGA identity | None | Its own secret named by `security.rebac.token_env_var`, provisioned and revocable independently; never shared with another backend |
+
+Both tiers verify the caller's bearer locally before entitlement. A first-party
+backend runs with `security.profile: c3`, so the incoming JWT must carry the
+exact audience in that backend's `security.user.client_id`. That resource-server
+client is distinct from both the backend's outbound `security.m2m` identity and
+its OpenFGA token.
+
+`await rebac_sdk_factory(security_config, *, kpi_writer)` is the supported
+first-party construction path. It fails startup unless the `c3` profile, user
+and M2M authentication, and OpenFGA ReBAC are enabled, and unless
+`create_store_if_needed` and `sync_schema_on_init` are both `false`, and the
+OpenFGA timeout is between 1 ms and 30 seconds. The control plane remains the
+store and authorization-model owner. The async factory also initializes
+fred-core's process-local user JWT verifier from `security.user`, requires the
+backend's process-level KPI writer, creates one private OpenFGA engine, and
+resolves the configured store before startup completes. A backend reuses that
+facade for requests and awaits `close()` during shutdown (or uses its async
+context manager); it never constructs a client per request.
+
+The facade exposes only `check_user_team_permission`,
+`check_team_capability`, and `check_application_access`. These are
+authorization gates: they return no data and raise on denial. The combined
+application check asks team membership first, then the team's grant on
+`app__<app_id>`. Every facade check rejects personal spaces before contacting
+OpenFGA, so composing the two component checks cannot bypass the collaborative-
+team-only application boundary or trigger personal-team self-healing writes.
+It exposes no engine, tuple writer, general query, or raw OpenFGA client.
+
+The SDK deliberately reads neither catalog state nor the application feature
+gate. `enableApplications: false` still withdraws the normal browser path for
+**both** tiers because the gateway returns 404 for `/apps` and
+`/app-services`. Parking one catalog entry (`enabled: false`) is narrower: the
+arm's-length endpoint stops returning it while the gateway route and team grant
+remain, so a directly reachable first-party backend would still accept the
+grant. Parking is catalog state, **not a security kill switch**. Revoke the
+`app__<app_id>` team grant to withdraw entitlement from both tiers; for an
+incident, also block or remove the gateway route. Remove both registration
+halves to retire the application.
+
+The planned first-party example intentionally carries no agent capability. It
+demonstrates one boundary only — browser to host to application service, local
+JWT verification, then the SDK check. Agent-pod writes are a separate delegated
+downstream-auth problem; adding them would either retain the existing shared-key
+side door or silently expand this work to solve that problem. Any future agent
+integration needs its own design and may reuse the runtime's pod-to-pod JWT and
+OpenFGA pattern.
+
+Finally, trust does not confer datastore ownership. A first-party application
+may own a dedicated store for its own data. Data owned by another Fred backend
+must still be reached through that backend's API, bearer-forwarded for
+user-scoped operations: the owning backend may enforce object-level ReBAC in
+addition to team entitlement, and its schema is an internal detail rather than
+a contract. `GET /teams/{team_id}/applications` remains unchanged; Fred's own
+catalog and navigation depend on it regardless of tier.
 
 `ui_prefix` is a path today and the frame is therefore same-origin with Fred.
 A same-origin iframe is a rendering and lifecycle boundary, not a security
@@ -3259,3 +3348,139 @@ else changes. Anything that would only work same-origin is a defect against
 this contract. Durable installed/tombstoned registration, admin-visible
 stale-grant cleanup after removal, and `pending_reactivation` on id
 reappearance remain deferred lifecycle requirements.
+
+---
+
+## 47. Contract Notes — a team_admin may rename their own team (2026-09-03, issue #2516)
+
+**`UpdateTeamRequest.name` (`PATCH /teams/{team_id}`), 1-180 chars.** A team's
+name was set once by `POST /teams` (platform-admin only) and immutable
+afterwards; a team_admin who mistyped it, or whose team was renamed in the real
+world, had no way to fix it. It now rides the existing team PATCH surface, which
+is gated on `can_update_info` — defined as exactly `team_admin` in `schema.fga`.
+No new endpoint, no new permission, no governance capability: renaming is team
+self-service, unlike creating or deleting a team. Deleting a team from the team
+settings stays out of scope.
+
+**`null` is a client error for this field, not "clear the value".** Every other
+field on `UpdateTeamRequest` uses `exclude_unset` partial semantics where an
+explicit `null` clears the stored value. A team always has a name, so `null` and
+a whitespace-only string are both 422; the accepted value is stored trimmed.
+`CreateTeamRequest.name` now trims the same way — uniqueness only means
+something if both write paths agree, otherwise a team created as `"Ops "` and a
+rename to `"Ops"` each clear the pre-check and the unique index and leave two
+teams a reader cannot tell apart.
+
+**A rename can 409.** `teammetadata.name` is globally unique (migration
+`a8b9c0d1e2f3`), so `update_team` reuses `TeamAlreadyExistsError` exactly like
+`create_team`: a `get_by_name` pre-check for the common case, and an
+`IntegrityError` catch around the upsert for the concurrent-rename race the
+pre-check cannot close. An `IntegrityError` on a patch that renames nothing is
+re-raised untouched — `name` is the only unique-constrained column, and a
+database failure must not be reported as a taken name. Renaming a team to the
+name it already holds is a no-op, not a conflict.
+
+**Personal spaces are not renameable, and need no guard to stay that way.** They
+have no `teammetadata` row, so `update_team` already 404s for them through its
+normal existence check.
+
+**Consequence for bundle import.** `importer.py` reconciles teams by name, not
+id. A bundle exported before a rename no longer matches the renamed team and
+creates a new one on import. Accepted for now; the import surface is unchanged
+by this issue.
+
+## 48. Contract Notes — platform prompt and platform instructions (2026-08-28, renamed and extended 2026-08-31)
+
+**What it is.** One org-admin-editable text that becomes the **first block** of
+every agent's system prompt on the deployment, ahead of each agent's own
+template. Runtime side, block ordering and trust boundary:
+`RUNTIME-EXECUTION-CONTRACT.md` §8.70.
+
+**Endpoints.**
+
+| Method | Path | Permission |
+| ------ | ---- | ---------- |
+| GET | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
+| PUT | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
+
+Same shared org-admin gate as the platform model-binding trio (§40). Both are
+registered in `authz-endpoint-matrix.yaml`.
+
+**No DELETE, on purpose.** Unlike a `(provider, name)` model binding, a text
+field has a natural "off" value, and `""` is it. Keeping `DELETE` would give
+two ways to say "nothing" with two different meanings:
+
+- **row absent** → `is_default: true` → the pod's `config/platform_prompt.json`
+  applies;
+- **row present, `text: ""`** → `is_default: false` → **no block at all**, and
+  the pod default is deliberately *not* restored.
+
+`PlatformPrompt.is_default` exists so the admin UI can tell the two apart, and
+conflating them would silently reinstate the default for an admin who meant to
+switch the block off.
+
+**Write shape.** `SetPlatformPromptRequest` replaces the text wholesale,
+`extra="forbid"`, capped at 20 000 characters at request parsing — the text is
+re-sent on every model call of every agent, so an unbounded field would be
+permanent context for the whole platform. `updated_by`/`updated_at` are echoed
+back; updates overwrite rather than version (same as §40).
+
+**Delivery to the runtime.** `resolve_platform_prompt_text` is called on the
+per-turn `ManagedAgentRuntimeBinding` path and takes **no** `user` argument:
+this is a platform assertion resolved server-side, exactly like
+`resolve_platform_chat_model_binding`. It reaches the pod on
+`ManagedAgentRuntimeBinding.platform_prompt` → `BoundRuntimeContext.platform_prompt`
+and is readable from no client-forwarded field.
+
+**Amendment (2026-08-31) — GET fetches the pod default, resolve does not.**
+`GET /admin/platform/prompt` on a deployment with no row returns the pod's own
+default with `is_default: true`, not `""`. It previously returned an empty
+string, which made the admin page show a blank editor on a fresh deployment and
+imply no platform prompt was in force when one was.
+
+Both this route and `/admin/platform/instructions` now read the agent pod's
+`config/platform_prompt.json` over `GET /agents/platform-prompt`
+(`fetch_pod_platform_prompt_file`), because that file lives with the pod that
+composes it and control-plane runs in a different container — the same fetch
+shape `/agents/models-catalog` already uses. First reachable source wins; the
+editor therefore opens on exactly what agents receive.
+
+Both responses carry **`source_unavailable`**, true when no pod answered. `text`
+is then empty for lack of an answer rather than because the block is empty, and
+the UI must say so: it shows a warning instead of the text and disables Save,
+since persisting the empty editor would suppress the platform prompt as though
+an admin had chosen to. `source_unavailable` is always false when a row exists —
+a stored value needs no pod.
+
+`resolve_platform_prompt_text` keeps returning `None` for an absent row. The
+asymmetry is deliberate: GET *describes the deployment to a human*, resolve
+*carries an admin decision to the runtime*. Substituting the default there would
+send the pod a value it already has on disk and would erase the `None` vs `""`
+distinction that lets an admin suppress the block. `is_default: true` also keeps
+Save enabled on an untouched default, since adopting it verbatim writes a row
+and is a real state change.
+
+**Amendment (2026-08-31).** Renamed from "master prompt", and paired with a
+read-only sibling.
+
+| Method | Path | Permission |
+| ------ | ---- | ---------- |
+| GET | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` |
+| PUT | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` |
+| GET | `/control-plane/v1/admin/platform/instructions` | `can_manage_platform` |
+
+`/admin/platform/instructions` returns `PlatformInstructions` — the markdown
+shipped in the `platform_instructions` field of the pod's
+`config/platform_prompt.json`, the same file whose `platform_prompt` field seeds
+the editable block, which
+the runtime renders as the block immediately under the platform prompt for
+every agent. **Read-only on purpose**: an admin can rewrite the platform prompt
+wholesale, and the tool-usage discipline every agent depends on must not be
+rewritable with it. There is no row, no `updated_by`, no PUT and no DELETE; it
+changes only with a deployment. It is gated like its editable sibling — it
+reveals nothing secret, but one permission for the whole `/admin/platform/`
+surface is easier to reason about than two.
+
+Both are read by the same admin page, which renders the instructions verbatim
+under the editor with no input control, in the same order the runtime composes
+them.

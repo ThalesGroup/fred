@@ -36,9 +36,10 @@ replace:
   then stamps the flag so the note fires exactly once.
 - `awrap_model_call` replaces the orchestrator's model-only "documents already open"
   reminder, overlaying the write-instructions fragment (always) and the SAME catalog
-  text (when documents exist) on the system prompt per model call (the
-  `_McpInstructionsMiddleware` delivery path) so they survive across turns
-  without being persisted.
+  text (when documents exist) on the system prompt per model call — the open-documents
+  catalog is genuinely per-turn state, unlike an MCP server's static `agent_instructions`
+  (#2455, delivered inline in the static prompt instead of a middleware overlay) — so
+  they survive across turns without being persisted.
 """
 
 from __future__ import annotations
@@ -287,10 +288,12 @@ class _WritableDocumentMiddleware(AgentMiddleware):
     ) -> ModelResponse:
         """Overlay the write instructions and the open-documents catalog (per model call).
 
-        Mirrors `_McpInstructionsMiddleware`: the static composed system prompt reaches
-        `create_agent`; this middleware overlays the capability fragments per model call
-        so the "use write_document" and "revise in place" reminders survive across
-        turns without being persisted.
+        The static composed system prompt reaches `create_agent`; this middleware
+        overlays the capability fragments per model call so the "use write_document"
+        and "revise in place" reminders survive across turns without being persisted
+        — necessary here because the open-documents catalog is genuinely per-turn
+        state, unlike an MCP server's static `agent_instructions` (#2455, delivered
+        inline in the static prompt instead of a middleware overlay).
         """
 
         fragments = [_WRITE_INSTRUCTIONS]

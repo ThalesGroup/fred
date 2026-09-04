@@ -1539,6 +1539,7 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "status": "available",
             "default_tuning_fields": [],
             "available_capabilities": [],
+            "supports_capabilities": True,
             "default_capability_ids": [],
             # #2473: a template declaring neither reasoning field reports both
             # false — the platform default, and what a pod predating #2473
@@ -3199,6 +3200,7 @@ def _build_erasure_deps(
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]

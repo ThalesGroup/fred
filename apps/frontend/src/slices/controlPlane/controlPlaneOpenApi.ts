@@ -720,6 +720,28 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings`, method: "DELETE" }),
     }),
+    getPlatformPromptControlPlaneV1AdminPlatformPromptGet: build.query<
+      GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse,
+      GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/prompt` }),
+    }),
+    putPlatformPromptControlPlaneV1AdminPlatformPromptPut: build.mutation<
+      PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiResponse,
+      PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/prompt`,
+        method: "PUT",
+        body: queryArg.setPlatformPromptRequest,
+      }),
+    }),
+    getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: build.query<
+      GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse,
+      GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -1670,6 +1692,17 @@ export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutAp
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg = void;
+export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg = void;
+export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
+  setPlatformPromptRequest: SetPlatformPromptRequest;
+};
+export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
+  /** status 200 Successful Response */ PlatformInstructions;
+export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -2213,6 +2246,7 @@ export type CreateTeamRequest = {
   initial_team_admin_ids: string[];
 };
 export type UpdateTeamRequest = {
+  name?: string | null;
   description?: string | null;
   joining_mode?: JoiningMode | null;
   visibility?: TeamVisibility | null;
@@ -2275,6 +2309,8 @@ export type FrontendFeatureFlags = {
   enableApplications?: boolean;
   /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */
   enableAllResourceSpaces?: boolean;
+  /** Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone. */
+  enableInformationSystems?: boolean;
 };
 export type PermissionSummary = {
   /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */
@@ -2489,6 +2525,8 @@ export type AgentTemplateSummary = {
   default_tuning_fields?: ManagedAgentFieldSpec[];
   /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as ordinary capabilities keyed by their plain catalog server id (#1988). Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
+  /** Whether this template genuinely participates in capability selection, unfiltered by the team's can_use grants — unlike available_capabilities, which an empty team grant also empties. False means the frontend should say so, not imply zero grants. */
+  supports_capabilities?: boolean;
   /** Capability ids this template activates by default (RFC AGENT-CAPABILITY §2), verbatim from the pod's `definition.default_mcp_servers` — MCP-derived and native ids alike. Unlike `available_capabilities` this list is NOT filtered by the team's `can_use`: intersect the two client-side to get the defaults a team may actually activate. The agent-creation form uses it to pre-tick a new instance's capabilities so a template's declared defaults are not silently dropped by an explicit empty selection.
     
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
@@ -2848,6 +2886,7 @@ export type ManagedAgentRuntimeBinding = {
   };
   reasoning_enabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
+  platform_prompt?: string | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -3117,6 +3156,26 @@ export type PlatformModelBinding = {
 };
 export type SetPlatformModelBindingRequest = {
   binding: ModelBinding;
+};
+export type PlatformPrompt = {
+  /** The platform prompt text currently in force. When `is_default` is true this is the pod-shipped default (the `platform_prompt` field of the pod's `config/platform_prompt.json`), which is what agents actually receive until an admin saves something; when it is false this is the saved value, and an empty string then means an admin deliberately suppressed the block. */
+  text: string;
+  /** True when no row has ever been saved, i.e. `text` is the pod's default rather than an admin's own. The admin UI uses this to say 'this is the default, save to adopt it' rather than presenting it as a stored value — and to keep Save enabled on an untouched default, since adopting it verbatim is a real state change. */
+  is_default: boolean;
+  /** True when `is_default` is true AND no runtime pod could be reached to report its default, so `text` is empty for lack of an answer rather than because the default is empty. The UI must say so instead of showing a blank editor that looks like a real default. Always false when a row exists — the stored value needs no pod. */
+  source_unavailable?: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetPlatformPromptRequest = {
+  /** Replaces the stored platform prompt wholesale. Saving an empty string is meaningful and supported: it suppresses the block for every agent, and does NOT restore the pod-shipped default. */
+  text: string;
+};
+export type PlatformInstructions = {
+  /** Markdown rendered verbatim as the second block of every agent's system prompt, immediately under the platform prompt. Empty when `source_unavailable` is true. */
+  text: string;
+  /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
+  source_unavailable?: boolean;
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -3610,6 +3669,11 @@ export const {
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation,
+  useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
+  useLazyGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
+  usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
+  useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

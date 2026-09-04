@@ -92,6 +92,9 @@ platform:
   #     messages:
   #       en: "Do not upload sensitive or classified documents."
   #       fr: "Ne téléversez pas de documents sensibles ou classifiés."
+  frontend:
+    feature_flags:
+      enableInformationSystems: true # local dev — unused now the in-repo SI UI is gone, kept for the standalone rags-services page
   #   info_banner:
   #     color: "#00BBDD"
   #     auto_hide_seconds: 30 # omit for a persistent banner (the default)

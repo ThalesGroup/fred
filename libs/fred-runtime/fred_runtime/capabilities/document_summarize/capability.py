@@ -69,9 +69,14 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
-from fred_sdk.contracts.runtime import DocumentSummaryResult
+from fred_sdk.contracts.runtime import (
+    DocumentScopeRefusedError,
+    DocumentSummaryResult,
+)
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
+
+from fred_runtime.capabilities.document_read_common import document_scope_refusal
 
 _KF_SERVICE = "Knowledge Flow"
 
@@ -277,6 +282,12 @@ class DocumentSummarizeCapability(
                     document_uid,
                     instruction=instruction,
                     max_chars=effective_max_chars,
+                )
+            except DocumentScopeRefusedError as exc:
+                return document_scope_refusal(
+                    tool_ref="summarize_document",
+                    action="summarize the document",
+                    exc=exc,
                 )
             except Exception as exc:
                 message, artifact = _document_tool_failure(

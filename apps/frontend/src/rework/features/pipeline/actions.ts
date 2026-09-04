@@ -38,7 +38,7 @@ async function bearer(): Promise<string> {
 
 /** Upload a document into a library and return the scheduled ingestion task id. */
 export async function uploadDocument(libraryId: string, file: File): Promise<string> {
-  const tasks = await streamUploadOrProcessDocument(file, "process", { tags: [libraryId], profile: "fast" });
+  const tasks = await streamUploadOrProcessDocument([file], "process", { tags: [libraryId], profile: "fast" });
   const taskId = tasks[0]?.taskId;
   if (!taskId) throw new Error(`upload of ${file.name} returned no ingestion task`);
   return taskId;

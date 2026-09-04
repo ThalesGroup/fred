@@ -107,7 +107,6 @@ from fred_sdk.contracts.models import (
     ExecutionCategory,
     FieldSpec,
     FieldType,
-    GuardrailDefinition,
     ReActAgentDefinition,
     ReActPolicy,
     ToolApprovalPolicy,
@@ -181,6 +180,7 @@ from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_RESOURCES_FETCH_TEXT,
+    TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 
@@ -251,7 +251,6 @@ __all__ = [
     "ToolApprovalPolicy",
     "FieldSpec",
     "FieldType",
-    "GuardrailDefinition",
     "ToolRefRequirement",
     "TuningScalar",
     "TuningValue",
@@ -284,5 +283,6 @@ __all__ = [
     "TOOL_REF_GEO_RENDER_POINTS",
     "TOOL_REF_KNOWLEDGE_SEARCH",
     "TOOL_REF_RESOURCES_FETCH_TEXT",
+    "TOOL_REF_SIMILARITY_SEARCH",
     "TOOL_REF_TRACES_SUMMARIZE_CONVERSATION",
 ]

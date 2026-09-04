@@ -1887,7 +1887,7 @@ goes through the same factory.
    (`react_tool_binding.py`). Amendment C §C.7 measured that the protection was
    real but **accidental** — carried by the #2073 tool-failure suffix, with
    nothing tying it to reasoning drift. Now explicit, greppable, and tied by two
-   tests in `test_react_prompting.py`.
+   tests in `test_react_prompting.py`. **Removed 2026-08-27** — see §8.37.
 3. `ToolSelectionPolicy` docstrings corrected (`fred_sdk/contracts/models.py`):
    the cap IS enforced (untrue since `frame.py` wired it), and
    `allow_parallel_calls` is now documented as declarative-only.
@@ -2143,19 +2143,27 @@ convention provides. Measured empty risk (0/8 trials) of the model
 narrating or repeating this recalled text back to the user, but the
 channel itself carries no guarantee against it.
 
-**Tool-loop safety guardrails, permanent (not reasoning-specific — apply to
-every ReAct turn):**
+**Tool-loop safety guardrails:**
 
 - `max_tool_calls_per_turn = 12` on all five ReAct agents
-  (`fred_agents/tool_pacing.py`) — a real cap, not a documented-but-inert
-  default; hitting it degrades the answer (`exit_behavior="continue"`)
-  rather than erroring the turn.
-- `TOOL_REPETITION_RULE`, explicit and tested, in
-  `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`) — previously
-  a symptom of the tool-failure-recovery suffix (unrelated issue #2073) was
-  the only thing suppressing repeat calls in production, with nothing
-  tying that protection to reasoning drift or guaranteeing it would survive
-  a rewording.
+  (`fred_agents/tool_pacing.py`), permanent — a real cap, not a
+  documented-but-inert default; hitting it degrades the answer
+  (`exit_behavior="continue"`) rather than erroring the turn.
+- `TOOL_REPETITION_RULE`, an explicit prompt instruction in
+  `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`), was kept here
+  through 2026-08-27 as a guardrail independent of reasoning continuity —
+  previously a symptom of the tool-failure-recovery suffix (unrelated issue
+  #2073) was the only thing suppressing repeat calls in production, with
+  nothing tying that protection to reasoning drift or guaranteeing it would
+  survive a rewording. **Removed 2026-08-27**, developer decision: with
+  `thread_reasoning_within_open_turn` now measured at 0/12 duplicate-call
+  turns (vs. 9/12 without it, p = 1.7e-4 — see above), the whole "Tool
+  calling rules" block (`TOOL_REPETITION_RULE` plus three generic
+  tool-hygiene lines) was judged redundant with the root-cause fix and
+  deleted rather than kept as unmeasured defense-in-depth. Residual risk,
+  accepted: a ReAct turn with reasoning disabled has no reasoning to thread,
+  so this guardrail no longer exists for that configuration either — not
+  separately re-measured before removal.
 
 **Not closed by this work:** reasoning continuity across a **Graph** agent's
 node boundaries (Graph authors use `context.thinking()` directly, a
@@ -3214,8 +3222,10 @@ never summarizing. The map phase runs with **bounded concurrency
 exponential + jitter) so a throttling provider slows the extraction rather than
 failing the turn (DOCREAD-01 #2). Document text is resolved through
 `SummarizeService.get_document_text`, so the corpus/session-attachment access
-rules stay single-sourced. `document_verbatim`'s positional read stays on the
-paginated `document_markdown` port; only exhaustive extraction moved.
+rules stay single-sourced (that resolution moved to
+`ContentService.get_markdown_preview` in §8.63). `document_verbatim`'s
+positional read stays on the paginated `document_markdown` port; only
+exhaustive extraction moved.
 
 Wiring mirrors the summarize path: `KfDocumentClient.extract` (extended read
 timeout), `DocumentExtractionAdapter`, injected in `agent_app.py`'s turn-time
@@ -4191,14 +4201,27 @@ twice per model call:
    embeds each route's full JSON response schema in its tool description.
    Measured: Tabular's 5 tools go 25 505 → 10 323 chars with the flags off,
    Vector Search's 4 go 22 892 → 9 368; the handwritten docstrings survive
-   intact, only the generated schema dump is dropped.
-2. `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`) then re-emits
-   every tool's description into the system prompt, on top of the `tools` API
-   parameter that already carries it.
+   intact, only the generated schema dump is dropped. Still open — tracked as
+   an experiment (answer-quality and tool-call correctness need checking, not
+   a straight merge) in #2412 item 2.
 
-Both are real reductions and neither was taken here — this change is display
-and accounting only, kept separate per the consolidation rule against bundling
-a reduction with an unrelated fix.
+Both reductions above were real and neither was taken as part of the #2403
+work that introduced this accounting — that change was display and accounting
+only, kept separate per the consolidation rule against bundling a reduction
+with an unrelated fix. The system-prompt duplicate **was** taken by issue
+#2412's item 1: `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`)
+used to re-emit each tool's full description into the system prompt on top
+of the `tools` API parameter that already carries it; it now emits only the
+opening paragraph (text up to the first blank line, whitespace-collapsed to
+one line) — the model still sees a summary of what each tool does (needed to
+decide which tool to call across a multi-tool turn), but the full "how to
+use it" text, response schemas, and error blocks are carried solely by the
+`tools` parameter, not duplicated into the prompt body (2026-08-27). Issue
+#2412's item 2 (the MCP response-schema flags experiment above) is still
+open. Issue #2412's item 3 (block reordering) **was** taken the same day —
+see §8.67.
+
+---
 
 ### 8.58 ✅ `agent.turn_completed` carries `session_id` — issue #2426 (2026-08-25)
 
@@ -4469,3 +4492,902 @@ declared. Consumer side and the seed-not-gate semantics:
 **Adopter.** `fred_agents.platform_ops` declares both `True` — a diagnostic
 agent whose turns are inherently multi-step.
 
+---
+
+### 8.63 ✅ `AgentDefinition.supports_capabilities`; `knowledge.similarity_search` builtin tool (PR #2504, 2026-09-02)
+
+Two additions to the agent-template surface `agent_app.py`'s
+`/agents/templates` route advertises:
+
+- `AgentDefinition.supports_capabilities: bool`, default `True` on the shared
+  base and `False` on `GraphAgentDefinition` (no graph node consumes
+  capability-provided tools today). `_AgentTemplateSummary.available_capabilities`
+  is now `[]` outright for a non-participating definition, and the new
+  `_AgentTemplateSummary.supports_capabilities` field mirrors the flag
+  unfiltered, so control-plane's `AgentTemplateSummary.supports_capabilities`
+  can distinguish "this team has zero usable capabilities" from "this
+  template doesn't support selection" — `available_capabilities` alone
+  conflates the two once team `can_use` filtering has run.
+- `TOOL_REF_SIMILARITY_SEARCH` (`knowledge.similarity_search`, `fred_sdk.support.builtins`):
+  a document-to-document comparison primitive — ranks passages most similar
+  to an anchor text, restricted to an explicit `document_uids` list — distinct
+  from `knowledge.search`'s corpus-wide retrieval. `FredKnowledgeSearchToolInvoker`
+  (`v2_runtime/adapters.py`) delegates it to `DocumentSimilarityAdapter` —
+  the same `RuntimeServices.document_similarity` port §8.60's `document_similarity`
+  capability calls — so scope-narrowing, `general_only` enforcement, and
+  citable-source filtering live once, not in two parallel implementations.
+  `declared_tool_refs`-based agents get this for free with no per-team
+  capability enablement; §8.60's capability remains the ADMIN_GATED,
+  chat-control-carrying route to the same port.
+
+**Rolling upgrade.** Both fields default to the pre-existing behaviour
+(`supports_capabilities=True`, no similarity tool referenced), so a pod
+predating this entry advertises templates control-plane reads unchanged.
+
+---
+
+### 8.64 ✅ `read_document` resolves session attachments too — issue #2495 (2026-09-02)
+
+**One resolution point instead of a corpus-only reader and a fallback nobody
+else could reach.** `DocumentMarkdownPort` reaches Knowledge Flow through
+`GET /markdown/{document_uid}`, which resolved text via
+`ContentService.get_markdown_preview`: a metadata-store record plus a preview
+artifact (`output.md`). A session attachment (fast ingest,
+`POST /fast/ingest`) has neither — vectors only, no metadata record, no ReBAC
+tuple — so `read_document` returned 403/404 on exactly the files the
+attachment prompt suffix told the model to name. Its siblings did not:
+`summarize_document` and `extract_from_document` both resolved through
+`SummarizeService.get_document_text`, which fell back to rebuilding the text
+from the session vectors.
+
+**The fallback moved down, not sideways.** Reconstruction is now
+`BaseVectorStore.get_own_session_document_text`, beside the two other
+session-ownership decisions (`is_own_session_chunk`,
+`may_delete_session_document`), and `ContentService.get_markdown_preview` is
+the single reader that applies it. `SummarizeService._get_document_markdown`,
+`_reconstruct_attachment_text` and `get_document_text` are gone; summarize and
+extract call the content service directly. Net effect on the port: an
+attachment uid now pages like any other document, and `DocumentMarkdownAdapter`
+is unchanged (it still paginates adapter-side and memoises per uid per turn).
+
+**Scoped to the metadata seam, deliberately.** The fallback fires only when the
+corpus *metadata* resolution fails (`FileNotFoundError` / `AuthorizationError`)
+— the exact signature of an attachment. A corpus document whose preview is not
+ready still fails fast and pays no chunk scan, which is the behaviour the
+previous fallback (wrapped around the whole preview call) did not have.
+
+**A clipped attachment now says so.** Fast ingest drops WHOLE PAGES past its
+60k-char cap and recorded that only in the upload response, never in the
+vectors — so a rebuilt attachment was indistinguishable from a complete one,
+and `read_document`'s footer would tell the model "END OF DOCUMENT reached...
+you now have the complete text". `fast_ingest` now stamps `truncated` into each
+chunk's metadata and the reconstruction appends a plain-text notice when it is
+set. Attachments ingested before this carry no flag and stay silent, as they
+were. The notice is in-band rather than a new `DocumentMarkdownResult` field:
+it reaches summarize and extract by the same path, with no wire change.
+
+**Security is unchanged and now single-sourced.** Reconstruction joins only
+chunks whose own `scope == "session"` and `user_id` match the caller, so a
+corpus document a user was denied READ on is never readable back through its
+vectors; an empty reconstruction re-raises the original denial rather than
+returning an empty document.
+
+**Still corpus-only** (each for its own structural reason, not an oversight):
+`find_similar_passages` (Knowledge Flow runs it with
+`include_session_scope=False` and its controller gates every uid on a ReBAC
+tuple — §8.60), `list_document_tree`, `list_documents_by_label` (labels are a
+metadata-store notion), the tabular tools (#2418) and `ppt_filler`'s raw-bytes
+fetch (an attachment keeps no blob).
+
+
+---
+
+### 8.65 ✅ The turn's document scope reaches the read tools and the tree — issue #2510 (2026-09-03)
+
+**The composer's selection used to narrow retrieval only.** The document-scope
+picker sends the user's pick twice — as `turn_options["document_access"]
+.document_uids` and as `RuntimeContext.selected_document_uids` — and two of the
+six document tools read it: `search_documents_using_vectorization` and
+`find_similar_passages`. `list_document_tree` narrowed by library and ignored
+documents; `read_document`, `summarize_document` and `extract_from_document`
+narrowed by nothing at all. Ticking one file therefore produced a listing of the
+whole corpus, a model asking which document was meant, and a reading tool that
+would accept any uid it had ever seen.
+
+**Three seams, one selection.**
+
+- `DocumentTreePort.tree` takes `document_uids`; `DocumentTreeAdapter`
+  intersects it with the binding, `KfDocumentClient` puts it on the wire, and
+  `DocumentTreeRequest` / `CorpusTreeService` narrow the resolved leaves and
+  drop the folders left empty (`prune_empty_folders`). Without a document scope
+  the listing is byte-for-byte what it was, empty folders included.
+- `DocumentMarkdownAdapter`, `DocumentSummarizeAdapter` and
+  `DocumentExtractionAdapter` bound the model-supplied uid by the same selection
+  (`_ensure_uid_in_turn_scope`) and raise `DocumentScopeRefusedError` — the
+  seam `DocumentSimilarityAdapter` already had, for uids of exactly the same
+  provenance. The capabilities render it through `document_scope_refusal`, never
+  as a Knowledge Flow failure: a scope decision told as a transport error gets
+  retried, and told as an empty result gets reported as an empty document.
+- `build_document_scope_suffix` names the selection in the per-turn system
+  prompt, beside the attachment suffix. Without a referent for "this document"
+  the model listed the tree and asked which file was meant while exactly one was
+  ticked. Uids, not display names: `RuntimeContext` carries the selection as
+  uids, and they are what the tools take.
+
+**Library and document scope UNION, they do not intersect.** Vector search
+already merges library hits with document hits, so ticking a library plus one
+file elsewhere means "that library, plus that file". The tree now follows the
+same rule rather than inventing an intersection nobody asked for.
+
+**The gate refuses only what it can prove.** A false refusal is worse than a
+missed one here: the model reports a document the user picked as unreachable.
+So two cases pass through, both by design — a selection that includes a library
+(its documents cannot be enumerated pod-side, and refusing them would refuse the
+user's own pick), and a uid among the conversation's attached files
+(`get_attachment_uids`, read from the same `attachments_markdown` the model is
+told to quote from — the picker lists the corpus, so an attachment is never in
+the selection). What remains enforced is the case that produced the bug: a
+documents-only selection, with a stale uid from a wider earlier turn.
+
+**Two known gaps, tracked rather than papered over.**
+
+- With `bind_libraries=True`, the pinned library is always sent as the tree's
+  library scope and Knowledge Flow unions it with the document scope, so ticking
+  one file still lists the whole bound library. Separating "the user picked this
+  library" from "the agent is pinned to it" needs a second wire field, not a
+  behaviour change here.
+- `narrow_scope_ids` reads an empty intersection (`config.document_uids`
+  disjoint from the turn's pick) as "no bound at this level" and re-widens to the
+  session selection. Pre-existing on the search path, now shared by the tree;
+  `DocumentSimilarityAdapter` is the one caller that handles it explicitly.
+
+---
+
+### 8.66 ✅ ReAct tool listing grouped by MCP server; `agent_instructions` moved off per-model-call middleware — issue #2455 (2026-08-27)
+
+**What changed.** `build_runtime_tool_prompt_suffix` (`react_tool_binding.py`)
+now groups the flat tool list by originating MCP server when the caller
+passes `mcp_prompt_groups`: each server renders under its own `Tools for
+{title}:` header, with that server's catalog `agent_instructions` inlined
+immediately after its tool list — instead of a separate `# Available tools
+(exact names)` line followed later by one middleware-appended fragment per
+server. Untagged tools (built-in/registered/declared, never MCP-sourced) or
+tools whose tag matches no given group render under a flat `Other tools:`
+bucket ahead of the named groups; a caller that passes no
+`mcp_prompt_groups` at all (Deep agents — `DeepAgentRuntime.build_executor`
+never builds a `CapabilityAgentBlock`) gets today's exact flat list, no
+extra heading.
+
+**Mechanism.**
+
+- `BoundTool`/`FredRuntimeToolSpec` gain `mcp_server_id: str | None`, tagged
+  at the two points that still know it — `mcp_utils.py`'s remote-MCP fetch
+  loop and `mcp_runtime.py`'s in-process toolkit loop — via
+  `BaseTool.metadata[MCP_SERVER_ID_METADATA_KEY]`. That field already
+  survives `ContextAwareTool` wrapping and every merge/dedupe step
+  untouched, so no constructor parameter needed threading through
+  `MCPRuntime`/`McpToolkit`/`FredMcpToolProvider`. Tagging is
+  `model_copy`-based (non-mutating): `_get_or_connect_mcp_client` caches and
+  reuses the fetched tool-object list across concurrent requests, so
+  in-place mutation would have corrupted the shared cache under load.
+- `MCPServerConfiguration` (`fred_sdk/contracts/models.py`) gains
+  `prompt_group_title: str | None` — unlike `name`/`description` (i18n keys,
+  resolved only in the frontend), this is plain English rendered directly
+  into the model-facing prompt. Falls back to the raw catalog id when unset.
+  Authored in `mcp_catalog.yaml` and mirrored in `deploy/charts/fred/values.yaml`
+  for all 8 (6 in the Helm mirror — see gap below) catalog servers.
+- `McpCapability.middleware()` — which built one `_McpInstructionsMiddleware`
+  per server carrying its `agent_instructions`, appended to `system_prompt`
+  on every model call — is replaced by `McpCapability.prompt_group()`,
+  returning an `McpPromptGroup(server_id, title, agent_instructions)`.
+  `build_capability_agent_block` (`assembly.py`) collects one per active MCP
+  server into `CapabilityAgentBlock.mcp_prompt_groups`, in the same
+  `sorted(capability id)` order (RFC §5.3) every other capability
+  contribution already uses — reused as-is, no new sort logic. `react_runtime.py`
+  passes `self._capability_block.mcp_prompt_groups` into
+  `build_runtime_tool_prompt_suffix`; `deep_runtime.py` is unchanged (the
+  parameter defaults to `()`).
+
+**Same-day follow-up: native capability tools were invisible in this
+directory too.** Found by reading the rendered prompt after the above
+landed: a native Fred capability's tools (`document_access`'s
+`list_document_tree`/`search_documents_using_vectorization`,
+`document_verbatim`'s `read_document`, etc.) reach the model's actual
+tool-calling set through `ToolCarrierMiddleware`
+(`fred_runtime.capabilities.assembly`), never through `bound_tools` — so
+`build_runtime_tool_prompt_suffix` never listed them, before OR after the
+grouping work above (a pre-existing gap, not a regression from it). The
+model could still call them (their full schema reaches it via the real
+`tools` API parameter regardless), but had no signal about them in Fred's
+own added directory text. Fixed the same day: `build_runtime_tool_prompt_suffix`
+gains `capability_tools: Sequence[BaseTool]`, fed from
+`self._capability_block.tools` (`react_runtime.py`) — a field
+`build_capability_agent_block` already collected, once per selected
+capability, for Graph agents and HITL binding, so no new data-collection
+plumbing was needed, only a new read of it. These tools join the `Other
+tools:` bucket (a name already present in `bound_tools` is skipped rather
+than duplicated); they get no per-capability header of their own yet, unlike
+MCP servers — capability tools carry no analogous group/title tag today.
+
+**Accepted, unmeasured risk.** `agent_instructions` was the LAST text
+appended to `system_prompt` before the LLM call — `_McpInstructionsMiddleware`
+sat innermost in the `wrap_model_call` chain (`middleware/frame.py`, after
+`DynamicPromptMiddleware`), so its fragment landed after guardrails, the
+global-base output contract, tool-failure recovery, context prompts, and
+attachments. `MCPServerConfiguration.agent_instructions`'s own docstring
+calls this "non-negotiable... appended after any operator override" —
+deliberate positioning for maximum recency weight. Inlining it right after
+its tool group moves it much earlier in the prompt instead. This tradeoff
+was surfaced and explicitly accepted before implementation, not discovered
+after the fact — but it was not re-measured. Recommended follow-up: a
+`fred-agent-evaluator` before/after comparison on the Tabular agent (the
+richest `agent_instructions` block, a 5-step tool-ordering contract),
+watching whether ordering-contract adherence holds at the new position.
+
+**Also found, out of scope for #2455.** `deploy/charts/fred/values.yaml`'s
+mirror of `mcp_catalog.yaml` was already missing `agent_instructions`
+entirely on `mcp-knowledge-flow-mcp-tabular`, and is missing the
+`mcp-atlassian-jira-server`/`mcp-knowledge-flow-prometheus-ops` entries
+altogether (6 of 8 catalog servers mirrored) — pre-existing Helm-mirror
+drift, unrelated to this change, flagged here rather than silently fixed.
+
+---
+
+### 8.67 ✅ System-prompt block order: agent template moved to last static block — issue #2412 item 3 (2026-08-27)
+
+**What changed.** `compose_system_prompt` (`react_prompting.py`) used to emit
+
+```
+agent template → tools → guardrails → global base contract →
+tool-failure recovery → runtime suffixes → context prompts → attachments
+```
+
+— the agent's own `system_prompt_template` first, shared invariants scattered
+after the tool list. It now emits
+
+```
+guardrails → global base contract → tool-failure recovery →
+tools → runtime suffixes → agent template → context prompts → attachments
+```
+
+i.e. **general instructions, then tools, then "how to use the tools"
+(`runtime_suffixes` — today only Deep's static filesystem-browsing notice),
+then the agent template as the last STATIC block**, with the two genuinely
+volatile per-turn suffixes (selected context prompt, conversation
+attachments) staying last exactly as before. Both `ReActRuntime` and
+`DeepAgentRuntime` share this one composer, so both moved together — no
+call-site changes needed, `compose_system_prompt`'s signature is unchanged,
+only its internal ordering.
+
+**Why.** Two reasons, from the issue:
+
+- **Recency.** The agent's own instructions should carry the most weight,
+  and under the old order they were the *furthest* thing from the model's
+  answer, not the closest.
+- **Provider prefix-cache reuse.** Blocks 1–3 (general instructions, tools,
+  tool usage) are largely identical across agents sharing a deployment's
+  tool set and guardrails. Putting the agent-specific text last makes that
+  shared prefix actually contiguous and cacheable from byte one; under the
+  old order the cacheable prefix ended almost immediately, right after the
+  agent's own (agent-specific, rarely shared) template.
+
+**Where the per-turn suffixes land — the issue's own open question,
+resolved.** "The agent last" and "per-turn user context last" cannot both
+hold literally; confirmed with the developer before implementing: the agent
+template is the last **static** block, and the two per-turn suffixes
+(context prompt, attachments) stay after it as the volatile tail — not
+promoted ahead of it. This keeps the cache boundary clean (everything before
+the context-prompt suffix is stable for the whole session) and keeps
+`build_context_prompt_suffix`'s own subordination envelope ("follow them for
+every response where they do not conflict with your operating guardrails or
+the output contract above") meaningful — it still refers to text that is,
+in fact, above it.
+
+**Tests.** `test_react_prompting.py`'s two composer ordering tests updated in
+place (`test_compose_system_prompt_folds_selected_prompt_and_attachment`
+no longer asserts `.startswith("BASE-TEMPLATE")`, now asserts the full
+new sequence by `.index()`; the runtime-suffix test renamed to
+`..._places_runtime_suffixes_before_the_agent_template` and gained that
+assertion). `test_runtime_context_prompt_injection.py`'s two
+`.startswith("BASE-TEMPLATE")` assertions (one per runtime, proving each
+runtime's real `build_executor` output — not just the composer in
+isolation) became presence-plus-order checks against the selected
+context-prompt marker.
+
+**Not done here (tracked back on #2412 itself, not this doc).** The
+before/after token measurement on a bare "Hello" turn, and the
+`describe_full_response_schema`/`describe_all_responses` experiment (#2412
+item 2) — both are reporting/measurement deliverables on the issue, not
+runtime behavior this doc tracks. *(Amended 2026-08-28: item 2 turned out to
+be a runtime-behavior change after all — it shrinks the `tools` API
+parameter, not the prompt — and landed as §8.69.)*
+
+**Follow-up (2026-08-28): the new boundary needed a marker.** Moving the
+agent template out of first position surfaced a rendering gap the old order
+never exposed: `base_prompt` now lands directly after the tool/
+`agent_instructions` block with no blank line or heading, so — as reported
+against a real tabular agent's rendered prompt — Fred's shared instructions
+run straight into the agent's own template (e.g. "...no write operations
+exist on these tables.# RÔLE\nTu es l'assistant...") with nothing marking
+where one ends and the other begins. `compose_system_prompt` now inserts a
+fixed `# Agent instructions` heading (with its own blank-line separation)
+immediately before `base_prompt`, skipped when `base_prompt` is empty (an
+agent with no configured `system_prompt_template`) so there is never a
+heading with nothing under it. New test:
+`test_compose_system_prompt_omits_agent_heading_when_template_is_empty`;
+the two existing ordering tests above gained an assertion for the heading's
+position.
+
+---
+
+### 8.68 ✅ Mermaid output contract condensed, ~45% smaller (2026-08-27, re-measured 2026-08-31 after rebase)
+
+**What changed.** `mermaid_output_contract.md`
+(`fred_sdk/resources/prompts/`) — the unconditional, per-agent-turn output
+contract #2412 named as out of scope ("Condensing the 5 787-char Mermaid
+output contract... not part of this issue") — went from 5 793 to 3 100
+characters against the branch this was authored on. No distinct rule was
+dropped: every constraint in the original 14 numbered rules still holds,
+reworded and merged to remove duplication. The largest single source of
+duplication was rule 13's 13-line "self-check" — a near-total restatement
+of rules 2–12 as a checklist — condensed to one sentence (new rule 11);
+rule 12 ("keep examples renderer-safe") was pure duplication of rule 2 and
+folded into it; rule 6 ("no HTML for layout") duplicated rule 5's HTML-tag
+prohibition and was merged there too.
+
+**Rebased onto #2382 (2026-08-31).** Between this being authored and rebased
+onto `swift`, issue #2382 landed on the uncondensed file, adding "always
+reference a node by its ID, never by its label text" (rule 7) and its
+matching self-check bullet (rule 13) — a real fix (a bare label used as an
+edge endpoint breaks the parse), not wording. The rebase folded both into
+the condensed rules 6 and 11 rather than dropping them as stale. Measured
+against `swift`'s version with #2382 already applied (6 076 chars), the
+condensed file is 3 333 chars (~45%).
+
+**No empirical basis found for individual rules, so none were cut on
+judgment alone.** Git history shows the file was authored whole-cloth in
+one commit (#1696, 2026-06-15) with no per-rule rationale, and
+`fred-sdk/tests/test_prompt_bundles.py`'s own docstring states the specific
+fragile forms it pins (bare backticks echoed inside a fence, nested/wrapped
+fences, a diagram not opening with `flowchart TD`/`graph TD`,
+`subgraph ID["Title"]` syntax) are "seen in rendering errors" — i.e. at
+least some of this is defect-driven, not generic caution, even though
+nothing here ties a specific rule to a specific incident the way
+`RUNTIME-04`'s `TOOL_REPETITION_RULE` measurement did (§8.30). Every
+constraint that test file pins by exact substring was re-verified present
+in the condensed text (with one real, deliberately-restored omission: the
+first draft dropped "labeled as non-rendered" — the instruction to mark a
+literal Mermaid syntax example shown in a `text` fence as such — while
+merging two bullets; restored before merge, since it is a distinct
+instruction, not just wording).
+
+**Tests.** `fred-sdk/tests/test_prompt_bundles.py`'s exact-substring
+assertions updated to the new wording (four tests, same constraints
+checked); `fred-runtime/tests/test_react_prompting.py`'s
+`_EXPECTED_MERMAID_FRAGMENT` (the unchanged intro line) needed no change;
+`apps/fred-agents/tests/test_prompting.py`'s `_EXPECTED_FALLBACK_RULE`
+constant updated to match (its assertions check *absence* from shipped
+templates, so they passed either way, but the constant now actually
+reflects current contract text).
+
+**Not measured.** Whether the shorter contract holds the same parse-success
+rate as the original 5 793-char version — no regression is expected (every
+constraint survives), but this is prose-compression, not a code change with
+a test oracle. If Mermaid parse failures are ever tracked as a metric,
+that would be the way to close this out empirically rather than by
+inspection.
+
+---
+
+### 8.69 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
+
+**What changed.** No MCP tool description carries response documentation any
+more. Two steps, landed together in knowledge-flow's `main.py`:
+
+1. All nine `FastApiMCP(...)` mounts passed `describe_all_responses=True` and
+   `describe_full_response_schema=True`. Both kwargs are deleted; `fastapi_mcp`
+   defaults both to `False` (`server.py:41-48`), so step 1 is a pure
+   subtraction — 18 lines removed, no new code.
+2. A new `_without_response_docs(mcp)` helper wraps each constructor and drops
+   the `### Responses:` block itself.
+
+Those two flags drive `convert_openapi_to_mcp_tools` (`fastapi_mcp/openapi/
+convert.py:70-150`), which appends a `### Responses:` block to **every tool
+description**. With both True that block carried, per tool: an
+`**Output Schema:**` dump of the fully `$ref`-resolved success model, *plus*
+the generic FastAPI `HTTPValidationError` 422 — the same 1 060 characters
+repeated verbatim once per tool.
+
+**Why step 2 was needed.** The flags size that block; they never suppress it.
+At the defaults, what remained was worth measuring before keeping: of the 57
+tools an agent can reach, **49 carried nothing but boilerplate** —
+`### Responses:`, `**200**: Successful Response (Success Response)`,
+`Content-Type: application/json` — 4 576 characters stating what no caller
+needed told. `read_file`'s entire description was `Read a file` followed by
+exactly that. The 8 tools that did emit an `**Example Response:**` (1 796
+chars) got field names paired with placeholder values echoed from each
+field's `title`: `"document_uid": "Document Uid"`, `"kind": "Kind"` — where
+`kind`'s real values are `csv`/`spreadsheet`, an enum the dropped Output
+Schema had stated and the surviving example silently replaces with a
+plausible-looking lie. The block was therefore not a cheaper version of the
+schema; it was noise with a misinformation rate. Only the hand-written route
+docstring survives now.
+
+**How step 2 works, and why it is not a monkey patch.** `FastApiMCP.__init__`
+ends with `setup_server()`, so `.tools` is populated by the time the
+constructor returns, and `handle_list_tools` closes over `self` and re-reads
+`self.tools` on every request — mutating the list's items in place is enough,
+with no re-setup and no re-derivation of `operation_map`. `.tools` is public
+API and `mcp.types.Tool` is not frozen (`model_config['frozen']` is False,
+verified). `compat/fastapi_mcp_patch.py` stays reserved for the two genuine
+upstream monkey patches; this is ordinary post-processing of our own object.
+
+**Where the cost actually was.** Not in the system prompt. Since §8.66's
+`_tool_summary` (`react_tool_binding.py`) the prompt keeps only each
+description's opening paragraph — it already cut at the first `\n\n`, ahead
+of `### Responses:`. The full description travels in the **`tools` API
+parameter**, re-sent in full on every model call. That is what shrank:
+
+| MCP server (agent-reachable) | before | after step 1 | after step 2 | delta |
+| ---------------------------- | -----: | -----------: | -----------: | ----: |
+| `mcp-opensearch-ops` (22 tools) | 28 828 | 7 899 | 5 787 | −80 % |
+| `mcp-tabular` (5) | 20 156 | 4 974 | 3 160 | −84 % |
+| `mcp-fs` (14) | 19 401 | 1 957 | 330 | −98 % |
+| `mcp-prometheus-ops` (9) | 9 808 | 1 206 | 342 | −97 % |
+| `mcp-corpus` (7) | 9 776 | 1 048 | 181 | −98 % |
+| **total** | **87 969** | **17 084** | **9 800** | **−89 %** |
+
+Columns: before, after step 1 (flags), after step 2 (helper). Characters of
+cumulated tool description, measured by running `convert_openapi_to_mcp_tools`
+over `knowledge-flow-backend/openapi.json` filtered by each mount's
+`include_tags`. ≈ **19.5k tokens removed from every model call** on a pod
+exposing all five (17.7k from step 1, a further 1.8k from step 2). The three
+remaining mounts (`mcp-reports`, `mcp-resources`, `mcp-template`) are excluded
+because no `mcp_catalog.yaml` — local, Helm chart, or deployment-factory —
+references them, so no agent can reach them (see "Adjacent findings" below).
+
+**Why this is safe.** Neither the flags nor the helper touch `inputSchema`.
+Verified programmatically across all 57 tools of the five reachable servers:
+the generated argument schemas are byte-identical before and after. Argument-
+generation accuracy is structurally out of reach of this change — a property
+of the code, not a hypothesis. What is dropped describes data the model
+receives milliseconds later anyway; its only value was anticipative. Also
+verified after step 2: no tool is left with an empty description, and no
+`### Responses:` residue survives on any of the 57.
+
+**The rule going forward.** Do not re-enable either flag, and do not remove
+the helper. If a response field genuinely needs explaining — the two-cause
+`tables_truncated` warning on `search_tabular_values` is the real example —
+put that sentence in the **route's docstring**, which is now the only part of
+a tool description that reaches the model. A Pydantic `Field(description=...)`
+does not reach it at all.
+
+**Tests.** None added. Step 1 deletes non-default kwargs; step 2 adds one
+branchless loop whose effect is asserted by measurement rather than by a unit
+test that would just restate `str.split`. `make code-quality` (root) clean;
+knowledge-flow's suite 964 passed with the same two pre-existing
+`tests/features/kpi/test_prometheus_service.py` failures, reproduced
+identically on an unmodified `main.py` and unrelated to this change (that
+test module imports `prometheus_service`, never `main`).
+
+**Adjacent findings, not fixed here** (deliberately kept out per the
+consolidation phase's scope-discipline rule — each is its own change):
+
+1. **Three MCP mounts are unreachable.** `mcp-reports`, `mcp-resources` and
+   `mcp-template` are mounted but referenced by no catalog anywhere. Grep
+   for their mount paths returns only the `mount_http` calls themselves.
+   `mcp-resources` is the largest of the nine (15 tools, 30 774 chars).
+   Either delete them or add catalog entries — but they should not sit in
+   between.
+2. **`mcp-template` is misnamed** `"Knowledge Flow Text MCP"`, copy-pasted
+   from `mcp_text`.
+3. **`mcp-fs` and `mcp-corpus` have essentially no descriptions — the single
+   most valuable follow-up.** Their routes carry an `operation_id` and a
+   `summary` but no docstring, so their whole description *is* that summary:
+   330 chars for 14 fs tools, 181 for 7 corpus tools (`read_file` → "Read a
+   file", 11 characters). Nothing disambiguates `read_file` /
+   `read_file_page` / `download_file`, or `ls` / `glob` / `grep`. This change
+   did not cause it and does not worsen it — what step 2 removed from those
+   tools was boilerplate carrying no signal — but it does expose it: post-
+   §8.66 the opening paragraph is *all* the model sees when choosing between
+   tools, and here that paragraph is three words. Write real docstrings on
+   these 21 routes before adding any further tool to either server.
+4. **Seven routes have auto-generated `operation_id`s**, which become the
+   tool names the model must emit verbatim:
+   `unshare_tag_knowledge_flow_v1_tags__tag_id__share__target_id__delete`,
+   `write_report_knowledge_flow_v1_mcp_reports_write_post`, five more. All
+   are on the unreachable mounts of finding 1, so fixing 1 may moot this.
+5. **`backfill_rebac_relations` is exposed as an agent tool** — an
+   admin-only maintenance endpoint under the `Tags` tag, which
+   `mcp_resources` exports wholesale.
+6. **`openapi.json` is stale**: `mcp_fs_controller`'s `rename` and
+   `corpus_manager_controller`'s `corpus_repair_vector_metadata` exist in
+   code but not in the committed spec. Runtime is unaffected (`FastApiMCP`
+   reads the live app), but the committed spec feeds frontend codegen.
+7. **`mcp-web-github-readonly` is `enabled: true` but inert**: catalog
+   declares `transport: inprocess, provider: web_github_readonly`, while
+   `build_inprocess_toolkit` (`inprocess_toolkit_registry.py`) only knows
+   `kf_vector_search`. It logs "no toolkit built for provider=..." and
+   contributes zero tools. No prompt pollution — `build_runtime_tool_prompt_suffix`
+   already skips empty groups — but it is a dead entry in the capability picker.
+
+---
+
+### 8.70 ✅ Two platform-wide prompt blocks lead the system prompt — issue TBD (2026-08-28, renamed and extended 2026-08-31)
+
+**What changed.** A single, org-admin-editable text now applies to every agent
+on the deployment, rendered as the **first block** of the composed system
+prompt — ahead of the guardrails, the global output contract, the tools, and
+the agent's own template. `compose_system_prompt` (`react_prompting.py`) gained
+`build_platform_prompt_prefix(binding)` at position 0; the block order is
+otherwise exactly as §8.67 left it.
+
+Before this, the only platform-wide text was `GLOBAL_BASE_PROMPT_MARKDOWN`
+(§8.68) — shipped in fred-sdk, deliberately not editable. Teams could already
+express their own intent through their agents' `system_prompt_template`; what
+was missing was the platform operator's own layer above both.
+
+**Where the value comes from — three states, deliberately distinguishable.**
+
+| State | Stored | Delivered as | Effect |
+| ----- | ------ | ------------ | ------ |
+| No admin ever saved one | no `platform_prompt` row | `platform_prompt=None` | pod falls back to its shipped `config/platform_prompt.json` |
+| Admin saved a text | row with that text | that text | that text is the first block |
+| Admin cleared the field | row with `""` | `""` | **no block at all** — the pod default is *not* resurrected |
+
+The third row is the one worth stating twice: an admin who empties the editor
+means "no platform prompt", not "give me the shipped default back". Collapsing
+`""` into `None` anywhere along the chain would silently undo that, so the
+store has no `delete` at all (row absence keeps a single unambiguous meaning)
+and `build_platform_prompt_prefix` checks `is None` before it checks emptiness.
+
+**Delivery, and why it is a trusted field.** Same channel and same trust
+boundary as `platform_chat_model_binding` (§8.55): resolved server-side on the
+runtime's own per-turn `ManagedAgentRuntimeBinding` lookup
+(`resolve_platform_prompt_text`, no `user` argument by design), carried on
+`BoundRuntimeContext.platform_prompt`, and reachable from **no** `ctx.get(...)`
+anywhere in `agent_app.py`. This matters more here than for a model binding: a
+client that could set this field would prepend arbitrary instructions ahead of
+every guardrail on the deployment. Direct (non-managed) `agent_id` execution
+never populates it and falls back to the pod default, exactly like the platform
+binding.
+
+**Surfaces.**
+
+- `config/platform_prompt.json` in `apps/fred-agents/config/`, alongside
+  `mcp_catalog.yaml` / `models_catalog.yaml` and resolved the same way
+  (`FRED_PLATFORM_PROMPT_FILE` env override, `resolve_platform_prompt_path`).
+  Optional, unlike `models_catalog.yaml`: a pod without one simply contributes
+  no default.
+- `platform_prompt` table (control-plane), one row, `id="default"` CHECK-enforced
+  — the `platform_model_binding` singleton shape. Migration `a1c3e5f70b21`,
+  parented on `0dd1e72106af` (the head of the branch it was written against),
+  verified by a real `alembic upgrade head` plus an isolated
+  upgrade/CHECK/downgrade cycle against a throwaway Postgres database.
+  **Re-parent it on rebase**: `swift` has since put `0c70cb820802` on that same
+  parent, so rebasing without acting yields two Alembic heads. The migration's
+  own docstring carries this warning; `alembic merge` is not the fix (CLAUDE.md,
+  "Alembic migrations - keep history linear").
+- `GET`/`PUT /control-plane/v1/admin/platform/prompt`, both gated on
+  `organization_authz.require_manage_any` (`can_manage_platform`) and both
+  registered in `authz-endpoint-matrix.yaml`. No `DELETE`, per the table above.
+- Admin UI: a new **Platform prompt** entry in `AdminNavbar`, `/admin/platform-prompt`,
+  `Protected requires="admin"`. The page names which of the three states is in
+  force rather than showing an identical empty box for two of them.
+
+**Scope decision (V1).** Platform-wide only, no team override — confirmed with
+the developer: teams already have their own agent-level prompt, so a second
+per-team layer would add ReBAC and precedence resolution for something that is
+already expressible. Updates are overwrite-with-audit (`updated_by` /
+`updated_at`), not versioned history, matching `platform_model_binding`.
+
+**Cost note.** This text is re-sent on every model call of every agent, so it
+is permanent context for the whole deployment — the same budget §8.69 just
+freed. `SetPlatformPromptRequest` caps it at 20 000 characters and the editor
+shows the counter, so the cost is visible while typing rather than discovered
+in a Langfuse trace.
+
+**Tests.** `test_react_prompting.py` +5 (empty without value or default, admin
+value wins, empty admin value suppresses without falling back, fallback when
+never set, and position-0 ordering in the full composer);
+`tests/test_platform_prompt.py` +8 in control-plane (projection, runtime
+resolution for all three states, request validation). `test_authz_endpoint_matrix`
+caught both new routes as unregistered before they could ship — they are now in
+the matrix.
+
+**One pre-existing wart fixed in passing.** `build_guardrail_suffix` emitted a
+single leading `\n`, which read fine while guardrails led the prompt (the
+composer strips the head) but ran the two blocks together once a platform prompt
+could precede them. It now emits the blank-line separator every other block
+uses, and `compose_system_prompt` `.lstrip("\n")`s the joined result once so
+whichever block happens to lead never opens the prompt with stray newlines.
+Verified across all four platform-prompt x guardrail combinations.
+
+**Caught by review, not by the tests written alongside the code.** An
+independent `/code-review` pass over the cold diff found five defects that the
+five new composer tests and eight new control-plane tests all missed — the
+failure mode CLAUDE.md's Step 5 warns about, reproduced exactly:
+
+1. **Alembic head collision on merge.** `swift` had meanwhile given
+   `0dd1e72106af` — this migration's parent — to `0c70cb820802`, so merging as
+   written yields two heads. Re-parenting onto `0c70cb820802` immediately was
+   the wrong sequencing and broke the present instead: that revision is not in
+   the local tree (the branch is behind `swift` and cannot fast-forward — 14
+   files overlap with local edits), so `alembic upgrade head` died on
+   `KeyError: 0c70cb820802`. The parent is therefore `0dd1e72106af`, correct
+   for the history it actually sits on, with the re-parent recorded as a rebase
+   obligation in the migration's own docstring — which is when CLAUDE.md
+   expects it to happen.
+2. **Sub-agents silently lost the prompt.** `LocalRegistryAgentInvoker`
+   propagated `platform_chat_model_binding` to nested `invoke_agent` turns but
+   not `platform_prompt`, so a child agent composed with `None` and fell back to
+   the pod default — including when an admin had saved `""` to suppress it.
+   Now carried on the same private attribute.
+3. **The fallback could never fire in a deployed pod.** `platform_prompt.json`
+   was not baked into `Dockerfile-prod` next to the two catalogs, so
+   `resolve_platform_prompt_path` found nothing and the admin page still claimed
+   "each pod is using the default shipped in its configuration". Added the
+   `COPY`. (The chart's `-catalog` ConfigMap is mounted by no deployment
+   template, so a knob there would have been dead surface — the image is how
+   these files actually travel, per `values.yaml`'s own note.)
+4. **Silent save failures.** The mutation was awaited without `.unwrap()` and
+   with no toast: a 403 for a non-admin looked identical to success.
+5. **The suppressed state was unreachable.** The save button keyed on
+   `draft !== data.text`, so from the initial `is_default` state (empty text)
+   an admin could not save `""` — the one transition this design exists to
+   support. Now `isDirty || is_default`.
+
+**Not done here.** No GitHub issue existed for this feature; one should be
+opened and linked from this section. The `is_default` flag is computed from row
+presence only — a pod whose `platform_prompt.json` differs from its siblings' is
+not detectable from the admin UI, which is acceptable while the file ships in
+the image but would need a runtime read-back if it ever became per-pod mutable.
+
+**Amendment (2026-08-31) — renamed, and a second, read-only block added.**
+
+*Renamed.* "Master prompt" became the **platform prompt** everywhere
+(`platform_prompt` table, `BoundRuntimeContext.platform_prompt`,
+`config/platform_prompt.json`, `FRED_PLATFORM_PROMPT_FILE`,
+`GET`/`PUT /admin/platform/prompt`). The obvious identifier —
+`platform_global_prompt` — was deliberately not used: it sits one word away
+from the pre-existing `global_base_prompt` (the Mermaid output contract) and
+the two would be misread for each other on every future skim. The UI label is
+"Platform global prompt" / "Prompt global de la plateforme"; the code name is
+the short one.
+
+*Second block.* `build_platform_instructions_prefix()` renders the runtime
+context's `platform_instructions` — seeded from the `platform_instructions`
+field of the pod's `config/platform_prompt.json` — as the block immediately
+under the platform prompt. The composed order is now:
+
+```
+platform prompt (admin-editable) -> platform instructions (read-only) ->
+guardrails -> global base contract -> tools -> runtime suffixes ->
+# Agent instructions -> per-turn context -> attachments
+```
+
+*Why two layers rather than one editable text.* The platform prompt carries
+personality and deployment-specific intent, and an admin can rewrite it
+wholesale — including to `""`. The behaviour a coherent platform depends on
+(call the tools you were actually given, never claim a call you did not make,
+recover from a failed one instead of pasting its error, say when you do not
+know) must **not** be rewritable along with it. Shipping it read-only is the
+point, not a limitation.
+
+*Consolidation, not a fourth text.* `build_tool_failure_recovery_suffix()` was
+deleted and its #2073 guidance folded into the new markdown. It was the same
+kind of rule living in a third place, and an admin-facing "platform
+instructions" view that showed only part of what agents are told would be
+worse than none. `test_react_prompting.py`'s #2073 regression follows the rule
+to its new home rather than being deleted with the function. The Mermaid
+contract stays where it is and is **not** merged in: it is an output/renderer
+contract, a different concern from operating behaviour, and it keeps its
+position after the guardrails.
+
+*Read-only surface.* `GET /admin/platform/instructions` (org admin, same
+`require_manage_any` gate) returns the same constant the runtime composes, so
+the admin page cannot drift from what agents actually receive. No PUT, no
+DELETE, no row — it changes only with a deployment. The page renders it
+verbatim under the editor, scrollable, with no input control.
+
+*Migration.* `a1c3e5f70b21` was rewritten in place to create `platform_prompt`
+rather than `master_prompt` — it had not shipped anywhere, so there is no
+second migration and no rename DDL. The local dev database was downgraded
+first (its single row held a 9-character test value, backed up before the
+drop), then re-upgraded onto the new name.
+
+**Follow-up (2026-08-31, same day).** Three fixes from using the page.
+
+1. *The shipped default is now a worked example, not a stub.*
+   `config/platform_prompt.json` held four terse lines, which showed the
+   mechanism but not what belongs in it. It now carries a real example — tone,
+   formatting standards, ambiguity handling — ending with an explicit "replace
+   this with your own organisation's personality and standards, and keep it
+   about how agents behave in general, not about any one agent's job". The
+   default is the only guidance most operators will ever read on what this
+   field is for, so it has to teach the shape.
+2. *The read-only panel says why it is read-only.* A note under the
+   instructions (not in the header — it reads as a conclusion once you have
+   seen the content) explains that these belong to the platform, are what keeps
+   every agent consistent, and cannot be edited by anyone so that changing one
+   prompt can never weaken the whole platform's behaviour.
+3. *Only the panel scrolls.* `.page` auto-sized to its content, so the whole
+   page scrolled inside `MainLayout`'s `.content` (`overflow: auto`) and the
+   panel's own `max-height` scroll region was redundant. `.page` now takes
+   `flex: 1; min-height: 0` — claim the real available height, and allow
+   shrinking rather than growing to fit children — with the same pair on
+   `.instructions` and `flex: 1; min-height: 0; overflow: auto` on the body,
+   which becomes the single scroll region. Same reasoning and same declarations
+   as `CapabilitiesPage.module.css`, which documents the flex `min-height: auto`
+   trap this fell into. The editor dropped from 16 to 10 rows so the panel has
+   room in the common case.
+
+**Follow-up 2 (2026-08-31, same day) — split layout.** Stacking the two blocks
+was the wrong shape. The editor inherited the `TextArea` atom's `height: 100%`
+inside an auto-sized column and grew to fill the viewport, pushing the
+read-only panel off-screen; the panel it exists to inform was a scroll away
+from the editor. The page is now a two-column grid, one pane per block, left to
+right in the order the model receives them: the admin-owned platform prompt,
+then the platform instructions. Each pane is a card (`--outline-variant`,
+`--radius-m`, `--surface-container-low`) with a title, an Editable/Read-only
+badge, and its own scroll region; the page itself never scrolls above 1100px,
+below which the panes stack and the page scrolls instead. Save/Discard moved
+from `PageHeader` into the editor pane — a page-level button read as if it
+might be saving both blocks. Three incidental fixes came with it: the CSS used
+`--spacing-md`, `--color-border` and `--color-surface-secondary`, none of which
+exist (the tokens are `--spacing-m`, `--outline-variant`,
+`--surface-container-*`), so every value had been silently falling back to its
+raw-px literal; grid tracks are `minmax(0, 1fr)` so the instructions' long
+lines wrap instead of widening the page; and the instructions render in
+`--font-body-medium` rather than monospace, since they are markdown prose and a
+mono face made them read as a code dump.
+
+Two overflow bugs surfaced once the editor was in a narrow column, both from
+the same root cause — the `TextArea` atom's root declares no width, so it sizes
+to its widest content. In the pane it spilled past the card's right edge, fixed
+by pinning `.editorSlot > *` to `flex: 1; min-width: 0`. Inside the atom, the
+`.maxLength` character counter had no rule of its own and so shrank and wrapped
+("0 / 20000" on two lines) whenever the explanation hint was long; it now takes
+`flex: none; white-space: nowrap`, since `.hint` beside it already yields space
+by ellipsizing. That second fix is in the shared atom, not this page — it
+applies to every `TextArea` with a long `explanation` in a narrow container.
+
+**Follow-up 3 (2026-08-31, same day) — one pod file, two blocks, served over
+HTTP.** On a fresh deployment the admin editor opened on an empty box while the
+pods were already running on a default, because control-plane cannot read the
+agent pod's filesystem.
+
+*The file.* `apps/fred-agents/config/platform_prompt.json` now carries **both**
+head blocks, and `platform_instructions.md` was folded into it and deleted:
+
+```json
+{ "version": 1, "platform_prompt": "…", "platform_instructions": "…" }
+```
+
+They belong together because they are one thing — the head of every system
+prompt — and reading them side by side is the only way to see whether they
+contradict each other. The field names carry the only distinction that matters:
+`platform_prompt` is a *starting point* (an admin edits it, the saved value goes
+to Postgres, this text stops being used), `platform_instructions` is *shipped*
+(nothing edits it; the admin UI renders it read-only). Both are required under
+`extra="forbid"`: making either optional is what would let a bad edit silently
+drop a block, since the composer renders nothing for an empty one and nothing
+else would fail. The tradeoff accepted is editing ergonomics — Markdown inside a
+JSON string means escaped newlines, which is worse to hand-edit than the `.md`
+file was.
+
+*Delivery.* The pod loads the file at boot (`PlatformPromptFile`,
+`load_platform_prompt_file`, `FRED_PLATFORM_PROMPT_FILE`) into
+`RuntimeConfig.default_platform_prompt` / `.platform_instructions`, and both
+prompt-prefix builders read them from `RuntimeContext`. Control-plane fetches
+them over the pod's new `GET /agents/platform-prompt` — the same shape
+`/agents/models-catalog` already uses for `models_catalog.yaml`, down to the
+5-second timeout and the best-effort-with-WARNING failure path. First reachable
+source wins: the blocks are platform-wide, every pod runs the same image, and
+there is no way to reconcile two pods that shipped different text.
+
+The endpoint serves the values parsed at boot rather than re-reading the file,
+unlike `/models-catalog`. The composer uses those same in-memory values on every
+turn, so re-reading here could report a file agents are not actually using until
+the pod restarts.
+
+*Precedence, unchanged:* an admin value in Postgres wins; absent that, the pod
+file applies; a saved empty string is neither and suppresses the block.
+`resolve_platform_prompt_text` deliberately does *not* substitute the pod
+default — it carries an admin decision to the runtime, and substituting would
+erase the `None` vs `""` distinction the runtime needs.
+
+*Degraded mode.* Both admin responses carry `source_unavailable`, set when no
+pod answered. Without it an outage is indistinguishable from "this platform has
+no prompt and no instructions", which is a lie in both panels; the UI shows a
+warning instead of the text and **disables Save**, since saving the empty editor
+would persist a suppressed platform prompt as though an admin had chosen it.
+
+The "no admin has saved one yet" notice was removed (2026-08-31): the pane's
+Editable badge and the default text sitting in the editor already say it, so a
+line repeating it was noise on the state the page is in most of the time. Only
+the two states a reader cannot see for themselves still get a line — an admin's
+deliberately empty prompt, and `source_unavailable`.
+
+*Both blocks were cut down (2026-08-31).* `platform_prompt` 1443 → 880 chars,
+`platform_instructions` 1801 → 965. The instructions lost their `## Answering`
+section entirely: every rule in it (answer in the user's language, say when you
+don't know, don't expose internals) restated something the platform prompt
+directly above it already says, and paying for the same instruction twice on
+every model call of every agent is exactly the cost this head-of-prompt design
+is supposed to be careful with. What remains is the tool discipline, which is
+the one thing that must not be rewritable by an admin. The three phrases the
+#2073 regression test pins — "never present that raw text as your final answer",
+"retry with corrected arguments", "answer from what other calls already
+returned" — survive verbatim; `apps/fred-agents/tests/test_platform_prompt_file.py`
+is what proves it, and is why the pins live next to the file rather than in
+fred-runtime.
+
+*The read-only panel is selectable* (2026-08-31). It inherited the app-wide
+`user-select: none` chrome default and so could not be copied — worse there than
+anywhere else, since it is the only place the shipped instructions are readable
+and, unlike the prompt beside it, has no editor to select from. It opts back in
+with `user-select: text`, the same way `MarkdownRenderer` and `AssistantTurn`
+already do for their reading zones.
+
+*The audit line shows a name, not a uid* (2026-08-31). "Dernière modification
+par 75730f40-9e81-…" was unreadable. The row still stores the acting user's
+Keycloak uid — stable across renames, and the right thing to persist for audit —
+so the resolution is display-only, reusing the existing `useUsersByIdsQuery` +
+`userDisplayName` pair that agent cards already use for their own audit uids
+(#1952). No backend change: `PlatformPrompt.updated_by` keeps carrying the uid,
+and `userDisplayName` falls back to it when the lookup finds nothing, so a
+deployment with Keycloak M2M disabled still shows who edited rather than nothing.
+
+**Follow-up 4 (2026-08-31, same day) — cut down further.** Still too much for
+a "simple for now" default. `platform_prompt` 882 → 418 chars: the worked
+example dropped from five rules to two (be direct/short/in-language, honest
+about limits; replace-this-text) — the quoting-exactness and
+structure-only-when-it-helps guidance is exactly the kind of thing an operator
+who reaches for this field will already restate in their own words, so keeping
+it as unrequested-but-plausible filler cost more than it taught.
+`platform_instructions` 965 → 548 chars: dropped the intro paragraph ("follow
+these in addition to your own role instructions; where the two conflict, ask
+for clarification") as redundant scaffolding — the compose order already
+places these ahead of `# Agent instructions`, so the precedence was implicit
+— and tightened the three tool-discipline bullets to two clauses each without
+touching the pinned phrasing. `test_platform_prompt_file.py`'s five content
+assertions and `test_react_prompting.py`'s compose-order tests (which use
+synthetic fixture values, not the shipped file) both pass unchanged.
+
+---
+
+### 8.71 ✅ Per-agent `guardrails` removed from `ReActPolicy` — operating rules live in the agent template (2026-09-02)
+
+**What changed.** `GuardrailDefinition` and `ReActPolicy.guardrails` are gone
+from fred-sdk, and `build_guardrail_suffix` is gone from
+`fred_runtime.react.react_prompting`. `compose_system_prompt` no longer takes
+a `definition` argument — it only ever read it for the guardrails. The
+composed order is now:
+
+```
+platform prompt (admin-editable) -> platform instructions (read-only) ->
+global base contract -> tools -> runtime suffixes ->
+# Agent instructions -> per-turn context -> attachments
+```
+
+**Why.** Every shipped guardrail duplicated a rule already written in the
+same agent's prompt Markdown: `sql_expert` (read-only SQL, no invented
+schema, clarify ambiguity — the read-only part is also server-enforced by the
+tabular capability), `platform_ops` (ground on discovered schema, aggregate
+in SQL, fix failed queries). The model therefore received each rule twice,
+once in an "Operating guardrails" block it could not be edited out of and
+once in the template an operator *can* edit — so an operator who rewrote the
+template to change a rule still got the old wording from the policy. One
+home for behavioural rules, the editable template, removes that trap and one
+abstraction with it.
+
+**Where the rules went.** `sql_expert` and `platform_ops`: nowhere new,
+their Markdown already carried each rule verbatim. `rag_expert`: the
+"uncertainty" rule was already in the Markdown; the sharper half of
+"grounding" ("never present an unsupported claim as if it came from the
+documents") was added to its `## Uncertainty` section.
+
+**Wire contract.** Unchanged — `guardrails` never crossed the runtime
+OpenAPI surface; `ReActAgentDefinition.preview()` simply drops its
+`- Guardrails: N` line.

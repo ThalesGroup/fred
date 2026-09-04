@@ -53,10 +53,23 @@ and the nginx container resolve both the same way:
 | `/app-services/<app_id>/` | `service_upstream` | the app's own code            |
 
 ```bash
-FRONTEND_ENABLE_APPLICATIONS=true \
-FRONTEND_APPLICATIONS_JSON='[{"app_id":"acme-forecast","ui_upstream":"http://localhost:8300","service_upstream":"http://localhost:8301","service_required":true}]' \
+cp config/.env.template config/.env
+# Edit config/.env, then start Fred and the registered application upstreams.
 make run
 ```
+
+Frontend make commands load application gateway settings from `config/.env`
+when it exists. The file is local-only and ignored by Git. An explicit shell
+environment value or make command-line value takes precedence, so one-off
+overrides remain available:
+
+```bash
+FRONTEND_ENABLE_APPLICATIONS=false make run
+```
+
+The template's `localhost` upstreams are for native `make run`. For
+`make docker-run`, use addresses reachable from inside the container, such as
+`host.docker.internal` for services running on the host.
 
 The whole `/apps/<app_id>` prefix is forwarded upstream, so build the app's
 bundle with that base path — its own absolute asset URLs then resolve back
