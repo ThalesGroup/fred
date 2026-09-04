@@ -305,7 +305,17 @@ Runtime tests:
 - the outbound Workspace call authenticates with the runtime's M2M provider, never the
   human's access token;
 - binding fields (`team_id`, `agent_instance_id`, `user_id`, `session_id`, `exchange_id`)
-  and trace context are propagated onto that call correctly.
+  and trace context are propagated onto that call correctly;
+- `LocalRegistryAgentInvoker` preserves the parent's `agent_instance_id` when constructing
+  the child's execution request (§9.4) - not `None`;
+- `user_id`, `team_id`, and `session_id` remain consistent between parent and child across
+  that same delegation;
+- a delegated child sees the same authorized workspace subtree as its parent - the
+  `TODO.md` proof holds across at least one level of `TeamAgent` delegation, not only for a
+  top-level execution;
+- a missing or inconsistent binding on a delegated child fails closed, per §9.4;
+- invoking a different child `agent_id` does not by itself mint or select a different
+  workspace `agent_instance_id`.
 
 ## 8. Decision needed
 
@@ -451,13 +461,35 @@ Two consequences of that, named rather than glossed:
 - **Agent-private scratch space has no home in v1.** Material the agent wants to keep to
   itself would need a sibling segment under the instance, outside `users/{uid}`. Not in
   this contract.
-- **Child agents inherit the parent's `agent_instance_id` and `user_id`.**
-  This is as-built, not a proposal: the graph runtime reads `agent_instance_id` from the
-  portable baggage (`graph_runtime.py`), so a child lands in the *same* subtree as its
-  parent. That is precisely what keeps a parent's `TODO.md` readable by its children -
-  minting a fresh instance id per child would move it to a different subtree and break
-  the Deep Agents proof `#2328` is built on. Per-child isolation, if it is ever wanted,
-  is a sibling segment, not a different instance id.
+- **A child delegated inside an interactive managed execution MUST reuse the parent
+  workspace binding - `team_id`, `agent_instance_id`, `user_id`, and `session_id`.** The
+  child may run a different agent template/`agent_id`, but that must never create or
+  select a different workspace `agent_instance_id` - a fresh instance id would move the
+  child to a different subtree, and a parent's `TODO.md` would stop being readable by its
+  children, breaking the Deep Agents proof `#2328` is built on. Per-child isolation, if it
+  is ever wanted, is a sibling segment, not a different instance id.
+
+  **This is a contract requirement, not an as-built invariant across every child
+  invocation - a real gap exists today.** Some graph-runtime paths do recover
+  `agent_instance_id` from portable baggage (`graph_runtime.py:1925,2193`,
+  `portable.baggage.get("agent_instance_id")`), which is the mechanism that makes the
+  requirement above hold *when the baggage was populated correctly upstream*. It is not:
+  `LocalRegistryAgentInvoker.invoke` (`fred_runtime/app/agent_app.py`) constructs the
+  child's `_AgentExecuteRequest` with `agent_instance_id=None` explicitly, and
+  `_iterate_runtime_event_payloads` builds the child's `PortableContext.baggage` from that
+  same top-level `request.agent_instance_id` field - not from the parent's own
+  `RuntimeContext.agent_instance_id`, which is present elsewhere in the dumped context but
+  never read for this purpose. A `None` value is filtered out of `baggage` entirely (the
+  dict comprehension keeps only `isinstance(value, str) and value`), so a `TeamAgent` child
+  invoked through this in-process path loses its parent's `agent_instance_id` outright, not
+  merely inherits a stale one. Propagation is therefore an **implementation obligation**
+  this contract states and the vertical slice must close (§9.10), not a property already
+  guaranteed by today's code.
+
+  **Workspace operations must fail closed if the binding cannot be preserved or
+  validated.** A child that cannot establish a consistent `(team_id, agent_instance_id,
+  user_id, session_id)` binding must be refused Workspace access, not silently fall back to
+  no instance scope, a service-account uid, or a newly minted instance id.
 
 ### 9.5 How Knowledge Flow verifies the M2M binding
 
@@ -543,6 +575,20 @@ This does not restore or generalize `ExecutionGrant`, and needs no new signing o
 cryptography beyond the exact-client-identity check above: every check is a live read
 against control-plane state at call time, consistent with `RUNTIME-EXECUTION-CONTRACT.md`
 §8.11's model of no control-plane-issued token.
+
+**What this trust boundary is, stated plainly, so it is not read as more than it is.** The
+configured runtime service account is the trusted delegation boundary - every Workspace
+operation from every agent instance, in every session, across the whole runtime pod fleet,
+authenticates as that one client identity. This design does not claim per-pod or
+per-execution credential isolation: it verifies *what* the caller asserts (the
+`team_id`/`agent_instance_id`/`user_id`/`session_id` tuple) against live control-plane
+state, not *which specific execution* is asking. Compromise of that one runtime credential
+would have service-wide impact - every workspace it can construct a plausible tuple for,
+not just one execution's. Introducing execution-scoped grants (a distinct, narrower
+credential minted per turn or per instance) would be a separate threat-model and
+architecture change of its own, not something this tuple-validation design silently
+provides. If that stronger isolation is ever required, it is future work, not implied by
+anything in this section.
 
 Agent writes must not ship gated behind "M2M PR later" as a deferred flag, and must not
 ship before this validation path is complete end to end - see §9.10.
@@ -684,6 +730,11 @@ independently-mergeable fragments:
 - `FredWorkspaceFs` migrated off the human bearer token and off caller-constructed
   physical prefixes;
 - server-derived namespace end to end;
+- `LocalRegistryAgentInvoker` fixed to preserve the parent's workspace binding
+  (`team_id`/`agent_instance_id`/`user_id`/`session_id`) onto a delegated child's
+  execution request, instead of the current `agent_instance_id=None` (§9.4) - this is
+  part of the vertical slice, not a follow-up, because a delegated `TeamAgent` child
+  cannot pass the `TODO.md` proof without it;
 - generated-contract regeneration for every public API this touches (below);
 - isolation and actor-permission tests (§9.1a, §9.7, §7);
 - validation-latency instrumentation (§9.5).
