@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fred_core.conversion import convert_pptx_file_to_pdf
+
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
     render_pdf_pages_to_png,
 )
