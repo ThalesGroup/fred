@@ -26,6 +26,7 @@ depends on.
 from __future__ import annotations
 
 import asyncio
+from typing import Any, cast
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
@@ -428,3 +429,78 @@ def test_cross_agent_child_runs_the_registry_template(monkeypatch) -> None:
 
     assert seen["definition"].agent_id == OTHER_AGENT_ID
     assert seen["definition"].default_mcp_servers == ()
+
+
+def test_child_turn_is_closed_when_the_invoker_returns_early(monkeypatch) -> None:
+    """The child's cleanup must run before `invoke()` returns.
+
+    Every branch of the loop returns mid-iteration. Without `aclosing`, the
+    turn generator — and the child runtime's `stream()` under it — stayed
+    suspended at their `yield`, so the `finally` that ends the child's root
+    tracing span never ran and Langfuse, which exports a span only on `end()`,
+    showed the child's model and tool spans as parentless orphans.
+    """
+
+    closed: list[str] = []
+
+    async def _fake(definition, request, access_token=None, **kwargs):
+        try:
+            yield {"kind": "final", "sequence": 0, "content": "ok"}
+            yield {"kind": "never-reached", "sequence": 1}
+        finally:
+            closed.append("child-turn")
+
+    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", _fake)
+    invoker = _invoker(_parent_turn(agent_id=_EchoAgent().agent_id))
+
+    async def _scenario():
+        # Read `closed` the instant `invoke()` returns: the loop's own
+        # `shutdown_asyncgens()` would close an abandoned generator anyway,
+        # which is exactly the late, non-deterministic cleanup the fix removes.
+        result = await invoker.invoke(_child_request(_EchoAgent().agent_id))
+        return result, list(closed)
+
+    result, closed_on_return = asyncio.run(_scenario())
+
+    assert result.content == "ok"
+    assert closed_on_return == ["child-turn"]
+
+
+def test_closing_event_stream_closes_a_generator_and_tolerates_one_that_is_not() -> (
+    None
+):
+    """`Executor.stream` is typed `AsyncIterator`, but is a generator in practice.
+
+    Abandoning it skips the `finally` that ends the turn's root tracing span,
+    which is what made a sub-agent's spans orphans. Closing the OUTER turn
+    generator is not enough — unwinding its frame drops this iterator without
+    closing it — so `_iterate_runtime_event_payloads` closes this level too.
+    """
+
+    closed: list[str] = []
+
+    async def _generator_stream():
+        try:
+            yield cast(Any, "event")
+        finally:
+            closed.append("runtime-stream")
+
+    class _PlainAsyncIterator:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    async def _scenario() -> None:
+        async with agent_app_module._closing_event_stream(_generator_stream()) as s:
+            async for _ in s:
+                break
+        # No `aclose` to call — must not raise.
+        async with agent_app_module._closing_event_stream(_PlainAsyncIterator()) as s:
+            async for _ in s:
+                pass
+
+    asyncio.run(_scenario())
+
+    assert closed == ["runtime-stream"]
