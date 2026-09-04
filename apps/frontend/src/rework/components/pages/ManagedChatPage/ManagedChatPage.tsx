@@ -29,12 +29,10 @@ import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/t
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import {
-  CapabilityLauncherRail,
-  CapabilitySidePanelHost,
-} from "../../../features/capabilities/CapabilitySidePanelHost";
+import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
+import { ChatLauncherRail } from "../../../features/capabilities/ChatLauncherRail";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
 import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
 import { conversationTokenTotals } from "./toThreadMessages";
@@ -176,6 +174,25 @@ export default function ManagedChatPage() {
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
   const allowChatAttachments = chat.chatControls.some((control) => control.widget === "attach_files");
+
+  // The rail's attachments launcher. Offered when the agent still exposes
+  // attaching OR the conversation already holds files: an older session whose
+  // agent lost `attach_files` must not lose the way back to its own files.
+  const attachmentsLaunchers = useMemo(
+    () =>
+      allowChatAttachments || attachmentsCount > 0
+        ? [
+            {
+              key: "attachments",
+              label: t("chatbot.sessionAttachments.title"),
+              icon: "attach_file" as const,
+              badgeCount: attachmentsCount,
+              onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
+            },
+          ]
+        : [],
+    [allowChatAttachments, attachmentsCount, t],
+  );
   // The composer options menu always renders: even when an agent exposes no
   // search options, the prompt-library row is always available (personal +
   // team library + platform defaults).
@@ -441,18 +458,6 @@ export default function ManagedChatPage() {
                     </span>
                   )}
                   <div className={styles.topBarActions}>
-                    {attachmentsCount > 0 && (
-                      <button
-                        type="button"
-                        className={styles.conversationFilesButton}
-                        onClick={() =>
-                          setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
-                        }
-                      >
-                        <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-                        <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-                      </button>
-                    )}
                     {isAdmin && (
                       <IconButton
                         variant="icon"
@@ -572,10 +577,11 @@ export default function ManagedChatPage() {
 
         {/* Launcher rail — page-root sibling of the body (not inside it) so it
             reserves its own in-flow column at the far right. */}
-        <CapabilityLauncherRail
+        <ChatLauncherRail
           capabilityIds={chat.capabilityIds}
           activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
           onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+          launchers={attachmentsLaunchers}
         />
 
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />

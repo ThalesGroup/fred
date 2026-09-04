@@ -712,6 +712,37 @@ _(none yet)_
 
 ---
 
+### `IconButton` count badge (2026-09-04)
+
+**Location:** `src/rework/components/shared/atoms/IconButton/`
+
+**Status:** `Functional`
+
+`badgeCount` puts an M3 *large badge* on the button's top-right corner. Nothing
+renders below 1 — a "0" pill is noise, not information — and counts above 999
+show as `999+`, M3's three-digit cap.
+
+Spec mapped onto existing tokens, no invented values: 16px min box
+(`--spacing-m`), `--radius-full`, 4px side padding (`--spacing-2xs`), Label
+Small (`--font-label-small`, already the 11px M3 asks for), and
+`line-height: 1` so the digit sits centred rather than low in the pill.
+
+**One deliberate divergence from M3:** the badge is `--primary` / `--on-primary`,
+not the `error` / `on-error` M3 specifies. M3 colors badges as notification
+signals; this one is a neutral count (attachments in a conversation), and a red
+pill would read as something to fix.
+
+The badge renders in a wrapper *beside* the `<button>`, not inside it: `.btn` is
+`overflow: hidden` to clip its state layer to the circle, so a nested badge
+would be cut off. The wrapper only appears when a badge does, so every other
+call site keeps rendering a bare `<button>`.
+
+It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
+otherwise a screen reader announces the button with no number, or reads a bare
+digit after the name.
+
+---
+
 ### `Chip` atom + composer consolidation (`ManagedChatPage`, 2026-08-03)
 
 **Location:** `src/rework/components/shared/atoms/Chip/`,
@@ -3689,21 +3720,36 @@ agent-health controls.
 
 ---
 
-### Capability side-panel launcher rail (2026-08-28)
+### Chat launcher rail (2026-08-28, generalised 2026-09-04)
 
-**Location:** `src/rework/features/capabilities/CapabilitySidePanelHost.tsx`,
+**Location:** `src/rework/features/capabilities/ChatLauncherRail.tsx`,
 `src/rework/features/capabilities/<id>/plugin.ts`
 
 **Status:** `Functional`
 
 The launcher rail on the chat page's right edge, one small icon button per side panel
-a session's active capabilities declare. **Since 2026-09-01 it is a page-root in-flow
-column** — extracted into `CapabilityLauncherRail` (a flex sibling of `.pageBody`, not
-inside it), `flex-shrink: 0`, full page height, 12px top/right/bottom margin — so it
-reserves its own space at the far right and reflows the chat body left, rather than
-floating over it as an absolutely-positioned overlay. Opening a panel retires the whole
-rail (returns `null`), so the body-side push drawer takes the full width. Earlier
-behaviour (#2459):
+the conversation can open. **Since 2026-09-01 it is a page-root in-flow column** — a
+flex sibling of `.pageBody`, not inside it — `flex-shrink: 0`, full page height, 12px
+top/right/bottom margin, so it reserves its own space at the far right and reflows the
+chat body left rather than floating over it. Opening a capability panel retires the
+whole rail (returns `null`), so the body-side push drawer takes the full width.
+
+**Two sources feed it (2026-09-04).** It was `CapabilityLauncherRail`, built only from
+`sidePanelsForCapabilities()`. It now also takes a `launchers` array of first-party
+descriptors (`key`, `label`, `icon`, optional `badgeCount`, `onOpen`) that the page
+owns, rendered **above** the capability-derived ones — session attachments is the first,
+and a future native panel plugs in the same way. The rename followed: the old name
+would have lied about what the rail renders.
+
+A first-party launcher may carry a count, shown through `IconButton`'s `badgeCount`
+(M3 large badge — see `IconButton` below).
+
+**Known consequence, deliberately deferred:** the rail still retires entirely while a
+capability viewer is open, first-party launchers included. Since the attachments panel
+lost its top-bar trigger in the same change, its files are unreachable while a viewer is
+open. Suppressing only the capability entries and keeping the `launchers` would fix it.
+
+Earlier behaviour (#2459):
 
 - **A launcher appears only once its panel has something to show.** The rail used to
   render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`

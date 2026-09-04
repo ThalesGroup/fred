@@ -473,7 +473,6 @@
     },
     "characterCounter": "{{used}} / {{limit}} caractères",
     "conversationAriaLabel": "Conversation",
-    "conversationFiles": "Fichiers de conversation",
     "copyMessage": {
       "tooltip": "Copier le message",
       "response": "Copier la réponse",
@@ -505,11 +504,11 @@
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
-      "empty": "Aucun fichier n'est attaché à cette conversation.",
-      "filePreviewTitle": "Aperçu du fichier",
-      "loading": "Chargement des fichiers...",
+      "empty": "Aucune pièce jointe dans cette conversation.",
+      "filePreviewTitle": "Aperçu de la pièce jointe",
+      "loading": "Chargement des pièces jointes...",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
-      "title": "Fichiers de conversation"
+      "title": "Pièces jointes"
     },
     "sessionTitleEditor": {
       "untitled": "Conversation sans titre",

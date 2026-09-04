@@ -103,8 +103,8 @@ vi.mock("@shared/atoms/IconButton/IconButton", () => ({ default: () => null }));
 vi.mock("@shared/molecules/TokenUsageBadge/TokenUsageBadge", () => ({ TokenUsageBadge: () => null }));
 vi.mock("../../../features/capabilities/CapabilitySidePanelHost", () => ({
   CapabilitySidePanelHost: () => null,
-  CapabilityLauncherRail: () => null,
 }));
+vi.mock("../../../features/capabilities/ChatLauncherRail", () => ({ ChatLauncherRail: () => null }));
 vi.mock("../../../features/capabilities/ComposerControlSlot", () => ({ ComposerControlSlot: () => null }));
 vi.mock("../../../features/capabilities/ComposerOptionChips", () => ({
   COMPOSER_CHIP_WIDGETS: new Set<string>(),

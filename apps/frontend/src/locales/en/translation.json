@@ -473,7 +473,6 @@
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
-    "conversationFiles": "Conversation files",
     "copyMessage": {
       "tooltip": "Copy message",
       "response": "Copy response",
@@ -505,11 +504,11 @@
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
-      "empty": "No files are attached to this conversation.",
-      "filePreviewTitle": "File preview",
-      "loading": "Loading files...",
+      "empty": "No attachments in this conversation.",
+      "filePreviewTitle": "Attachment preview",
+      "loading": "Loading attachments...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
-      "title": "Conversation files"
+      "title": "Attachments"
     },
     "sessionTitleEditor": {
       "untitled": "Untitled conversation",

@@ -20,7 +20,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CapabilityLauncherRail } from "./CapabilitySidePanelHost";
+import { ChatLauncherRail, type ChatLauncher } from "./ChatLauncherRail";
 
 const state = vi.hoisted(() => ({ entries: [] as unknown[] }));
 
@@ -30,9 +30,12 @@ vi.mock("./sessionProbeRegistry", () => ({ sessionProbesForCapabilities: () => [
 
 vi.mock("./sidePanelRegistry", () => ({ sidePanelsForCapabilities: () => state.entries }));
 
+// Stubbed down to what the rail actually decides: which glyph, which label, and
+// what count it hands the badge. The badge's own rendering rules are
+// IconButton's, and are tested there.
 vi.mock("@shared/atoms/IconButton/IconButton", () => ({
-  default: ({ icon, ...rest }: { icon: { type: string }; "aria-label": string }) => (
-    <button data-icon={icon.type} aria-label={rest["aria-label"]} />
+  default: ({ icon, badgeCount, ...rest }: { icon: { type: string }; badgeCount?: number; "aria-label": string }) => (
+    <button data-icon={icon.type} aria-label={rest["aria-label"]} data-badge={badgeCount} />
   ),
 }));
 
@@ -49,12 +52,25 @@ const entry = (capabilityId: string, icon: string, useHasContent?: () => boolean
   ownsHeader: false,
 });
 
-const render = (activeKey: string | null = null) =>
+const render = (activeKey: string | null = null, launchers?: ChatLauncher[]) =>
   renderToStaticMarkup(
-    <CapabilityLauncherRail capabilityIds={["ppt_filler"]} activeKey={activeKey} onActiveKeyChange={() => undefined} />,
+    <ChatLauncherRail
+      capabilityIds={["ppt_filler"]}
+      activeKey={activeKey}
+      onActiveKeyChange={() => undefined}
+      launchers={launchers}
+    />,
   );
 
-describe("CapabilityLauncherRail", () => {
+const attachmentsLauncher = (badgeCount?: number): ChatLauncher => ({
+  key: "attachments",
+  label: "Attachments",
+  icon: "attach_file",
+  badgeCount,
+  onOpen: () => undefined,
+});
+
+describe("ChatLauncherRail", () => {
   beforeEach(() => {
     state.entries = [];
   });
@@ -83,6 +99,26 @@ describe("CapabilityLauncherRail", () => {
 
     expect(html).toContain('data-icon="slideshow"');
     expect(html).toContain('data-icon="edit_document"');
+  });
+
+  it("renders a first-party launcher with no capability contributing a panel", () => {
+    // The attachments button must reach an otherwise bare chat.
+    const html = render(null, [attachmentsLauncher()]);
+
+    expect(html).toContain('data-icon="attach_file"');
+  });
+
+  it("puts first-party launchers above the capability ones", () => {
+    state.entries = [entry("ppt_filler", "slideshow", () => true)];
+    const html = render(null, [attachmentsLauncher()]);
+
+    expect(html.indexOf('data-icon="attach_file"')).toBeLessThan(html.indexOf('data-icon="slideshow"'));
+  });
+
+  it("hands the launcher's count to the button's badge", () => {
+    // Whether a count actually paints a badge is IconButton's rule, tested there.
+    expect(render(null, [attachmentsLauncher(3)])).toContain('data-badge="3"');
+    expect(render(null, [attachmentsLauncher()])).not.toContain("data-badge");
   });
 
   it("retires the whole rail while a panel is open, other panels included", () => {
