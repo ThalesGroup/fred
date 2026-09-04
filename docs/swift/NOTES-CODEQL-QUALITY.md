@@ -106,7 +106,7 @@ snapshot and not re-checked.**
     `# codeql[py/unused-global-variable]` suppression comment (CodeQL 2.12.0+, engine-level — works
     regardless of GitHub Default vs. Advanced setup). The 5 `script.py.mako` scaffold templates
     (`apps/control-plane-backend/alembic/`, `apps/knowledge-flow-backend/alembic/`,
-    `libs/fred-runtime/alembic/`, `libs/fred-runtime/.../demo_migrations/`,
+    `libs/fred-runtime/fred_runtime/migrations/`, `libs/fred-runtime/.../demo_migrations/`,
     `libs/fred-capability-writable-document/.../writable_document_migrations/`) got the same comment on
     all 4 scaffolded globals, so every future `alembic revision` is immune — the 52 existing migration
     files predate the template fix and were bulk-dismissed on GitHub directly instead of retrofitted

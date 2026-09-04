@@ -68,7 +68,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-capability-html-artifact /workspac
 # `python -m fred_runtime migrate` (the Helm migration hook) upgrades fred-runtime's tree
 # then every installed capability's own tree, all rooted under /workspace/libs/..., so the
 # ini belongs beside fred-runtime's pyproject.toml whose [tool.alembic] script_location
-# resolves to /workspace/libs/fred-runtime/alembic.
+# resolves to /workspace/libs/fred-runtime/fred_runtime/migrations.
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /workspace/libs/fred-runtime/alembic.ini
 
 # Runtime pods keep the startup contract externalized: .env + configuration

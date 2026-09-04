@@ -15,12 +15,14 @@
 from __future__ import annotations
 
 from logging.config import fileConfig
+from typing import cast
 
 from alembic import context
 from fred_core.history.history_models import SessionHistoryRow  # noqa: F401
 from fred_core.sql import make_alembic_env
+from sqlalchemy import MetaData, Table
+
 from fred_runtime.app.config_loader import load_agent_pod_config
-from sqlalchemy import MetaData
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
@@ -34,7 +36,7 @@ if config.config_file_name is not None:
 # so we must not pass Base.metadata directly — that would make alembic check
 # report drift for tables managed by control-plane-backend.
 _runtime_metadata = MetaData()
-SessionHistoryRow.__table__.to_metadata(_runtime_metadata)
+cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
     target_metadata=_runtime_metadata,

@@ -19,7 +19,7 @@ own single head — never rebased against another's. ORM models are registered i
 | --- | --- | --- |
 | control-plane | `apps/control-plane-backend/alembic/` | `alembic_version_control_plane` |
 | knowledge-flow | `apps/knowledge-flow-backend/alembic/` | `alembic_version_knowledge_flow` |
-| fred-runtime | `libs/fred-runtime/alembic/` | `alembic_version_runtime` |
+| fred-runtime | `libs/fred-runtime/fred_runtime/migrations/` | `alembic_version_runtime` |
 | writable-document capability | `libs/fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/` | `cap_writable_document_alembic_version` |
 
 A capability's tree sits inside its package rather than under `alembic/`, because
@@ -127,7 +127,7 @@ databases with the right tables and an *unstamped* version table, which no
 later `alembic upgrade head` could ever be applied to (issue #2290). Since
 then:
 
-- `session_history` DDL lives only in `libs/fred-runtime/alembic/versions/`;
+- `session_history` DDL lives only in `libs/fred-runtime/fred_runtime/migrations/versions/`;
 - a fred-runtime pod verifies at startup that `session_history` exists and
   refuses to finish booting when it does not — the log names the table and the
   command to run, instead of surfacing an `UndefinedTableError` mid-request
@@ -224,7 +224,7 @@ cd apps/fred-agents && make db-upgrade      # python -m fred_runtime migrate
 
 Stamping writes into `alembic_version_runtime` (fred-runtime's own version
 table — every backend and every capability has its own; see
-`libs/fred-runtime/alembic/env.py`).
+`libs/fred-runtime/fred_runtime/migrations/env.py`).
 
 ## SQLite compatibility
 

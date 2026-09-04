@@ -3292,7 +3292,7 @@ more accurate once rates are populated, no new UI element shipped.
 write path (`save`, `get`, `list_sessions`, `delete_session`,
 `session_belongs_to_user`, `session_exists`, `next_rank`,
 `latest_exchange_id`), in parallel with the Alembic tree that already owns the
-same schema (`libs/fred-runtime/alembic/versions/a1e2f3c4d5b6_*`,
+same schema (`libs/fred-runtime/fred_runtime/migrations/versions/a1e2f3c4d5b6_*`,
 `b2f3a4e5c6d7_*`, `c3d4b5a6f7e8_*`). Hit in production: an install that skipped
 its migration job worked — the store silently made the table — but
 `alembic_version_runtime` was never stamped, so the first `alembic upgrade head`

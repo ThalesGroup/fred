@@ -34,7 +34,10 @@ BACKENDS = {
     "swift": [
         (SWIFT_ROOT / "apps/control-plane-backend/alembic/versions",  "control-plane"),
         (SWIFT_ROOT / "apps/knowledge-flow-backend/alembic/versions", "knowledge-flow"),
-        (SWIFT_ROOT / "libs/fred-runtime/alembic/versions",           "fred-runtime"),
+        (
+            SWIFT_ROOT / "libs/fred-runtime/fred_runtime/migrations/versions",
+            "fred-runtime",
+        ),
     ],
 }
 

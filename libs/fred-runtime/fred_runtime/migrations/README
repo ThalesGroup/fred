@@ -1,0 +1,5 @@
+Fred Runtime Alembic migrations — manages the session_history table and ships
+inside the fred_runtime Python package.
+
+Run from libs/fred-runtime/:
+    alembic upgrade head
