@@ -24,20 +24,15 @@
 // visible, exactly as it was in the former `SearchConfig`, so attaching a
 // chat-context prompt keeps working through the new slot.
 
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ChatControlDescriptor, ContextPromptSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import { ContextPromptPicker } from "@shared/molecules/ContextPromptPicker/ContextPromptPicker";
+import type { ChatControlDescriptor } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
-import { usePickerMenuMaxHeight } from "@shared/molecules/MenuPopover/usePickerMenuMaxHeight";
 import { COMPOSER_CHIP_WIDGETS } from "./ReasoningChip";
 import { resolveChatTurnControls, type ResolvedChatTurnControl } from "./chatTurnControlRegistry";
 import type { ChatTurnControlComposerState } from "./types";
 import styles from "./ComposerControlSlot.module.css";
-
-const PROMPTS_MENU_MAX_HEIGHT_PX = 480;
-const CONTEXT_PROMPTS_KEY = "__context_prompts__";
 
 interface ComposerControlSlotProps {
   /** `ExecutionPreparation.chat_controls`, already ordered (RFC §3.3/§3.7). */
@@ -53,10 +48,6 @@ interface ComposerControlSlotProps {
    *  - "tools": the search / scope / reasoning / document-scope controls.
    */
   part?: "primary" | "tools";
-  /** Prompt library available in the composer (personal + team). "primary" only. */
-  contextPrompts?: ContextPromptSummary[];
-  /** Picking a prompt inserts its content into the composer input (one-shot). "primary" only. */
-  onInsertContextPrompt?: (prompt: ContextPromptSummary) => void;
 }
 
 const controlKey = (entry: ResolvedChatTurnControl): string => `${entry.capabilityId}:${entry.widget}`;
@@ -66,12 +57,9 @@ export function ComposerControlSlot({
   composer,
   onRequestClose,
   part = "primary",
-  contextPrompts = [],
-  onInsertContextPrompt,
 }: ComposerControlSlotProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
-  const promptsWrapRef = useRef<HTMLDivElement>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
 
   const resolved = useMemo(() => resolveChatTurnControls(chatControls), [chatControls]);
@@ -107,13 +95,6 @@ export function ComposerControlSlot({
     };
   }, [openKey]);
 
-  const promptsOpen = openKey === CONTEXT_PROMPTS_KEY;
-  const promptsMenuStyle: CSSProperties = usePickerMenuMaxHeight(
-    promptsOpen,
-    promptsWrapRef,
-    PROMPTS_MENU_MAX_HEIGHT_PX,
-  );
-
   const renderControl = (entry: ResolvedChatTurnControl) => {
     const key = controlKey(entry);
     const { Component } = entry;
@@ -129,43 +110,20 @@ export function ComposerControlSlot({
     );
   };
 
-  // The always-on prompt-library row (PROMPT-05) and its anchored sub-menu.
-  const promptsRow = (
-    <div key="prompts" ref={promptsWrapRef} className={styles.rowWrap}>
-      <MenuPopoverItem
-        icon={{ category: "outlined", type: "auto_awesome" }}
-        label={t("chatbot.contextPrompts.rowLabel")}
-        trailingIcon="chevron_right"
-        aria-haspopup="dialog"
-        aria-expanded={promptsOpen}
-        onClick={() => setOpenKey((current) => (current === CONTEXT_PROMPTS_KEY ? null : CONTEXT_PROMPTS_KEY))}
-      />
-
-      {promptsOpen && (
-        <div className={styles.pickerAnchor} style={promptsMenuStyle}>
-          <MenuPopover
-            role="dialog"
-            aria-label={t("chatbot.contextPrompts.title")}
-            className={styles.pickerSurface}
-            groups={[
-              [
-                <ContextPromptPicker
-                  key="picker"
-                  prompts={contextPrompts}
-                  onSelect={(prompt) => {
-                    onInsertContextPrompt?.(prompt);
-                    // One-shot insert: close the picker and the whole actions
-                    // popover so the user lands back on the input.
-                    setOpenKey(null);
-                    onRequestClose?.();
-                  }}
-                />,
-              ],
-            ]}
-          />
-        </div>
-      )}
-    </div>
+  // The always-on prompt-library row. Picking a prompt now happens in the
+  // right-side panel the page owns, so this row only opens it and dismisses
+  // the actions popover — the user lands back on the input either way.
+  const promptsRow = !composer.onOpenPromptLibraryPanel ? null : (
+    <MenuPopoverItem
+      key="prompts"
+      icon={{ category: "outlined", type: "edit_note" }}
+      label={t("chatbot.promptSelectionPanel.menuRow")}
+      aria-haspopup="dialog"
+      onClick={() => {
+        composer.onOpenPromptLibraryPanel?.();
+        onRequestClose?.();
+      }}
+    />
   );
 
   // "primary" holds the attach action + prompt row; "tools" holds the search /
@@ -174,7 +132,9 @@ export function ComposerControlSlot({
   // divider between them) — unlike the former SearchConfig layout, this menu
   // reads as one flat list of actions rather than two visually split groups.
   const groups =
-    part === "tools" ? [otherControls.map(renderControl)] : [[...attachControls.map(renderControl), promptsRow]];
+    part === "tools"
+      ? [otherControls.map(renderControl)]
+      : [[...attachControls.map(renderControl), promptsRow].filter(Boolean)];
 
   return (
     <MenuPopover

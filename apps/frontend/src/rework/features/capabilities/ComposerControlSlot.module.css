@@ -19,46 +19,5 @@
   max-width: 240px;
 }
 
-/* Position anchor for the chat-context-prompts row's anchored menu. */
-.rowWrap {
-  position: relative;
-}
-
-/* Positioning only — the surface (shadow / radius / background / padding) is the
-   shared MenuPopover placed inside this anchor, so sub-menus reuse the same
-   container as the menus (mirrors EnumSelectRow). */
-.pickerAnchor {
-  display: flex;
-  position: absolute;
-  right: auto;
-  bottom: 0;
-  left: calc(100% + var(--spacing-xs));
-  flex-direction: column;
-  z-index: 20;
-  /* Shrink to the content width (the 240px-capped rows) rather than a fixed
-     box, so the popover hugs the items instead of leaving empty space. */
-  width: fit-content;
-  max-width: calc(100vw - 64px);
-  min-height: 0;
-}
-
-/* Lets the MenuPopover surface scroll internally when the content is taller
-   than the anchor's computed max-height. Tightens the shared popover padding
-   for this instance: 8px all round. */
-.pickerSurface {
-  flex: 1 1 auto;
-  padding: var(--spacing-xs);
-  width: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
 @media (max-width: 720px) {
-  .pickerAnchor {
-    top: calc(100% + var(--spacing-xs));
-    right: 0;
-    left: 0;
-    max-width: calc(100vw - 32px);
-  }
 }

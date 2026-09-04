@@ -62,6 +62,13 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [
     () => ({ unwrap: async () => ({ text: "" }) }),
   ],
+  // Read by the prompt-selection panel the page mounts; it is closed here, so
+  // the queries are skipped and only their shape matters.
+  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({
+    data: [],
+    isLoading: false,
+  }),
+  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({ data: [] }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({ canAdministerAdmins: false }),
@@ -119,7 +126,6 @@ describe("ManagedChatPage chat-input policy wiring", () => {
       capabilityIds: [],
       chatControls: [],
       commitTitle: noop,
-      contextPrompts: [],
       deletePersistedAttachment: noop,
       handleAbort: noop,
       handleAddAttachments: noop,

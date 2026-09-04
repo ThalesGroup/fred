@@ -36,6 +36,7 @@ import {
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
+import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
@@ -101,7 +102,11 @@ export default function ManagedChatPage() {
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
   // a time so their widths never cumulate.
   const [activePushDrawer, setActivePushDrawer] = useState<
-    { kind: "attachments" } | { kind: "capability"; key: string } | { kind: "document-scope" } | null
+    | { kind: "attachments" }
+    | { kind: "capability"; key: string }
+    | { kind: "document-scope" }
+    | { kind: "prompt-library" }
+    | null
   >(null);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
 
@@ -183,20 +188,30 @@ export default function ManagedChatPage() {
   // Bumped alongside chat.setInput below to ask RichInputField to refocus with
   // the caret at the end of the just-inserted prompt (batched into one render).
   const [focusEndRequestId, setFocusEndRequestId] = useState(0);
-  const insertContextPrompt = async (prompt: ContextPromptSummary) => {
+  // Resolves true once the text is in the composer. The prompt panel closes on
+  // true only, so a failed fetch leaves the user where they were instead of
+  // dismissing the list under them.
+  const insertContextPrompt = async (prompt: ContextPromptSummary): Promise<boolean> => {
     const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
-    if (!promptTeamId) return;
+    if (!promptTeamId) return false;
     try {
       const detail = await fetchPrompt({ teamId: promptTeamId, promptId: prompt.id }).unwrap();
       const text = detail.text?.trim();
-      if (!text) return;
-      chat.setInput(chat.input.trim().length > 0 ? `${chat.input}\n\n${text}` : text);
+      // An empty record is a failed insert from the user's side, not a no-op:
+      // without the toast the click would look ignored.
+      if (!text) throw new Error("empty prompt");
+      // Functional update: `chat.input` read before the await is stale by the
+      // time it resolves, so typing (or sending) during the fetch would be
+      // clobbered or resurrected.
+      chat.setInput((current) => (current.trim().length > 0 ? `${current}\n\n${text}` : text));
       setFocusEndRequestId((n) => n + 1);
+      return true;
     } catch {
       showError({
         summary: t("chatbot.contextPrompts.insertErrorSummary"),
         detail: t("chatbot.contextPrompts.insertErrorDetail"),
       });
+      return false;
     }
   };
 
@@ -287,6 +302,7 @@ export default function ManagedChatPage() {
     onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
     // The document_scope tune row calls this to open the side panel (#2259).
     onOpenDocumentScopePanel: () => setActivePushDrawer({ kind: "document-scope" }),
+    onOpenPromptLibraryPanel: () => setActivePushDrawer({ kind: "prompt-library" }),
     searchPolicy: chat.searchPolicy,
     onSearchPolicyChange: chat.setSearchPolicy,
     ragScope: chat.ragScope,
@@ -343,8 +359,6 @@ export default function ManagedChatPage() {
                 chatControls={chat.chatControls}
                 onRequestClose={closeMenu}
                 composer={composerState}
-                contextPrompts={chat.contextPrompts}
-                onInsertContextPrompt={insertContextPrompt}
               />
             )}
           </ComposerActionsMenu>
@@ -402,10 +416,9 @@ export default function ManagedChatPage() {
             {/* Conversation header. When a side panel opens it reflows left
             together with the content below — the panel sits at the page body's
             right edge at full height, no longer under this bar. The inner row is
-            capped to the composer field width so title and composer stay aligned.
-            data-picker-top-boundary: the composer's anchored pickers
-            (usePickerMenuMaxHeight) stop just below this bar. */}
-            <div className={styles.topBar} data-picker-top-boundary>
+            capped to the composer field width so title and composer stay
+            aligned. */}
+            <div className={styles.topBar}>
               <div className={styles.topBarInner}>
                 <div className={styles.topBarTitle}>
                   {chat.sessionId && chat.sessionTitle != null && (
@@ -510,6 +523,15 @@ export default function ManagedChatPage() {
             capabilityIds={chat.capabilityIds}
             activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
             onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+          />
+
+          <PromptSelectionChatPanel
+            open={activePushDrawer?.kind === "prompt-library"}
+            onClose={() => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : v))}
+            teamId={teamId}
+            personalTeamId={activeTeam?.id}
+            isPersonalChat={isPersonalTeam}
+            onInsert={insertContextPrompt}
           />
 
           <SessionAttachmentsDrawer

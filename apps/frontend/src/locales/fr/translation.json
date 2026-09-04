@@ -418,9 +418,6 @@
       "copied": "Copié"
     },
     "contextPrompts": {
-      "rowLabel": "Prompts de l'équipe",
-      "title": "Bibliothèque de prompts",
-      "empty": "Aucun prompt disponible",
       "insertErrorSummary": "Impossible d'insérer le prompt",
       "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
@@ -535,7 +532,21 @@
     "voiceInputStartFailed": "Impossible de démarrer l'enregistrement audio.",
     "voiceInputTranscriptionFailed": "Impossible de transcrire l'extrait audio.",
     "voiceInputUnavailable": "L'enregistrement audio n'est pas disponible dans ce navigateur.",
-    "welcomeFallback": "Bonjour"
+    "welcomeFallback": "Bonjour",
+    "promptSelectionPanel": {
+      "menuRow": "Librairie de prompts",
+      "title": "Sélectionner un prompt à insérer",
+      "spaceLabel": "Espace",
+      "space": {
+        "team": "Équipe",
+        "personal": "Mon espace"
+      },
+      "searchPlaceholder": "Rechercher un prompt...",
+      "clearSearch": "Effacer la recherche",
+      "allCategories": "Toutes",
+      "empty": "Aucun prompt dans cet espace.",
+      "emptyFilters": "Aucun prompt ne correspond aux filtres."
+    }
   },
   "comingSoon": {
     "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
