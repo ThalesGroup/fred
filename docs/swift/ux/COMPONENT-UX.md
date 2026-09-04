@@ -1325,7 +1325,7 @@ Composition and states:
 Wording is deployment-configurable: the placeholder interpolates
 `agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
 
-**Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 300px`
+**Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
 so the control does not resize as the picked option changes length) sits after
 the search field, offering Alphabetical (default), Recently created and Recently updated —
 `display_name`, `created_at`, `updated_at`, the three orderings available

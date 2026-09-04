@@ -30,7 +30,7 @@
 /* Fixed width so the control does not resize as the selected option changes
    length — a toolbar that reflows on every pick is hard to aim at. */
 .sortSelect {
-  min-width: 300px;
+  min-width: 200px;
 }
 
 /* Shown in place of the list when a query matches nothing — distinct from
