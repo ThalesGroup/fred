@@ -225,46 +225,6 @@ Grants are held **team to capability**, never user to capability, so any
 correct check answers two questions: is this caller a member of the team, and
 does the team hold the application.
 
-### 5.1 Open question: where enforcement belongs
-
-The gateway is proposed as pure routing — it checks that an application id is
-registered and has an upstream, then forwards the caller's credentials
-untouched. Under that design **the application's own API is the only thing
-authorizing its data**, and an application that omits the check is readable by
-every authenticated principal.
-
-Two properties make this sharper than an ordinary reminder to check
-authorization. There is no safety net: the API is code its owners write, in
-their own container, and no misconfiguration exists for an operator to notice.
-And the failure is invisible from the inside — the author belongs to an entitled
-team, so every check they naturally perform passes, and nothing errors or logs.
-
-The alternative is for the gateway to verify entitlement before proxying. It
-would be mechanically small, reusing the existing team-subject capability query.
-Its costs are not:
-
-1. The gateway stops being pure routing and acquires an authorization
-   dependency, which is what allows it to be operationally simple.
-2. The control plane enters the hot path of every application API call —
-   latency per request, and control-plane unavailability becoming application
-   unavailability. A short-lived cache makes the call rare but introduces
-   revocation lag.
-3. It risks being a confused deputy. The gateway can only authorize the team
-   identifier it parses from the request path; it cannot know what the
-   application does with that path, or whether the response is scoped to that
-   team at all. It would appear to have authorized a response it never saw.
-
-A guarantee that looks stronger than it is may be worse than none, because
-application authors would reasonably stop writing their own check.
-
-**Options:** documentation and a mandatory negative test; gateway enforcement;
-a short-lived signed entitlement assertion the application verifies; or
-enforcement limited to Fred-owned routes, which does not cover the exposure.
-
-This RFC proposes starting with the documented requirement and treating gateway
-enforcement as a separate decision, because only the application knows what its
-response contains.
-
 ---
 
 ## 6. Lifecycle
@@ -327,32 +287,30 @@ belongs to several teams.
 
 ## 8. Open questions
 
-1. Where authorization for the application API belongs (§5.1). This is the
-   decision with the widest consequences and should be settled explicitly.
-2. The durable registration and removal lifecycle (§6), including the catalog
+1. The durable registration and removal lifecycle (§6), including the catalog
    and gateway asymmetry.
-3. ~~Whether to let an application hand a record to a conversation (§4.5).~~
+2. ~~Whether to let an application hand a record to a conversation (§4.5).~~
    Decided — granted as `fred:open-chat`, with the bound and its two runtime
    dependencies recorded in §4.5. Kept in this list only until §4.5 is folded
    into the contract doc and trimmed from here.
-4. Serving an application from its own origin. The contract is written to make
+3. Serving an application from its own origin. The contract is written to make
    this a configuration change; it needs verifying under an opaque origin before
    the isolation property can be claimed rather than intended.
-5. Typed, non-secret per-team application configuration beyond enablement.
-6. Where application health belongs relative to existing operational health
+4. Typed, non-secret per-team application configuration beyond enablement.
+5. Where application health belongs relative to existing operational health
    surfaces.
-7. Personal-space availability, and how it would interact with the existing
+6. Personal-space availability, and how it would interact with the existing
    personal capability class.
 
-Items 5 through 7 want evidence from more than one independently developed
+Items 4 through 6 want evidence from more than one independently developed
 application before being standardized.
 
 ---
 
 ## 9. Acceptance
 
-This RFC is complete when §5.1 and §4.5 each have a recorded decision and
-rationale, and §6 has either an owner or an explicit deferral. §4.5 in
-particular should be decided against a real application that wanted it, not in
-the abstract. Anything settled moves into the relevant contract or platform
-document and is removed from this RFC rather than amended in place.
+This RFC is complete when §4.5 has a recorded decision and rationale, and §6
+has either an owner or an explicit deferral. §4.5 in particular should be
+decided against a real application that wanted it, not in the abstract.
+Anything settled moves into the relevant contract or platform document and is
+removed from this RFC rather than amended in place.

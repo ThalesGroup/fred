@@ -37,7 +37,17 @@ export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
    *  whose async work (e.g. a network fetch) isn't instant, so a click
    *  reads as "in progress" instead of dead/unresponsive. */
   loading?: boolean;
+  /**
+   * Count shown in a badge on the button's top-right corner (M3 large badge).
+   * Nothing renders below 1 — a zero badge is noise, not information. The badge
+   * is `aria-hidden`, so pass an `aria-label` that carries the count or a screen
+   * reader announces the button without it.
+   */
+  badgeCount?: number;
 }
+
+/** M3 caps the label at three digits; past that the exact number stops mattering. */
+const BADGE_MAX = 999;
 
 export default function IconButton({
   color = "on-surface-retreat",
@@ -45,16 +55,32 @@ export default function IconButton({
   size,
   icon,
   loading = false,
+  badgeCount,
   disabled,
   ...props
 }: IconButtonProps) {
   const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
 
-  return (
+  const button = (
     <button className={buttonClasses.join(" ")} disabled={disabled || loading} aria-busy={loading} {...props}>
       <div className={`${styles["state-layer"]}`}>
         {loading ? <Spinner size={SPINNER_SIZE[size]} /> : <Icon {...icon} />}
       </div>
     </button>
+  );
+
+  // The badge lives outside the button because `.btn` is `overflow: hidden` to
+  // clip its state layer to the circle — a child badge would be cut off. The
+  // wrapper only appears when there is a badge, so every other call site keeps
+  // rendering a bare <button>.
+  if (badgeCount === undefined || badgeCount < 1) return button;
+
+  return (
+    <span className={styles.badgeAnchor}>
+      {button}
+      <span className={styles.badge} aria-hidden="true">
+        {badgeCount > BADGE_MAX ? `${BADGE_MAX}+` : badgeCount}
+      </span>
+    </span>
   );
 }

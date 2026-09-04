@@ -1,0 +1,15 @@
+/* Insets minus the top one — the drawer header already leaves that gap — plus
+   the column layout the drawer shell does not impose. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-m) var(--spacing-m);
+}
+
+/* Height-capped so a child with its own overflow scrolls inside the body
+   instead of growing it, keeping anything above the list pinned. */
+.bodyFill {
+  height: 100%;
+  min-height: 0;
+}

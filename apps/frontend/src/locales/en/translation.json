@@ -418,9 +418,6 @@
       "copied": "Copied"
     },
     "contextPrompts": {
-      "rowLabel": "Team prompts",
-      "title": "Prompt library",
-      "empty": "No prompts available",
       "insertErrorSummary": "Couldn't insert prompt",
       "insertErrorDetail": "The prompt content could not be loaded. Please try again."
     },
@@ -476,7 +473,6 @@
     },
     "characterCounter": "{{used}} / {{limit}} characters",
     "conversationAriaLabel": "Conversation",
-    "conversationFiles": "Conversation files",
     "copyMessage": {
       "tooltip": "Copy message",
       "response": "Copy response",
@@ -508,11 +504,11 @@
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
-      "empty": "No files are attached to this conversation.",
-      "filePreviewTitle": "File preview",
-      "loading": "Loading files...",
+      "empty": "No attachments in this conversation.",
+      "filePreviewTitle": "Attachment preview",
+      "loading": "Loading attachments...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
-      "title": "Conversation files"
+      "title": "Attachments"
     },
     "sessionTitleEditor": {
       "untitled": "Untitled conversation",
@@ -528,14 +524,27 @@
     "startConversationVariantSearch": "What should we dive into today, {{username}}?",
     "stopRecording": "Stop recording",
     "stopResponse": "Stop response",
-    "toggleDebugDrawer": "Toggle debug drawer",
     "transcribingAudio": "Transcribing audio",
     "voiceInputErrorSummary": "Voice dictation failed",
     "voiceInputPermissionDenied": "Microphone access was denied.",
     "voiceInputStartFailed": "Unable to start audio recording.",
     "voiceInputTranscriptionFailed": "Unable to transcribe the audio clip.",
     "voiceInputUnavailable": "Voice recording is not available in this browser.",
-    "welcomeFallback": "Hello there"
+    "welcomeFallback": "Hello there",
+    "promptSelectionPanel": {
+      "menuRow": "Prompt library",
+      "title": "Select a prompt to insert",
+      "spaceLabel": "Space",
+      "space": {
+        "team": "Team",
+        "personal": "My space"
+      },
+      "searchPlaceholder": "Search prompts...",
+      "clearSearch": "Clear search",
+      "allCategories": "All",
+      "empty": "No prompts in this space.",
+      "emptyFilters": "No prompts match these filters."
+    }
   },
   "comingSoon": {
     "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",

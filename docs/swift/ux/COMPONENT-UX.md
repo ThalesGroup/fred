@@ -237,19 +237,17 @@ sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface
   `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
   and bleed full width (negative horizontal margins cancel the popover padding).
 
-- **Composer sub-menu container (2026-08-03)** — the composer's anchored sub-menus now reuse
-  `MenuPopover` as their container instead of a bespoke `.pickerMenu` surface, so menus and
-  sub-menus in the composer are all the same component (mirrors `EnumSelectRow`). Each consumer
-  keeps only a positioning anchor (absolute placement) and passes its picker content as a single
-  `groups` entry; a `pickerSurface` className adds internal scroll for tall content. Applied to
-  `ComposerControlSlot` (prompt library) and `DocumentScopeControl` (document/library picker).
+- **Composer sub-menu container** — the composer's anchored sub-menus reused `MenuPopover`
+  as their container, each consumer keeping only a positioning anchor and a `pickerSurface`
+  className for internal scroll. Both consumers (document scope, then the prompt library)
+  have since moved into side panels, so the composer no longer anchors any sub-menu and the
+  `pickerSurface` surface was deleted 2026-09-04.
 
-- **Pickers stop below the session top bar (2026-08-05, #2245)** — `usePickerMenuMaxHeight`
-  clamped the upward-growing pickers against the viewport top, so once the session top bar
-  landed (#2214/#2218) an expanded document tree slid under it and got clipped. The hook now
-  honors an optional boundary element marked `data-picker-top-boundary` (measured from its
-  bottom edge, tracked with a `ResizeObserver` while open); `ManagedChatPage` marks its
-  `.topBar`. Pages without a marked boundary keep the viewport-top clamp.
+- **Pickers stop below the session top bar** — `usePickerMenuMaxHeight` clamped the
+  upward-growing pickers against a boundary element so an expanded tree could not slide
+  under the session top bar. Both of its consumers have since moved into side panels
+  (document scope, then the prompt library), so the hook and the
+  `data-picker-top-boundary` marker were deleted 2026-09-04.
 
 ---
 
@@ -742,6 +740,37 @@ _(none yet)_
 
 ---
 
+### `IconButton` count badge (2026-09-04)
+
+**Location:** `src/rework/components/shared/atoms/IconButton/`
+
+**Status:** `Functional`
+
+`badgeCount` puts an M3 *large badge* on the button's top-right corner. Nothing
+renders below 1 — a "0" pill is noise, not information — and counts above 999
+show as `999+`, M3's three-digit cap.
+
+Spec mapped onto existing tokens, no invented values: 16px min box
+(`--spacing-m`), `--radius-full`, 4px side padding (`--spacing-2xs`), Label
+Small (`--font-label-small`, already the 11px M3 asks for), and
+`line-height: 1` so the digit sits centred rather than low in the pill.
+
+**One deliberate divergence from M3:** the badge is `--primary` / `--on-primary`,
+not the `error` / `on-error` M3 specifies. M3 colors badges as notification
+signals; this one is a neutral count (attachments in a conversation), and a red
+pill would read as something to fix.
+
+The badge renders in a wrapper *beside* the `<button>`, not inside it: `.btn` is
+`overflow: hidden` to clip its state layer to the circle, so a nested badge
+would be cut off. The wrapper only appears when a badge does, so every other
+call site keeps rendering a bare `<button>`.
+
+It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
+otherwise a screen reader announces the button with no number, or reads a bare
+digit after the name.
+
+---
+
 ### `Chip` atom + composer consolidation (`ManagedChatPage`, 2026-08-03)
 
 **Location:** `src/rework/components/shared/atoms/Chip/`,
@@ -816,33 +845,115 @@ itself owns only `aria-invalid` and its send gating.
 
 ---
 
-### Prompt library → insert into composer (`ContextPromptPicker`, 2026-08-03)
+### `ChatSidePanel` (2026-09-04)
 
-**Location:** `src/rework/components/shared/molecules/ContextPromptPicker/`,
+**Location:** `src/rework/components/shared/molecules/ChatSidePanel/`
+
+**Status:** `Functional`
+
+The one shell every chat side panel wears. Three panels — document scope,
+session attachments, prompt library — had drifted into three slightly different
+`InlineDrawer` configurations (two of them had independently grown the same
+"insets minus the top one" body rule). The shell fixes the treatment once:
+
+`layout="push"` so it reflows the conversation instead of covering it,
+`floating` (12px inset card, `outline-muted` border, `--radius-m`, soft shadow),
+`background: --surface-container-high`, `compactHeader` (a 12px/8px title band
+rather than the drawer's roomier 16px/12px — these panels sit in a narrow column
+beside the conversation; the settings and admin drawers keep the default),
+`flushBody` plus a body that carries
+the insets the drawer's own padding would double up (`0 16px 16px` — the header
+already leaves the top gap) and a `--spacing-m` column gap, and drag-to-resize
+with a persisted width (`persistKey`, unique per panel; `width` seeds the
+first-ever value only).
+
+**Open/close speed (2026-09-04).** These panels run at `--duration-short-3`
+(150ms) through `InlineDrawer`'s `duration` prop, against the 250ms default a
+capability viewer keeps. Note this is deliberately *faster* than M3 recommends
+for a panel (300–400ms) — a designer call: they are a quick detour from the
+conversation, not a context switch. The prop moved the drawer's hardcoded
+`250ms ease-out` onto the `--duration-*` / `--easing-*` tokens on the way.
+
+**The capability viewers wear the same card (2026-09-04).** `CapabilitySidePanelHost`
+passes the same `floating` + `surface-container-high` as this shell, so the
+right-hand column keeps one height, one corner radius and one surface whichever
+panel is showing. They are not on `ChatSidePanel` itself: a viewer needs
+`hideHeader`/`flushBody` for panes that own their header (`ownsHeader`), which
+this shell does not expose.
+
+One content-shaped option: `fill` caps the body at the drawer height so a child
+owns the scrolling and whatever sits above it stays pinned — the prompt panel's
+list under its space picker, the attachments list under its upload warning.
+Without it the content grows and the drawer scrolls as a whole, which is what
+the document-scope tree wants.
+
+Note for panel authors: the panel background is `--surface-container-high`, so
+a row's hover must be a translucent state layer (`--state-on-surface-hover`),
+never that same surface token — painting it makes hover disappear.
+
+A new chat panel should mount `ChatSidePanel`, not `InlineDrawer` directly, and
+take a `kind` in `ManagedChatPage`'s `activePushDrawer` union so it shares the
+single push-drawer slot.
+
+---
+
+### Prompt library → insert into composer (`PromptSelectionChatPanel`, 2026-09-04)
+
+**Location:** `src/rework/components/shared/molecules/PromptSelectionChatPanel/`,
+`src/rework/components/shared/utils/promptFilter.ts`,
 `src/rework/features/capabilities/ComposerControlSlot.tsx`,
 `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
 
 **Status:** `Functional`
 
-Picking a prompt in the composer's `Prompts` row now **inserts the prompt's content into the
-chat input** instead of attaching it as a session-context chip.
+The composer's add menu carries a **Prompt library** row (`edit_note`) that opens
+a right-side panel. It replaces the anchored sub-menu that listed every prompt
+flat, with no search, no category filter, and no way to reach the caller's
+personal prompts from a team chat. `ContextPromptPicker` and the
+`usePickerMenuMaxHeight` hook that positioned it are deleted.
 
-- `ContextPromptPicker` went from a multi-select toggle (checkboxes, `selectedIds`/`onChange`) to
-  a one-shot action list (`onSelect(prompt)`, `role="menu"`/`menuitem`). Picking a row fetches the
-  full prompt (`GetTeamPrompt` — the `text` lives on the record, not the `ContextPromptSummary`),
-  appends it to the draft (`\n\n`-separated when the draft is non-empty), and closes the actions
-  popover. Scope resolves the owning team: `personal` → the user's personal team, `team` → the
-  chat team.
-- `RichInputField` now resizes the textarea on any external value change (not just clear), so
-  inserted (and voice-transcribed) text grows the box instead of being clipped at one row.
-- The context-prompt **chip** UI was removed: `ContextPromptChips` (molecule + test) is deleted,
-  and the composer no longer renders attached-prompt pills. The backend session-context channel
-  (`contextPromptIds` → `context_prompt_text`, PROMPT-05) is left in place but is now **dormant**
-  — nothing in the composer writes to it. Fully retiring it (store + runtime contract) is a
-  separate change, not done here.
-- Picker rows were simplified to name + description (+ score stars): the leading icon and the
-  usage count were removed. The picker's `MenuPopover` uses an 8px padding for this instance via
-  the `pickerSurface` className.
+**Panel.** A `ChatSidePanel` (`fill`), sharing `ManagedChatPage`'s single
+push-drawer slot so it never stacks with the attachments, capability or
+document-scope panels. The shell supplies the header (title + close), the
+surface and the insets. Body, top to bottom: a `ButtonGroup` picking the space,
+a `SearchInput`, category `FilterChips`, then the list. Only the list scrolls.
+
+**Two spaces, two queries.** `GET /teams/{id}/prompts/context` returns personal
+**or** team prompts depending on the id passed, never both — deliberately (a
+backend test asserts a team call never exposes the caller's personal prompts).
+So the panel issues a second call against the personal space
+(`activeTeam.id`), and every query is skipped while the panel is closed: it is
+mounted for every chat but most sessions never open it. Removing the composer's
+old always-on prompt query is part of that — the chat no longer fetches prompts
+on session load.
+
+In a personal chat the space picker is hidden: the team side would have nothing
+to show, and the chat's own team id *is* the personal space.
+
+**Categories are team-owned** (migration `8ca7cafc292f`), so the chips are
+fetched per space and the active category resets when the space changes. Chip
+counts come from the whole space, not the searched subset, so a number does not
+shift as the user types. The chips row is hidden when a space has no category.
+The search + category predicate is `promptFilter.ts`, shared with the team
+prompts page and unit-tested on its own.
+
+**Insert.** Picking a row fetches the full record (`GetTeamPrompt` — `text`
+lives there, not on `ContextPromptSummary`) and appends it to the draft,
+`\n\n`-separated when the draft is non-empty. Scope resolves the owning team:
+`personal` → the user's personal team, `team` → the chat team. Three details
+worth keeping:
+
+- The panel closes **only once the insert resolves**. A failed fetch (or an
+  empty record, which raises rather than passing silently) keeps the panel open
+  behind the existing error toast, so the user does not lose their place.
+- The draft is updated **functionally**. The `input` read before the await is
+  stale by the time it resolves, so typing or sending during the fetch would
+  otherwise be clobbered or resurrected.
+- A second pick is ignored while one insert is in flight.
+
+The session-context channel (`contextPromptIds` → `context_prompt_text`,
+PROMPT-05) remains dormant: nothing in the composer writes to it. Retiring it
+(store + runtime contract) is still a separate change.
 
 ---
 
@@ -937,7 +1048,7 @@ The composer's `document_scope` control (the resource/library picker) moved out 
 inline popover into a full-height right-side push panel (#2259).
 
 - The `document_scope` row in the "tune" popover is now a **launcher**: clicking it closes the
-  tune menu and opens `DocumentScopePanel` — an `InlineDrawer layout="push"` sharing
+  tune menu and opens `DocumentScopePanel` — a `ChatSidePanel` (see below) sharing
   `ManagedChatPage`'s single push-drawer slot (`activePushDrawer`), so it never stacks with the
   attachments / capability panels. The old inline `MenuPopover` + `usePickerMenuMaxHeight` anchor
   in `DocumentScopeControl` is gone; the row just computes the current-selection summary and calls
@@ -3671,21 +3782,52 @@ agent-health controls.
 
 ---
 
-### Capability side-panel launcher rail (2026-08-28)
+### Chat launcher rail (2026-08-28, generalised 2026-09-04)
 
-**Location:** `src/rework/features/capabilities/CapabilitySidePanelHost.tsx`,
+**Location:** `src/rework/features/capabilities/ChatLauncherRail.tsx`,
 `src/rework/features/capabilities/<id>/plugin.ts`
 
 **Status:** `Functional`
 
 The launcher rail on the chat page's right edge, one small icon button per side panel
-a session's active capabilities declare. **Since 2026-09-01 it is a page-root in-flow
-column** — extracted into `CapabilityLauncherRail` (a flex sibling of `.pageBody`, not
-inside it), `flex-shrink: 0`, full page height, 12px top/right/bottom margin — so it
-reserves its own space at the far right and reflows the chat body left, rather than
-floating over it as an absolutely-positioned overlay. Opening a panel retires the whole
-rail (returns `null`), so the body-side push drawer takes the full width. Earlier
-behaviour (#2459):
+the conversation can open. **Since 2026-09-01 it is a page-root in-flow column** — a
+flex sibling of `.pageBody`, not inside it — `flex-shrink: 0`, full page height, 12px
+top/right/bottom margin, so it reserves its own space at the far right and reflows the
+chat body left rather than floating over it.
+
+**Two sources feed it (2026-09-04).** It was `CapabilityLauncherRail`, built only from
+`sidePanelsForCapabilities()`. It now also takes a `launchers` array of first-party
+descriptors (`key`, `label`, `icon`, optional `badgeCount`, `onOpen`) that the page
+owns, rendered **above** the capability-derived ones — session attachments is the first,
+and a future native panel plugs in the same way. The rename followed: the old name
+would have lied about what the rail renders.
+
+A first-party launcher may carry a count, shown through `IconButton`'s `badgeCount`
+(M3 large badge — see `IconButton` below), and reads as selected while its panel is
+the one showing.
+
+`footerLaunchers` is the same descriptor pushed to the rail's foot (`margin-top: auto`)
+— for tooling rather than conversation content. The raw-debug panel is the first: it
+was an admin-only `build` button in the chat header opening an overlay drawer, and is
+now a rail-footer launcher opening a `ChatSidePanel` like the rest, inside the single
+push-drawer slot so it never stacks with another panel.
+
+**The rail outlives an open panel (2026-09-04).** It used to return `null` the moment a
+capability viewer opened, so the body-side drawer took the full width and reaching
+another launcher meant closing the open one first. Now it keeps its own in-flow column
+beside the viewer, exactly as it already did for the attachments, prompt-library and
+document-scope panels — which also closes the hole the previous change opened, where
+losing the attachments' top-bar trigger left its files unreachable while a viewer was up.
+
+The open panel's launcher reads as selected through `IconButton`'s M3 filled `tonal`
+variant plus `aria-pressed`, and clicking it closes the panel — the launcher is both the
+way in and the way out. Clicking a different launcher switches viewers directly.
+
+The trade-off accepted here: a viewer is ~48px narrower, the rail keeping its column.
+One behavioural side effect worth knowing — the early return used to unmount every
+`useHasContent` hook while a viewer was open; they now stay mounted.
+
+Earlier behaviour (#2459):
 
 - **A launcher appears only once its panel has something to show.** The rail used to
   render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`

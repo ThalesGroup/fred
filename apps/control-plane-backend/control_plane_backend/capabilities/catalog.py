@@ -25,9 +25,11 @@ from __future__ import annotations
 import logging
 import re
 
+from fred_core.security.rebac.capability_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
     CAPABILITY_ID_PATTERN,
     MODEL_CAPABILITY_NAMESPACE_PREFIX,
 )

@@ -22,7 +22,6 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useChatSse } from "@hooks/useChatSse";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import {
-  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
@@ -137,12 +136,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const { currentData: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
     { teamId, sessionId: sessionId ?? "" },
     { skip: !teamId || !sessionId },
-  );
-
-  // Library prompts available as chat context (personal + team).
-  const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
-    { teamId },
-    { skip: !teamId },
   );
 
   const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
@@ -780,7 +773,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setRagScope: composer.setRagScope,
     reasoning: composer.reasoning,
     setReasoning: composer.setReasoning,
-    contextPrompts,
     contextPromptIds,
     setContextPrompts,
     threadMessages,
