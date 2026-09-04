@@ -130,9 +130,24 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     which also allows a document with no chunks left at all — so a retry after
     an earlier attempt already deleted the vectors but failed on a later
     cleanup step can still converge instead of being denied forever.
+
+    A CSV attachment (ATTACH-TAB-01) never has vector chunks at all — the
+    text-chunk preview is skipped for it entirely, by design — so the
+    chunk-based check above would treat "zero chunks" as a safe retry for
+    *every* CSV attachment uid, not just this caller's own, silently
+    returning success to a non-owner instead of denying them. Checked first,
+    ahead of the chunk-based fallback: a document with a `tabular_v1`
+    artifact is authorized purely by `uploaded_by` match, the same test
+    `TabularService._resolve_owned_attachment_dataset` uses, never falling
+    through to the chunk-count check at all for this document class.
     """
     if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
         return
+    metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
+    if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and read_tabular_artifact(metadata) is not None:
+        if metadata.identity.uploaded_by == user.uid:
+            return
+        raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
     if await asyncio.to_thread(vector_store.may_delete_session_document, document_uid, user.uid):
         return
     raise AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
@@ -395,7 +410,7 @@ class IngestionController:
         document_uid: str,
         filename: str,
         raw_path: pathlib.Path,
-    ) -> bool:
+    ) -> None:
         """
         Build a SQL-queryable `tabular_v1` dataset for one CSV chat attachment.
 
@@ -407,8 +422,13 @@ class IngestionController:
 
         How to use:
         - Call with the raw upload path, before it is cleaned up.
-        - Best-effort: any failure is logged and swallowed — the attachment
-          still works as a text-only preview, exactly as before this feature.
+        - Raises on failure — deliberately not best-effort. CSV attachments
+          skip vector-chunking entirely (DESIGN.md, "Session-Scoped
+          Attachment Datasets"), so there is no fallback retrieval path left
+          if this fails; the caller must reject the upload rather than
+          accept an attachment the agent can neither search nor query,
+          exactly like the "no text could be extracted" empty-file check
+          above.
         - Reuses `document_uid` from the fast-ingest vector chunks so the one
           bracketed id the agent is given works for both search and SQL.
         - Persists metadata with no tags, so no ReBAC tuple is created —
@@ -424,22 +444,14 @@ class IngestionController:
           `document_sources` registry (`resolve_source_type`), which a chat
           attachment was never meant to be a member of.
         """
-        try:
-            metadata = DocumentMetadata(
-                identity=Identity(document_name=filename, document_uid=document_uid, title=filename, uploaded_by=user.uid),
-                source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),  # type: ignore[reportCallIssue]  # basedpyright doesn't recognize Field(None, ...) positional defaults as satisfying SourceInfo's synthesized __init__; pull_location genuinely defaults to None (document_structures.py) -- same false positive as scripts/seed_synthetic_corpus.py:119
-                file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-                tags=Tagging(tag_ids=[]),
-            )
-            await asyncio.to_thread(self._tabular_processor.process, str(raw_path), metadata, emit_pointer_chunk=False)
-            await self.service.metadata_service.save_document_metadata(user, metadata)
-            return True
-        except Exception:
-            logger.exception(
-                "[FAST TEXT][INGEST] Failed to build tabular dataset for %s (attachment stays text-only)",
-                filename,
-            )
-            return False
+        metadata = DocumentMetadata(
+            identity=Identity(document_name=filename, document_uid=document_uid, title=filename, uploaded_by=user.uid),
+            source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),  # type: ignore[reportCallIssue]  # basedpyright doesn't recognize Field(None, ...) positional defaults as satisfying SourceInfo's synthesized __init__; pull_location genuinely defaults to None (document_structures.py) -- same false positive as scripts/seed_synthetic_corpus.py:119
+            file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+            tags=Tagging(tag_ids=[]),
+        )
+        await asyncio.to_thread(self._tabular_processor.process, str(raw_path), metadata, emit_pointer_chunk=False)
+        await self.service.metadata_service.save_document_metadata(user, metadata)
 
     async def _delete_fast_ingest_artifacts(
         self,
@@ -1260,11 +1272,42 @@ class IngestionController:
                 except Exception as e:
                     raise HTTPException(status_code=400, detail=str(e))
 
+                is_csv = filename.lower().endswith(".csv")
                 docs: list[Document] = []
+                chunks = 0
 
-                if result.pages:
-                    # Ingest per-page to keep chunks smaller and recall higher.
-                    for p in result.pages:
+                # CSV gets a real tabular_v1 dataset below (exact SQL, full
+                # data) instead of a text-chunked vector preview: a truncated
+                # markdown-table chunk is exactly the kind of imprecise
+                # answer source ATTACH-TAB-01 exists to move away from for
+                # this file type, and it would compete with the deterministic
+                # SQL path instead of complementing it (DESIGN.md,
+                # "Session-Scoped Attachment Datasets"). `summary_md` below
+                # still uses the extracted text for the UI preview card.
+                if not is_csv:
+                    if result.pages:
+                        # Ingest per-page to keep chunks smaller and recall higher.
+                        for p in result.pages:
+                            chunk_uid = uuid.uuid4().hex
+                            doc_meta = {
+                                "document_uid": document_uid,
+                                CHUNK_ID_FIELD: chunk_uid,
+                                "file_name": filename,
+                                "document_name": filename,
+                                "title": filename,
+                                "user_id": user.uid,
+                                "session_id": session_id,
+                                "scope": scope,
+                                "retrievable": True,
+                                "source": "fast_ingest",
+                                # Whole pages are dropped past the char cap; the vectors
+                                # are the only copy, so readers must be able to say so.
+                                "truncated": result.truncated,
+                                "page": p.page_no,
+                            }
+                            docs.append(Document(page_content=p.text or "", metadata=doc_meta))
+                    else:
+                        # Single combined doc fallback
                         chunk_uid = uuid.uuid4().hex
                         doc_meta = {
                             "document_uid": document_uid,
@@ -1277,59 +1320,58 @@ class IngestionController:
                             "scope": scope,
                             "retrievable": True,
                             "source": "fast_ingest",
-                            # Whole pages are dropped past the char cap; the vectors
-                            # are the only copy, so readers must be able to say so.
                             "truncated": result.truncated,
-                            "page": p.page_no,
                         }
-                        docs.append(Document(page_content=p.text or "", metadata=doc_meta))
+                        docs.append(Document(page_content=text, metadata=doc_meta))
+
+                    try:
+                        scheduler_backend, chunks = await self._store_fast_vectors(document_uid=document_uid, docs=docs)
+                        logger.info(
+                            "[FAST TEXT][INGEST] Stored vectors backend=%s doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
+                            scheduler_backend,
+                            document_uid,
+                            chunks,
+                            user.uid,
+                            session_id,
+                            scope,
+                            bool(result.pages),
+                        )
+                    except HTTPException:
+                        raise
+                    except Exception:
+                        logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
+                        raise HTTPException(status_code=500, detail="Failed to store vectors")
                 else:
-                    # Single combined doc fallback
-                    chunk_uid = uuid.uuid4().hex
-                    doc_meta = {
-                        "document_uid": document_uid,
-                        CHUNK_ID_FIELD: chunk_uid,
-                        "file_name": filename,
-                        "document_name": filename,
-                        "title": filename,
-                        "user_id": user.uid,
-                        "session_id": session_id,
-                        "scope": scope,
-                        "retrievable": True,
-                        "source": "fast_ingest",
-                        "truncated": result.truncated,
-                    }
-                    docs.append(Document(page_content=text, metadata=doc_meta))
-
-                try:
-                    scheduler_backend, chunks = await self._store_fast_vectors(document_uid=document_uid, docs=docs)
                     logger.info(
-                        "[FAST TEXT][INGEST] Stored vectors backend=%s doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
-                        scheduler_backend,
+                        "[FAST TEXT][INGEST] Skipped vector chunking for CSV doc_uid=%s user=%s file=%s (tabular dataset covers search and SQL)",
                         document_uid,
-                        chunks,
                         user.uid,
-                        session_id,
-                        scope,
-                        bool(result.pages),
+                        filename,
                     )
-                except HTTPException:
-                    raise
-                except Exception:
-                    logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
-                    raise HTTPException(status_code=500, detail="Failed to store vectors")
-
-                # Best-effort and last: only attempted once the vectors this
-                # endpoint's contract actually depends on are safely stored,
-                # so a tabular-build failure never leaves a Parquet artifact
-                # or metadata record orphaned by an earlier vector-store failure.
-                if filename.lower().endswith(".csv"):
-                    tabular_available = await self._build_attachment_tabular_dataset(
-                        user=user,
-                        document_uid=document_uid,
-                        filename=filename,
-                        raw_path=raw_path,
-                    )
+                    # No fallback retrieval path is left for a CSV once vector
+                    # chunking is skipped, so a build failure must reject the
+                    # upload — same as the empty-file check above — rather
+                    # than accept an attachment the agent can neither search
+                    # nor query.
+                    try:
+                        await self._build_attachment_tabular_dataset(
+                            user=user,
+                            document_uid=document_uid,
+                            filename=filename,
+                            raw_path=raw_path,
+                        )
+                        tabular_available = True
+                    except HTTPException:
+                        raise
+                    except Exception:
+                        logger.exception("[FAST TEXT][INGEST] Failed to build tabular dataset for %s", filename)
+                        raise HTTPException(
+                            status_code=422,
+                            detail={
+                                "code": "tabular_dataset_build_failed",
+                                "message": f"Could not build a queryable dataset from {filename}.",
+                            },
+                        )
             finally:
                 cleanup_uploaded_temp_file(raw_path)
 

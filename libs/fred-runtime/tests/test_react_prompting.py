@@ -466,12 +466,17 @@ def test_attachment_context_suffix_marks_csv_as_sql_queryable() -> None:
     )
 
     # ATTACH-TAB-01: fast ingest now builds a real `tabular_v1` dataset for
-    # CSV attachments (DESIGN.md, "Session-Scoped Attachment Datasets"), so
-    # the prompt must tell agents to use the tabular/SQL tools for exact
-    # questions instead of steering them away entirely.
-    assert "CSV attachments are converted to markdown text" in suffix
-    assert "indexed as a SQL-queryable dataset" in suffix
-    assert "pass a CSV attachment's uid to the tabular/SQL tools" in suffix
+    # CSV attachments (DESIGN.md, "Session-Scoped Attachment Datasets") and
+    # skips vector-chunking them entirely (a truncated markdown preview would
+    # compete with the deterministic SQL path) — so the prompt must tell
+    # agents CSV is SQL-only, never searchable.
+    assert "CSV attachments are the one exception" in suffix
+    assert "NOT indexed for search at all, only as a SQL-queryable dataset" in suffix
+    assert "never call it for one" in suffix
+    assert (
+        "Pass a CSV attachment's uid to the tabular/SQL tools for everything about it"
+        in suffix
+    )
 
 
 def test_attachment_context_suffix_marks_excel_as_text_not_tabular() -> None:
@@ -504,8 +509,7 @@ def test_attachment_context_suffix_annotates_each_line_inline_by_type() -> None:
     # model would otherwise mishandle.
     assert (
         "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document "
-        "(also a SQL-queryable dataset - pass this id to the tabular/SQL tools"
-        in suffix
+        "(SQL-queryable dataset ONLY, not indexed for search" in suffix
     )
     # Case-insensitive extension match (.XLSX) is annotated too, with the
     # Excel (not CSV) note.
@@ -521,7 +525,7 @@ def test_attachment_context_suffix_annotates_each_line_inline_by_type() -> None:
             "- notes.pdf [88bb1cfdbffe4847a4d2f087741f2811]: conversation document"
         )
     )
-    assert suffix.count("also a SQL-queryable dataset") == 1
+    assert suffix.count("SQL-queryable dataset ONLY") == 1
     assert suffix.count("NOT a SQL dataset") == 1
 
 
@@ -556,7 +560,7 @@ def test_attachment_context_suffix_does_not_annotate_a_filename_only_containing_
         )
     )
 
-    assert "also a SQL-queryable dataset" not in suffix
+    assert "SQL-queryable dataset ONLY" not in suffix
 
 
 def test_document_scope_suffix_names_the_selection() -> None:

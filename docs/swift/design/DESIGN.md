@@ -358,34 +358,42 @@ setting, since the remote path can't be exercised offline to tighten it.
 ### Session-Scoped Attachment Datasets (ATTACH-TAB-01)
 
 CSV files attached directly to a chat conversation (`POST /fast/ingest`) get
-a second, real `tabular_v1` artifact alongside the existing text preview —
-not only a bounded Markdown-table chunk. Excel/XLSX attachments are not
-covered yet; they keep the text-only behavior below until a follow-up
-increment generalizes this to `tabular_multi_v1`. That follow-up must also
-extend `_resolve_owned_attachment_dataset` (or add a `tabular_multi_v1`
-sibling) to `TabularService.get_document_markdown` — untouched in this
-increment since it is scoped to spreadsheet documents, which no CSV
-attachment ever produces, so wiring it in now would be dead code.
+a real `tabular_v1` artifact **instead of** the text-chunked vector preview
+every other attachment type gets — not alongside it. A truncated Markdown
+table (20 rows × 10 cols default) is exactly the kind of imprecise answer
+source this feature exists to move away from for CSV, and leaving it in
+place would give the agent two competing ways to answer a question about
+the same file — a fuzzy, incomplete one (vector search over the preview)
+and an exact one (SQL over the full data) — with nothing forcing it toward
+the correct one. `fast_ingest` skips building/storing vectors entirely for
+`.csv` (`chunks: 0` in the response); the fast-text extraction step still
+runs, but only to produce `summary_md` for the frontend's attachment preview
+card — that text never reaches the agent's context or the vector index.
+Excel/XLSX attachments are not covered by the SQL path yet; they keep both
+the text-chunk preview and the "text only" prompt guidance below until a
+follow-up increment generalizes this to `tabular_multi_v1`. That follow-up
+must also extend `_resolve_owned_attachment_dataset` (or add a
+`tabular_multi_v1` sibling) to `TabularService.get_document_markdown` —
+untouched in this increment since it is scoped to spreadsheet documents,
+which no CSV attachment ever produces, so wiring it in now would be dead
+code.
 
 **Ingestion.** `fast_ingest` builds a `DocumentMetadata` for the attachment
-directly (`identity.document_uid` = the same uuid already used for its
-vector chunks, so the one bracketed id the agent is given works for both
-search and SQL; `source.source_tag = "fast_ingest"`, mirroring the vector
-chunks' own `source: "fast_ingest"` marker; **no tags**) — deliberately not
-via `IngestionService.extract_metadata()`/`process_metadata()`, both built
-for corpus documents: the former's versioning step scans the whole metadata
-catalog for a same-named document and raises if one exists (wrong semantics
-for a session-scoped attachment, and would collide across unrelated users
-sharing a common filename like "sales.csv"), and the latter requires
-`source_tag` to resolve against the operator-configured `document_sources`
-registry, which an attachment was never meant to join. The Parquet
-conversion itself is fully reused — `TabularProcessor.process()` (DuckDB
-CSV→Parquet via the same `CsvTabularProcessor` delimiter/encoding detection,
-`tabular_v1` extension), exactly as corpus CSV ingestion does. The metadata
-record is persisted through the normal `MetadataService` path, only after
-the fast-ingest vectors this endpoint's contract actually depends on are
-safely stored — so a vector-store failure can never leave an orphaned
-Parquet artifact or metadata record behind.
+directly (`identity.document_uid` = the same uuid used elsewhere for this
+attachment, so the one bracketed id the agent is given works for the
+tabular/SQL tools; `source.source_tag = "fast_ingest"`, mirroring the
+convention non-CSV attachments' vector chunks use; **no tags**) —
+deliberately not via `IngestionService.extract_metadata()`/
+`process_metadata()`, both built for corpus documents: the former's
+versioning step scans the whole metadata catalog for a same-named document
+and raises if one exists (wrong semantics for a session-scoped attachment,
+and would collide across unrelated users sharing a common filename like
+"sales.csv"), and the latter requires `source_tag` to resolve against the
+operator-configured `document_sources` registry, which an attachment was
+never meant to join. The Parquet conversion itself is fully reused —
+`TabularProcessor.process()` (DuckDB CSV→Parquet via the same
+`CsvTabularProcessor` delimiter/encoding detection, `tabular_v1` extension),
+exactly as corpus CSV ingestion does.
 
 **Why this creates no ReBAC tuple.** `_persist_metadata_and_follow_up` only
 writes a ReBAC parent link when `metadata.tags.tag_ids` is non-empty (see
@@ -433,18 +441,44 @@ in another user's search. `TabularProcessor.process()` takes an explicit
 `False` regardless of the deployment's `pointer_chunks_enabled` setting.
 Corpus ingestion is unaffected (default unchanged).
 
-**Deletion.** `DELETE /fast/delete/{document_uid}` deletes the Parquet
-artifact (`content_store`, same prefix corpus re-ingestion pruning already
-uses) and the metadata record (`metadata_store.delete_metadata`, a raw
-store-level call — no ReBAC permission check applies, matching how deletion
-of this document class already worked before this change) alongside the
-existing vector cleanup, when a `tabular_v1` artifact was produced.
+**Deletion — re-verifies ownership itself, deliberately.**
+`DELETE /fast/delete/{document_uid}` deletes the Parquet artifact
+(`content_store`, same prefix corpus re-ingestion pruning already uses) and
+the metadata record (`metadata_store.delete_metadata`, a raw store-level
+call) alongside the vector cleanup, when a `tabular_v1` artifact was
+produced. `_delete_attachment_tabular_dataset` re-checks
+`source_tag == "fast_ingest"` and `identity.uploaded_by == user.uid` before
+touching anything — the same test `_resolve_owned_attachment_dataset` uses,
+not a rubber stamp of the endpoint's upstream authorization. That upstream
+check (`_authorize_fast_ingest_delete` → `may_delete_session_document`) was
+designed for an idempotent vector-only delete and treats "zero vector
+chunks" as safe-to-retry; since a CSV attachment now *always* has zero
+chunks by construction (see above), that upstream check alone would let any
+authenticated user pass it for any CSV attachment uid, corpus or not —
+`_delete_attachment_tabular_dataset`'s own check is what actually stops a
+cross-tenant delete, not merely an extra safety net. Reusing
+`MetadataService.delete_document_and_artifacts_trusted` here was considered
+and rejected: it also runs storage-quota release (`_delete_and_release`),
+which requires a live Postgres engine even to determine there is nothing to
+release for a tagless, quota-exempt attachment — infrastructure this narrow
+cleanup has no other reason to depend on.
 
 **Prompt suffix.** `build_attachment_context_suffix`
-(`libs/fred-runtime/fred_runtime/react/react_prompting.py`) now tells agents
-`.csv` attachments *are* SQL-queryable via the tabular tools, using the same
-uid given for search. `.xlsx`/`.xls`/`.xlsm` keep the prior "text only, not
-SQL-queryable" wording until Excel gets the same treatment.
+(`libs/fred-runtime/fred_runtime/react/react_prompting.py`) tells agents
+`.csv` attachments are SQL-queryable *only* — not indexed for search at all,
+so the conversation search tool must never be called for one (it would find
+nothing, since no vector chunk exists). `.xlsx`/`.xls`/`.xlsm` keep the
+original "text only, not SQL-queryable" wording, unaffected, until Excel
+gets the same treatment as CSV.
+
+**Known open gap.** The agent isn't guaranteed to call schema-discovery
+(`get_tabular_documents_schemas`) before its first `read_query` on an
+attachment — live-testing hit exactly this (a guessed SQL alias, `400`,
+self-corrected retry). `list_tabular_documents` can't help here since it
+deliberately never enumerates attachment datasets (see above). Tracked as
+open in `TABULAR-DATA-AGENTIC-ANALYSIS-RFC.md`, alongside a related,
+not-yet-designed pattern for per-row agentic analysis over a resolved row
+set — not solved here since neither has a decided direction yet.
 
 ## 3. Tabular Reads on GCS — Signed URLs
 

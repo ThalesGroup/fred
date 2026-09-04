@@ -37,10 +37,22 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
 )
+from fred_core.documents.document_structures import (
+    DocumentMetadata,
+    FileInfo,
+    FileType,
+    Identity,
+    SourceInfo,
+    SourceType,
+    Tagging,
+)
 
+from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.ingestion.ingestion_controller import (
     _authorize_fast_ingest_delete,
 )
+from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG
 
 
 def _user(uid: str = "svc-control-plane") -> KeycloakUser:
@@ -113,3 +125,66 @@ async def test_retry_after_vectors_already_deleted_converges() -> None:
     vector_store = _FakeVectorStore(may_delete=True)
     await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
     assert vector_store.checked is True
+
+
+@pytest.mark.asyncio
+async def test_csv_attachment_owner_passes_without_reaching_the_chunk_check(tmp_path) -> None:
+    """
+    ATTACH-TAB-01: a CSV attachment has zero vector chunks by construction
+    (it skips vector-chunking entirely), so `may_delete_session_document`
+    would otherwise treat "zero chunks" as a safe retry for ANY caller, not
+    just the uploader. A document carrying a `tabular_v1` artifact must be
+    authorized purely by `uploaded_by` match, without ever reaching that
+    chunk-count fallback.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-csv", title="sales.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+
+    rebac = _FakeRebac(is_platform_admin=False)
+    # Would incorrectly authorize ANY caller if the tabular-ownership check
+    # didn't return before this fallback is ever consulted (zero chunks by
+    # construction for a CSV attachment).
+    vector_store = _FakeVectorStore(may_delete=True)
+
+    await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-csv", vector_store)
+    assert vector_store.checked is False
+
+
+@pytest.mark.asyncio
+async def test_csv_attachment_non_owner_is_refused_even_with_zero_chunks(tmp_path) -> None:
+    """
+    Regression: without its own check, `_authorize_fast_ingest_delete` would
+    rubber-stamp `DELETE /fast/delete/{uid}` for ANY authenticated user on
+    ANY CSV attachment uid, since `may_delete_session_document` returns True
+    unconditionally for zero vector chunks and a CSV attachment always has
+    zero. This must deny a non-owner instead of silently falling through to
+    that chunk-count check.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-csv", title="sales.csv", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user("alice"), processed)
+
+    rebac = _FakeRebac(is_platform_admin=False)
+    # A non-owner reaching the chunk-count fallback would incorrectly pass
+    # (zero chunks by construction) if the tabular-ownership check above it
+    # didn't already deny them first.
+    vector_store = _FakeVectorStore(may_delete=True)
+
+    with pytest.raises(AuthorizationError):
+        await _authorize_fast_ingest_delete(rebac, _user("mallory"), "doc-csv", vector_store)
+    assert vector_store.checked is False

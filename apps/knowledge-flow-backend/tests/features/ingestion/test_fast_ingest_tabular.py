@@ -14,10 +14,10 @@
 
 """
 ATTACH-TAB-01: CSV chat attachments build a real `tabular_v1` dataset
-alongside the existing text preview (DESIGN.md, "Session-Scoped Attachment
-Datasets"). These tests cover the ingestion controller's build/delete
-orchestration; `TabularService`'s ownership-based authorization fallback is
-covered in `tests/services/test_tabular_service.py`.
+instead of the text-chunk vector preview other attachments get (DESIGN.md,
+"Session-Scoped Attachment Datasets"). These tests cover the ingestion
+controller's build/delete orchestration; `TabularService`'s ownership-based
+authorization fallback is covered in `tests/services/test_tabular_service.py`.
 """
 
 from pathlib import Path
@@ -66,14 +66,13 @@ async def test_build_attachment_tabular_dataset_reuses_the_vector_chunk_document
 
     controller = _controller_with_fake_metadata_service(_save_document_metadata)
 
-    ok = await controller._build_attachment_tabular_dataset(
+    await controller._build_attachment_tabular_dataset(
         user=_user(),
         document_uid="doc-attachment",
         filename="sales.csv",
         raw_path=csv_path,
     )
 
-    assert ok is True
     assert len(saved) == 1
     persisted = saved[0]
     assert persisted.document_uid == "doc-attachment"
@@ -89,7 +88,13 @@ async def test_build_attachment_tabular_dataset_reuses_the_vector_chunk_document
 
 
 @pytest.mark.asyncio
-async def test_build_attachment_tabular_dataset_is_best_effort(tmp_path: Path, caplog):
+async def test_build_attachment_tabular_dataset_raises_on_failure(tmp_path: Path):
+    """
+    Deliberately not best-effort: a CSV attachment skips vector-chunking
+    entirely (DESIGN.md), so a failed tabular build would otherwise leave an
+    attachment the agent can neither search nor query. The caller
+    (`fast_ingest`) turns this into a 422, same as the empty-file check.
+    """
     # A file that doesn't exist makes `TabularProcessor.process` raise before
     # any metadata is saved.
     missing_csv_path = tmp_path / "missing.csv"
@@ -99,17 +104,13 @@ async def test_build_attachment_tabular_dataset_is_best_effort(tmp_path: Path, c
 
     controller = _controller_with_fake_metadata_service(_save_document_metadata)
 
-    with caplog.at_level("ERROR"):
-        ok = await controller._build_attachment_tabular_dataset(
+    with pytest.raises(Exception):
+        await controller._build_attachment_tabular_dataset(
             user=_user(),
             document_uid="doc-attachment",
             filename="missing.csv",
             raw_path=missing_csv_path,
         )
-
-    # A failure here must never surface as an HTTP error — the attachment
-    # still works as a text-only preview, exactly as before this feature.
-    assert ok is False
 
 
 @pytest.mark.asyncio
@@ -134,13 +135,12 @@ async def test_build_attachment_tabular_dataset_does_not_collide_across_users_wi
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
 
-        ok = await controller._build_attachment_tabular_dataset(
+        await controller._build_attachment_tabular_dataset(
             user=_user(uploader),
             document_uid=uid,
             filename="sales.csv",
             raw_path=csv_path,
         )
-        assert ok is True, f"tabular build unexpectedly failed for {uploader}"
 
     assert await metadata_store.get_metadata_by_uid("doc-user-a") is not None
     assert await metadata_store.get_metadata_by_uid("doc-user-b") is not None
