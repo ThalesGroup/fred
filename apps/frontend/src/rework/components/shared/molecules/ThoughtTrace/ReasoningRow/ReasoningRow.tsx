@@ -63,9 +63,9 @@ export function ReasoningRow({ entry, text }: { entry: TraceEntry; text: string 
       <span className={styles.content}>
         {title && <span className={styles.title}>{title}</span>}
 
-        {/* The whole block, not a preview: every line of the turn's reasoning must
-            be readable from the timeline. Markdown is flattened; the rendered
-            version lives in the detail drawer. */}
+        {/* Clamped to three lines of the block's OWN content — the repeated
+            preamble is already gone. Markdown is flattened; the rendered version
+            lives in the detail drawer. */}
         {text && <span className={styles.preview}>{text}</span>}
 
         {extras.conclusion && <span className={styles.conclusion}>{extras.conclusion}</span>}

@@ -371,10 +371,9 @@ agents) so the decision is informed at the point it is made.
   against that row's *full* text, so the rows tile the whole reasoning with nothing lost
   between them. Whole sentences only: blocks that merely open on the same few words share no
   sentence and are left alone — a character-level trim rendered `demandé un document nommé…`
-  on this very session. And the clamp is gone: with the repeat removed, what is left is the
-  block's own content and all of it is shown, so the timeline holds the turn's entire
-  reasoning. The trace auto-collapses once the turn is done, so the height costs nothing
-  after the fact; the rendered markdown still lives in `TraceDetailDrawer`.
+  on this very session. And the clamp went from 2 lines to 3: with the repeat removed, the
+  lines that survive are the block's own content, so the budget buys reasoning instead of a
+  preamble. The full markdown still lives in `TraceDetailDrawer`.
 
   Not a duplicate-row bug: nothing in the data was duplicated, and `groupTraceEntries` still
   has no thought-level dedup to match its `call_id` one. If true duplicates ever appear, the
@@ -468,12 +467,13 @@ agents) so the decision is informed at the point it is made.
 **Status:** `Functional`
 
 One reasoning entry, sequenced in the trace where it happened (#2172, reordered #2565): a
-`settings` marker on the timeline rail, the block's text, and the duration trailing right.
+`settings` marker on the timeline rail, a 3-line clamp of the block's text, and the duration
+trailing right.
 Clicking opens `TraceDetailDrawer` for the rendered markdown.
 
 The text is supplied by `traceRows()`, not derived here: it is trimmed of the sentences the
 previous reasoning row already showed, which only the caller walking the sequence can know.
-It is shown unclamped — see the 2026-09-04 entry under `ThoughtTrace`.
+It is clamped to 3 lines — see the 2026-09-04 entry under `ThoughtTrace`.
 
 Deliberately not a `TraceEntryRow`: reasoning is not a tool step, so it gets no step number
 and no status dot. Successive rounds of weight-trimming, each from developer review:
