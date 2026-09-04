@@ -5422,3 +5422,40 @@ wanting a turn total sums the blocks instead of taking the longest (the frontend
 **Already-stored turns.** Sessions persisted before this date keep their single
 block and therefore their old rendering. There is no migration: the trace is a
 record of what was streamed.
+
+### 8.73 ✅ A tool round's preamble is kept as reasoning instead of discarded (2026-09-04)
+
+**What changed.** When a round streams answer text and then resolves with tool
+calls, `react_runtime.stream()` re-emits that text as a `source="model_native"`
+`THOUGHT_*` block, ranked just before the round's `ToolCallRuntimeEvent`. Only
+text the user actually saw is collected (the `suppress_assistant_deltas` path
+emits nothing, so there is nothing to relocate), and only up to
+`MAX_PREAMBLE_CHARS`.
+
+**Why.** Providers stream a turn's text before its tool-call tokens with nothing
+declaring which is coming — confirmed on Mistral in #2088, where the raw chunk
+was a plain string, structurally identical to a real answer. The runtime emits it
+immediately; the frontend purges it from the answer bubble once a `tool_call` for
+the same exchange proves the turn was not final (`chatSseUtils.shouldClearStreamingDeltas`).
+Until now that text was simply lost: written on screen, wiped, and persisted
+nowhere. It is planning, and it now lands in the trace where planning belongs —
+and, since §8.72 splits blocks per round, at the point in the sequence where it
+actually happened rather than hoisted above the tools.
+
+**The cap.** Past `MAX_PREAMBLE_CHARS` the text is dropped, exactly as before.
+Beyond that size it is not a preamble but a deliverable written in the wrong
+place: `write_document`'s prompt fragment exists precisely because models write
+the report inline instead of calling the tool, and the field incident behind
+`tool_loop._tool_calls_char_len` carried a 22k-character document. Relocating
+that would copy — and persist — a whole document next to the editor already
+showing it.
+
+**Known consequence, deliberately accepted (#2088).** An agent with reasoning
+disabled will now show reasoning rows, and its trace header will say "Reasoning":
+a preamble does not depend on `reasoning_enabled`, which governs what the model
+is asked to produce, not what is shown of what it produced anyway. The cap keeps
+these to short statements of intent. To be revisited if the preambles prove
+uninteresting or harmful in use — see the tracking note on #2088.
+
+**Wire contract.** Unchanged. `THOUGHT_*` shapes are frozen; what changes is
+that a block can now carry text the model addressed to the user.

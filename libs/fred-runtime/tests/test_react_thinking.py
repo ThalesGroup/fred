@@ -33,7 +33,10 @@ from typing import Any
 
 import pytest
 from fred_runtime.react.react_message_codec import stringify_langchain_content
-from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+from fred_runtime.react.react_runtime import (
+    MAX_PREAMBLE_CHARS,
+    _TransportBackedReActExecutor,
+)
 from fred_runtime.react.react_stream_adapter import (
     assistant_delta_from_stream_event,
     decode_stream_chunk,
@@ -559,6 +562,104 @@ async def test_stream_closes_the_reasoning_block_at_each_tool_round() -> None:
     # Both blocks are closed by the end of the turn — neither spins forever.
     closed_ids = {e.thought_id for e in collected if isinstance(e, ThoughtEndEvent)}
     assert {s.thought_id for s in native_starts} <= closed_ids
+
+
+@pytest.mark.asyncio
+async def test_stream_keeps_a_tool_round_preamble_as_reasoning() -> None:
+    """
+    Text a round streams before calling tools is planning, not an answer.
+
+    Providers emit a turn's text before its tool-call tokens with nothing
+    declaring which is coming, so the runtime cannot tell them apart when it
+    streams the text. The frontend purges it from the answer bubble once the
+    tool call proves the turn was not final; without this it is simply lost.
+    """
+
+    tool_call = AIMessage(
+        content="", tool_calls=[{"id": "call-1", "name": "read_query", "args": {}}]
+    )
+    tool_result = ToolMessage(content="ok", tool_call_id="call-1", name="read_query")
+
+    events = [
+        _stream_frame("I will query "),
+        _stream_frame("the parts table."),
+        ("updates", {"agent": {"messages": [tool_call]}}),
+        ("updates", {"tools": {"messages": [tool_result]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="done")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    # The runtime also opens a synthetic `tool_use` block around every call —
+    # bookkeeping the UI hides, not the preamble under test.
+    starts = [
+        e
+        for e in collected
+        if isinstance(e, ThoughtStartEvent) and e.source == "model_native"
+    ]
+    assert len(starts) == 1
+    deltas = [
+        e.delta
+        for e in collected
+        if isinstance(e, ThoughtDeltaEvent) and e.thought_id == starts[0].thought_id
+    ]
+    assert "".join(deltas) == "I will query the parts table."
+
+    # It has to land BEFORE the tool call it announces, or the trace would read
+    # as if the model explained itself after the fact.
+    kinds = [type(e) for e in collected]
+    assert collected.index(starts[0]) < kinds.index(ToolCallRuntimeEvent)
+
+
+@pytest.mark.asyncio
+async def test_stream_drops_a_preamble_too_large_to_be_one() -> None:
+    """
+    A deliverable written inline is not a preamble and must not be duplicated.
+
+    `write_document`'s instructions exist because models write the report in the
+    chat instead of calling the tool; the field incident behind
+    `tool_loop._tool_calls_char_len` carried 22k characters. Relocating that
+    would copy — and persist — a whole document beside the editor showing it.
+    """
+
+    events = [
+        _stream_frame("x" * (MAX_PREAMBLE_CHARS + 1)),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {"id": "c1", "name": "write_document", "args": {}}
+                            ],
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content="ok", tool_call_id="c1", name="write_document"
+                        )
+                    ]
+                }
+            },
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="done")]}}),
+    ]
+
+    collected = await _run_stream(events)
+    assert not [
+        e
+        for e in collected
+        if isinstance(e, ThoughtStartEvent) and e.source == "model_native"
+    ]
 
 
 @pytest.mark.asyncio
