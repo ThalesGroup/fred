@@ -229,6 +229,10 @@ Behaviour to keep in mind:
   control-plane configuration alongside it.
 - The archive is applied at container start. After replacing the zip under the
   same name, restart the pods; pointing the URL at a new name rolls them.
+- nginx does not listen until the fetch returns, so it gives up after ~16s to
+  stay inside the default liveness window: an unreachable store costs a warning,
+  not a crashloop. Add the startup probe from the example values for a store
+  that is reachable but slow.
 
 The archive is unpacked into `/var/lib/fred/theme`, outside the web root, and
 nginx tries it before the baked file for the three surfaces above. Helm wiring

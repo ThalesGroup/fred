@@ -72,6 +72,11 @@ with zipfile.ZipFile(f"{out}/theme.zip", "w") as z:
     locked = zipfile.ZipInfo("images/locked.svg")
     locked.external_attr = 0o100000 << 16
     z.writestr(locked, "<svg>locked</svg>")
+    # Same for a directory: one the container cannot enter would abort every
+    # walk over the unpacked tree.
+    locked_dir = zipfile.ZipInfo("images/locked/")
+    locked_dir.external_attr = (0o040000 << 16) | 0x10
+    z.writestr(locked_dir, "")
 # A folder compressed from the macOS Finder: one wrapper folder plus __MACOSX.
 with zipfile.ZipFile(f"{out}/wrapped.zip", "w") as z:
     z.writestr("acme-theme/images/fred.svg", "<svg>wrapped-logo</svg>")
@@ -82,6 +87,14 @@ with zipfile.ZipFile(f"{out}/escaping.zip", "w") as z:
     z.writestr("images/fred.svg", "<svg>escape-logo</svg>")
 with zipfile.ZipFile(f"{out}/no-surfaces.zip", "w") as z:
     z.writestr("README.txt", "nothing nginx would serve")
+# unzip cannot write into a directory it stored unreadable, and the cleanup that
+# follows cannot enter it either: both have to degrade, not kill the container.
+with zipfile.ZipFile(f"{out}/unwritable-dir.zip", "w") as z:
+    z.writestr("images/fred.svg", "<svg>unwritable-logo</svg>")
+    blocked = zipfile.ZipInfo("images/blocked/")
+    blocked.external_attr = (0o040000 << 16) | 0x10
+    z.writestr(blocked, "")
+    z.writestr("images/blocked/deep.svg", "<svg>unreachable</svg>")
 with open(f"{out}/not-a-zip.zip", "w") as f:
     f.write("<html>bucket error page</html>")
 EOF
@@ -298,6 +311,7 @@ for broken in \
     "escaping.zip|archive contains entries with '..' or absolute paths" \
     "no-surfaces.zip|archive holds no images/, contrib/ or root markdown" \
     "not-a-zip.zip|cannot unpack the archive" \
+    "unwritable-dir.zip|cannot unpack the archive" \
     "missing.zip|cannot download"; do
     archive=${broken%%|*}
     message=${broken#*|}
@@ -315,5 +329,9 @@ expect_refused_start "Theme installation failed: cannot download" \
     -e "FRONTEND_THEME_URL=${theme_url}/missing.zip" -e 'FRONTEND_THEME_REQUIRED=true'
 expect_refused_start "FRONTEND_THEME_REQUIRED must be either true or false" \
     -e 'FRONTEND_THEME_REQUIRED=maybe'
+# Half a credential is an operator mistake, not a store outage: fail closed even
+# though the theme is optional, rather than fetch anonymously and blame the URL.
+expect_refused_start "FRONTEND_THEME_S3_ACCESS_KEY and FRONTEND_THEME_S3_SECRET_KEY must be set together" \
+    -e "FRONTEND_THEME_URL=${theme_url}/theme.zip" -e 'FRONTEND_THEME_S3_ACCESS_KEY=theme-key'
 
 echo "Theme container smoke checks passed"

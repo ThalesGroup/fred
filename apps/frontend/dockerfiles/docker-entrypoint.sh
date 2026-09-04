@@ -60,6 +60,13 @@ require_boolean() {
 require_boolean FRONTEND_ENABLE_APPLICATIONS "${FRONTEND_ENABLE_APPLICATIONS}"
 require_boolean FRONTEND_THEME_REQUIRED "${FRONTEND_THEME_REQUIRED}"
 
+# Half a credential would silently fetch anonymously and report the store's 403
+# as an unreachable bucket, sending the operator after the wrong thing.
+if [ -n "${FRONTEND_THEME_S3_ACCESS_KEY}${FRONTEND_THEME_S3_SECRET_KEY}" ] &&
+    { [ -z "${FRONTEND_THEME_S3_ACCESS_KEY}" ] || [ -z "${FRONTEND_THEME_S3_SECRET_KEY}" ]; }; then
+    fail_configuration "FRONTEND_THEME_S3_ACCESS_KEY and FRONTEND_THEME_S3_SECRET_KEY must be set together"
+fi
+
 if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
     if ! printf '%s' "${FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE}" | grep -Eq '^[1-9][0-9]*[kKmMgG]?$'; then
         fail_configuration "FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE must be a positive nginx size"
@@ -96,8 +103,17 @@ if [ "${FRONTEND_ENABLE_APPLICATIONS}" = "true" ]; then
     fi
 fi
 
+# A half-extracted archive can leave a directory rm cannot enter, and cleanup
+# that fails must never be what takes the container down.
+discard_work() {
+    [ -n "${work:-}" ] || return 0
+    chmod -R u+rwX "${work}" 2>/dev/null || true
+    rm -rf "${work}" 2>/dev/null || true
+    work=
+}
+
 theme_failure() {
-    [ -z "${work:-}" ] || rm -rf "${work}"
+    discard_work
     # An emptyDir outlives container restarts: drop a previous theme so the
     # message below stays true instead of serving a stale brand.
     find "${FRONTEND_THEME_DIR}" -mindepth 1 -delete 2>/dev/null || true
@@ -132,10 +148,11 @@ install_theme() {
     else
         set --
     fi
-    # A stalling store must not outlast the default liveness budget (3 x 10s):
-    # a last retry can start at 15s and run 10s, so the pod boots on the stock
-    # assets instead of crashlooping. Slow but working stores want a startupProbe.
-    if ! curl "$@" -fsSL --connect-timeout 5 --max-time 10 --retry 2 --retry-connrefused --retry-max-time 15 \
+    # nginx does not listen until this returns, and the chart's liveness probe
+    # starts at once (3 failures x 10s), so the whole chain stays under ~16s and
+    # a stalling store boots the stock assets instead of crashlooping. Anything
+    # slower than that needs the startupProbe from the example values.
+    if ! curl "$@" -fsSL --connect-timeout 3 --max-time 6 --retry 2 --retry-connrefused --retry-max-time 10 \
         --max-filesize 64m -o "${archive}" "${FRONTEND_THEME_URL}"; then
         theme_failure "cannot download ${theme_source}"
         return 0
@@ -146,17 +163,24 @@ install_theme() {
         theme_failure "archive contains entries with '..' or absolute paths"
         return 0
     fi
-    mkdir "${work}/unpacked"
-    if ! unzip -oq "${archive}" -d "${work}/unpacked" >/dev/null 2>&1; then
+    if ! mkdir "${work}/unpacked" || ! unzip -oq "${archive}" -d "${work}/unpacked" >/dev/null 2>&1; then
         theme_failure "cannot unpack the archive"
         return 0
     fi
-    find "${work}/unpacked" -type l -delete
+    # A zip stores each entry's mode, and 0000 is a valid one for a directory
+    # too. Widen first: every walk below, symlink sweep included, needs to
+    # enter every directory, and one it cannot enter would abort the script.
+    if ! chmod -R u+rwX "${work}/unpacked"; then
+        theme_failure "cannot make the archive contents readable"
+        return 0
+    fi
+    # unzip recreates symlinks and nginx would follow one out of the overlay.
+    if ! find "${work}/unpacked" -type l -delete; then
+        theme_failure "cannot drop the symlinks the archive carries"
+        return 0
+    fi
     # Finder's "Compress" adds this folder next to the real one.
-    rm -rf "${work}/unpacked/__MACOSX"
-    # A zip stores each entry's mode, and 0000 is a valid one. Make the tree
-    # readable before anything copies from it or nginx opens it.
-    chmod -R u+rwX "${work}/unpacked"
+    rm -rf "${work}/unpacked/__MACOSX" || true
     root="${work}/unpacked"
     # zip -r acme-theme/ wraps everything in one folder: look inside it.
     set -- "${root}"/*
@@ -169,7 +193,10 @@ install_theme() {
     # Assembled aside, then swapped in one go: a copy that fails halfway would
     # otherwise leave the overlay mixing two brands.
     staging="${work}/staging"
-    mkdir "${staging}"
+    if ! mkdir "${staging}"; then
+        theme_failure "cannot stage the archive contents"
+        return 0
+    fi
     for entry in "${root}"/*; do
         [ -e "${entry}" ] || continue
         name=$(basename "${entry}")
@@ -191,7 +218,7 @@ install_theme() {
         theme_failure "cannot write ${FRONTEND_THEME_DIR}"
         return 0
     fi
-    rm -rf "${work}"
+    discard_work
     echo "Theme installed from ${theme_source}: ${installed} files"
 }
 

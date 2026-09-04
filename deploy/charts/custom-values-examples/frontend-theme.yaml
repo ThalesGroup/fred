@@ -36,9 +36,10 @@ applications:
     extraVolumeMounts:
       - name: theme
         mountPath: /var/lib/fred/theme
-    # The theme is fetched before nginx listens, within about 25 seconds. The
-    # default liveness probe (10s x 3) would kill a pod still waiting on a slow
-    # store; a startup probe holds it off for up to a minute.
+    # nginx does not listen until the theme is fetched, and the liveness probe
+    # starts counting immediately (10s x 3). The fetch gives up after ~16s to
+    # stay inside that window, so keep this startup probe: it is what lets a
+    # slower store finish instead of being killed mid-download.
     probes:
       startupProbe:
         enabled: true
