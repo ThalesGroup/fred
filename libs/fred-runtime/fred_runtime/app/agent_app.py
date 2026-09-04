@@ -44,8 +44,15 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Mapping,
+    Sequence,
+)
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum, auto
@@ -804,69 +811,77 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         )
 
         content_parts: list[str] = []
-        async for payload in _iterate_runtime_event_payloads(
-            definition,
-            execute_request,
-            access_token=self._access_token,
-            team_id=request.context.team_id,
-            registry=self._registry,
-            # Private trusted propagation (see __init__): the child inherits
-            # the parent turn's platform chat binding, never the request's
-            # own `context` — that dict has no field for it at all.
-            platform_chat_model_binding=self._platform_chat_model_binding,
-            # Depth counts call stack, not identity: it rises on EVERY
-            # re-entry, so an A -> B -> A cycle is bounded too.
-            invocation_depth=(parent.invocation_depth if parent else 0) + 1,
-            # Public, caller-supplied, and deliberately NOT part of the trusted
-            # `_ParentTurn` state: it replaces the callee's template layer only.
-            system_prompt_override=request.system_prompt,
-            **inherited_turn,
-        ):
-            kind = payload.get("kind")
-            if kind == "final":
-                # A callee is not a reduced agent: its citations and its parts
-                # travel with its answer. The payload is a JSON dump of the
-                # child's `final` event, so the model re-validates both — and a
-                # part this process cannot rebuild is an error result, never an
-                # exception escaping a port whose every other branch returns one.
-                try:
+        # `aclosing` is load-bearing: every branch below returns mid-iteration,
+        # and an abandoned generator never runs the child turn's own cleanup.
+        # Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.69.
+        async with aclosing(
+            _iterate_runtime_event_payloads(
+                definition,
+                execute_request,
+                access_token=self._access_token,
+                team_id=request.context.team_id,
+                registry=self._registry,
+                # Private trusted propagation (see __init__): the child inherits
+                # the parent turn's platform chat binding, never the request's
+                # own `context` — that dict has no field for it at all.
+                platform_chat_model_binding=self._platform_chat_model_binding,
+                # Depth counts call stack, not identity: it rises on EVERY
+                # re-entry, so an A -> B -> A cycle is bounded too.
+                invocation_depth=(parent.invocation_depth if parent else 0) + 1,
+                # Public, caller-supplied, and deliberately NOT part of the
+                # trusted `_ParentTurn` state: it replaces the callee's
+                # template layer only.
+                system_prompt_override=request.system_prompt,
+                **inherited_turn,
+            )
+        ) as payloads:
+            async for payload in payloads:
+                kind = payload.get("kind")
+                if kind == "final":
+                    # A callee is not a reduced agent: its citations and its
+                    # parts travel with its answer. The payload is a JSON dump
+                    # of the child's `final` event, so the model re-validates
+                    # both — and a part this process cannot rebuild is an error
+                    # result, never an exception escaping a port whose every
+                    # other branch returns one.
+                    try:
+                        return AgentInvocationResult(
+                            agent_id=request.agent_id,
+                            content=payload.get("content", ""),
+                            sources=payload.get("sources") or (),
+                            ui_parts=payload.get("ui_parts") or (),
+                            is_error=False,
+                            # SUBAGENT token accounting: a child turn emits no
+                            # `agent.turn_completed`, so this is the only place
+                            # its billed spend is still readable.
+                            token_usage=payload.get("token_usage"),
+                        )
+                    except ValidationError as exc:
+                        logger.exception(
+                            "[fred-runtime] callee result rejected agent_id=%s",
+                            request.agent_id,
+                        )
+                        return AgentInvocationResult(
+                            agent_id=request.agent_id,
+                            content=f"The callee's answer could not be read: {exc}",
+                            is_error=True,
+                        )
+                if kind == "assistant_delta":
+                    content_parts.append(payload.get("delta", ""))
+                elif kind == "node_error":
                     return AgentInvocationResult(
                         agent_id=request.agent_id,
-                        content=payload.get("content", ""),
-                        sources=payload.get("sources") or (),
-                        ui_parts=payload.get("ui_parts") or (),
-                        is_error=False,
-                        # SUBAGENT token accounting: a child turn emits no
-                        # `agent.turn_completed`, so this is the only place its
-                        # billed spend is still readable.
-                        token_usage=payload.get("token_usage"),
-                    )
-                except ValidationError as exc:
-                    logger.exception(
-                        "[fred-runtime] callee result rejected agent_id=%s",
-                        request.agent_id,
-                    )
-                    return AgentInvocationResult(
-                        agent_id=request.agent_id,
-                        content=f"The callee's answer could not be read: {exc}",
+                        content=payload.get("error_message", "Unknown error"),
                         is_error=True,
                     )
-            if kind == "assistant_delta":
-                content_parts.append(payload.get("delta", ""))
-            elif kind == "node_error":
-                return AgentInvocationResult(
-                    agent_id=request.agent_id,
-                    content=payload.get("error_message", "Unknown error"),
-                    is_error=True,
-                )
-            elif kind == "execution_error":
-                # Terminal: no `final` follows. Without this branch the caller
-                # gets is_error=True with an empty message.
-                return AgentInvocationResult(
-                    agent_id=request.agent_id,
-                    content=payload.get("message", "Unknown error"),
-                    is_error=True,
-                )
+                elif kind == "execution_error":
+                    # Terminal: no `final` follows. Without this branch the
+                    # caller gets is_error=True with an empty message.
+                    return AgentInvocationResult(
+                        agent_id=request.agent_id,
+                        content=payload.get("message", "Unknown error"),
+                        is_error=True,
+                    )
 
         return AgentInvocationResult(
             agent_id=request.agent_id,
@@ -3433,6 +3448,26 @@ class _Unresolved(Enum):
     TOKEN = auto()
 
 
+@asynccontextmanager
+async def _closing_event_stream(
+    events: AsyncIterator[RuntimeEvent],
+) -> AsyncIterator[AsyncIterator[RuntimeEvent]]:
+    """
+    Iterate a runtime event stream and close it on the way out.
+
+    `Executor.stream` is typed `AsyncIterator`, so an implementation need not
+    be a generator — close only what can be closed. Abandoning one that is a
+    generator skips the `finally` that ends the turn's root span (§8.69).
+    """
+
+    try:
+        yield events
+    finally:
+        aclose = getattr(events, "aclose", None)
+        if aclose is not None:
+            await aclose()
+
+
 async def _iterate_runtime_event_payloads(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
@@ -3452,7 +3487,7 @@ async def _iterate_runtime_event_payloads(
         _Unresolved.TOKEN
     ),
     system_prompt_override: str | None = None,
-) -> AsyncIterator[dict[str, Any]]:
+) -> AsyncGenerator[dict[str, Any], None]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
 
@@ -3720,13 +3755,19 @@ async def _iterate_runtime_event_payloads(
                 graph_input = input_cls.model_validate(
                     {"message": request.message or ""}
                 )
-            async for event in executor.stream(graph_input, execution_config):
-                payload = event.model_dump(mode="json")
-                if not isinstance(payload, dict):
-                    raise RuntimeError(
-                        "RuntimeEvent payload must serialize to a JSON object."
-                    )
-                yield payload
+            # Closed at THIS level too: closing the outer generator unwinds
+            # this frame but abandons the runtime stream under it, whose
+            # `finally` ends the turn's root span (see §8.69).
+            async with _closing_event_stream(
+                executor.stream(graph_input, execution_config)
+            ) as events:
+                async for event in events:
+                    payload = event.model_dump(mode="json")
+                    if not isinstance(payload, dict):
+                        raise RuntimeError(
+                            "RuntimeEvent payload must serialize to a JSON object."
+                        )
+                    yield payload
         else:
             runtime = ReActRuntime(
                 definition=definition,
@@ -3778,13 +3819,19 @@ async def _iterate_runtime_event_payloads(
                     interrupt_id=request.interrupt_id,
                 )
 
-            async for event in executor.stream(react_input, execution_config):
-                payload = event.model_dump(mode="json")
-                if not isinstance(payload, dict):
-                    raise RuntimeError(
-                        "RuntimeEvent payload must serialize to a JSON object."
-                    )
-                yield payload
+            # Closed at THIS level too: closing the outer generator unwinds
+            # this frame but abandons the runtime stream under it, whose
+            # `finally` ends the turn's root span (see §8.69).
+            async with _closing_event_stream(
+                executor.stream(react_input, execution_config)
+            ) as events:
+                async for event in events:
+                    payload = event.model_dump(mode="json")
+                    if not isinstance(payload, dict):
+                        raise RuntimeError(
+                            "RuntimeEvent payload must serialize to a JSON object."
+                        )
+                    yield payload
 
             if hitl_claim is not None:
                 await hitl_claim.consume()

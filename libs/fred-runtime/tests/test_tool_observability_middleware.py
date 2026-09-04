@@ -38,11 +38,14 @@ from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
+from fred_core.portable import Span, Tracer
 from fred_core.security.models import AuthorizationError, Resource
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
+from fred_runtime.react.react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
+from fred_runtime.react.react_tracing import active_agent_span
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     RuntimeContext,
@@ -59,7 +62,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from langchain_core.messages.tool import ToolMessage
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import BaseTool, StructuredTool, tool
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
@@ -747,3 +750,150 @@ def test_base_dims_includes_identifiers_from_portable_context_and_baggage() -> N
     assert dims["agent_instance_id"] == "instance-1"
     assert dims["template_agent_id"] == "template-1"
     assert dims["correlation_id"] == "correlation-1"
+
+
+# ---------------------------------------------------------------------------
+# Trace spans for tools the ReAct binder never sees
+# ---------------------------------------------------------------------------
+
+
+class _RecordingSpan(Span):
+    def __init__(self) -> None:
+        self.attributes: dict[str, object] = {}
+        self.ended = False
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self.attributes[key] = value
+
+    def end(self) -> None:
+        self.ended = True
+
+
+class _RecordingTracer(Tracer):
+    def __init__(self) -> None:
+        self.spans: list[tuple[str, dict[str, object], _RecordingSpan]] = []
+        self.parents: list[Span | None] = []
+
+    def start_span(
+        self,
+        name: str,
+        *,
+        context: object | None = None,
+        attributes: Any = None,
+        parent: Span | None = None,
+        **kwargs: object,
+    ) -> Span:
+        del context, kwargs
+        span = _RecordingSpan()
+        self.parents.append(parent)
+        self.spans.append((name, dict(attributes or {}), span))
+        return span
+
+
+def _self_traced_tool() -> BaseTool:
+    """Shaped like what `ReActToolBinder` hands to `create_agent`."""
+
+    async def _run(question: str) -> str:
+        return "ok"
+
+    return StructuredTool.from_function(
+        func=None,
+        coroutine=_run,
+        name="declared.search",
+        description="A binder-bound tool.",
+        metadata={SELF_TRACED_TOOL_METADATA_KEY: True},
+    )
+
+
+@pytest.mark.asyncio
+async def test_capability_tool_call_gets_a_trace_span() -> None:
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    request = _request(name="run_subagent", tool_obj=cast(Any, native_capability_tool))
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="run_subagent", tool_call_id="call-1")
+
+    await middleware.awrap_tool_call(request, handler)
+
+    assert len(tracer.spans) == 1
+    name, attributes, span = tracer.spans[0]
+    assert name == "v2.react.runtime_tool"
+    assert attributes["tool_name"] == "run_subagent"
+    assert span.attributes["status"] == "ok"
+    assert span.ended is True
+
+
+@pytest.mark.asyncio
+async def test_binder_bound_tool_is_not_spanned_twice() -> None:
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    request = _request(name="declared.search", tool_obj=_self_traced_tool())
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="declared.search", tool_call_id="call-1")
+
+    await middleware.awrap_tool_call(request, handler)
+
+    assert tracer.spans == []
+
+
+@pytest.mark.asyncio
+async def test_failing_capability_tool_ends_its_span_as_an_error() -> None:
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    request = _request(name="run_subagent", tool_obj=cast(Any, native_capability_tool))
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        await middleware.awrap_tool_call(request, handler)
+
+    _, _, span = tracer.spans[0]
+    assert span.attributes["status"] == "error"
+    assert span.attributes["error_type"] == "RuntimeError"
+    assert span.ended is True
+
+
+@pytest.mark.asyncio
+async def test_tool_span_parents_on_the_turn_and_hosts_the_child_turn() -> None:
+    """The orphaned-sub-agent bug in two assertions.
+
+    The tool span must hang under the turn's own span, and must itself be the
+    active parent while the tool runs — that is what makes a `run_subagent`
+    child's root span nest inside the call that opened it instead of landing
+    beside its parent as a second root.
+    """
+
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    turn_span = _RecordingSpan()
+    token = active_agent_span.set(turn_span)
+    seen_inside: list[Span | None] = []
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        seen_inside.append(active_agent_span.get())
+        return ToolMessage(content="ok", name="run_subagent", tool_call_id="call-1")
+
+    try:
+        await middleware.awrap_tool_call(
+            _request(name="run_subagent", tool_obj=cast(Any, native_capability_tool)),
+            handler,
+        )
+        restored = active_agent_span.get()
+    finally:
+        active_agent_span.reset(token)
+
+    _, _, tool_span_obj = tracer.spans[0]
+    assert tracer.parents == [turn_span]
+    assert seen_inside == [tool_span_obj]
+    assert restored is turn_span

@@ -16,7 +16,7 @@
 
 What it is, why, and its open limits: README.md and
 `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md`; the runtime half it drives is
-`RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.68.
+`RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.69.
 """
 
 from __future__ import annotations

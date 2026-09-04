@@ -5,7 +5,7 @@ A Fred agent capability (`subagent`) that gives an agent one tool,
 itself** and get the answer back on an ordinary tool-result line.
 
 What the runtime does for it, and why: `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`
-§8.63-§8.68. What is still open: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md`.
+§8.63-§8.69. What is still open: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md`.
 
 ## What it ships
 

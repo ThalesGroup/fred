@@ -4,7 +4,7 @@
 still genuinely open: the prompt-mode evaluation (§2), the fan-out bound (§3),
 one POC observation (§4), and the unspecified tiers 2-3 (§8). Everything tier 1
 built is recorded in the compact docs, not here —
-`../design/RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.68 and §14 (contract
+`../design/RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.69 and §14 (contract
 surface), `../capabilities/AUTHORING.md` (what a capability author needs),
 `../platform/OBSERVABILITY-AND-AUDIT.md` §3.1 (the per-child metric), and
 `libs/fred-capability-subagent/README.md` (the package itself).
@@ -221,6 +221,6 @@ cut — §6 records direction, not design.
 
 | Tier | Content | Spec status | Tickets |
 | ---- | ------- | ----------- | ------- |
-| 1 — playable POC | the tool, same-agent children, depth, HITL, prompt mode, token accounting, `sources` / `ui_parts` | shipped; recorded in `RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.68 | #2525 → #2526, #2527, #2528, #2529 |
+| 1 — playable POC | the tool, same-agent children, depth, HITL, prompt mode, token accounting, `sources` / `ui_parts` | shipped; recorded in `RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.69 | #2525 → #2526, #2527, #2528, #2529 |
 | 2 — observability UI | SSE keepalive during child runs (§5); child activity nested under the parent's tool-call line, which needs a forwarded child-event shape; sub-agent spend on the analytics page (§6.3) | not written | none until spec'd |
 | 3 — async and kinds | background children with completion notification and follow-up messaging (§6.1, reopens child state); admin-defined sub-agent kinds such as a "searcher" (§6.2's schema rule), which depends on the prompt-mode decision of §2; per-child model choice (§6.2) | not written (§6.1 and §6.2 give direction only) | none until spec'd |

@@ -32,6 +32,7 @@ open.
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import time
 import uuid
@@ -245,6 +246,20 @@ def _elapsed_ms_since(started_at: float) -> int:
     return int((time.monotonic() - started_at) * 1000)
 
 
+def _reset_active_agent_span(token: contextvars.Token) -> None:
+    """
+    Restore the previous active span, tolerating a cross-context token.
+
+    An abandoned async generator is finalized in a different context, where
+    `reset` raises `ValueError` — clearing the var is the safe equivalent.
+    """
+
+    try:
+        active_agent_span.reset(token)
+    except ValueError:
+        active_agent_span.set(None)
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -289,6 +304,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 name="agent.invoke",
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
+                # None at the top of a turn (a real root); the calling
+                # tool span for a sub-agent, which nests the child turn.
+                parent=active_agent_span.get(),
             )
             if self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
@@ -315,10 +333,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     span.set_io(output=final_message.content)
             return ReActOutput(final_message=final_message, transcript=transcript)
         finally:
-            if span_token is not None:
-                active_agent_span.reset(span_token)
             if span is not None:
                 span.end()
+            if span_token is not None:
+                _reset_active_agent_span(span_token)
 
     async def stream(
         self, input_model: ReActInput, config: ExecutionConfig
@@ -335,6 +353,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 name="agent.stream",
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
+                # None at the top of a turn (a real root); the calling
+                # tool span for a sub-agent, which nests the child turn.
+                parent=active_agent_span.get(),
             )
             # The turn's root span carries the trace-level input/output, which
             # is what the Langfuse trace list shows for a conversation: the
@@ -720,10 +741,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             raise
         finally:
             phase_timer_ctx.__exit__(None, None, None)
-            if span_token is not None:
-                active_agent_span.reset(span_token)
             if span is not None:
                 span.end()
+            if span_token is not None:
+                _reset_active_agent_span(span_token)
 
 
 class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):

@@ -112,6 +112,7 @@ from fred_runtime.common.kf_workspace_client import (
 from fred_runtime.common.mcp_runtime import MCPRuntime
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.table_hits import repair_table_hits
+from fred_runtime.react.react_tracing import RUNTIME_TOOL_SPAN_NAME
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
     get_document_library_tags_ids,
@@ -127,7 +128,7 @@ logger = logging.getLogger(__name__)
 _TRACE_MODEL_SPAN_NAMES = frozenset({"v2.graph.model", "v2.react.model"})
 _TRACE_AWAIT_HUMAN_SPAN_NAMES = frozenset({"v2.graph.await_human"})
 _TRACE_TOOL_SPAN_NAMES = frozenset(
-    {"v2.graph.tool", "v2.graph.runtime_tool", "tool.invoke"}
+    {"v2.graph.tool", "v2.graph.runtime_tool", RUNTIME_TOOL_SPAN_NAME, "tool.invoke"}
 )
 _TRACE_AGENT_SPAN_NAMES = frozenset({"agent.invoke", "agent.stream"})
 # Tool-shaped spans that are not the generic tool invoker.

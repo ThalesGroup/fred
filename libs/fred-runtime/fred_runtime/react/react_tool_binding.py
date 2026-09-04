@@ -44,6 +44,12 @@ from langchain_core.tools import BaseTool, StructuredTool
 
 from .react_tool_resolution import FredRuntimeToolSpec
 from .react_tool_utils import normalize_payload
+from .react_tracing import tool_span
+
+#: Marks a tool whose invocation this binder already wraps in a trace span.
+#: `ToolObservabilityMiddleware` spans everything else reaching the tool node —
+#: capability tools ride in on `ToolCarrierMiddleware` and never pass here.
+SELF_TRACED_TOOL_METADATA_KEY = "fred.tracing.self_traced"
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,42 +225,22 @@ class ReActToolBinder:
                 dict[str, object],
                 normalize_payload(dict(payload)),
             )
-            span = None
-            if self._tracer is not None:
-                from .react_tracing import active_agent_span
-
-                attributes = {
+            async with tool_span(
+                self._tracer,
+                name=spec.trace_span_name,
+                context=self._binding.portable_context,
+                attributes={
                     "tool_name": spec.runtime_name,
                     "tool_ref": spec.tool_ref,
                     **dict(spec.build_trace_attributes(normalized_payload)),
-                }
-                span = self._tracer.start_span(
-                    name=spec.trace_span_name,
-                    context=self._binding.portable_context,
-                    attributes=attributes,
-                    parent=active_agent_span.get(),
-                )
-                # A tool span without its arguments and result shows only that
-                # a tool ran and how long it took — not enough to tell a bad
-                # retrieval from a bad answer, which is the usual reason for
-                # opening a trace at all.
-                if self._tracer.captures_content:
-                    span.set_io(input=normalized_payload)
-            try:
+                },
+                input_payload=normalized_payload,
+            ) as span:
                 rendered_result, artifact = await spec.invoke(normalized_payload)
-                if span is not None:
-                    span.set_attribute("status", "ok")
-                    if self._tracer is not None and self._tracer.captures_content:
+                if span is not None and self._tracer is not None:
+                    if self._tracer.captures_content:
                         span.set_io(output=rendered_result)
                 return (rendered_result, artifact)
-            except Exception as exc:
-                if span is not None:
-                    span.set_attribute("status", "error")
-                    span.set_attribute("error_type", type(exc).__name__)
-                raise
-            finally:
-                if span is not None:
-                    span.end()
 
         return BoundTool(
             runtime_name=spec.runtime_name,
@@ -266,5 +252,6 @@ class ReActToolBinder:
                 description=spec.description,
                 args_schema=cast(Any, spec.args_schema),
                 response_format="content_and_artifact",
+                metadata={SELF_TRACED_TOOL_METADATA_KEY: True},
             ),
         )
