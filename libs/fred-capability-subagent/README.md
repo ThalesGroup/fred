@@ -4,7 +4,8 @@ A Fred agent capability (`subagent`) that gives an agent one tool,
 `run_subagent`, to delegate a self-contained task to **a fresh-context copy of
 itself** and get the answer back on an ordinary tool-result line.
 
-Design: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md` (issue #2525).
+What the runtime does for it, and why: `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`
+§8.63-§8.68. What is still open: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md`.
 
 ## What it ships
 
@@ -20,7 +21,8 @@ Design: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md` (issue #2525).
   (`AgentInvocationRequest.system_prompt`) with a fixed trigger as the user
   message, so the child inherits no persona, output language or business rule.
   Guardrails, tool descriptions and the output contract are kept either way.
-  Both ship so they can be compared on real agents — RFC §5.2, issue #2527.
+  Both ship so they can be compared on real agents; picking the winner is the
+  RFC's one remaining open question (§2), and the loser is deleted then.
 - **Metric** `agent.subagent_turn_completed` — one KPI event per finished
   child, carrying its tokens. Dims, Grafana/PromQL, and why a query reading
   `agent.turn_completed` alone under-counts:
@@ -57,10 +59,12 @@ Local/POC surface today:
 - **Unbounded fan-out**, and the content cap is per child so it does not
   compose with it. Deliberate for the POC, to be settled with POC data — #2531.
 - **No timeout, and the parent's SSE stream is silent** for a child's whole
-  run (RFC §10).
-- **Approval-gated (HITL) tools are not yet stripped** from a child's tool
-  list, and a child has no checkpoint an interrupt could persist to (#2526).
-  Until that lands, enable this only on agents with no approval-gated tools.
+  run — the keepalive belongs to the tier-2 UI pass (RFC §5).
+- **Work that needs a human decision cannot be delegated.** No human is
+  reachable inside a child, so approval-gated tools are hidden from its model
+  and anything else that would gate is refused with an error tool result. Not a
+  hang risk, but a real limit on what a child can be asked to do
+  (`RUNTIME-EXECUTION-CONTRACT.md` §8.64).
 
 ## Dev
 
