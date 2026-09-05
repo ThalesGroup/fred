@@ -84,6 +84,10 @@ function mount(props: Partial<React.ComponentProps<typeof PromptSelectionChatPan
   });
 }
 
+function categoryTrigger(): HTMLButtonElement | null {
+  return container.querySelector('button[aria-haspopup="listbox"]');
+}
+
 function buttonWithText(text: string): HTMLButtonElement | undefined {
   return Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes(text));
 }
@@ -140,6 +144,33 @@ describe("PromptSelectionChatPanel", () => {
     mount({ isPersonalChat: true });
 
     expect(container.textContent).not.toContain("chatbot.promptSelectionPanel.space.team");
+  });
+
+  it("defaults the category filter to every category", () => {
+    mount();
+
+    // toContain, not toBe: the trigger also renders its dropdown arrow glyph.
+    expect(categoryTrigger()?.textContent).toContain("chatbot.promptSelectionPanel.allCategories");
+    expect(container.textContent).toContain("Weekly report");
+    expect(container.textContent).toContain("Bug triage");
+  });
+
+  it("carries each category's count in its option label", async () => {
+    // A menu row has no second column for a count, so it rides in the label —
+    // and it is what makes an empty category obvious before clicking it.
+    mount();
+    await click(categoryTrigger());
+
+    const options = document.body.textContent ?? "";
+    expect(options).toContain("Reports (1)");
+    expect(options).toContain("rework.promptCategories.noCategory (1)");
+  });
+
+  it("hides the category filter when the space has none", () => {
+    h.categoriesByTeam[TEAM_ID] = [];
+    mount();
+
+    expect(categoryTrigger()).toBeNull();
   });
 
   it("filters the list as the user searches", async () => {

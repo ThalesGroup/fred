@@ -198,9 +198,12 @@ export default function ManagedChatPage() {
   // The rail's attachments launcher. Offered when the agent still exposes
   // attaching OR the conversation already holds files: an older session whose
   // agent lost `attach_files` must not lose the way back to its own files.
-  const attachmentsLaunchers = useMemo(
-    () =>
-      allowChatAttachments || attachmentsCount > 0
+  // The conversation's own panels, above the capability viewers. The prompt
+  // library is reachable from the composer's add menu too — the rail is a
+  // second door to the same panel, not a different one.
+  const railLaunchers = useMemo(
+    () => [
+      ...(allowChatAttachments || attachmentsCount > 0
         ? [
             {
               key: "attachments",
@@ -211,8 +214,16 @@ export default function ManagedChatPage() {
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
             },
           ]
-        : [],
-    [allowChatAttachments, attachmentsCount, attachmentsDrawerOpen, t],
+        : []),
+      {
+        key: "prompt-library",
+        label: t("chatbot.promptSelectionPanel.menuRow"),
+        icon: "edit_note" as const,
+        selected: activePushDrawer?.kind === "prompt-library",
+        onOpen: () => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : { kind: "prompt-library" })),
+      },
+    ],
+    [allowChatAttachments, attachmentsCount, attachmentsDrawerOpen, activePushDrawer, t],
   );
   // The composer options menu always renders: even when an agent exposes no
   // search options, the prompt-library row is always available (personal +
@@ -615,7 +626,7 @@ export default function ManagedChatPage() {
           capabilityIds={chat.capabilityIds}
           activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
           onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
-          launchers={attachmentsLaunchers}
+          launchers={railLaunchers}
           footerLaunchers={debugLaunchers}
         />
 

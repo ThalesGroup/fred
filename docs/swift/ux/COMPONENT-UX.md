@@ -939,13 +939,16 @@ session attachments, prompt library — had drifted into three slightly differen
 "insets minus the top one" body rule). The shell fixes the treatment once:
 
 `layout="push"` so it reflows the conversation instead of covering it,
-`floating` (12px inset card, `outline-muted` border, `--radius-m`, soft shadow),
+`floating` (inset card, `outline-muted` border, `--radius-m`, soft shadow;
+12px from the page edges and the conversation, 8px on the right where the
+launcher rail sits — a gap to a neighbouring control is tighter than a gap to
+the page edge),
 `background: --surface-container-high`, `compactHeader` (a 12px/8px title band
 rather than the drawer's roomier 16px/12px — these panels sit in a narrow column
 beside the conversation; the settings and admin drawers keep the default),
 `flushBody` plus a body that carries
 the insets the drawer's own padding would double up (`0 16px 16px` — the header
-already leaves the top gap) and a `--spacing-m` column gap, and drag-to-resize
+already leaves the top gap) and a `--spacing-s` column gap, and drag-to-resize
 with a persisted width (`persistKey`, unique per panel; `width` seeds the
 first-ever value only).
 
@@ -998,7 +1001,15 @@ personal prompts from a team chat. `ContextPromptPicker` and the
 push-drawer slot so it never stacks with the attachments, capability or
 document-scope panels. The shell supplies the header (title + close), the
 surface and the insets. Body, top to bottom: a `ButtonGroup` picking the space,
-a `SearchInput`, category `FilterChips`, then the list. Only the list scrolls.
+a `SearchInput` and a category `Select` grouped together at 8px — both narrow
+the same list, so they sit tighter than the body's 12px between blocks — then
+the list of outlined tiles. Only the list scrolls.
+
+The three controls run one tier below the app default, the panel being a narrow
+column: `xs` for the search field and the select, `2xs` for the space picker —
+`ButtonGroup`'s ladder has no `xs`, and `2xs` keeps it the same 8px shorter than
+the fields that it already was. The drawer opens at 340px rather than the 480px
+default; that only seeds the first-ever width, a dragged one persists.
 
 **Two spaces, two queries.** `GET /teams/{id}/prompts/context` returns personal
 **or** team prompts depending on the id passed, never both — deliberately (a
@@ -1012,12 +1023,26 @@ on session load.
 In a personal chat the space picker is hidden: the team side would have nothing
 to show, and the chat's own team id *is* the personal space.
 
-**Categories are team-owned** (migration `8ca7cafc292f`), so the chips are
-fetched per space and the active category resets when the space changes. Chip
-counts come from the whole space, not the searched subset, so a number does not
-shift as the user types. The chips row is hidden when a space has no category.
-The search + category predicate is `promptFilter.ts`, shared with the team
-prompts page and unit-tested on its own.
+**Categories are team-owned** (migration `8ca7cafc292f`), so they are fetched
+per space and the active category resets when the space changes. The counts come
+from the whole space, not the searched subset, so a number does not shift as the
+user types. The control is hidden when a space has no category. The search +
+category predicate is `promptFilter.ts`, shared with the team prompts page and
+unit-tested on its own.
+
+**A dropdown, not chips (2026-09-04).** The panel opened with the same
+`FilterChips` row the team prompts page uses. That row is right on a full-width
+page and wrong in a narrow column, where it wrapped and ate the height the
+prompt list needs. It is now one unlabelled `Select` defaulting to "every
+category", with each option's count folded into its label — a menu row has no
+second column for a count, and the number is what makes an empty category
+obvious before picking it. `FilterChips` is unchanged and still serves
+`PromptsPage`.
+
+Two consequences worth knowing: a dropdown has no toggle-off, so clearing the
+filter means picking "Toutes" rather than clicking the active chip again; and
+"every category" travels as a sentinel value, not `null`, because the menu
+derives each option's DOM id from its value.
 
 **Insert.** Picking a row fetches the full record (`GetTeamPrompt` — `text`
 lives there, not on `ContextPromptSummary`) and appends it to the draft,

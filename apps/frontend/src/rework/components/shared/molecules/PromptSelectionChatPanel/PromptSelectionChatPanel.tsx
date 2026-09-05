@@ -19,9 +19,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
 import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
+import type { OptionModel } from "@models/Option.model.ts";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
 import {
@@ -31,8 +32,12 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptSelectionChatPanel.module.css";
 
-/** Chips shown before the "+N" toggle — same budget as the team prompts page. */
-const FILTER_VISIBLE = 4;
+/**
+ * "Every category" as a select value. A sentinel rather than `null`: the menu
+ * derives each option's DOM id from its value, and `null` would stringify.
+ * Mapped back to `null` — no filter — before it reaches the predicate.
+ */
+const ALL_CATEGORIES = "__all__";
 
 type Space = "team" | "personal";
 const SPACES: Space[] = ["team", "personal"];
@@ -136,6 +141,25 @@ export default function PromptSelectionChatPanel({
     return { byId, noCategory };
   }, [prompts, knownCategoryIds]);
 
+  // Counts ride in the label: a menu row has no second column for them, and the
+  // number is what makes an empty category obvious before clicking it.
+  const categoryOptions: OptionModel<string>[] = useMemo(
+    () => [
+      { value: ALL_CATEGORIES, key: ALL_CATEGORIES, label: t("chatbot.promptSelectionPanel.allCategories") },
+      {
+        value: NO_CATEGORY_FILTER_ID,
+        key: NO_CATEGORY_FILTER_ID,
+        label: `${t("rework.promptCategories.noCategory")} (${categoryCounts.noCategory})`,
+      },
+      ...categories.map((cat) => ({
+        value: cat.id,
+        key: cat.id,
+        label: `${cat.name} (${categoryCounts.byId.get(cat.id) ?? 0})`,
+      })),
+    ],
+    [categories, categoryCounts, t],
+  );
+
   const visiblePrompts = useMemo(
     () => filterPrompts(prompts, { search, categoryId: category, knownCategoryIds }),
     [prompts, search, category, knownCategoryIds],
@@ -157,11 +181,13 @@ export default function PromptSelectionChatPanel({
       onClose={onClose}
       title={t("chatbot.promptSelectionPanel.title")}
       persistKey="prompt-selection-panel"
+      width="340px"
       fill
     >
       {canPickSpace && (
         <ButtonGroup
-          size="small"
+          // 2xs, not xs: ButtonGroup's ladder skips that tier.
+          size="2xs"
           color="secondary"
           variant="radio"
           fullWidth
@@ -172,36 +198,28 @@ export default function PromptSelectionChatPanel({
         />
       )}
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
-        clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
-        size="small"
-      />
-
-      {categories.length > 0 && (
-        <FilterChips
-          options={[
-            {
-              id: NO_CATEGORY_FILTER_ID,
-              label: t("rework.promptCategories.noCategory"),
-              count: categoryCounts.noCategory,
-            },
-            ...categories.map((cat) => ({
-              id: cat.id,
-              label: cat.name,
-              count: categoryCounts.byId.get(cat.id) ?? 0,
-            })),
-          ]}
-          value={category}
-          onChange={setCategory}
-          allLabel={t("chatbot.promptSelectionPanel.allCategories")}
-          maxVisible={FILTER_VISIBLE}
-          showMoreLabel={(count) => `+${count}`}
-          showLessLabel="−"
+      {/* Search and category are one group — both narrow the same list — so they
+          sit tighter than the panel body's own spacing between blocks. */}
+      <div className={styles.filters}>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
+          clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
+          size="xs"
         />
-      )}
+
+        {categories.length > 0 && (
+          <Select<string>
+            size="xs"
+            compact
+            options={categoryOptions}
+            value={category ?? ALL_CATEGORIES}
+            onChange={(value) => setCategory(value === ALL_CATEGORIES ? null : value)}
+            ariaLabel={t("chatbot.promptSelectionPanel.categoryLabel")}
+          />
+        )}
+      </div>
 
       {isLoading ? (
         <div className={styles.state}>
