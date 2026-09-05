@@ -1,0 +1,137 @@
+/* Reasoning row — chrome-free, like the tool rows it now sits between: no card
+   border, no fill, no chips. It reads as a quiet aside in the sequence, not as
+   a panel above it. */
+.row {
+  /* Where this row's marker sits, for the rail trimming done by ThoughtTrace.
+     Not 50% like a tool row: the icon rides the FIRST line of text, so a
+     two-line preview does not drag the marker down with it. */
+  --trace-marker-y: calc(var(--spacing-2xs) + var(--trace-line-h) / 2);
+
+  display: flex;
+  position: relative;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  transition: background 150ms ease;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: none;
+  padding: var(--spacing-2xs) var(--spacing-xs) var(--spacing-2xs) 0;
+  width: 100%;
+  text-align: left;
+}
+
+/* Timeline rail — drawn per row and full height, exactly like TraceEntryRow, so
+   consecutive rows of either kind join into one continuous line. Trimming the
+   two ends is ThoughtTrace's job: only it knows which row is first and last. */
+.row::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--trace-rail-x, 0);
+  transform: translateX(-50%);
+  background: var(--outline-retreat);
+  width: 1px;
+  content: "";
+}
+
+.row:hover,
+.row:focus-visible {
+  outline: none;
+  background: var(--surface-container);
+}
+
+/* The marker sits ON the rail (`--trace-rail-x`, set by ThoughtTrace) so the
+   line threads it exactly like a tool row's status dot. The opaque background
+   masks the rail behind the glyph; the top margin centres the disc on the first
+   line of text beside it. One `--marker-size` drives all three — the disc, its
+   offset onto the rail, and the glyph — so they cannot drift apart. */
+.marker {
+  --marker-size: 0.875rem;
+
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 1;
+  margin-top: calc((var(--trace-line-h) - var(--marker-size)) / 2);
+  margin-left: calc(var(--trace-rail-x, 6px) - var(--marker-size) / 2);
+  box-shadow: 0 0 0 1.5px var(--surface-main);
+  border-radius: 50%;
+  background: var(--surface-main);
+  width: var(--marker-size);
+  height: var(--marker-size);
+  color: var(--on-surface-retreat);
+  font-size: var(--marker-size);
+}
+
+/* Only the marker pulses while reasoning streams — the whole row pulsing was
+   the "stuck tool" look this design removes. */
+.markerLive {
+  animation: pulse 1.4s ease-in-out infinite;
+  color: var(--primary);
+}
+
+/* Text column, starting at the marker's line so the icon reads as this row's
+   bullet rather than a header above it. */
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  line-height: var(--trace-line-h);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Three lines. The clamp used to be two, which hid four fifths of a block — and
+   since reasoning models restate the task before adding anything new, those two
+   lines were the repeated part, so consecutive rows read as duplicates. The
+   repeat is now removed upstream (`stripRepeatedPreamble`), so the lines that
+   survive are the block's own content; three of them is a budget, not a
+   preview of a preamble. The full markdown stays in the detail drawer. */
+.preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  line-height: var(--trace-line-h);
+  overflow-wrap: anywhere;
+}
+
+.conclusion {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  line-height: var(--trace-line-h);
+}
+
+/* Pinned to the first line, so it stays level with the marker whatever the
+   preview's height. */
+.duration {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  line-height: var(--trace-line-h);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

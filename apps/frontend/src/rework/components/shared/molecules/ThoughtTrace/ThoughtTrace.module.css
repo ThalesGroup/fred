@@ -56,22 +56,24 @@
   }
 }
 
-/* Body: reasoning lane, then step lane. The reasoning card stays chrome-free —
-   the trace is secondary UI and must stay lighter than the answer below it.
-   The one piece of chrome kept throughout is the timeline rail: it is what
-   makes the turn read as a process unfolding, from the reasoning marker down
-   through the numbered tool steps.
+/* Body: one chronological sequence of rows, reasoning and tool steps mixed.
+   Every row stays chrome-free — the trace is secondary UI and must stay lighter
+   than the answer below it. The one piece of chrome kept is the timeline rail:
+   it is what makes the turn read as a process unfolding rather than a list.
 
-   `--trace-rail-x` is the shared geometry: the status dot is the first item
-   in a TraceEntryRow, offset by the row's own left padding (--spacing-s,
-   12px) before the rail sits on its center — half a status dot (9px / 2 =
-   4.5px), so 12 + 4.5 = 16.5px. That half-pixel value is deliberate: the 1px
-   rail is centered on it via translateX(-50%), so its rendered edges land on
-   whole pixels (16.5 ± 0.5 = 16 and 17) instead of blurring. It cascades to
-   ReasoningBlock and TraceEntryRow, which align their markers on it, so the
-   rail threads every marker with no per-component magic. */
+   `--trace-rail-x` is the shared geometry: the status dot is the first item in
+   a TraceEntryRow, offset by the row's own left padding (--spacing-s, 12px)
+   before the rail sits on its center — half a status dot (9px / 2 = 4.5px), so
+   12 + 4.5 = 16.5px. That half-pixel value is deliberate: the 1px rail is
+   centered on it via translateX(-50%), so its rendered edges land on whole
+   pixels (16.5 ± 0.5 = 16 and 17) instead of blurring.
+
+   `--trace-line-h` is the other shared value: one line of row text. A reasoning
+   row centres its marker on it, so both tokens cascade and every row aligns on
+   the rail with no per-component magic. */
 .body {
   --trace-rail-x: 16.5px;
+  --trace-line-h: 1.125rem;
 
   display: flex;
   flex-direction: column;
@@ -81,21 +83,15 @@
   padding-top: var(--spacing-2xs);
 }
 
-/* The one card in the trace: visually groups the tool-step rows, distinct
-   from the chrome-free reasoning lane above it. Horizontal breathing room
-   comes from each row's own left/right padding, not from this container —
-   that's why only top/bottom padding is set here. */
-.entries {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border-radius: var(--radius-s);
-  background: var(--surface-container-low);
-  padding: var(--spacing-2xs) 0;
+/* The rail starts at the first marker and stops at the last, instead of
+   floating above the one and overshooting past the other. Each row publishes
+   where its own marker sits (`--trace-marker-y`) — 50% for a one-line tool row,
+   the first line of text for a reasoning row — so this holds whichever kind of
+   row happens to open or close the sequence. */
+.body > *:first-child::before {
+  top: var(--trace-marker-y);
 }
 
-/* Nothing above the first step: the rail must start AT its marker, not float
-   above it. (Element selector, not a class: the row is TraceEntryRow's root.) */
-.entriesLeading > div:first-child::before {
-  top: 50%;
+.body > *:last-child::before {
+  bottom: calc(100% - var(--trace-marker-y));
 }

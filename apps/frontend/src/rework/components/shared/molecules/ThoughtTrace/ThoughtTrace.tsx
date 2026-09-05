@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
-import type { TraceSummary } from "../../../../utils/traceUtils";
+import type { TraceRow, TraceSummary } from "../../../../utils/traceUtils";
 import {
   formatLatencyMs,
   groupTraceEntries,
-  splitTraceEntries,
   traceEntryKey,
+  traceRows,
   traceSummary,
 } from "../../../../utils/traceUtils";
 import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
-import { ReasoningBlock } from "./ReasoningBlock/ReasoningBlock";
+import { ReasoningRow } from "./ReasoningRow/ReasoningRow";
 import { TraceEntryRow } from "./TraceEntryRow/TraceEntryRow";
 import styles from "./ThoughtTrace.module.css";
 
@@ -61,13 +62,22 @@ function useSummaryLabel(summary: TraceSummary): string {
   return parts.length > 0 ? parts.join(" · ") : t("rework.chatTrace.details");
 }
 
+/** Stable empty identity, so the collapsed memo never yields a new array. */
+const EMPTY_ROWS: TraceRow[] = [];
+
 export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: ThoughtTraceProps) {
   const { t } = useTranslation();
-  const entries = groupTraceEntries(messages);
-  const { reasoning, steps } = splitTraceEntries(entries);
-  const summary = traceSummary(entries, pendingToolCallIds);
+  // Memoized: this fold runs on every streamed delta, and the page re-renders
+  // for reasons of its own on top of that.
+  const entries = useMemo(() => groupTraceEntries(messages), [messages]);
+  const summary = useMemo(() => traceSummary(entries, pendingToolCallIds), [entries, pendingToolCallIds]);
   const label = useSummaryLabel(summary);
   const { expanded, toggle } = useTraceExpansion(done);
+  // Only when open. `toThreadMessages` rebuilds every exchange's traceMessages
+  // array on each streamed frame, so this memo is invalidated for the WHOLE
+  // conversation on every token — and traceRows flattens markdown. Behind the
+  // toggle, a long history's collapsed traces cost nothing per token.
+  const rows = useMemo(() => (expanded ? traceRows(entries) : EMPTY_ROWS), [entries, expanded]);
 
   if (entries.length === 0) return null;
 
@@ -86,23 +96,21 @@ export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: Tho
         <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
       </button>
 
+      {/* One sequence, in the order the turn actually unfolded: reasoning and
+          tool steps alternate rather than being stacked into two lanes. */}
       {expanded && (
         <div className={styles.body}>
-          <ReasoningBlock entries={reasoning} continues={steps.length > 0} />
-
-          {/* No section header: the step numbers already say what this list is,
-              and the header text was pure visual weight. */}
-          {steps.length > 0 && (
-            <div className={`${styles.entries} ${reasoning.length === 0 ? styles.entriesLeading : ""}`}>
-              {steps.map(({ entry, index }) => (
-                <TraceEntryRow
-                  key={traceEntryKey(entry)}
-                  entry={entry}
-                  index={index}
-                  pendingToolCallIds={pendingToolCallIds}
-                />
-              ))}
-            </div>
+          {rows.map(({ entry, lane, index, reasoningText }) =>
+            lane === "reasoning" ? (
+              <ReasoningRow key={traceEntryKey(entry)} entry={entry} text={reasoningText ?? ""} />
+            ) : (
+              <TraceEntryRow
+                key={traceEntryKey(entry)}
+                entry={entry}
+                index={index}
+                pendingToolCallIds={pendingToolCallIds}
+              />
+            ),
           )}
         </div>
       )}

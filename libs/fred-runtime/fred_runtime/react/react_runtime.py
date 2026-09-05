@@ -237,6 +237,22 @@ def _graph_input(
     return base
 
 
+#: Longest preamble kept when a round turns out to end in tool calls.
+#:
+#: Providers stream a turn's text before its tool-call tokens with nothing
+#: declaring which is coming, so text that looks like an answer can turn out to
+#: be the model talking about what it is about to do. That text is worth keeping
+#: — but only while it stays a statement of intent.
+#:
+#: Past this, it is not a preamble: it is a deliverable written in the wrong
+#: place. `write_document`'s own instructions exist because models write the
+#: report inline instead of calling the tool, and the field incident behind
+#: `tool_loop._tool_calls_char_len` carried 22k characters. Copying that into
+#: the trace would duplicate, and persist, a whole document beside the editor
+#: already showing it. Over the cap the text is dropped, as it is today.
+MAX_PREAMBLE_CHARS = 1000
+
+
 def _tool_thought_title(tool_name: str) -> str:
     """Return a human-readable thought title for a tool call."""
     readable = tool_name.replace("_", " ").replace("-", " ")
@@ -411,10 +427,47 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         active_thought_started_at: dict[str, float] = {}
         # Open model-native reasoning block (RUNTIME-05 Layer 2b). When a provider
         # streams reasoning chunks (Mistral ThinkChunk, Claude thinking), they are
-        # promoted to a single THOUGHT block with source="model_native" that must be
-        # closed before the first answer delta and before the run ends.
+        # promoted to a THOUGHT block with source="model_native", closed at the
+        # next boundary — see _close_model_native_thought below.
         model_native_thought_id: str | None = None
         model_native_thought_started_at: float | None = None
+        # Answer text emitted so far in this round, kept in case the round turns
+        # out to end in tool calls — see MAX_PREAMBLE_CHARS. Only text the user
+        # actually saw is collected, so what is relocated is exactly what the
+        # frontend is about to purge from the answer bubble.
+        round_preamble: list[str] = []
+        round_preamble_chars = 0
+        round_preamble_started_at: float | None = None
+
+        def _close_model_native_thought(
+            conclusion: str | None = None,
+        ) -> ThoughtEndEvent | None:
+            """
+            End the open model-native reasoning block, or None if none is open.
+
+            Closed at every boundary that ends a stretch of reasoning: a round of
+            tool calls, the first answer delta, the end of the stream, and the
+            error path. Closing on tool calls is what lets the UI interleave
+            reasoning with tool steps — one block per round, each ranked where it
+            actually happened, instead of one turn-long block ranked first.
+            """
+            nonlocal sequence
+            nonlocal model_native_thought_id, model_native_thought_started_at
+
+            if model_native_thought_id is None:
+                return None
+            event = ThoughtEndEvent(
+                sequence=sequence,
+                thought_id=model_native_thought_id,
+                conclusion=conclusion,
+                duration_ms=_elapsed_ms_since(model_native_thought_started_at)
+                if model_native_thought_started_at is not None
+                else None,
+            )
+            sequence += 1
+            model_native_thought_id = None
+            model_native_thought_started_at = None
+            return event
 
         def observe_model_call(call_usage: dict[str, int] | None) -> None:
             """
@@ -479,25 +532,22 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     if decoded.text:
                         # Close the reasoning block before the first answer delta so
                         # the UI accordion ends cleanly ahead of the response.
-                        if model_native_thought_id is not None:
-                            yield ThoughtEndEvent(
-                                sequence=sequence,
-                                thought_id=model_native_thought_id,
-                                duration_ms=_elapsed_ms_since(
-                                    model_native_thought_started_at
-                                )
-                                if model_native_thought_started_at is not None
-                                else None,
-                            )
-                            sequence += 1
-                            model_native_thought_id = None
-                            model_native_thought_started_at = None
+                        closed = _close_model_native_thought()
+                        if closed is not None:
+                            yield closed
                         if not suppress_assistant_deltas:
                             yield AssistantDeltaRuntimeEvent(
                                 sequence=sequence,
                                 delta=decoded.text,
                             )
                             sequence += 1
+                            if round_preamble_started_at is None:
+                                round_preamble_started_at = time.monotonic()
+                            # Stop appending past the cap rather than buffering a
+                            # whole answer this round may never need.
+                            round_preamble_chars += len(decoded.text)
+                            if round_preamble_chars <= MAX_PREAMBLE_CHARS:
+                                round_preamble.append(decoded.text)
                     continue
 
                 if mode != "updates":
@@ -579,6 +629,47 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         continue
 
                     if isinstance(message, AIMessage) and message.tool_calls:
+                        # The reasoning that led to this round is over: close its
+                        # block here so the next round opens a fresh one, ranked
+                        # after these tool calls. Without this the block stays open
+                        # until the answer text and swallows every later round's
+                        # reasoning, collapsing the whole turn into one entry.
+                        closed = _close_model_native_thought()
+                        if closed is not None:
+                            yield closed
+                        # This round streamed text and then called tools, so that
+                        # text was never an answer — the frontend purges it from
+                        # the bubble the moment the tool call below lands. Keep it
+                        # as reasoning, where it belongs and where it survives a
+                        # reload, unless it is too big to be a preamble at all.
+                        preamble = "".join(round_preamble)
+                        if preamble and round_preamble_chars <= MAX_PREAMBLE_CHARS:
+                            preamble_id = uuid.uuid4().hex
+                            yield ThoughtStartEvent(
+                                sequence=sequence,
+                                thought_id=preamble_id,
+                                phase="planning",
+                                title="Model reasoning",
+                                source="model_native",
+                            )
+                            sequence += 1
+                            yield ThoughtDeltaEvent(
+                                sequence=sequence,
+                                thought_id=preamble_id,
+                                delta=preamble,
+                            )
+                            sequence += 1
+                            yield ThoughtEndEvent(
+                                sequence=sequence,
+                                thought_id=preamble_id,
+                                duration_ms=_elapsed_ms_since(round_preamble_started_at)
+                                if round_preamble_started_at is not None
+                                else None,
+                            )
+                            sequence += 1
+                        round_preamble = []
+                        round_preamble_chars = 0
+                        round_preamble_started_at = None
                         # A new round of tool calls begins: its outcome is
                         # judged on its own results. A prior round's error
                         # stays claimed (sticky) until one of THIS round's
@@ -641,17 +732,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
 
             # Close a model-native reasoning block that never saw answer text
             # (e.g. the answer arrived via an updates AIMessage, not a delta).
-            if model_native_thought_id is not None:
-                yield ThoughtEndEvent(
-                    sequence=sequence,
-                    thought_id=model_native_thought_id,
-                    duration_ms=_elapsed_ms_since(model_native_thought_started_at)
-                    if model_native_thought_started_at is not None
-                    else None,
-                )
-                sequence += 1
-                model_native_thought_id = None
-                model_native_thought_started_at = None
+            closed = _close_model_native_thought()
+            if closed is not None:
+                yield closed
 
             if last_tool_error is not None or last_assistant_message is not None:
                 final_content = (
@@ -710,16 +793,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             active_thought_started_at.clear()
             # Close an open model-native reasoning block so its accordion does not
             # spin forever after a mid-stream failure.
-            if model_native_thought_id is not None:
-                yield ThoughtEndEvent(
-                    sequence=sequence,
-                    thought_id=model_native_thought_id,
-                    conclusion="Error",
-                    duration_ms=_elapsed_ms_since(model_native_thought_started_at)
-                    if model_native_thought_started_at is not None
-                    else None,
-                )
-                sequence += 1
+            closed = _close_model_native_thought(conclusion="Error")
+            if closed is not None:
+                yield closed
             raise
         finally:
             phase_timer_ctx.__exit__(None, None, None)

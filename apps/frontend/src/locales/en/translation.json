@@ -1539,13 +1539,6 @@
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
-      "phase": {
-        "observation": "Observation",
-        "planning": "Planning",
-        "reflection": "Reflection",
-        "synthesis": "Synthesis",
-        "tool_use": "Tool use"
-      },
       "rows_one": "{{count}} row",
       "rows_other": "{{count}} rows",
       "running": "running…",
