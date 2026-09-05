@@ -39,6 +39,12 @@ from .capability import (
     UploadedFile,
     chat_part_kind,
 )
+from .connector import (
+    ChangeKind,
+    SourceChange,
+    SourceConnector,
+    SourceItem,
+)
 from .context import (
     ConversationalState,
     ConversationTurn,
@@ -46,6 +52,12 @@ from .context import (
     LinkKind,
     LinkPart,
     RuntimeContext,
+)
+from .corpus import (
+    Corpus,
+    CorpusKind,
+    CorpusMode,
+    CorpusScope,
 )
 from .execution import (
     ActorContext,
@@ -116,4 +128,13 @@ __all__ = [
     "OpenAIToolCallFunction",
     # Prompt template token registry
     "PROMPT_SAFE_TOKENS",
+    # Indexed corpus contract (CORPUS-01, draft — docs/swift/rfc/INDEXED-CORPUS-RFC.md)
+    "Corpus",
+    "CorpusKind",
+    "CorpusMode",
+    "CorpusScope",
+    "ChangeKind",
+    "SourceChange",
+    "SourceConnector",
+    "SourceItem",
 ]
