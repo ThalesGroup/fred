@@ -22,15 +22,22 @@ Why this module exists:
   grouping primitive is introduced here.
 - `mode` (push or pull) is mutually exclusive on a given corpus. A corpus is
   never fed by both at once — this is a deliberate simplicity choice, not an
-  omission (see the RFC §2/§6).
+  omission (see the RFC §2/§7).
 - `kind` names the pipeline/representation a corpus materializes. This module
   does not encode what a `kind` does with a change, or when — that decision
   belongs entirely to that pipeline's own code (see connector.py's docstring
   for the corresponding boundary on the connector side).
+- `connector_kind` and `connector_ref` are deliberately two fields (RFC §4):
+  `connector_kind` is the small, enumerable "which connector implementation"
+  (`local_fs`, later `minio`/`github`/`sphere`) a usage-enablement check can
+  key on (RFC §6) without parsing the opaque `connector_ref`. That
+  enablement check is not implemented yet — see the RFC's coordination note
+  in §6 — but the field exists now so the model doesn't need a breaking
+  change once it lands.
 
 This is a pure data contract. No behavior, no registry, no factory — those are
 deliberately deferred to the first proof-of-concept consumer, per the RFC's
-own plan (§9), so the shape is validated against a real use before it is
+own plan (§10), so the shape is validated against a real use before it is
 extended.
 """
 
@@ -68,8 +75,9 @@ class Corpus(FrozenModel):
     """
     A named, scoped, typed unit of derived knowledge.
 
-    `connector_ref` is required if and only if `mode == PULL` — a push-mode
-    corpus has no connector, and a pull-mode corpus without one cannot be fed.
+    `connector_kind` and `connector_ref` are required if and only if
+    `mode == PULL` — a push-mode corpus has no connector, and a pull-mode
+    corpus without both cannot be fed or usage-gated.
     """
 
     corpus_id: str = Field(min_length=1)
@@ -77,14 +85,21 @@ class Corpus(FrozenModel):
     scope: CorpusScope
     mode: CorpusMode
     kind: CorpusKind
+    connector_kind: str | None = None
     connector_ref: str | None = None
 
     @model_validator(mode="after")
-    def _connector_ref_matches_mode(self) -> "Corpus":
-        if self.mode is CorpusMode.PULL and not self.connector_ref:
-            raise ValueError("connector_ref is required when mode is CorpusMode.PULL")
-        if self.mode is CorpusMode.PUSH and self.connector_ref is not None:
+    def _connector_fields_match_mode(self) -> "Corpus":
+        if self.mode is CorpusMode.PULL and not (
+            self.connector_kind and self.connector_ref
+        ):
             raise ValueError(
-                "connector_ref must not be set when mode is CorpusMode.PUSH"
+                "connector_kind and connector_ref are both required when mode is CorpusMode.PULL"
+            )
+        if self.mode is CorpusMode.PUSH and (
+            self.connector_kind is not None or self.connector_ref is not None
+        ):
+            raise ValueError(
+                "connector_kind and connector_ref must not be set when mode is CorpusMode.PUSH"
             )
         return self

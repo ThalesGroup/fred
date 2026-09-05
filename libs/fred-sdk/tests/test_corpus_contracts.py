@@ -17,7 +17,7 @@ Offline unit tests for the indexed corpus contract (CORPUS-01, draft).
 
 Tests cover:
 - Corpus / CorpusScope construction and validation
-- the push/pull <-> connector_ref exclusivity invariant (RFC §2/§6)
+- the push/pull <-> connector_kind/connector_ref exclusivity invariant (RFC §2/§7)
 - SourceItem / SourceChange construction
 - a minimal in-memory fake proving SourceConnector is actually implementable
 
@@ -47,7 +47,7 @@ def test_corpus_scope_defaults_to_no_tags() -> None:
     assert scope.tag_ids == []
 
 
-def test_push_corpus_requires_no_connector_ref() -> None:
+def test_push_corpus_requires_no_connector_fields() -> None:
     corpus = Corpus(
         corpus_id="c-1",
         name="Team RAG corpus",
@@ -55,6 +55,7 @@ def test_push_corpus_requires_no_connector_ref() -> None:
         mode=CorpusMode.PUSH,
         kind=CorpusKind.RAG_SQL,
     )
+    assert corpus.connector_kind is None
     assert corpus.connector_ref is None
 
 
@@ -70,7 +71,7 @@ def test_push_corpus_rejects_connector_ref() -> None:
         )
 
 
-def test_pull_corpus_requires_connector_ref() -> None:
+def test_pull_corpus_requires_both_connector_fields() -> None:
     with pytest.raises(Exception):
         Corpus(
             corpus_id="c-2",
@@ -81,15 +82,41 @@ def test_pull_corpus_requires_connector_ref() -> None:
         )
 
 
-def test_pull_corpus_with_connector_ref_is_valid() -> None:
+def test_pull_corpus_rejects_connector_ref_without_kind() -> None:
+    with pytest.raises(Exception):
+        Corpus(
+            corpus_id="c-2",
+            name="Team pull corpus",
+            scope=CorpusScope(team_id="team-1"),
+            mode=CorpusMode.PULL,
+            kind=CorpusKind.RAG_SQL,
+            connector_ref="conn-1",
+        )
+
+
+def test_pull_corpus_rejects_connector_kind_without_ref() -> None:
+    with pytest.raises(Exception):
+        Corpus(
+            corpus_id="c-2",
+            name="Team pull corpus",
+            scope=CorpusScope(team_id="team-1"),
+            mode=CorpusMode.PULL,
+            kind=CorpusKind.RAG_SQL,
+            connector_kind="local_fs",
+        )
+
+
+def test_pull_corpus_with_both_connector_fields_is_valid() -> None:
     corpus = Corpus(
         corpus_id="c-2",
         name="Team pull corpus",
         scope=CorpusScope(team_id="team-1", tag_ids=["tag-a"]),
         mode=CorpusMode.PULL,
         kind=CorpusKind.RAG_SQL,
+        connector_kind="local_fs",
         connector_ref="conn-1",
     )
+    assert corpus.connector_kind == "local_fs"
     assert corpus.connector_ref == "conn-1"
     assert corpus.scope.tag_ids == ["tag-a"]
 

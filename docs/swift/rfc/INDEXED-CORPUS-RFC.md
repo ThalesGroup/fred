@@ -5,7 +5,7 @@
 **Date:** 2026-09-04
 **ID:** CORPUS-01 *(informal mnemonic only — see "Task ID convention" in CLAUDE.md, no registry)*
 **Scope:** `libs/fred-sdk` (data model + base connector interface), `apps/knowledge-flow-backend` (first concrete pipeline + proof-of-concept pull corpus)
-**Relationship to prior work:** this RFC intentionally does not build on `#2240` ("RFC: Design pluggable ingestion processors and source connectors coordinated by Temporal"). It was written after deliberately restarting from the problem rather than from #2240's processor/connector framing and processor-first sequencing. The developer directed this restart explicitly. The two RFCs will need reconciling (see §8) — that reconciliation is out of scope here.
+**Relationship to prior work:** this RFC intentionally does not build on `#2240` ("RFC: Design pluggable ingestion processors and source connectors coordinated by Temporal"). It was written after deliberately restarting from the problem rather than from #2240's processor/connector framing and processor-first sequencing. The developer directed this restart explicitly. The two RFCs will need reconciling (see §9) — that reconciliation is out of scope here.
 
 ---
 
@@ -28,20 +28,20 @@ Corpus = scope × mode × kind [× connector, iff mode == pull]
 ```
 
 - **scope** — which documents belong to this corpus. Reuses FRED's existing Team/Tag/ReBAC model completely; no new grouping primitive.
-- **mode** — `push` or `pull`, **mutually exclusive** on a given corpus. A corpus is never fed by both at once. (Deliberate simplicity choice — see §6.)
+- **mode** — `push` or `pull`, **mutually exclusive** on a given corpus. A corpus is never fed by both at once. (Deliberate simplicity choice — see §7.)
 - **kind** — the pipeline/representation this corpus materializes: `rag_sql` (today's default), `graphrag`, `llm_wiki`, `sql_live` (pass-through, no materialization at all), extensible to future kinds.
-- **connector** — required only when `mode == pull`. A narrow, pipeline-agnostic contract (§5) responsible only for discovering and fetching remote content with a stable identity — never for deciding how a `kind` consumes that content.
+- **connector** — required only when `mode == pull`. A narrow, pipeline-agnostic contract (§5) responsible only for discovering and fetching remote content with a stable identity — never for deciding how a `kind` consumes that content. A corpus's connector has both a **kind** (which connector implementation — `local_fs`, later `minio`/`github`/`sphere`; gates *whether a team may use it at all*, §6) and a **ref** (the opaque, resolved instance — credentials, root path; §4).
 
 Each `kind` owns its own consumption granularity, and the connector contract must never encode it:
 
 | kind | reprocessing grain | who decides *when* |
 |---|---|---|
 | `rag_sql` | per document | immediate, per detected change |
-| `graphrag` | per batch / affected neighborhood | the corpus's own pipeline (threshold, schedule, or on demand — deliberately not specified by this RFC, see §6) |
+| `graphrag` | per batch / affected neighborhood | the corpus's own pipeline (threshold, schedule, or on demand — deliberately not specified by this RFC, see §7) |
 | `llm_wiki` | per batch (pages can span many source docs) | same as above |
 | `sql_live` | none — live query, no materialization | n/a — this kind arguably needs no connector at all |
 
-Corpora with different sources may overlap: the same external source (e.g. one GitHub repo) may legitimately feed two different corpora (e.g. a `rag_sql` corpus and a future `graphrag` corpus), each with its own independent connector instance, own cursor, own state. This is a deliberate trade — redundant sync cost across corpora, in exchange for zero cross-corpus coordination (see §6).
+Corpora with different sources may overlap: the same external source (e.g. one GitHub repo) may legitimately feed two different corpora (e.g. a `rag_sql` corpus and a future `graphrag` corpus), each with its own independent connector instance, own cursor, own state. This is a deliberate trade — redundant sync cost across corpora, in exchange for zero cross-corpus coordination (see §7).
 
 ## 3. What already exists (evidence, not a base to build on)
 
@@ -81,8 +81,11 @@ class Corpus(BaseModel):
     scope: CorpusScope
     mode: CorpusMode
     kind: CorpusKind
+    connector_kind: str | None = None  # required iff mode == PULL; e.g. "local_fs" — gates §6 usage enablement
     connector_ref: str | None = None   # required iff mode == PULL; opaque reference, not a class_path
 ```
+
+`connector_kind` and `connector_ref` answer two different questions and are deliberately two fields, not one: `connector_kind` is *which connector implementation* — the thing §6's usage-enablement check is keyed on, small and enumerable (`local_fs`, later `minio`/`github`/`sphere`) — while `connector_ref` is *which configured instance* of that kind (credentials, root path), opaque to everything except the code that resolves it. Collapsing them into one field would force parsing `connector_ref` just to answer an authorization question.
 
 `fred-sdk` must not import Knowledge Flow application models, Temporal types, or provider-internal types — same boundary discipline as the rest of `fred_sdk/contracts/`.
 
@@ -123,9 +126,21 @@ Design points this directly encodes, each traceable to a §3 failure mode:
 - `discover_changes` is cursor-based, not full-rescan. A connector that cannot offer real deltas may implement this as "cursor = last full scan, always return everything" — but the contract does not privilege that as the default.
 - `DELETE` is a first-class `ChangeKind`, not inferred by the caller diffing two listings.
 - The connector has **no knowledge of `CorpusKind`, no batching, no scheduling** — it is a pure discover/fetch surface. What a `Corpus` does with a `SourceChange` stream is entirely the pipeline's decision (§2 table).
-- **Not addressed here, deliberately**: what runs `discover_changes` on what cadence, and how at-most-one-active-sync-per-corpus is guaranteed. Kept as an explicit invariant (§6), not a mechanism — see below.
+- **Not addressed here, deliberately**: what runs `discover_changes` on what cadence, and how at-most-one-active-sync-per-corpus is guaranteed. Kept as an explicit invariant (§7), not a mechanism — see below.
 
-## 6. What this RFC deliberately does not decide
+## 6. Usage enablement — which teams may use a connector kind (2026-09-05)
+
+Corrected in conversation after a team decision the same week, not yet written down anywhere else: **`capability` is reserved for "something an agent uses."** A corpus's creation/operation permission is not that — no more than an application is — so it does not belong on `type capability`, namespaced or otherwise.
+
+**What is being gated, precisely.** Not a specific corpus instance, and not cross-team sharing of one corpus's content — a corpus's content stays exactly as scoped by `CorpusScope.team_id` (§4) regardless of this gate. The question is coarser and purely operational: *may team A create/operate a corpus backed by connector kind K at all* — e.g. "team A may use an fs corpus." This gate answers nothing about who can read a given corpus's documents.
+
+**Proposed shape (provisional — see coordination note below).** A new OpenFGA object type, e.g. `type corpus_connector`, copying the exact relation shape already proven by `type capability` (`fred_core/security/rebac/schema.fga`): `organization` anchor, `default_on` (all teams), `enabled`/`disabled` (per-team override, tri-state), `can_manage` (`platform_admin`-only), `can_use` (computed). One object per **connector kind**, not per corpus instance: `corpus_connector:local_fs`, later `corpus_connector:minio`, `corpus_connector:github`.
+
+**Where the check happens.** At Corpus creation — a team without `can_use` on `corpus_connector:<connector_kind>` cannot create a corpus of that kind. As a stated requirement, not yet implemented: capability revocation should suspend that team's already-running corpora of that connector kind, mirroring the existing agent-capability pattern (`reconcile_instance_suspension`, `control_plane_backend/capabilities/enablement.py`) — losing access must not merely block new creation while an already-running sync keeps going. Left unimplemented in this RFC's POC scope (§8).
+
+**Coordination note — do not implement yet.** A parallel, not-yet-written-down team decision is moving applications (`capability:app__<id>`, `fred_core/security/rebac/capability_authz.py`) off the shared `capability` type and onto their own proper ReBAC type, for the same reason stated above. `corpus_connector` should land using whatever convention that work settles on — same relation shape, same one-type-per-concept pattern — rather than being designed and merged independently. **`libs/fred-core/fred_core/security/rebac/schema.fga` is deliberately left untouched by this RFC and its POC** to avoid two uncoordinated schema changes landing for the same underlying mechanism. Land the app-kind change first (or together), then mirror it for `corpus_connector`.
+
+## 7. What this RFC deliberately does not decide
 
 Per developer direction, this RFC stays at the model/contract level and leaves execution mechanics to be resolved with FRED's existing Temporal + Kubernetes primitives when the POC is built, not pre-decided in writing:
 
@@ -136,27 +151,29 @@ Per developer direction, this RFC stays at the model/contract level and leaves e
 
 **One invariant is kept as a hard requirement, not deferred**: a given corpus must never have two overlapping/racing sync executions against its own state. This is the single most concrete lesson from the Sphere post-mortem (§3) — it broke there specifically because nothing enforced it. How it's enforced (Temporal workflow-id semantics, a lease, a lock) is an implementation choice for the POC; that it must hold is not.
 
-## 7. Non-goals for this RFC
+## 8. Non-goals for this RFC
 
 - Building an external, independently-deployed connector pod.
 - A UI for creating/configuring corpora.
 - Implementing `graphrag` or `llm_wiki` kinds — `rag_sql` (the existing pipeline) is the only kind the POC needs to target, since it already exists and lets the corpus/connector model be validated without also inventing a new pipeline.
 - Deciding the fate of RFC `#2240` or the dead `sphere`/`github`/`gitlab` code in the current codebase (see §3) — a separate, explicit decision the developer should make once this model is validated.
 - Multi-tenant/multi-Sphere-account credential design — inherit whatever FRED's current secret-reference conventions are when the POC needs real credentials.
+- Implementing or enforcing the `corpus_connector` ReBAC type (§6) — the `connector_kind` field exists on `Corpus` now so the model doesn't need a breaking change later, but the POC creates/runs its corpus without any usage-enablement check. Wiring that check is blocked on the coordination note in §6, not on this POC.
 
-## 8. Relationship to `#2240`
+## 9. Relationship to `#2240`
 
-Left as an open question for the developer, not resolved here: `#2240`'s connector contract (discover/fetch split, stable provenance, durable cursor) converges strongly with §5 above — independently re-derived, not copied. What `#2240` has that this RFC does not is the external-pod execution envelope and processor/connector shared-envelope fields; what this RFC has that `#2240` does not is the `Corpus` object itself (§2) and the explicit decision to defer the pod question (§6). Reconciling — supersede, merge, or keep as two RFCs at different layers — is a decision for the developer once the POC in §9 has produced real evidence, not before.
+Left as an open question for the developer, not resolved here: `#2240`'s connector contract (discover/fetch split, stable provenance, durable cursor) converges strongly with §5 above — independently re-derived, not copied. What `#2240` has that this RFC does not is the external-pod execution envelope and processor/connector shared-envelope fields; what this RFC has that `#2240` does not is the `Corpus` object itself (§2) and the explicit decision to defer the pod question (§7). Reconciling — supersede, merge, or keep as two RFCs at different layers — is a decision for the developer once the POC in §10 has produced real evidence, not before.
 
-## 9. Plan
+## 10. Plan
 
 1. Land `Corpus` and `SourceConnector` (§4, §5) in `fred-sdk`, with contract fixtures/tests, no behavior yet.
 2. Implement exactly one proof-of-concept pull corpus in `knowledge-flow-backend`, `kind=rag_sql`, against the simplest possible real connector (candidate: local filesystem or Minio/S3, since both already have working loaders to model the new contract against — Sphere/GitHub are harder cases, better attempted once the model is proven).
-3. Validate the §6 invariant (no overlapping sync) end-to-end before calling the POC done.
-4. Only after the POC works: revisit `#2240` (§8), and consider a second corpus `kind` or a second connector (Sphere, GitHub) as the next increment.
+3. Validate the §7 invariant (no overlapping sync) end-to-end before calling the POC done.
+4. Only after the POC works: revisit `#2240` (§9), land the `corpus_connector` usage-enablement gate (§6) once the app-kind ReBAC convention is written down, and consider a second corpus `kind` or a second connector (Sphere, GitHub) as the next increment.
 
-## 10. Open questions
+## 11. Open questions
 
 - Final name for `Corpus` vs. alternatives (kept simple deliberately; flag if it collides with product-facing terminology already in use elsewhere).
 - Exact shape of `connector_ref` (opaque string id vs. a richer registration object) — deferred until the POC needs to actually resolve one.
 - Where does per-`CorpusKind` consumption policy configuration live — on the `Corpus` object itself, or entirely inside each pipeline's own code? Leaning toward the latter (keeps `Corpus` minimal) but not decided.
+- Final name and shape of the `corpus_connector` ReBAC type (§6) — pinned to whatever the app-kind convention settles on, not decided independently here.
