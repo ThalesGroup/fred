@@ -5391,3 +5391,82 @@ documents") was added to its `## Uncertainty` section.
 **Wire contract.** Unchanged — `guardrails` never crossed the runtime
 OpenAPI surface; `ReActAgentDefinition.preview()` simply drops its
 `- Guardrails: N` line.
+
+### 8.72 ✅ The model-native reasoning block closes at every tool round (2026-09-04)
+
+**What changed.** `react_runtime.stream()` closes the open `source="model_native"`
+thought when it emits a round of tool calls, not only when the first answer text
+arrives. A turn that reasons, calls a tool, reasons again and calls another now
+produces two `THOUGHT_START`/`THOUGHT_END` pairs instead of one.
+
+The closing sequence had been copied at three sites (first answer delta, end of
+stream, error path); it is now one nested helper, `_close_model_native_thought()`,
+which returns the event or `None` so each site stays a two-line yield.
+
+**Why.** The block was opened lazily on the first reasoning fragment and closed
+only on answer text. Tool calls did not end it, so in a multi-round ReAct loop
+every later round's reasoning accumulated into the block opened by the first one.
+The turn therefore persisted a single `thought` row carrying the rank of its
+earliest fragment — and since `THOUGHT_START` is what reserves the rank (§8.31),
+that row sorted before every tool call it had actually interleaved with. The
+frontend could not recover the chronology by reordering: the information that a
+thought came *after* a given tool was never recorded. This is what let the chat
+trace stop rendering reasoning and tool steps as two stacked lanes.
+
+**Wire contract.** Unchanged — `THOUGHT_*` shapes are frozen and no field moved.
+What changes is their *cardinality*: consumers must not assume at most one
+model-native block per turn. `duration_ms` is now per block, so a consumer
+wanting a turn total sums the blocks instead of taking the longest (the frontend's
+`traceSummary()` was switched accordingly).
+
+**Already-stored turns.** Sessions persisted before this date keep their single
+block and therefore their old rendering. There is no migration: the trace is a
+record of what was streamed.
+
+### 8.73 ✅ A tool round's preamble is kept as reasoning instead of discarded (2026-09-04)
+
+**What changed.** When a round streams answer text and then resolves with tool
+calls, `react_runtime.stream()` re-emits that text as a `source="model_native"`
+`THOUGHT_*` block, ranked just before the round's `ToolCallRuntimeEvent`. Only
+text the user actually saw is collected (the `suppress_assistant_deltas` path
+emits nothing, so there is nothing to relocate), and only up to
+`MAX_PREAMBLE_CHARS`.
+
+**Why.** Providers stream a turn's text before its tool-call tokens with nothing
+declaring which is coming — confirmed on Mistral in #2088, where the raw chunk
+was a plain string, structurally identical to a real answer. The runtime emits it
+immediately; the frontend purges it from the answer bubble once a `tool_call` for
+the same exchange proves the turn was not final (`chatSseUtils.shouldClearStreamingDeltas`).
+Until now that text was simply lost: written on screen, wiped, and persisted
+nowhere. It is planning, and it now lands in the trace where planning belongs —
+and, since §8.72 splits blocks per round, at the point in the sequence where it
+actually happened rather than hoisted above the tools.
+
+**The cap.** Past `MAX_PREAMBLE_CHARS` the text is dropped, exactly as before.
+Beyond that size it is not a preamble but a deliverable written in the wrong
+place: `write_document`'s prompt fragment exists precisely because models write
+the report inline instead of calling the tool, and the field incident behind
+`tool_loop._tool_calls_char_len` carried a 22k-character document. Relocating
+that would copy — and persist — a whole document next to the editor already
+showing it.
+
+**Known consequence, deliberately accepted (#2088).** An agent with reasoning
+disabled will now show reasoning rows, and its trace header will say "Reasoning":
+a preamble does not depend on `reasoning_enabled`, which governs what the model
+is asked to produce, not what is shown of what it produced anyway. The cap keeps
+these to short statements of intent. To be revisited if the preambles prove
+uninteresting or harmful in use — see the tracking note on #2088.
+
+**Wire contract.** Unchanged. `THOUGHT_*` shapes are frozen; what changes is
+that a block can now carry text the model addressed to the user.
+
+**Consumer note — the openai-compat surface delivers the preamble twice.** The
+relocation assumes a consumer that purges the answer bubble on `tool_call`, which
+the frontend does. `fred_event_to_openai_chunk` maps both `assistant_delta` and
+`thought_delta` to content deltas, so a client of `app.openai_compat` (on in
+`fred-agents`' shipped config) receives the preamble once as content and again
+inside `<think>`. Suppressing the first copy is not possible: whether a round ends
+in tool calls is not known until after the text has streamed, and buffering it
+would cost every real answer its time-to-first-token. A client that wants the
+frontend's behaviour drops content deltas preceding a `tool_calls` chunk in the
+same round; the `<think>` copy is the one carrying `fred.thought` metadata.

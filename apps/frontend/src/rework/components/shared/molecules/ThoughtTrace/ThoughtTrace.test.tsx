@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// ThoughtTrace × two lanes (#2172): reasoning must render as its own card, not
-// as row #1 of the tool pile, and the whole block must be hideable.
+// ThoughtTrace: one chronological sequence. Reasoning still renders differently
+// from a tool step (#2172), but the two now alternate in arrival order rather
+// than being stacked into a reasoning lane above a tool lane.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -89,11 +90,59 @@ describe("ThoughtTrace", () => {
     expect(render([], true)).toBe("");
   });
 
-  it("renders reasoning as its own card, not as a tool step row", () => {
+  it("renders reasoning as its own row, not as a tool step row", () => {
     const html = render(TRACE, false);
-    // Only the two tool steps are step rows; the reasoning card is a <button>.
+    // Only the two tool steps are step rows; the reasoning row is a <button>.
     expect(html.match(/role="button"/g)).toHaveLength(2);
-    expect(html).toContain("rework.chatTrace.phase.planning");
+    // Its marker is the settings glyph, and it carries no phase label: the row
+    // shows the reasoning itself, not a name for the kind of reasoning it is.
+    expect(html).toContain('data-icon="settings"');
+    expect(html).not.toContain("rework.chatTrace.phase.");
+  });
+
+  it("names each reasoning row by its own text, so successive rounds are distinguishable", () => {
+    const html = render(TRACE, false);
+    expect(html).toContain('aria-label="I should list the tabular documents first"');
+    // The generic label survives only for a block that has streamed nothing yet.
+    const empty = msg({
+      channel: "thought",
+      parts: [{ type: "text", text: "" }],
+      metadata: { extras: { thought_id: "t0", phase: "planning", source: "model_native" } },
+    });
+    expect(render([empty], false)).toContain('aria-label="rework.chatTrace.openReasoning"');
+  });
+
+  // The thread is an aria-live region, so the name is read out — and re-read on
+  // every delta while the block streams. Bounded to roughly the three lines the
+  // row actually shows; the rest is one click away in the drawer.
+  it("bounds a long reasoning row's accessible name", () => {
+    const long = msg({
+      channel: "thought",
+      parts: [{ type: "text", text: "sentence ".repeat(400) }],
+      metadata: { extras: { thought_id: "t9", phase: "planning", source: "model_native" } },
+    });
+    // The root element carries an aria-label of its own; the row's is the long one.
+    const labels = [...render([long], false).matchAll(/aria-label="([^"]*)"/g)].map((m) => m[1]);
+    const label = labels.reduce((a, b) => (b.length > a.length ? b : a), "");
+    expect(label.length).toBeLessThan(280);
+    expect(label.endsWith("…")).toBe(true);
+  });
+
+  it("keeps reasoning and tool steps in the order they happened", () => {
+    const second = msg({
+      channel: "thought",
+      rank: 5,
+      parts: [{ type: "text", text: "the first query came back empty" }],
+      metadata: { extras: { thought_id: "t2", phase: "reflection", source: "model_native" } },
+    });
+    // Reasoning, tool, reasoning, tool — as streamed. The old two-lane split
+    // hoisted both thoughts above both tools, an order that never occurred.
+    const html = render([...TRACE.slice(0, 3), second, ...TRACE.slice(3)], false);
+
+    // Matched on the rendered text node (leading `>`), not the aria-label that
+    // now repeats the same words.
+    const order = [...html.matchAll(/>I should list|>the first query|>1<|>2</g)].map((m) => m[0]);
+    expect(order).toEqual([">I should list", ">1<", ">the first query", ">2<"]);
   });
 
   it("numbers the two identical tool calls so they can be told apart", () => {

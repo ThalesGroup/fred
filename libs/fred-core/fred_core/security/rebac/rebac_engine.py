@@ -1089,8 +1089,14 @@ class RebacEngine(ABC):
         *,
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
+        actor_uid: str | None = None,
     ) -> None:
         """Raise `AuthorizationError` when access is denied.
+
+        `actor_uid` names the acting user in the error when the checked subject
+        is not a user (for example, a team-subject capability check). The
+        legacy `AuthorizationError.user_id` remains a string and falls back to
+        the checked subject id when no user actor is available.
 
         Example:
         - Raises if Bob tries to update a team where he is only a member.
@@ -1110,11 +1116,17 @@ class RebacEngine(ABC):
                 resource.type.value,
                 resource.id,
             )
+            denied_actor_uid = actor_uid
+            if denied_actor_uid is None and subject.type == Resource.USER:
+                denied_actor_uid = subject.id
             raise AuthorizationError(
-                subject.id,
+                denied_actor_uid if denied_actor_uid is not None else subject.id,
                 permission.value,
                 resource.type,
                 f"Not authorized to {permission.value} {resource.type.value} {resource.id}",
+                actor_uid=denied_actor_uid,
+                subject_type=subject.type,
+                subject_id=subject.id,
             )
 
     async def check_user_permission_or_raise(

@@ -1402,7 +1402,8 @@ subset the V1 team-routing picker/write path consumes. Capability is never
 inferred from a profile-id prefix.
 
 **Runtime enforcement is fail-closed and differs by kind, deliberately.**
-`kind="tool"`/`kind="agent"` enforce at **write time** — `can_use_capability`
+`kind="tool"`/`kind="agent"` enforce at **write time** —
+`can_team_use_capability`
 gates tool selection and template enrollment, and both suspend/revive
 dependent agent instances on revocation/grant (`enablement.py`, `impact.py`).
 `kind="model"` has no equivalent write-time surface (model choice is a
@@ -3230,10 +3231,11 @@ one 401 retry, and rejects absolute, traversing, or protected-header inputs;
 the frame supplies only a relative path and an ordinary payload over
 `fred:request`. A 401 from an application service is that service's own
 entitlement decision and never ends the Fred session; only a token refresh that
-fails does, so one misconfigured application cannot log the user out.
-**No app receives Fred's store, Keycloak object, or raw token** — that remains
-true, and is now the property that makes moving the frame to a separate origin
-a configuration change rather than a redesign.
+fails does, so one misconfigured application cannot log the user out. **No
+application frame receives Fred's store, Keycloak object, or raw token**; the
+backend service receives the caller's bearer only on the proxied request leg.
+Keeping the credential out of frame code is the property that makes moving the
+frame to a separate origin a configuration change rather than a redesign.
 
 Two browser-facing prefixes exist, and only these:
 
@@ -3257,10 +3259,84 @@ on the service leg. Application services remain responsible for equal or
 smaller per-request limits, aggregate concurrency bounds, and authorization
 before consuming a request body.
 
-The gateway authorizes nothing; the control plane does. A gateway registration
-with no matching `application_sources` entry therefore proxies both prefixes
-for an application no team was granted, so the gateway list must stay a subset
-of the catalog.
+The gateway never authorizes. In the arm's-length tier the control plane is the
+entitlement authority; in the first-party tier the application backend checks
+entitlement locally through the narrow SDK described below. A gateway
+registration with no matching `application_sources` entry still proxies both
+prefixes, so the gateway list must stay a subset of the catalog.
+
+`app__<app_id>` is derived by `application_capability_id` (fred-core), which
+unlike `model_capability_id` does **not** normalize characters outside the id
+charset. A registered `app_id` is already constrained to a subset of
+`CAPABILITY_ID_PATTERN` at config load, so an id needing repair is one no
+catalog accepted; normalizing it on an authorization path could resolve it
+onto a neighbouring capability's id instead of failing closed.
+
+### Two application trust tiers (2026-09-04)
+
+An application backend authorizes each request in one of two ways, and the
+tier is a deployment decision, not something the application selects:
+
+| Boundary | Arm's-length | First-party |
+| --- | --- | --- |
+| Who | Independently deployed code, any language, with no Fred service or OpenFGA credential | A backend built and run inside the Fred perimeter; admission is an explicit devops act |
+| Entitlement | Forward the caller's bearer to `GET /teams/{team_id}/applications` and require its own id in the response | Ask the named checks on a process-lifetime `RebacSdk` created by `rebac_sdk_factory` |
+| Keycloak service identity | None required for entitlement | Its own enabled `security.m2m` client; this is for outbound service calls, not caller validation or OpenFGA |
+| OpenFGA identity | None | Its own secret named by `security.rebac.token_env_var`, provisioned and revocable independently; never shared with another backend |
+
+Both tiers verify the caller's bearer locally before entitlement. A first-party
+backend runs with `security.profile: c3`, so the incoming JWT must carry the
+exact audience in that backend's `security.user.client_id`. That resource-server
+client is distinct from both the backend's outbound `security.m2m` identity and
+its OpenFGA token.
+
+`await rebac_sdk_factory(security_config, *, kpi_writer)` is the supported
+first-party construction path. It fails startup unless the `c3` profile, user
+and M2M authentication, and OpenFGA ReBAC are enabled, and unless
+`create_store_if_needed` and `sync_schema_on_init` are both `false`, and the
+OpenFGA timeout is between 1 ms and 30 seconds. The control plane remains the
+store and authorization-model owner. The async factory also initializes
+fred-core's process-local user JWT verifier from `security.user`, requires the
+backend's process-level KPI writer, creates one private OpenFGA engine, and
+resolves the configured store before startup completes. A backend reuses that
+facade for requests and awaits `close()` during shutdown (or uses its async
+context manager); it never constructs a client per request.
+
+The facade exposes only `check_user_team_permission`,
+`check_team_capability`, and `check_application_access`. These are
+authorization gates: they return no data and raise on denial. The combined
+application check asks team membership first, then the team's grant on
+`app__<app_id>`. Every facade check rejects personal spaces before contacting
+OpenFGA, so composing the two component checks cannot bypass the collaborative-
+team-only application boundary or trigger personal-team self-healing writes.
+It exposes no engine, tuple writer, general query, or raw OpenFGA client.
+
+The SDK deliberately reads neither catalog state nor the application feature
+gate. `enableApplications: false` still withdraws the normal browser path for
+**both** tiers because the gateway returns 404 for `/apps` and
+`/app-services`. Parking one catalog entry (`enabled: false`) is narrower: the
+arm's-length endpoint stops returning it while the gateway route and team grant
+remain, so a directly reachable first-party backend would still accept the
+grant. Parking is catalog state, **not a security kill switch**. Revoke the
+`app__<app_id>` team grant to withdraw entitlement from both tiers; for an
+incident, also block or remove the gateway route. Remove both registration
+halves to retire the application.
+
+The planned first-party example intentionally carries no agent capability. It
+demonstrates one boundary only — browser to host to application service, local
+JWT verification, then the SDK check. Agent-pod writes are a separate delegated
+downstream-auth problem; adding them would either retain the existing shared-key
+side door or silently expand this work to solve that problem. Any future agent
+integration needs its own design and may reuse the runtime's pod-to-pod JWT and
+OpenFGA pattern.
+
+Finally, trust does not confer datastore ownership. A first-party application
+may own a dedicated store for its own data. Data owned by another Fred backend
+must still be reached through that backend's API, bearer-forwarded for
+user-scoped operations: the owning backend may enforce object-level ReBAC in
+addition to team entitlement, and its schema is an internal detail rather than
+a contract. `GET /teams/{team_id}/applications` remains unchanged; Fred's own
+catalog and navigation depend on it regardless of tier.
 
 `ui_prefix` is a path today and the frame is therefore same-origin with Fred.
 A same-origin iframe is a rendering and lifecycle boundary, not a security

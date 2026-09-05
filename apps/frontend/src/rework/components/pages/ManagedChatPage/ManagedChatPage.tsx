@@ -28,15 +28,14 @@ import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerC
 import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import {
-  CapabilityLauncherRail,
-  CapabilitySidePanelHost,
-} from "../../../features/capabilities/CapabilitySidePanelHost";
+import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
+import { ChatLauncherRail } from "../../../features/capabilities/ChatLauncherRail";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
+import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
 import { conversationTokenTotals } from "./toThreadMessages";
+import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
@@ -96,12 +95,16 @@ export default function ManagedChatPage() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [debugOpen, setDebugOpen] = useState(false);
   // The capability side-panel and the session attachments drawer are both
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
   // a time so their widths never cumulate.
   const [activePushDrawer, setActivePushDrawer] = useState<
-    { kind: "attachments" } | { kind: "capability"; key: string } | { kind: "document-scope" } | null
+    | { kind: "attachments" }
+    | { kind: "capability"; key: string }
+    | { kind: "document-scope" }
+    | { kind: "prompt-library" }
+    | { kind: "debug" }
+    | null
   >(null);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
 
@@ -167,10 +170,61 @@ export default function ManagedChatPage() {
   const attachmentsCount = chat.persistedAttachments.length;
 
   const conversationTokens = useMemo(() => conversationTokenTotals(chat.threadMessages), [chat.threadMessages]);
+
+  // Keeps the running turn in view. The key changes when the conversation is
+  // replaced or a new user turn starts — the two moments the view jumps to the
+  // bottom — and never on a streaming token. `hasAnswerText` separates the two
+  // phases: trace rows are followed to the bottom, answer text only until it
+  // has filled ANSWER_FOLLOW_FRACTION of the viewport.
+  const lastTurn = chat.threadMessages[chat.threadMessages.length - 1];
+  const userTurnCount = useMemo(
+    () => chat.threadMessages.reduce((n, m) => (m.role === "user" ? n + 1 : n), 0),
+    [chat.threadMessages],
+  );
+  useChatAutoScroll(scrollContainerRef, {
+    // Session id included: two conversations can hold the same number of turns,
+    // and switching between them must still land at the bottom.
+    turnKey: `${chat.sessionId ?? ""}:${userTurnCount}`,
+    isStreaming: chat.waitResponse,
+    hasAnswerText: Boolean(lastTurn?.isStreaming && lastTurn.text),
+    traceCount: lastTurn?.traceMessages.length ?? 0,
+    isAwaitingHuman: chat.pendingHitl != null,
+  });
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
   const allowChatAttachments = chat.chatControls.some((control) => control.widget === "attach_files");
+
+  // The rail's attachments launcher. Offered when the agent still exposes
+  // attaching OR the conversation already holds files: an older session whose
+  // agent lost `attach_files` must not lose the way back to its own files.
+  // The conversation's own panels, above the capability viewers. The prompt
+  // library is reachable from the composer's add menu too — the rail is a
+  // second door to the same panel, not a different one.
+  const railLaunchers = useMemo(
+    () => [
+      ...(allowChatAttachments || attachmentsCount > 0
+        ? [
+            {
+              key: "attachments",
+              label: t("chatbot.sessionAttachments.title"),
+              icon: "attach_file" as const,
+              badgeCount: attachmentsCount,
+              selected: attachmentsDrawerOpen,
+              onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
+            },
+          ]
+        : []),
+      {
+        key: "prompt-library",
+        label: t("chatbot.promptSelectionPanel.menuRow"),
+        icon: "edit_note" as const,
+        selected: activePushDrawer?.kind === "prompt-library",
+        onOpen: () => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : { kind: "prompt-library" })),
+      },
+    ],
+    [allowChatAttachments, attachmentsCount, attachmentsDrawerOpen, activePushDrawer, t],
+  );
   // The composer options menu always renders: even when an agent exposes no
   // search options, the prompt-library row is always available (personal +
   // team library + platform defaults).
@@ -183,20 +237,32 @@ export default function ManagedChatPage() {
   // Bumped alongside chat.setInput below to ask RichInputField to refocus with
   // the caret at the end of the just-inserted prompt (batched into one render).
   const [focusEndRequestId, setFocusEndRequestId] = useState(0);
-  const insertContextPrompt = async (prompt: ContextPromptSummary) => {
+  // Resolves true once the text is in the composer. The prompt panel closes on
+  // true only, so a failed fetch leaves the user where they were instead of
+  // dismissing the list under them.
+  const insertContextPrompt = async (prompt: ContextPromptSummary): Promise<boolean> => {
     const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
-    if (!promptTeamId) return;
     try {
+      // No owning team means no way to fetch the text — the same dead end as a
+      // failed request, so it gets the same toast rather than a silent no-op.
+      if (!promptTeamId) throw new Error("unknown prompt team");
       const detail = await fetchPrompt({ teamId: promptTeamId, promptId: prompt.id }).unwrap();
       const text = detail.text?.trim();
-      if (!text) return;
-      chat.setInput(chat.input.trim().length > 0 ? `${chat.input}\n\n${text}` : text);
+      // An empty record is a failed insert from the user's side, not a no-op:
+      // without the toast the click would look ignored.
+      if (!text) throw new Error("empty prompt");
+      // Functional update: `chat.input` read before the await is stale by the
+      // time it resolves, so typing (or sending) during the fetch would be
+      // clobbered or resurrected.
+      chat.setInput((current) => (current.trim().length > 0 ? `${current}\n\n${text}` : text));
       setFocusEndRequestId((n) => n + 1);
+      return true;
     } catch {
       showError({
         summary: t("chatbot.contextPrompts.insertErrorSummary"),
         detail: t("chatbot.contextPrompts.insertErrorDetail"),
       });
+      return false;
     }
   };
 
@@ -287,6 +353,7 @@ export default function ManagedChatPage() {
     onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
     // The document_scope tune row calls this to open the side panel (#2259).
     onOpenDocumentScopePanel: () => setActivePushDrawer({ kind: "document-scope" }),
+    onOpenPromptLibraryPanel: () => setActivePushDrawer({ kind: "prompt-library" }),
     searchPolicy: chat.searchPolicy,
     onSearchPolicyChange: chat.setSearchPolicy,
     ragScope: chat.ragScope,
@@ -343,8 +410,6 @@ export default function ManagedChatPage() {
                 chatControls={chat.chatControls}
                 onRequestClose={closeMenu}
                 composer={composerState}
-                contextPrompts={chat.contextPrompts}
-                onInsertContextPrompt={insertContextPrompt}
               />
             )}
           </ComposerActionsMenu>
@@ -370,6 +435,20 @@ export default function ManagedChatPage() {
       }
     />
   );
+
+  // Admin tooling, so it sits at the rail's foot rather than among the
+  // conversation's own panels.
+  const debugLaunchers = isAdmin
+    ? [
+        {
+          key: "debug",
+          label: t("chatbot.debugRaw.title"),
+          icon: "build" as const,
+          selected: activePushDrawer?.kind === "debug",
+          onOpen: () => setActivePushDrawer((v) => (v?.kind === "debug" ? null : { kind: "debug" as const })),
+        },
+      ]
+    : [];
 
   return (
     <TraceDrawerProvider value={traceDrawerApi}>
@@ -402,10 +481,9 @@ export default function ManagedChatPage() {
             {/* Conversation header. When a side panel opens it reflows left
             together with the content below — the panel sits at the page body's
             right edge at full height, no longer under this bar. The inner row is
-            capped to the composer field width so title and composer stay aligned.
-            data-picker-top-boundary: the composer's anchored pickers
-            (usePickerMenuMaxHeight) stop just below this bar. */}
-            <div className={styles.topBar} data-picker-top-boundary>
+            capped to the composer field width so title and composer stay
+            aligned. */}
+            <div className={styles.topBar}>
               <div className={styles.topBarInner}>
                 <div className={styles.topBarTitle}>
                   {chat.sessionId && chat.sessionTitle != null && (
@@ -427,29 +505,6 @@ export default function ManagedChatPage() {
                       {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
                     </span>
                   )}
-                  <div className={styles.topBarActions}>
-                    {attachmentsCount > 0 && (
-                      <button
-                        type="button"
-                        className={styles.conversationFilesButton}
-                        onClick={() =>
-                          setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" }))
-                        }
-                      >
-                        <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-                        <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <IconButton
-                        variant="icon"
-                        size="small"
-                        icon={{ category: "outlined", type: "build" }}
-                        aria-label={t("chatbot.toggleDebugDrawer")}
-                        onClick={() => setDebugOpen((v) => !v)}
-                      />
-                    )}
-                  </div>
                 </div>
               </div>
             </div>
@@ -512,6 +567,23 @@ export default function ManagedChatPage() {
             onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
           />
 
+          {isAdmin && (
+            <DebugRawDrawer
+              open={activePushDrawer?.kind === "debug"}
+              onClose={() => setActivePushDrawer((v) => (v?.kind === "debug" ? null : v))}
+              messages={chat.messages}
+            />
+          )}
+
+          <PromptSelectionChatPanel
+            open={activePushDrawer?.kind === "prompt-library"}
+            onClose={() => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : v))}
+            teamId={teamId}
+            personalTeamId={activeTeam?.id}
+            isPersonalChat={isPersonalTeam}
+            onInsert={insertContextPrompt}
+          />
+
           <SessionAttachmentsDrawer
             open={attachmentsDrawerOpen}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
@@ -550,14 +622,15 @@ export default function ManagedChatPage() {
 
         {/* Launcher rail — page-root sibling of the body (not inside it) so it
             reserves its own in-flow column at the far right. */}
-        <CapabilityLauncherRail
+        <ChatLauncherRail
           capabilityIds={chat.capabilityIds}
           activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
           onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+          launchers={railLaunchers}
+          footerLaunchers={debugLaunchers}
         />
 
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
-        {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
         <UploadWarningAckDialog
           open={pendingAttachments !== null}
           onConfirm={() => {

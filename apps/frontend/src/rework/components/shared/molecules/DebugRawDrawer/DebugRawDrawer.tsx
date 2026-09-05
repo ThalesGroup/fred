@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
+import ChatSidePanel from "../ChatSidePanel/ChatSidePanel.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
@@ -48,7 +48,14 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
   };
 
   return (
-    <InlineDrawer open={open} onClose={onClose} title={t("chatbot.debugRaw.title")} width="560px">
+    <ChatSidePanel
+      open={open}
+      onClose={onClose}
+      title={t("chatbot.debugRaw.title")}
+      persistKey="debug-raw-panel"
+      width="560px"
+      fill
+    >
       <div className={styles.toolbar}>
         <ButtonGroup
           size="small"
@@ -70,6 +77,6 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
         />
       </div>
       <pre className={styles.json}>{json}</pre>
-    </InlineDrawer>
+    </ChatSidePanel>
   );
 }

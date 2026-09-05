@@ -17,14 +17,12 @@ import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
   entryLabel,
   isCancelledByUser,
-  phaseKeyForEntry,
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
   toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
-import phaseStyles from "../phaseBadge.module.css";
 import styles from "./TraceEntryRow.module.css";
 
 interface TraceEntryRowProps {
@@ -44,7 +42,6 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   const { openTrace } = useTraceDrawer();
   const status = statusForEntry(entry, pendingToolCallIds);
   const label = entryLabel(entry);
-  const phase = phaseKeyForEntry(entry);
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const isPending = status === "pending";
@@ -83,12 +80,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
         </span>
       </div>
 
-      <span
-        className={`${phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label} ${isCrashLine ? styles.errorText : ""}`}
-        data-phase={phase ?? undefined}
-      >
-        {label}
-      </span>
+      <span className={`${styles.label} ${isCrashLine ? styles.errorText : ""}`}>{label}</span>
 
       {discriminatorText && <span className={styles.discriminator}>{discriminatorText}</span>}
 

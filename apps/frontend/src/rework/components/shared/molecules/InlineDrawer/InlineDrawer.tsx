@@ -39,6 +39,13 @@ interface InlineDrawerProps {
   /** Drawer shell background (CSS color/token). Defaults to `--surface-container`. */
   background?: string;
   /**
+   * Open/close duration for the push layout (any CSS time, ideally a
+   * `--duration-*` token). Defaults to `--duration-medium-1` (250ms).
+   */
+  duration?: string;
+  /** Tightens the title band (12px above, 8px below) for a narrow panel. */
+  compactHeader?: boolean;
+  /**
    * Layout mode.
    * - `"overlay"` (default): floats over the page with a dimming backdrop.
    * - `"push"`: takes layout space on the right; the host's main column reflows
@@ -84,6 +91,8 @@ export function InlineDrawer({
   headerActions,
   width = "480px",
   background,
+  duration,
+  compactHeader = false,
   layout = "overlay",
   resizable,
   flushBody = false,
@@ -153,6 +162,7 @@ export function InlineDrawer({
         data-open={open}
         data-layout={layout}
         data-floating={floating ? "true" : undefined}
+        data-compact-header={compactHeader ? "true" : undefined}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
         aria-hidden={!open}
         aria-labelledby={hideHeader ? undefined : titleId}
@@ -161,6 +171,7 @@ export function InlineDrawer({
           {
             "--drawer-width": drawerWidth,
             ...(background ? { "--drawer-background": background } : {}),
+            ...(duration ? { "--drawer-duration": duration } : {}),
           } as React.CSSProperties
         }
       >

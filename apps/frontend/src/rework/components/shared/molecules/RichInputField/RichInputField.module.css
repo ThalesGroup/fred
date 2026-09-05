@@ -27,7 +27,9 @@
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   background: var(--surface-container-high);
-  padding: var(--spacing-s);
+  /* Tighter at the bottom: the control row already carries its own spacing, so
+     a full pad there read as a gap under the buttons. */
+  padding: var(--spacing-s) var(--spacing-s) var(--spacing-xs);
   width: 100%;
   /* Consumers can override via --composer-max-width (e.g. ManagedChatPage sets
      it once so the chat top bar aligns to this exact width); 720px otherwise. */

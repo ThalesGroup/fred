@@ -16,13 +16,14 @@ import {
   parseToolResultContent,
   primaryTextForEntry,
   secondaryTextForEntry,
-  splitTraceEntries,
   statusForEntry,
   stripDocumentUids,
   textOf,
   toolCopyText,
   toolDiscriminator,
+  stripRepeatedPreamble,
   totalLatencyMs,
+  traceRows,
   traceSummary,
 } from "./traceUtils";
 
@@ -459,24 +460,103 @@ describe("totalLatencyMs", () => {
   });
 });
 
-// ── splitTraceEntries ─────────────────────────────────────────────────────────
+// ── stripRepeatedPreamble ─────────────────────────────────────────────────────
 
-describe("splitTraceEntries", () => {
-  it("returns empty lanes for an empty trace", () => {
-    expect(splitTraceEntries([])).toEqual({ reasoning: [], steps: [] });
+describe("stripRepeatedPreamble", () => {
+  it("keeps the text when there is no previous block", () => {
+    expect(stripRepeatedPreamble("Only block.", null)).toBe("Only block.");
   });
 
-  it("routes reasoning channels to the reasoning lane, never to the steps", () => {
+  it("drops the whole sentences the previous block already carried", () => {
+    const previous = "I found the document. It is a fictional report.";
+    const current = "I found the document. It is a fictional report. The tool is unavailable.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("The tool is unavailable.");
+  });
+
+  // The failure the sentence rule exists to prevent: two blocks that merely open
+  // on the same few words share no complete sentence, and a character-level trim
+  // would have rendered "asked for a document." — a mutilated line.
+  // A `.` is not a sentence end on its own. Cutting after one of these opens a
+  // row mid-sentence — the mutilated line the whole function exists to prevent.
+  // Each prefix below holds NO real sentence end, so the only cut on offer is
+  // the wrong one; a passing case returns the text untouched.
+  it.each([
+    ["an abbreviation before a lowercase word", "Two sources agree, e.g. the audit log and "],
+    ["an abbreviation before a capital", "See cf. Section 4 and the appendix "],
+    ["a titled reference before a digit", "See Fig. 2 and the appendix "],
+    ["a numbered list marker", "1. Read the configuration file and "],
+    ["an ordinal before a digit", "Ranked No. 3 by score and "],
+    ["a person's title", "Escalated to Dr. Martin and the on-call "],
+  ])("does not cut inside %s", (_label, prefix) => {
+    expect(stripRepeatedPreamble(`${prefix}stop.`, `${prefix}go.`)).toBe(`${prefix}stop.`);
+  });
+
+  it("still cuts on a real sentence end that follows an abbreviation", () => {
+    const previous = "Checked the audit log, e.g. the last entry. Nothing matched.";
+    const current = "Checked the audit log, e.g. the last entry. Retrying with a wider range.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("Retrying with a wider range.");
+  });
+
+  // The length-based guard this replaced rejected these: "it" and "us" are as
+  // short as "cf", and they end sentences all the time.
+  it("cuts after a short final word", () => {
+    const previous = "I identified it and summarised it. Nothing else to add.";
+    const current = "I identified it and summarised it. However, the tool is unavailable.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("However, the tool is unavailable.");
+  });
+
+  it("cuts on ! and ?", () => {
+    const previous = "Found it! Now summarising.";
+    const current = "Found it! Now writing the report.";
+    expect(stripRepeatedPreamble(current, previous)).toBe("Now writing the report.");
+  });
+
+  it("keeps the text when the shared prefix holds no complete sentence", () => {
+    const previous = "The user wrote a filename. I will search for it.";
+    const current = "The user asked for a document. I will summarise it.";
+    expect(stripRepeatedPreamble(current, previous)).toBe(current);
+  });
+
+  it("keeps the text when the block is wholly contained in its predecessor", () => {
+    const previous = "First. Second. Third.";
+    expect(stripRepeatedPreamble("First. Second.", previous)).toBe("First. Second.");
+  });
+
+  it("cuts on ! and ? as well as .", () => {
+    expect(stripRepeatedPreamble("Done! Next step.", "Done! Other.")).toBe("Next step.");
+    expect(stripRepeatedPreamble("Which one? Then this.", "Which one? Other.")).toBe("Then this.");
+  });
+});
+
+// ── traceRows ─────────────────────────────────────────────────────────────────
+
+describe("traceRows", () => {
+  it("returns no rows for an empty trace", () => {
+    expect(traceRows([])).toEqual([]);
+  });
+
+  // The flattened preview is cached on the message object. That is only sound
+  // because a streaming block arrives as a NEW object each delta (`upsertOne`
+  // rebuilds it rather than mutating in place) — if that ever changes, a live
+  // reasoning row would freeze at its first token.
+  it("reflects a growing block, which arrives as a new message object", () => {
+    const first = thoughtMsg("I will search", { phase: "planning" });
+    const grown = thoughtMsg("I will search the corpus", { phase: "planning" });
+    expect(traceRows([{ kind: "solo", message: first }])[0].reasoningText).toBe("I will search");
+    expect(traceRows([{ kind: "solo", message: grown }])[0].reasoningText).toBe("I will search the corpus");
+  });
+
+  it("tags reasoning channels as the reasoning lane", () => {
     const planning = thoughtMsg("thinking", { phase: "planning" });
     const plan = msg({ channel: "plan", parts: [{ type: "text", text: "step 1" }] });
     const observation = msg({ channel: "observation", parts: [{ type: "text", text: "noted" }] });
-    const lanes = splitTraceEntries([
+    const rows = traceRows([
       { kind: "solo", message: planning },
       { kind: "solo", message: plan },
       { kind: "solo", message: observation },
     ]);
-    expect(lanes.reasoning).toHaveLength(3);
-    expect(lanes.steps).toEqual([]);
+    expect(rows.map((r) => r.lane)).toEqual(["reasoning", "reasoning", "reasoning"]);
+    expect(rows.every((r) => r.index === null)).toBe(true);
   });
 
   it("numbers tool steps 1-based in arrival order", () => {
@@ -484,26 +564,73 @@ describe("splitTraceEntries", () => {
       { kind: "combo" as const, call: toolCallMsg("c1", "read_query"), result: toolResultMsg("c1", "{}", true, 100) },
       { kind: "combo" as const, call: toolCallMsg("c2", "read_query"), result: toolResultMsg("c2", "{}", true, 200) },
     ];
-    const lanes = splitTraceEntries(entries);
-    expect(lanes.steps.map((s) => s.index)).toEqual([1, 2]);
+    expect(traceRows(entries).map((r) => r.index)).toEqual([1, 2]);
   });
 
-  it("keeps the reasoning block out of the step numbering", () => {
+  it("keeps reasoning out of the step numbering", () => {
     const planning = thoughtMsg("thinking", { phase: "planning" });
     const call = toolCallMsg("c1", "search");
     const result = toolResultMsg("c1", "found", true, 50);
-    const lanes = splitTraceEntries(groupTraceEntries([planning, call, result]));
-    expect(lanes.reasoning).toHaveLength(1);
-    expect(lanes.steps).toHaveLength(1);
-    expect(lanes.steps[0].index).toBe(1);
+    const rows = traceRows(groupTraceEntries([planning, call, result]));
+    expect(rows.map((r) => [r.lane, r.index])).toEqual([
+      ["reasoning", null],
+      ["step", 1],
+    ]);
   });
 
   it("sequences notes and errors with the steps but leaves them unnumbered", () => {
     const call = toolCallMsg("c1", "search");
     const result = toolResultMsg("c1", "found", true, 50);
     const failure = msg({ channel: "error", parts: [{ type: "text", text: "boom" }] });
-    const lanes = splitTraceEntries(groupTraceEntries([call, result, failure]));
-    expect(lanes.steps.map((s) => s.index)).toEqual([1, null]);
+    const rows = traceRows(groupTraceEntries([call, result, failure]));
+    expect(rows.map((r) => [r.lane, r.index])).toEqual([
+      ["step", 1],
+      ["step", null],
+    ]);
+  });
+
+  // The whole point of the rewrite: a turn that reasoned, called a tool,
+  // reasoned again and called another must render in that order — not as every
+  // thought hoisted above every tool, which is an order that never happened.
+  it("interleaves reasoning and tool steps in arrival order", () => {
+    const rows = traceRows(
+      groupTraceEntries([
+        thoughtMsg("first", { phase: "planning" }),
+        toolCallMsg("c1", "search"),
+        toolResultMsg("c1", "found", true, 50),
+        thoughtMsg("second", { phase: "reflection" }),
+        toolCallMsg("c2", "read_query"),
+        toolResultMsg("c2", "rows", true, 20),
+      ]),
+    );
+    expect(rows.map((r) => [r.lane, r.index])).toEqual([
+      ["reasoning", null],
+      ["step", 1],
+      ["reasoning", null],
+      ["step", 2],
+    ]);
+  });
+
+  // The real shape of the defect, from session fausse-situation-thales-espagne:
+  // two model-native blocks of one turn sharing 533 identical leading characters,
+  // differing only after them. Every character must still appear exactly once
+  // across the rows — nothing is dropped from the turn, only from the repeat.
+  it("trims a reasoning row of the sentences the previous row already showed", () => {
+    const shared = "The user asked for a document. I identified it and summarised it.";
+    const first = thoughtMsg(shared, { phase: "planning" });
+    const second = thoughtMsg(`${shared} However, the tool is unavailable.`, { phase: "planning" });
+    const rows = traceRows(groupTraceEntries([first, toolCallMsg("c1", "search"), second]));
+
+    expect(rows[0].reasoningText).toBe(shared);
+    expect(rows[2].reasoningText).toBe("However, the tool is unavailable.");
+    // Trimmed against the previous block's FULL text, so the rows tile the whole
+    // reasoning with no gap between them.
+    expect(`${rows[0].reasoningText} ${rows[2].reasoningText}`).toBe(`${shared} However, the tool is unavailable.`);
+  });
+
+  it("leaves step rows without reasoning text", () => {
+    const rows = traceRows(groupTraceEntries([toolCallMsg("c1", "search"), toolResultMsg("c1", "ok", true, 10)]));
+    expect(rows[0].reasoningText).toBeNull();
   });
 });
 
@@ -520,15 +647,30 @@ describe("traceSummary", () => {
     });
   });
 
-  it("takes the MAX reasoning duration, not the sum — nested blocks share wall-clock", () => {
-    const outer = thoughtMsg("outer", { phase: "planning", duration_ms: 16400 });
-    const inner = thoughtMsg("inner", { phase: "reflection", duration_ms: 1200 });
+  // The runtime now closes the model-native block at every tool round, so the
+  // blocks are disjoint stretches of thinking. A max would report only the
+  // longest one and silently drop the rest.
+  it("sums the reasoning durations across the turn's blocks", () => {
+    const first = thoughtMsg("first", { phase: "planning", duration_ms: 16400 });
+    const second = thoughtMsg("second", { phase: "reflection", duration_ms: 1200 });
     expect(
       traceSummary([
-        { kind: "solo", message: outer },
-        { kind: "solo", message: inner },
+        { kind: "solo", message: first },
+        { kind: "solo", message: second },
       ]).reasoningMs,
-    ).toBe(16400);
+    ).toBe(17600);
+  });
+
+  it("ignores blocks that reported no duration rather than counting them as zero", () => {
+    const timed = thoughtMsg("timed", { phase: "planning", duration_ms: 900 });
+    const untimed = thoughtMsg("untimed", { phase: "reflection" });
+    expect(
+      traceSummary([
+        { kind: "solo", message: timed },
+        { kind: "solo", message: untimed },
+      ]).reasoningMs,
+    ).toBe(900);
+    expect(traceSummary([{ kind: "solo", message: untimed }]).reasoningMs).toBeNull();
   });
 
   it("counts tools and sums their latency separately from the reasoning duration", () => {

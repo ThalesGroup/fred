@@ -44,6 +44,12 @@
 
 .select-container[data-size="xs"] {
   --select-height: 2rem;
+
+  /* Body Medium on this compact tier, matching TextInput at the same size —
+   * Body Large is sized for a 40px control and reads oversized in 32px. */
+  .value {
+    font: var(--font-body-medium);
+  }
 }
 
 .select-container[data-size="small"] {

@@ -93,10 +93,6 @@
         --item-background-color: #{map.get($scheme, "on-container-hover")};
       }
 
-      [data-selected="true"] {
-        --item-background-color: #{map.get($scheme, "container")};
-      }
-
       .label {
         --label-color: #{map.get($scheme, "on-container")};
       }
@@ -104,6 +100,22 @@
       .icon {
         --icon-color: #{map.get($scheme, "on-container")};
       }
+    }
+  }
+
+  /* The active item is secondary-container / on-secondary-container in every
+   * group, whatever `color` the group carries — that prop only drives the
+   * unselected hover and pressed layers. Declared after the loop above so it
+   * wins over the per-scheme label color. */
+  .stateLayer[data-selected="true"] {
+    --item-background-color: var(--secondary-container);
+
+    .label {
+      --label-color: var(--on-secondary-container);
+    }
+
+    .icon {
+      --icon-color: var(--on-secondary-container);
     }
   }
 

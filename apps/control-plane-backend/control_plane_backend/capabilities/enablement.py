@@ -36,7 +36,12 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping
 
-from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
+from fred_core.common import (
+    TeamId,
+    ThreadSafeLRUCache,
+    is_personal_team_id,
+    is_personal_team_ref,
+)
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
@@ -274,7 +279,7 @@ def _is_personal_application_team(team_id: TeamId) -> bool:
     # The admin API accepts the same reserved alias as other team routes. It
     # cannot canonicalize it without the target user's identity, but it can
     # still fail closed before writing any application grant.
-    return str(team_id) == "personal" or is_personal_team_id(str(team_id))
+    return is_personal_team_ref(str(team_id))
 
 
 def _reject_personal_team_application_grant(

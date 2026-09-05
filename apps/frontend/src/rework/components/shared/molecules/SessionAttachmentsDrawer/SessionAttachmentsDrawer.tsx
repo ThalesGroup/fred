@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
-import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
+import ChatSidePanel from "../ChatSidePanel/ChatSidePanel.tsx";
 import { MarkdownPreviewModal } from "../MarkdownPreviewModal/MarkdownPreviewModal";
 import { formatBytes as formatBytesUnit } from "@shared/utils/formatBytes";
 import type { SessionAttachment } from "@rework/types/attachments";
@@ -67,14 +67,15 @@ export function SessionAttachmentsDrawer({
 
   return (
     <>
-      <InlineDrawer
+      <ChatSidePanel
         open={open}
         onClose={onClose}
         title={t("chatbot.sessionAttachments.title")}
+        persistKey="session-attachments-panel"
         width="460px"
-        layout="push"
+        fill
       >
-        <UploadWarningBanner className={styles.uploadWarning} />
+        <UploadWarningBanner />
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
@@ -118,7 +119,7 @@ export function SessionAttachmentsDrawer({
             })
           )}
         </div>
-      </InlineDrawer>
+      </ChatSidePanel>
       <MarkdownPreviewModal
         open={previewAttachment != null}
         onClose={() => setPreviewAttachmentId(null)}

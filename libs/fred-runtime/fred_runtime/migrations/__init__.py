@@ -38,13 +38,13 @@ import logging
 import os
 from pathlib import Path
 
-from .capabilities import CapabilityRegistry
+from ..capabilities import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
-# fred-runtime's own Alembic tree ships beside the package (libs/fred-runtime/
-# alembic), one level above this module's package directory.
-RUNTIME_ALEMBIC_DIR = Path(__file__).resolve().parent.parent / "alembic"
+# This package is the runtime's Alembic tree, so the migration CLI needs no
+# source checkout or repository-relative resources.
+RUNTIME_ALEMBIC_DIR = Path(__file__).resolve().parent
 
 
 def _upgrade(script_location: str, *, label: str) -> None:
@@ -106,7 +106,7 @@ def upgrade_sqlite_database(sqlite_path: str | Path) -> None:
     leaves `alembic_version_runtime` stamped like a real install. It costs ~30ms
     per database once imports are warm.
 
-    Why `DATABASE_URL`: `alembic/env.py` honours it ahead of `CONFIG_FILE`
+    Why `DATABASE_URL`: the packaged Alembic env honours it ahead of `CONFIG_FILE`
     (`fred_core.sql.alembic_env._build_url`), which is the only way to point the
     tree at an arbitrary file. The previous value is restored, since tests run
     in-process and some set it themselves.
