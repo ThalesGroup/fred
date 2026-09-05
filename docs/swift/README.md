@@ -209,7 +209,6 @@ Runbooks and operational guides for the platform.
 | -------------------------------------------------------------------- | --------------------------------------------- |
 | [`AGENT_POD_RUNTIME_PROTOCOL.md`](ops/AGENT_POD_RUNTIME_PROTOCOL.md) | Runtime pod protocol and operational contract |
 | [`DATABASE_MIGRATIONS.md`](ops/DATABASE_MIGRATIONS.md)               | Database migration runbook                    |
-| [`KEA_SWIFT_CUTOVER.md`](ops/KEA_SWIFT_CUTOVER.md)                   | Kea to Swift cutover order, topic boundaries, and implementation state |
 
 ---
 

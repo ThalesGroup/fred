@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""GitHub #2004 item 3 — the Kea/Swift bulk import must never leave an agent
-instance with the `selected_capability_ids=None` bypass sentinel #1980 closed
-for the live enroll/update path.
+"""The bulk import must never leave an agent instance with the
+`selected_capability_ids=None` bypass sentinel #1980 closed for the live
+enroll/update path.
 
-`run_import` writes `agent_instance` rows directly (kea classification /
-swift-native passthrough), never through `enroll_agent_instance` /
+`run_import` writes `agent_instance` rows directly (a swift-native
+passthrough), never through `enroll_agent_instance` /
 `_apply_capability_selection`. These tests prove the new Phase 6 wiring: the
 two compatibility sweeps (`materialize_default_capability_selections`,
 `grant_existing_teams_served_templates`) run once per import, scoped to
@@ -32,7 +32,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.import_export import importer as importer_module
 from control_plane_backend.import_export.bundle import KBundle
 from control_plane_backend.import_export.importer import run_import
@@ -111,7 +110,6 @@ async def _run(
         task_id=start.task_id,
         task_service=task_service,
         engine=engine,
-        agent_instance_store=AgentInstanceStore(engine),
         product_deps=product_deps,
     )
     # Mirror `import_export/api.py`'s real background-task wrapper, which

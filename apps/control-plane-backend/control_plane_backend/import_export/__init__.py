@@ -1,4 +1,4 @@
-"""Kea→Swift platform import (MIGR-05).
+"""Swift platform configuration import/export.
 
-See docs/swift/rfc/PLATFORM-IMPORT-RFC.md for the design.
+See docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md §27 for the contract.
 """
