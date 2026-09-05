@@ -321,11 +321,6 @@ document_sources:
   fred:
     type: push
     description: "Documents manually uploaded by users"
-  local:
-    type: pull
-    provider: local_path
-    base_path: ~/Documents/Fred
-    description: "Personal local documents available for pull-mode ingestion"
 
 embedding_model:
   provider: openai

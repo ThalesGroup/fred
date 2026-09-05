@@ -99,10 +99,7 @@ class BaseScheduler(ABC):
     def _extract_document_uids(self, definition: PipelineDefinition) -> List[str]:
         document_uids: List[str] = []
         for file in definition.files:
-            if file.is_pull():
-                virtual_metadata = file.to_virtual_metadata()
-                document_uids.append(virtual_metadata.identity.document_uid)
-            elif file.document_uid:
+            if file.document_uid:
                 document_uids.append(file.document_uid)
             else:
                 logger.warning("[SCHEDULER] Push file without document_uid, skipping from tracking")

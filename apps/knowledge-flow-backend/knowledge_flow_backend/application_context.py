@@ -52,14 +52,12 @@ from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
     ClickHouseVectorStorageConfig,
     Configuration,
-    FileSystemPullSource,
     GcsFilesystemConfig,
     GcsStorageConfig,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
     LocalFilesystemConfig,
     MinioFilesystemConfig,
-    MinioPullSource,
     MinioStorageConfig,
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
@@ -70,12 +68,9 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
-from knowledge_flow_backend.core.stores.content.base_content_loader import BaseContentLoader
 from knowledge_flow_backend.core.stores.content.base_content_store import BaseContentStore
-from knowledge_flow_backend.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.core.stores.content.gcs_content_store import GcsContentStore
-from knowledge_flow_backend.core.stores.content.minio_content_loader import MinioContentLoader
 from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
 from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore
 from knowledge_flow_backend.core.stores.files.gcs_file_store import GcsFileStore
@@ -914,26 +909,6 @@ class ApplicationContext:
             return self._resource_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
-    def get_content_loader(self, source: str) -> BaseContentLoader:
-        """
-        Factory method to create a document loader instance based on configuration.
-        this document loader is legacy it returns directly langchain documents
-        Currently supports LocalFileLoader.
-        """
-        # Get the singleton application context and configuration
-        config = self.get_config().document_sources
-        if not config or source not in config:
-            raise ValueError(f"Unknown document source tag: {source}")
-        source_config = config[source]
-        if source_config.type != "pull":
-            raise ValueError(f"Source '{source}' is not a pull-mode source.")
-        if isinstance(source_config, FileSystemPullSource):
-            return FileSystemContentLoader(source_config, source)
-        elif isinstance(source_config, MinioPullSource):
-            return MinioContentLoader(source_config, source)
-        else:
-            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
-
     def get_text_splitter(self) -> BaseTextSplitter:
         """
         Factory method to create a text splitter instance based on configuration.
@@ -949,21 +924,6 @@ class ApplicationContext:
             chunk_overlap=splitter_cfg.chunk_overlap,
             preserve_tables=splitter_cfg.preserve_tables,
         )
-
-    def get_pull_provider(self, source_tag: str) -> BaseContentLoader:
-        source_config = self.configuration.document_sources.get(source_tag)
-
-        if not source_config:
-            raise ValueError(f"Unknown document source tag: {source_tag}")
-        if source_config.type != "pull":
-            raise ValueError(f"Source '{source_tag}' is not a pull-mode source.")
-
-        if source_config.provider == "local_path":
-            return FileSystemContentLoader(source_config, source_tag)
-        elif source_config.provider == "minio":
-            return MinioContentLoader(source_config, source_tag)
-        else:
-            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
     def get_filesystem(self):
         """

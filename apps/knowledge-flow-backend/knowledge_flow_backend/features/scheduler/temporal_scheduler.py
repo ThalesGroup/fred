@@ -29,7 +29,7 @@ from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.repair_vector_metadata_workflow import RepairVectorMetadataWorkflow
 from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
-from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPull, ProcessPush, RevectorizeCorpusWorkflow
+from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPush, RevectorizeCorpusWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -66,18 +66,12 @@ class TemporalScheduler(BaseScheduler):
         definition: PipelineDefinition,
         background_tasks: Optional[BackgroundTasks] = None,  # kept for interface symmetry, not used
     ) -> WorkflowHandle:
-        has_pull = any(file.is_pull() for file in definition.files)
-        has_push = any(file.is_push() for file in definition.files)
-        if has_pull and has_push:
-            raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
-
         handle = self._register_workflow(user, definition)
 
         client: Client = await self._client_provider.get_client()
 
-        workflow_run = ProcessPull.run if has_pull else ProcessPush.run
         workflow_handle = await client.start_workflow(
-            workflow_run,
+            ProcessPush.run,
             definition,
             id=handle.workflow_id,
             task_queue=self._scheduler_config.temporal.task_queue,

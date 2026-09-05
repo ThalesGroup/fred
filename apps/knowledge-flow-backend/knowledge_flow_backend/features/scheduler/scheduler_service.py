@@ -89,11 +89,6 @@ class IngestionTaskService:
         """
         Kick off a document processing pipeline.
         """
-        has_pull = any(file.is_pull() for file in files)
-        has_push = any(file.is_push() for file in files)
-        if has_pull and has_push:
-            raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
-
         enriched_files: list[FileToProcess] = []
         for file in files:
             normalized_profile = self._processing_config.normalize_profile(file.profile)

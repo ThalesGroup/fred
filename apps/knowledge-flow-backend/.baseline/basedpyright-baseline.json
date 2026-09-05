@@ -10,16 +10,6 @@
                 }
             }
         ],
-        "./knowledge_flow_backend/common/source_utils.py": [
-            {
-                "code": "reportUnreachable",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 93,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./knowledge_flow_backend/core/processors/input/common/image_describer.py": [
             {
                 "code": "reportUnreachable",

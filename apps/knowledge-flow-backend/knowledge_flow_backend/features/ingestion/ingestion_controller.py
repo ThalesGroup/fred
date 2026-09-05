@@ -825,7 +825,6 @@ class IngestionController:
                     metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file), profile=profile)
                     file_to_process = FileToProcess(
                         document_uid=metadata.document_uid,
-                        external_path=None,
                         source_tag=source_tag,
                         tags=tags,
                         profile=profile,

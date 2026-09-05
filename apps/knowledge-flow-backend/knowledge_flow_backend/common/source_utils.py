@@ -17,8 +17,6 @@ import logging
 
 from fred_core.documents.document_structures import SourceType
 
-from knowledge_flow_backend.common.structures import DocumentSourceConfig
-
 logger = logging.getLogger(__name__)
 
 
@@ -31,14 +29,9 @@ def resolve_source_type(source_tag: str) -> SourceType:
 
     config = ApplicationContext.get_instance().get_config()
     try:
-        source_config: DocumentSourceConfig = config.document_sources[source_tag]
+        config.document_sources[source_tag]
     except KeyError:
         logger.error(f"[resolve_source_type] Unknown source tag: {source_tag}")
         raise UnknownSourceTagError(f"Unknown source tag: '{source_tag}'")
 
-    if source_config.type == "push":
-        return SourceType.PUSH
-    elif source_config.type == "pull":
-        return SourceType.PULL
-    else:
-        raise ValueError(f"Invalid source type for tag '{source_tag}': {source_config.type}")
+    return SourceType.PUSH

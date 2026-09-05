@@ -60,11 +60,8 @@ class SchedulerController:
             "/process-documents",
             tags=["Processing"],
             response_model=ProcessDocumentsResponse,
-            summary="Submit processing for push/pull files in-process (fire-and-forget)",
-            description=(
-                "Accepts a list of files (document_uid or external_path) and launches the ingestion pipeline "
-                "in a local background worker thread. Push and pull files must be submitted in separate requests."
-            ),
+            summary="Submit processing for uploaded files in-process (fire-and-forget)",
+            description=("Accepts a list of files (document_uid) and launches the ingestion pipeline in a local background worker thread."),
         )
         async def process_documents(
             req: ProcessDocumentsRequest,
@@ -83,7 +80,7 @@ class SchedulerController:
                 if not file.tags:
                     raise HTTPException(
                         400,
-                        f"File '{file.display_name or file.document_uid or file.external_path}' cannot be authorized yet: pass at least one tag (files with no tags are not team-checkable).",
+                        f"File '{file.display_name or file.document_uid}' cannot be authorized yet: pass at least one tag (files with no tags are not team-checkable).",
                     )
             for file in req.files:
                 for tag_id in file.tags:

@@ -41,10 +41,6 @@ from knowledge_flow_backend.features.scheduler.activities import (
     output_process_trusted,
     prepare_revectorize_file,
 )
-from knowledge_flow_backend.features.scheduler.pull_files_activities import (
-    create_pull_file_metadata,
-    pull_input_process,
-)
 from knowledge_flow_backend.features.scheduler.push_files_activities import (
     get_push_file_metadata,
     push_input_process,
@@ -58,16 +54,12 @@ from knowledge_flow_backend.features.scheduler.repair_vector_metadata_activities
 )
 from knowledge_flow_backend.features.scheduler.repair_vector_metadata_workflow import RepairVectorMetadataWorkflow
 from knowledge_flow_backend.features.scheduler.workflow import (
-    CreatePullFileMetadata,
     FastDeleteVectors,
     FastStoreVectors,
     GetPushFileMetadata,
     OutputProcess,
-    ProcessPull,
-    ProcessPullFile,
     ProcessPush,
     ProcessPushFile,
-    PullInputProcess,
     PushInputProcess,
     RevectorizeCorpusWorkflow,
     RevectorizeDocument,
@@ -116,13 +108,9 @@ async def run_worker(
         client=client,
         task_queue=config.task_queue,
         workflows=[
-            ProcessPull,
-            ProcessPullFile,
             ProcessPush,
             ProcessPushFile,
-            CreatePullFileMetadata,
             GetPushFileMetadata,
-            PullInputProcess,
             PushInputProcess,
             OutputProcess,
             FastStoreVectors,
@@ -132,9 +120,7 @@ async def run_worker(
             RepairVectorMetadataWorkflow,
         ],
         activities=[
-            create_pull_file_metadata,
             get_push_file_metadata,
-            pull_input_process,
             push_input_process,
             output_process,
             output_process_trusted,
