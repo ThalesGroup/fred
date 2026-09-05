@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.import_export.bundle import (
     UnsupportedBundleFormatError,
     open_bundle,
@@ -87,8 +86,6 @@ def test_open_bundle_accepts_a_conformant_manifest() -> None:
             "source_platform": "swift",
             "created_at": "2026-07-16T00:00:00Z",
             "tables": {},
-            "tuple_count": 0,
-            "realm_exported": False,
             "content_keys": [],
         }
     )
@@ -131,7 +128,6 @@ async def _import(bundle_bytes: bytes, engine: AsyncEngine) -> MigrationReport:
         task_id=start.task_id,
         task_service=task_service,
         engine=engine,
-        agent_instance_store=AgentInstanceStore(engine),
     )
 
 

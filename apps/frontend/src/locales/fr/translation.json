@@ -2134,7 +2134,6 @@
         "labelPlaceholder": "ex. castle-prod",
         "launch": "Lancer la migration",
         "launching": "Lancement...",
-        "keaLink": "Outils de bascule Kea → Swift (temporaire) →",
         "title": "Données plateforme",
         "import": {
           "title": "Importer"

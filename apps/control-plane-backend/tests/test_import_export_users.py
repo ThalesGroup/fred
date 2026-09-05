@@ -60,17 +60,16 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.importer import (
     BundleProvisioningError,
     MigrationReport,
+    UserSubResolver,
     _effective_team_relations,
     _provision_bundle_identities,
     _run_users_phase,
     run_import,
 )
-from control_plane_backend.import_export.kea_reconciliation import KeaUserResolver
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.task_models import TASK_TABLES
@@ -311,7 +310,7 @@ class _FakeKeycloakAdmin:
     Serves two distinct `a_get_users` query shapes, exactly like a real
     Keycloak Admin API: a single-username exact lookup (`find_user_sub_by_username`)
     and the paginated bulk listing `_fetch_all_users`/`find_user_subs_bulk` use
-    (`{"first": ..., "max": ...}`, no `username` key) — `KeaUserResolver` only
+    (`{"first": ..., "max": ...}`, no `username` key) — `UserSubResolver` only
     ever exercises the latter now that bulk resolution is authoritative.
     """
 
@@ -368,7 +367,7 @@ class _FakeWritableKeycloakAdmin:
             sub = self._directory.get(cast(str, username))
             return [{"id": sub, "username": username}] if sub else []
         # Bulk pagination shape (`_fetch_all_users`/`find_user_subs_bulk`) —
-        # `KeaUserResolver` prefetches through this path, never per-username,
+        # `UserSubResolver` prefetches through this path, never per-username,
         # so a directory mutated by `a_create_user` must be visible here too.
         first = cast(int, query.get("first", 0))
         max_ = cast(int, query.get("max", len(self._directory)))
@@ -477,8 +476,6 @@ def _build_bundle_bytes(users: list[dict[str, Any]]) -> bytes:
                     "source_platform": "swift",
                     "created_at": "2026-07-14T00:00:00Z",
                     "tables": {},
-                    "tuple_count": 0,
-                    "realm_exported": False,
                     "content_keys": [],
                 }
             ),
@@ -508,7 +505,6 @@ async def _run(
         task_id=start.task_id,
         task_service=task_service,
         engine=engine,
-        agent_instance_store=AgentInstanceStore(engine),
         platform_admin=platform_admin,
         user_deps=user_deps,
         team_deps=team_deps,
@@ -944,6 +940,65 @@ async def test_users_phase_fails_when_rebac_disabled(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_import_aborts_before_any_postgres_write_when_keycloak_m2m_disabled(
+    tmp_path: Path,
+) -> None:
+    """`UserSubResolver.create()` (the Keycloak bulk-list-users sweep for
+    users.json) must run before Phases 2-4's Postgres transaction opens, not
+    after — otherwise a bundle combining ordinary config data (team_metadata
+    here) with a users.json would commit that config to Postgres, then fail
+    the users phase, leaving exactly the partial state this module's
+    docstring promises never happens."""
+    engine = await _make_engine(tmp_path, "users-m2m-disabled.sqlite3")
+    try:
+        team_deps = _team_deps(engine, _FakeTeamRebac())
+        user_deps = UserServiceDependencies(
+            configuration=cast(Any, MagicMock()),
+            create_keycloak_admin_client=KeycloackDisabled,
+        )
+        platform_admin = _admin_user()
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr(
+                "manifest.json",
+                json.dumps(
+                    {
+                        "format_version": 1,
+                        "users_schema_version": 1,
+                        "source_platform": "swift",
+                        "created_at": "2026-09-05T00:00:00Z",
+                        "tables": {},
+                        "content_keys": [],
+                    }
+                ),
+            )
+            zf.writestr(
+                "postgres/team_metadata.jsonl",
+                json.dumps({"id": "team-gamma", "name": "Gamma"}) + "\n",
+            )
+            zf.writestr(
+                "users.json",
+                json.dumps([{"username": "alice", "teams": ["team-gamma"]}]),
+            )
+        bundle_bytes = buf.getvalue()
+
+        with pytest.raises(KeycloakM2MUserOperationDisabledError):
+            await _run(
+                bundle_bytes,
+                engine,
+                platform_admin=platform_admin,
+                user_deps=user_deps,
+                team_deps=team_deps,
+            )
+
+        metadata_store = team_deps.get_team_metadata_store()
+        assert await metadata_store.get_by_name("Gamma") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_run_users_phase_rebac_disabled_guard_precedes_every_counter_increment(
     tmp_path: Path,
 ) -> None:
@@ -983,7 +1038,7 @@ async def test_run_users_phase_rebac_disabled_guard_precedes_every_counter_incre
             )
         ]
 
-        resolver = await KeaUserResolver.create(user_deps)
+        resolver = await UserSubResolver.create(user_deps)
         with pytest.raises(BundleProvisioningError, match="ReBAC is disabled"):
             await _run_users_phase(
                 bundle_users=bundle_users,
@@ -1177,7 +1232,7 @@ async def test_provision_bundle_identities_creates_missing_user_with_password() 
         BundleUserEntry(username="nopass"),
     ]
 
-    resolver = await KeaUserResolver.create(user_deps)
+    resolver = await UserSubResolver.create(user_deps)
     await _provision_bundle_identities(
         bundle_users, resolver, user_deps, platform_admin, report
     )

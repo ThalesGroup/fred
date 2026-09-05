@@ -15,7 +15,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -143,18 +142,7 @@ export default function MigrationPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader
-        title={t("rework.tasks.migration.title")}
-        breadcrumb={
-          // KEA CUTOVER 2026 — quick link to the dedicated, unlisted dry-run page.
-          // Deliberately not a nav entry, just a discreet link here so Dimitri/Sébastien
-          // don't have to remember the URL — see KeaMigrationPage.tsx for why that page
-          // itself stays off the nav. Delete this link with KeaMigrationPage/.
-          <Link to="/admin/kea-migration" className={styles.keaLink}>
-            {t("rework.tasks.migration.keaLink")}
-          </Link>
-        }
-      />
+      <PageHeader title={t("rework.tasks.migration.title")} />
 
       <section className={styles.overview}>
         <div className={styles.overviewHeader}>

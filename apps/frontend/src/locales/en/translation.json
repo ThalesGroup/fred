@@ -2134,7 +2134,6 @@
         "labelPlaceholder": "e.g. castle-prod",
         "launch": "Launch migration",
         "launching": "Launching...",
-        "keaLink": "Kea → Swift cutover tools (temporary) →",
         "title": "Platform data",
         "import": {
           "title": "Import"

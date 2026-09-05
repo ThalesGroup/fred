@@ -1,9 +1,9 @@
 """Migration-task concurrency guard (CONTROL-PLANE-PRODUCT-CONTRACT.md §27).
 
-`POST /import` and `POST /reset-rebac` must both refuse to start while another
-migration task (import / reset / reset-rebac) is still running or pending —
-an import racing a teardown on the same instance is exactly the scenario a
-cutover-day operator cannot safely reason about.
+`POST /import` and `POST /reset` must both refuse to start while another
+migration task (import / reset) is still running or pending — two concurrent
+migration-affecting calls on the same instance is exactly the scenario an
+operator cannot safely reason about.
 """
 
 from __future__ import annotations

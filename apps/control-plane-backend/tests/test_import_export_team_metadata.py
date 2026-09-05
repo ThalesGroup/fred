@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import pytest
-from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.exporter import run_export
 from control_plane_backend.import_export.importer import MigrationReport, run_import
@@ -83,7 +82,6 @@ async def _import(
         task_id=start.task_id,
         task_service=task_service,
         engine=engine,
-        agent_instance_store=AgentInstanceStore(engine),
         rebac=rebac,
     )
 
@@ -245,12 +243,12 @@ async def test_team_metadata_import_is_idempotent_and_skips_existing(
 async def test_team_metadata_import_guarantees_organization_relation(
     tmp_path: Path,
 ) -> None:
-    """#2065: a swift-native import never restores raw OpenFGA tuples (only
-    kea bundles do — MIGR-05.04) and `_import_team_metadata` writes
-    `TeamMetadataRow`s directly, bypassing `teams.service.create_team`
-    (which now writes the organization structural edge itself) entirely.
-    The import's own cold-path reconciliation must establish it instead of
-    silently leaving a newly-registered team without the invariant."""
+    """An import never restores raw OpenFGA tuples and
+    `_import_team_metadata` writes `TeamMetadataRow`s directly, bypassing
+    `teams.service.create_team` (which now writes the organization structural
+    edge itself) entirely. The import's own cold-path reconciliation must
+    establish it instead of silently leaving a newly-registered team without
+    the invariant."""
     source = await _make_engine(tmp_path, "org-src.sqlite3")
     dest = await _make_engine(tmp_path, "org-dst.sqlite3")
     try:
