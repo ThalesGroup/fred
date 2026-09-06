@@ -44,12 +44,12 @@ choisir son mode d'adhésion (**Ouverte** ou **Sur invitation**).
 
 Au sein d'une équipe, chaque membre a un rôle qui définit ses droits :
 
-| Rôle               | Peut faire                                              |
-| ------------------ | ------------------------------------------------------- |
-| **Admin**          | Gérer les membres, leurs rôles et les réglages d'équipe |
-| **Éditeur**        | Créer et modifier agents, prompts et ressources         |
-| **Analyste**       | Créer et lancer des campagnes d'évaluation              |
-| **Membre**         | Utiliser les agents et prompts de l'équipe              |
+| Rôle         | Peut faire                                              |
+| ------------ | ------------------------------------------------------- |
+| **Admin**    | Gérer les membres, leurs rôles et les réglages d'équipe |
+| **Éditeur**  | Créer et modifier agents, prompts et ressources         |
+| **Analyste** | Créer et lancer des campagnes d'évaluation              |
+| **Membre**   | Utiliser les agents et prompts de l'équipe              |
 
 Les rôles sont **cumulables** et le détail exact de chaque droit est en
 [Rôles et droits](/help/fr/features/roles). Un administrateur peut à tout moment

@@ -43,12 +43,12 @@ only**).
 
 Within a team, each member has a role that defines their permissions:
 
-| Role              | Can do                                         |
-| ----------------- | ---------------------------------------------- |
-| **Admin**         | Manage members, their roles, and team settings |
-| **Editor**        | Create and edit agents, prompts, and resources |
-| **Analyst**       | Create and run evaluation campaigns            |
-| **Member**        | Use the team's agents and prompts              |
+| Role        | Can do                                         |
+| ----------- | ---------------------------------------------- |
+| **Admin**   | Manage members, their roles, and team settings |
+| **Editor**  | Create and edit agents, prompts, and resources |
+| **Analyst** | Create and run evaluation campaigns            |
+| **Member**  | Use the team's agents and prompts              |
 
 Roles are **cumulative**, and the exact detail of each permission is in
 [Roles & permissions](/help/en/features/roles). An administrator can, at any

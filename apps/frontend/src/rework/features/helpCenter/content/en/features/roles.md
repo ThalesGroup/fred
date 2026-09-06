@@ -42,12 +42,12 @@ flowchart TB
 Within a team, each member holds one or more roles. They are **cumulative**: the
 same person can be both Admin and Editor, each role granted separately.
 
-| Role          | Can                                                                                                                                                           | Cannot (unless another role)                          |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| **Admin**     | Manage members and their roles; set the team policy (quotas, allowed model profiles, MCP servers, storage/ingestion limits); read the configuration for audit | Create/edit agents, prompts, or routing policy        |
-| **Editor**    | Manage agents, shared prompts, the routing policy, and the document corpus                                                                                    | Change the team policy, create teams, or assign roles |
-| **Analyst**   | Create and run evaluation campaigns, manage evaluation corpora                                                                                                | Manage the general corpus, governance, or membership  |
-| **Member**    | Use the team's agents and prompts, manage their own personal prompts, leave the team                                                                          | Change any setting, policy, or shared resource        |
+| Role        | Can                                                                                                                                                           | Cannot (unless another role)                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **Admin**   | Manage members and their roles; set the team policy (quotas, allowed model profiles, MCP servers, storage/ingestion limits); read the configuration for audit | Create/edit agents, prompts, or routing policy        |
+| **Editor**  | Manage agents, shared prompts, the routing policy, and the document corpus                                                                                    | Change the team policy, create teams, or assign roles |
+| **Analyst** | Create and run evaluation campaigns, manage evaluation corpora                                                                                                | Manage the general corpus, governance, or membership  |
+| **Member**  | Use the team's agents and prompts, manage their own personal prompts, leave the team                                                                          | Change any setting, policy, or shared resource        |
 
 > **Admin and Editor are orthogonal, not hierarchical.**
 > The Admin governs (members, policy) but has **no** authority over
