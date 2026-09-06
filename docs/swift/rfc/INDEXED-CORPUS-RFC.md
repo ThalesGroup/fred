@@ -1,8 +1,8 @@
 # RFC: Indexed Corpus Model and Pull Connector Contract
 
-**Status:** draft — problem and model confirmed by developer in conversation; interfaces not yet confirmed
-**Author:** Dimitri Tombroff (design derived collaboratively; not yet built)
-**Date:** 2026-09-04
+**Status:** draft — POC (§10 steps 1-3) built and tested; §10 step 4 (usage enablement + admin/team UI) in progress
+**Author:** Dimitri Tombroff (design derived collaboratively)
+**Date:** 2026-09-04, revised 2026-09-06 (CorpusType/Corpus split, §2/§4/§6)
 **ID:** CORPUS-01 *(informal mnemonic only — see "Task ID convention" in CLAUDE.md, no registry)*
 **Scope:** `libs/fred-sdk` (data model + base connector interface), `apps/knowledge-flow-backend` (first concrete pipeline + proof-of-concept pull corpus)
 **Relationship to prior work:** this RFC intentionally does not build on `#2240` ("RFC: Design pluggable ingestion processors and source connectors coordinated by Temporal"). It was written after deliberately restarting from the problem rather than from #2240's processor/connector framing and processor-first sequencing. The developer directed this restart explicitly. The two RFCs will need reconciling (see §9) — that reconciliation is out of scope here.
@@ -21,18 +21,27 @@ That hell decomposes into distinct failure modes, all independently reproducible
 
 ## 2. Decision
 
-Introduce **`Corpus`** as a first-class FRED object: a named, independently-scoped, independently-typed unit of derived knowledge.
+Introduce **two** first-class FRED objects, not one (2026-09-06 revision — see §6 for why a bare connector was rejected as the unit):
 
 ```
-Corpus = scope × mode × kind [× connector, iff mode == pull]
+CorpusType = kind × mode [× connector_kind, iff mode == pull]     — platform-wide, registered once
+Corpus     = corpus_type_id × scope [× connector_ref]              — team-scoped instance of an enabled CorpusType
 ```
 
-- **scope** — which documents belong to this corpus. Reuses FRED's existing Team/Tag/ReBAC model completely; no new grouping primitive.
-- **mode** — `push` or `pull`, **mutually exclusive** on a given corpus. A corpus is never fed by both at once. (Deliberate simplicity choice — see §7.)
-- **kind** — the pipeline/representation this corpus materializes: `rag_sql` (today's default), `graphrag`, `llm_wiki`, `sql_live` (pass-through, no materialization at all), extensible to future kinds.
-- **connector** — required only when `mode == pull`. A narrow, pipeline-agnostic contract (§5) responsible only for discovering and fetching remote content with a stable identity — never for deciding how a `kind` consumes that content. A corpus's connector has both a **kind** (which connector implementation — `local_fs`, later `minio`/`github`/`sphere`; gates *whether a team may use it at all*, §6) and a **ref** (the opaque, resolved instance — credentials, root path; §4).
+This mirrors FRED's existing agent-template/agent-instance split, for the same reason: "what can exist on the platform" and "what a given team actually has" are different lifecycles, owned by different actors (developer/platform admin vs. team).
 
-Each `kind` owns its own consumption granularity, and the connector contract must never encode it:
+**`CorpusType`** — what a developer brings to FRED and a platform admin enables per team (§6):
+
+- **kind** — the pipeline/representation a corpus of this type materializes: `rag_sql` (today's default), `graphrag`, `llm_wiki`, `sql_live` (pass-through, no materialization at all), extensible to future kinds.
+- **mode** — `push` or `pull`, **mutually exclusive** on a given type. A type is never fed both ways. (Deliberate simplicity choice — see §7.)
+- **connector_kind** — required only when `mode == pull`: which connector implementation the type uses internally (`local_fs`, later `minio`/`github`/`sphere`). This is also the id the usage-enablement gate keys on (§6) — *whether a team may use this type at all*.
+
+**`Corpus`** — a team-scoped instance a team creates once its `CorpusType` is enabled:
+
+- **scope** — which documents belong to this instance. Reuses FRED's existing Team/Tag/ReBAC model completely; no new grouping primitive.
+- **connector_ref** — the instance's own connector configuration (credentials, root path — opaque, resolved by whatever code knows how to build a `SourceConnector` for `corpus_type_id`). Whether one is required depends on the referenced `CorpusType.mode`; that cross-check is a service-layer concern, not encoded in either pure data model (§4).
+
+The connector itself (§5) stays a narrow, pipeline-agnostic contract responsible only for discovering and fetching remote content with a stable identity — never for deciding how a `kind` consumes that content, and never itself the thing registered or enabled. Each `kind` owns its own consumption granularity, and the connector contract must never encode it:
 
 | kind | reprocessing grain | who decides *when* |
 |---|---|---|
@@ -41,7 +50,7 @@ Each `kind` owns its own consumption granularity, and the connector contract mus
 | `llm_wiki` | per batch (pages can span many source docs) | same as above |
 | `sql_live` | none — live query, no materialization | n/a — this kind arguably needs no connector at all |
 
-Corpora with different sources may overlap: the same external source (e.g. one GitHub repo) may legitimately feed two different corpora (e.g. a `rag_sql` corpus and a future `graphrag` corpus), each with its own independent connector instance, own cursor, own state. This is a deliberate trade — redundant sync cost across corpora, in exchange for zero cross-corpus coordination (see §7).
+Corpus instances with different sources may overlap: the same external source (e.g. one GitHub repo) may legitimately feed two different corpus instances (e.g. one of a `rag_sql` type and one of a future `graphrag` type), each with its own independent connector instance, own cursor, own state. This is a deliberate trade — redundant sync cost across corpora, in exchange for zero cross-corpus coordination (see §7).
 
 ## 3. What already exists (evidence, not a base to build on)
 
@@ -50,13 +59,13 @@ Checked before writing this RFC, per the repo's reuse-audit rule — kept here a
 | Component | Location | Status |
 |---|---|---|
 | `BaseContentLoader` / `PullFileEntry` / `BaseCatalogStore` | `apps/knowledge-flow-backend/knowledge_flow_backend/core/stores/content/`, `core/stores/catalog/base_catalog_store.py` | Implemented for `local_path`/`minio` only. A full `SphereContentLoader` exists but is **never wired** — `ApplicationContext.get_content_loader`/`get_pull_provider` raise `NotImplementedError` for `sphere`, `github`, `gitlab` despite their config models (`SpherePullSource`, `GitPullSource`, `GitlabPullSource`) existing in `common/structures.py`. Dead code. |
-| `LibraryOutputProcessor` | `core/processors/output/base_library_output_processor.py` | Already scopes a batch step "once for a library/corpus... aggregate across documents (e.g. build a shared graph)" by `library_tag`. Never formalized as a typed, configured object — exactly the gap `Corpus.kind` fills. |
+| `LibraryOutputProcessor` | `core/processors/output/base_library_output_processor.py` | Already scopes a batch step "once for a library/corpus... aggregate across documents (e.g. build a shared graph)" by `library_tag`. Never formalized as a typed, configured object — exactly the gap `CorpusType.kind` fills. |
 | `/corpus` virtual filesystem + `corpus_manager` | `features/filesystem/corpus_virtual_filesystem.py`, `features/corpus_manager/` | Read-only view + `/corpus/revectorize`, `/corpus/purge-vectors`, etc. `corpus_manager_service.py` explicitly says in its own code: *"This is MOCKED here; later it maps to Temporal workflow_id, etc."* — scaffolding waiting for a real object. |
 | Sphere connector, production reality (`~/Work/fingence`, not this repo) | `contrib/thanos/sphere/sphere_fsspec.py`, `features/external_sources/external_sources_service.py` | Working but instructive as a **negative example**: full remote rescan every cycle (incremental delta API coded but disabled), no stable revision id (diffs by a raw modified-timestamp string), a changed file gets a brand-new `document_uid` with the old one explicitly deleted to fake an update, no leader election across replicas (safe only because `replicaCount: 1`), in-memory-only sync status, heavy Thanos-business-logic coupling inside what should be a generic sync engine. Every one of these is a concrete instance of the failure modes in §1. |
 
 This RFC's connector contract (§5) is written specifically to make the Sphere failure modes structurally impossible, not just "better handled."
 
-## 4. `Corpus` data model (`fred-sdk`)
+## 4. `CorpusType` / `Corpus` data model (`fred-sdk`)
 
 Proposed location: `libs/fred-sdk/fred_sdk/contracts/corpus.py` (new module — `fred_sdk/contracts/` already exists and already hosts other transport-neutral wire models; no new top-level package needed).
 
@@ -71,6 +80,13 @@ class CorpusKind(str, Enum):
     LLM_WIKI = "llm_wiki"
     SQL_LIVE = "sql_live"
 
+class CorpusType(BaseModel):
+    corpus_type_id: str          # e.g. "local_fs_rag" — the §6 enablement key
+    name: str
+    kind: CorpusKind
+    mode: CorpusMode
+    connector_kind: str | None = None  # required iff mode == PULL; e.g. "local_fs"
+
 class CorpusScope(BaseModel):
     team_id: str
     tag_ids: list[str] = Field(default_factory=list)
@@ -78,14 +94,15 @@ class CorpusScope(BaseModel):
 class Corpus(BaseModel):
     corpus_id: str
     name: str
+    corpus_type_id: str           # which CorpusType this instantiates
     scope: CorpusScope
-    mode: CorpusMode
-    kind: CorpusKind
-    connector_kind: str | None = None  # required iff mode == PULL; e.g. "local_fs" — gates §6 usage enablement
-    connector_ref: str | None = None   # required iff mode == PULL; opaque reference, not a class_path
+    connector_ref: str | None = None   # instance-specific connector config, opaque; not a class_path
 ```
 
-`connector_kind` and `connector_ref` answer two different questions and are deliberately two fields, not one: `connector_kind` is *which connector implementation* — the thing §6's usage-enablement check is keyed on, small and enumerable (`local_fs`, later `minio`/`github`/`sphere`) — while `connector_ref` is *which configured instance* of that kind (credentials, root path), opaque to everything except the code that resolves it. Collapsing them into one field would force parsing `connector_ref` just to answer an authorization question.
+Two design points:
+
+- `CorpusType.connector_kind` and `Corpus.connector_ref` answer two different questions and live on two different objects, not one field on one object: `connector_kind` is *which connector implementation* — the thing §6's usage-enablement check is keyed on, small and enumerable (`local_fs`, later `minio`/`github`/`sphere`) — while `connector_ref` is *which configured instance* of that kind (credentials, root path), opaque to everything except the code that resolves it. Collapsing them would force parsing `connector_ref` just to answer an authorization question, and would put instance-specific config on the platform-wide, not-team-scoped object.
+- `Corpus` does **not** re-validate against its `CorpusType` (e.g. "does this instance have a `connector_ref` because its type is pull-mode?"). A pure data model can't look up an external registry; that check belongs to whatever service creates a `Corpus` instance, not to either pydantic model.
 
 `fred-sdk` must not import Knowledge Flow application models, Temporal types, or provider-internal types — same boundary discipline as the rest of `fred_sdk/contracts/`.
 
@@ -128,17 +145,19 @@ Design points this directly encodes, each traceable to a §3 failure mode:
 - The connector has **no knowledge of `CorpusKind`, no batching, no scheduling** — it is a pure discover/fetch surface. What a `Corpus` does with a `SourceChange` stream is entirely the pipeline's decision (§2 table).
 - **Not addressed here, deliberately**: what runs `discover_changes` on what cadence, and how at-most-one-active-sync-per-corpus is guaranteed. Kept as an explicit invariant (§7), not a mechanism — see below.
 
-## 6. Usage enablement — which teams may use a connector kind (2026-09-05)
+## 6. Usage enablement — which teams may use a `CorpusType` (2026-09-05, revised 2026-09-06)
 
 Corrected in conversation after a team decision the same week, not yet written down anywhere else: **`capability` is reserved for "something an agent uses."** A corpus's creation/operation permission is not that — no more than an application is — so it does not belong on `type capability`, namespaced or otherwise.
 
-**What is being gated, precisely.** Not a specific corpus instance, and not cross-team sharing of one corpus's content — a corpus's content stays exactly as scoped by `CorpusScope.team_id` (§4) regardless of this gate. The question is coarser and purely operational: *may team A create/operate a corpus backed by connector kind K at all* — e.g. "team A may use an fs corpus." This gate answers nothing about who can read a given corpus's documents.
+**Why the gate is on `CorpusType`, not on a raw connector kind.** A bare connector (discover/fetch only) says nothing about what an agent gets — it is not the thing worth registering, enabling, or showing an admin. What a developer contributes and a platform admin enables is a whole `CorpusType` (§2/§4): "team A may use the Local Filesystem corpus," not "team A may use the `local_fs` connector." The connector stays internal plumbing a `CorpusType` happens to use (`CorpusType.connector_kind`), reused across types if useful — it is never itself registered or gated.
 
-**Proposed shape (provisional — see coordination note below).** A new OpenFGA object type, e.g. `type corpus_connector`, copying the exact relation shape already proven by `type capability` (`fred_core/security/rebac/schema.fga`): `organization` anchor, `default_on` (all teams), `enabled`/`disabled` (per-team override, tri-state), `can_manage` (`platform_admin`-only), `can_use` (computed). One object per **connector kind**, not per corpus instance: `corpus_connector:local_fs`, later `corpus_connector:minio`, `corpus_connector:github`.
+**What is being gated, precisely.** Not a specific `Corpus` instance, and not cross-team sharing of one instance's content — a corpus instance's content stays exactly as scoped by `CorpusScope.team_id` (§4) regardless of this gate. The question is coarser and purely operational: *may team A create/operate an instance of `CorpusType` T at all* — e.g. "team A may use an fs corpus." This gate answers nothing about who can read a given instance's documents.
 
-**Where the check happens.** At Corpus creation — a team without `can_use` on `corpus_connector:<connector_kind>` cannot create a corpus of that kind. As a stated requirement, not yet implemented: capability revocation should suspend that team's already-running corpora of that connector kind, mirroring the existing agent-capability pattern (`reconcile_instance_suspension`, `control_plane_backend/capabilities/enablement.py`) — losing access must not merely block new creation while an already-running sync keeps going. Left unimplemented in this RFC's POC scope (§8).
+**Proposed shape (provisional — see coordination note below).** A new OpenFGA object type, e.g. `type corpus_type`, copying the exact relation shape already proven by `type capability` (`fred_core/security/rebac/schema.fga`): `organization` anchor, `default_on` (all teams), `enabled`/`disabled` (per-team override, tri-state), `can_manage` (`platform_admin`-only), `can_use` (computed). One object per **registered `CorpusType`**, keyed by `corpus_type_id`, not per `Corpus` instance: `corpus_type:local_fs_rag`, later e.g. `corpus_type:minio_rag`, `corpus_type:sphere_rag`.
 
-**Coordination note — do not implement yet.** A parallel, not-yet-written-down team decision is moving applications (`capability:app__<id>`, `fred_core/security/rebac/capability_authz.py`) off the shared `capability` type and onto their own proper ReBAC type, for the same reason stated above. `corpus_connector` should land using whatever convention that work settles on — same relation shape, same one-type-per-concept pattern — rather than being designed and merged independently. **`libs/fred-core/fred_core/security/rebac/schema.fga` is deliberately left untouched by this RFC and its POC** to avoid two uncoordinated schema changes landing for the same underlying mechanism. Land the app-kind change first (or together), then mirror it for `corpus_connector`.
+**Where the check happens.** At `Corpus` instance creation — a team without `can_use` on `corpus_type:<corpus_type_id>` cannot create an instance of that type. As a stated requirement, not yet implemented: revoking a team's access should suspend that team's already-running instances of that type, mirroring the existing agent-capability pattern (`reconcile_instance_suspension`, `control_plane_backend/capabilities/enablement.py`) — losing access must not merely block new creation while an already-running sync keeps going. Left unimplemented in this RFC's POC scope (§8).
+
+**Coordination note.** Adrian is actively implementing the equivalent move for applications — off the shared `capability` type (`capability:app__<id>`, `fred_core/security/rebac/capability_authz.py`) and onto their own proper ReBAC type, for the same reason stated above. `corpus_type` should mirror whatever shape that work lands with — same relations, same one-type-per-concept pattern — rather than being designed independently; the developer confirmed we follow his pattern once it exists, not build a parallel one. **`libs/fred-core/fred_core/security/rebac/schema.fga` is deliberately left untouched by this RFC and its POC** until then, both to avoid guessing at a shape that's about to be decided elsewhere and to avoid two people editing the same shared schema file concurrently.
 
 ## 7. What this RFC deliberately does not decide
 
@@ -154,11 +173,11 @@ Per developer direction, this RFC stays at the model/contract level and leaves e
 ## 8. Non-goals for this RFC
 
 - Building an external, independently-deployed connector pod.
-- A UI for creating/configuring corpora.
+- A UI for creating/configuring corpora — true of the POC completed so far (§10 steps 1-3); the admin Features-tab and team Resources-tab surfaces are the explicit next phase (§10 step 4), not covered by this RFC's model/contract sections.
 - Implementing `graphrag` or `llm_wiki` kinds — `rag_sql` (the existing pipeline) is the only kind the POC needs to target, since it already exists and lets the corpus/connector model be validated without also inventing a new pipeline.
 - Deciding the fate of RFC `#2240` or the dead `sphere`/`github`/`gitlab` code in the current codebase (see §3) — a separate, explicit decision the developer should make once this model is validated.
 - Multi-tenant/multi-Sphere-account credential design — inherit whatever FRED's current secret-reference conventions are when the POC needs real credentials.
-- Implementing or enforcing the `corpus_connector` ReBAC type (§6) — the `connector_kind` field exists on `Corpus` now so the model doesn't need a breaking change later, but the POC creates/runs its corpus without any usage-enablement check. Wiring that check is blocked on the coordination note in §6, not on this POC.
+- Implementing or enforcing the `corpus_type` ReBAC type (§6) — the `CorpusType`/`Corpus` split exists now so the model doesn't need a breaking change later, but the POC creates/runs its corpus instance without any usage-enablement check. Wiring that check follows Adrian's app-kind convention once it lands (§6), not decided independently here.
 
 ## 9. Relationship to `#2240`
 
@@ -169,11 +188,14 @@ Left as an open question for the developer, not resolved here: `#2240`'s connect
 1. Land `Corpus` and `SourceConnector` (§4, §5) in `fred-sdk`, with contract fixtures/tests, no behavior yet.
 2. Implement exactly one proof-of-concept pull corpus in `knowledge-flow-backend`, `kind=rag_sql`, against the simplest possible real connector (candidate: local filesystem or Minio/S3, since both already have working loaders to model the new contract against — Sphere/GitHub are harder cases, better attempted once the model is proven).
 3. Validate the §7 invariant (no overlapping sync) end-to-end before calling the POC done.
-4. Only after the POC works: revisit `#2240` (§9), land the `corpus_connector` usage-enablement gate (§6) once the app-kind ReBAC convention is written down, and consider a second corpus `kind` or a second connector (Sphere, GitHub) as the next increment.
+4. Next phase (in progress, 2026-09-06): a `corpus_type` usage-enablement gate (§6) mirroring Adrian's app-kind convention once it lands, an admin Features-tab entry, and a team Resources-tab surface for created `Corpus` instances.
+5. Only after that: revisit `#2240` (§9), and consider a second `CorpusType` (Sphere, GitHub, or a non-`rag_sql` kind) as the following increment.
 
 ## 11. Open questions
 
 - Final name for `Corpus` vs. alternatives (kept simple deliberately; flag if it collides with product-facing terminology already in use elsewhere).
 - Exact shape of `connector_ref` (opaque string id vs. a richer registration object) — deferred until the POC needs to actually resolve one.
 - Where does per-`CorpusKind` consumption policy configuration live — on the `Corpus` object itself, or entirely inside each pipeline's own code? Leaning toward the latter (keeps `Corpus` minimal) but not decided.
-- Final name and shape of the `corpus_connector` ReBAC type (§6) — pinned to whatever the app-kind convention settles on, not decided independently here.
+- Final name and shape of the `corpus_type` ReBAC type (§6) — pinned to whatever Adrian's app-kind convention settles on, not decided independently here.
+- Whether the admin Features-tab entry for a `CorpusType` reuses the existing `CapabilityKind`-style filtered catalog UI (`CapabilitiesPage.tsx`) as an additional filter value, or gets its own page — leaning toward reusing the existing generic catalog/enablement UI pattern (same table, same per-team matrix drawer) since it already tolerates a new `kind`, but not decided.
+- How a team's Resources tab represents multiple corpus instances (today it shows undifferentiated documents with no corpus concept at all) — smallest-viable UI addition vs. a full corpus switcher, not decided.

@@ -15,25 +15,34 @@
 """
 Indexed corpus contract (CORPUS-01, draft — see docs/swift/rfc/INDEXED-CORPUS-RFC.md).
 
-Why this module exists:
-- `Corpus` is FRED's central object for a named, independently-scoped,
-  independently-typed unit of derived knowledge: `scope x mode x kind`.
+Why this module has two objects, not one (RFC §2/§4, 2026-09-06 revision):
+- A bare connector is too fine-grained to be the thing a developer brings to
+  FRED — it says nothing on its own about what an agent can do with it. What
+  a developer actually contributes, and what a platform admin actually
+  enables, is a **`CorpusType`**: a named, registered kind of corpus
+  (`kind` + `mode` + `connector_kind`) — analogous to registering an agent
+  template. It is platform-wide, not team-scoped.
+- A **`Corpus`** is a team-scoped *instance* of an enabled `CorpusType` —
+  what a team creates once its type is enabled, carrying the team/tag scope
+  and instance-specific connector configuration (e.g. which folder). This
+  mirrors FRED's existing agent-template/agent-instance split; teams and
+  admins already understand this shape.
 - `scope` reuses the existing Team/Tag/ReBAC model completely — no new
   grouping primitive is introduced here.
-- `mode` (push or pull) is mutually exclusive on a given corpus. A corpus is
-  never fed by both at once — this is a deliberate simplicity choice, not an
-  omission (see the RFC §2/§7).
+- `mode` (push or pull) lives on `CorpusType`, not `Corpus`: it is intrinsic
+  to which type is being instantiated, not a per-instance choice — mutually
+  exclusive on a given type, never both (see RFC §2/§7).
 - `kind` names the pipeline/representation a corpus materializes. This module
   does not encode what a `kind` does with a change, or when — that decision
   belongs entirely to that pipeline's own code (see connector.py's docstring
   for the corresponding boundary on the connector side).
-- `connector_kind` and `connector_ref` are deliberately two fields (RFC §4):
-  `connector_kind` is the small, enumerable "which connector implementation"
-  (`local_fs`, later `minio`/`github`/`sphere`) a usage-enablement check can
-  key on (RFC §6) without parsing the opaque `connector_ref`. That
-  enablement check is not implemented yet — see the RFC's coordination note
-  in §6 — but the field exists now so the model doesn't need a breaking
-  change once it lands.
+- `connector_kind` lives on `CorpusType` (which connector implementation the
+  type uses internally, e.g. `local_fs`) — it is what the usage-enablement
+  check keys on (RFC §6), not implemented yet. `connector_ref` lives on the
+  `Corpus` instance (the resolved instance config, e.g. a root path) and is
+  deliberately not cross-validated against its `CorpusType` here — whether it
+  is required depends on a registry lookup this pure data contract does not
+  own; that is a service-layer concern.
 
 This is a pure data contract. No behavior, no registry, no factory — those are
 deliberately deferred to the first proof-of-concept consumer, per the RFC's
@@ -64,8 +73,36 @@ class CorpusKind(str, Enum):
     SQL_LIVE = "sql_live"
 
 
+class CorpusType(FrozenModel):
+    """
+    A registered, platform-wide kind of corpus — what a developer brings to
+    FRED and a platform admin enables per team (RFC §6). Not team-scoped.
+
+    `connector_kind` is required if and only if `mode == PULL` — a push-mode
+    type has no connector; a pull-mode type without one cannot be usage-gated.
+    """
+
+    corpus_type_id: str = Field(
+        min_length=1
+    )  # e.g. "local_fs_rag" — the RFC §6 enablement key
+    name: str = Field(min_length=1)
+    kind: CorpusKind
+    mode: CorpusMode
+    connector_kind: str | None = None
+
+    @model_validator(mode="after")
+    def _connector_kind_matches_mode(self) -> "CorpusType":
+        if self.mode is CorpusMode.PULL and not self.connector_kind:
+            raise ValueError("connector_kind is required when mode is CorpusMode.PULL")
+        if self.mode is CorpusMode.PUSH and self.connector_kind is not None:
+            raise ValueError(
+                "connector_kind must not be set when mode is CorpusMode.PUSH"
+            )
+        return self
+
+
 class CorpusScope(FrozenModel):
-    """Which documents belong to this corpus — an existing Team, optionally narrowed by Tags."""
+    """Which documents belong to this corpus instance — an existing Team, optionally narrowed by Tags."""
 
     team_id: str = Field(min_length=1)
     tag_ids: list[str] = Field(default_factory=list)
@@ -73,33 +110,15 @@ class CorpusScope(FrozenModel):
 
 class Corpus(FrozenModel):
     """
-    A named, scoped, typed unit of derived knowledge.
+    A team-scoped instance of an enabled `CorpusType`.
 
-    `connector_kind` and `connector_ref` are required if and only if
-    `mode == PULL` — a push-mode corpus has no connector, and a pull-mode
-    corpus without both cannot be fed or usage-gated.
+    `connector_ref` is the instance's own connector configuration (e.g. a
+    root path or credentials reference) — opaque here, resolved by whatever
+    code knows how to construct a `SourceConnector` for `corpus_type_id`.
     """
 
     corpus_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
+    corpus_type_id: str = Field(min_length=1)
     scope: CorpusScope
-    mode: CorpusMode
-    kind: CorpusKind
-    connector_kind: str | None = None
     connector_ref: str | None = None
-
-    @model_validator(mode="after")
-    def _connector_fields_match_mode(self) -> "Corpus":
-        if self.mode is CorpusMode.PULL and not (
-            self.connector_kind and self.connector_ref
-        ):
-            raise ValueError(
-                "connector_kind and connector_ref are both required when mode is CorpusMode.PULL"
-            )
-        if self.mode is CorpusMode.PUSH and (
-            self.connector_kind is not None or self.connector_ref is not None
-        ):
-            raise ValueError(
-                "connector_kind and connector_ref must not be set when mode is CorpusMode.PUSH"
-            )
-        return self

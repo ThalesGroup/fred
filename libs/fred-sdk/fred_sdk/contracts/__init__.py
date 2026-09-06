@@ -58,6 +58,7 @@ from .corpus import (
     CorpusKind,
     CorpusMode,
     CorpusScope,
+    CorpusType,
 )
 from .execution import (
     ActorContext,
@@ -133,6 +134,7 @@ __all__ = [
     "CorpusKind",
     "CorpusMode",
     "CorpusScope",
+    "CorpusType",
     "ChangeKind",
     "SourceChange",
     "SourceConnector",
