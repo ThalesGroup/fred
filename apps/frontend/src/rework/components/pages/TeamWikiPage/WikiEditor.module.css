@@ -12,16 +12,10 @@
   color: var(--on-surface);
 }
 
-/* Its own band above the sheet: the title and the two commands are the frame
-   around the writing, not part of it. */
 .header {
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
-  border-radius: var(--radius-s);
-  background: var(--surface-container);
-  padding: var(--spacing-xs) var(--spacing-s);
-  color: var(--on-surface);
 }
 
 .title {
