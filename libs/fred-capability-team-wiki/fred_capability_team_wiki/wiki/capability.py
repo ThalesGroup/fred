@@ -76,6 +76,16 @@ PAGE_READ_MAX_CHARS = 8_000
 # reads the wiki every turn.
 INDEX_MAX_CHARS = 4_000
 
+# Appended when the same page is read twice in one turn. The content is still
+# returned — a trimmed history can legitimately cost the model a page it read —
+# but the loop this breaks is real: a model asked to edit a page, with no tool
+# that can, re-read it six times before answering that it could not retrieve it.
+_REREAD_NOTE = (
+    "\n\n[You already read this page earlier in this turn and it has not "
+    "changed. Reading it again will not change it either — no tool here writes "
+    "to the wiki. Answer the user with what you have.]"
+)
+
 
 def _wiki_tool_failure(
     *, action: str, exc: Exception, elapsed_s: float
@@ -202,6 +212,19 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
             "Read a page with wiki_read_page before relying on it — the index "
             "below carries titles only."
         )
+        # Field evidence, 2026-09-07: asked to add a fact to a page, an agent
+        # read it, found no way to write, and answered "Mise à jour appliquée"
+        # with the new Markdown — a change the user believed had been saved and
+        # that never existed. A capability that only reads has to say so, or a
+        # model told it "has access to the wiki" will assume the rest.
+        parts.append(
+            "\nYou can READ this wiki. You cannot change it: there is no tool "
+            "here that creates, edits or deletes a page, and nothing you write "
+            "in your answer reaches it. If the user asks you to add or correct "
+            "something, give them the text you would put there and tell them an "
+            "editor has to paste it into the page from the Wiki screen. Never "
+            "say a page has been updated, created or saved — it has not."
+        )
         if rules.strip():
             parts.append(
                 "\n## Rules set by this team\n\n"
@@ -266,6 +289,11 @@ class TeamWikiCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
         """
 
         services = ctx.services
+        # Slugs already read this turn. The closure is rebuilt per turn, so this
+        # never leaks across conversations. See `_REREAD_NOTE`: a model with no
+        # way to act on a page it has read will otherwise call this again, and
+        # again — six identical calls in one turn, in the field.
+        already_read: set[str] = set()
 
         def _require_port() -> TeamWikiPort:
             port = services.team_wiki
@@ -310,9 +338,13 @@ class TeamWikiCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
 
             Use this before relying on anything the wiki says — the index in
             your instructions carries titles only, and a title is not evidence.
-            A long page comes back cut, and says so at the end; if you need the
-            rest, say so rather than inventing it. When the answer comes from a
-            page, name that page so the user can check it.
+            You get the whole page unless the text ends with an explicit cut
+            marker; no marker means nothing was withheld, so do not call this
+            again hoping for more. When the answer comes from a page, name that
+            page so the user can check it.
+
+            This tool READS. There is no tool here that writes to the wiki, so
+            re-reading a page will never let you change it.
             """
 
             port = _require_port()
@@ -332,6 +364,9 @@ class TeamWikiCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
                     f"\n\n…[cut at {PAGE_READ_MAX_CHARS} characters — this page "
                     "is longer than what you were given]"
                 )
+            if page.slug in already_read or slug in already_read:
+                text += _REREAD_NOTE
+            already_read.update({slug, page.slug})
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),

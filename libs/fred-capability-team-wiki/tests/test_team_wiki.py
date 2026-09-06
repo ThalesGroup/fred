@@ -98,12 +98,18 @@ def _tools(port: TeamWikiPort | None) -> dict[str, Any]:
     return {t.name: t for t in TeamWikiCapability().tools(_ctx(port))}
 
 
-def _call(port: TeamWikiPort | None, name: str, args: dict[str, Any]) -> Any:
+def _call(
+    port: TeamWikiPort | None,
+    name: str,
+    args: dict[str, Any],
+    tools: dict[str, Any] | None = None,
+) -> Any:
     """Invoke through a ToolCall, so a `content_and_artifact` tool hands back
     the ToolMessage the runtime actually sees (content + artifact), not the
-    raw tuple."""
+    raw tuple. Pass `tools` to make several calls against ONE binding, the way
+    a single turn does — a fresh binding has a fresh per-turn state."""
 
-    the_tool = _tools(port)[name]
+    the_tool = (tools or _tools(port))[name]
     return asyncio.run(
         the_tool.ainvoke({"type": "tool_call", "name": name, "args": args, "id": "c1"})
     )
@@ -211,3 +217,41 @@ def test_an_unreachable_wiki_does_not_take_the_turn_down() -> None:
 
     assert "could not be read this turn" in block
     assert "Do not state or imply what it contains" in block
+
+
+# ---------------------------------------------------------------------------
+# Field evidence, session bbd9ebc3 (2026-09-07)
+#
+# Asked to add a fact to a page, an agent read the page, found no way to write,
+# re-read it five more times, then answered "Mise à jour appliquée" with the new
+# Markdown. Nothing was written. The user had every reason to believe the wiki
+# had changed — the worst failure a knowledge base can have.
+# ---------------------------------------------------------------------------
+
+
+def test_the_prompt_block_says_the_wiki_cannot_be_written() -> None:
+    """Told only that it "has access to the wiki", a model asked to edit one
+    will narrate the edit as done. The block has to close that off."""
+
+    port = _FakePort(pages=(_page("a", "A"),))
+    block = asyncio.run(_TeamWikiPromptMiddleware(port)._compose())
+
+    assert "You cannot change it" in block
+    assert "Never say a page has been updated" in block
+
+
+def test_reading_the_same_page_twice_in_a_turn_says_to_stop() -> None:
+    """The content still comes back — a trimmed history can legitimately cost
+    the model a page it read — but the second answer says re-reading changes
+    nothing, which is what the loop was waiting to hear."""
+
+    port = _FakePort(content="Some content.")
+    turn = _tools(port)
+
+    first = _call(port, "wiki_read_page", {"slug": "shinigami"}, turn).content
+    assert "already read this page" not in first
+
+    second = _call(port, "wiki_read_page", {"slug": "shinigami"}, turn).content
+    assert "Some content." in second
+    assert "already read this page" in second
+    assert "no tool here writes" in second
