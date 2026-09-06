@@ -17,6 +17,7 @@ from control_plane_backend.team_wiki.schemas import (
     UpdateWikiPageContentRequest,
     UpdateWikiPageMetadataRequest,
     UpdateWikiRulesRequest,
+    WikiAvailability,
     WikiPageDetail,
     WikiPageSummary,
     WikiPageTree,
@@ -27,6 +28,7 @@ from control_plane_backend.team_wiki.service import (
     WikiRequestError,
     create_wiki_page,
     delete_wiki_page,
+    get_wiki_availability,
     get_wiki_page,
     get_wiki_rules,
     get_wiki_tree,
@@ -65,6 +67,19 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "current_content_md": exc.current_content_md,
             },
         )
+
+
+@router.get(
+    "/teams/{team_id}/wiki/availability",
+    response_model=WikiAvailability,
+    summary="Whether this team has a wiki (WIKI-03)",
+)
+async def wiki_availability(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> WikiAvailability:
+    return await get_wiki_availability(user, team_id, deps)
 
 
 @router.get(

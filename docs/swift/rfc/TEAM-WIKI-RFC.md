@@ -618,7 +618,7 @@ Four slices, in order. Each is a reviewable PR; none is a big-bang.
 | --- | --- | --- |
 | 1 | Control-plane foundation | the two tables and their migration, the REST API, role enforcement, the generated client |
 | 2 | The Wiki page | tree, rendered page, editor for editors, revision list and restore, the rules page, the review mark |
-| 3 | The capability, read-only | package, `TeamWikiPort` and its adapter, `wiki_list_pages` / `wiki_read_page`, rules and index injection |
+| 3 | The capability, read-only ✅ shipped 2026-09-07, issue #2573 | package, `TeamWikiPort` and its adapter, `wiki_list_pages` / `wiki_read_page`, rules and index injection |
 | 4 | Agent writes | the two propose tools, the HITL gate, the pending-revision flow, the diff modal and its HITL renderer registry |
 
 Slices 1 and 2 deliver a usable human wiki with no agent involvement at all —
@@ -627,6 +627,28 @@ having before any agent writes into it.
 
 `fred-performance-reviewer` is required on slice 3, which touches per-turn prompt
 composition.
+
+**Two decisions taken while building slice 3**, both outside what this RFC had
+settled; the durable form of each lives in `CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§49, and they are recorded here only because they change what §5 said.
+
+*The capability is ReAct-only.* The rules page reaches the model as a
+system-prompt fragment, and prompt fragments are a ReAct-loop hook the Graph
+runtime never runs. §3 calls the rules non-negotiable, so a Graph agent
+selecting this capability must fail loudly at assembly rather than answer
+without them. The cost is real: the wiki is unavailable to Graph agents
+entirely, read included. Reversing this means finding a prompt seam both
+runtimes share — the closest is `McpCapability.prompt_group()`, which the
+assembler currently keys off `isinstance(capability, McpCapability)` and would
+have to generalise.
+
+*Enabling the capability is what gives a team a wiki at all.* Not only its
+agents: the control-plane refuses every wiki route for a team without it. §5.4
+said "the capability is the grant" about agent access; this extends the same
+sentence to people. The reasoning is that a wiki no agent can read is a
+document store, and the team space already is one. Reversing this means
+splitting the two — a separate deployment flag or ReBAC relation for human
+access — and accepting that a team can then maintain a wiki nothing reads.
 
 ---
 

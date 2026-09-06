@@ -361,6 +361,11 @@ operations:
     required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
   - service: control-plane
     method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/availability
+    review_status: approved
+    required_permission: can_read_members # WIKI-03 — member-only, like every wiki read. Answers whether the team_wiki capability is enabled; deliberately NOT behind the capability gate itself, since answering "no" is its whole purpose
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/{team_id}/wiki/pages
     review_status: approved
     required_permission: can_read_members # WIKI-01 — DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use

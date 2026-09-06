@@ -720,6 +720,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings`, method: "DELETE" }),
     }),
+    wikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGet: build.query<
+      WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiResponse,
+      WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/availability` }),
+    }),
     listPagesControlPlaneV1TeamsTeamIdWikiPagesGet: build.query<
       ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiResponse,
       ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiArg
@@ -1786,6 +1792,11 @@ export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutAp
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg = void;
+export type WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiResponse =
+  /** status 200 Successful Response */ WikiAvailability;
+export type WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiArg = {
+  teamId: string;
+};
 export type ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiResponse =
   /** status 200 Successful Response */ WikiPageTree;
 export type ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiArg = {
@@ -3318,6 +3329,9 @@ export type PlatformModelBinding = {
 export type SetPlatformModelBindingRequest = {
   binding: ModelBinding;
 };
+export type WikiAvailability = {
+  enabled: boolean;
+};
 export type WikiPageSummary = {
   page_id: string;
   slug: string;
@@ -3893,6 +3907,8 @@ export const {
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation,
+  useWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery,
+  useLazyWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery,
   useListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery,
   useLazyListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery,
   useCreatePageControlPlaneV1TeamsTeamIdWikiPagesPostMutation,

@@ -34,6 +34,7 @@ import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
+import { useWikiAvailabilityQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -94,6 +95,15 @@ export default function TeamContentNavbar() {
   // second, build-time compatibility question to ask here.
   const showApplications =
     applicationsEnabled && !isPersonalTeam && !applicationsError && (teamApplications?.items?.length ?? 0) > 0;
+
+  // A team has a wiki when an admin has enabled the `team_wiki` agent
+  // capability for it (WIKI-03) — one decision covering the team's agents and
+  // its people. Hidden while the answer is unknown rather than shown
+  // optimistically: an entry that appears and then vanishes on a slow answer
+  // reads worse than one that arrives a moment late, and the control-plane
+  // refuses the wiki routes anyway.
+  const { data: wikiAvailability } = useWikiAvailabilityQuery({ teamId: teamId ?? "" }, { skip: !teamId });
+  const showWiki = wikiAvailability?.enabled === true;
 
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
@@ -162,13 +172,15 @@ export default function TeamContentNavbar() {
       icon: { category: "outlined", type: "edit_note", filled: true },
       linkProps: { to: `/team/${teamId}/prompts` },
     },
-    {
+  ];
+  if (showWiki) {
+    navigationItems.push({
       type: "link",
       label: t("rework.sidebar.team.menu.wiki"),
       icon: { category: "outlined", type: "book_2", filled: true },
       linkProps: { to: `/team/${teamId}/wiki` },
-    },
-  ];
+    });
+  }
   if (showApplications) {
     navigationItems.push({
       type: "link",

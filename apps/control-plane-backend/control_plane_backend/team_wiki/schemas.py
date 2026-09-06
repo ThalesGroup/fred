@@ -119,3 +119,14 @@ class WikiConflictResponse(BaseModel):
     detail: str
     current_revision_id: str
     current_content_md: str
+
+
+class WikiAvailability(BaseModel):
+    """Whether this team has a wiki at all.
+
+    A team has one when an admin has enabled the `team_wiki` agent capability
+    for it. Its own endpoint so the navigation panel can decide whether to
+    offer the wiki without fetching the page tree to find out.
+    """
+
+    enabled: bool

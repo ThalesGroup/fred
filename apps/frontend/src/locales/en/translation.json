@@ -370,6 +370,10 @@
           "description": "Maximum time a single SQL statement may run before the server cancels it (1–120 seconds)."
         }
       }
+    },
+    "team_wiki": {
+      "name": "Team wiki",
+      "description": "Gives the agent access to the team's wiki: it reads the pages the team has written and follows the rules the team set there. Enabling this capability for a team is also what gives its members a wiki."
     }
   },
   "chatbot": {

@@ -132,14 +132,33 @@ class _Store:
         return None
 
 
+class _TeamDeps:
+    """`rebac` is what the capability gate reads; nothing here queries it —
+    `can_team_use_capability` is stubbed per test."""
+
+    rebac = object()
+
+
 class _Deps:
-    team_dependencies = object()
+    team_dependencies = _TeamDeps()
 
     def __init__(self, store: _Store) -> None:
         self._store = store
 
     def get_team_wiki_store(self) -> Any:
         return self._store
+
+
+@pytest.fixture(autouse=True)
+def wiki_capability_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test below is about the wiki's own rules, so the capability gate
+    is open. Its own behaviour is covered by the two tests at the bottom of
+    this file."""
+
+    async def _enabled(*_args: Any, **_kwargs: Any) -> bool:
+        return True
+
+    monkeypatch.setattr(wiki_service, "can_team_use_capability", _enabled)
 
 
 @pytest.fixture()
@@ -325,3 +344,75 @@ async def test_reading_the_rules_page_never_creates_it(gate: _RecordingGate) -> 
     assert detail.revision_id is None
     assert detail.page.kind == "rules"
     assert gate.permissions == [[WIKI_READ_PERMISSION]]
+
+
+# ---------------------------------------------------------------------------
+# The capability gate (WIKI-03)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_team_without_the_capability_has_no_wiki(
+    monkeypatch: pytest.MonkeyPatch, gate: _RecordingGate
+) -> None:
+    """An admin turning the `team_wiki` capability off takes the wiki away from
+    the team's people as well as its agents. 404, not 403: to that team, this
+    wiki does not exist."""
+
+    async def _disabled(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+    monkeypatch.setattr(wiki_service, "can_team_use_capability", _disabled)
+
+    with pytest.raises(wiki_service.WikiRequestError) as caught:
+        await wiki_service.get_wiki_tree(_User(), TEAM, _Deps(_Store()))  # type: ignore[arg-type]
+    assert caught.value.http_status == 404
+
+
+@pytest.mark.asyncio
+async def test_the_gate_runs_on_every_entry_point(
+    monkeypatch: pytest.MonkeyPatch, gate: _RecordingGate
+) -> None:
+    """One test over all of them, like the write-permission one above: a route
+    added later that reaches the store without the gate is the failure this
+    covers, and the read routes are the easiest place to miss it."""
+
+    async def _disabled(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+    monkeypatch.setattr(wiki_service, "can_team_use_capability", _disabled)
+    store = _Store()
+    store.pages.append(_page("p1", None))
+    deps = _Deps(store)
+    user = _User()
+
+    calls = [
+        wiki_service.get_wiki_tree(user, TEAM, deps),  # type: ignore[arg-type]
+        wiki_service.get_wiki_page(user, TEAM, "p1", deps),  # type: ignore[arg-type]
+        wiki_service.get_wiki_rules(user, TEAM, deps),  # type: ignore[arg-type]
+        wiki_service.list_wiki_revisions(user, TEAM, "p1", deps),  # type: ignore[arg-type]
+        wiki_service.create_wiki_page(
+            user, TEAM, CreateWikiPageRequest(title="T"), deps
+        ),  # type: ignore[arg-type]
+        wiki_service.delete_wiki_page(user, TEAM, "p1", deps),  # type: ignore[arg-type]
+    ]
+    for call in calls:
+        with pytest.raises(wiki_service.WikiRequestError) as caught:
+            await call
+        assert caught.value.http_status == 404
+
+
+@pytest.mark.asyncio
+async def test_availability_answers_no_instead_of_refusing(
+    monkeypatch: pytest.MonkeyPatch, gate: _RecordingGate
+) -> None:
+    """The one route that must NOT 404 when the capability is off — the
+    navigation panel asks it precisely to find out."""
+
+    async def _disabled(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+    monkeypatch.setattr(wiki_service, "can_team_use_capability", _disabled)
+
+    result = await wiki_service.get_wiki_availability(_User(), TEAM, _Deps(_Store()))  # type: ignore[arg-type]
+    assert result.enabled is False

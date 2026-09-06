@@ -32,6 +32,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     listPagesControlPlaneV1TeamsTeamIdWikiPagesGet: {
       providesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki" as const, id: `TREE-${arg.teamId}` }],
     },
+    wikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
     readPageControlPlaneV1TeamsTeamIdWikiPagesSlugGet: {
       providesTags: (result, _e, arg) =>
         result
@@ -577,7 +580,8 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
   // Read-only platform operating instructions, shown under the editable prompt.
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
-  // Team wiki (WIKI-01/02).
+  // Team wiki (WIKI-01/02), and whether the team has one at all (WIKI-03).
+  useWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery: useWikiAvailabilityQuery,
   useListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery: useWikiPagesQuery,
   useReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery: useWikiPageQuery,
   useReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery: useWikiRulesQuery,

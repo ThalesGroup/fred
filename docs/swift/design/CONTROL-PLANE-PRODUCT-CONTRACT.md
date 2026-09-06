@@ -3505,6 +3505,7 @@ reach theirs.
 
 | Method | Path | Permission |
 | ------ | ---- | ---------- |
+| GET | `/teams/{team_id}/wiki/availability` | `can_read_members` |
 | GET | `/teams/{team_id}/wiki/pages` | `can_read_members` |
 | POST | `/teams/{team_id}/wiki/pages` | `can_update_resources` |
 | GET | `/teams/{team_id}/wiki/pages/{slug}` | `can_read_members` |
@@ -3522,6 +3523,23 @@ reach theirs.
 internal knowledge to non-members. Writes are `can_update_resources`
 (`team_editor`), like every other team content surface — `team_admin` has no
 write authority here, the roles being orthogonal rather than hierarchical.
+
+**A team has a wiki only where the `team_wiki` capability is enabled**
+(2026-09-07, issue #2573). Every route in the table above is refused with 404
+when an admin has not enabled that agent capability for the team — one gate in
+`_require_wiki_access`, so a route added later cannot forget it. 404 rather than
+403 for the same reason a hidden agent template answers 404: to a team without
+the capability, this wiki does not exist.
+
+One switch covers the team's agents and its people on purpose. A wiki nothing
+can read into a conversation is a document store, which the team space already
+is; the point of the wiki is that agents work from it. `/wiki/availability` is
+the one route NOT behind that gate — answering "no" is its whole purpose, and
+the team navigation panel asks it to decide whether to offer the entry.
+
+**Disabling never deletes anything.** The tables are untouched, and re-enabling
+brings the wiki back exactly as it was, revisions and all. Revoking access is
+not a destructive operation and must never become one.
 
 **Content is append-only.** An edit inserts a revision and moves the page's
 `current_revision_id`; it never updates content in place. History, restore and

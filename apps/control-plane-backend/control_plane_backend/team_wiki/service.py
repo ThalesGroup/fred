@@ -13,6 +13,7 @@ from control_plane_backend.models.team_wiki_models import (
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.team_wiki.schemas import (
+    WikiAvailability,
     CreateWikiPageRequest,
     SetNeedsReviewRequest,
     UpdateWikiPageContentRequest,
@@ -32,6 +33,7 @@ from control_plane_backend.team_wiki.store import (
     WikiRevisionConflictError,
     WikiSlugAlreadyExistsError,
 )
+from control_plane_backend.capabilities.authz import can_team_use_capability
 from control_plane_backend.teams.service import require_team_access
 
 # Read is member-only, NOT `CAN_READ`: `can_read` is `team_member or public`, so
@@ -47,8 +49,46 @@ WIKI_READ_PERMISSION = TeamPermission.CAN_READ_MEMEBERS
 # `team_editor` on their own space, so this is one code path for both.
 WIKI_WRITE_PERMISSION = TeamPermission.CAN_UPDATE_RESOURCES
 
+#: The agent capability whose enablement makes a team's wiki exist at all.
+#: An admin turning it off takes the wiki away from the team's agents AND its
+#: people — the two are one decision on purpose: a wiki nothing can read into a
+#: conversation is a document store, which the team space already is. Turning it
+#: off never deletes anything; the tables are untouched and re-enabling brings
+#: the wiki back exactly as it was.
+TEAM_WIKI_CAPABILITY_ID = "team_wiki"
+
 #: Most revisions one history response returns, newest first.
 MAX_REVISIONS_RETURNED = 50
+
+
+async def _require_wiki_access(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+    permissions: list[TeamPermission],
+) -> TeamId:
+    """Resolve the caller's access to this team's wiki, or refuse.
+
+    Two gates, in this order: the team membership/role one every wiki route
+    already had, then the capability one. Both live here rather than in each
+    entry point so a route added later cannot forget either — the whole
+    service reaches its store through this function.
+
+    404, not 403, when the capability is off: to a team without it, this team
+    has no wiki, and that is the same answer a nonexistent team gets. The
+    anti-guessing rule the rest of the codebase applies to hidden templates.
+    """
+
+    team_id = await require_team_access(
+        user, team_id, deps.team_dependencies, permissions
+    )
+    if not await can_team_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        capability_id=TEAM_WIKI_CAPABILITY_ID,
+    ):
+        raise WikiRequestError("This team has no wiki.", http_status=404)
+    return team_id
 
 
 class WikiRequestError(Exception):
@@ -203,12 +243,32 @@ async def _detail(
 # ---- reads ----------------------------------------------------------------
 
 
-async def get_wiki_tree(
+async def get_wiki_availability(
     user: KeycloakUser, team_id: TeamId, deps: ProductServiceDependencies
-) -> WikiPageTree:
+) -> WikiAvailability:
+    """Does this team have a wiki?
+
+    Deliberately NOT behind `_require_wiki_access`: the whole point is to
+    answer "no" for a team whose capability is off, which that helper turns
+    into a 404. Team membership is still required — whether a team runs a wiki
+    is its own business.
+    """
+
     team_id = await require_team_access(
         user, team_id, deps.team_dependencies, [WIKI_READ_PERMISSION]
     )
+    enabled = await can_team_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        capability_id=TEAM_WIKI_CAPABILITY_ID,
+    )
+    return WikiAvailability(enabled=enabled)
+
+
+async def get_wiki_tree(
+    user: KeycloakUser, team_id: TeamId, deps: ProductServiceDependencies
+) -> WikiPageTree:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
     store = deps.get_team_wiki_store()
     pages = await store.list_pages(team_id)
     return WikiPageTree(pages=[_summary(p) for p in pages])
@@ -217,9 +277,7 @@ async def get_wiki_tree(
 async def get_wiki_page(
     user: KeycloakUser, team_id: TeamId, slug: str, deps: ProductServiceDependencies
 ) -> WikiPageDetail:
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_READ_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
     store = deps.get_team_wiki_store()
     page = await store.get_page_by_slug(team_id, slug)
     if page is None:
@@ -230,9 +288,7 @@ async def get_wiki_page(
 async def list_wiki_revisions(
     user: KeycloakUser, team_id: TeamId, page_id: str, deps: ProductServiceDependencies
 ) -> WikiRevisionList:
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_READ_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
     store = deps.get_team_wiki_store()
     await _require_page(store, team_id, page_id)
     # Bounded: one revision is capped, their NUMBER is not, so a page edited a
@@ -267,9 +323,7 @@ async def get_wiki_rules(
     row appears on the first PUT, which is editor-only.
     """
 
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_READ_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
     store = deps.get_team_wiki_store()
     page = await store.get_page_by_slug(team_id, RULES_PAGE_SLUG)
     if page is not None:
@@ -293,9 +347,7 @@ async def create_wiki_page(
     request: CreateWikiPageRequest,
     deps: ProductServiceDependencies,
 ) -> WikiPageDetail:
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_WRITE_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
 
     if request.parent_page_id is not None:
@@ -342,9 +394,7 @@ async def update_wiki_page_content(
     request: UpdateWikiPageContentRequest,
     deps: ProductServiceDependencies,
 ) -> WikiPageDetail:
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_WRITE_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
     page = await _require_page(store, team_id, page_id)
     if page.kind == "rules":
@@ -370,9 +420,7 @@ async def update_wiki_rules(
     """Edit the rules page. Editors only, and never reachable by an agent —
     the agent write path has no tool that targets a `kind="rules"` page."""
 
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_WRITE_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
     page = await store.get_page_by_slug(team_id, RULES_PAGE_SLUG)
     if page is None:
@@ -453,9 +501,7 @@ async def update_wiki_page_metadata(
     request: UpdateWikiPageMetadataRequest,
     deps: ProductServiceDependencies,
 ) -> WikiPageSummary:
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_WRITE_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
     pages = {p.page_id: p for p in await store.list_pages(team_id)}
     page = pages.get(page_id)
@@ -519,9 +565,7 @@ async def restore_wiki_revision(
     is itself an entry in the page's history.
     """
 
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_WRITE_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
     page = await _require_page(store, team_id, page_id)
     revision = await store.get_revision(team_id, revision_id)
@@ -546,9 +590,7 @@ async def set_wiki_page_needs_review(
     request: SetNeedsReviewRequest,
     deps: ProductServiceDependencies,
 ) -> WikiPageSummary:
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_WRITE_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
     await _require_page(store, team_id, page_id)
     updated = await store.set_needs_review(
@@ -563,9 +605,7 @@ async def set_wiki_page_needs_review(
 async def delete_wiki_page(
     user: KeycloakUser, team_id: TeamId, page_id: str, deps: ProductServiceDependencies
 ) -> None:
-    team_id = await require_team_access(
-        user, team_id, deps.team_dependencies, [WIKI_WRITE_PERMISSION]
-    )
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
     page = await _require_page(store, team_id, page_id)
     if page.kind == "rules":

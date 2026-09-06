@@ -1187,6 +1187,102 @@ class PlatformSqlPort(ABC):
         """
 
 
+# --- Team wiki (WIKI-03) ----------------------------------------------------
+#
+# The team's shared knowledge base, read by an agent through the `team_wiki`
+# capability. Design: docs/swift/rfc/TEAM-WIKI-RFC.md.
+
+WIKI_RULES_MAX_CHARS: Final[int] = 4_000
+"""Cap the rules page is truncated to before it enters a prompt.
+
+Mirrors the control-plane's own `MAX_RULES_CHARS`, so a rules page that fits
+the editor always fits the prompt whole. Kept here because the capability
+composes the prompt and must not import a control-plane module.
+"""
+
+
+class WikiPageRef(FrozenModel):
+    """One page as it appears in a listing — never its content."""
+
+    page_id: str
+    slug: str
+    title: str
+    parent_slug: str | None = None
+    updated_at: str | None = None
+
+
+class WikiPageContent(FrozenModel):
+    """One page's Markdown, with the identity needed to cite it."""
+
+    slug: str
+    title: str
+    content_md: str = ""
+    updated_at: str | None = None
+    truncated: bool = False
+
+
+class TeamWikiPortError(Exception):
+    """
+    Typed transport failure raised by team wiki port adapters.
+
+    Same doctrine as `DocumentPortCallError`: a failing wiki tool surfaces a
+    clean `is_error` tool result carrying an actionable message, and the
+    capability reads the failure's shape off these attributes rather than
+    importing the adapter's HTTP stack.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        timed_out: bool = False,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+        self.status_code = status_code
+
+
+class TeamWikiPort(ABC):
+    """
+    Read-only access to the calling team's wiki (WIKI-03).
+
+    Deliberately identity-free, like every other capability port: the team and
+    the caller's token bind privately inside the adapter, which is also where
+    the control-plane's own role checks are enforced. The capability names a
+    slug and nothing else — it cannot reach another team's wiki by asking.
+
+    Read-only by construction in this slice. Agent writes are slice 4 and will
+    arrive as separate `propose_*` methods behind a HITL gate, never by
+    widening these three.
+    """
+
+    @abstractmethod
+    async def list_pages(self) -> tuple[WikiPageRef, ...]:
+        """Every page of the team's wiki, excluding the rules page.
+
+        Ordered as the wiki's own tree orders it (parents before children), so
+        a caller rendering an index gets the team's structure, not a shuffle.
+        """
+
+    @abstractmethod
+    async def read_page(self, slug: str, *, max_chars: int = 8_000) -> WikiPageContent:
+        """One page's Markdown, truncated to `max_chars` (`truncated` says so).
+
+        Raises `TeamWikiPortError` with `status_code=404` when no page carries
+        this slug — an agent that guessed must be told, not handed an empty
+        page it would summarize as "this topic is undocumented".
+        """
+
+    @abstractmethod
+    async def read_rules(self) -> str:
+        """The team's rules for agents, or an empty string when unwritten.
+
+        Never raises for an absent rules page: a team that has not written one
+        is the normal state, not a failure.
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1263,6 +1359,11 @@ class RuntimeServices:
     # enforced server-side in the adapter, never here. Appended after
     # `document_similarity` for the same positional-safety reason noted above.
     platform_sql: PlatformSqlPort | None = None
+    # The calling team's wiki (WIKI-03): powers the `team_wiki` capability.
+    # Same doctrine/optionality as the document ports — team and token bind
+    # privately in the adapter. Appended last for the same positional-safety
+    # reason noted above.
+    team_wiki: TeamWikiPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

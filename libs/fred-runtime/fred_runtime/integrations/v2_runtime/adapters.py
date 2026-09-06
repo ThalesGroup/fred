@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import re
+from urllib.parse import quote
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Protocol, TypedDict, cast
@@ -87,9 +88,13 @@ from fred_sdk.contracts.runtime import (
     DocumentTreeResult,
     FolderDocumentEntry,
     SpanPort,
+    TeamWikiPort,
+    TeamWikiPortError,
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+    WikiPageContent,
+    WikiPageRef,
     WorkspaceFileNotFound,
     WorkspaceFsPort,
 )
@@ -2830,3 +2835,162 @@ class KPIWriterMetricsAdapter(MetricsProvider):
             actor=KPIActor(type="system"),
         ) as recorded_dims:
             yield recorded_dims
+
+
+class TeamWikiAdapter(TeamWikiPort):
+    """
+    Runtime adapter behind `RuntimeServices.team_wiki` (WIKI-03).
+
+    Same private-binding doctrine as `DocumentSearchAdapter`: the turn's team
+    and access token are captured here and never cross into
+    `CapabilityContext`. The capability names a slug; it cannot name a team.
+
+    The control-plane is the authority, not this adapter. It re-checks team
+    membership on every call, and refuses the whole wiki when an admin has not
+    enabled the `team_wiki` capability for the team — so an agent whose
+    selection survived a revoke gets a clean refusal rather than a stale read.
+    """
+
+    def __init__(
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        control_plane_url: str | None,
+        http_client: Any | None,
+    ) -> None:
+        self._control_plane_url = control_plane_url
+        self._http_client = http_client
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+
+    def _base(self) -> str:
+        if not self._control_plane_url:
+            raise TeamWikiPortError(
+                "The team wiki is unavailable: this pod has no control-plane URL "
+                "configured."
+            )
+        team_id = getattr(self._binding.runtime_context, "team_id", None)
+        if not team_id:
+            raise TeamWikiPortError(
+                "The team wiki is unavailable: this conversation has no team."
+            )
+        return f"{self._control_plane_url.rstrip('/')}/teams/{team_id}/wiki"
+
+    async def _get(self, path: str) -> Any:
+        url = f"{self._base()}{path}"
+        client = self._http_client
+        if client is None:
+            raise TeamWikiPortError(
+                "The team wiki is unavailable: this pod has no control-plane client."
+            )
+        token = await _workspace_access_token(self._binding.runtime_context)
+        try:
+            response = await client.get(
+                url, headers={"Authorization": f"Bearer {token}"}
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            raise _wrap_team_wiki_error(exc) from exc
+        return response.json()
+
+    async def list_pages(self) -> tuple[WikiPageRef, ...]:
+        payload = await self._get("/pages")
+        pages = payload.get("pages") or []
+        # The API is flat and carries parent ids; the port speaks slugs, so the
+        # capability never has to hold an id-to-slug map of its own.
+        slug_by_id = {
+            page.get("page_id"): page.get("slug")
+            for page in pages
+            if page.get("page_id")
+        }
+        refs = [
+            WikiPageRef(
+                page_id=page.get("page_id") or "",
+                slug=page.get("slug") or "",
+                title=page.get("title") or "",
+                parent_slug=slug_by_id.get(page.get("parent_page_id")),
+                updated_at=page.get("updated_at"),
+            )
+            for page in pages
+            if page.get("kind") != "rules"
+        ]
+        return tuple(_ordered_wiki_refs(refs))
+
+    async def read_page(self, slug: str, *, max_chars: int = 8_000) -> WikiPageContent:
+        payload = await self._get(f"/pages/{quote(slug, safe='')}")
+        page = payload.get("page") or {}
+        content = payload.get("content_md") or ""
+        truncated = len(content) > max_chars
+        return WikiPageContent(
+            slug=page.get("slug") or slug,
+            title=page.get("title") or slug,
+            content_md=content[:max_chars] if truncated else content,
+            updated_at=page.get("updated_at"),
+            truncated=truncated,
+        )
+
+    async def read_rules(self) -> str:
+        try:
+            payload = await self._get("/rules")
+        except TeamWikiPortError as exc:
+            # A team that has not written rules is the normal state. Anything
+            # else — a refusal, a transport failure — must still be raised: an
+            # agent silently running without the rules is the failure the
+            # rules page exists to prevent.
+            if exc.status_code == 404:
+                return ""
+            raise
+        return payload.get("content_md") or ""
+
+
+def _ordered_wiki_refs(refs: Sequence[WikiPageRef]) -> list[WikiPageRef]:
+    """Parents before their children, siblings in the order given.
+
+    The control-plane returns a flat list; an index that lists a child above
+    the page it belongs to reads as a different wiki than the one the team
+    sees in the rail.
+    """
+
+    by_parent: dict[str | None, list[WikiPageRef]] = {}
+    known = {ref.slug for ref in refs}
+    for ref in refs:
+        parent = ref.parent_slug if ref.parent_slug in known else None
+        by_parent.setdefault(parent, []).append(ref)
+
+    ordered: list[WikiPageRef] = []
+    seen: set[str] = set()
+
+    def walk(parent: str | None) -> None:
+        for ref in by_parent.get(parent, []):
+            if ref.slug in seen:
+                continue
+            seen.add(ref.slug)
+            ordered.append(ref)
+            walk(ref.slug)
+
+    walk(None)
+    # A page caught in a parent cycle would never be walked into; append it
+    # rather than drop it, for the same reason the frontend tree promotes it.
+    ordered.extend(ref for ref in refs if ref.slug not in seen)
+    return ordered
+
+
+def _wrap_team_wiki_error(exc: Exception) -> TeamWikiPortError:
+    """
+    Map an httpx failure onto the SDK-typed `TeamWikiPortError`.
+
+    Same redaction as `_wrap_document_port_error`: the message reaches the LLM
+    and is persisted in chat history, so the internal host and route are
+    stripped and the status carries the diagnosis.
+    """
+
+    if isinstance(exc, TeamWikiPortError):
+        return exc
+    timed_out = isinstance(exc, httpx.TimeoutException)
+    status_code = (
+        exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+    )
+    detail = _redact_urls(str(exc).strip()) or type(exc).__name__
+    return TeamWikiPortError(detail, timed_out=timed_out, status_code=status_code)

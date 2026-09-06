@@ -370,6 +370,10 @@
           "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
         }
       }
+    },
+    "team_wiki": {
+      "name": "Wiki d'équipe",
+      "description": "Donne à l'agent accès au wiki de l'équipe : il lit les pages écrites par l'équipe et suit les règles qu'elle y a fixées. Activer cette capacité pour une équipe est aussi ce qui donne un wiki à ses membres."
     }
   },
   "chatbot": {
