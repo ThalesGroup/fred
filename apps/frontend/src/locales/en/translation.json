@@ -377,7 +377,11 @@
       "fields": {
         "mode": {
           "title": "What the agent may do",
-          "description": "Read lets the agent consult the wiki. Read and propose also lets it suggest pages and edits \u2014 you are always asked to approve them before anything is written. No mode can delete, rename or move a page."
+          "description": "Read lets the agent consult the wiki. Read and propose also lets it suggest pages and edits — you are always asked to approve them before anything is written. No mode can delete, rename or move a page.",
+          "options": {
+            "read": "Read only",
+            "read_write": "Read and propose"
+          }
         }
       }
     }
@@ -2507,6 +2511,10 @@
               "title": "Access to team resources",
               "description": "Lets the agent use the team's resources to carry out its mission."
             },
+            "teamWiki": {
+              "title": "Access to the team wiki",
+              "description": "Lets the agent read the team's wiki pages and follow the rules the team set there."
+            },
             "conversationAttachments": {
               "title": "Attachments in a conversation",
               "description": "Allows adding documents to a conversation to use their information."
@@ -3115,16 +3123,16 @@
         "empty": "No rules written yet. An editor can add the instructions every agent should follow."
       },
       "proposal": {
-        "newPage": "This agent proposes a new page \u201c{{title}}\u201d ({{added}} lines).",
-        "edit": "This agent proposes changing \u201c{{title}}\u201d: {{added}} lines added, {{removed}} removed.",
+        "newPage": "This agent proposes a new page “{{title}}” ({{added}} lines).",
+        "edit": "This agent proposes changing “{{title}}”: {{added}} lines added, {{removed}} removed.",
         "seeChanges": "See the changes",
-        "dialogTitle": "Proposed changes \u2014 {{title}}",
+        "dialogTitle": "Proposed changes — {{title}}",
         "close": "Close",
         "unavailable": "This proposal is no longer available."
       },
       "newPageDialog": {
         "title": "New wiki page",
-        "childTitle": "New page under \u201c{{parent}}\u201d",
+        "childTitle": "New page under “{{parent}}”",
         "label": "Page title",
         "confirm": "Create page"
       },
@@ -3132,12 +3140,12 @@
         "title": "Title and location",
         "label": "Page title",
         "parentLabel": "Parent page",
-        "root": "None \u2014 top level",
+        "root": "None — top level",
         "confirm": "Save"
       },
       "leaveDialog": {
         "title": "Discard your changes?",
-        "message": "You are editing \u201c{{title}}\u201d. Opening another page will lose the text you have not saved.",
+        "message": "You are editing “{{title}}”. Opening another page will lose the text you have not saved.",
         "confirm": "Discard changes",
         "cancel": "Keep writing"
       },
@@ -3149,7 +3157,7 @@
       "errors": {
         "save": "Could not save this page",
         "create": "Could not create the page",
-        "rename": "Could not save the page\u2019s title or location",
+        "rename": "Could not save the page’s title or location",
         "delete": "Could not delete the page"
       }
     }

@@ -33,7 +33,7 @@ import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInf
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
-import { CAP_DOCUMENT_ACCESS, CAP_PPT_FILLER, type ToolPack } from "./toolPacks.ts";
+import { CAP_DOCUMENT_ACCESS, CAP_PPT_FILLER, CAP_TEAM_WIKI, type ToolPack } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
@@ -273,6 +273,24 @@ export function AgentFormBody({
         <DocumentAccessPackOptions
           configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
           onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+          teamId={teamId}
+        />
+      );
+    }
+    // Team wiki → the capability's own `mode` field, rendered by the same
+    // renderer the Advanced card uses so the two views share one control and one
+    // set of labels. Read from the live manifest rather than restated here.
+    if (pack.enablesCapabilityIds.includes(CAP_TEAM_WIKI) && availableCapabilityIds.has(CAP_TEAM_WIKI)) {
+      const modeField = capabilities
+        .find((capability) => capability.id === CAP_TEAM_WIKI)
+        ?.config_fields?.find((field) => field.key === "mode");
+      if (!modeField) return undefined;
+      return (
+        <TuningFieldRenderer
+          field={modeField}
+          value={capabilityConfigValues[CAP_TEAM_WIKI]?.[modeField.key]}
+          onChange={(key, value) => onCapabilityConfigChange(CAP_TEAM_WIKI, key, value)}
+          disabled={isSubmitting}
           teamId={teamId}
         />
       );

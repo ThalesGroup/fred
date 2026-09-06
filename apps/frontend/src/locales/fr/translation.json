@@ -377,7 +377,11 @@
       "fields": {
         "mode": {
           "title": "Ce que l'agent peut faire",
-          "description": "En lecture, l'agent consulte le wiki. En lecture et proposition, il peut aussi proposer des pages et des modifications — vous serez toujours invité à les approuver avant qu'elles ne soient écrites. Aucun mode ne permet de supprimer, renommer ou déplacer une page."
+          "description": "En lecture, l'agent consulte le wiki. En lecture et proposition, il peut aussi proposer des pages et des modifications — vous serez toujours invité à les approuver avant qu'elles ne soient écrites. Aucun mode ne permet de supprimer, renommer ou déplacer une page.",
+          "options": {
+            "read": "Lecture seule",
+            "read_write": "Lecture et proposition"
+          }
         }
       }
     }
@@ -2507,6 +2511,10 @@
               "title": "Accès aux ressources de l'équipe",
               "description": "Permet à l'agent d'exploiter les ressources de l'équipe pour remplir sa mission."
             },
+            "teamWiki": {
+              "title": "Accès au Wiki de l'équipe",
+              "description": "Permet à l'agent de lire les pages du wiki de l'équipe et de suivre les règles qui y sont fixées."
+            },
             "conversationAttachments": {
               "title": "Pièces jointes à une conversation",
               "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
@@ -3120,11 +3128,11 @@
         "seeChanges": "Voir les modifications",
         "dialogTitle": "Modifications proposées — {{title}}",
         "close": "Fermer",
-        "unavailable": "Cette proposition n\u2019est plus disponible."
+        "unavailable": "Cette proposition n’est plus disponible."
       },
       "newPageDialog": {
         "title": "Nouvelle page de wiki",
-        "childTitle": "Nouvelle page sous \u00ab\u00a0{{parent}}\u00a0\u00bb",
+        "childTitle": "Nouvelle page sous « {{parent}} »",
         "label": "Titre de la page",
         "confirm": "Créer la page"
       },
@@ -3132,14 +3140,14 @@
         "title": "Titre et emplacement",
         "label": "Titre de la page",
         "parentLabel": "Page parente",
-        "root": "Aucune \u2014 premier niveau",
+        "root": "Aucune — premier niveau",
         "confirm": "Enregistrer"
       },
       "leaveDialog": {
         "title": "Abandonner vos modifications ?",
-        "message": "Vous \u00eates en train de modifier \u00ab\u00a0{{title}}\u00a0\u00bb. Si vous ouvrez une autre page, le texte que vous n\u2019avez pas enregistr\u00e9 sera perdu.",
+        "message": "Vous êtes en train de modifier « {{title}} ». Si vous ouvrez une autre page, le texte que vous n’avez pas enregistré sera perdu.",
         "confirm": "Abandonner les modifications",
-        "cancel": "Continuer \u00e0 \u00e9crire"
+        "cancel": "Continuer à écrire"
       },
       "deleteDialog": {
         "title": "Supprimer cette page ?",
