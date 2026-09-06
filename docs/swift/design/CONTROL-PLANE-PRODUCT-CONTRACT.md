@@ -3625,3 +3625,17 @@ cleared when a human edits the page or an editor clears it explicitly. It is
 what gives editors a review queue without building one, and it is the
 counterpart of the wiki being open to every member's contributions through an
 agent (RFC §5.4).
+
+**2026-09-07 (WIKI-05) — clearing the review mark is recorded, and is not an
+edit.** `POST .../review` now stamps `reviewed_at`/`reviewed_by` on the page's
+currently published revision, and `WikiRevisionSummary` exposes both. Setting
+`needs_review` back to true clears them: the same text is under review again,
+so an earlier approval must not still stand against it.
+
+Two bugs closed by that. The endpoint used to overwrite the page's
+`updated_by`/`updated_at`, so validating an agent's page relabelled it as
+edited by whoever read it — those columns are now left alone, since reviewing
+is not editing. And the validation itself was recorded nowhere, which mattered
+because the person who approves an agent's text need not be the one it was
+written for. The frontend renders the stamp as its own entry in the page
+history, at its own time, next to the edit it approves.

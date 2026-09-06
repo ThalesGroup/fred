@@ -3113,9 +3113,14 @@
         "close": "Close the history",
         "empty": "No earlier versions.",
         "current": "Current",
-        "view": "View",
-        "hide": "Hide",
-        "restore": "Restore"
+        "restore": "Restore",
+        "event": {
+          "humanEdit": "Manual edit",
+          "agentEdit": "Edited by agent ({{agent}})",
+          "agentEditUnnamed": "Edited by an agent",
+          "agentReview": "Agent edit validated",
+          "review": "Content validated"
+        }
       },
       "rules": {
         "title": "Agent rules",

@@ -122,6 +122,14 @@ class TeamWikiRevisionRow(Base):
     # Its `page_id` is minted with the proposal and becomes the page's own.
     proposed_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
     proposed_parent_page_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Who cleared the page's review mark while THIS revision was published, and
+    # when. Kept on the revision rather than the page so the history can show
+    # the validation as its own event, at its own time, by whoever did it —
+    # which need not be the person the agent wrote for.
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

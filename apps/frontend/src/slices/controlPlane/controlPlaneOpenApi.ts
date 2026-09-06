@@ -3448,6 +3448,9 @@ export type WikiRevisionSummary = {
   agent_instance_id?: string | null;
   session_id?: string | null;
   created_at?: string | null;
+  /** When an editor cleared the review mark while this revision was published. The history shows it as its own entry: the person who validates an agent's text is not always the one it was written for. */
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
 };
 export type WikiRevisionList = {
   revisions?: WikiRevisionSummary[];

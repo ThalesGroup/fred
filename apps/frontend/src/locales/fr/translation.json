@@ -3113,9 +3113,14 @@
         "close": "Fermer l'historique",
         "empty": "Aucune version antérieure.",
         "current": "Actuelle",
-        "view": "Voir",
-        "hide": "Masquer",
-        "restore": "Restaurer"
+        "restore": "Restaurer",
+        "event": {
+          "humanEdit": "Édition manuelle",
+          "agentEdit": "Édition par agent ({{agent}})",
+          "agentEditUnnamed": "Édition par un agent",
+          "agentReview": "Validation de l'édition de l'agent",
+          "review": "Validation du contenu"
+        }
       },
       "rules": {
         "title": "Règles pour les agents",

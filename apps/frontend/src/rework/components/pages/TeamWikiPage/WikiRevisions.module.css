@@ -59,6 +59,7 @@
 
 .entry {
   display: flex;
+  position: relative;
   flex-direction: column;
   gap: var(--spacing-3xs);
   /* Transparent by default so the outlined entry below is the same size as
@@ -69,35 +70,54 @@
   padding: var(--spacing-xs);
 }
 
+/* A validation records that someone read the version above it. Recessed, so the
+   timeline still reads as a list of versions with events between them. */
+.entryEvent {
+  background: var(--surface-container);
+}
+
 /* The current revision is outlined rather than only tagged: in a list of
    near-identical rows, the eye finds a border before it finds a word. */
 .entryCurrent {
   border-color: var(--secondary-container);
 }
 
-.entryHead {
+/* The tile's own body: what happened, then when and by whom. A button on a
+   version, a plain block on an event. Right padding clears the corner control. */
+.entryMain {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.entryMeta {
-  display: flex;
-  flex: 1;
   flex-direction: column;
   gap: 1px;
+  cursor: inherit;
+  border: none;
+  background: none;
+  padding: 0 var(--spacing-l) 0 0;
   min-width: 0;
+  text-align: left;
 }
 
-.when {
-  color: var(--on-surface);
-  font: var(--font-body-small);
+button.entryMain {
+  cursor: pointer;
 }
 
-.who {
+button.entryMain:hover .what {
+  color: var(--core-primary);
+}
+
+/* Says in words what this entry is — a manual edit, an agent's, a validation.
+   The line the eye lands on, so it leads rather than the timestamp. */
+.what {
   display: flex;
   align-items: center;
   gap: var(--spacing-3xs);
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.when {
   overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
@@ -105,25 +125,25 @@
   white-space: nowrap;
 }
 
+/* Restore, tucked into the corner the current-version tag would otherwise hold
+   — the two are mutually exclusive, so they can share the spot. */
+.corner {
+  position: absolute;
+  top: var(--spacing-3xs);
+  right: var(--spacing-3xs);
+}
+
 .currentTag {
-  flex-shrink: 0;
-  align-self: flex-start;
-  /* Pulled flush into the tile's own corner, inside the outline. Only the two
-     corners it does not share with the tile are rounded. */
-  margin: calc(-1 * var(--spacing-xs)) calc(-1 * var(--spacing-xs)) 0 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  /* Flush into the tile's own corner, inside the outline. Only the two corners
+     it does not share with the tile are rounded. */
   border-radius: 0 calc(var(--radius-s) - 2px) 0 calc(var(--radius-s) - 2px);
   background: var(--secondary-container);
   padding: 2px var(--spacing-2xs);
   color: var(--on-secondary-container);
   font: var(--font-label-small);
-}
-
-/* Actions sit under the metadata rather than beside it: at 340px the row would
-   otherwise squeeze the timestamp, which is what identifies the revision. */
-.entryActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-3xs);
 }
 
 .preview {

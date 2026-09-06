@@ -102,6 +102,9 @@ class WikiRevisionRecord:
     # Set only on a proposal for a page that does not exist yet (WIKI-04).
     proposed_title: str | None = None
     proposed_parent_page_id: str | None = None
+    # Who cleared the page's review mark while this revision was published.
+    reviewed_at: datetime | None = None
+    reviewed_by: str | None = None
 
 
 @dataclass
@@ -146,6 +149,8 @@ def _to_revision(row: TeamWikiRevisionRow) -> WikiRevisionRecord:
         created_at=row.created_at,
         proposed_title=row.proposed_title,
         proposed_parent_page_id=row.proposed_parent_page_id,
+        reviewed_at=row.reviewed_at,
+        reviewed_by=row.reviewed_by,
     )
 
 
@@ -503,8 +508,19 @@ class TeamWikiStore:
         return page
 
     async def set_needs_review(
-        self, *, team_id: TeamId, page_id: str, needs_review: bool, updated_by: str
+        self, *, team_id: TeamId, page_id: str, needs_review: bool, reviewed_by: str
     ) -> WikiPageRecord:
+        """Flag or clear a page's review mark, and stamp the clearing on the
+        revision it applies to.
+
+        Reviewing is not editing: `updated_at`/`updated_by` are left alone, or
+        validating an agent's page would relabel it as edited by whoever read
+        it. The page's own columns cannot hold the validation either — they
+        would say only that the page was touched, not that this text was
+        approved — so it lands on the currently published revision, where it
+        stays true after the next edit moves the page on.
+        """
+        now = _utcnow()
         async with use_session(self._sessions) as s:
             result: CursorResult = await s.execute(  # type: ignore[assignment]
                 update(TeamWikiPageRow)
@@ -512,10 +528,35 @@ class TeamWikiStore:
                     TeamWikiPageRow.team_id == str(team_id),
                     TeamWikiPageRow.page_id == page_id,
                 )
-                .values(needs_review=needs_review, updated_by=updated_by)
+                # `updated_at` restated so the column's `onupdate` does not fire.
+                .values(
+                    needs_review=needs_review,
+                    updated_at=TeamWikiPageRow.updated_at,
+                )
             )
             if result.rowcount == 0:
                 raise WikiPageNotFoundError(page_id)
+
+            current_revision_id = await s.scalar(
+                select(TeamWikiPageRow.current_revision_id).where(
+                    TeamWikiPageRow.team_id == str(team_id),
+                    TeamWikiPageRow.page_id == page_id,
+                )
+            )
+            if current_revision_id:
+                await s.execute(
+                    update(TeamWikiRevisionRow)
+                    .where(
+                        TeamWikiRevisionRow.team_id == str(team_id),
+                        TeamWikiRevisionRow.revision_id == current_revision_id,
+                    )
+                    # Re-flagging withdraws the validation: the text under
+                    # review is the same one someone had approved.
+                    .values(
+                        reviewed_at=None if needs_review else now,
+                        reviewed_by=None if needs_review else reviewed_by,
+                    )
+                )
 
         page = await self.get_page(team_id, page_id)
         assert page is not None

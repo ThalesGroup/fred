@@ -239,6 +239,73 @@ async def test_an_agent_revision_marks_the_page_for_review(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
+async def test_clearing_the_review_mark_records_the_validation(tmp_path: Path) -> None:
+    """Validating an agent's page is its own event, and not an edit.
+
+    Two things used to be lost: who validated (nothing recorded it at all), and
+    who wrote (the page's `updated_by` was overwritten with the reviewer).
+    """
+    store, engine = await _make_store(tmp_path, "review-stamp.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A,
+            slug="p",
+            title="P",
+            content_md="human text",
+            author_user_id="alice",
+        )
+        await store.publish_revision(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="agent text",
+            base_revision_id=created.page.current_revision_id,
+            author_user_id="alice",
+            author_kind="agent",
+            agent_instance_id="inst-1",
+        )
+        written = await store.get_page(TEAM_A, created.page.page_id)
+        assert written is not None
+
+        await store.set_needs_review(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            needs_review=False,
+            reviewed_by="bob",
+        )
+
+        page = await store.get_page(TEAM_A, created.page.page_id)
+        assert page is not None
+        assert page.needs_review is False
+        # Bob read the page; he did not write it.
+        assert page.updated_by == "alice"
+        assert page.updated_at == written.updated_at
+
+        revisions = await store.list_revisions(TEAM_A, created.page.page_id)
+        current = next(
+            r for r in revisions if r.revision_id == page.current_revision_id
+        )
+        assert current.reviewed_by == "bob"
+        assert current.reviewed_at is not None
+
+        # Re-flagging withdraws the validation — the same text is under review
+        # again, so the old approval must not still stand against it.
+        await store.set_needs_review(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            needs_review=True,
+            reviewed_by="bob",
+        )
+        revisions = await store.list_revisions(TEAM_A, created.page.page_id)
+        current = next(
+            r for r in revisions if r.revision_id == page.current_revision_id
+        )
+        assert current.reviewed_at is None
+        assert current.reviewed_by is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_deleting_a_page_with_children_is_refused(tmp_path: Path) -> None:
     """Revision history cannot undo a lost subtree — the pages themselves would
     be gone — so the delete refuses rather than cascading."""

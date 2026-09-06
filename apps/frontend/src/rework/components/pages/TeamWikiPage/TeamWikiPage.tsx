@@ -472,6 +472,7 @@ export default function TeamWikiPage() {
         {detail && (
           <WikiRevisions
             open={showHistory}
+            teamId={teamId}
             history={history}
             loading={historyLoading}
             currentRevisionId={detail.revision_id ?? null}

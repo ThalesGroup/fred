@@ -55,10 +55,6 @@ from control_plane_backend.routing_policy.api import (
     register_exception_handlers as register_routing_policy_exception_handlers,
 )
 from control_plane_backend.routing_policy.api import router as routing_policy_router
-from control_plane_backend.team_wiki.api import (
-    register_exception_handlers as register_team_wiki_exception_handlers,
-)
-from control_plane_backend.team_wiki.api import router as team_wiki_router
 from control_plane_backend.scheduler.dependencies import (
     build_lifecycle_action_dependencies,
 )
@@ -75,6 +71,10 @@ from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerResult,
 )
 from control_plane_backend.tasks.api import build_tasks_router
+from control_plane_backend.team_wiki.api import (
+    register_exception_handlers as register_team_wiki_exception_handlers,
+)
+from control_plane_backend.team_wiki.api import router as team_wiki_router
 from control_plane_backend.teams.api import (
     register_exception_handlers as register_team_exception_handlers,
 )

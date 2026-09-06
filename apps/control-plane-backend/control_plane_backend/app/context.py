@@ -51,7 +51,6 @@ from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import PlatformPromptStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
-from control_plane_backend.team_wiki.store import TeamWikiStore
 from control_plane_backend.routing_policy.store import (
     PlatformModelBindingStore,
     TeamRoutingPolicyStore,
@@ -65,6 +64,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
+from control_plane_backend.team_wiki.store import TeamWikiStore
 
 logger = logging.getLogger(__name__)
 

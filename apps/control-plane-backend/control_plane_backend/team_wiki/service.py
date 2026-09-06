@@ -7,38 +7,38 @@ from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.security.rebac.rebac_engine import TeamPermission
 
+from control_plane_backend.capabilities.authz import can_team_use_capability
 from control_plane_backend.models.team_wiki_models import (
     MAX_PAGE_DEPTH,
     RULES_PAGE_SLUG,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.team_wiki.schemas import (
+    CreateWikiPageRequest,
     ProposeEditRequest,
     ProposePageRequest,
-    WikiAvailability,
-    WikiProposal,
-    CreateWikiPageRequest,
     SetNeedsReviewRequest,
     UpdateWikiPageContentRequest,
     UpdateWikiPageMetadataRequest,
     UpdateWikiRulesRequest,
+    WikiAvailability,
     WikiPageDetail,
     WikiPageSummary,
     WikiPageTree,
+    WikiProposal,
     WikiRevisionList,
     WikiRevisionSummary,
 )
 from control_plane_backend.team_wiki.store import (
     TeamWikiStore,
-    WikiRevisionRecord,
-    _StaleBaseWrite,
     WikiPageHasChildrenError,
     WikiPageNotFoundError,
     WikiPageRecord,
     WikiRevisionConflictError,
+    WikiRevisionRecord,
     WikiSlugAlreadyExistsError,
+    _StaleBaseWrite,
 )
-from control_plane_backend.capabilities.authz import can_team_use_capability
 from control_plane_backend.teams.service import require_team_access
 
 # Read is member-only, NOT `CAN_READ`: `can_read` is `team_member or public`, so
@@ -310,6 +310,8 @@ async def list_wiki_revisions(
                 agent_instance_id=r.agent_instance_id,
                 session_id=r.session_id,
                 created_at=r.created_at,
+                reviewed_at=r.reviewed_at,
+                reviewed_by=r.reviewed_by,
             )
             for r in revisions
         ],
@@ -607,7 +609,7 @@ async def set_wiki_page_needs_review(
         team_id=team_id,
         page_id=page_id,
         needs_review=request.needs_review,
-        updated_by=user.uid,
+        reviewed_by=user.uid,
     )
     return _summary(updated)
 

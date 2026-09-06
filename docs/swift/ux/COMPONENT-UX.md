@@ -4096,6 +4096,25 @@ control stays rendered while the filter is ON even when the count reaches zero �
 clearing the last mark would otherwise remove the only way to turn the filter
 off and strand the reader on an empty rail.
 
+### Version history (2026-09-07, WIKI-05)
+
+Each tile says in words what happened — `Édition manuelle`, `Édition par agent
+(<name>)`, `Validation de l'édition de l'agent` — because a column of
+timestamps and names does not tell a reader which changes were an agent's, and
+that is the one thing they open the history to find out. The agent's display
+name is resolved from the team's instances, and only fetched once a page
+actually has an agent revision.
+
+**A validation is its own entry**, not a line inside the edit it approves. The
+approval happens later than the write and often by someone else, so folding the
+two together would lose both facts. Event entries carry no preview and no
+restore: no content of their own belongs to them.
+
+**The whole tile opens the version**, and restore is a small icon button in the
+corner the current-version tag would otherwise occupy — the two never appear on
+the same tile. A row of text buttons under every entry cost more height than
+the history it was listing.
+
 ### Conflict handling in the editor
 
 A stale save returns 409 carrying the current text and revision. The editor

@@ -14,21 +14,27 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import type { WikiRevisionList } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  type WikiRevisionList,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useClickOutside } from "@shared/hooks/UseClickOutside";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
+import { historyEntries } from "@rework/features/teamWiki/historyEntries";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiRevisions.module.css";
 
 interface WikiRevisionsProps {
   /** Kept mounted while closed so it can slide out rather than vanish. */
   open: boolean;
+  /** Resolves the agent that wrote a revision to its display name. */
+  teamId: string;
   history: WikiRevisionList | undefined;
   loading: boolean;
   currentRevisionId: string | null;
@@ -49,6 +55,7 @@ interface WikiRevisionsProps {
  */
 export function WikiRevisions({
   open,
+  teamId,
   history,
   loading,
   currentRevisionId,
@@ -82,6 +89,23 @@ export function WikiRevisions({
   const { data: authors = [] } = useUsersByIdsQuery({ ids: authorIds }, { skip: authorIds.length === 0 });
   const authorById = useMemo(() => new Map(authors.map((user) => [user.id, user])), [authors]);
 
+  // Which agent wrote a revision, by name. Only fetched once the history holds
+  // an agent revision — most pages never do, and "an agent" reads no worse than
+  // a name the user would have to wait for.
+  const hasAgentRevision = revisions.some((revision) => revision.agent_instance_id);
+  const { data: agentInstances = [] } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
+    { teamId },
+    { skip: !teamId || !hasAgentRevision },
+  );
+  const agentNameById = useMemo(
+    () => new Map(agentInstances.map((instance) => [instance.agent_instance_id, instance.display_name])),
+    [agentInstances],
+  );
+
+  const entries = useMemo(() => historyEntries(revisions), [revisions]);
+
+  const nameOf = (userId: string) => userDisplayName(userId, authorById.get(userId));
+
   return (
     <aside
       ref={panelRef}
@@ -111,43 +135,75 @@ export function WikiRevisions({
       {!loading && revisions.length === 0 && <p className={styles.empty}>{t("rework.wiki.history.empty")}</p>}
 
       <ul className={styles.list}>
-        {revisions.map((revision) => {
-          const isCurrent = revision.revision_id === currentRevisionId;
-          const isOpen = preview === revision.revision_id;
-          return (
-            <li key={revision.revision_id} className={`${styles.entry} ${isCurrent ? styles.entryCurrent : ""}`}>
-              <div className={styles.entryHead}>
-                <div className={styles.entryMeta}>
-                  <span className={styles.when}>{formatDateTime(revision.created_at, { seconds: true })}</span>
-                  <span className={styles.who}>
-                    {revision.author_kind === "agent" && <Icon category="outlined" type="smart_toy" filled />}
-                    {userDisplayName(revision.author_user_id, authorById.get(revision.author_user_id))}
+        {entries.map((entry) => {
+          // A validation is an event, not a version: nothing to preview, nothing
+          // to restore, and no current-version outline to claim.
+          if (entry.kind === "review") {
+            return (
+              <li key={entry.key} className={`${styles.entry} ${styles.entryEvent}`}>
+                <div className={styles.entryMain}>
+                  <span className={styles.what}>
+                    <Icon category="outlined" type="check_circle" filled />
+                    {t(
+                      entry.ofAgentEdit ? "rework.wiki.history.event.agentReview" : "rework.wiki.history.event.review",
+                    )}
+                  </span>
+                  <span className={styles.when}>
+                    {formatDateTime(entry.at, { seconds: true })} · {nameOf(entry.by)}
                   </span>
                 </div>
-                {isCurrent && <span className={styles.currentTag}>{t("rework.wiki.history.current")}</span>}
-              </div>
+              </li>
+            );
+          }
 
-              <div className={styles.entryActions}>
-                <Button
-                  color="on-surface-retreat"
-                  variant="text"
-                  size="small"
-                  onClick={() => setPreview(isOpen ? null : revision.revision_id)}
-                >
-                  {t(isOpen ? "rework.wiki.history.hide" : "rework.wiki.history.view")}
-                </Button>
-                {canRestore && !isCurrent && (
-                  <Button
-                    color="primary"
-                    variant="text"
-                    size="small"
-                    onClick={() => onRestore(revision.revision_id)}
-                    disabled={restoring}
-                  >
-                    {t("rework.wiki.history.restore")}
-                  </Button>
-                )}
-              </div>
+          const { revision } = entry;
+          const isCurrent = revision.revision_id === currentRevisionId;
+          const isOpen = preview === revision.revision_id;
+          const agentName = revision.agent_instance_id ? agentNameById.get(revision.agent_instance_id) : undefined;
+          const what =
+            revision.author_kind !== "agent"
+              ? t("rework.wiki.history.event.humanEdit")
+              : agentName
+                ? t("rework.wiki.history.event.agentEdit", { agent: agentName })
+                : t("rework.wiki.history.event.agentEditUnnamed");
+
+          return (
+            <li key={entry.key} className={`${styles.entry} ${isCurrent ? styles.entryCurrent : ""}`}>
+              {/* The whole tile opens the version — a row of buttons under every
+                  entry cost more height than the history it was listing. */}
+              <button
+                type="button"
+                className={styles.entryMain}
+                aria-expanded={isOpen}
+                onClick={() => setPreview(isOpen ? null : revision.revision_id)}
+              >
+                <span className={styles.what}>
+                  {revision.author_kind === "agent" && <Icon category="outlined" type="smart_toy" filled />}
+                  {what}
+                </span>
+                <span className={styles.when}>
+                  {formatDateTime(revision.created_at, { seconds: true })} · {nameOf(revision.author_user_id)}
+                </span>
+              </button>
+
+              {isCurrent ? (
+                <span className={styles.currentTag}>{t("rework.wiki.history.current")}</span>
+              ) : (
+                canRestore && (
+                  <span className={styles.corner}>
+                    <Tooltip text={t("rework.wiki.history.restore")}>
+                      <IconButton
+                        icon={{ category: "outlined", type: "history" }}
+                        variant="icon"
+                        size="small"
+                        onClick={() => onRestore(revision.revision_id)}
+                        disabled={restoring}
+                        aria-label={t("rework.wiki.history.restore")}
+                      />
+                    </Tooltip>
+                  </span>
+                )
+              )}
 
               {isOpen && (
                 <div className={styles.preview}>

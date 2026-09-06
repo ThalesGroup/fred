@@ -51,6 +51,15 @@ class WikiRevisionSummary(BaseModel):
     agent_instance_id: str | None = None
     session_id: str | None = None
     created_at: datetime | None = None
+    reviewed_at: datetime | None = Field(
+        default=None,
+        description=(
+            "When an editor cleared the review mark while this revision was "
+            "published. The history shows it as its own entry: the person who "
+            "validates an agent's text is not always the one it was written for."
+        ),
+    )
+    reviewed_by: str | None = None
 
 
 class WikiPageDetail(BaseModel):
