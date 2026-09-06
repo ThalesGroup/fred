@@ -296,3 +296,44 @@ type capability
     # and personal-class edges resolve through the contextual
     # `organization#team` / `organization#personal_team` reverse edges.
     define can_use: (enabled or inherited) but not disabled
+
+type corpus_type
+  # --------------- Corpus-type team scoping (docs/swift/rfc/INDEXED-CORPUS-RFC.md §6) ---------------
+  # A corpus_type is ONE platform-wide object many teams are *enabled-for* (not
+  # a team-owned resource) — a team's actual corpus instances stay scoped by
+  # their own team/tag, unaffected by this gate. Kept as its own type rather
+  # than a namespaced `capability` id: a corpus type is not "something an agent
+  # uses" — same reasoning as the equivalent move for `app`. Callers check only
+  # `can_use`/`can_manage`; the structural relations below are written
+  # exclusively by the enablement API.
+  #
+  # Deliberately smaller than `capability`: no personal-space class overlay
+  # (`personal_on`/`personal_disabled`/`personal_grant`/`personal_block`) yet.
+  # A personal team still inherits `default_on` like any other team through
+  # the contextual `organization#team` edge; add the personal-space overlay
+  # only if a real need for a differently-scoped personal-space default shows up.
+  relations
+    # Platform anchor — every corpus type is anchored to the singleton
+    # organization so management rights derive from the org admin role.
+    define organization: [organization]
+
+    # Default-on marker: tuple present => usable by ALL teams (runtime state,
+    # toggled by writing/deleting this one tuple — never a code property).
+    define default_on: [organization]
+
+    # Explicit per-team grant (the admin-gated path).
+    define enabled: [team]
+
+    # Per-team opt-out of a default-on corpus type (gives the dashboard a
+    # tri-state: inherited-on / enabled / disabled).
+    define disabled: [team]
+
+    # --------------- Permissions (computed relations) ---------------
+    # Can manage (enable/disable/toggle default-on) -> platform admin only,
+    # same precedent as `capability#can_manage`.
+    define can_manage: platform_admin from organization
+
+    # Can a team create/operate an instance of this corpus type. Same
+    # precedence rule as `capability#can_use`: explicit `enabled`/`disabled`
+    # beats `default_on`.
+    define can_use: (enabled or team from default_on) but not disabled

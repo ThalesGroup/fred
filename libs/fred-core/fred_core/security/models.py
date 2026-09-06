@@ -56,6 +56,10 @@ class Resource(str, Enum):
     # Agent-capability team scoping (CAPAB-01 / #1980, RFC AGENT-CAPABILITY §8.1):
     # a platform-wide object that teams are enabled-for, not owned-by.
     CAPABILITY = "capability"
+    # Corpus-type team scoping (docs/swift/rfc/INDEXED-CORPUS-RFC.md §6): same
+    # shape as CAPABILITY, kept as its own type rather than a namespaced
+    # capability id — a corpus type is not "something an agent uses".
+    CORPUS_TYPE = "corpus_type"
 
     # Authorization subject
     USER = "user"
