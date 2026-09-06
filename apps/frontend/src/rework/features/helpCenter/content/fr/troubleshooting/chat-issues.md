@@ -17,10 +17,16 @@ icon: forum
 
 ## Un agent est indisponible ou suspendu
 
-Un agent **suspendu** reste visible mais inutilisable. La cause la plus fréquente
-est une **capacité désactivée** pour l'équipe, dont l'agent dépend. Un
-administrateur de l'équipe peut réactiver la capacité concernée (voir
-[Les capacités](/help/fr/features/capabilities)), ce qui rétablit l'agent.
+Un agent **suspendu** reste visible mais inutilisable. Causes fréquentes :
+
+- Une capacité dont l'agent dépend a été **retirée ou désactivée** : seul
+  l'**administrateur de la plateforme** peut la réactiver, depuis la console
+  d'administration (voir [Les capacités](/help/fr/features/capabilities)).
+- L'**accès** de l'équipe à cette capacité a été **révoqué** : même remède,
+  l'administrateur de la plateforme rétablit l'accès depuis la console
+  d'administration.
+- La **configuration** de la capacité est **invalide** : décochez la capacité
+  sur l'agent, enregistrez, puis recochez-la et enregistrez à nouveau.
 
 ## Ma pièce jointe est refusée
 
