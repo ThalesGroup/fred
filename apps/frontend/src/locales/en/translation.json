@@ -3069,7 +3069,7 @@
         "addChild": "Add a sub-page to {{title}}"
       },
       "article": {
-        "breadcrumb": "Parent pages",
+        "breadcrumb": "Breadcrumb",
         "edit": "Edit",
         "rename": "Rename or move this page",
         "delete": "Delete this page",

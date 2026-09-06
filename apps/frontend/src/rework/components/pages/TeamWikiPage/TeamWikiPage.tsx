@@ -415,7 +415,7 @@ export default function TeamWikiPage() {
             }}
             onOpenHistory={() => {
               setHistoryOpened(true);
-              setShowHistory(true);
+              setShowHistory((shown) => !shown);
             }}
             onRename={() => {
               setRenameTitle(detail.page.title);
@@ -432,6 +432,7 @@ export default function TeamWikiPage() {
               })
             }
             onNavigate={goTo}
+            onNavigateRoot={() => navigate(`/team/${teamId}/wiki`)}
           />
         )}
 

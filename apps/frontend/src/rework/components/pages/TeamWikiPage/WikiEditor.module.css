@@ -3,17 +3,25 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-s);
+  background: var(--surface-main);
   padding: var(--spacing-m);
   min-width: 0;
   /* The text area scrolls inside the surface below, so this column must not:
      two nested scrollbars on one page is the failure this avoids. */
   min-height: 0;
+  color: var(--on-surface);
 }
 
+/* Its own band above the sheet: the title and the two commands are the frame
+   around the writing, not part of it. */
 .header {
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-surface);
 }
 
 .title {
@@ -75,7 +83,7 @@
   flex-direction: column;
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
-  background: var(--surface-container-high);
+  background: var(--surface-main);
   min-height: 320px;
   overflow: hidden;
   color: var(--on-surface);

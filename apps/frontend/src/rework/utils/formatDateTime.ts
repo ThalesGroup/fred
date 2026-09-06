@@ -12,8 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+interface FormatDateTimeOptions {
+  /** Append `:ss`. For a list where two entries can share a minute — a page's
+   *  revision history — the minute alone does not say which came first. */
+  seconds?: boolean;
+}
+
 /** Date + time for a table cell, e.g. `formatDateTime("2026-07-27T15:02:00Z")` -> `"27/07/26 - 15:02"`. */
-export function formatDateTime(iso: string | null | undefined): string {
+export function formatDateTime(iso: string | null | undefined, options: FormatDateTimeOptions = {}): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
@@ -22,5 +28,6 @@ export function formatDateTime(iso: string | null | undefined): string {
   const yy = String(date.getFullYear()).slice(-2);
   const hh = String(date.getHours()).padStart(2, "0");
   const min = String(date.getMinutes()).padStart(2, "0");
-  return `${dd}/${mm}/${yy} - ${hh}:${min}`;
+  const ss = options.seconds ? `:${String(date.getSeconds()).padStart(2, "0")}` : "";
+  return `${dd}/${mm}/${yy} - ${hh}:${min}${ss}`;
 }

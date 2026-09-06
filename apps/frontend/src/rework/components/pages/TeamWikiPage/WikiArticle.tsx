@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { TFunction } from "i18next";
+import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -36,6 +37,8 @@ interface WikiArticleProps {
   onRename: () => void;
   onClearReview: () => void;
   onNavigate: (slug: string) => void;
+  /** The wiki's own root — the breadcrumb's first crumb. */
+  onNavigateRoot: () => void;
 }
 
 /**
@@ -70,104 +73,117 @@ export function WikiArticle({
   onRename,
   onClearReview,
   onNavigate,
+  onNavigateRoot,
 }: WikiArticleProps) {
   const { t } = useTranslation();
   const { page } = detail;
-  const trail = isRules ? [] : ancestorsOf(pages, page.slug);
+  // Always led by the wiki itself, so a root page still says where it sits and
+  // the way back up is in the same place on every page.
+  const trail = [
+    { key: "__root__", label: t("rework.wiki.title"), go: onNavigateRoot },
+    ...(isRules ? [] : ancestorsOf(pages, page.slug)).map((ancestor) => ({
+      key: ancestor.page_id,
+      label: ancestor.title,
+      go: () => onNavigate(ancestor.slug),
+    })),
+  ];
   const isEmpty = detail.content_md.trim().length === 0;
   const edited = editedLine(t, lastAuthorName, page.updated_at ? formatDateTime(page.updated_at) : null);
 
   return (
     <article className={styles.article}>
-      <header className={styles.header}>
-        {trail.length > 0 && (
-          <nav className={styles.trail} aria-label={t("rework.wiki.article.breadcrumb")}>
-            {trail.map((ancestor) => (
-              <button
-                key={ancestor.page_id}
-                type="button"
-                className={styles.trailLink}
-                onClick={() => onNavigate(ancestor.slug)}
-              >
-                {ancestor.title}
+      <div className={styles.topBar}>
+        <nav className={styles.trail} aria-label={t("rework.wiki.article.breadcrumb")}>
+          {trail.map((crumb, index) => (
+            <Fragment key={crumb.key}>
+              {index > 0 && (
+                <span className={styles.trailSeparator} aria-hidden="true">
+                  /
+                </span>
+              )}
+              <button type="button" className={styles.trailLink} onClick={crumb.go}>
+                {crumb.label}
               </button>
-            ))}
-          </nav>
-        )}
+            </Fragment>
+          ))}
+        </nav>
 
-        <div className={styles.titleRow}>
-          <h1 className={styles.title}>{isRules ? t("rework.wiki.rules.title") : page.title}</h1>
-          <div className={styles.actions}>
-            <div className={styles.tools}>
-              {/* History is a read, and the endpoint is member-readable. Who wrote
+        <div className={styles.actions}>
+          <div className={styles.tools}>
+            {/* History is a read, and the endpoint is member-readable. Who wrote
                   what, and when, is exactly what a reader needs to judge a page
                   an agent may have touched — restore stays editor-only inside. */}
+            <IconButton
+              icon={{ category: "outlined", type: "history" }}
+              variant="icon"
+              size="small"
+              onClick={onOpenHistory}
+              aria-label={t("rework.wiki.article.history")}
+            />
+            {canEdit && !isRules && (
               <IconButton
-                icon={{ category: "outlined", type: "history" }}
+                icon={{ category: "outlined", type: "drive_file_rename_outline" }}
                 variant="icon"
                 size="small"
-                onClick={onOpenHistory}
-                aria-label={t("rework.wiki.article.history")}
+                onClick={onRename}
+                aria-label={t("rework.wiki.article.rename")}
               />
-              {canEdit && !isRules && (
-                <IconButton
-                  icon={{ category: "outlined", type: "drive_file_rename_outline" }}
-                  variant="icon"
-                  size="small"
-                  onClick={onRename}
-                  aria-label={t("rework.wiki.article.rename")}
-                />
-              )}
-              {canEdit && !isRules && (
-                <IconButton
-                  icon={{ category: "outlined", type: "delete" }}
-                  variant="icon"
-                  size="small"
-                  onClick={onDelete}
-                  aria-label={t("rework.wiki.article.delete")}
-                />
-              )}
-            </div>
-            {canEdit && (
-              <Button color="primary" variant="filled" size="small" onClick={onEdit}>
-                {t("rework.wiki.article.edit")}
-              </Button>
+            )}
+            {canEdit && !isRules && (
+              <IconButton
+                icon={{ category: "outlined", type: "delete" }}
+                variant="icon"
+                size="small"
+                onClick={onDelete}
+                aria-label={t("rework.wiki.article.delete")}
+              />
             )}
           </div>
-        </div>
-
-        {isRules && <p className={styles.rulesNotice}>{t("rework.wiki.rules.notice")}</p>}
-
-        <div className={styles.meta}>
-          {detail.author_kind === "agent" && (
-            <span className={styles.agentBadge}>
-              <Icon category="outlined" type="smart_toy" filled />
-              {t("rework.wiki.article.writtenByAgent")}
-            </span>
-          )}
-          {edited && <span>{edited}</span>}
-          {page.needs_review && (
-            <button
-              type="button"
-              className={styles.reviewChip}
-              onClick={onClearReview}
-              disabled={!canEdit}
-              title={canEdit ? t("rework.wiki.article.clearReviewHint") : undefined}
-            >
-              <Icon category="outlined" type="reviews" filled />
-              {t(canEdit ? "rework.wiki.article.markReviewed" : "rework.wiki.article.awaitingReview")}
-            </button>
+          {canEdit && (
+            <Button color="primary" variant="filled" size="small" onClick={onEdit}>
+              {t("rework.wiki.article.edit")}
+            </Button>
           )}
         </div>
-      </header>
+      </div>
 
-      {isEmpty ? (
-        <p className={styles.emptyBody}>{t(isRules ? "rework.wiki.rules.empty" : "rework.wiki.article.empty")}</p>
-      ) : (
-        <div className={styles.body}>
-          <MarkdownRenderer text={detail.content_md} />
-        </div>
-      )}
+      <div className={styles.scroll}>
+        <header className={styles.header}>
+          <h1 className={styles.title}>{isRules ? t("rework.wiki.rules.title") : page.title}</h1>
+
+          {isRules && <p className={styles.rulesNotice}>{t("rework.wiki.rules.notice")}</p>}
+
+          <div className={styles.meta}>
+            {detail.author_kind === "agent" && (
+              <span className={styles.agentBadge}>
+                <Icon category="outlined" type="smart_toy" filled />
+                {t("rework.wiki.article.writtenByAgent")}
+              </span>
+            )}
+            {edited && <span>{edited}</span>}
+            {page.needs_review && (
+              <button
+                type="button"
+                className={styles.reviewChip}
+                onClick={onClearReview}
+                disabled={!canEdit}
+                title={canEdit ? t("rework.wiki.article.clearReviewHint") : undefined}
+              >
+                <Icon category="outlined" type="reviews" filled />
+                {t(canEdit ? "rework.wiki.article.markReviewed" : "rework.wiki.article.awaitingReview")}
+              </button>
+            )}
+          </div>
+        </header>
+
+        {isEmpty ? (
+          <p className={styles.emptyBody}>{t(isRules ? "rework.wiki.rules.empty" : "rework.wiki.article.empty")}</p>
+        ) : (
+          <div className={styles.body}>
+            <MarkdownRenderer text={detail.content_md} />
+          </div>
+        )}
+      </div>
     </article>
   );
 }

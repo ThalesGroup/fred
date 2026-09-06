@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -21,6 +21,7 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import type { WikiRevisionList } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useClickOutside } from "@shared/hooks/UseClickOutside";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiRevisions.module.css";
@@ -58,6 +59,15 @@ export function WikiRevisions({
 }: WikiRevisionsProps) {
   const { t } = useTranslation();
   const [preview, setPreview] = useState<string | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  // Dismissed by clicking away, as an overlay panel should be. No exception for
+  // the button that opens it: the panel covers that corner while it is open, so
+  // no pointer can reach it — and a keyboard press emits no mousedown.
+  const closeOnOutsideClick = useCallback(() => {
+    if (open) onClose();
+  }, [open, onClose]);
+  useClickOutside(panelRef, closeOnOutsideClick);
 
   const revisions = useMemo(() => history?.revisions ?? [], [history]);
   const contents = history?.contents ?? {};
@@ -74,6 +84,7 @@ export function WikiRevisions({
 
   return (
     <aside
+      ref={panelRef}
       className={`${styles.panel} ${open ? styles.panelOpen : ""}`}
       // Closed, it is off to the side but still in the DOM: `inert` keeps its
       // buttons out of the tab order and out of the accessibility tree.
@@ -107,7 +118,7 @@ export function WikiRevisions({
             <li key={revision.revision_id} className={`${styles.entry} ${isCurrent ? styles.entryCurrent : ""}`}>
               <div className={styles.entryHead}>
                 <div className={styles.entryMeta}>
-                  <span className={styles.when}>{formatDateTime(revision.created_at)}</span>
+                  <span className={styles.when}>{formatDateTime(revision.created_at, { seconds: true })}</span>
                   <span className={styles.who}>
                     {revision.author_kind === "agent" && <Icon category="outlined" type="smart_toy" filled />}
                     {userDisplayName(revision.author_user_id, authorById.get(revision.author_user_id))}

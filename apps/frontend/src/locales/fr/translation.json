@@ -3069,7 +3069,7 @@
         "addChild": "Ajouter une sous-page à {{title}}"
       },
       "article": {
-        "breadcrumb": "Pages parentes",
+        "breadcrumb": "Fil d’Ariane",
         "edit": "Modifier",
         "rename": "Renommer ou déplacer cette page",
         "delete": "Supprimer cette page",

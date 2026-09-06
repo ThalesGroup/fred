@@ -5,6 +5,25 @@
   gap: var(--spacing-m);
   padding: var(--spacing-m);
   min-width: 0;
+  min-height: 0;
+}
+
+/* Breadcrumb left, page actions right — one fixed row above the scrolling
+   content, so the toolbar is in the same place on every page and at every
+   scroll position rather than riding away with the title. */
+.topBar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -18,11 +37,19 @@
 
 .trail {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2xs);
+  min-width: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+}
+
+/* A real element between crumbs rather than an ::after on each: the trail ends
+   on a page name, never on a separator. */
+.trailSeparator {
+  color: var(--on-surface-muted);
 }
 
 .trailLink {
@@ -39,19 +66,7 @@
   text-decoration: underline;
 }
 
-.trailLink::after {
-  margin-left: var(--spacing-2xs);
-  content: "/";
-}
-
-.titleRow {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-m);
-}
-
 .title {
-  flex: 1;
   margin: 0;
   min-width: 0;
   color: var(--on-surface);
