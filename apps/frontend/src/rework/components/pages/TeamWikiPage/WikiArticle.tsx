@@ -77,15 +77,19 @@ export function WikiArticle({
 }: WikiArticleProps) {
   const { t } = useTranslation();
   const { page } = detail;
-  // Always led by the wiki itself, so a root page still says where it sits and
-  // the way back up is in the same place on every page.
-  const trail = [
+  const pageTitle = isRules ? t("rework.wiki.rules.title") : page.title;
+
+  // Led by the wiki itself and closed by the page being read, so a root page
+  // still says where it sits and the way back up is in the same place on every
+  // page. The last crumb carries no link — it is where you already are.
+  const trail: { key: string; label: string; go?: () => void }[] = [
     { key: "__root__", label: t("rework.wiki.title"), go: onNavigateRoot },
     ...(isRules ? [] : ancestorsOf(pages, page.slug)).map((ancestor) => ({
       key: ancestor.page_id,
       label: ancestor.title,
       go: () => onNavigate(ancestor.slug),
     })),
+    { key: page.page_id || "__current__", label: pageTitle },
   ];
   const isEmpty = detail.content_md.trim().length === 0;
   const edited = editedLine(t, lastAuthorName, page.updated_at ? formatDateTime(page.updated_at) : null);
@@ -103,9 +107,15 @@ export function WikiArticle({
                     /
                   </span>
                 )}
-                <button type="button" className={styles.trailLink} onClick={crumb.go}>
-                  {crumb.label}
-                </button>
+                {crumb.go ? (
+                  <button type="button" className={styles.trailLink} onClick={crumb.go}>
+                    {crumb.label}
+                  </button>
+                ) : (
+                  <span className={styles.trailCurrent} aria-current="page">
+                    {crumb.label}
+                  </span>
+                )}
               </Fragment>
             ))}
           </nav>
@@ -150,7 +160,7 @@ export function WikiArticle({
         </div>
 
         <div className={styles.titleBlock}>
-          <h1 className={styles.title}>{isRules ? t("rework.wiki.rules.title") : page.title}</h1>
+          <h1 className={styles.title}>{pageTitle}</h1>
 
           {isRules && <p className={styles.rulesNotice}>{t("rework.wiki.rules.notice")}</p>}
 

@@ -18,7 +18,7 @@
 // before anything starts writing into it. Design: rfc/TEAM-WIKI-RFC.md.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
@@ -64,6 +64,19 @@ interface ConflictBody {
   current_content_md?: string;
 }
 
+/** What the open editor is writing to, captured when it opens.
+ *
+ * Read live from the page query, a background refetch — someone else's save, a
+ * restore, a review mark — hands the editor a different page or none at all,
+ * and the draft goes with it. Captured, the editor is independent of every
+ * query in flight until the user closes it. */
+interface EditingTarget {
+  pageId: string;
+  title: string;
+  content: string;
+  revisionId: string | null;
+}
+
 interface StaleWrite {
   currentContentMd: string;
   /** What the next save must use as its base, or the retry conflicts again. */
@@ -94,7 +107,8 @@ export default function TeamWikiPage() {
   const { canUpdateResources: canEdit } = useTeamCapabilities(selectedTeam);
   const teamId = routeTeamId ?? "";
 
-  const [editing, setEditing] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
+  const editing = editingTarget !== null;
   const [showHistory, setShowHistory] = useState(false);
   // Stays set after the panel closes: unsubscribing on close would drop the
   // revisions and blank the panel out through its whole slide-out.
@@ -190,10 +204,20 @@ export default function TeamWikiPage() {
     ];
   }, [pages, detail, t]);
 
-  const goTo = (target: string) => navigate(`/team/${teamId}/wiki/${target}`);
+  /** Open a wiki page, or the wiki's root when `target` is null. */
+  const goTo = (target: string | null) => navigate(target ? `/team/${teamId}/wiki/${target}` : `/team/${teamId}/wiki`);
+
+  // Leaving an open editor throws the draft away — the page is re-read from the
+  // server on arrival — so the user is asked first rather than told afterwards.
+  // Blocking the router rather than the wiki's own links catches the team's
+  // navigation panel and the browser's Back button too, which no in-page guard
+  // could see.
+  const leaveBlocker = useBlocker(
+    ({ currentLocation, nextLocation }) => editing && currentLocation.pathname !== nextLocation.pathname,
+  );
 
   const leaveEditor = () => {
-    setEditing(false);
+    setEditingTarget(null);
     setConflict(null);
     setEditorSeed(null);
     setBaseOverride(null);
@@ -203,7 +227,7 @@ export default function TeamWikiPage() {
   // mounted, its draft would still be in state while `handleSave` now targets
   // the NEW page id — one click from overwriting page B with page A's text.
   useEffect(() => {
-    setEditing(false);
+    setEditingTarget(null);
     setConflict(null);
     setEditorSeed(null);
     setBaseOverride(null);
@@ -212,10 +236,10 @@ export default function TeamWikiPage() {
   }, [slug]);
 
   const handleSave = async (contentMd: string) => {
-    if (!detail) return;
+    if (!editingTarget) return;
     setConflict(null);
     try {
-      const base = baseOverride ?? detail.revision_id;
+      const base = baseOverride ?? editingTarget.revisionId;
       if (isRules) {
         await writeRules({
           teamId,
@@ -224,7 +248,7 @@ export default function TeamWikiPage() {
       } else {
         await writePage({
           teamId,
-          pageId: detail.page.page_id,
+          pageId: editingTarget.pageId,
           updateWikiPageContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       }
@@ -295,7 +319,7 @@ export default function TeamWikiPage() {
     try {
       await deletePage({ teamId, pageId: detail.page.page_id }).unwrap();
       setConfirmDelete(false);
-      navigate(`/team/${teamId}/wiki`);
+      goTo(null);
     } catch (error) {
       // The commonest refusal is "delete its children first" — a 409 the user
       // can act on, so it must reach them rather than looking like a dead click.
@@ -338,7 +362,9 @@ export default function TeamWikiPage() {
         >
           <div className={styles.railHeader}>
             <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
-            {canEdit && (
+            {/* Not while a draft is open: creating a page navigates to it, and
+                the prompt would come after the page already existed. */}
+            {canEdit && !editing && (
               <Button
                 color="primary"
                 variant="text"
@@ -356,7 +382,7 @@ export default function TeamWikiPage() {
             activeSlug={activeSlug}
             onSelect={goTo}
             onSelectRules={() => goTo(RULES_PAGE_SLUG)}
-            canEdit={canEdit}
+            canEdit={canEdit && !editing}
             onAddChild={(parent) => openCreate(parent)}
             reviewOnly={reviewOnly}
             onToggleReviewOnly={() => setReviewOnly((on) => !on)}
@@ -370,23 +396,13 @@ export default function TeamWikiPage() {
           />
         </div>
 
-        {!hasPages && !isRules ? (
-          <PageEmptyState
-            icon="book_2"
-            message={t(canEdit ? "rework.wiki.empty.editor" : "rework.wiki.empty.member")}
-            action={canEdit ? { label: t("rework.wiki.newPage"), onClick: () => openCreate(null) } : undefined}
-          />
-        ) : pageLoading || rulesLoading ? (
-          <div className={styles.state}>
-            <Spinner />
-          </div>
-        ) : !detail ? (
-          <div className={styles.state}>{t("rework.wiki.notFound")}</div>
-        ) : editing ? (
+        {/* First, and from captured values: a refetch landing mid-draft must not
+            swap the editor for a spinner and take the text with it. */}
+        {editingTarget ? (
           <WikiEditor
             key={editorGeneration}
-            title={isRules ? t("rework.wiki.rules.title") : detail.page.title}
-            initialContent={editorSeed ?? detail.content_md}
+            title={editingTarget.title}
+            initialContent={editorSeed ?? editingTarget.content}
             maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
             saving={savingPage || savingRules}
             conflict={conflict}
@@ -402,6 +418,18 @@ export default function TeamWikiPage() {
               setEditorGeneration((n) => n + 1);
             }}
           />
+        ) : !hasPages && !isRules ? (
+          <PageEmptyState
+            icon="book_2"
+            message={t(canEdit ? "rework.wiki.empty.editor" : "rework.wiki.empty.member")}
+            action={canEdit ? { label: t("rework.wiki.newPage"), onClick: () => openCreate(null) } : undefined}
+          />
+        ) : pageLoading || rulesLoading ? (
+          <div className={styles.state}>
+            <Spinner />
+          </div>
+        ) : !detail ? (
+          <div className={styles.state}>{t("rework.wiki.notFound")}</div>
         ) : (
           <WikiArticle
             detail={detail}
@@ -411,7 +439,12 @@ export default function TeamWikiPage() {
             isRules={isRules}
             onEdit={() => {
               setEditorSeed(null);
-              setEditing(true);
+              setEditingTarget({
+                pageId: detail.page.page_id,
+                title: isRules ? t("rework.wiki.rules.title") : detail.page.title,
+                content: detail.content_md,
+                revisionId: detail.revision_id ?? null,
+              });
             }}
             onOpenHistory={() => {
               setHistoryOpened(true);
@@ -432,7 +465,7 @@ export default function TeamWikiPage() {
               })
             }
             onNavigate={goTo}
-            onNavigateRoot={() => navigate(`/team/${teamId}/wiki`)}
+            onNavigateRoot={() => goTo(null)}
           />
         )}
 
@@ -493,6 +526,20 @@ export default function TeamWikiPage() {
             />
           </div>
         </Dialog>
+
+        <ConfirmationDialog
+          open={leaveBlocker.state === "blocked"}
+          title={t("rework.wiki.leaveDialog.title")}
+          message={t("rework.wiki.leaveDialog.message", { title: editingTarget?.title ?? "" })}
+          confirmLabel={t("rework.wiki.leaveDialog.confirm")}
+          cancelLabel={t("rework.wiki.leaveDialog.cancel")}
+          criticalAction
+          onConfirm={() => {
+            leaveEditor();
+            leaveBlocker.proceed?.();
+          }}
+          onCancel={() => leaveBlocker.reset?.()}
+        />
 
         <ConfirmationDialog
           open={confirmDelete}

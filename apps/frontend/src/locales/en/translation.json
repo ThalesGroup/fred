@@ -3117,6 +3117,12 @@
         "root": "None \u2014 top level",
         "confirm": "Save"
       },
+      "leaveDialog": {
+        "title": "Discard your changes?",
+        "message": "You are editing \u201c{{title}}\u201d. Opening another page will lose the text you have not saved.",
+        "confirm": "Discard changes",
+        "cancel": "Keep writing"
+      },
       "deleteDialog": {
         "title": "Delete this page?",
         "message": "\"{{title}}\" and all of its versions will be deleted permanently. This cannot be undone.",

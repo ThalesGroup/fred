@@ -61,6 +61,12 @@
   color: var(--on-surface-muted);
 }
 
+/* The page being read. Not a link — it is where you already are — and stated
+   in the full text colour so the trail reads as leading somewhere. */
+.trailCurrent {
+  color: var(--on-surface);
+}
+
 .trailLink {
   cursor: pointer;
   border: none;

@@ -3117,6 +3117,12 @@
         "root": "Aucune \u2014 premier niveau",
         "confirm": "Enregistrer"
       },
+      "leaveDialog": {
+        "title": "Abandonner vos modifications ?",
+        "message": "Vous \u00eates en train de modifier \u00ab\u00a0{{title}}\u00a0\u00bb. Si vous ouvrez une autre page, le texte que vous n\u2019avez pas enregistr\u00e9 sera perdu.",
+        "confirm": "Abandonner les modifications",
+        "cancel": "Continuer \u00e0 \u00e9crire"
+      },
       "deleteDialog": {
         "title": "Supprimer cette page ?",
         "message": "« {{title}} » et toutes ses versions seront supprimées définitivement. Cette action est irréversible.",
