@@ -34,7 +34,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from fred_core import KeycloakUser
 from fred_sdk.contracts.connector import ChangeKind, SourceChange, SourceItem
-from fred_sdk.contracts.corpus import Corpus, CorpusKind, CorpusMode, CorpusScope
+from fred_sdk.contracts.corpus import Corpus, CorpusKind, CorpusMode, CorpusScope, CorpusType
 
 from knowledge_flow_backend.features.scheduler import pull_corpus_sync as sync_module
 
@@ -43,14 +43,29 @@ def _user() -> KeycloakUser:
     return KeycloakUser(uid="sync-user", username="sync", email="sync@localhost", roles=["admin"])
 
 
-def _corpus() -> Corpus:
+def _corpus_type(*, mode: CorpusMode = CorpusMode.PULL) -> CorpusType:
+    if mode is CorpusMode.PULL:
+        return CorpusType(
+            corpus_type_id="local_fs_rag",
+            name="Local filesystem corpus",
+            kind=CorpusKind.RAG_SQL,
+            mode=CorpusMode.PULL,
+            connector_kind="local_fs",
+        )
+    return CorpusType(
+        corpus_type_id="local_fs_rag",
+        name="Local filesystem corpus",
+        kind=CorpusKind.RAG_SQL,
+        mode=CorpusMode.PUSH,
+    )
+
+
+def _corpus(*, corpus_type_id: str = "local_fs_rag") -> Corpus:
     return Corpus(
         corpus_id="corpus-1",
         name="Team FS corpus",
+        corpus_type_id=corpus_type_id,
         scope=CorpusScope(team_id="team-1", tag_ids=["tag-a"]),
-        mode=CorpusMode.PULL,
-        kind=CorpusKind.RAG_SQL,
-        connector_kind="local_fs",
         connector_ref="conn-1",
     )
 
@@ -92,19 +107,29 @@ def _patch_ingestion(monkeypatch, *, document_uid: str = "doc-1"):
     return ingestion_service, delete_mock
 
 
-def test_rejects_push_mode_corpus() -> None:
-    push_corpus = Corpus(
-        corpus_id="c",
-        name="n",
-        scope=CorpusScope(team_id="t"),
-        mode=CorpusMode.PUSH,
-        kind=CorpusKind.RAG_SQL,
-    )
+def test_rejects_push_mode_corpus_type() -> None:
     try:
         asyncio.run(
             sync_module.sync_pull_corpus(
                 user=_user(),
-                corpus=push_corpus,
+                corpus=_corpus(),
+                corpus_type=_corpus_type(mode=CorpusMode.PUSH),
+                connector=_ScriptedConnector([]),
+                state=None,
+            )
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+
+
+def test_rejects_mismatched_corpus_type_id() -> None:
+    try:
+        asyncio.run(
+            sync_module.sync_pull_corpus(
+                user=_user(),
+                corpus=_corpus(corpus_type_id="other_type"),
+                corpus_type=_corpus_type(),
                 connector=_ScriptedConnector([]),
                 state=None,
             )
@@ -119,7 +144,7 @@ def test_upsert_ingests_new_file_and_records_state(monkeypatch) -> None:
     item = SourceItem(source_item_id="a.txt", revision="rev-1", display_path="a.txt")
     connector = _ScriptedConnector([([SourceChange(item=item, kind=ChangeKind.UPSERT)], "cursor-1")])
 
-    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), connector=connector, state=None))
+    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), corpus_type=_corpus_type(), connector=connector, state=None))
 
     parsed = json.loads(next_state)
     assert parsed["connector_cursor"] == "cursor-1"
@@ -132,7 +157,7 @@ def test_second_sync_with_no_changes_makes_no_ingestion_calls(monkeypatch) -> No
     connector = _ScriptedConnector([([], "cursor-1")])
     state = json.dumps({"connector_cursor": "cursor-0", "documents": {"a.txt": "doc-1"}})
 
-    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), connector=connector, state=state))
+    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), corpus_type=_corpus_type(), connector=connector, state=state))
 
     assert json.loads(next_state) == {"connector_cursor": "cursor-1", "documents": {"a.txt": "doc-1"}}
     ingestion_service.extract_metadata.assert_not_called()
@@ -145,7 +170,7 @@ def test_delete_change_removes_document_and_state(monkeypatch) -> None:
     connector = _ScriptedConnector([([SourceChange(item=item, kind=ChangeKind.DELETE)], "cursor-1")])
     state = json.dumps({"connector_cursor": "cursor-0", "documents": {"a.txt": "doc-1"}})
 
-    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), connector=connector, state=state))
+    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), corpus_type=_corpus_type(), connector=connector, state=state))
 
     delete_mock.assert_awaited_once_with(_user(), "doc-1")
     assert json.loads(next_state)["documents"] == {}
@@ -157,7 +182,7 @@ def test_changed_content_deletes_old_document_then_recreates(monkeypatch) -> Non
     connector = _ScriptedConnector([([SourceChange(item=item, kind=ChangeKind.UPSERT)], "cursor-1")])
     state = json.dumps({"connector_cursor": "cursor-0", "documents": {"a.txt": "doc-1"}})
 
-    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), connector=connector, state=state))
+    next_state = asyncio.run(sync_module.sync_pull_corpus(user=_user(), corpus=_corpus(), corpus_type=_corpus_type(), connector=connector, state=state))
 
     delete_mock.assert_awaited_once_with(_user(), "doc-1")
     assert json.loads(next_state)["documents"] == {"a.txt": "doc-2"}

@@ -37,6 +37,10 @@ Not addressed here (RFC §7 — deliberately not decided by this POC): what
 calls this on what cadence, and serializing concurrent calls for the same
 corpus. Calling this function twice concurrently for the same `corpus.corpus_id`
 is the caller's responsibility to prevent, not this function's.
+
+`Corpus` (instance) and `CorpusType` (registered kind) are two objects
+since the RFC's 2026-09-06 revision (§2/§4) — `mode` lives on `CorpusType`,
+not on the instance, so this function takes both rather than just `corpus`.
 """
 
 from __future__ import annotations
@@ -50,7 +54,7 @@ from typing import Any
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import SourceType
 from fred_sdk.contracts.connector import ChangeKind, SourceConnector
-from fred_sdk.contracts.corpus import Corpus, CorpusMode
+from fred_sdk.contracts.corpus import Corpus, CorpusMode, CorpusType
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
@@ -66,6 +70,7 @@ async def sync_pull_corpus(
     *,
     user: KeycloakUser,
     corpus: Corpus,
+    corpus_type: CorpusType,
     connector: SourceConnector,
     state: str | None,
     profile: IngestionProcessingProfile = IngestionProcessingProfile.medium,
@@ -78,8 +83,10 @@ async def sync_pull_corpus(
     of its own, including the connector-kind usage-enablement check the RFC
     describes (§6, not yet implemented).
     """
-    if corpus.mode is not CorpusMode.PULL:
-        raise ValueError(f"sync_pull_corpus requires a pull-mode corpus, got {corpus.mode}")
+    if corpus.corpus_type_id != corpus_type.corpus_type_id:
+        raise ValueError(f"corpus.corpus_type_id ({corpus.corpus_type_id!r}) does not match corpus_type ({corpus_type.corpus_type_id!r})")
+    if corpus_type.mode is not CorpusMode.PULL:
+        raise ValueError(f"sync_pull_corpus requires a pull-mode corpus type, got {corpus_type.mode}")
 
     parsed: dict[str, Any] = json.loads(state) if state else {}
     documents: dict[str, str] = dict(parsed.get("documents", {}))
