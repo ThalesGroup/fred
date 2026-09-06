@@ -17,7 +17,12 @@ suivre l'activité et repérer ce qui pèse.
 - **Par modèle** : la répartition selon les modèles utilisés.
 - **Votre part personnelle**, distincte du total de l'équipe.
 
+La répartition à l'échelle de l'équipe (consommation dans le temps, par agent,
+par modèle) demande le rôle **Admin**, **Éditeur** ou **Analyste**. Un simple
+membre ne voit que sa part personnelle.
+
 ![TODO: capture — la page de suivi d'usage](assets/usage-overview.png)
 
-Le suivi du **stockage** documentaire, lui, se consulte sur la page
-[Ressources](/help/fr/features/resources).
+Le suivi du **stockage** documentaire se consulte surtout sur la page
+[Ressources](/help/fr/features/resources), mais un graphique de quota de
+stockage est aussi affiché ici pour les rôles élevés.

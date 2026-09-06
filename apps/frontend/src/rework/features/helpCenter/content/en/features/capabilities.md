@@ -37,12 +37,17 @@ Packs are grouped into **sections** by what they bring:
     [Build an assistant on your resources](/help/en/guides/build-rag-assistant).
   - **Attachments in a conversation**: the agent can use the files you drop into
     a conversation — without reaching the rest of the team's resources.
+  - **Document reading**: on top of search, the agent can read a document's
+    exact text and pull out every item matching a request, without skipping
+    anything. See "How your agent reads documents" further down this page.
 - **Document production**
   - **Generate a Word document**: the agent writes a downloadable text
     document. See the guide
     [Producing documents](/help/en/guides/generate-documents).
   - **Fill in a PowerPoint document**: from a `.pptx` template, the agent fills
     in a finished presentation.
+  - **Generate a web page (HTML/CSS)**: the agent produces a static HTML/CSS
+    page, rendered in a preview next to the chat.
 - **Intelligence and orchestration**
   - **Reasoning**: the agent takes time to think step by step before answering,
     for more complex questions.
@@ -51,6 +56,33 @@ Packs are grouped into **sections** by what they bring:
 Turning on a pack automatically enables every capability it contains that is
 **available to your team** (see just below). You don't have to switch each item
 on by hand.
+
+## How your agent reads documents
+
+Three different packs touch your team's documents, and it's worth knowing
+what each one actually gives you. You never pick between them yourself in a
+conversation — the agent chooses automatically based on what you ask — but
+knowing the difference helps you turn on the right pack and trust the answer.
+
+- **Search** (part of _Access to team resources_): finds the most relevant
+  passages across your documents and answers from them. Fast, and the right
+  default for "what does the team know about X".
+- **Read verbatim** (part of _Document reading_): reads a document's exact
+  text, in order, for when you need the precise wording of one spot — "what
+  does section 4.3 say, word for word".
+- **Extract** (part of _Document reading_): goes through an entire document
+  and lists everything matching what you asked for, without skipping
+  anything — "list every deadline in this contract". This is the slower,
+  more thorough option, and the one that costs the most to run.
+- **Summarize** (part of _Access to team resources_ and _Attachments in a
+  conversation_): a short, readable overview. It's deliberately not
+  exhaustive — detail is left out on purpose to keep it short.
+
+> **Tip.** If a request needs _nothing left out_ — "list every…", "each and
+> every…", "don't miss any…" — make sure **Document reading** is turned on,
+> not just **Access to team resources**. Search alone only surfaces the
+> passages it judges most relevant, and can miss items that don't rank highly
+> enough to come back.
 
 ## See it at a glance: the three states
 
