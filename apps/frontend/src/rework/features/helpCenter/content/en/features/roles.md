@@ -15,7 +15,7 @@ Your permissions depend on your **roles**. There are two independent levels:
 Any authenticated user can **use the platform**: there is no "global" role
 gating basic access. Roles only open up extra permissions. Every permission is
 checked **server-side** on each action (see
-[Security & authorization](/help/en/architecture/security)).
+[Security & authorization](https://site.fredlab.dev)).
 
 ```mermaid
 flowchart TB
@@ -88,5 +88,5 @@ operations team, outside the application role model.
   `platform_admin`, can reach it.
 
 For the authorization mechanism, see
-[Security & authorization](/help/en/architecture/security). To manage members
+[Security & authorization](https://site.fredlab.dev). To manage members
 and their roles, see [Administering your team](/help/en/features/teams).

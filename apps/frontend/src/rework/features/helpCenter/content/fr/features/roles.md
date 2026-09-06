@@ -17,7 +17,7 @@ l'un de l'autre :
 Tout utilisateur authentifié peut **utiliser la plateforme** : il n'y a pas de
 rôle « global » qui conditionne l'accès de base. Les rôles ne font qu'ouvrir des
 droits supplémentaires. Chaque droit est vérifié **côté serveur** à chaque
-action (voir [Sécurité & autorisation](/help/fr/architecture/security)).
+action (voir [Sécurité & autorisation](https://site.fredlab.dev)).
 
 ```mermaid
 flowchart TB
@@ -93,5 +93,5 @@ d'exploitation distincte, en dehors du modèle de rôles applicatif.
   `platform_admin`, ne peut y accéder.
 
 Pour le détail du mécanisme d'autorisation, voir
-[Sécurité & autorisation](/help/fr/architecture/security). Pour gérer les
+[Sécurité & autorisation](https://site.fredlab.dev). Pour gérer les
 membres et leurs rôles, voir [Administrer son équipe](/help/fr/features/teams).

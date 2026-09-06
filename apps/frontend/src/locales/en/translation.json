@@ -1617,6 +1617,7 @@
       "copyPageLink": "Copy the page link",
       "copyHeadingLink": "Copy the link to this paragraph",
       "missingPage": "This page doesn't exist yet.",
+      "externalDocsLink": "Technical documentation ↗",
       "search": {
         "placeholder": "Search the help…",
         "ariaLabel": "Search the Help Center",
@@ -1630,7 +1631,6 @@
         "guides": "Guides & use cases",
         "troubleshooting": "Troubleshooting",
         "faq": "FAQ",
-        "architecture": "Technical architecture",
         "changelog": "What's new"
       }
     },
