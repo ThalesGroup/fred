@@ -78,6 +78,18 @@ def test_open_bundle_rejects_unsupported_users_schema_version() -> None:
         open_bundle(data)
 
 
+def test_open_bundle_rejects_non_swift_source_platform() -> None:
+    """A matching format/schema version is not enough: this importer only ever
+    reads Swift table names, so a bundle from anywhere else (or a stale kea
+    bundle that happens to share these version numbers) must be rejected here
+    rather than silently mis-imported."""
+    data = _minimal_bundle_bytes(
+        {"format_version": 1, "users_schema_version": 1, "source_platform": "kea"}
+    )
+    with pytest.raises(UnsupportedBundleFormatError):
+        open_bundle(data)
+
+
 def test_open_bundle_accepts_a_conformant_manifest() -> None:
     data = _minimal_bundle_bytes(
         {

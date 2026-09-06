@@ -118,4 +118,12 @@ def open_bundle(data: bytes) -> KBundle:
             f"Unsupported users.json schema version {manifest.users_schema_version}; "
             f"this importer understands {sorted(SUPPORTED_USERS_SCHEMA_VERSIONS)}"
         )
+    if manifest.source_platform != "swift":
+        # Matching format/schema version numbers is not enough: this importer
+        # only ever reads Swift table names, so a manifest from anywhere else
+        # must be rejected here rather than silently mis-imported.
+        raise UnsupportedBundleFormatError(
+            f"Unsupported bundle source_platform {manifest.source_platform!r}; "
+            "this importer only understands 'swift'"
+        )
     return KBundle(zf, manifest)
