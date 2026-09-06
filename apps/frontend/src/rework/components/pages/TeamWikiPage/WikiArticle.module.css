@@ -2,20 +2,36 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--spacing-m);
   padding: var(--spacing-m);
   min-width: 0;
   min-height: 0;
 }
 
-/* Breadcrumb left, page actions right — one fixed row above the scrolling
-   content, so the toolbar is in the same place on every page and at every
-   scroll position rather than riding away with the title. */
+/* Breadcrumb left, page actions right. */
 .topBar {
   display: flex;
-  flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-m);
+}
+
+/* What names the page — trail, actions, title, metadata — stays put. The rule
+   below it is the line the body scrolls under: without it, text sliding away
+   under a heading that never moves reads as a rendering fault. */
+.header {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-m);
+}
+
+/* Two groups in one header: the top row is navigation and commands, this is
+   the page's identity. Their own gaps, so they do not read as one list. */
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
 }
 
 .scroll {
@@ -23,16 +39,9 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-m);
+  padding-top: var(--spacing-m);
   min-height: 0;
   overflow-y: auto;
-}
-
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  /* Its own gap, not the article's: the title block is one group, and sharing
-     the article's spacing would read as another paragraph of content. */
 }
 
 .trail {

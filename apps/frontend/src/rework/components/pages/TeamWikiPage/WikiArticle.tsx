@@ -92,63 +92,64 @@ export function WikiArticle({
 
   return (
     <article className={styles.article}>
-      <div className={styles.topBar}>
-        <nav className={styles.trail} aria-label={t("rework.wiki.article.breadcrumb")}>
-          {trail.map((crumb, index) => (
-            <Fragment key={crumb.key}>
-              {index > 0 && (
-                <span className={styles.trailSeparator} aria-hidden="true">
-                  /
-                </span>
-              )}
-              <button type="button" className={styles.trailLink} onClick={crumb.go}>
-                {crumb.label}
-              </button>
-            </Fragment>
-          ))}
-        </nav>
+      {/* Everything that names the page stays put; only its body scrolls. */}
+      <header className={styles.header}>
+        <div className={styles.topBar}>
+          <nav className={styles.trail} aria-label={t("rework.wiki.article.breadcrumb")}>
+            {trail.map((crumb, index) => (
+              <Fragment key={crumb.key}>
+                {index > 0 && (
+                  <span className={styles.trailSeparator} aria-hidden="true">
+                    /
+                  </span>
+                )}
+                <button type="button" className={styles.trailLink} onClick={crumb.go}>
+                  {crumb.label}
+                </button>
+              </Fragment>
+            ))}
+          </nav>
 
-        <div className={styles.actions}>
-          <div className={styles.tools}>
-            {/* History is a read, and the endpoint is member-readable. Who wrote
+          <div className={styles.actions}>
+            <div className={styles.tools}>
+              {/* History is a read, and the endpoint is member-readable. Who wrote
                   what, and when, is exactly what a reader needs to judge a page
                   an agent may have touched — restore stays editor-only inside. */}
-            <IconButton
-              icon={{ category: "outlined", type: "history" }}
-              variant="icon"
-              size="small"
-              onClick={onOpenHistory}
-              aria-label={t("rework.wiki.article.history")}
-            />
-            {canEdit && !isRules && (
               <IconButton
-                icon={{ category: "outlined", type: "drive_file_rename_outline" }}
+                icon={{ category: "outlined", type: "history" }}
                 variant="icon"
                 size="small"
-                onClick={onRename}
-                aria-label={t("rework.wiki.article.rename")}
+                onClick={onOpenHistory}
+                aria-label={t("rework.wiki.article.history")}
               />
-            )}
-            {canEdit && !isRules && (
-              <IconButton
-                icon={{ category: "outlined", type: "delete" }}
-                variant="icon"
-                size="small"
-                onClick={onDelete}
-                aria-label={t("rework.wiki.article.delete")}
-              />
+              {canEdit && !isRules && (
+                <IconButton
+                  icon={{ category: "outlined", type: "drive_file_rename_outline" }}
+                  variant="icon"
+                  size="small"
+                  onClick={onRename}
+                  aria-label={t("rework.wiki.article.rename")}
+                />
+              )}
+              {canEdit && !isRules && (
+                <IconButton
+                  icon={{ category: "outlined", type: "delete" }}
+                  variant="icon"
+                  size="small"
+                  onClick={onDelete}
+                  aria-label={t("rework.wiki.article.delete")}
+                />
+              )}
+            </div>
+            {canEdit && (
+              <Button color="primary" variant="filled" size="small" onClick={onEdit}>
+                {t("rework.wiki.article.edit")}
+              </Button>
             )}
           </div>
-          {canEdit && (
-            <Button color="primary" variant="filled" size="small" onClick={onEdit}>
-              {t("rework.wiki.article.edit")}
-            </Button>
-          )}
         </div>
-      </div>
 
-      <div className={styles.scroll}>
-        <header className={styles.header}>
+        <div className={styles.titleBlock}>
           <h1 className={styles.title}>{isRules ? t("rework.wiki.rules.title") : page.title}</h1>
 
           {isRules && <p className={styles.rulesNotice}>{t("rework.wiki.rules.notice")}</p>}
@@ -174,8 +175,10 @@ export function WikiArticle({
               </button>
             )}
           </div>
-        </header>
+        </div>
+      </header>
 
+      <div className={styles.scroll}>
         {isEmpty ? (
           <p className={styles.emptyBody}>{t(isRules ? "rework.wiki.rules.empty" : "rework.wiki.article.empty")}</p>
         ) : (
