@@ -3,7 +3,7 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-s);
-  background: var(--surface-main);
+  background: var(--surface-container);
   padding: var(--spacing-m);
   min-width: 0;
   /* The text area scrolls inside the surface below, so this column must not:
