@@ -23,8 +23,8 @@ Pour en profiter :
 2. Utilisez un agent qui en dispose.
 3. Décrivez ce que vous voulez, puis affinez par itérations successives.
 
-Le document produit apparaît dans la conversation et se retrouve parmi les
-[ressources](/help/fr/features/resources), avec la provenance **Généré**.
+Le document produit reste dans le panneau de conversation, d'où vous pouvez le
+télécharger au format Word ou Markdown.
 
 ## Remplir un modèle PowerPoint
 

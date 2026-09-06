@@ -13,10 +13,11 @@ save everyone time.
 ## Frame the roles
 
 Assign [roles](/help/en/getting-started/join-create-team) by responsibility:
-**Administrators** for those who manage members and settings, **Editors** for
-those who create agents and prompts, **Analysts** and **Members** for day-to-day
-use. Too many administrators dilutes responsibility; too few creates
-bottlenecks.
+**Admins** for those who manage members and settings, **Editors** for those who
+create agents and prompts, **Analysts** for those who create and run agent
+evaluation campaigns and manage the evaluation corpora, and **Members** for
+day-to-day use. Too many administrators dilutes responsibility; too few
+creates bottlenecks.
 
 ## Share reference prompts
 

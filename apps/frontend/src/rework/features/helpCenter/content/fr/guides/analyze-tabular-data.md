@@ -7,8 +7,8 @@ icon: table
 
 # Interroger des données tabulaires
 
-La capacité **données tabulaires** permet d'interroger un fichier de données
-(tableur, CSV) en langage naturel, sans écrire de requête.
+L'outil **Exploiter les fichiers tabulaires** permet d'interroger un fichier de
+données (tableur, CSV) en langage naturel, sans écrire de requête.
 
 ## Charger le fichier
 
