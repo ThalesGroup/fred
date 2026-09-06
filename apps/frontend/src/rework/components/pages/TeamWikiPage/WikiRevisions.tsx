@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -20,6 +20,8 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import type { WikiRevisionList } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import styles from "./WikiRevisions.module.css";
 
 interface WikiRevisionsProps {
@@ -59,8 +61,18 @@ export function WikiRevisions({
   const { t, i18n } = useTranslation();
   const [preview, setPreview] = useState<string | null>(null);
 
-  const revisions = history?.revisions ?? [];
+  const revisions = useMemo(() => history?.revisions ?? [], [history]);
   const contents = history?.contents ?? {};
+
+  // A revision stores the author's uid. Showing it raw makes the history a
+  // column of opaque strings, which is the opposite of what it is for — the
+  // point of the panel is knowing WHO changed a page.
+  const authorIds = useMemo(
+    () => Array.from(new Set(revisions.map((revision) => revision.author_user_id).filter(Boolean))),
+    [revisions],
+  );
+  const { data: authors = [] } = useUsersByIdsQuery({ ids: authorIds }, { skip: authorIds.length === 0 });
+  const authorById = useMemo(() => new Map(authors.map((user) => [user.id, user])), [authors]);
 
   return (
     <aside className={styles.panel} aria-label={t("rework.wiki.history.title")}>
@@ -88,13 +100,13 @@ export function WikiRevisions({
           const isCurrent = revision.revision_id === currentRevisionId;
           const isOpen = preview === revision.revision_id;
           return (
-            <li key={revision.revision_id} className={styles.entry}>
+            <li key={revision.revision_id} className={`${styles.entry} ${isCurrent ? styles.entryCurrent : ""}`}>
               <div className={styles.entryHead}>
                 <div className={styles.entryMeta}>
                   <span className={styles.when}>{formatWhen(revision.created_at, i18n.language)}</span>
                   <span className={styles.who}>
                     {revision.author_kind === "agent" && <Icon category="outlined" type="smart_toy" filled />}
-                    {revision.author_user_id}
+                    {userDisplayName(revision.author_user_id, authorById.get(revision.author_user_id))}
                   </span>
                 </div>
                 {isCurrent && <span className={styles.currentTag}>{t("rework.wiki.history.current")}</span>}

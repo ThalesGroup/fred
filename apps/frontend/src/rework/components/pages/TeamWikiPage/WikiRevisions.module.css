@@ -33,6 +33,12 @@
   list-style: none;
 }
 
+/* The current revision is outlined rather than only tagged: in a list of
+   near-identical rows, the eye finds a border before it finds a word. */
+.entryCurrent {
+  box-shadow: inset 0 0 0 2px var(--secondary);
+}
+
 .entry {
   display: flex;
   flex-direction: column;

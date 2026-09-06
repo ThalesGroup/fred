@@ -32,8 +32,9 @@ import {
   UndoRedo,
 } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ApplicationContext } from "../../../../app/ApplicationContextProvider";
 import Button from "@shared/atoms/Button/Button";
 import styles from "./WikiEditor.module.css";
 
@@ -49,8 +50,6 @@ interface WikiEditorProps {
   onCancel: () => void;
   onTakeTheirs: (contentMd: string) => void;
 }
-
-const isDarkTheme = () => document.documentElement.getAttribute("data-theme") === "dark";
 
 /**
  * Edit one wiki page.
@@ -70,6 +69,7 @@ export function WikiEditor({
   onTakeTheirs,
 }: WikiEditorProps) {
   const { t } = useTranslation();
+  const { darkMode } = useContext(ApplicationContext);
   const [draft, setDraft] = useState(initialContent);
 
   const tooLong = draft.length > maxChars;
@@ -122,7 +122,11 @@ export function WikiEditor({
         <MDXEditor
           markdown={initialContent}
           onChange={setDraft}
-          className={isDarkTheme() ? "dark-theme dark-editor" : undefined}
+          // Remounts on a theme flip: MDXEditor builds its popup container once,
+          // copying this class onto it, so the toolbar's dropdowns would keep
+          // the palette they were born with.
+          key={darkMode ? "dark" : "light"}
+          className={darkMode ? "dark-theme dark-editor" : undefined}
           contentEditableClassName="fred-writable-document"
           plugins={[
             headingsPlugin(),

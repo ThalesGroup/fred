@@ -42,7 +42,9 @@ import {
   useWikiRulesQuery,
   useWriteWikiPageMutation,
   useWriteWikiRulesMutation,
+  useUsersByIdsQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import { WikiArticle } from "./WikiArticle";
 import { WikiEditor } from "./WikiEditor";
 import { WikiRevisions } from "./WikiRevisions";
@@ -137,6 +139,19 @@ export default function TeamWikiPage() {
   const [deletePage] = useDeleteWikiPageMutation();
   const [setReviewMark] = useSetWikiReviewMarkMutation();
   const [restoreRevision, { isLoading: restoring }] = useRestoreWikiRevisionMutation();
+
+  // The page stores its last author's uid; the meta line needs their name.
+  const lastAuthorId = detail?.page.updated_by ?? null;
+  const { data: lastAuthors = [] } = useUsersByIdsQuery(
+    { ids: lastAuthorId ? [lastAuthorId] : [] },
+    { skip: !lastAuthorId },
+  );
+  const lastAuthorName = lastAuthorId
+    ? userDisplayName(
+        lastAuthorId,
+        lastAuthors.find((user) => user.id === lastAuthorId),
+      )
+    : null;
 
   const goTo = (target: string) => navigate(`/team/${teamId}/wiki/${target}`);
 
@@ -235,12 +250,24 @@ export default function TeamWikiPage() {
     }
   };
 
-  if (!teamId) return <div className={styles.state}>{t("rework.wiki.missingTeam")}</div>;
+  if (!teamId) {
+    return (
+      <div className={styles.frame}>
+        <div className={styles.page}>
+          <div className={styles.state}>{t("rework.wiki.missingTeam")}</div>
+        </div>
+      </div>
+    );
+  }
 
   if (treeLoading) {
     return (
-      <div className={styles.state}>
-        <Spinner />
+      <div className={styles.frame}>
+        <div className={styles.page}>
+          <div className={styles.state}>
+            <Spinner />
+          </div>
+        </div>
       </div>
     );
   }
@@ -248,148 +275,151 @@ export default function TeamWikiPage() {
   const hasPages = pages.some((page) => page.kind !== "rules");
 
   return (
-    <div className={styles.page}>
-      <div className={styles.railColumn}>
-        <div className={styles.railHeader}>
-          <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
-          {canEdit && (
-            <Button
-              color="primary"
-              variant="text"
-              size="small"
-              icon={{ category: "outlined", type: "add" }}
-              onClick={() => setCreating(true)}
-            >
-              {t("rework.wiki.newPage")}
-            </Button>
-          )}
+    <div className={styles.frame}>
+      <div className={styles.page}>
+        <div className={styles.railColumn}>
+          <div className={styles.railHeader}>
+            <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
+            {canEdit && (
+              <Button
+                color="primary"
+                variant="text"
+                size="small"
+                icon={{ category: "outlined", type: "add" }}
+                onClick={() => setCreating(true)}
+              >
+                {t("rework.wiki.newPage")}
+              </Button>
+            )}
+          </div>
+          <WikiTree
+            pages={pages}
+            rulesPage={rulesPage ?? { page_id: "", slug: RULES_PAGE_SLUG, title: "Rules", kind: "rules" }}
+            activeSlug={activeSlug}
+            onSelect={goTo}
+            onSelectRules={() => goTo(RULES_PAGE_SLUG)}
+            reviewOnly={reviewOnly}
+            onToggleReviewOnly={() => setReviewOnly((on) => !on)}
+          />
         </div>
-        <WikiTree
-          pages={pages}
-          rulesPage={rulesPage ?? { page_id: "", slug: RULES_PAGE_SLUG, title: "Rules", kind: "rules" }}
-          activeSlug={activeSlug}
-          onSelect={goTo}
-          onSelectRules={() => goTo(RULES_PAGE_SLUG)}
-          reviewOnly={reviewOnly}
-          onToggleReviewOnly={() => setReviewOnly((on) => !on)}
+
+        {!hasPages && !isRules ? (
+          <PageEmptyState
+            icon="book_2"
+            message={t(canEdit ? "rework.wiki.empty.editor" : "rework.wiki.empty.member")}
+            action={canEdit ? { label: t("rework.wiki.newPage"), onClick: () => setCreating(true) } : undefined}
+          />
+        ) : pageLoading || rulesLoading ? (
+          <div className={styles.state}>
+            <Spinner />
+          </div>
+        ) : !detail ? (
+          <div className={styles.state}>{t("rework.wiki.notFound")}</div>
+        ) : editing ? (
+          <WikiEditor
+            key={editorGeneration}
+            title={isRules ? t("rework.wiki.rules.title") : detail.page.title}
+            initialContent={editorSeed ?? detail.content_md}
+            maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
+            saving={savingPage || savingRules}
+            conflict={conflict}
+            onSave={handleSave}
+            onCancel={leaveEditor}
+            onTakeTheirs={(current) => {
+              // Remount on the server's text: MDXEditor reads `markdown` only at
+              // mount, so changing the prop alone would leave the user's own text
+              // on screen while claiming to have loaded theirs. The draft is lost,
+              // but they chose that — it was never silently overwritten.
+              setEditorSeed(current);
+              setConflict(null);
+              setEditorGeneration((n) => n + 1);
+            }}
+          />
+        ) : (
+          <WikiArticle
+            detail={detail}
+            pages={pages}
+            lastAuthorName={lastAuthorName}
+            canEdit={canEdit}
+            isRules={isRules}
+            onEdit={() => {
+              setEditorSeed(null);
+              setEditing(true);
+            }}
+            onOpenHistory={() => setShowHistory(true)}
+            onRename={() => {
+              setRenameTitle(detail.page.title);
+              setRenaming(true);
+            }}
+            onDelete={() => setConfirmDelete(true)}
+            onClearReview={() =>
+              void setReviewMark({
+                teamId,
+                pageId: detail.page.page_id,
+                setNeedsReviewRequest: { needs_review: false },
+              })
+            }
+            onNavigate={goTo}
+          />
+        )}
+
+        {showHistory && detail && (
+          <WikiRevisions
+            history={history}
+            loading={historyLoading}
+            currentRevisionId={detail.revision_id ?? null}
+            canRestore={canEdit}
+            restoring={restoring}
+            onRestore={(revisionId) => void restoreRevision({ teamId, pageId: detail.page.page_id, revisionId })}
+            onClose={() => setShowHistory(false)}
+          />
+        )}
+
+        <Dialog
+          open={creating}
+          title={t("rework.wiki.newPageDialog.title")}
+          confirmLabel={t("rework.wiki.newPageDialog.confirm")}
+          confirmDisabled={!newTitle.trim() || creatingPage}
+          onConfirm={() => void handleCreate()}
+          onCancel={() => {
+            setCreating(false);
+            setNewTitle("");
+          }}
+        >
+          <TextInput
+            label={t("rework.wiki.newPageDialog.label")}
+            value={newTitle}
+            onChange={(event) => setNewTitle(event.target.value)}
+            autoFocus
+          />
+        </Dialog>
+
+        <Dialog
+          open={renaming}
+          title={t("rework.wiki.renameDialog.title")}
+          confirmLabel={t("rework.wiki.renameDialog.confirm")}
+          confirmDisabled={!renameTitle.trim()}
+          onConfirm={() => void handleRename()}
+          onCancel={() => setRenaming(false)}
+        >
+          <TextInput
+            label={t("rework.wiki.renameDialog.label")}
+            value={renameTitle}
+            onChange={(event) => setRenameTitle(event.target.value)}
+            autoFocus
+          />
+        </Dialog>
+
+        <ConfirmationDialog
+          open={confirmDelete}
+          title={t("rework.wiki.deleteDialog.title")}
+          message={t("rework.wiki.deleteDialog.message", { title: detail?.page.title ?? "" })}
+          confirmLabel={t("rework.wiki.deleteDialog.confirm")}
+          criticalAction
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setConfirmDelete(false)}
         />
       </div>
-
-      {!hasPages && !isRules ? (
-        <PageEmptyState
-          icon="book_2"
-          message={t(canEdit ? "rework.wiki.empty.editor" : "rework.wiki.empty.member")}
-          action={canEdit ? { label: t("rework.wiki.newPage"), onClick: () => setCreating(true) } : undefined}
-        />
-      ) : pageLoading || rulesLoading ? (
-        <div className={styles.state}>
-          <Spinner />
-        </div>
-      ) : !detail ? (
-        <div className={styles.state}>{t("rework.wiki.notFound")}</div>
-      ) : editing ? (
-        <WikiEditor
-          key={editorGeneration}
-          title={isRules ? t("rework.wiki.rules.title") : detail.page.title}
-          initialContent={editorSeed ?? detail.content_md}
-          maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
-          saving={savingPage || savingRules}
-          conflict={conflict}
-          onSave={handleSave}
-          onCancel={leaveEditor}
-          onTakeTheirs={(current) => {
-            // Remount on the server's text: MDXEditor reads `markdown` only at
-            // mount, so changing the prop alone would leave the user's own text
-            // on screen while claiming to have loaded theirs. The draft is lost,
-            // but they chose that — it was never silently overwritten.
-            setEditorSeed(current);
-            setConflict(null);
-            setEditorGeneration((n) => n + 1);
-          }}
-        />
-      ) : (
-        <WikiArticle
-          detail={detail}
-          pages={pages}
-          canEdit={canEdit}
-          isRules={isRules}
-          onEdit={() => {
-            setEditorSeed(null);
-            setEditing(true);
-          }}
-          onOpenHistory={() => setShowHistory(true)}
-          onRename={() => {
-            setRenameTitle(detail.page.title);
-            setRenaming(true);
-          }}
-          onDelete={() => setConfirmDelete(true)}
-          onClearReview={() =>
-            void setReviewMark({
-              teamId,
-              pageId: detail.page.page_id,
-              setNeedsReviewRequest: { needs_review: false },
-            })
-          }
-          onNavigate={goTo}
-        />
-      )}
-
-      {showHistory && detail && (
-        <WikiRevisions
-          history={history}
-          loading={historyLoading}
-          currentRevisionId={detail.revision_id ?? null}
-          canRestore={canEdit}
-          restoring={restoring}
-          onRestore={(revisionId) => void restoreRevision({ teamId, pageId: detail.page.page_id, revisionId })}
-          onClose={() => setShowHistory(false)}
-        />
-      )}
-
-      <Dialog
-        open={creating}
-        title={t("rework.wiki.newPageDialog.title")}
-        confirmLabel={t("rework.wiki.newPageDialog.confirm")}
-        confirmDisabled={!newTitle.trim() || creatingPage}
-        onConfirm={() => void handleCreate()}
-        onCancel={() => {
-          setCreating(false);
-          setNewTitle("");
-        }}
-      >
-        <TextInput
-          label={t("rework.wiki.newPageDialog.label")}
-          value={newTitle}
-          onChange={(event) => setNewTitle(event.target.value)}
-          autoFocus
-        />
-      </Dialog>
-
-      <Dialog
-        open={renaming}
-        title={t("rework.wiki.renameDialog.title")}
-        confirmLabel={t("rework.wiki.renameDialog.confirm")}
-        confirmDisabled={!renameTitle.trim()}
-        onConfirm={() => void handleRename()}
-        onCancel={() => setRenaming(false)}
-      >
-        <TextInput
-          label={t("rework.wiki.renameDialog.label")}
-          value={renameTitle}
-          onChange={(event) => setRenameTitle(event.target.value)}
-          autoFocus
-        />
-      </Dialog>
-
-      <ConfirmationDialog
-        open={confirmDelete}
-        title={t("rework.wiki.deleteDialog.title")}
-        message={t("rework.wiki.deleteDialog.message", { title: detail?.page.title ?? "" })}
-        confirmLabel={t("rework.wiki.deleteDialog.confirm")}
-        criticalAction
-        onConfirm={() => void handleDelete()}
-        onCancel={() => setConfirmDelete(false)}
-      />
     </div>
   );
 }

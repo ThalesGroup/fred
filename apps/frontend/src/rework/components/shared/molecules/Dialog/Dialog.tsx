@@ -75,11 +75,24 @@ export function Dialog({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape") {
+        onCancel();
+        return;
+      }
+      // Enter confirms — a dialog whose body is one field should not need a
+      // trip to the mouse. Never from a textarea or a rich-text surface, where
+      // Enter means "new line", and never past a disabled confirm button,
+      // which would submit exactly what the caller judged invalid.
+      if (e.key !== "Enter" || e.shiftKey || confirmDisabled) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "TEXTAREA" || target?.isContentEditable) return;
+      e.preventDefault();
+      onConfirm();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
+  }, [open, onCancel, onConfirm, confirmDisabled]);
 
   if (!open) return null;
 

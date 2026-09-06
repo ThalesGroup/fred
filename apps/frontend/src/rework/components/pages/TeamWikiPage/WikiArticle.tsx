@@ -22,6 +22,8 @@ import { ancestorsOf } from "@rework/features/teamWiki/wikiTree";
 import styles from "./WikiArticle.module.css";
 
 interface WikiArticleProps {
+  /** Display name of the page's last author, already resolved. */
+  lastAuthorName: string | null;
   detail: WikiPageDetail;
   pages: readonly WikiPageSummary[];
   canEdit: boolean;
@@ -45,6 +47,7 @@ interface WikiArticleProps {
 export function WikiArticle({
   detail,
   pages,
+  lastAuthorName,
   canEdit,
   isRules,
   onEdit,
@@ -125,7 +128,7 @@ export function WikiArticle({
               {t("rework.wiki.article.writtenByAgent")}
             </span>
           )}
-          {page.updated_by && <span>{t("rework.wiki.article.lastEditedBy", { user: page.updated_by })}</span>}
+          {lastAuthorName && <span>{t("rework.wiki.article.lastEditedBy", { user: lastAuthorName })}</span>}
           {page.needs_review && (
             <button
               type="button"

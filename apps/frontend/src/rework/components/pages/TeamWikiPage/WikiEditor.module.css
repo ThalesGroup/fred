@@ -5,7 +5,9 @@
   gap: var(--spacing-s);
   padding: var(--spacing-l);
   min-width: 0;
-  overflow-y: auto;
+  /* The text area scrolls inside the surface below, so this column must not:
+     two nested scrollbars on one page is the failure this avoids. */
+  min-height: 0;
 }
 
 .header {
@@ -63,10 +65,31 @@
   font: var(--font-body-small);
 }
 
+/* Fills the height left by the header, so a short page still offers a full
+   writing surface rather than a two-line box floating in an empty column.
+   MDXEditor sizes to its content by default, so its own root has to stretch
+   too, and the text area is what scrolls. */
 .surface {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-s);
   background: var(--surface-main);
+  min-height: 320px;
   overflow: hidden;
   color: var(--on-surface);
+}
+
+.surface > :global(.mdxeditor) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.surface :global(.mdxeditor-root-contenteditable) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
