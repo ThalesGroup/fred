@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { WikiPageSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import { ancestorsOf, buildWikiTree, findRulesPage, visibleNodes } from "./wikiTree";
+import { ancestorsOf, buildWikiTree, canHaveChild, findRulesPage, moveTargets, visibleNodes } from "./wikiTree";
 
 function page(id: string, overrides: Partial<WikiPageSummary> = {}): WikiPageSummary {
   return {
@@ -113,5 +113,55 @@ describe("ancestorsOf", () => {
     expect(ancestorsOf(pages, "grandchild").map((p) => p.page_id)).toEqual(["root", "child"]);
     expect(ancestorsOf(pages, "root")).toEqual([]);
     expect(ancestorsOf(pages, "missing")).toEqual([]);
+  });
+});
+
+describe("canHaveChild", () => {
+  it("allows a child up to the cap and refuses one past it", () => {
+    expect(canHaveChild(0)).toBe(true);
+    expect(canHaveChild(2)).toBe(true);
+    // A child of a depth-3 page would sit at 4, which the server refuses.
+    expect(canHaveChild(3)).toBe(false);
+  });
+});
+
+describe("moveTargets", () => {
+  it("offers every other page when the tree is shallow", () => {
+    const pages = [page("a"), page("b"), page("c")];
+    expect(moveTargets(pages, "a").map((t) => t.page.page_id)).toEqual(["b", "c"]);
+  });
+
+  it("never offers the page itself or one of its own descendants", () => {
+    const pages = [page("root"), page("child", { parent_page_id: "root" }), page("other")];
+    expect(moveTargets(pages, "root").map((t) => t.page.page_id)).toEqual(["other"]);
+  });
+
+  it("names a target by its full path, so two same-named pages are distinguishable", () => {
+    const pages = [
+      page("a", { title: "Onboarding" }),
+      page("b", { title: "Notes", parent_page_id: "a" }),
+      page("moving", { title: "Moving" }),
+    ];
+    expect(moveTargets(pages, "moving").map((t) => t.path)).toEqual(["Onboarding", "Onboarding / Notes"]);
+  });
+
+  // The move carries the subtree with it: a destination that fits the page
+  // itself can still push its deepest child past the cap.
+  it("drops a destination that would push the moved subtree past the depth cap", () => {
+    const pages = [
+      page("l0"),
+      page("l1", { parent_page_id: "l0" }),
+      page("l2", { parent_page_id: "l1" }),
+      page("moving"),
+      page("kid", { parent_page_id: "moving" }),
+    ];
+    // "moving" is one level tall, so it fits under l0 (depth 0 -> lands at 1,
+    // kid at 2) and under l1 (lands at 2, kid at 3) but not under l2, whose
+    // child would sit at 3 with the kid at 4.
+    expect(moveTargets(pages, "moving").map((t) => t.page.page_id)).toEqual(["l0", "l1"]);
+  });
+
+  it("returns nothing for a page the tree does not contain", () => {
+    expect(moveTargets([page("a")], "ghost")).toEqual([]);
   });
 });

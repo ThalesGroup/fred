@@ -3064,12 +3064,13 @@
         "needsReview": "Un agent a écrit cette page et personne ne l'a encore relue",
         "pendingReview": "{{count}} page à relire",
         "pendingReview_other": "{{count}} pages à relire",
-        "nothingToReview": "Rien à relire."
+        "nothingToReview": "Rien à relire.",
+        "addChild": "Ajouter une sous-page à {{title}}"
       },
       "article": {
         "breadcrumb": "Pages parentes",
         "edit": "Modifier",
-        "rename": "Renommer cette page",
+        "rename": "Renommer ou déplacer cette page",
         "delete": "Supprimer cette page",
         "history": "Historique des versions",
         "empty": "Cette page est vide.",
@@ -3104,13 +3105,16 @@
       },
       "newPageDialog": {
         "title": "Nouvelle page de wiki",
+        "childTitle": "Nouvelle page sous \u00ab\u00a0{{parent}}\u00a0\u00bb",
         "label": "Titre de la page",
         "confirm": "Créer la page"
       },
       "renameDialog": {
-        "title": "Renommer la page",
+        "title": "Titre et emplacement",
         "label": "Titre de la page",
-        "confirm": "Renommer"
+        "parentLabel": "Page parente",
+        "root": "Aucune \u2014 premier niveau",
+        "confirm": "Enregistrer"
       },
       "deleteDialog": {
         "title": "Supprimer cette page ?",
@@ -3120,7 +3124,7 @@
       "errors": {
         "save": "Impossible d'enregistrer cette page",
         "create": "Impossible de créer la page",
-        "rename": "Impossible de renommer la page",
+        "rename": "Impossible d’enregistrer le titre ou l’emplacement de la page",
         "delete": "Impossible de supprimer la page"
       }
     }

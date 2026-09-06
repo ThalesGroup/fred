@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { buildWikiTree, visibleNodes } from "@rework/features/teamWiki/wikiTree";
+import { buildWikiTree, canHaveChild, visibleNodes } from "@rework/features/teamWiki/wikiTree";
 import styles from "./WikiTree.module.css";
 
 interface WikiTreeProps {
@@ -26,6 +26,9 @@ interface WikiTreeProps {
   activeSlug: string | null;
   onSelect: (slug: string) => void;
   onSelectRules: () => void;
+  /** Editors only: start a new page under this one. */
+  canEdit: boolean;
+  onAddChild: (parent: WikiPageSummary) => void;
   /** Filter the tree down to pages an agent touched and nobody has reviewed. */
   reviewOnly: boolean;
   onToggleReviewOnly: () => void;
@@ -45,6 +48,8 @@ export function WikiTree({
   activeSlug,
   onSelect,
   onSelectRules,
+  canEdit,
+  onAddChild,
   reviewOnly,
   onToggleReviewOnly,
 }: WikiTreeProps) {
@@ -64,6 +69,11 @@ export function WikiTree({
     }
     return visibleNodes(tree, collapsed);
   }, [reviewOnly, pages, tree, collapsed]);
+
+  // A flat wiki has no chevrons, so reserving their column on every row would
+  // indent the whole rail against nothing. Under a parent, the slot is what
+  // keeps a leaf's title aligned with its siblings', so it stays.
+  const anyExpandable = rows.some((row) => row.children.length > 0);
 
   const toggle = (pageId: string) => {
     setCollapsed((current) => {
@@ -110,7 +120,7 @@ export function WikiTree({
                   aria-label={t(collapsed.has(page.page_id) ? "rework.wiki.tree.expand" : "rework.wiki.tree.collapse")}
                 />
               ) : (
-                <span className={styles.spacer} aria-hidden="true" />
+                anyExpandable && <span className={styles.spacer} aria-hidden="true" />
               )}
               <button
                 type="button"
@@ -121,6 +131,27 @@ export function WikiTree({
                 <span className={styles.title}>{page.title}</span>
                 {page.needs_review && <span className={styles.reviewDot} title={t("rework.wiki.tree.needsReview")} />}
               </button>
+              {/* Revealed on hover or keyboard focus. Creating a sub-page by
+                  pointing at its parent is what makes the parent unambiguous —
+                  no second field to fill, and nothing to get wrong. */}
+              {canEdit && !reviewOnly && canHaveChild(depth) && (
+                <span className={styles.addChild}>
+                  <IconButton
+                    icon={{ category: "outlined", type: "add" }}
+                    variant="icon"
+                    size="small"
+                    onClick={() => {
+                      setCollapsed((current) => {
+                        const next = new Set(current);
+                        next.delete(page.page_id);
+                        return next;
+                      });
+                      onAddChild(page);
+                    }}
+                    aria-label={t("rework.wiki.tree.addChild", { title: page.title })}
+                  />
+                </span>
+              )}
             </div>
           </li>
         ))}

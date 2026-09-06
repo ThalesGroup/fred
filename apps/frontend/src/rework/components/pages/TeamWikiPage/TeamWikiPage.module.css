@@ -65,3 +65,11 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
+
+/* Two fields in a dialog are one group, and the Dialog molecule hands its body
+   no spacing of its own. */
+.formFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}

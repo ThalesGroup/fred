@@ -3064,12 +3064,13 @@
         "needsReview": "An agent wrote this page and nobody has reviewed it yet",
         "pendingReview": "{{count}} page to review",
         "pendingReview_other": "{{count}} pages to review",
-        "nothingToReview": "Nothing waiting for a review."
+        "nothingToReview": "Nothing waiting for a review.",
+        "addChild": "Add a sub-page to {{title}}"
       },
       "article": {
         "breadcrumb": "Parent pages",
         "edit": "Edit",
-        "rename": "Rename this page",
+        "rename": "Rename or move this page",
         "delete": "Delete this page",
         "history": "Version history",
         "empty": "This page is empty.",
@@ -3104,13 +3105,16 @@
       },
       "newPageDialog": {
         "title": "New wiki page",
+        "childTitle": "New page under \u201c{{parent}}\u201d",
         "label": "Page title",
         "confirm": "Create page"
       },
       "renameDialog": {
-        "title": "Rename page",
+        "title": "Title and location",
         "label": "Page title",
-        "confirm": "Rename"
+        "parentLabel": "Parent page",
+        "root": "None \u2014 top level",
+        "confirm": "Save"
       },
       "deleteDialog": {
         "title": "Delete this page?",
@@ -3120,7 +3124,7 @@
       "errors": {
         "save": "Could not save this page",
         "create": "Could not create the page",
-        "rename": "Could not rename the page",
+        "rename": "Could not save the page\u2019s title or location",
         "delete": "Could not delete the page"
       }
     }

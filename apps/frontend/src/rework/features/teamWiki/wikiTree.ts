@@ -24,6 +24,15 @@ import type { WikiPageSummary } from "../../../slices/controlPlane/controlPlaneO
 /** Reserved slug of the rules page — must match the backend's RULES_PAGE_SLUG. */
 export const RULES_PAGE_SLUG = "__rules__";
 
+/** Mirrors the backend's MAX_PAGE_DEPTH. A root sits at depth 0, so 3 allows
+ *  four levels and a child of a depth-3 page is refused. */
+export const MAX_PAGE_DEPTH = 3;
+
+/** Can a page at this depth take a child without the server refusing it? */
+export function canHaveChild(depth: number): boolean {
+  return depth + 1 <= MAX_PAGE_DEPTH;
+}
+
 export interface WikiTreeNode {
   page: WikiPageSummary;
   depth: number;
@@ -119,4 +128,52 @@ export function ancestorsOf(pages: readonly WikiPageSummary[], slug: string): Wi
     cursor = parent.parent_page_id;
   }
   return chain;
+}
+
+/** A page a subtree may legally be moved under, with the path that names it. */
+export interface WikiMoveTarget {
+  page: WikiPageSummary;
+  /** Root-first path, e.g. `"Onboarding / Tooling"` — a flat list of bare
+   *  titles cannot tell two pages named "Notes" apart. */
+  path: string;
+}
+
+/** How many levels sit below this node — 0 for a leaf. */
+function subtreeHeight(node: WikiTreeNode): number {
+  return node.children.length === 0 ? 0 : 1 + Math.max(...node.children.map(subtreeHeight));
+}
+
+/**
+ * The pages `pageId` may be moved under, mirroring the server's three refusals:
+ * itself, its own descendants, and any destination deep enough to push the
+ * moved subtree's lowest page past the cap.
+ *
+ * Duplicated from the backend deliberately: the server stays the gate, and this
+ * only spares the user a destination that would come back as an error. Returned
+ * in tree order, so the select reads like the rail.
+ */
+export function moveTargets(pages: readonly WikiPageSummary[], pageId: string): WikiMoveTarget[] {
+  const candidates: (WikiMoveTarget & { depth: number })[] = [];
+  let height: number | null = null;
+
+  const walk = (nodes: readonly WikiTreeNode[], trail: readonly string[]) => {
+    for (const node of nodes) {
+      const path = [...trail, node.page.title];
+      // The moved page and everything under it are skipped whole: a page cannot
+      // be its own parent, nor a child of its own child.
+      if (node.page.page_id === pageId) {
+        height = subtreeHeight(node);
+        continue;
+      }
+      candidates.push({ page: node.page, path: path.join(" / "), depth: node.depth });
+      walk(node.children, path);
+    }
+  };
+  walk(buildWikiTree(pages), []);
+
+  if (height === null) return [];
+  const moved = height;
+  return candidates
+    .filter((candidate) => candidate.depth + 1 + moved <= MAX_PAGE_DEPTH)
+    .map(({ page, path }) => ({ page, path }));
 }

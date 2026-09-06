@@ -23,13 +23,14 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import TextInput from "@shared/atoms/TextInput/TextInput";
+import Select from "@shared/molecules/Select/Select";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities";
-import { buildWikiTree, findRulesPage, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
+import { buildWikiTree, findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
 import {
   useCreateWikiPageMutation,
   useDeleteWikiPageMutation,
@@ -45,6 +46,7 @@ import {
   useUsersByIdsQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
+import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { WikiArticle } from "./WikiArticle";
 import { WikiEditor } from "./WikiEditor";
 import { WikiRevisions } from "./WikiRevisions";
@@ -96,8 +98,12 @@ export default function TeamWikiPage() {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  // The page the new one goes under, set by the rail's "+". Null creates a root.
+  const [newParent, setNewParent] = useState<WikiPageSummary | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [renameTitle, setRenameTitle] = useState("");
+  // Destination of a move, as the select holds it: "" is the root.
+  const [renameParentId, setRenameParentId] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [conflict, setConflict] = useState<StaleWrite | null>(null);
   const [editorSeed, setEditorSeed] = useState<string | null>(null);
@@ -153,6 +159,21 @@ export default function TeamWikiPage() {
       )
     : null;
 
+  // Where this page may be moved. The root is always offered; the rest is what
+  // the depth cap and the page's own subtree leave available.
+  const parentOptions = useMemo(() => {
+    const root = { value: "", key: "__root__", label: t("rework.wiki.renameDialog.root") };
+    if (!detail) return [root];
+    return [
+      root,
+      ...moveTargets(pages, detail.page.page_id).map((target) => ({
+        value: target.page.page_id,
+        key: target.page.page_id,
+        label: target.path,
+      })),
+    ];
+  }, [pages, detail, t]);
+
   const goTo = (target: string) => navigate(`/team/${teamId}/wiki/${target}`);
 
   const leaveEditor = () => {
@@ -206,16 +227,27 @@ export default function TeamWikiPage() {
     }
   };
 
+  const openCreate = (parent: WikiPageSummary | null) => {
+    setNewParent(parent);
+    setNewTitle("");
+    setCreating(true);
+  };
+
+  const closeCreate = () => {
+    setCreating(false);
+    setNewTitle("");
+    setNewParent(null);
+  };
+
   const handleCreate = async () => {
     const title = newTitle.trim();
     if (!title) return;
     try {
       const created = await createPage({
         teamId,
-        createWikiPageRequest: { title, content_md: "", parent_page_id: null },
+        createWikiPageRequest: { title, content_md: "", parent_page_id: newParent?.page_id ?? null },
       }).unwrap();
-      setCreating(false);
-      setNewTitle("");
+      closeCreate();
       goTo(created.page.slug);
     } catch (error) {
       showError({ summary: t("rework.wiki.errors.create"), detail: errorText(error) });
@@ -229,7 +261,11 @@ export default function TeamWikiPage() {
       await patchPage({
         teamId,
         pageId: detail.page.page_id,
-        updateWikiPageMetadataRequest: { title },
+        // `parent_page_id: null` means "leave it where it is", so detaching a
+        // page has its own flag — otherwise a move to the root is unsayable.
+        updateWikiPageMetadataRequest: renameParentId
+          ? { title, parent_page_id: renameParentId }
+          : { title, move_to_root: true },
       }).unwrap();
       setRenaming(false);
     } catch (error) {
@@ -286,7 +322,7 @@ export default function TeamWikiPage() {
                 variant="text"
                 size="small"
                 icon={{ category: "outlined", type: "add" }}
-                onClick={() => setCreating(true)}
+                onClick={() => openCreate(null)}
               >
                 {t("rework.wiki.newPage")}
               </Button>
@@ -298,6 +334,8 @@ export default function TeamWikiPage() {
             activeSlug={activeSlug}
             onSelect={goTo}
             onSelectRules={() => goTo(RULES_PAGE_SLUG)}
+            canEdit={canEdit}
+            onAddChild={(parent) => openCreate(parent)}
             reviewOnly={reviewOnly}
             onToggleReviewOnly={() => setReviewOnly((on) => !on)}
           />
@@ -307,7 +345,7 @@ export default function TeamWikiPage() {
           <PageEmptyState
             icon="book_2"
             message={t(canEdit ? "rework.wiki.empty.editor" : "rework.wiki.empty.member")}
-            action={canEdit ? { label: t("rework.wiki.newPage"), onClick: () => setCreating(true) } : undefined}
+            action={canEdit ? { label: t("rework.wiki.newPage"), onClick: () => openCreate(null) } : undefined}
           />
         ) : pageLoading || rulesLoading ? (
           <div className={styles.state}>
@@ -349,6 +387,8 @@ export default function TeamWikiPage() {
             onOpenHistory={() => setShowHistory(true)}
             onRename={() => {
               setRenameTitle(detail.page.title);
+              const parentId = detail.page.parent_page_id;
+              setRenameParentId(parentId && pages.some((p) => p.page_id === parentId) ? parentId : "");
               setRenaming(true);
             }}
             onDelete={() => setConfirmDelete(true)}
@@ -377,14 +417,15 @@ export default function TeamWikiPage() {
 
         <Dialog
           open={creating}
-          title={t("rework.wiki.newPageDialog.title")}
+          title={
+            newParent
+              ? t("rework.wiki.newPageDialog.childTitle", { parent: newParent.title })
+              : t("rework.wiki.newPageDialog.title")
+          }
           confirmLabel={t("rework.wiki.newPageDialog.confirm")}
           confirmDisabled={!newTitle.trim() || creatingPage}
           onConfirm={() => void handleCreate()}
-          onCancel={() => {
-            setCreating(false);
-            setNewTitle("");
-          }}
+          onCancel={closeCreate}
         >
           <TextInput
             label={t("rework.wiki.newPageDialog.label")}
@@ -402,12 +443,21 @@ export default function TeamWikiPage() {
           onConfirm={() => void handleRename()}
           onCancel={() => setRenaming(false)}
         >
-          <TextInput
-            label={t("rework.wiki.renameDialog.label")}
-            value={renameTitle}
-            onChange={(event) => setRenameTitle(event.target.value)}
-            autoFocus
-          />
+          <div className={styles.formFields}>
+            <TextInput
+              label={t("rework.wiki.renameDialog.label")}
+              value={renameTitle}
+              onChange={(event) => setRenameTitle(event.target.value)}
+              autoFocus
+            />
+            <Select
+              size="medium"
+              label={t("rework.wiki.renameDialog.parentLabel")}
+              value={renameParentId}
+              onChange={setRenameParentId}
+              options={parentOptions}
+            />
+          </div>
         </Dialog>
 
         <ConfirmationDialog

@@ -33,6 +33,21 @@
   background: var(--state-on-surface-hover);
 }
 
+/* Hidden until the row is pointed at or focused: the rail is read far more
+   often than it is edited, and a "+" on every line would compete with the
+   titles. `opacity` rather than `display`, so the button keeps its place in
+   the tab order and reveals itself when it takes focus. */
+.addChild {
+  display: flex;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.row:hover .addChild,
+.row:focus-within .addChild {
+  opacity: 1;
+}
+
 /* The selected page. `secondary-container` is this design system's selected
    state, and its `on-` pairing is set explicitly with it. */
 .rowActive,
