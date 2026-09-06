@@ -19,6 +19,7 @@ from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, model_validator
 
 from control_plane_backend.applications.catalog import ApplicationSourceConfig
+from control_plane_backend.corpus_types.catalog import CorpusTypeConfig
 
 
 class AppConfig(BaseModel):
@@ -370,6 +371,12 @@ class PlatformConfig(BaseModel):
             "browser-facing prefix Fred frames at /apps/<app_id>/ and, "
             "optionally, the server-side upstream behind /app-services/<app_id>/."
         ),
+    )
+    # Model defined next to its catalog projection in
+    # `control_plane_backend.corpus_types.catalog`.
+    corpus_type_sources: list[CorpusTypeConfig] = Field(
+        default_factory=list,
+        description="Corpus types this deployment offers (docs/swift/rfc/INDEXED-CORPUS-RFC.md §6).",
     )
 
     @model_validator(mode="after")
