@@ -3075,6 +3075,8 @@
         "empty": "This page is empty.",
         "writtenByAgent": "Written by an agent",
         "lastEditedBy": "Last edited by {{user}}",
+        "lastEditedByAt": "Last edited by {{user}} on {{when}}",
+        "lastEditedAt": "Last edited on {{when}}",
         "awaitingReview": "Awaiting review",
         "markReviewed": "Mark as reviewed",
         "clearReviewHint": "Clear the review mark once you have read this page"

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -19,6 +20,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import type { WikiPageDetail, WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { ancestorsOf } from "@rework/features/teamWiki/wikiTree";
+import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiArticle.module.css";
 
 interface WikiArticleProps {
@@ -34,6 +36,18 @@ interface WikiArticleProps {
   onRename: () => void;
   onClearReview: () => void;
   onNavigate: (slug: string) => void;
+}
+
+/**
+ * Who last changed this page, and when. A reader judging a page an agent may
+ * have touched needs the date as much as the name — a wiki entry that has not
+ * moved in a year is a different thing from one edited this morning.
+ */
+function editedLine(t: TFunction, user: string | null, when: string | null): string | null {
+  if (user && when) return t("rework.wiki.article.lastEditedByAt", { user, when });
+  if (user) return t("rework.wiki.article.lastEditedBy", { user });
+  if (when) return t("rework.wiki.article.lastEditedAt", { when });
+  return null;
 }
 
 /**
@@ -61,6 +75,7 @@ export function WikiArticle({
   const { page } = detail;
   const trail = isRules ? [] : ancestorsOf(pages, page.slug);
   const isEmpty = detail.content_md.trim().length === 0;
+  const edited = editedLine(t, lastAuthorName, page.updated_at ? formatDateTime(page.updated_at) : null);
 
   return (
     <article className={styles.article}>
@@ -128,7 +143,7 @@ export function WikiArticle({
               {t("rework.wiki.article.writtenByAgent")}
             </span>
           )}
-          {lastAuthorName && <span>{t("rework.wiki.article.lastEditedBy", { user: lastAuthorName })}</span>}
+          {edited && <span>{edited}</span>}
           {page.needs_review && (
             <button
               type="button"

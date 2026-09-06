@@ -22,6 +22,7 @@ import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRen
 import type { WikiRevisionList } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
+import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiRevisions.module.css";
 
 interface WikiRevisionsProps {
@@ -32,12 +33,6 @@ interface WikiRevisionsProps {
   restoring: boolean;
   onRestore: (revisionId: string) => void;
   onClose: () => void;
-}
-
-function formatWhen(iso: string | null | undefined, locale: string): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(locale);
 }
 
 /**
@@ -58,7 +53,7 @@ export function WikiRevisions({
   onRestore,
   onClose,
 }: WikiRevisionsProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [preview, setPreview] = useState<string | null>(null);
 
   const revisions = useMemo(() => history?.revisions ?? [], [history]);
@@ -103,7 +98,7 @@ export function WikiRevisions({
             <li key={revision.revision_id} className={`${styles.entry} ${isCurrent ? styles.entryCurrent : ""}`}>
               <div className={styles.entryHead}>
                 <div className={styles.entryMeta}>
-                  <span className={styles.when}>{formatWhen(revision.created_at, i18n.language)}</span>
+                  <span className={styles.when}>{formatDateTime(revision.created_at)}</span>
                   <span className={styles.who}>
                     {revision.author_kind === "agent" && <Icon category="outlined" type="smart_toy" filled />}
                     {userDisplayName(revision.author_user_id, authorById.get(revision.author_user_id))}

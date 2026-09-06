@@ -5,7 +5,7 @@
   flex-shrink: 0;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  border-right: 1px solid var(--outline-variant);
+  border-right: 1px solid var(--outline-muted);
   padding: var(--spacing-m) var(--spacing-xs);
   width: 260px;
   height: 100%;
@@ -107,7 +107,7 @@
 .separator {
   margin: var(--spacing-xs) 0 0;
   border: none;
-  border-top: 1px solid var(--outline-variant);
+  border-top: 1px solid var(--outline-muted);
   width: 100%;
 }
 

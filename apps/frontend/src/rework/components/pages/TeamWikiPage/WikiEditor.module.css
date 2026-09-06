@@ -73,9 +73,9 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
-  background: var(--surface-main);
+  background: var(--surface-container-high);
   min-height: 320px;
   overflow: hidden;
   color: var(--on-surface);

@@ -3075,6 +3075,8 @@
         "empty": "Cette page est vide.",
         "writtenByAgent": "Écrit par un agent",
         "lastEditedBy": "Dernière modification par {{user}}",
+        "lastEditedByAt": "Dernière modification par {{user}} le {{when}}",
+        "lastEditedAt": "Dernière modification le {{when}}",
         "awaitingReview": "En attente de relecture",
         "markReviewed": "Marquer comme relue",
         "clearReviewHint": "Retirez la marque une fois la page relue"
