@@ -1,0 +1,72 @@
+.editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: var(--spacing-l);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+/* The page moved on while this draft was open. Error colours, because losing
+   an edit is what this prevents — but it is a banner, not a dialog: the user's
+   text stays on screen and editable behind it. */
+.conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-s);
+  background: var(--error-container);
+  padding: var(--spacing-s);
+  color: var(--on-error-container);
+}
+
+.conflictText {
+  flex: 1;
+  margin: 0;
+  min-width: 200px;
+  font: var(--font-body-small);
+}
+
+.conflictActions {
+  display: flex;
+  gap: var(--spacing-2xs);
+}
+
+.tooLong {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.surface {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-main);
+  overflow: hidden;
+  color: var(--on-surface);
+}

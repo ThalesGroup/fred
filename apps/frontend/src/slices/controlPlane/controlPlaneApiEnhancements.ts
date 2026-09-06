@@ -18,8 +18,74 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformModelBinding",
     "ControlPlanePlatformPrompt",
     "ControlPlanePlatformRole",
+    "ControlPlaneTeamWiki",
   ],
   endpoints: {
+    // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
+    // carries a page's content and its history.
+    //
+    // The page read is addressed by slug but tagged by `page_id` off the RESULT:
+    // every mutation knows the page id and none of them knows the slug, so
+    // tagging by slug would leave a write unable to invalidate the very page it
+    // just changed — the article would keep rendering pre-save text and, with
+    // it, a stale `revision_id`, which makes the NEXT save conflict every time.
+    listPagesControlPlaneV1TeamsTeamIdWikiPagesGet: {
+      providesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki" as const, id: `TREE-${arg.teamId}` }],
+    },
+    readPageControlPlaneV1TeamsTeamIdWikiPagesSlugGet: {
+      providesTags: (result, _e, arg) =>
+        result
+          ? [{ type: "ControlPlaneTeamWiki" as const, id: `PAGE-${arg.teamId}-${result.page.page_id}` }]
+          : [{ type: "ControlPlaneTeamWiki" as const, id: `TREE-${arg.teamId}` }],
+    },
+    readRulesControlPlaneV1TeamsTeamIdWikiRulesGet: {
+      providesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki" as const, id: `RULES-${arg.teamId}` }],
+    },
+    listRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGet: {
+      providesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki" as const, id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    // Writes invalidate the whole team's wiki: a rename or a move changes the
+    // tree, a restore changes content and history, and the payloads do not
+    // carry enough to invalidate more precisely without guessing.
+    createPageControlPlaneV1TeamsTeamIdWikiPagesPost: {
+      invalidatesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` }],
+    },
+    writePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPut: {
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    // A rename changes the title the ARTICLE renders, not only the tree row.
+    patchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatch: {
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    deletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDelete: {
+      invalidatesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` }],
+    },
+    // The review chip lives on the article as well as in the tree.
+    setReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPost: {
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost: {
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+      ],
+    },
+    writeRulesControlPlaneV1TeamsTeamIdWikiRulesPut: {
+      invalidatesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki", id: `RULES-${arg.teamId}` }],
+    },
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
     // rows `listTeams`/`getTeam` expose — tag them the same way so every
     // existing team mutation (join, add/remove member, grant/revoke role,
@@ -511,4 +577,17 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
   // Read-only platform operating instructions, shown under the editable prompt.
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
+  // Team wiki (WIKI-01/02).
+  useListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery: useWikiPagesQuery,
+  useReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery: useWikiPageQuery,
+  useReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery: useWikiRulesQuery,
+  useListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery: useWikiRevisionsQuery,
+  useCreatePageControlPlaneV1TeamsTeamIdWikiPagesPostMutation: useCreateWikiPageMutation,
+  useWritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutMutation: useWriteWikiPageMutation,
+  usePatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchMutation: usePatchWikiPageMutation,
+  useDeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteMutation: useDeleteWikiPageMutation,
+  useSetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostMutation: useSetWikiReviewMarkMutation,
+  useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation:
+    useRestoreWikiRevisionMutation,
+  useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation: useWriteWikiRulesMutation,
 } = enhancedControlPlaneApi;

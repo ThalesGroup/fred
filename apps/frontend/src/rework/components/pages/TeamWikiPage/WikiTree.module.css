@@ -1,0 +1,137 @@
+/* The wiki's left rail. Sized in percentages, never against the viewport: the
+   app shell owns viewport height (FRONTEND_CODING_GUIDELINES §2.5). */
+.rail {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  border-right: 1px solid var(--outline-variant);
+  padding: var(--spacing-m) var(--spacing-xs);
+  width: 260px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  border-radius: var(--radius-s);
+  padding-right: var(--spacing-2xs);
+}
+
+.row:hover {
+  background: var(--state-on-surface-hover);
+}
+
+/* The selected page. `secondary-container` is this design system's selected
+   state, and its `on-` pairing is set explicitly with it. */
+.rowActive,
+.rowActive:hover {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: var(--spacing-2xs) 0;
+  min-width: 0;
+  color: inherit;
+  font: var(--font-body-medium);
+  text-align: left;
+}
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Aligns a leaf's label with a parent's, whose chevron button occupies this. */
+.spacer {
+  flex-shrink: 0;
+  width: 24px;
+}
+
+/* An agent wrote the current revision and no editor has cleared it yet. A dot
+   rather than a chip: the rail is navigation, and a page can carry it for a
+   while without becoming the loudest thing on screen. */
+.reviewDot {
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--tertiary);
+  width: 6px;
+  height: 6px;
+}
+
+.reviewFilter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  text-align: left;
+}
+
+.reviewFilter:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.reviewFilterOn,
+.reviewFilterOn:hover {
+  border-color: transparent;
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.separator {
+  margin: var(--spacing-xs) 0 0;
+  border: none;
+  border-top: 1px solid var(--outline-variant);
+  width: 100%;
+}
+
+.rulesRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: left;
+}
+
+.rulesRow:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--spacing-s) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

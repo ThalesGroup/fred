@@ -2072,7 +2072,8 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Ressources"
+          "resources": "Ressources",
+          "wiki": "Wiki"
         },
         "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
@@ -3045,6 +3046,81 @@
         "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
       },
       "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
+    },
+    "wiki": {
+      "title": "Wiki",
+      "newPage": "Nouvelle page",
+      "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
+      "notFound": "Cette page n'existe pas.",
+      "empty": {
+        "editor": "Le wiki de votre équipe est vide. Créez la première page pour commencer à consigner ce que l'équipe sait.",
+        "member": "Le wiki de votre équipe est vide. Un éditeur peut créer la première page."
+      },
+      "tree": {
+        "ariaLabel": "Pages du wiki",
+        "empty": "Aucune page pour l'instant.",
+        "expand": "Déplier",
+        "collapse": "Replier",
+        "needsReview": "Un agent a écrit cette page et personne ne l'a encore relue",
+        "pendingReview": "{{count}} page à relire",
+        "pendingReview_other": "{{count}} pages à relire",
+        "nothingToReview": "Rien à relire."
+      },
+      "article": {
+        "breadcrumb": "Pages parentes",
+        "edit": "Modifier",
+        "rename": "Renommer cette page",
+        "delete": "Supprimer cette page",
+        "history": "Historique des versions",
+        "empty": "Cette page est vide.",
+        "writtenByAgent": "Écrit par un agent",
+        "lastEditedBy": "Dernière modification par {{user}}",
+        "awaitingReview": "En attente de relecture",
+        "markReviewed": "Marquer comme relue",
+        "clearReviewHint": "Retirez la marque une fois la page relue"
+      },
+      "editor": {
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "conflict": "Quelqu'un a enregistré cette page pendant que vous écriviez. Votre texte est toujours là — chargez sa version pour repartir de celle-ci, ou enregistrez pour garder la vôtre.",
+        "loadCurrent": "Charger sa version",
+        "tooLong": "Cette page est trop longue. Restez sous {{max}} caractères — une page de wiki est une synthèse, pas un document."
+      },
+      "history": {
+        "title": "Historique des versions",
+        "close": "Fermer l'historique",
+        "empty": "Aucune version antérieure.",
+        "current": "Actuelle",
+        "view": "Voir",
+        "hide": "Masquer",
+        "restore": "Restaurer"
+      },
+      "rules": {
+        "title": "Règles pour les agents",
+        "notice": "Chaque agent ayant accès au wiki lit cette page avant de répondre. Seuls les éditeurs peuvent la modifier, et aucun agent ne peut jamais y écrire.",
+        "empty": "Aucune règle pour l'instant. Un éditeur peut y écrire les consignes que tout agent doit suivre."
+      },
+      "newPageDialog": {
+        "title": "Nouvelle page de wiki",
+        "label": "Titre de la page",
+        "confirm": "Créer la page"
+      },
+      "renameDialog": {
+        "title": "Renommer la page",
+        "label": "Titre de la page",
+        "confirm": "Renommer"
+      },
+      "deleteDialog": {
+        "title": "Supprimer cette page ?",
+        "message": "« {{title}} » et toutes ses versions seront supprimées définitivement. Cette action est irréversible.",
+        "confirm": "Supprimer la page"
+      },
+      "errors": {
+        "save": "Impossible d'enregistrer cette page",
+        "create": "Impossible de créer la page",
+        "rename": "Impossible de renommer la page",
+        "delete": "Impossible de supprimer la page"
+      }
     }
   },
   "runtime": {

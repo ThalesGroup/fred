@@ -1,0 +1,128 @@
+.article {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: var(--spacing-l);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  /* Its own gap, not the article's: the title block is one group, and sharing
+     the article's spacing would read as another paragraph of content. */
+}
+
+.trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.trailLink {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.trailLink:hover {
+  color: var(--on-surface);
+  text-decoration: underline;
+}
+
+.trailLink::after {
+  margin-left: var(--spacing-2xs);
+  content: "/";
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* An agent wrote the current revision. Stated plainly rather than decoratively:
+   a reader deciding how much to trust a page needs to know this at a glance. */
+.agentBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  border-radius: var(--radius-full);
+  background: var(--tertiary-container);
+  padding: 2px var(--spacing-2xs);
+  color: var(--on-tertiary-container);
+  font: var(--font-label-small);
+}
+
+.reviewChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-full);
+  background: none;
+  padding: 2px var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.reviewChip:hover:not(:disabled) {
+  background: var(--state-on-surface-hover);
+}
+
+.reviewChip:disabled {
+  cursor: default;
+}
+
+.rulesNotice {
+  margin: 0;
+  border-left: 2px solid var(--outline-variant);
+  padding-left: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.body {
+  min-width: 0;
+}
+
+.emptyBody {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

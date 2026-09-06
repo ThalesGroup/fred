@@ -1,0 +1,109 @@
+.panel {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-left: 1px solid var(--outline-variant);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+  width: 340px;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font: var(--font-label-large);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  border-radius: var(--radius-s);
+  background: var(--surface-main);
+  padding: var(--spacing-xs);
+}
+
+.entryHead {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.entryMeta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.when {
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.currentTag {
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--secondary-container);
+  padding: 1px var(--spacing-2xs);
+  color: var(--on-secondary-container);
+  font: var(--font-label-small);
+}
+
+/* Actions sit under the metadata rather than beside it: at 340px the row would
+   otherwise squeeze the timestamp, which is what identifies the revision. */
+.entryActions {
+  display: flex;
+  gap: var(--spacing-3xs);
+}
+
+.preview {
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-2xs);
+  max-height: 320px;
+  overflow-y: auto;
+  font: var(--font-body-small);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-l);
+}
+
+.empty {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

@@ -4058,3 +4058,68 @@ conversation that produced them (the slice only drops them when the next convers
 upserts one of its own). A conversation whose documents all come from the API never
 upserts, so the previous conversation's document showed up as an extra tab - someone
 else's document, in an editor that autosaves.
+
+---
+
+## Team wiki (2026-09-06, WIKI-02, issue #2572)
+
+### `TeamWikiPage`
+
+**Location:** `src/rework/components/pages/TeamWikiPage/`
+**Status:** `Functional` — slice 2 of 4; no agent involvement yet (RFC §14)
+
+`/team/:teamId/wiki` and `/team/:teamId/wiki/:slug`. Three columns: the page
+tree, the article, and the version history when it is open. The layout is
+`HelpCenterPage`'s, which already solves this shape; reading uses
+`MarkdownRenderer` and editing uses `MDXEditor`, the same component
+`writable_document` uses. Nothing new was built where something existed.
+
+**The slug is in the URL**, so a wiki page is deep-linkable and the browser's
+back button walks the pages. A rename does not change the slug, so links
+survive it.
+
+**Every editor-only control is absent, not disabled**, for a member — except
+the version history, which is deliberately open to everyone: the endpoint is
+member-readable, and who wrote a page and when is exactly what a reader needs
+to judge one an agent may have touched. Restore stays editor-only, inside the
+panel. Hiding is courtesy; the server decides either way.
+
+**The rules page is not a node of the tree.** It sits below a separator with its
+own icon, because it is not content the team browses — it is the instruction
+sheet every agent reads — and putting it in the tree would invite moving or
+deleting it like an ordinary page. Its article carries a one-line notice saying
+what it does and that no agent can write to it.
+
+**The review mark** shows as a dot in the rail and a chip on the article, with a
+filter above the tree that lists every page waiting for a human read. The filter
+control stays rendered while the filter is ON even when the count reaches zero —
+clearing the last mark would otherwise remove the only way to turn the filter
+off and strand the reader on an empty rail.
+
+### Conflict handling in the editor
+
+A stale save returns 409 carrying the current text and revision. The editor
+shows a banner and keeps the user's own draft on screen and editable: nothing is
+discarded for them, and "Load their version" is a choice, not a consequence.
+
+Two things that had to be right for it to work at all:
+
+- **The editor remounts on a new `key`** when the server's version is loaded.
+  `MDXEditor` reads `markdown` only at mount (`WritableDocumentPane` documents
+  the same constraint), so changing the prop alone would leave the user's text
+  on screen while claiming to have loaded someone else's.
+- **The conflict's `current_revision_id` becomes the next save's base.** Without
+  it every retry after a conflict conflicts again, and the banner promises an
+  outcome the code cannot reach.
+
+Navigating to another page closes the editor. Left open, its draft would still
+be in state while the save now targets the new page id — one click from
+overwriting page B with page A's text.
+
+### Cache tags
+
+The page read is addressed by slug but tagged by `page_id` off the **result**:
+every mutation knows the page id and none of them knows the slug, so tagging by
+slug leaves a write unable to invalidate the page it just changed — the article
+keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
+the *next* save conflict every time.

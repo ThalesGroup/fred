@@ -162,6 +162,12 @@ export default function TeamContentNavbar() {
       icon: { category: "outlined", type: "edit_note", filled: true },
       linkProps: { to: `/team/${teamId}/prompts` },
     },
+    {
+      type: "link",
+      label: t("rework.sidebar.team.menu.wiki"),
+      icon: { category: "outlined", type: "book_2", filled: true },
+      linkProps: { to: `/team/${teamId}/wiki` },
+    },
   ];
   if (showApplications) {
     navigationItems.push({

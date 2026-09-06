@@ -1,0 +1,42 @@
+/* Three columns: the tree, the page, and the history when it is open. Height
+   is 100%, never a viewport unit — the app shell owns the viewport
+   (FRONTEND_CODING_GUIDELINES §2.5). */
+.page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  color: var(--on-surface);
+}
+
+.railColumn {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.railHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-right: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--outline-variant);
+  padding: var(--spacing-s) var(--spacing-xs) var(--spacing-s) var(--spacing-s);
+  width: 260px;
+}
+
+.railTitle {
+  flex: 1;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.state {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-l);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

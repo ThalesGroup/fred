@@ -2072,7 +2072,8 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Resources"
+          "resources": "Resources",
+          "wiki": "Wiki"
         },
         "teamLabel": "Team",
         "userTeam": "Personal space"
@@ -3045,6 +3046,81 @@
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
       "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
+    },
+    "wiki": {
+      "title": "Wiki",
+      "newPage": "New page",
+      "missingTeam": "Missing team id in route.",
+      "notFound": "This page does not exist.",
+      "empty": {
+        "editor": "Your team's wiki is empty. Create the first page to start writing down what the team knows.",
+        "member": "Your team's wiki is empty. An editor can create the first page."
+      },
+      "tree": {
+        "ariaLabel": "Wiki pages",
+        "empty": "No pages yet.",
+        "expand": "Expand",
+        "collapse": "Collapse",
+        "needsReview": "An agent wrote this page and nobody has reviewed it yet",
+        "pendingReview": "{{count}} page to review",
+        "pendingReview_other": "{{count}} pages to review",
+        "nothingToReview": "Nothing waiting for a review."
+      },
+      "article": {
+        "breadcrumb": "Parent pages",
+        "edit": "Edit",
+        "rename": "Rename this page",
+        "delete": "Delete this page",
+        "history": "Version history",
+        "empty": "This page is empty.",
+        "writtenByAgent": "Written by an agent",
+        "lastEditedBy": "Last edited by {{user}}",
+        "awaitingReview": "Awaiting review",
+        "markReviewed": "Mark as reviewed",
+        "clearReviewHint": "Clear the review mark once you have read this page"
+      },
+      "editor": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "conflict": "Someone else saved this page while you were writing. Your text is still here — load their version to start again from it, or save to keep yours.",
+        "loadCurrent": "Load their version",
+        "tooLong": "This page is too long. Keep it under {{max}} characters — a wiki page is a summary, not a document."
+      },
+      "history": {
+        "title": "Version history",
+        "close": "Close the history",
+        "empty": "No earlier versions.",
+        "current": "Current",
+        "view": "View",
+        "hide": "Hide",
+        "restore": "Restore"
+      },
+      "rules": {
+        "title": "Agent rules",
+        "notice": "Every agent with wiki access reads this page before answering. Only editors can change it, and no agent can ever write to it.",
+        "empty": "No rules written yet. An editor can add the instructions every agent should follow."
+      },
+      "newPageDialog": {
+        "title": "New wiki page",
+        "label": "Page title",
+        "confirm": "Create page"
+      },
+      "renameDialog": {
+        "title": "Rename page",
+        "label": "Page title",
+        "confirm": "Rename"
+      },
+      "deleteDialog": {
+        "title": "Delete this page?",
+        "message": "\"{{title}}\" and all of its versions will be deleted permanently. This cannot be undone.",
+        "confirm": "Delete page"
+      },
+      "errors": {
+        "save": "Could not save this page",
+        "create": "Could not create the page",
+        "rename": "Could not rename the page",
+        "delete": "Could not delete the page"
+      }
     }
   },
   "runtime": {
