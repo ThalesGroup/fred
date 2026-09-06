@@ -14,9 +14,11 @@
   height: 100%;
 }
 
-/* Three columns: the tree, the page, and the history when it is open. */
+/* Two columns — the tree and the page — with the history panel laid over the
+   page's right edge when it is open. */
 .page {
   display: flex;
+  position: relative;
   box-sizing: border-box;
   border: 1px solid var(--outline-muted);
   border-radius: 16px;

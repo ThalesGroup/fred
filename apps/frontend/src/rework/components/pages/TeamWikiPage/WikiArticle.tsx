@@ -98,34 +98,36 @@ export function WikiArticle({
         <div className={styles.titleRow}>
           <h1 className={styles.title}>{isRules ? t("rework.wiki.rules.title") : page.title}</h1>
           <div className={styles.actions}>
-            {/* History is a read, and the endpoint is member-readable. Who wrote
-                what, and when, is exactly what a reader needs to judge a page
-                an agent may have touched — restore stays editor-only inside. */}
-            <IconButton
-              icon={{ category: "outlined", type: "history" }}
-              variant="icon"
-              size="small"
-              onClick={onOpenHistory}
-              aria-label={t("rework.wiki.article.history")}
-            />
-            {canEdit && !isRules && (
+            <div className={styles.tools}>
+              {/* History is a read, and the endpoint is member-readable. Who wrote
+                  what, and when, is exactly what a reader needs to judge a page
+                  an agent may have touched — restore stays editor-only inside. */}
               <IconButton
-                icon={{ category: "outlined", type: "drive_file_rename_outline" }}
+                icon={{ category: "outlined", type: "history" }}
                 variant="icon"
                 size="small"
-                onClick={onRename}
-                aria-label={t("rework.wiki.article.rename")}
+                onClick={onOpenHistory}
+                aria-label={t("rework.wiki.article.history")}
               />
-            )}
-            {canEdit && !isRules && (
-              <IconButton
-                icon={{ category: "outlined", type: "delete" }}
-                variant="icon"
-                size="small"
-                onClick={onDelete}
-                aria-label={t("rework.wiki.article.delete")}
-              />
-            )}
+              {canEdit && !isRules && (
+                <IconButton
+                  icon={{ category: "outlined", type: "drive_file_rename_outline" }}
+                  variant="icon"
+                  size="small"
+                  onClick={onRename}
+                  aria-label={t("rework.wiki.article.rename")}
+                />
+              )}
+              {canEdit && !isRules && (
+                <IconButton
+                  icon={{ category: "outlined", type: "delete" }}
+                  variant="icon"
+                  size="small"
+                  onClick={onDelete}
+                  aria-label={t("rework.wiki.article.delete")}
+                />
+              )}
+            </div>
             {canEdit && (
               <Button color="primary" variant="filled" size="small" onClick={onEdit}>
                 {t("rework.wiki.article.edit")}
