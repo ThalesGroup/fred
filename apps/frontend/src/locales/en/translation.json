@@ -3049,6 +3049,7 @@
     },
     "wiki": {
       "title": "Wiki",
+      "resizeRail": "Resize the page list",
       "newPage": "New page",
       "missingTeam": "Missing team id in route.",
       "notFound": "This page does not exist.",

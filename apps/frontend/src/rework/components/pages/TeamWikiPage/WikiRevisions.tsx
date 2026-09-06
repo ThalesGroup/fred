@@ -26,6 +26,8 @@ import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiRevisions.module.css";
 
 interface WikiRevisionsProps {
+  /** Kept mounted while closed so it can slide out rather than vanish. */
+  open: boolean;
   history: WikiRevisionList | undefined;
   loading: boolean;
   currentRevisionId: string | null;
@@ -45,6 +47,7 @@ interface WikiRevisionsProps {
  * it.
  */
 export function WikiRevisions({
+  open,
   history,
   loading,
   currentRevisionId,
@@ -70,7 +73,13 @@ export function WikiRevisions({
   const authorById = useMemo(() => new Map(authors.map((user) => [user.id, user])), [authors]);
 
   return (
-    <aside className={styles.panel} aria-label={t("rework.wiki.history.title")}>
+    <aside
+      className={`${styles.panel} ${open ? styles.panelOpen : ""}`}
+      // Closed, it is off to the side but still in the DOM: `inert` keeps its
+      // buttons out of the tab order and out of the accessibility tree.
+      inert={!open}
+      aria-label={t("rework.wiki.history.title")}
+    >
       <header className={styles.header}>
         <h2 className={styles.title}>{t("rework.wiki.history.title")}</h2>
         <IconButton

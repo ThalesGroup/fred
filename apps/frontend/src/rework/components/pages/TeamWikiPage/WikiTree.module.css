@@ -2,13 +2,13 @@
    app shell owns viewport height (FRONTEND_CODING_GUIDELINES §2.5). */
 .rail {
   display: flex;
-  flex-shrink: 0;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-2xs);
   border-right: 1px solid var(--outline-muted);
-  padding: var(--spacing-m) var(--spacing-xs);
-  width: 260px;
-  height: 100%;
+  padding: var(--spacing-xs);
+  width: 100%;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -77,10 +77,11 @@
   white-space: nowrap;
 }
 
-/* Aligns a leaf's label with a parent's, whose chevron button occupies this. */
+/* Stands in for the chevron so a leaf's title starts where a parent's does.
+   Must match the icon button the chevron uses — at `size="small"`, 2rem. */
 .spacer {
   flex-shrink: 0;
-  width: 24px;
+  width: 2rem;
 }
 
 /* An agent wrote the current revision and no editor has cleared it yet. A dot

@@ -17,7 +17,7 @@
 // shipping it first is that a team can judge whether the wiki earns its place
 // before anything starts writing into it. Design: rfc/TEAM-WIKI-RFC.md.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -28,6 +28,7 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities";
 import { buildWikiTree, findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
@@ -95,6 +96,9 @@ export default function TeamWikiPage() {
 
   const [editing, setEditing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  // Stays set after the panel closes: unsubscribing on close would drop the
+  // revisions and blank the panel out through its whole slide-out.
+  const [historyOpened, setHistoryOpened] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -114,6 +118,18 @@ export default function TeamWikiPage() {
   // Remount key for the editor: MDXEditor reads `markdown` only at mount, so
   // loading someone else's version has to give it a new identity.
   const [editorGeneration, setEditorGeneration] = useState(0);
+
+  // The rail is a reading aid for some wikis and the main surface for others —
+  // deep trees need room, flat ones do not. Same grip as the chat's panels.
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const railResize = usePaneResize({
+    storageKey: "team-wiki:rail:width",
+    initialWidth: 260,
+    minWidth: 180,
+    maxWidth: 480,
+    anchor: "left",
+    paneRef: railRef,
+  });
 
   const { data: tree, isLoading: treeLoading } = useWikiPagesQuery({ teamId }, { skip: !teamId });
   const pages = useMemo(() => tree?.pages ?? [], [tree]);
@@ -135,7 +151,7 @@ export default function TeamWikiPage() {
 
   const { data: history, isFetching: historyLoading } = useWikiRevisionsQuery(
     { teamId, pageId: detail?.page.page_id ?? "" },
-    { skip: !showHistory || !detail?.page.page_id },
+    { skip: !historyOpened || !detail?.page.page_id },
   );
 
   const [createPage, { isLoading: creatingPage }] = useCreateWikiPageMutation();
@@ -192,6 +208,7 @@ export default function TeamWikiPage() {
     setEditorSeed(null);
     setBaseOverride(null);
     setShowHistory(false);
+    setHistoryOpened(false);
   }, [slug]);
 
   const handleSave = async (contentMd: string) => {
@@ -313,7 +330,12 @@ export default function TeamWikiPage() {
   return (
     <div className={styles.frame}>
       <div className={styles.page}>
-        <div className={styles.railColumn}>
+        <div
+          className={styles.railColumn}
+          ref={railRef}
+          style={{ width: `min(${railResize.width}px, 45vw)` }}
+          data-dragging={railResize.dragging ? "true" : undefined}
+        >
           <div className={styles.railHeader}>
             <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
             {canEdit && (
@@ -338,6 +360,13 @@ export default function TeamWikiPage() {
             onAddChild={(parent) => openCreate(parent)}
             reviewOnly={reviewOnly}
             onToggleReviewOnly={() => setReviewOnly((on) => !on)}
+          />
+          <div
+            className={styles.resizeHandle}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("rework.wiki.resizeRail")}
+            {...railResize.handleProps}
           />
         </div>
 
@@ -384,7 +413,10 @@ export default function TeamWikiPage() {
               setEditorSeed(null);
               setEditing(true);
             }}
-            onOpenHistory={() => setShowHistory(true)}
+            onOpenHistory={() => {
+              setHistoryOpened(true);
+              setShowHistory(true);
+            }}
             onRename={() => {
               setRenameTitle(detail.page.title);
               const parentId = detail.page.parent_page_id;
@@ -403,8 +435,9 @@ export default function TeamWikiPage() {
           />
         )}
 
-        {showHistory && detail && (
+        {detail && (
           <WikiRevisions
+            open={showHistory}
             history={history}
             loading={historyLoading}
             currentRevisionId={detail.revision_id ?? null}

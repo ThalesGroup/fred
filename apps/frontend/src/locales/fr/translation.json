@@ -3049,6 +3049,7 @@
     },
     "wiki": {
       "title": "Wiki",
+      "resizeRail": "Redimensionner la liste des pages",
       "newPage": "Nouvelle page",
       "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
       "notFound": "Cette page n'existe pas.",

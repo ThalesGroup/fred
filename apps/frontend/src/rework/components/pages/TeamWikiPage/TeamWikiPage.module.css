@@ -34,9 +34,50 @@
 
 .railColumn {
   display: flex;
+  position: relative;
   flex-shrink: 0;
   flex-direction: column;
   min-height: 0;
+}
+
+/* The same grip idiom as the chat's resizable panels: a slim col-resize strip
+   straddling the rail's edge, with a bar that lights up while hovered or
+   dragged. Centred on the divider, so the target is the line the user sees. */
+.resizeHandle {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: calc(var(--spacing-s) / -2);
+  bottom: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+  cursor: col-resize;
+  width: var(--spacing-s);
+  touch-action: none;
+}
+
+.resizeHandle::before {
+  transition:
+    background-color var(--duration-short-3),
+    height var(--duration-short-3);
+  border-radius: var(--radius-s);
+  background: transparent;
+  width: 4px;
+  height: 40px;
+  content: "";
+}
+
+.resizeHandle:hover::before,
+.railColumn[data-dragging="true"] .resizeHandle::before {
+  background: var(--primary);
+  height: 56px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resizeHandle::before {
+    transition: none;
+  }
 }
 
 .railHeader {
@@ -46,8 +87,8 @@
   gap: var(--spacing-2xs);
   border-right: 1px solid var(--outline-muted);
   border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-s) var(--spacing-xs) var(--spacing-s) var(--spacing-s);
-  width: 260px;
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-m);
+  width: 100%;
 }
 
 .railTitle {

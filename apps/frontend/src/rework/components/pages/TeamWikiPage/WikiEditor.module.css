@@ -3,7 +3,7 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-s);
-  padding: var(--spacing-l);
+  padding: var(--spacing-m);
   min-width: 0;
   /* The text area scrolls inside the surface below, so this column must not:
      two nested scrollbars on one page is the failure this avoids. */
@@ -81,15 +81,17 @@
   color: var(--on-surface);
 }
 
+/* `mdxeditor-full-height` on the editor itself chains the wrappers below it;
+   this only makes the editor root fill the surface. */
 .surface > :global(.mdxeditor) {
-  display: flex;
   flex: 1;
-  flex-direction: column;
   min-height: 0;
 }
 
-.surface :global(.mdxeditor-root-contenteditable) {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+/* MDXEditor paints its toolbar with `--baseBg`, a Radix slate step outside this
+   design system. Set on the element rather than by redefining that variable:
+   the library declares it at the same specificity in a chunk that loads later,
+   so the variable route is a coin toss. Same idiom as WritableDocumentPane. */
+.surface :global(.mdxeditor [role="toolbar"]) {
+  background-color: var(--surface-container-highest);
 }

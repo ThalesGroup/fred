@@ -126,7 +126,10 @@ export function WikiEditor({
           // copying this class onto it, so the toolbar's dropdowns would keep
           // the palette they were born with.
           key={darkMode ? "dark" : "light"}
-          className={darkMode ? "dark-theme dark-editor" : undefined}
+          // `mdxeditor-full-height` is the library's own opt-in: it makes every
+          // element between the root and the contenteditable a flex column, so
+          // the whole writing area is clickable rather than just its first line.
+          className={`mdxeditor-full-height${darkMode ? " dark-theme dark-editor" : ""}`}
           contentEditableClassName="fred-writable-document"
           plugins={[
             headingsPlugin(),

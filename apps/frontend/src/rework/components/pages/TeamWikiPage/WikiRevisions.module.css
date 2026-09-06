@@ -1,6 +1,7 @@
 /* Laid over the page's right edge rather than taking a column of its own:
    opening the history is a glance at what changed, and re-flowing the article
-   underneath costs the reader their place in it. The card clips it. */
+   underneath costs the reader their place in it. The card clips it, so the
+   closed panel simply sits outside the rounding. */
 .panel {
   display: flex;
   position: absolute;
@@ -9,7 +10,12 @@
   bottom: 0;
   flex-direction: column;
   gap: var(--spacing-s);
+  transform: translateX(100%);
+  opacity: 0;
   z-index: 1;
+  transition:
+    transform var(--duration-short-3) var(--easing-standard),
+    opacity var(--duration-short-3) var(--easing-standard);
   box-shadow: var(--shadow-m);
   border-left: 1px solid var(--outline-muted);
   background: var(--surface-container-low);
@@ -17,6 +23,17 @@
   width: 340px;
   overflow-y: auto;
   color: var(--on-surface);
+}
+
+.panelOpen {
+  transform: none;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: none;
+  }
 }
 
 .header {
