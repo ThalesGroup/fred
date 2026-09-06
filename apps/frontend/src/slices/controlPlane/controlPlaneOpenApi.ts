@@ -820,6 +820,43 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
       }),
     }),
+    proposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePost: build.mutation<
+      ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiResponse,
+      ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/page`,
+        method: "POST",
+        body: queryArg.proposePageRequest,
+      }),
+    }),
+    proposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPost: build.mutation<
+      ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiResponse,
+      ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/edit`,
+        method: "POST",
+        body: queryArg.proposeEditRequest,
+      }),
+    }),
+    readProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGet: build.query<
+      ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiResponse,
+      ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/${queryArg.proposalId}`,
+      }),
+    }),
+    publishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPost: build.mutation<
+      PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiResponse,
+      PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/${queryArg.proposalId}/publish`,
+        method: "POST",
+      }),
+    }),
     getPlatformPromptControlPlaneV1AdminPlatformPromptGet: build.query<
       GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse,
       GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg
@@ -1863,6 +1900,30 @@ export type RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevi
   teamId: string;
   pageId: string;
   revisionId: string;
+};
+export type ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiResponse =
+  /** status 201 Successful Response */ WikiProposal;
+export type ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiArg = {
+  teamId: string;
+  proposePageRequest: ProposePageRequest;
+};
+export type ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiResponse =
+  /** status 201 Successful Response */ WikiProposal;
+export type ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiArg = {
+  teamId: string;
+  proposeEditRequest: ProposeEditRequest;
+};
+export type ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiResponse =
+  /** status 200 Successful Response */ WikiProposal;
+export type ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiArg = {
+  teamId: string;
+  proposalId: string;
+};
+export type PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiArg = {
+  teamId: string;
+  proposalId: string;
 };
 export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse =
   /** status 200 Successful Response */ PlatformPrompt;
@@ -3395,6 +3456,31 @@ export type WikiRevisionList = {
     [key: string]: string;
   };
 };
+export type WikiProposal = {
+  proposal_id: string;
+  kind: "page" | "edit";
+  title: string;
+  slug?: string | null;
+  parent_slug?: string | null;
+  content_md: string;
+  current_content_md?: string;
+  created_at?: string | null;
+  author_user_id?: string;
+  agent_instance_id?: string | null;
+};
+export type ProposePageRequest = {
+  title: string;
+  content_md: string;
+  parent_slug?: string | null;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+};
+export type ProposeEditRequest = {
+  slug: string;
+  content_md: string;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+};
 export type PlatformPrompt = {
   /** The platform prompt text currently in force. When `is_default` is true this is the pod-shipped default (the `platform_prompt` field of the pod's `config/platform_prompt.json`), which is what agents actually receive until an admin saves something; when it is false this is the saved value, and an empty string then means an admin deliberately suppressed the block. */
   text: string;
@@ -3924,6 +4010,11 @@ export const {
   useListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery,
   useLazyListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery,
   useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation,
+  useProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostMutation,
+  useProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostMutation,
+  useReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery,
+  useLazyReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery,
+  usePublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostMutation,
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
   useLazyGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,

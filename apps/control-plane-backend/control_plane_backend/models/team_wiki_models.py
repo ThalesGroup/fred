@@ -116,6 +116,12 @@ class TeamWikiRevisionRow(Base):
     # The conversation an agent revision came from — the audit trail back to the
     # context that produced it.
     session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Set only on a proposal for a page that does not exist yet (WIKI-04). The
+    # page row is created at approval, not at proposal: an unapproved page must
+    # not appear in the team's rail, and a page with no content is not a page.
+    # Its `page_id` is minted with the proposal and becomes the page's own.
+    proposed_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    proposed_parent_page_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

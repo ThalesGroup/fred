@@ -99,6 +99,9 @@ class WikiRevisionRecord:
     agent_instance_id: str | None = None
     session_id: str | None = None
     created_at: datetime | None = None
+    # Set only on a proposal for a page that does not exist yet (WIKI-04).
+    proposed_title: str | None = None
+    proposed_parent_page_id: str | None = None
 
 
 @dataclass
@@ -141,6 +144,8 @@ def _to_revision(row: TeamWikiRevisionRow) -> WikiRevisionRecord:
         agent_instance_id=row.agent_instance_id,
         session_id=row.session_id,
         created_at=row.created_at,
+        proposed_title=row.proposed_title,
+        proposed_parent_page_id=row.proposed_parent_page_id,
     )
 
 
@@ -234,6 +239,9 @@ class TeamWikiStore:
                     .where(
                         TeamWikiRevisionRow.team_id == str(team_id),
                         TeamWikiRevisionRow.page_id == page_id,
+                        # History is what happened. A proposal awaiting a human,
+                        # or one they refused, is not an edit of this page.
+                        TeamWikiRevisionRow.status.notin_(("proposed", "rejected")),
                     )
                     # `revision_id` only breaks a tie: it is a uuid and says
                     # nothing about time, but it makes the order deterministic
@@ -562,3 +570,188 @@ class TeamWikiStore:
             ).scalars()
             if list(late_children):
                 raise WikiPageHasChildrenError(page_id)
+
+    # ---- proposals (WIKI-04) ----------------------------------------------
+
+    async def create_proposal(
+        self,
+        *,
+        team_id: TeamId,
+        page_id: str | None,
+        content_md: str,
+        base_revision_id: str | None,
+        proposed_title: str | None,
+        proposed_parent_page_id: str | None,
+        author_user_id: str,
+        agent_instance_id: str | None,
+        session_id: str | None,
+    ) -> WikiRevisionRecord:
+        """Store one `proposed` revision. Nothing about the wiki changes yet.
+
+        `page_id` None means the proposal is for a page that does not exist:
+        an id is minted here and becomes the page's own if a human approves,
+        so the proposal can be diffed and published without ever putting an
+        unapproved page in the team's rail.
+        """
+
+        revision = TeamWikiRevisionRow(
+            revision_id=_new_id(),
+            page_id=page_id or _new_id(),
+            team_id=str(team_id),
+            content_md=content_md,
+            base_revision_id=base_revision_id,
+            status="proposed",
+            # The user driving the conversation, never the agent: identity here
+            # is the human's, and `author_kind` is what records the origin.
+            author_user_id=author_user_id,
+            author_kind="agent",
+            agent_instance_id=agent_instance_id,
+            session_id=session_id,
+            created_at=_utcnow(),
+            proposed_title=proposed_title,
+            proposed_parent_page_id=proposed_parent_page_id,
+        )
+        async with use_session(self._sessions) as s:
+            s.add(revision)
+        return _to_revision(revision)
+
+    async def get_proposal(
+        self, team_id: TeamId, revision_id: str, session: AsyncSession | None = None
+    ) -> WikiRevisionRecord | None:
+        async with use_session(self._sessions, session) as s:
+            row = (
+                await s.execute(
+                    select(TeamWikiRevisionRow).where(
+                        TeamWikiRevisionRow.team_id == str(team_id),
+                        TeamWikiRevisionRow.revision_id == revision_id,
+                        TeamWikiRevisionRow.status == "proposed",
+                    )
+                )
+            ).scalar_one_or_none()
+            return _to_revision(row) if row is not None else None
+
+    async def reparent_proposal(
+        self, *, team_id: TeamId, revision_id: str, parent_page_id: str | None
+    ) -> None:
+        """Re-point a pending proposal's parent, when the one it named is gone.
+
+        The only field of a proposal that may change before approval, and only
+        towards the root: a proposal is approved or refused as a whole
+        (RFC §8.2), never edited into something else.
+        """
+
+        async with use_session(self._sessions) as s:
+            await s.execute(
+                update(TeamWikiRevisionRow)
+                .where(
+                    TeamWikiRevisionRow.team_id == str(team_id),
+                    TeamWikiRevisionRow.revision_id == revision_id,
+                    TeamWikiRevisionRow.status == "proposed",
+                )
+                .values(proposed_parent_page_id=parent_page_id)
+            )
+
+    async def publish_proposal(
+        self,
+        *,
+        team_id: TeamId,
+        revision_id: str,
+        slug: str,
+        approver_user_id: str,
+    ) -> WikiPageRecord:
+        """Turn a pending proposal into the page's current revision.
+
+        One transaction: for a new page it creates the page row and points it
+        at the proposal; for an edit it moves `current_revision_id` under the
+        same base-revision guard `publish_revision` uses, so a proposal written
+        against text someone has since changed is refused rather than silently
+        overwriting them.
+
+        The page is left `needs_review=True` either way — the approval says the
+        change is wanted, not that the page has been read as a whole.
+        """
+
+        now = _utcnow()
+        # A slug free a moment ago can be taken between the check and this
+        # insert. Surfacing the named error lets the caller answer 409 rather
+        # than a bare 500 the approver can do nothing with.
+        try:
+            async with use_session(self._sessions) as s:
+                row = (
+                    await s.execute(
+                        select(TeamWikiRevisionRow).where(
+                            TeamWikiRevisionRow.team_id == str(team_id),
+                            TeamWikiRevisionRow.revision_id == revision_id,
+                            TeamWikiRevisionRow.status == "proposed",
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is None:
+                    raise WikiPageNotFoundError(revision_id)
+
+                page_row = (
+                    await s.execute(
+                        select(TeamWikiPageRow).where(
+                            TeamWikiPageRow.team_id == str(team_id),
+                            TeamWikiPageRow.page_id == row.page_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if page_row is None:
+                    if row.proposed_title is None:
+                        # An edit whose page was deleted while the proposal waited.
+                        raise WikiPageNotFoundError(row.page_id)
+                    page_row = TeamWikiPageRow(
+                        page_id=row.page_id,
+                        team_id=str(team_id),
+                        parent_page_id=row.proposed_parent_page_id,
+                        slug=slug,
+                        title=row.proposed_title,
+                        kind="page",
+                        current_revision_id=revision_id,
+                        needs_review=True,
+                        position=0,
+                        created_at=now,
+                        updated_at=now,
+                        created_by=approver_user_id,
+                        updated_by=approver_user_id,
+                    )
+                    s.add(page_row)
+                else:
+                    result: CursorResult = await s.execute(  # type: ignore[assignment]
+                        update(TeamWikiPageRow)
+                        .where(
+                            TeamWikiPageRow.team_id == str(team_id),
+                            TeamWikiPageRow.page_id == row.page_id,
+                            TeamWikiPageRow.current_revision_id == row.base_revision_id,
+                        )
+                        .values(
+                            current_revision_id=revision_id,
+                            updated_at=now,
+                            updated_by=approver_user_id,
+                            needs_review=True,
+                        )
+                    )
+                    if result.rowcount == 0:
+                        raise _StaleBaseWrite()
+                    if row.base_revision_id:
+                        await s.execute(
+                            update(TeamWikiRevisionRow)
+                            .where(
+                                TeamWikiRevisionRow.team_id == str(team_id),
+                                TeamWikiRevisionRow.revision_id == row.base_revision_id,
+                            )
+                            .values(status="superseded")
+                        )
+
+                row.status = "published"
+                # The approver is the author of record: an agent drafted it, a human
+                # decided it. Identity in this table is never the agent's.
+                row.author_user_id = approver_user_id
+        except IntegrityError as exc:
+            raise WikiSlugAlreadyExistsError(slug) from exc
+        refreshed = await self.get_page(team_id, row.page_id)
+        if refreshed is None:  # pragma: no cover — created or updated just above
+            raise WikiPageNotFoundError(row.page_id)
+        return refreshed

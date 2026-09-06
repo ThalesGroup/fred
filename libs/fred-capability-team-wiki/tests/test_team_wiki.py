@@ -29,6 +29,7 @@ import pytest
 from fred_capability_team_wiki.wiki.capability import (
     PAGE_READ_MAX_CHARS,
     TeamWikiCapability,
+    TeamWikiConfig,
     _TeamWikiPromptMiddleware,
 )
 from fred_sdk.contracts.capability import (
@@ -42,6 +43,7 @@ from fred_sdk.contracts.runtime import (
     TeamWikiPortError,
     WikiPageContent,
     WikiPageRef,
+    WikiProposalRef,
 )
 
 
@@ -60,6 +62,8 @@ class _FakePort(TeamWikiPort):
         self._raises = raises
         self.list_calls = 0
         self.rules_calls = 0
+        self.proposed: list[tuple[str, str]] = []
+        self.published: list[str] = []
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
         self.list_calls += 1
@@ -84,18 +88,42 @@ class _FakePort(TeamWikiPort):
             raise self._raises
         return self._rules
 
+    async def propose_page(
+        self, *, title: str, content_md: str, parent_slug: str | None = None
+    ) -> WikiProposalRef:
+        if self._raises is not None:
+            raise self._raises
+        self.proposed.append((title, content_md))
+        return WikiProposalRef(
+            proposal_id="prop-1", title=title, summary=f"create “{title}”"
+        )
 
-def _ctx(port: TeamWikiPort | None) -> Any:
+    async def propose_edit(self, *, slug: str, content_md: str) -> WikiProposalRef:
+        if self._raises is not None:
+            raise self._raises
+        self.proposed.append((slug, content_md))
+        return WikiProposalRef(
+            proposal_id="prop-2", title=slug, slug=slug, summary=f"rewrite “{slug}”"
+        )
+
+    async def publish_proposal(self, proposal_id: str) -> str:
+        if self._raises is not None:
+            raise self._raises
+        self.published.append(proposal_id)
+        return "some-slug"
+
+
+def _ctx(port: TeamWikiPort | None, mode: str = "read") -> Any:
     return CapabilityContext(
         identity=CapabilityIdentity(user_id="u", session_id="s"),
-        config=EmptyModel(),
+        config=TeamWikiConfig(mode=mode),
         turn_options=EmptyModel(),
         services=RuntimeServices(team_wiki=port),
     )
 
 
-def _tools(port: TeamWikiPort | None) -> dict[str, Any]:
-    return {t.name: t for t in TeamWikiCapability().tools(_ctx(port))}
+def _tools(port: TeamWikiPort | None, mode: str = "read") -> dict[str, Any]:
+    return {t.name: t for t in TeamWikiCapability().tools(_ctx(port, mode))}
 
 
 def _call(
@@ -103,13 +131,14 @@ def _call(
     name: str,
     args: dict[str, Any],
     tools: dict[str, Any] | None = None,
+    mode: str = "read_write",
 ) -> Any:
     """Invoke through a ToolCall, so a `content_and_artifact` tool hands back
     the ToolMessage the runtime actually sees (content + artifact), not the
     raw tuple. Pass `tools` to make several calls against ONE binding, the way
     a single turn does — a fresh binding has a fresh per-turn state."""
 
-    the_tool = (tools or _tools(port))[name]
+    the_tool = (tools or _tools(port, mode))[name]
     return asyncio.run(
         the_tool.ainvoke({"type": "tool_call", "name": name, "args": args, "id": "c1"})
     )
@@ -140,16 +169,21 @@ def test_an_empty_wiki_says_so_rather_than_returning_nothing() -> None:
     assert "no pages yet" in text
 
 
-def test_a_refused_read_names_the_cause_and_is_an_error_result() -> None:
-    """A disabled capability is the commonest cause. The model must be told it
-    cannot read the wiki AT ALL this turn, or it retries the call until the
-    step budget runs out."""
+def test_a_refusal_carries_the_server_own_reason() -> None:
+    """403 covers two very different refusals — the capability being off, and
+    the rules page being out of reach — so the message the server sent is what
+    reaches the model, not a guess made from the status."""
 
-    port = _FakePort(raises=TeamWikiPortError("nope", status_code=403))
+    port = _FakePort(
+        raises=TeamWikiPortError(
+            "The rules page cannot be changed by an agent.", status_code=403
+        )
+    )
     message = _call(port, "wiki_read_page", {"slug": "x"})
 
     assert message.artifact.is_error is True
-    assert "not available to you" in message.content
+    assert "not allowed" in message.content
+    assert "rules page cannot be changed by an agent" in message.content
 
 
 def test_an_unknown_slug_is_an_error_not_an_empty_page() -> None:
@@ -180,7 +214,7 @@ def test_a_missing_port_fails_loud() -> None:
 
 def test_the_prompt_block_carries_the_rules_and_the_index() -> None:
     port = _FakePort(pages=(_page("onboarding", "Onboarding"),), rules="Never guess.")
-    block = asyncio.run(_TeamWikiPromptMiddleware(port)._compose())
+    block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=False)._compose())
 
     assert "Never guess." in block
     assert "- Onboarding — onboarding" in block
@@ -193,7 +227,7 @@ def test_the_prompt_block_is_fetched_once_per_turn() -> None:
     round, to fetch text that cannot have changed."""
 
     port = _FakePort(pages=(_page("a", "A"),), rules="r")
-    middleware = _TeamWikiPromptMiddleware(port)
+    middleware = _TeamWikiPromptMiddleware(port, can_write=False)
 
     async def three_calls() -> None:
         await asyncio.gather(
@@ -213,7 +247,7 @@ def test_an_unreachable_wiki_does_not_take_the_turn_down() -> None:
     the wiki could not be read, and the tools report the same failure."""
 
     port = _FakePort(raises=TeamWikiPortError("boom", status_code=503))
-    block = asyncio.run(_TeamWikiPromptMiddleware(port)._compose())
+    block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=False)._compose())
 
     assert "could not be read this turn" in block
     assert "Do not state or imply what it contains" in block
@@ -234,7 +268,7 @@ def test_the_prompt_block_says_the_wiki_cannot_be_written() -> None:
     will narrate the edit as done. The block has to close that off."""
 
     port = _FakePort(pages=(_page("a", "A"),))
-    block = asyncio.run(_TeamWikiPromptMiddleware(port)._compose())
+    block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=False)._compose())
 
     assert "You cannot change it" in block
     assert "Never say a page has been updated" in block
@@ -254,4 +288,91 @@ def test_reading_the_same_page_twice_in_a_turn_says_to_stop() -> None:
     second = _call(port, "wiki_read_page", {"slug": "shinigami"}, turn).content
     assert "Some content." in second
     assert "already read this page" in second
-    assert "no tool here writes" in second
+    assert "reading it again will not change it" in second
+
+
+# ---------------------------------------------------------------------------
+# The write half (WIKI-04)
+# ---------------------------------------------------------------------------
+
+
+def test_read_mode_exposes_no_way_to_change_the_wiki() -> None:
+    """The mode is the whole gate on the tool surface. An agent left on the
+    default must not be one config read away from writing into the team's
+    shared memory."""
+
+    assert set(_tools(_FakePort())) == {"wiki_list_pages", "wiki_read_page"}
+
+
+def test_read_write_mode_adds_proposing_and_publishing_only() -> None:
+    """And nothing else, ever: no delete, rename or move tool exists here. The
+    RFC's §5.4 invariant is an absence, not a check that could be bypassed."""
+
+    names = set(_tools(_FakePort(), "read_write"))
+
+    assert names == {
+        "wiki_list_pages",
+        "wiki_read_page",
+        "wiki_propose_edit",
+        "wiki_propose_page",
+        "wiki_publish_proposal",
+    }
+    assert not any("delete" in n or "rename" in n or "move" in n for n in names)
+
+
+def test_only_publishing_is_gated_for_approval() -> None:
+    """Gating the propose tools would ask the user to approve a draft they
+    cannot see yet: the gate runs before the tool and carries only a truncated
+    argument preview. The proposal is stored first so the modal has something
+    to diff."""
+
+    specs = TeamWikiCapability().hitl_specs()
+
+    assert [s.tool for s in specs] == ["wiki_publish_proposal"]
+    assert specs[0].require is True
+
+
+def test_proposing_says_plainly_that_nothing_is_written_yet() -> None:
+    """The model has to know its work is not done, or it reports the change as
+    made — which is exactly what happened before the write path existed."""
+
+    port = _FakePort()
+    message = _call(port, "wiki_propose_edit", {"slug": "s", "content_md": "new"})
+
+    assert port.proposed == [("s", "new")]
+    assert port.published == []
+    assert "Nothing is written yet" in message.content
+    assert "wiki_publish_proposal" in message.content
+
+
+def test_publishing_reports_the_review_mark() -> None:
+    port = _FakePort()
+    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+
+    assert port.published == ["prop-2"]
+    assert "review mark" in message.content
+
+
+def test_a_stale_proposal_tells_the_model_what_to_do_about_it() -> None:
+    """Someone edited the page while the proposal waited. Publishing must not
+    overwrite them — and "the wiki could not be reached" would have the model
+    retry the same doomed call instead of rebasing its edit."""
+
+    port = _FakePort(raises=TeamWikiPortError("stale", status_code=409))
+    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+
+    assert message.artifact.is_error is True
+    assert "changed while your proposal was waiting" in message.content
+    assert "redo your edit" in message.content
+
+
+def test_the_write_mode_prompt_describes_the_two_steps() -> None:
+    port = _FakePort(pages=(_page("a", "A"),))
+    block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=True)._compose())
+
+    assert "wiki_publish_proposal" in block
+    assert "replaces it whole" in block
+    assert "never change the rules page" in block
+    # The read-only wording must NOT survive into write mode: it would tell an
+    # agent that can write that it cannot.
+    assert "You cannot change it" not in block

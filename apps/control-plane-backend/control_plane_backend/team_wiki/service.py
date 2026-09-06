@@ -13,7 +13,10 @@ from control_plane_backend.models.team_wiki_models import (
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.team_wiki.schemas import (
+    ProposeEditRequest,
+    ProposePageRequest,
     WikiAvailability,
+    WikiProposal,
     CreateWikiPageRequest,
     SetNeedsReviewRequest,
     UpdateWikiPageContentRequest,
@@ -27,6 +30,8 @@ from control_plane_backend.team_wiki.schemas import (
 )
 from control_plane_backend.team_wiki.store import (
     TeamWikiStore,
+    WikiRevisionRecord,
+    _StaleBaseWrite,
     WikiPageHasChildrenError,
     WikiPageNotFoundError,
     WikiPageRecord,
@@ -573,6 +578,11 @@ async def restore_wiki_revision(
         raise WikiRequestError(
             "This revision does not belong to this page.", http_status=404
         )
+    if revision.status in ("proposed", "rejected"):
+        # A proposal is not history. Restoring one would publish an agent's
+        # draft as a human edit — clearing the review mark in the process —
+        # which is exactly the decision the approval gate exists to record.
+        raise WikiRequestError("This revision was never published.", http_status=404)
     return await _publish(
         store,
         team_id=team_id,
@@ -620,3 +630,241 @@ async def delete_wiki_page(
         raise WikiRequestError(
             "This wiki page does not exist.", http_status=404
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Agent proposals (WIKI-04)
+#
+# The write half is deliberately two steps. The platform's HITL gate pauses a
+# tool BEFORE it runs and carries only a truncated argument preview, which
+# cannot hold a page. So an agent first stores a proposal — invisible in the
+# wiki, changing nothing — and then asks to publish it; that second call is
+# what a human approves, and the approval modal fetches the proposal by id to
+# show the diff.
+#
+# Proposing is member-level, not editor: §9 of the RFC opens contribution to
+# any member driving an agent, and the approval gate plus the review mark are
+# what make that defensible. Nothing an agent proposes reaches the wiki
+# without a person saying so.
+# ---------------------------------------------------------------------------
+
+
+def _proposal_view(
+    proposal: WikiRevisionRecord,
+    *,
+    page: WikiPageRecord | None,
+    current_content_md: str,
+    parent_slug: str | None,
+) -> WikiProposal:
+    return WikiProposal(
+        proposal_id=proposal.revision_id,
+        # From the proposal itself, never from whether the page still resolves:
+        # an edit whose page was deleted while it waited is a broken edit, and
+        # rendering it as a brand-new page would show the approver a diff of the
+        # whole body against nothing.
+        kind="page" if proposal.proposed_title is not None else "edit",
+        title=page.title if page is not None else (proposal.proposed_title or ""),
+        slug=page.slug if page is not None else None,
+        parent_slug=parent_slug,
+        content_md=proposal.content_md,
+        current_content_md=current_content_md,
+        created_at=proposal.created_at,
+        author_user_id=proposal.author_user_id,
+        agent_instance_id=proposal.agent_instance_id,
+    )
+
+
+async def propose_wiki_page(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: ProposePageRequest,
+    deps: ProductServiceDependencies,
+) -> WikiProposal:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    pages = {p.page_id: p for p in await store.list_pages(team_id)}
+
+    parent: WikiPageRecord | None = None
+    if request.parent_slug:
+        parent = next(
+            (p for p in pages.values() if p.slug == request.parent_slug), None
+        )
+        if parent is None:
+            raise WikiRequestError(
+                f"No wiki page has the slug {request.parent_slug!r}.", http_status=404
+            )
+        if parent.kind == "rules":
+            raise WikiRequestError(
+                "The rules page cannot have children.", http_status=400
+            )
+        if _child_depth_under(pages, parent.page_id) > MAX_PAGE_DEPTH:
+            raise WikiRequestError(
+                f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
+                http_status=400,
+            )
+
+    proposal = await store.create_proposal(
+        team_id=team_id,
+        page_id=None,
+        content_md=request.content_md,
+        base_revision_id=None,
+        proposed_title=request.title,
+        proposed_parent_page_id=parent.page_id if parent else None,
+        author_user_id=user.uid,
+        agent_instance_id=request.agent_instance_id,
+        session_id=request.session_id,
+    )
+    return _proposal_view(
+        proposal,
+        page=None,
+        current_content_md="",
+        parent_slug=parent.slug if parent else None,
+    )
+
+
+async def propose_wiki_edit(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: ProposeEditRequest,
+    deps: ProductServiceDependencies,
+) -> WikiProposal:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await store.get_page_by_slug(team_id, request.slug)
+    if page is None:
+        raise WikiRequestError("This wiki page does not exist.", http_status=404)
+    if page.kind == "rules":
+        # §8.6: no agent can touch the rules page under any configuration. This
+        # is the only place that could have been the exception, so it is not.
+        raise WikiRequestError(
+            "The rules page cannot be changed by an agent.", http_status=403
+        )
+
+    current = (
+        await store.get_revision(team_id, page.current_revision_id)
+        if page.current_revision_id
+        else None
+    )
+    proposal = await store.create_proposal(
+        team_id=team_id,
+        page_id=page.page_id,
+        content_md=request.content_md,
+        base_revision_id=page.current_revision_id,
+        proposed_title=None,
+        proposed_parent_page_id=None,
+        author_user_id=user.uid,
+        agent_instance_id=request.agent_instance_id,
+        session_id=request.session_id,
+    )
+    return _proposal_view(
+        proposal,
+        page=page,
+        current_content_md=current.content_md if current else "",
+        parent_slug=None,
+    )
+
+
+async def get_wiki_proposal(
+    user: KeycloakUser,
+    team_id: TeamId,
+    proposal_id: str,
+    deps: ProductServiceDependencies,
+) -> WikiProposal:
+    """What the approval modal reads to render the diff."""
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    proposal = await store.get_proposal(team_id, proposal_id)
+    if proposal is None:
+        raise WikiRequestError("This proposal is no longer pending.", http_status=404)
+    page = await store.get_page(team_id, proposal.page_id)
+    current = (
+        await store.get_revision(team_id, page.current_revision_id)
+        if page and page.current_revision_id
+        else None
+    )
+    parent_slug = None
+    if page is None and proposal.proposed_parent_page_id:
+        parent = await store.get_page(team_id, proposal.proposed_parent_page_id)
+        parent_slug = parent.slug if parent else None
+    return _proposal_view(
+        proposal,
+        page=page,
+        current_content_md=current.content_md if current else "",
+        parent_slug=parent_slug,
+    )
+
+
+async def publish_wiki_proposal(
+    user: KeycloakUser,
+    team_id: TeamId,
+    proposal_id: str,
+    deps: ProductServiceDependencies,
+) -> WikiPageDetail:
+    """Approve a pending proposal. The approver becomes the author of record.
+
+    The page keeps its review mark: approving says the change is wanted, not
+    that the whole page has been read.
+    """
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    proposal = await store.get_proposal(team_id, proposal_id)
+    if proposal is None:
+        raise WikiRequestError("This proposal is no longer pending.", http_status=404)
+
+    slug = ""
+    if proposal.proposed_title is not None:
+        # Re-run what proposing checked. A proposal can wait, and the tree can
+        # move under it: the parent may be gone (publish at the root rather than
+        # dangle) or have been pushed deeper (refuse rather than break the cap).
+        pages = {p.page_id: p for p in await store.list_pages(team_id)}
+        parent_id = proposal.proposed_parent_page_id
+        if parent_id is not None and parent_id not in pages:
+            parent_id = None
+        if _child_depth_under(pages, parent_id) > MAX_PAGE_DEPTH:
+            raise WikiRequestError(
+                f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels. "
+                "The page this one would go under has moved since it was "
+                "proposed.",
+                http_status=409,
+            )
+        if parent_id != proposal.proposed_parent_page_id:
+            await store.reparent_proposal(
+                team_id=team_id, revision_id=proposal_id, parent_page_id=parent_id
+            )
+        slug = await _unique_slug(store, team_id, proposal.proposed_title)
+    try:
+        page = await store.publish_proposal(
+            team_id=team_id,
+            revision_id=proposal_id,
+            slug=slug,
+            approver_user_id=user.uid,
+        )
+    except _StaleBaseWrite:
+        # Someone edited the page while the proposal waited for an answer.
+        # Refusing carries the current text so the agent can redo its edit on
+        # top of it rather than the approver losing the other person's work.
+        current_page = await store.get_page(team_id, proposal.page_id)
+        current_id = current_page.current_revision_id if current_page else None
+        current = await store.get_revision(team_id, current_id) if current_id else None
+        raise WikiConflictError(
+            current_id or "", current.content_md if current else ""
+        ) from None
+    except WikiPageNotFoundError as exc:
+        raise WikiRequestError(
+            "The page this proposal targets no longer exists.", http_status=404
+        ) from exc
+    except WikiSlugAlreadyExistsError as exc:
+        # The slug was free a moment ago. Someone else took it, or this same
+        # proposal is being published twice at once — either way the caller can
+        # act on a 409, where a 500 tells them nothing.
+        raise WikiRequestError(
+            "A page with this title already exists.", http_status=409
+        ) from exc
+    return WikiPageDetail(
+        page=_summary(page),
+        content_md=proposal.content_md,
+        revision_id=proposal_id,
+        author_kind="agent",
+    )

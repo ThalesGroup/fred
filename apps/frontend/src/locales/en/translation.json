@@ -373,7 +373,13 @@
     },
     "team_wiki": {
       "name": "Team wiki",
-      "description": "Gives the agent access to the team's wiki: it reads the pages the team has written and follows the rules the team set there. Enabling this capability for a team is also what gives its members a wiki."
+      "description": "Gives the agent access to the team's wiki: it reads the pages the team has written and follows the rules the team set there. Enabling this capability for a team is also what gives its members a wiki.",
+      "fields": {
+        "mode": {
+          "title": "What the agent may do",
+          "description": "Read lets the agent consult the wiki. Read and propose also lets it suggest pages and edits \u2014 you are always asked to approve them before anything is written. No mode can delete, rename or move a page."
+        }
+      }
     }
   },
   "chatbot": {
@@ -3107,6 +3113,14 @@
         "title": "Agent rules",
         "notice": "Every agent with wiki access reads this page before answering. Only editors can change it, and no agent can ever write to it.",
         "empty": "No rules written yet. An editor can add the instructions every agent should follow."
+      },
+      "proposal": {
+        "newPage": "This agent proposes a new page \u201c{{title}}\u201d ({{added}} lines).",
+        "edit": "This agent proposes changing \u201c{{title}}\u201d: {{added}} lines added, {{removed}} removed.",
+        "seeChanges": "See the changes",
+        "dialogTitle": "Proposed changes \u2014 {{title}}",
+        "close": "Close",
+        "unavailable": "This proposal is no longer available."
       },
       "newPageDialog": {
         "title": "New wiki page",

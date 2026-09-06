@@ -25,6 +25,7 @@ from __future__ import annotations
 from importlib.metadata import EntryPoint
 
 from fred_capability_team_wiki.wiki.capability import TeamWikiCapability
+from fred_capability_team_wiki.wiki.capability import TeamWikiConfig
 from fred_sdk.contracts.capability import EmptyModel
 from fred_runtime.capabilities import CapabilityRegistry
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
@@ -83,7 +84,7 @@ def test_middleware_does_not_re_register_the_tools() -> None:
 
     ctx: Any = CapabilityContext(
         identity=CapabilityIdentity(user_id="u", session_id="s"),
-        config=EmptyModel(),
+        config=TeamWikiConfig(),
         turn_options=EmptyModel(),
         services=RuntimeServices(),
     )

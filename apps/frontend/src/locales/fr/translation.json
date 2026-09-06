@@ -373,7 +373,13 @@
     },
     "team_wiki": {
       "name": "Wiki d'équipe",
-      "description": "Donne à l'agent accès au wiki de l'équipe : il lit les pages écrites par l'équipe et suit les règles qu'elle y a fixées. Activer cette capacité pour une équipe est aussi ce qui donne un wiki à ses membres."
+      "description": "Donne à l'agent accès au wiki de l'équipe : il lit les pages écrites par l'équipe et suit les règles qu'elle y a fixées. Activer cette capacité pour une équipe est aussi ce qui donne un wiki à ses membres.",
+      "fields": {
+        "mode": {
+          "title": "Ce que l'agent peut faire",
+          "description": "En lecture, l'agent consulte le wiki. En lecture et proposition, il peut aussi proposer des pages et des modifications — vous serez toujours invité à les approuver avant qu'elles ne soient écrites. Aucun mode ne permet de supprimer, renommer ou déplacer une page."
+        }
+      }
     }
   },
   "chatbot": {
@@ -3107,6 +3113,14 @@
         "title": "Règles pour les agents",
         "notice": "Chaque agent ayant accès au wiki lit cette page avant de répondre. Seuls les éditeurs peuvent la modifier, et aucun agent ne peut jamais y écrire.",
         "empty": "Aucune règle pour l'instant. Un éditeur peut y écrire les consignes que tout agent doit suivre."
+      },
+      "proposal": {
+        "newPage": "Cet agent propose une nouvelle page « {{title}} » ({{added}} lignes).",
+        "edit": "Cet agent propose de modifier « {{title}} » : {{added}} lignes ajoutées, {{removed}} retirées.",
+        "seeChanges": "Voir les modifications",
+        "dialogTitle": "Modifications proposées — {{title}}",
+        "close": "Fermer",
+        "unavailable": "Cette proposition n\u2019est plus disponible."
       },
       "newPageDialog": {
         "title": "Nouvelle page de wiki",

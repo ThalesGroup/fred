@@ -22,6 +22,7 @@
 import type { ComponentType } from "react";
 import type { IconType } from "@shared/utils/Type";
 import type { RawUiPart } from "@rework/types/parts";
+import type { PendingToolCall } from "../../../slices/runtime/runtimeOpenApi";
 import type { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface UiPartRendererProps {
@@ -178,6 +179,22 @@ export interface CapabilityConfigWidgetProps {
  */
 export type CapabilityConfigWidget = ComponentType<CapabilityConfigWidgetProps>;
 
+export interface CapabilityHitlRendererProps {
+  /** The gated call, as the approval prompt carries it. */
+  call: PendingToolCall;
+}
+
+/**
+ * Extra content shown inside the approval card for ONE gated tool.
+ *
+ * The gate itself carries almost nothing — a tool name and an argument preview
+ * truncated to 1 200 characters — so a capability whose approval needs real
+ * context (what a proposed wiki edit would actually change) contributes a
+ * renderer that fetches it. It renders above the accept/reject buttons and
+ * never replaces them: the decision stays the platform's.
+ */
+export type CapabilityHitlRenderer = ComponentType<CapabilityHitlRendererProps>;
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
@@ -217,4 +234,11 @@ export interface CapabilityUiPlugin {
    * has documents (its card renderer only covers live writes, not replay).
    */
   sessionProbes?: readonly CapabilitySessionProbe[];
+  /**
+   * Approval-card content keyed by GATED TOOL NAME (WIKI-04). Tool names are
+   * unique across capabilities — the backend assembler refuses a collision at
+   * turn assembly — so one flat map resolves them, the same shape as the
+   * side-panel and config-widget registries.
+   */
+  hitlRenderers?: Record<string, CapabilityHitlRenderer>;
 }

@@ -582,6 +582,8 @@ export const {
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
   // Team wiki (WIKI-01/02), and whether the team has one at all (WIKI-03).
   useWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery: useWikiAvailabilityQuery,
+  // Agent proposals (WIKI-04): read by the approval card to show the diff.
+  useReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery: useWikiProposalQuery,
   useListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery: useWikiPagesQuery,
   useReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery: useWikiPageQuery,
   useReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery: useWikiRulesQuery,

@@ -20,6 +20,7 @@ import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/Charact
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import type { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import { hitlRendererForTool } from "@rework/features/capabilities/hitlRendererRegistry";
 import styles from "./HitlPrompt.module.css";
 
 interface HitlPromptProps {
@@ -80,6 +81,15 @@ export function HitlPrompt({
     >
       {payload.title && <p className={styles.title}>{payload.title}</p>}
       {payload.question && <p className={styles.question}>{payload.question}</p>}
+
+      {/* What the gate carries is a tool name and 1 200 characters of argument
+          preview — enough to say WHICH call, never enough to judge it. A
+          capability whose approval needs real context contributes a renderer
+          keyed by tool name; everything else shows nothing extra, as before. */}
+      {(payload.pending_calls ?? []).map((call) => {
+        const Renderer = hitlRendererForTool(call.tool_name);
+        return Renderer ? <Renderer key={call.tool_call_id || call.tool_name} call={call} /> : null;
+      })}
 
       {/* Answered questions hide their choices — the answer is already written into the
           chat as the turn right after this card, so a disabled button row would be redundant. */}

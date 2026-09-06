@@ -95,6 +95,7 @@ from fred_sdk.contracts.runtime import (
     TracerPort,
     WikiPageContent,
     WikiPageRef,
+    WikiProposalRef,
     WorkspaceFileNotFound,
     WorkspaceFsPort,
 )
@@ -2878,7 +2879,7 @@ class TeamWikiAdapter(TeamWikiPort):
             )
         return f"{self._control_plane_url.rstrip('/')}/teams/{team_id}/wiki"
 
-    async def _get(self, path: str) -> Any:
+    async def _request(self, method: str, path: str, json: Any = None) -> Any:
         url = f"{self._base()}{path}"
         client = self._http_client
         if client is None:
@@ -2887,13 +2888,16 @@ class TeamWikiAdapter(TeamWikiPort):
             )
         token = await _workspace_access_token(self._binding.runtime_context)
         try:
-            response = await client.get(
-                url, headers={"Authorization": f"Bearer {token}"}
+            response = await client.request(
+                method, url, headers={"Authorization": f"Bearer {token}"}, json=json
             )
             response.raise_for_status()
         except Exception as exc:
             raise _wrap_team_wiki_error(exc) from exc
-        return response.json()
+        return response.json() if response.content else None
+
+    async def _get(self, path: str) -> Any:
+        return await self._request("GET", path)
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
         payload = await self._get("/pages")
@@ -2944,6 +2948,67 @@ class TeamWikiAdapter(TeamWikiPort):
             raise
         return payload.get("content_md") or ""
 
+    # ---- the write half (WIKI-04) -----------------------------------------
+    #
+    # Two steps, because the platform's approval gate pauses a tool BEFORE it
+    # runs and carries only a truncated argument preview. A proposal is stored
+    # first, changing nothing; publishing it is the call a human approves.
+
+    def _proposal_ref(self, payload: Any, *, verb: str) -> WikiProposalRef:
+        title = payload.get("title") or ""
+        return WikiProposalRef(
+            proposal_id=payload.get("proposal_id") or "",
+            title=title,
+            slug=payload.get("slug"),
+            summary=f"{verb} \u201c{title}\u201d",
+        )
+
+    async def propose_page(
+        self, *, title: str, content_md: str, parent_slug: str | None = None
+    ) -> WikiProposalRef:
+        payload = await self._request(
+            "POST",
+            "/proposals/page",
+            {
+                "title": title,
+                "content_md": content_md,
+                "parent_slug": parent_slug,
+                # The audit trail back to the conversation that produced it.
+                # Read from the binding, never from the model.
+                "agent_instance_id": getattr(
+                    self._binding.runtime_context, "agent_instance_id", None
+                ),
+                "session_id": getattr(
+                    self._binding.runtime_context, "session_id", None
+                ),
+            },
+        )
+        return self._proposal_ref(payload, verb="create")
+
+    async def propose_edit(self, *, slug: str, content_md: str) -> WikiProposalRef:
+        payload = await self._request(
+            "POST",
+            "/proposals/edit",
+            {
+                "slug": slug,
+                "content_md": content_md,
+                "agent_instance_id": getattr(
+                    self._binding.runtime_context, "agent_instance_id", None
+                ),
+                "session_id": getattr(
+                    self._binding.runtime_context, "session_id", None
+                ),
+            },
+        )
+        return self._proposal_ref(payload, verb="rewrite")
+
+    async def publish_proposal(self, proposal_id: str) -> str:
+        payload = await self._request(
+            "POST", f"/proposals/{quote(proposal_id, safe='')}/publish"
+        )
+        page = (payload or {}).get("page") or {}
+        return page.get("slug") or ""
+
 
 def _ordered_wiki_refs(refs: Sequence[WikiPageRef]) -> list[WikiPageRef]:
     """Parents before their children, siblings in the order given.
@@ -2989,8 +3054,18 @@ def _wrap_team_wiki_error(exc: Exception) -> TeamWikiPortError:
     if isinstance(exc, TeamWikiPortError):
         return exc
     timed_out = isinstance(exc, httpx.TimeoutException)
-    status_code = (
-        exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-    )
-    detail = _redact_urls(str(exc).strip()) or type(exc).__name__
+    status_code = None
+    detail = ""
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        # The server's own `detail` is what makes the failure actionable — "the
+        # rules page cannot be changed by an agent", "this page changed while
+        # the proposal was waiting". `str(exc)` carries only the status and the
+        # URL, so the reason never reached the model without this.
+        try:
+            body = exc.response.json()
+            detail = str(body.get("detail") or "").strip()
+        except Exception:
+            detail = ""
+    detail = detail or _redact_urls(str(exc).strip()) or type(exc).__name__
     return TeamWikiPortError(detail, timed_out=timed_out, status_code=status_code)

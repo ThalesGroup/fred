@@ -619,7 +619,7 @@ Four slices, in order. Each is a reviewable PR; none is a big-bang.
 | 1 | Control-plane foundation | the two tables and their migration, the REST API, role enforcement, the generated client |
 | 2 | The Wiki page | tree, rendered page, editor for editors, revision list and restore, the rules page, the review mark |
 | 3 | The capability, read-only ✅ shipped 2026-09-07, issue #2573 | package, `TeamWikiPort` and its adapter, `wiki_list_pages` / `wiki_read_page`, rules and index injection |
-| 4 | Agent writes | the two propose tools, the HITL gate, the pending-revision flow, the diff modal and its HITL renderer registry |
+| 4 | Agent writes ✅ shipped 2026-09-07, issue #2574 | the two propose tools, the HITL gate, the pending-revision flow, the diff modal and its HITL renderer registry |
 
 Slices 1 and 2 deliver a usable human wiki with no agent involvement at all —
 which is the right order: it lets the team judge whether the wiki is worth
@@ -641,6 +641,14 @@ entirely, read included. Reversing this means finding a prompt seam both
 runtimes share — the closest is `McpCapability.prompt_group()`, which the
 assembler currently keys off `isinstance(capability, McpCapability)` and would
 have to generalise.
+
+*Publishing is its own tool, and it is the gated one.* §7.1 listed
+`propose_*` and `publish_proposal` as port methods without saying which the HITL
+gate would pause. Checked against the platform: the gate runs BEFORE a tool and
+carries only `PendingToolCall.args_preview`, truncated to 1 200 characters — so
+gating `propose_*` would ask the user to approve a page they cannot see. The
+proposal is stored first and its id is what the approval card resolves. Nothing
+about this is reversible cheaply: it is the shape the gate imposes.
 
 *Enabling the capability is what gives a team a wiki at all.* Not only its
 agents: the control-plane refuses every wiki route for a team without it. §5.4

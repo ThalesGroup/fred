@@ -360,6 +360,26 @@ operations:
     review_status: approved
     required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
   - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/page
+    review_status: approved
+    required_permission: can_read_members # WIKI-04 — member-level on purpose: a proposal changes nothing in the wiki, and the HITL approval is the authority rather than the role of whoever drove the agent
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/edit
+    review_status: approved
+    required_permission: can_read_members # WIKI-04 — same as the page proposal; the rules page is refused by its kind, so no agent can reach it under any configuration
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/{proposal_id}
+    review_status: approved
+    required_permission: can_read_members # WIKI-04 — what the approval modal reads to render the diff
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/{proposal_id}/publish
+    review_status: approved
+    required_permission: can_read_members # WIKI-04 — the member driving the conversation approves their own agent's proposal (RFC §9); the published revision carries their identity and leaves the page marked for review
+  - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/wiki/availability
     review_status: approved

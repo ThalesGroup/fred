@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-`TeamWikiCapability` (WIKI-03) — read the team's wiki, spec
+`TeamWikiCapability` (WIKI-03/04) — read and contribute to the team's wiki, spec
 `docs/swift/rfc/TEAM-WIKI-RFC.md`.
 
 Doctrine summary:
@@ -26,8 +26,12 @@ Doctrine summary:
   runtime never runs. The rules are not decoration: a Graph agent selecting
   this capability must fail loudly at assembly rather than answer without
   them. `execution_models=("react",)` is what makes that mechanical.
-- Read-only. Agent writes are slice 4 and arrive as separate `propose_*`
-  tools behind a HITL gate — never by widening these two.
+- **Writes are two steps and gated** (WIKI-04). `wiki_propose_*` stores a
+  suggestion that changes nothing; `wiki_publish_proposal` is the call the
+  platform's single approval gate pauses, because the gate runs BEFORE a tool
+  and carries only a truncated argument preview — too little to diff a page
+  against. There is no delete, rename or move tool, and the rules page is
+  refused server-side whatever the configuration.
 """
 
 from __future__ import annotations
@@ -43,6 +47,8 @@ from fred_sdk.contracts.capability import (
     CapabilityManifest,
     EmptyModel,
 )
+from fred_sdk.contracts.capability.hitl import HitlSpec
+from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
@@ -53,6 +59,7 @@ from fred_sdk.contracts.runtime import (
     TeamWikiPort,
     WikiPageRef,
 )
+from pydantic import BaseModel
 from langchain.agents.middleware.types import (
     AgentMiddleware,
     ModelRequest,
@@ -82,8 +89,8 @@ INDEX_MAX_CHARS = 4_000
 # that can, re-read it six times before answering that it could not retrieve it.
 _REREAD_NOTE = (
     "\n\n[You already read this page earlier in this turn and it has not "
-    "changed. Reading it again will not change it either — no tool here writes "
-    "to the wiki. Answer the user with what you have.]"
+    "changed, and reading it again will not change it. Answer the user with "
+    "what you have, or propose a change if you have a tool for that.]"
 )
 
 
@@ -103,11 +110,18 @@ def _wiki_tool_failure(
     timed_out = bool(getattr(exc, "timed_out", False))
     raw = str(exc).strip()
 
-    if status_code in (401, 403):
-        # The commonest real cause is an admin having turned the capability
-        # off for this team. Saying so stops the model retrying a call that
-        # will never succeed this turn.
-        cause = "this team's wiki is not available to you"
+    if status_code == 409:
+        # A conflict is the one failure the model can fix by itself: someone
+        # changed the page while the proposal waited. Without this branch it
+        # read as "could not be reached" and the model retried unchanged.
+        cause = (
+            "the page changed while your proposal was waiting. Read it again "
+            "and redo your edit on the new text"
+        )
+    elif status_code in (401, 403):
+        # 403 is also how the server refuses the rules page, so the reason it
+        # sent is kept below rather than replaced by a guess.
+        cause = "that is not allowed"
     elif status_code == 404:
         cause = "there is no such wiki page"
     elif timed_out:
@@ -124,7 +138,10 @@ def _wiki_tool_failure(
         timed_out,
     )
 
-    detail = f" ({raw})" if raw and status_code is None and not timed_out else ""
+    # The server's own message is kept whenever there is one: it names the
+    # actual refusal ("the rules page cannot be changed by an agent") where the
+    # status alone would have the model guess.
+    detail = f" ({raw})" if raw and not timed_out else ""
     message = f"Could not {action}: {cause}{detail}."
     # `blocks` carries the same diagnostic as `content` (CAPAB-02): a Graph
     # agent's plain-dict invocation keeps only the artifact half.
@@ -178,9 +195,10 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
     when the model tries to use them.
     """
 
-    def __init__(self, port: TeamWikiPort | None) -> None:
+    def __init__(self, port: TeamWikiPort | None, *, can_write: bool) -> None:
         super().__init__()
         self._port = port
+        self._can_write = can_write
         self._block: str | None = None
         self._lock = asyncio.Lock()
 
@@ -217,14 +235,27 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         # with the new Markdown — a change the user believed had been saved and
         # that never existed. A capability that only reads has to say so, or a
         # model told it "has access to the wiki" will assume the rest.
-        parts.append(
-            "\nYou can READ this wiki. You cannot change it: there is no tool "
-            "here that creates, edits or deletes a page, and nothing you write "
-            "in your answer reaches it. If the user asks you to add or correct "
-            "something, give them the text you would put there and tell them an "
-            "editor has to paste it into the page from the Wiki screen. Never "
-            "say a page has been updated, created or saved — it has not."
-        )
+        if self._can_write:
+            parts.append(
+                "\nYou can read this wiki and propose changes to it. A proposal "
+                "changes nothing on its own: prepare it with wiki_propose_edit "
+                "or wiki_propose_page, then call wiki_publish_proposal, which "
+                "asks the user to approve it. Read a page before proposing an "
+                "edit — your text replaces it whole, so it must be the complete "
+                "page as it should end up. You cannot delete, rename or move a "
+                "page, and you can never change the rules page. Say a page was "
+                "written only after a publish call has come back successful."
+            )
+        else:
+            parts.append(
+                "\nYou can READ this wiki. You cannot change it: there is no "
+                "tool here that creates, edits or deletes a page, and nothing "
+                "you write in your answer reaches it. If the user asks you to "
+                "add or correct something, give them the text you would put "
+                "there and tell them an editor has to paste it into the page "
+                "from the Wiki screen. Never say a page has been updated, "
+                "created or saved — it has not."
+            )
         if rules.strip():
             parts.append(
                 "\n## Rules set by this team\n\n"
@@ -254,7 +285,18 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         )
 
 
-class TeamWikiCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
+class TeamWikiConfig(BaseModel):
+    """Agent-creation / stored config of the `team_wiki` capability.
+
+    One knob (RFC §7.2): whether this agent may only read the wiki, or may
+    also propose changes to it. Read is the default — an agent that can write
+    is a deliberate choice, not what you get by ticking a box.
+    """
+
+    mode: str = "read"
+
+
+class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyModel]):
     """Read access to the calling team's wiki, through
     `RuntimeServices.team_wiki` (see the module docstring for the doctrine)."""
 
@@ -265,21 +307,42 @@ class TeamWikiCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
         description="capability.team_wiki.description",
         icon="book_2",
         kind="tool",
-        # No config fields: what to read is the whole team wiki, and the caps
-        # are the product's, not a per-agent knob. See the RFC before adding
-        # one — a scoping field would be a second, weaker access rule beside
-        # the team's own.
-        config_fields=[],
+        # One field only (RFC §7.2). There is deliberately no scoping knob:
+        # what an agent may reach is the whole team wiki, and a per-agent scope
+        # would be a second, weaker access rule beside the team's own.
+        config_fields=[
+            FieldSpec(
+                key="mode",
+                type="string",
+                title="capability.team_wiki.fields.mode.title",
+                description="capability.team_wiki.fields.mode.description",
+                default="read",
+                enum=["read", "read_write"],
+            ),
+        ],
         # ReAct only — see the module docstring. The default would let a Graph
         # agent select this capability and answer without the team's rules.
         execution_models=("react",),
         # team_scope stays the ADMIN_GATED default: enabling this capability is
         # what makes a team's wiki exist at all, for its agents and its people.
     )
-    ConfigModel = EmptyModel
+    ConfigModel = TeamWikiConfig
+
+    def hitl_specs(self) -> Sequence[HitlSpec]:
+        """Publishing is the one act a human must sign off on.
+
+        Not `wiki_propose_*`: a proposal changes nothing and gating it would
+        ask the user to approve a draft they cannot see yet. The gate pauses a
+        tool BEFORE it runs and carries only a truncated argument preview — too
+        little to diff a page — so the proposal is stored first and its id is
+        what the approval prompt carries. The modal fetches it and shows the
+        diff. See `docs/swift/rfc/TEAM-WIKI-RFC.md` §11.
+        """
+
+        return [HitlSpec(tool="wiki_publish_proposal", require=True)]
 
     def tools(
-        self, ctx: CapabilityContext[EmptyModel, EmptyModel]
+        self, ctx: CapabilityContext[TeamWikiConfig, EmptyModel]
     ) -> Sequence[BaseTool]:
         """The two read tools, bound to the turn's typed context.
 
@@ -372,10 +435,121 @@ class TeamWikiCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
             )
 
-        return [wiki_list_pages, wiki_read_page]
+        if ctx.config.mode != "read_write":
+            return [wiki_list_pages, wiki_read_page]
+
+        # --- the write half ------------------------------------------------
+        #
+        # Two tools, two steps: proposing stores a suggestion that changes
+        # nothing; publishing is the call the platform's approval gate pauses.
+        # No delete, rename or move tool exists — that is the enforcement of
+        # the RFC's §5.4 invariant, an absence rather than a check.
+
+        _PREPARED = (
+            "Nothing is written yet — call wiki_publish_proposal with this id "
+            "to ask the user to approve it."
+        )
+
+        @tool("wiki_propose_edit", response_format="content_and_artifact")
+        async def wiki_propose_edit(
+            slug: str, content_md: str
+        ) -> tuple[str, ToolInvocationResult]:
+            """Suggest new content for an existing wiki page.
+
+            Read the page first: `content_md` REPLACES it whole, so it must be
+            the complete page as you want it to end up, not just your addition.
+            Keep what was already there unless the user asked to remove it.
+
+            This stores a suggestion and changes nothing in the wiki.
+            """
+
+            port = _require_port()
+            started = time.monotonic()
+            try:
+                proposal = await port.propose_edit(slug=slug, content_md=content_md)
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action=f"propose an edit to '{slug}'",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
+            return text, ToolInvocationResult(
+                tool_ref=TEAM_WIKI_TOOL_REF,
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+            )
+
+        @tool("wiki_propose_page", response_format="content_and_artifact")
+        async def wiki_propose_page(
+            title: str, content_md: str, parent_slug: str | None = None
+        ) -> tuple[str, ToolInvocationResult]:
+            """Suggest a NEW wiki page. Use wiki_propose_edit for one that exists.
+
+            `parent_slug` nests it under an existing page; omit it for a
+            top-level one. Check the index first — a second page on a topic the
+            wiki already covers is worse than a longer one.
+
+            This stores a suggestion and changes nothing in the wiki.
+            """
+
+            port = _require_port()
+            started = time.monotonic()
+            try:
+                proposal = await port.propose_page(
+                    title=title, content_md=content_md, parent_slug=parent_slug
+                )
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action=f"propose the page '{title}'",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
+            return text, ToolInvocationResult(
+                tool_ref=TEAM_WIKI_TOOL_REF,
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+            )
+
+        @tool("wiki_publish_proposal", response_format="content_and_artifact")
+        async def wiki_publish_proposal(
+            proposal_id: str,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Submit a prepared proposal for the user's approval.
+
+            The user is shown what would change and decides. Call it only with
+            an id a propose tool just gave you, and only once — if the user
+            declines, do not call it again with the same id.
+            """
+
+            port = _require_port()
+            started = time.monotonic()
+            try:
+                slug = await port.publish_proposal(proposal_id)
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action="publish the proposal",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            text = (
+                f"Published. The page is live at '{slug}' and carries the review "
+                "mark every agent-written page gets until an editor clears it."
+            )
+            return text, ToolInvocationResult(
+                tool_ref=TEAM_WIKI_TOOL_REF,
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+            )
+
+        return [
+            wiki_list_pages,
+            wiki_read_page,
+            wiki_propose_edit,
+            wiki_propose_page,
+            wiki_publish_proposal,
+        ]
 
     def middleware(
-        self, ctx: CapabilityContext[EmptyModel, EmptyModel]
+        self, ctx: CapabilityContext[TeamWikiConfig, EmptyModel]
     ) -> Sequence[AgentMiddleware]:
         """ONLY the prompt fragment — the tools are not carried here.
 
@@ -386,4 +560,8 @@ class TeamWikiCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
         tools twice, so the model would see each of them twice in its schema.
         """
 
-        return [_TeamWikiPromptMiddleware(ctx.services.team_wiki)]
+        return [
+            _TeamWikiPromptMiddleware(
+                ctx.services.team_wiki, can_write=ctx.config.mode == "read_write"
+            )
+        ]

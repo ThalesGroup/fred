@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -130,3 +131,42 @@ class WikiAvailability(BaseModel):
     """
 
     enabled: bool
+
+
+# --- Agent proposals (WIKI-04) ---------------------------------------------
+
+
+class ProposePageRequest(BaseModel):
+    """An agent's suggestion for a page that does not exist yet."""
+
+    title: str = Field(min_length=1, max_length=300)
+    content_md: str = Field(max_length=MAX_PAGE_CHARS)
+    parent_slug: str | None = None
+    agent_instance_id: str | None = None
+    session_id: str | None = None
+
+
+class ProposeEditRequest(BaseModel):
+    """An agent's suggestion for an existing page, by slug."""
+
+    slug: str = Field(min_length=1)
+    content_md: str = Field(max_length=MAX_PAGE_CHARS)
+    agent_instance_id: str | None = None
+    session_id: str | None = None
+
+
+class WikiProposal(BaseModel):
+    """A pending suggestion, and everything the approval modal needs to show
+    what it would change — including the text it would replace."""
+
+    proposal_id: str
+    kind: Literal["page", "edit"]
+    title: str
+    slug: str | None = None
+    parent_slug: str | None = None
+    content_md: str
+    #: What the page holds today; empty for a proposed new page.
+    current_content_md: str = ""
+    created_at: datetime | None = None
+    author_user_id: str = ""
+    agent_instance_id: str | None = None

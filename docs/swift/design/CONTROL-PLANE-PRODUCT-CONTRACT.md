@@ -3517,6 +3517,10 @@ reach theirs.
 | POST | `/teams/{team_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore` | `can_update_resources` |
 | GET | `/teams/{team_id}/wiki/rules` | `can_read_members` |
 | PUT | `/teams/{team_id}/wiki/rules` | `can_update_resources` |
+| POST | `/teams/{team_id}/wiki/proposals/page` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/proposals/edit` | `can_read_members` |
+| GET | `/teams/{team_id}/wiki/proposals/{proposal_id}` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/proposals/{proposal_id}/publish` | `can_read_members` |
 
 **Reads are `can_read_members`, deliberately not `can_read`.** `can_read` is
 `team_member or public`, so on a team flagged public it would hand a team's
@@ -3540,6 +3544,33 @@ the team navigation panel asks it to decide whether to offer the entry.
 **Disabling never deletes anything.** The tables are untouched, and re-enabling
 brings the wiki back exactly as it was, revisions and all. Revoking access is
 not a destructive operation and must never become one.
+
+**Agent writes are two steps, and member-level** (2026-09-07, issue #2574).
+`propose_*` stores a revision at `status = "proposed"` — invisible in the tree,
+absent from the page's history, changing nothing — and `publish` is what makes
+it the page's current revision. The split exists because the platform's HITL
+gate pauses a tool *before* it runs and carries only a truncated argument
+preview: too little to diff a page, but ample for a proposal id, which is what
+the approval card resolves to render the change.
+
+The proposal routes are `can_read_members`, not `can_update_resources`. This is
+deliberate (RFC §5.4, §9) and it has a consequence worth stating plainly: a plain
+member can propose and publish, so the editor role does not gate wiki content the
+way it gates the direct `PUT` routes. What makes that defensible is not a check
+but two properties — every published proposal is stamped `author_kind = "agent"`
+and leaves the page `needs_review`, and any editor can restore an earlier
+revision. Contribution is open; the audit trail and reversibility are the
+mitigation.
+
+Three things no configuration reaches: the rules page (refused by its `kind` on
+both propose paths), deletion, and renaming or moving — no tool and no endpoint
+exists for an agent to do any of them. A `proposed` or `rejected` revision also
+cannot be restored: doing so would publish an agent's draft as a human edit and
+clear the review mark, undoing the very decision the statuses record.
+
+Declining an approval leaves the proposal pending rather than marking it
+refused — the runtime never runs the tool, so nothing reports the decision back.
+A queue of pending proposals for editors stays deferred (RFC §12.2).
 
 **Content is append-only.** An edit inserts a revision and moves the page's
 `current_revision_id`; it never updates content in place. History, restore and

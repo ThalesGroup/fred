@@ -1221,6 +1221,20 @@ class WikiPageContent(FrozenModel):
     truncated: bool = False
 
 
+class WikiProposalRef(FrozenModel):
+    """A stored suggestion awaiting a human's decision.
+
+    `summary` is a one-line description of what it would change, for the tool
+    result the model reads back — never the page itself, which the approval
+    modal fetches by id.
+    """
+
+    proposal_id: str
+    title: str
+    slug: str | None = None
+    summary: str = ""
+
+
 class TeamWikiPortError(Exception):
     """
     Typed transport failure raised by team wiki port adapters.
@@ -1252,9 +1266,11 @@ class TeamWikiPort(ABC):
     the control-plane's own role checks are enforced. The capability names a
     slug and nothing else — it cannot reach another team's wiki by asking.
 
-    Read-only by construction in this slice. Agent writes are slice 4 and will
-    arrive as separate `propose_*` methods behind a HITL gate, never by
-    widening these three.
+    The write half (WIKI-04) is two steps on purpose: `propose_*` stores a
+    suggestion that changes nothing, and `publish_proposal` — the call the
+    platform's approval gate pauses — is what makes it real. There is no
+    delete, rename or move method here, and adding one would be the wrong
+    move: §5.4's invariant is an absence, not a check that could be bypassed.
     """
 
     @abstractmethod
@@ -1280,6 +1296,36 @@ class TeamWikiPort(ABC):
 
         Never raises for an absent rules page: a team that has not written one
         is the normal state, not a failure.
+        """
+
+    @abstractmethod
+    async def propose_page(
+        self, *, title: str, content_md: str, parent_slug: str | None = None
+    ) -> WikiProposalRef:
+        """Store a suggestion for a page that does not exist yet.
+
+        Changes nothing: the page is created only if a human publishes the
+        proposal. Raises `TeamWikiPortError` with `status_code=404` when
+        `parent_slug` names no page.
+        """
+
+    @abstractmethod
+    async def propose_edit(self, *, slug: str, content_md: str) -> WikiProposalRef:
+        """Store a suggestion replacing one page's whole content.
+
+        Changes nothing until published. Raises `TeamWikiPortError` with
+        `status_code=403` for the rules page, which no agent may touch under
+        any configuration.
+        """
+
+    @abstractmethod
+    async def publish_proposal(self, proposal_id: str) -> str:
+        """Publish an approved proposal, returning the page's slug.
+
+        Called only after the platform's approval gate has let the tool run.
+        Raises `TeamWikiPortError` with `status_code=409` when the page moved
+        on while the proposal waited — the edit has to be redone on the new
+        text rather than overwriting whoever changed it.
         """
 
 

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from control_plane_backend.models.team_wiki_models import RULES_PAGE_SLUG
+from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.team_wiki import service as wiki_service
 from control_plane_backend.team_wiki.schemas import (
     CreateWikiPageRequest,
+    ProposeEditRequest,
+    ProposePageRequest,
     SetNeedsReviewRequest,
     UpdateWikiPageContentRequest,
     UpdateWikiPageMetadataRequest,
@@ -21,7 +24,8 @@ from control_plane_backend.team_wiki.service import (
     _subtree_height,
     slugify,
 )
-from control_plane_backend.team_wiki.store import WikiPageRecord
+from control_plane_backend.team_wiki.store import WikiPageRecord, WikiRevisionRecord
+from fred_core import KeycloakUser
 from fred_core.common import TeamId
 
 TEAM = TeamId("team-a")
@@ -40,13 +44,33 @@ def test_slugify_never_returns_an_empty_slug() -> None:
     assert slugify("") == "page"
 
 
-def _page(page_id: str, parent: str | None) -> WikiPageRecord:
+def _page(
+    page_id: str,
+    parent: str | None,
+    *,
+    kind: str = "page",
+    slug: str | None = None,
+) -> WikiPageRecord:
     return WikiPageRecord(
         page_id=page_id,
         team_id=TEAM,
-        slug=page_id,
+        slug=slug or page_id,
         title=page_id,
+        kind=kind,
         parent_page_id=parent,
+        current_revision_id=f"rev-{page_id}",
+    )
+
+
+def _revision(
+    revision_id: str, page_id: str, *, status: str = "published"
+) -> WikiRevisionRecord:
+    return WikiRevisionRecord(
+        revision_id=revision_id,
+        page_id=page_id,
+        team_id=TEAM,
+        content_md="body",
+        status=status,
     )
 
 
@@ -116,6 +140,8 @@ class _Store:
 
     def __init__(self) -> None:
         self.pages: list[WikiPageRecord] = []
+        self.revisions: dict[str, WikiRevisionRecord] = {}
+        self.proposals: list[WikiRevisionRecord] = []
 
     async def list_pages(self, _team_id: TeamId) -> list[WikiPageRecord]:
         return self.pages
@@ -128,8 +154,24 @@ class _Store:
     ) -> WikiPageRecord | None:
         return next((p for p in self.pages if p.slug == slug), None)
 
-    async def get_revision(self, _team_id: TeamId, _revision_id: str) -> None:
-        return None
+    async def get_revision(
+        self, _team_id: TeamId, revision_id: str
+    ) -> WikiRevisionRecord | None:
+        return self.revisions.get(revision_id)
+
+    async def create_proposal(self, **kwargs: Any) -> WikiRevisionRecord:
+        record = WikiRevisionRecord(
+            revision_id=f"prop-{len(self.proposals) + 1}",
+            page_id=kwargs["page_id"] or "new-page",
+            team_id=TEAM,
+            content_md=kwargs["content_md"],
+            status="proposed",
+            base_revision_id=kwargs["base_revision_id"],
+            proposed_title=kwargs["proposed_title"],
+            proposed_parent_page_id=kwargs["proposed_parent_page_id"],
+        )
+        self.proposals.append(record)
+        return record
 
 
 class _TeamDeps:
@@ -147,6 +189,22 @@ class _Deps:
 
     def get_team_wiki_store(self) -> Any:
         return self._store
+
+
+def _deps(store: _Store) -> ProductServiceDependencies:
+    """The fake, as the service's signature wants it.
+
+    Deliberately partial: it implements exactly what the wiki service touches,
+    and one cast in one place is what keeps the file type-checkable — a
+    per-call-site ignore comment neither documents that nor satisfies the
+    checker.
+    """
+
+    return cast(ProductServiceDependencies, _Deps(store))
+
+
+def _user() -> KeycloakUser:
+    return cast(KeycloakUser, _User())
 
 
 @pytest.fixture(autouse=True)
@@ -173,8 +231,8 @@ async def test_reads_demand_a_member_only_permission(gate: _RecordingGate) -> No
     """`CAN_READ` would admit non-members of a PUBLIC team; the wiki holds a
     team's internal knowledge, so the read gate must be member-only."""
 
-    deps = _Deps(_Store())
-    await wiki_service.get_wiki_tree(_User(), TEAM, deps)  # type: ignore[arg-type]
+    deps = _deps(_Store())
+    await wiki_service.get_wiki_tree(_user(), TEAM, deps)
     assert gate.permissions == [[WIKI_READ_PERMISSION]]
     assert WIKI_READ_PERMISSION.value == "can_read_members"
 
@@ -186,33 +244,33 @@ async def test_every_write_demands_the_editor_permission(gate: _RecordingGate) -
 
     store = _Store()
     store.pages.append(_page("p1", None))
-    deps = _Deps(store)
-    user = _User()
+    deps = _deps(store)
+    user = _user()
 
     with pytest.raises(Exception):
-        await wiki_service.create_wiki_page(  # type: ignore[arg-type]
+        await wiki_service.create_wiki_page(
             user, TEAM, CreateWikiPageRequest(title="T"), deps
         )
     with pytest.raises(Exception):
-        await wiki_service.update_wiki_page_content(  # type: ignore[arg-type]
+        await wiki_service.update_wiki_page_content(
             user, TEAM, "p1", UpdateWikiPageContentRequest(content_md="x"), deps
         )
     with pytest.raises(Exception):
-        await wiki_service.update_wiki_page_metadata(  # type: ignore[arg-type]
+        await wiki_service.update_wiki_page_metadata(
             user, TEAM, "p1", UpdateWikiPageMetadataRequest(title="T2"), deps
         )
     with pytest.raises(Exception):
-        await wiki_service.update_wiki_rules(  # type: ignore[arg-type]
+        await wiki_service.update_wiki_rules(
             user, TEAM, UpdateWikiRulesRequest(content_md="x"), deps
         )
     with pytest.raises(Exception):
-        await wiki_service.set_wiki_page_needs_review(  # type: ignore[arg-type]
+        await wiki_service.set_wiki_page_needs_review(
             user, TEAM, "p1", SetNeedsReviewRequest(needs_review=False), deps
         )
     with pytest.raises(Exception):
-        await wiki_service.delete_wiki_page(user, TEAM, "p1", deps)  # type: ignore[arg-type]
+        await wiki_service.delete_wiki_page(user, TEAM, "p1", deps)
     with pytest.raises(Exception):
-        await wiki_service.restore_wiki_revision(user, TEAM, "p1", "r1", deps)  # type: ignore[arg-type]
+        await wiki_service.restore_wiki_revision(user, TEAM, "p1", "r1", deps)
 
     assert gate.permissions == [[WIKI_WRITE_PERMISSION]] * 7
     assert WIKI_WRITE_PERMISSION.value == "can_update_resources"
@@ -238,11 +296,11 @@ async def test_the_rules_page_is_not_editable_deletable_or_movable_as_a_page(
         kind="rules",
     )
     store.pages.append(rules)
-    deps = _Deps(store)
-    user = _User()
+    deps = _deps(store)
+    user = _user()
 
     with pytest.raises(WikiRequestError) as edit:
-        await wiki_service.update_wiki_page_content(  # type: ignore[arg-type]
+        await wiki_service.update_wiki_page_content(
             user,
             TEAM,
             "rules-1",
@@ -252,7 +310,7 @@ async def test_the_rules_page_is_not_editable_deletable_or_movable_as_a_page(
     assert edit.value.http_status == 400
 
     with pytest.raises(WikiRequestError) as move:
-        await wiki_service.update_wiki_page_metadata(  # type: ignore[arg-type]
+        await wiki_service.update_wiki_page_metadata(
             user,
             TEAM,
             "rules-1",
@@ -262,7 +320,7 @@ async def test_the_rules_page_is_not_editable_deletable_or_movable_as_a_page(
     assert move.value.http_status == 400
 
     with pytest.raises(WikiRequestError) as removed:
-        await wiki_service.delete_wiki_page(user, TEAM, "rules-1", deps)  # type: ignore[arg-type]
+        await wiki_service.delete_wiki_page(user, TEAM, "rules-1", deps)
     assert removed.value.http_status == 400
 
 
@@ -270,11 +328,11 @@ async def test_the_rules_page_is_not_editable_deletable_or_movable_as_a_page(
 async def test_a_page_cannot_be_moved_under_its_own_child(gate: _RecordingGate) -> None:
     store = _Store()
     store.pages.extend([_page("root", None), _page("child", "root")])
-    deps = _Deps(store)
+    deps = _deps(store)
 
     with pytest.raises(WikiRequestError) as caught:
-        await wiki_service.update_wiki_page_metadata(  # type: ignore[arg-type]
-            _User(),
+        await wiki_service.update_wiki_page_metadata(
+            _user(),
             TEAM,
             "root",
             UpdateWikiPageMetadataRequest(parent_page_id="child"),
@@ -288,11 +346,11 @@ async def test_a_page_cannot_be_moved_under_its_own_child(gate: _RecordingGate) 
 async def test_a_page_cannot_be_its_own_parent(gate: _RecordingGate) -> None:
     store = _Store()
     store.pages.append(_page("p", None))
-    deps = _Deps(store)
+    deps = _deps(store)
 
     with pytest.raises(WikiRequestError):
-        await wiki_service.update_wiki_page_metadata(  # type: ignore[arg-type]
-            _User(), TEAM, "p", UpdateWikiPageMetadataRequest(parent_page_id="p"), deps
+        await wiki_service.update_wiki_page_metadata(
+            _user(), TEAM, "p", UpdateWikiPageMetadataRequest(parent_page_id="p"), deps
         )
 
 
@@ -312,13 +370,13 @@ async def test_a_move_accounts_for_the_subtree_it_carries(gate: _RecordingGate) 
             _page("dest-child", "dest"),
         ]
     )
-    deps = _Deps(store)
+    deps = _deps(store)
 
     # Moving "a" (height 2) under "dest-child" (child depth 2) would land "c" at
     # depth 4, past MAX_PAGE_DEPTH.
     with pytest.raises(WikiRequestError) as caught:
-        await wiki_service.update_wiki_page_metadata(  # type: ignore[arg-type]
-            _User(),
+        await wiki_service.update_wiki_page_metadata(
+            _user(),
             TEAM,
             "a",
             UpdateWikiPageMetadataRequest(parent_page_id="dest-child"),
@@ -338,8 +396,8 @@ async def test_reading_the_rules_page_never_creates_it(gate: _RecordingGate) -> 
         async def create_page(self, **_kwargs: Any) -> None:
             raise AssertionError("a read must not write")
 
-    deps = _Deps(_NoWriteStore())
-    detail = await wiki_service.get_wiki_rules(_User(), TEAM, deps)  # type: ignore[arg-type]
+    deps = _deps(_NoWriteStore())
+    detail = await wiki_service.get_wiki_rules(_user(), TEAM, deps)
     assert detail.content_md == ""
     assert detail.revision_id is None
     assert detail.page.kind == "rules"
@@ -365,7 +423,7 @@ async def test_a_team_without_the_capability_has_no_wiki(
     monkeypatch.setattr(wiki_service, "can_team_use_capability", _disabled)
 
     with pytest.raises(wiki_service.WikiRequestError) as caught:
-        await wiki_service.get_wiki_tree(_User(), TEAM, _Deps(_Store()))  # type: ignore[arg-type]
+        await wiki_service.get_wiki_tree(_user(), TEAM, _deps(_Store()))
     assert caught.value.http_status == 404
 
 
@@ -383,18 +441,18 @@ async def test_the_gate_runs_on_every_entry_point(
     monkeypatch.setattr(wiki_service, "can_team_use_capability", _disabled)
     store = _Store()
     store.pages.append(_page("p1", None))
-    deps = _Deps(store)
-    user = _User()
+    deps = _deps(store)
+    user = _user()
 
     calls = [
-        wiki_service.get_wiki_tree(user, TEAM, deps),  # type: ignore[arg-type]
-        wiki_service.get_wiki_page(user, TEAM, "p1", deps),  # type: ignore[arg-type]
-        wiki_service.get_wiki_rules(user, TEAM, deps),  # type: ignore[arg-type]
-        wiki_service.list_wiki_revisions(user, TEAM, "p1", deps),  # type: ignore[arg-type]
+        wiki_service.get_wiki_tree(user, TEAM, deps),
+        wiki_service.get_wiki_page(user, TEAM, "p1", deps),
+        wiki_service.get_wiki_rules(user, TEAM, deps),
+        wiki_service.list_wiki_revisions(user, TEAM, "p1", deps),
         wiki_service.create_wiki_page(
             user, TEAM, CreateWikiPageRequest(title="T"), deps
-        ),  # type: ignore[arg-type]
-        wiki_service.delete_wiki_page(user, TEAM, "p1", deps),  # type: ignore[arg-type]
+        ),
+        wiki_service.delete_wiki_page(user, TEAM, "p1", deps),
     ]
     for call in calls:
         with pytest.raises(wiki_service.WikiRequestError) as caught:
@@ -414,5 +472,90 @@ async def test_availability_answers_no_instead_of_refusing(
 
     monkeypatch.setattr(wiki_service, "can_team_use_capability", _disabled)
 
-    result = await wiki_service.get_wiki_availability(_User(), TEAM, _Deps(_Store()))  # type: ignore[arg-type]
+    result = await wiki_service.get_wiki_availability(_user(), TEAM, _deps(_Store()))
     assert result.enabled is False
+
+
+# ---------------------------------------------------------------------------
+# Agent proposals (WIKI-04)
+#
+# The whole point of the two-step write is that nothing reaches the wiki until
+# a person says so. These cover what a proposal must NOT be able to do.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_agent_can_never_propose_an_edit_to_the_rules_page(
+    gate: _RecordingGate,
+) -> None:
+    """The rules page steers every agent holding this capability. If an agent
+    could rewrite it, the page would protect nothing — §8.6 makes this the one
+    kind of page no configuration can reach."""
+
+    store = _Store()
+    store.pages.append(_page("rules-page", None, kind="rules", slug="__rules__"))
+    deps = _deps(store)
+
+    with pytest.raises(wiki_service.WikiRequestError) as caught:
+        await wiki_service.propose_wiki_edit(
+            _user(),
+            TEAM,
+            ProposeEditRequest(slug="__rules__", content_md="anything"),
+            deps,
+        )
+    assert caught.value.http_status == 403
+
+
+@pytest.mark.asyncio
+async def test_proposing_writes_nothing_to_the_page(gate: _RecordingGate) -> None:
+    """A proposal is a suggestion. The page it targets must be untouched until
+    someone publishes it — that is what makes the approval real."""
+
+    store = _Store()
+    page = _page("p1", None, slug="notes")
+    store.pages.append(page)
+    deps = _deps(store)
+
+    result = await wiki_service.propose_wiki_edit(
+        _user(), TEAM, ProposeEditRequest(slug="notes", content_md="new text"), deps
+    )
+
+    assert result.kind == "edit"
+    assert store.proposals[0].status == "proposed"
+    assert page.current_revision_id == "rev-p1"
+
+
+@pytest.mark.asyncio
+async def test_a_proposal_for_a_new_page_creates_no_page(gate: _RecordingGate) -> None:
+    """An unapproved page must not appear in the team's rail. The page row is
+    created at approval, which is why the proposal carries the title itself."""
+
+    store = _Store()
+
+    result = await wiki_service.propose_wiki_page(
+        _user(),
+        TEAM,
+        ProposePageRequest(title="Shinigami", content_md="text"),
+        _deps(store),
+    )
+
+    assert result.kind == "page"
+    assert store.pages == []
+
+
+@pytest.mark.asyncio
+async def test_a_restore_cannot_launder_a_proposal_into_history(
+    gate: _RecordingGate,
+) -> None:
+    """Restoring a `proposed` revision would publish an agent's draft as a
+    human edit AND clear the review mark — undoing the decision the approval
+    gate exists to record, with one id and no approval at all."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None))
+    store.revisions["draft-1"] = _revision("draft-1", "p1", status="proposed")
+    deps = _deps(store)
+
+    with pytest.raises(wiki_service.WikiRequestError) as caught:
+        await wiki_service.restore_wiki_revision(_user(), TEAM, "p1", "draft-1", deps)
+    assert caught.value.http_status == 404

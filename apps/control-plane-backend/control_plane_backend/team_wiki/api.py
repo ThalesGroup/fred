@@ -17,10 +17,13 @@ from control_plane_backend.team_wiki.schemas import (
     UpdateWikiPageContentRequest,
     UpdateWikiPageMetadataRequest,
     UpdateWikiRulesRequest,
+    ProposeEditRequest,
+    ProposePageRequest,
     WikiAvailability,
     WikiPageDetail,
     WikiPageSummary,
     WikiPageTree,
+    WikiProposal,
     WikiRevisionList,
 )
 from control_plane_backend.team_wiki.service import (
@@ -29,10 +32,14 @@ from control_plane_backend.team_wiki.service import (
     create_wiki_page,
     delete_wiki_page,
     get_wiki_availability,
+    get_wiki_proposal,
     get_wiki_page,
     get_wiki_rules,
     get_wiki_tree,
     list_wiki_revisions,
+    propose_wiki_edit,
+    propose_wiki_page,
+    publish_wiki_proposal,
     restore_wiki_revision,
     set_wiki_page_needs_review,
     update_wiki_page_content,
@@ -238,3 +245,69 @@ async def delete_page(
 ) -> Response:
     await delete_wiki_page(user, team_id, page_id, deps)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Agent proposals (WIKI-04) ---------------------------------------------
+#
+# Proposing changes nothing: a proposal is a stored suggestion, invisible in
+# the wiki until a human publishes it. Which is why these are member-level
+# rather than editor-level — the approval gate is the authority, not the role
+# of whoever drove the agent.
+
+
+@router.post(
+    "/teams/{team_id}/wiki/proposals/page",
+    response_model=WikiProposal,
+    status_code=status.HTTP_201_CREATED,
+    summary="Propose a new wiki page through an agent (WIKI-04)",
+)
+async def propose_page(
+    team_id: Annotated[TeamId, Path()],
+    request: ProposePageRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> WikiProposal:
+    return await propose_wiki_page(user, team_id, request, deps)
+
+
+@router.post(
+    "/teams/{team_id}/wiki/proposals/edit",
+    response_model=WikiProposal,
+    status_code=status.HTTP_201_CREATED,
+    summary="Propose an edit to a wiki page through an agent (WIKI-04)",
+)
+async def propose_edit(
+    team_id: Annotated[TeamId, Path()],
+    request: ProposeEditRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> WikiProposal:
+    return await propose_wiki_edit(user, team_id, request, deps)
+
+
+@router.get(
+    "/teams/{team_id}/wiki/proposals/{proposal_id}",
+    response_model=WikiProposal,
+    summary="Read a pending proposal and the text it would replace (WIKI-04)",
+)
+async def read_proposal(
+    team_id: Annotated[TeamId, Path()],
+    proposal_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> WikiProposal:
+    return await get_wiki_proposal(user, team_id, proposal_id, deps)
+
+
+@router.post(
+    "/teams/{team_id}/wiki/proposals/{proposal_id}/publish",
+    response_model=WikiPageDetail,
+    summary="Approve a pending proposal and publish it (WIKI-04)",
+)
+async def publish_proposal(
+    team_id: Annotated[TeamId, Path()],
+    proposal_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> WikiPageDetail:
+    return await publish_wiki_proposal(user, team_id, proposal_id, deps)
