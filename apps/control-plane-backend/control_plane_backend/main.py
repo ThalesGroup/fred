@@ -55,6 +55,10 @@ from control_plane_backend.routing_policy.api import (
     register_exception_handlers as register_routing_policy_exception_handlers,
 )
 from control_plane_backend.routing_policy.api import router as routing_policy_router
+from control_plane_backend.team_wiki.api import (
+    register_exception_handlers as register_team_wiki_exception_handlers,
+)
+from control_plane_backend.team_wiki.api import router as team_wiki_router
 from control_plane_backend.scheduler.dependencies import (
     build_lifecycle_action_dependencies,
 )
@@ -376,6 +380,7 @@ def create_app() -> FastAPI:
     router.include_router(bootstrap_router)
     router.include_router(capabilities_router)
     router.include_router(routing_policy_router)
+    router.include_router(team_wiki_router)
     router.include_router(platform_prompt_router)
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
@@ -387,5 +392,6 @@ def create_app() -> FastAPI:
     register_team_exception_handlers(app)
     register_bootstrap_exception_handlers(app)
     register_routing_policy_exception_handlers(app)
+    register_team_wiki_exception_handlers(app)
     app.include_router(router)
     return app

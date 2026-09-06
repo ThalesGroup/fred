@@ -23,6 +23,7 @@ from control_plane_backend.config.models import Configuration
 from control_plane_backend.platform_prompt.store import PlatformPromptStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
+from control_plane_backend.team_wiki.store import TeamWikiStore
 from control_plane_backend.routing_policy.store import (
     PlatformModelBindingStore,
     TeamRoutingPolicyStore,
@@ -71,6 +72,7 @@ class ProductServiceDependencies:
     get_session_attachment_store: Callable[[], SessionAttachmentStore]
     get_prompt_store: Callable[[], PromptStore]
     get_prompt_category_store: Callable[[], PromptCategoryStore]
+    get_team_wiki_store: Callable[[], TeamWikiStore]
     get_kpi_writer: Callable[[], BaseKPIWriter]
     get_kpi_store: Callable[[], "OpenSearchKPIStore | None"]
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
@@ -111,6 +113,7 @@ def build_product_service_dependencies(
         get_session_attachment_store=container.get_session_attachment_store,
         get_prompt_store=container.get_prompt_store,
         get_prompt_category_store=container.get_prompt_category_store,
+        get_team_wiki_store=container.get_team_wiki_store,
         get_kpi_writer=container.get_kpi_writer,
         get_kpi_store=container.get_kpi_store,
         get_policy_catalog=container.get_policy_catalog,

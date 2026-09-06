@@ -3484,3 +3484,95 @@ surface is easier to reason about than two.
 Both are read by the same admin page, which renders the instructions verbatim
 under the editor with no input control, in the same order the runtime composes
 them.
+
+---
+
+## 49. Contract Notes — team wiki (2026-09-06, issue #2571)
+
+A per-team tree of Markdown pages, owned by control-plane. Design and rationale:
+[`../rfc/TEAM-WIKI-RFC.md`](../rfc/TEAM-WIKI-RFC.md); this section records the
+wire surface only.
+
+**Why control-plane owns it and not the capability that will read it.** A
+capability-owned table would live in the agent pod's own database, and there is
+more than one agent pod: the same capability installed in two of them would give
+one team two silent wikis. A capability's route base URL is also published only
+on `ExecutionPreparation`, i.e. during a chat, while the Wiki page lives in the
+team navigation and has no chat to be prepared. And a pod being down must not
+take a team's written memory with it. The capability (slice 3) reaches this API
+through a typed port, the way `platform_postgres` and `document_access` already
+reach theirs.
+
+| Method | Path | Permission |
+| ------ | ---- | ---------- |
+| GET | `/teams/{team_id}/wiki/pages` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/pages` | `can_update_resources` |
+| GET | `/teams/{team_id}/wiki/pages/{slug}` | `can_read_members` |
+| PATCH | `/teams/{team_id}/wiki/pages/{page_id}` | `can_update_resources` |
+| DELETE | `/teams/{team_id}/wiki/pages/{page_id}` | `can_update_resources` |
+| PUT | `/teams/{team_id}/wiki/pages/{page_id}/content` | `can_update_resources` |
+| POST | `/teams/{team_id}/wiki/pages/{page_id}/review` | `can_update_resources` |
+| GET | `/teams/{team_id}/wiki/pages/{page_id}/revisions` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore` | `can_update_resources` |
+| GET | `/teams/{team_id}/wiki/rules` | `can_read_members` |
+| PUT | `/teams/{team_id}/wiki/rules` | `can_update_resources` |
+
+**Reads are `can_read_members`, deliberately not `can_read`.** `can_read` is
+`team_member or public`, so on a team flagged public it would hand a team's
+internal knowledge to non-members. Writes are `can_update_resources`
+(`team_editor`), like every other team content surface — `team_admin` has no
+write authority here, the roles being orthogonal rather than hierarchical.
+
+**Content is append-only.** An edit inserts a revision and moves the page's
+`current_revision_id`; it never updates content in place. History, restore and
+conflict detection are consequences of that shape, not features layered on it —
+which is why there is no content field on a page, and why `restore` publishes a
+new revision rather than deleting the ones after it.
+
+**A stale write is refused, and the refusal carries the current state.**
+`UpdateWikiPageContentRequest.base_revision_id` is the revision the author
+started from. If the page has moved on, the response is `409` with
+`current_revision_id` and `current_content_md` in the body, because whoever
+retries — a human in the editor or, from slice 4, an agent redoing its edit —
+needs something to rebase onto, and a bare error costs a second round trip to
+get it. That payload is read AFTER the failed write's transaction rolls back:
+reading it inside would report the revision that transaction opened on — already
+superseded under a real interleaving — sending a rebase-and-retry client round
+the same loop forever.
+
+**There is no unconditional overwrite.** Omitting `base_revision_id` on a page
+that already has a revision is refused exactly like a stale one: a caller cannot
+opt out of the check by leaving the field off. It is absent only when creating
+the rules page for the first time.
+
+**The rules page is an ordinary page at a reserved slug**, `kind="rules"`. That
+is what makes it unique per team: `(team_id, slug)` is already constrained, so
+no partial index is needed, and the page inherits history, attribution and
+restore for free. Its **content** is reachable only through `/wiki/rules`: the
+ordinary page routes refuse a `rules` page for content edit, rename, move and
+delete, so it cannot be rewritten by addressing it as a normal page.
+
+`restore` and the review mark are deliberately NOT refused on it. Both are
+`can_update_resources`, both are things an editor legitimately wants on the
+rules page, and neither is reachable by an agent — the capability (slice 4)
+ships no tool for either. Blocking them would cost an editor the ability to roll
+back a bad rules edit while buying no isolation, since that same editor can
+rewrite the page through `/wiki/rules` anyway.
+
+`GET /wiki/rules` **never creates the row.** It is gated on the member-only read
+permission, so materialising the page there would let any team member create the
+page that steers every agent's system prompt, and be recorded as its author. A
+team that has never written rules gets an empty representation with no
+`revision_id`; the row appears on the first `PUT`, which is editor-only.
+
+**One table holds every team's pages.** `team_id` is therefore the tenant
+boundary, and it is always derived server-side from the authenticated request —
+never read from a body parameter, never assembled by a client. A table per team
+was rejected: it would mean DDL at team creation, outside Alembic and invisible
+to the migration history.
+
+**`needs_review`** is set when an agent-authored revision is published and
+cleared when a human edits the page or an editor clears it explicitly. It is
+what gives editors a review queue without building one, and it is the
+counterpart of the wiki being open to every member's contributions through an
+agent (RFC §5.4).

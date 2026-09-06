@@ -3207,6 +3207,7 @@ def _build_erasure_deps(
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
         get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_prompt_category_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_team_wiki_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_writer=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_store=lambda: kpi_store,  # type: ignore[arg-type,return-value]
         get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
