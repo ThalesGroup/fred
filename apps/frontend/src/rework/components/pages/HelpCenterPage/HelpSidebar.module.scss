@@ -54,3 +54,19 @@
   flex-shrink: 0;
   height: 24px;
 }
+
+.externalLink {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  margin-top: var(--spacing-s);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--on-surface);
+  }
+}

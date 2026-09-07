@@ -43,8 +43,9 @@ An agent's answer can contain several elements:
 - **The text** of the answer.
 - **Sources**: when the agent relies on your documents, it points to the
   passages used — check them to make sure they're relevant.
-- **The tool trace**: the detail of the steps the agent followed (a document
-  search, a computation…).
+- **The trace**: the detail of the steps the agent followed, in order — its
+  own reasoning ("Thinking…") as well as tool actions (a document search, a
+  computation…).
 - **Produced documents**: some agents generate files (a drafted document, a
   table, a presentation).
 

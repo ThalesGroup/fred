@@ -24,8 +24,9 @@ library, then add your documents inside it.
 > A document uploaded outside a library can't be used by your agents: always
 > remember to place it in a library.
 
-The usual formats are accepted: PDF, text documents, presentations
-(PowerPoint), spreadsheets (Excel, CSV), Markdown.
+The usual formats are accepted: PDF, text documents, Word and OpenDocument
+files, presentations (PowerPoint), spreadsheets (Excel, CSV), Markdown. Images
+and audio files are also supported.
 
 ## What happens after upload
 
@@ -45,8 +46,8 @@ From the corpus, you can:
 
 - **Rename** a document or a library.
 - **Preview** a document without leaving the page.
-- **Set a document aside** so your agents stop taking it into account, without
-  deleting it.
+- **Exclude from search** so your agents stop taking it into account, without
+  deleting it — you can **include** it again anytime.
 - **Delete** a document or a whole library.
 
 ## Storage space

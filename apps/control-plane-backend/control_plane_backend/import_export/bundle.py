@@ -1,4 +1,4 @@
-"""Kea snapshot zip reader for the swift importer (MIGR-05)."""
+"""Swift-native snapshot zip reader for the import service."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from control_plane_backend.import_export.schemas import BundleUserEntry
 
-# Canonical contract — swift-native baseline (PLATFORM-IMPORT-RFC.md). Two
+# Canonical contract — swift-native baseline (CONTROL-PLANE-PRODUCT-CONTRACT.md). Two
 # independent version numbers because they change at different rates:
 # format_version is the container's own shape (which top-level files/tables
 # exist); users_schema_version is BundleUserEntry's field set, which already
@@ -38,34 +38,28 @@ class SnapshotManifest(BaseModel):
 
     format_version: int
     users_schema_version: int
-    source_platform: str = "kea"
+    source_platform: str = "swift"
     created_at: str = ""
     tables: dict[str, int] = Field(default_factory=dict)
-    tuple_count: int = 0
-    realm_exported: bool = False
     content_keys: list[str] = Field(default_factory=list)
 
 
 class KBundle:
-    """An opened kea snapshot zip, ready to iterate over tables and tuples."""
+    """An opened swift-native snapshot zip, ready to iterate over its tables."""
 
     def __init__(
         self,
         zf: zipfile.ZipFile,
         manifest: SnapshotManifest,
-        external_realm: dict[str, Any] | None = None,
     ) -> None:
         self._zf = zf
         self.manifest = manifest
-        self._external_realm = external_realm
 
     def iter_table(self, table: str) -> Iterator[dict[str, Any]]:
         """Yield one dict per row from a postgres/<table>.jsonl entry.
 
-        `table` must be the file name the producer actually wrote: kea bundles
-        use main's `migration/snapshot.py::EXPORT_TABLES` names verbatim
-        (`teammetadata`, `mcp-server`, …); swift-native bundles use the names
-        `exporter.py` writes (`team_metadata`, `agent_instance`, …).
+        `table` must be the file name `exporter.py` actually wrote
+        (`team_metadata`, `agent_instance`, …).
         """
         try:
             data = self._zf.read(f"postgres/{table}.jsonl").decode("utf-8")
@@ -83,38 +77,10 @@ class KBundle:
                         pass
                 yield row
 
-    def openfga_tuples(self) -> list[dict[str, Any]]:
-        """Return the raw OpenFGA tuples list, empty list if absent."""
-        try:
-            return json.loads(self._zf.read("openfga/tuples.json"))
-        except KeyError:
-            return []
-
-    def keycloak_realm(self) -> dict[str, Any] | None:
-        """Return the Keycloak realm export to use for this import, None if none available.
-
-        Precedence (PLATFORM-IMPORT-RFC.md §9.1): a standalone realm supplied at
-        `open_bundle(..., external_realm_data=...)` always wins over the zip's own
-        `keycloak/realm.json` — never merged, never compared. This is the practical
-        cutover workaround for kea's `exportClients` 403 (§8): re-export the realm
-        directly from Keycloak and upload it alongside the zip.
-
-        Kea bundles carry `keycloak/realm.json` best-effort (main's `_dump_realm`)
-        when present. A partial-export contains the realm's groups (the kea team
-        names) but never its users; a full `kc export --users` also carries
-        `users[]` with their `realmRoles`.
-        """
-        if self._external_realm is not None:
-            return self._external_realm
-        try:
-            return json.loads(self._zf.read("keycloak/realm.json"))
-        except KeyError:
-            return None
-
     def demo_users(self) -> list[BundleUserEntry]:
         """Return the typed users.json provisioning list, empty list if absent.
 
-        AUTHZ-07 Part 8 §40.2 / PLATFORM-IMPORT-RFC.md §6: declarative platform
+        AUTHZ-07 Part 8 §40.2 / CONTROL-PLANE-PRODUCT-CONTRACT.md §27: declarative platform
         provisioning for identities/teams/roles/users. Unlike `postgres/<table>.jsonl`
         rows, these entries are not Postgres rows — each one describes an optional
         Keycloak identity to create (email/first_name/last_name/password) plus the
@@ -132,26 +98,15 @@ class KBundle:
         self._zf.close()
 
 
-def open_bundle(data: bytes, external_realm_data: bytes | None = None) -> KBundle:
+def open_bundle(data: bytes) -> KBundle:
     """Open a snapshot zip from raw bytes, parse and validate its manifest.
 
     Rejects a bundle whose `format_version`/`users_schema_version` isn't in
     the supported set — no silent default when the key is absent or wrong,
-    per the canonical contract in `PLATFORM-IMPORT-RFC.md`.
-
-    `external_realm_data`, when given, is a standalone Keycloak realm export
-    (raw JSON bytes) that takes precedence over the zip's own
-    `keycloak/realm.json` — see `KBundle.keycloak_realm()` and RFC §9.1.
+    per the canonical contract in `CONTROL-PLANE-PRODUCT-CONTRACT.md` §27.
     """
     zf = zipfile.ZipFile(io.BytesIO(data))
     raw = json.loads(zf.read("manifest.json"))
-    # Kea's exporter (main branch, `migration/snapshot.py`) predates the
-    # `users_schema_version` field and will never emit it — kea bundles also
-    # never carry a `users.json`, so the field is meaningless for them. Default
-    # it for non-swift bundles only; swift producers must keep declaring both
-    # versions explicitly (no silent default), per PLATFORM-IMPORT-RFC.md §4.
-    if raw.get("source_platform", "kea") != "swift":
-        raw.setdefault("users_schema_version", 1)
     manifest = SnapshotManifest.model_validate(raw)
     if manifest.format_version not in SUPPORTED_FORMAT_VERSIONS:
         raise UnsupportedBundleFormatError(
@@ -163,51 +118,12 @@ def open_bundle(data: bytes, external_realm_data: bytes | None = None) -> KBundl
             f"Unsupported users.json schema version {manifest.users_schema_version}; "
             f"this importer understands {sorted(SUPPORTED_USERS_SCHEMA_VERSIONS)}"
         )
-    external_realm = (
-        json.loads(external_realm_data) if external_realm_data is not None else None
-    )
-    if external_realm is not None:
-        _validate_external_realm(external_realm)
-    return KBundle(zf, manifest, external_realm=external_realm)
-
-
-def _validate_external_realm(external_realm: Any) -> None:
-    """Refuse a standalone `realm_file` that is missing its key information,
-    instead of silently degrading (KEA CUTOVER 2026, 2026-07-28).
-
-    A `realm_file` this importer only ever sees because it was hand-built
-    (SQL extraction against the source Keycloak DB, not a real Keycloak
-    export) is exactly the case most exposed to a copy-paste mistake — a
-    forgotten `groups` key or an empty `users` array parses as valid JSON and
-    would otherwise proceed straight into a degraded run (orphan teams
-    silently dropped, every identity PENDING). Fail the whole request instead:
-    zero teams or zero users in a *supplied* realm_file is never intentional
-    for a cutover-scale kea source, so there is nothing to gain by proceeding.
-
-    This does NOT apply to a realm.json carried inside the zip itself (a
-    genuine, official Keycloak partial export legitimately has no `users[]` —
-    see `KBundle.keycloak_realm()` — and that degraded-but-intentional path is
-    unchanged) — only to a `realm_file` supplied independently.
-
-    Never checks for a personal-space team here: kea's shared `personal` team
-    and swift's per-user `personal-{uid}` space are never real Keycloak groups
-    and are never expected in `groups[]` — they self-heal on first use,
-    entirely outside this file's scope.
-    """
-    if not isinstance(external_realm, dict):
+    if manifest.source_platform != "swift":
+        # Matching format/schema version numbers is not enough: this importer
+        # only ever reads Swift table names, so a manifest from anywhere else
+        # must be rejected here rather than silently mis-imported.
         raise UnsupportedBundleFormatError(
-            "realm_file must be a JSON object with 'groups' and 'users' keys, "
-            f"got {type(external_realm).__name__}"
+            f"Unsupported bundle source_platform {manifest.source_platform!r}; "
+            "this importer only understands 'swift'"
         )
-    missing = [
-        key
-        for key in ("groups", "users")
-        if not isinstance(external_realm.get(key), list) or not external_realm[key]
-    ]
-    if missing:
-        raise UnsupportedBundleFormatError(
-            "realm_file is missing required, non-empty key(s): "
-            f"{', '.join(missing)} — refusing to import with incomplete "
-            "identity/team data rather than silently dropping orphan teams "
-            "or leaving every identity PENDING"
-        )
+    return KBundle(zf, manifest)

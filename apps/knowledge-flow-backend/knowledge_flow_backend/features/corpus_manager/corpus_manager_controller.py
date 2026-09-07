@@ -74,8 +74,8 @@ class CorpusManagerController:
         # MIGR-07: a source_tag-only scope spans arbitrary teams (it's the
         # migration's default revectorize scope — CORPUS-REVECTORIZE-RFC.md §4), so
         # it has no single team to check membership against. Require platform-admin
-        # instead, same gate as /documents/audit and the kea-migration/import-export
-        # reset endpoints for the same reason.
+        # instead, same gate as /documents/audit and the import-export reset
+        # endpoints for the same reason.
         if scope.source_tag and not scope.tag_ids and not scope.document_uids:
             await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
             return

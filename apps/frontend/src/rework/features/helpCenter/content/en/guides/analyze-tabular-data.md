@@ -7,7 +7,7 @@ icon: table
 
 # Query tabular data
 
-The **tabular data** capability lets you query a data file (spreadsheet, CSV) in
+The **Use tabular files** tool lets you query a data file (spreadsheet, CSV) in
 natural language, without writing a query.
 
 ## Load the file

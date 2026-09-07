@@ -13,8 +13,9 @@ un agent et obtenez des réponses appuyées sur vos contenus.
 ## Conversations
 
 Chaque échange avec un agent est une **conversation** (ou session). Vos
-conversations sont conservées et **regroupées par agent** dans la liste de
-gauche. Vous pouvez :
+conversations sont conservées dans la liste de gauche, et un interrupteur
+**« Grouper par agent »** permet de basculer vers l'affichage groupé quand
+vous le souhaitez (désactivé par défaut). Vous pouvez :
 
 - **reprendre** une conversation pour poursuivre l'échange là où vous l'aviez
   laissé ;
@@ -31,11 +32,13 @@ usage durable et partagé, préférez les
 [ressources](/help/fr/features/resources) de l'équipe, que l'agent peut
 consulter au fil des conversations.
 
-## Prompts attachés
+## Utiliser un prompt
 
-Une conversation peut s'appuyer sur des **prompts attachés** : des textes de
-cadrage qui orientent l'agent pour la durée de l'échange. Vous pouvez en
-attacher plusieurs (voir la [bibliothèque de prompts](/help/fr/features/prompts)).
+Plutôt que de retaper une demande récurrente, vous pouvez insérer le contenu
+d'un prompt enregistré directement dans le champ de saisie, puis le modifier
+avant d'envoyer. C'est un raccourci ponctuel pour ce message, pas un réglage
+durable de la conversation (voir la
+[bibliothèque de prompts](/help/fr/features/prompts)).
 
 ## Lire une réponse
 
@@ -48,7 +51,7 @@ Une réponse peut mêler plusieurs éléments :
   recherche documentaire, l'appel d'une capacité, un calcul…). Utile pour
   comprendre _comment_ la réponse a été construite.
 - **Les documents produits** : certains agents génèrent des fichiers (un
-  document rédigé, un tableau, une présentation), que vous pouvez ouvrir et
+  document rédigé, un tableau, une présentation), que vous pouvez
   télécharger.
 
 > **Vérifiez** les réponses importantes en vous appuyant sur les sources

@@ -2515,12 +2515,11 @@ now share one consistent header pattern instead of diverging per page:
 | `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
 | `SelfTestPage` | title only |
 | `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
-| `MigrationPage` (Platform data) | title, breadcrumb (Kea cutover link) |
+| `MigrationPage` (Platform data) | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
 | `AdminTeamsPage` | title only (new — page previously had no page-level header) |
 | `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
 | `TeamSettingsParameters` | title only (new) |
 | `TeamSettingsRouting` | title only (new) |
-| `KeaMigrationPage` (temporary, unlisted) | title only — hardcoded French string kept as-is; this page has no i18n at all and is slated for deletion with the Kea cutover, so it was wrapped for visual consistency without doing a full i18n pass |
 
 Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —

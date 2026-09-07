@@ -1,7 +1,7 @@
 ---
 title: Slowness and limits
 order: 40
-description: Maximum sizes, storage quotas, processing times.
+description: Storage quotas, file sizes, processing times.
 icon: schedule
 ---
 
@@ -16,8 +16,10 @@ stale versions), or ask an administrator for an adjustment.
 
 ## File sizes
 
-Document uploads and conversation attachments are subject to **maximum sizes**.
-A file that's too large is rejected: split it or shrink it.
+There's no hard per-file size cap today — the upload dialog's size hint is
+indicative, not an enforced limit. What **is** enforced is the team's overall
+**storage quota** for documents (see above); a very large file simply counts
+more against it. That quota doesn't apply to conversation attachments.
 
 ## Processing times
 

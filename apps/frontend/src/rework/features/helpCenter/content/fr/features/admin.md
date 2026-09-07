@@ -21,9 +21,13 @@ Ouvrez le **menu profil** (en bas du panneau de navigation) puis
 ## Ce qu'on y trouve
 
 - **Équipes** : la vue d'ensemble des équipes de la plateforme.
+- **Rôles plateforme** : qui détient des droits d'administrateur ou
+  d'observateur à l'échelle de la plateforme.
 - **Analytiques** : les indicateurs d'usage à l'échelle de la plateforme.
 - **Fonctionnalités** : le catalogue des fonctionnalités, leur activation par défaut et par
   équipe.
+- **Prompt global de la plateforme** : les instructions communes ajoutées en
+  tête du prompt système de chaque agent.
 - **Activité** : les tâches en cours et l'historique de traitement.
 - **Auto-test** : les vérifications de bon fonctionnement de la plateforme.
 - **Audit du corpus** : la vérification et la réparation de la base documentaire.

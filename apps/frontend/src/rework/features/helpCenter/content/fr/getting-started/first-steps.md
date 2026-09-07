@@ -24,21 +24,23 @@ Si vous n'arrivez pas à vous connecter, consultez
 ## Choisir sa langue
 
 L'interface est disponible en français et en anglais. Pour changer de langue,
-ouvrez le **menu profil** (votre nom, en bas du panneau de navigation) puis
-sélectionnez la langue souhaitée. Ce centre d'aide suit le même choix — vous
-pouvez aussi basculer sa langue avec le sélecteur **FR / EN** en haut à droite.
+ouvrez le **menu profil** (votre nom, en bas du panneau de navigation),
+choisissez **Profil**, puis sélectionnez votre langue sur la page
+**Réglages**. Ce centre d'aide suit le même choix — vous pouvez aussi basculer
+sa langue avec le sélecteur **FR / EN** en haut à droite.
 
 ## Se repérer dans l'interface
 
 Trois zones structurent l'écran :
 
 - **Le panneau de navigation**, à gauche : il donne accès à votre espace
-  personnel, à la marketplace des équipes, et — une fois une équipe
-  sélectionnée — à ses agents, prompts, ressources et réglages.
+  personnel, à la marketplace des équipes, à une icône **Centre d'aide** de
+  premier niveau (ouvre ce centre d'aide dans un nouvel onglet), et — une fois
+  une équipe sélectionnée — à ses agents, prompts, ressources et réglages.
 - **La zone de travail**, au centre : c'est là que s'affichent la page ou la
   conversation en cours.
-- **Le menu profil**, en bas à gauche : votre langue, l'accès à ce centre
-  d'aide, et la déconnexion.
+- **Le menu profil**, en bas à gauche : votre profil, le contact du support,
+  et la déconnexion.
 
 ![TODO: capture — vue d'ensemble de l'interface annotée](assets/first-steps-overview.png)
 
