@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 
 from fred_core import KeycloakUser
@@ -132,6 +133,21 @@ async def _unique_slug(store: TeamWikiStore, team_id: TeamId) -> str:
     raise WikiRequestError("Could not allocate a page identifier.", http_status=500)
 
 
+# ASCII whitespace only, and `lower` rather than `casefold`: this MUST fold a
+# title exactly as `uq_team_wiki_pages_sibling_title` does, or the index stops
+# backing the rule and two concurrent writes can still land two namesakes on
+# one parent. Postgres `\s` under a UTF-8 ctype does not cover U+00A0, and its
+# `lower()` does not do the extra foldings `casefold()` does — so this side is
+# the one that gives ground. Keep the two in step.
+_TITLE_WHITESPACE = re.compile(r"[ \t\n\r\f\v]+")
+
+
+def title_key(title: str) -> str:
+    """A page title as the sibling-uniqueness rule compares it."""
+
+    return _TITLE_WHITESPACE.sub(" ", title).strip(" \t\n\r\f\v").lower()
+
+
 def _require_free_title(
     pages: dict[str, WikiPageRecord] | list[WikiPageRecord],
     *,
@@ -148,12 +164,12 @@ def _require_free_title(
     everyone who reads them.
     """
 
-    wanted = " ".join(title.split()).casefold()
+    wanted = title_key(title)
     siblings = pages.values() if isinstance(pages, dict) else pages
     for page in siblings:
         if page.page_id == ignoring or page.parent_page_id != parent_page_id:
             continue
-        if " ".join(page.title.split()).casefold() == wanted:
+        if title_key(page.title) == wanted:
             raise WikiRequestError(
                 "A page with this title already exists at the same level.",
                 http_status=409,
@@ -473,7 +489,15 @@ async def update_wiki_rules(
             # surfacing an integrity error as a 500.
             page = await store.get_page_by_slug(team_id, RULES_PAGE_SLUG)
             if page is None:
-                raise
+                # Not a race: the rules page is created at the root titled
+                # "Rules", so a root page the team already titled "Rules" holds
+                # that name. Left bare this re-raised into a 500, and the team
+                # could never save its rules again.
+                raise WikiRequestError(
+                    'A page at the top level is already called "Rules". '
+                    "Rename it, then save the rules page again.",
+                    http_status=409,
+                ) from None
         else:
             return WikiPageDetail(
                 page=_summary(created.page),
@@ -593,15 +617,21 @@ async def update_wiki_page_metadata(
         ignoring=page_id,
     )
 
-    updated = await store.update_page_metadata(
-        team_id=team_id,
-        page_id=page_id,
-        title=request.title,
-        parent_page_id=request.parent_page_id,
-        position=request.position,
-        clear_parent=request.move_to_root,
-        updated_by=user.uid,
-    )
+    try:
+        updated = await store.update_page_metadata(
+            team_id=team_id,
+            page_id=page_id,
+            title=request.title,
+            parent_page_id=request.parent_page_id,
+            position=request.position,
+            clear_parent=request.move_to_root,
+            updated_by=user.uid,
+        )
+    except WikiPageConstraintError as exc:
+        raise WikiRequestError(
+            "A page with this title already exists at the same level.",
+            http_status=409,
+        ) from exc
     return _summary(updated)
 
 

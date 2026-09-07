@@ -68,12 +68,22 @@ class _FakePort(TeamWikiPort):
         # existing page (an edit) or onto a new one (a creation).
         self.publish_slug = "some-slug"
         self.publish_title = "Some Page"
+        # Fails only `list_pages`, so a test can break the tree read back
+        # AFTER a write has already landed.
+        self.raise_on_list: Exception | None = None
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
         self.list_calls += 1
+        if self.raise_on_list is not None:
+            raise self.raise_on_list
         if self._raises is not None:
             raise self._raises
         return self._pages
+
+    def set_pages(self, pages: tuple[WikiPageRef, ...]) -> None:
+        """A change landing between two calls in one turn."""
+
+        self._pages = pages
 
     async def read_page(self, slug: str, *, max_chars: int = 8_000) -> WikiPageContent:
         if self._raises is not None:
@@ -430,6 +440,81 @@ def test_publishing_a_new_page_says_it_was_created() -> None:
 
     assert "created at 'T'" in message.content
     assert "text was replaced" not in message.content
+
+
+def test_publishing_tells_an_edit_from_a_creation_across_the_approval_gate() -> None:
+    """The gate interrupts publishing and the resume arrives as a SEPARATE
+    request, which rebuilds the tools closure. Anything the propose call
+    remembered there is gone, so the distinction has to come from the wiki —
+    otherwise every approved edit is announced as a new page."""
+
+    port = _FakePort(pages=(_page("s1", "S"),))
+    port.publish_slug = "s1"
+
+    # Propose on one binding, publish on another: the resume's fresh closure.
+    _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"})
+    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+
+    assert "text was replaced" in message.content
+    assert "created" not in message.content
+
+
+def test_a_path_naming_a_parent_never_falls_back_to_another_branch() -> None:
+    """ "Archive / Onboarding" answered with "HR / Onboarding" — a different
+    page, whose whole text a write would then have replaced."""
+
+    port = _FakePort(
+        pages=(
+            _page("a", "HR"),
+            _page("b", "Archive"),
+            _page("c", "Onboarding", parent="a"),
+        )
+    )
+    message = _call(port, "wiki_read_page", {"path": "Archive / Onboarding"})
+
+    assert message.artifact.is_error is True
+    assert "no wiki page at" in message.content
+
+
+def test_a_title_containing_a_separator_is_still_addressable() -> None:
+    """Titles are free text. Folding the separator on only one side left a
+    page no tool could reach."""
+
+    port = _FakePort(pages=(_page("a", "Q1/Q2"),), content="body")
+    message = _call(port, "wiki_read_page", {"path": "Q1/Q2"})
+
+    assert message.artifact.is_error is False
+    assert "body" in message.content
+
+
+def test_a_failed_read_back_after_publishing_is_not_reported_as_a_failure() -> None:
+    """The write has landed by then. Reporting failure invites the model to
+    publish the same id again, which the tool tells it never to do."""
+
+    port = _FakePort(pages=(_page("s1", "S"),))
+    port.publish_slug = "s1"
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
+    port.raise_on_list = TeamWikiPortError("down", status_code=503)
+    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
+
+    assert message.artifact.is_error is False
+    assert "Published" in message.content
+
+
+def test_listing_the_pages_refreshes_what_a_path_resolves_against() -> None:
+    """The docstring tells the model to list after a change; a refresh that did
+    not reach the resolver answered "no such page" for a page just listed."""
+
+    port = _FakePort(pages=(_page("a", "Old"),), content="body")
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "Old"}, turn)
+
+    port.set_pages((_page("a", "Old"), _page("b", "Fresh")))
+    _call(port, "wiki_list_pages", {}, turn)
+    message = _call(port, "wiki_read_page", {"path": "Fresh"}, turn)
+
+    assert message.artifact.is_error is False
 
 
 def test_the_text_tool_is_named_for_its_scope() -> None:

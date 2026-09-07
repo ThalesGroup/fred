@@ -152,10 +152,19 @@ def _wiki_tool_failure(
     )
 
 
-def _page_path(pages: Sequence[WikiPageRef], page: WikiPageRef) -> str:
-    """One page's address: its titles from the root, joined by " / "."""
+def _page_path(
+    pages: Sequence[WikiPageRef],
+    page: WikiPageRef,
+    by_slug: dict[str, WikiPageRef] | None = None,
+) -> str:
+    """One page's address: its titles from the root, joined by " / ".
 
-    by_slug = {p.slug: p for p in pages}
+    `by_slug` is built once by a caller that walks every page — rebuilding it
+    per page made resolving a path quadratic, on the event loop, between a
+    tool call and the next model request.
+    """
+
+    by_slug = by_slug if by_slug is not None else {p.slug: p for p in pages}
     trail = [page.title]
     seen = {page.slug}
     parent = page.parent_slug
@@ -182,33 +191,56 @@ class _AmbiguousPath(Exception):
         self.candidates = list(candidates)
 
 
+def _path_key(text: str) -> str:
+    """Both sides of a path comparison, folded the same way.
+
+    The separator is normalised on the STORED path too, not only on what the
+    model typed: a page titled "Q1/Q2" would otherwise fold to `q1/q2` on one
+    side and `q1 / q2` on the other, and be unaddressable by any tool.
+    """
+
+    return _norm(text.replace("/", " / "))
+
+
 def resolve_path(pages: Sequence[WikiPageRef], path: str) -> WikiPageRef | None:
     """The page a model means by `path`, or None.
 
     Two ways in, because a model writes what it sees. A full path from the root
     ("Accueil / Thales Italie") is unique — sibling titles are refused by the
-    control-plane, so no two pages share one. A bare title is accepted too,
-    since that is what a model usually types, and is unique often enough to be
-    worth resolving; when it is not, `_AmbiguousPath` carries the full paths so
-    the model can pick rather than guess.
+    control-plane, so no two pages share one. A BARE title is accepted as well,
+    since that is what a model usually types; when several pages carry it,
+    `_AmbiguousPath` lists the full paths so the model can pick rather than
+    guess.
+
+    The bare-title fallback applies ONLY to an input with no separator. A path
+    that names a parent is a claim about where the page sits, and falling back
+    to its last segment answered "Archive / Onboarding" with "HR / Onboarding"
+    — a different page, whose whole text a write would then have replaced.
 
     Comparison folds case and collapses whitespace: the model is retyping a
     title it read, not copying an identifier.
     """
 
-    wanted = _norm(path.replace("/", " / "))
+    wanted = _path_key(path)
     if not wanted:
         return None
-    full = [p for p in pages if _norm(_page_path(pages, p)) == wanted]
+    by_slug = {p.slug: p for p in pages}
+    full = [p for p in pages if _path_key(_page_path(pages, p, by_slug)) == wanted]
     if len(full) == 1:
         return full[0]
+    if len(full) > 1:
+        # Sibling titles are unique, so two identical full paths mean a title
+        # containing a separator has collided with a real branch. Refusing is
+        # the only honest answer; picking one hides a page for good.
+        raise _AmbiguousPath([_page_path(pages, p, by_slug) for p in full])
 
-    leaf = _norm(path.rsplit("/", 1)[-1])
-    by_title = [p for p in pages if _norm(p.title) == leaf]
+    if "/" in path:
+        return None
+    by_title = [p for p in pages if _norm(p.title) == wanted]
     if len(by_title) == 1:
         return by_title[0]
     if len(by_title) > 1:
-        raise _AmbiguousPath([_page_path(pages, p) for p in by_title])
+        raise _AmbiguousPath([_page_path(pages, p, by_slug) for p in by_title])
     return None
 
 
@@ -431,9 +463,6 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # way to act on a page it has read will otherwise call this again, and
         # again — six identical calls in one turn, in the field.
         already_read: set[str] = set()
-        # What each prepared proposal would do, so publishing can say what it
-        # actually changed instead of only that it succeeded.
-        proposal_kind: dict[str, str] = {}
         # The tree, fetched at most once per turn and shared by every tool that
         # has to turn a path into a page. Dropped after a publish, which is the
         # only thing here that can add or rename one.
@@ -511,10 +540,19 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             the instructions say pages were omitted.
             """
 
-            port = _require_port()
+            nonlocal tree
+            # Before the try: a missing port is a wiring fault and must stay
+            # loud, not degrade into "the wiki could not be reached".
+            _require_port()
             started = time.monotonic()
             try:
-                pages = await port.list_pages()
+                # Through the cache, and refreshing it: the docstring tells the
+                # model to call this after a change, and a refresh that did not
+                # reach the resolver left it reading a tree from earlier in the
+                # turn — "there is no wiki page at X" for a page just listed.
+                async with tree_lock:
+                    tree = None
+                pages = await _tree()
             except Exception as exc:
                 return _wiki_tool_failure(
                     action="list the wiki pages",
@@ -627,7 +665,6 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            proposal_kind[proposal.proposal_id] = "edit"
             text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
@@ -669,7 +706,6 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            proposal_kind[proposal.proposal_id] = "page"
             text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
@@ -689,7 +725,20 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
 
             nonlocal tree
             port = _require_port()
+            # Read BEFORE publishing, and used to tell an edit from a creation:
+            # the approval gate interrupts this tool and the resume arrives as
+            # a separate request, which rebuilds this closure. Anything the
+            # propose call remembered here is gone by now, so the distinction
+            # has to come from the wiki itself.
             started = time.monotonic()
+            try:
+                before = {p.slug for p in await _tree()}
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action="publish the proposal",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
             try:
                 slug = await port.publish_proposal(proposal_id)
             except Exception as exc:
@@ -698,22 +747,35 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            # The tree just changed, and the cached copy would still be
-            # missing a page the model may go on to read this turn.
-            async with tree_lock:
-                tree = None
-            published = next((p for p in await _tree() if p.slug == slug), None)
-            where = f" '{_page_path(await _tree(), published)}'" if published else ""
+
+            # Past this point the write HAS landed. A failure reading the tree
+            # back must not be reported as a failed publish: the model's
+            # recovery would be to publish the same id again, which the tool
+            # tells it never to do.
+            at = ""
+            try:
+                async with tree_lock:
+                    tree = None
+                after = await _tree()
+                published = next((p for p in after if p.slug == slug), None)
+                if published is not None:
+                    at = f" '{_page_path(after, published)}'"
+            except Exception:
+                logger.warning(
+                    "team_wiki: proposal %s published, but the tree could not "
+                    "be read back to name the page.",
+                    proposal_id,
+                )
+            where = at or " (its path could not be read back)"
             # The page's ACTUAL path now, not a general assurance that nothing
             # moved: an agent that believed it had moved a page restated a
             # hierarchy that did not exist, and only a literal address gives
             # that belief something specific to contradict.
-            at = where or " (its path could not be read back)"
             did = (
-                f"Its text was replaced. It is still at{at} — publishing new "
-                "text never moves a page."
-                if proposal_kind.get(proposal_id) == "edit"
-                else f"The page was created at{at}."
+                f"Its text was replaced. It is still at{where} — publishing "
+                "new text never moves a page."
+                if slug in before
+                else f"The page was created at{where}."
             )
             text = (
                 f"Published. {did} It carries the review mark every "

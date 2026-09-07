@@ -52,6 +52,9 @@ export function WikiProposalReview({ call }: CapabilityHitlRendererProps) {
     { skip: !teamId || !proposalId },
   );
 
+  // One pass, on render rather than on open: the summary line needs the
+  // added/removed counts before anyone opens anything. What keeps that
+  // affordable is `MAX_DIFF_CELLS`, not laziness — see lineDiff.ts.
   const lines = useMemo(
     () => (proposal ? lineDiff(proposal.current_content_md ?? "", proposal.content_md) : []),
     [proposal],

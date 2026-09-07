@@ -80,14 +80,25 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       ],
     },
     restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost: {
+      // `RULES-` too: the history panel and its restore button are offered on
+      // the rules page like any other, and that page is cached under its own
+      // tag. Without it the article kept rendering pre-restore text AND a
+      // stale revision id, which made the next save conflict every time.
       invalidatesTags: (_r, _e, arg) => [
         { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
         { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
         { type: "ControlPlaneTeamWiki", id: `HISTORY-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `RULES-${arg.teamId}` },
       ],
     },
     writeRulesControlPlaneV1TeamsTeamIdWikiRulesPut: {
-      invalidatesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki", id: `RULES-${arg.teamId}` }],
+      // The rules page's history is keyed by its page id, which this caller
+      // does not have — invalidating the type's whole space is what keeps the
+      // panel from showing a version list missing the save just made.
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "ControlPlaneTeamWiki", id: `RULES-${arg.teamId}` },
+        { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+      ],
     },
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
     // rows `listTeams`/`getTeam` expose — tag them the same way so every

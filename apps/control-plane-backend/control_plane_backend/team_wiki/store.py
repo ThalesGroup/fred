@@ -494,17 +494,24 @@ class TeamWikiStore:
         elif parent_page_id is not None:
             values["parent_page_id"] = parent_page_id
 
-        async with use_session(self._sessions) as s:
-            result: CursorResult = await s.execute(  # type: ignore[assignment]
-                update(TeamWikiPageRow)
-                .where(
-                    TeamWikiPageRow.team_id == str(team_id),
-                    TeamWikiPageRow.page_id == page_id,
+        try:
+            async with use_session(self._sessions) as s:
+                result: CursorResult = await s.execute(  # type: ignore[assignment]
+                    update(TeamWikiPageRow)
+                    .where(
+                        TeamWikiPageRow.team_id == str(team_id),
+                        TeamWikiPageRow.page_id == page_id,
+                    )
+                    .values(**values)
                 )
-                .values(**values)
-            )
-            if result.rowcount == 0:
-                raise WikiPageNotFoundError(page_id)
+                if result.rowcount == 0:
+                    raise WikiPageNotFoundError(page_id)
+        except IntegrityError as exc:
+            # The race the sibling-title index exists to catch: two editors
+            # renaming two siblings to the same title, each passing the
+            # service's check on its own snapshot. Mapped like the other write
+            # paths so the loser gets a 409 rather than a 500.
+            raise WikiPageConstraintError() from exc
 
         page = await self.get_page(team_id, page_id)
         assert page is not None

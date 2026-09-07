@@ -153,7 +153,14 @@ export default function TeamWikiPage() {
     paneRef: railRef,
   });
 
-  const { data: tree, isLoading: treeLoading } = useWikiPagesQuery({ teamId }, { skip: !teamId });
+  // Refetched on arrival rather than served from cache: a page published by an
+  // agent is approved in the CHAT, and nothing there invalidates this cache —
+  // so opening the wiki right afterwards showed the tree as it was before the
+  // approval.
+  const { data: tree, isLoading: treeLoading } = useWikiPagesQuery(
+    { teamId },
+    { skip: !teamId, refetchOnMountOrArgChange: true },
+  );
   const pages = useMemo(() => tree?.pages ?? [], [tree]);
   const rulesPage = useMemo(() => findRulesPage(pages), [pages]);
 
@@ -166,9 +173,12 @@ export default function TeamWikiPage() {
 
   const { data: pageDetail, isFetching: pageLoading } = useWikiPageQuery(
     { teamId, slug: activeSlug ?? "" },
-    { skip: !teamId || !activeSlug || isRules },
+    { skip: !teamId || !activeSlug || isRules, refetchOnMountOrArgChange: true },
   );
-  const { data: rulesDetail, isFetching: rulesLoading } = useWikiRulesQuery({ teamId }, { skip: !teamId || !isRules });
+  const { data: rulesDetail, isFetching: rulesLoading } = useWikiRulesQuery(
+    { teamId },
+    { skip: !teamId || !isRules, refetchOnMountOrArgChange: true },
+  );
   const detail = isRules ? rulesDetail : pageDetail;
 
   const { data: history, isFetching: historyLoading } = useWikiRevisionsQuery(

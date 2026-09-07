@@ -126,7 +126,11 @@ export function WikiEditor({
 
       <div className={styles.surface}>
         <MDXEditor
-          markdown={initialContent}
+          // The CURRENT draft, not the text the editor opened on: this
+          // remounts on a theme flip, and MDXEditor reads `markdown` only at
+          // mount — so feeding the original text put it back on screen while
+          // Save still held the newer, now invisible, draft.
+          markdown={draft}
           onChange={setDraft}
           // Remounts on a theme flip: MDXEditor builds its popup container once,
           // copying this class onto it, so the toolbar's dropdowns would keep

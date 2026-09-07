@@ -87,7 +87,10 @@ class CreateWikiPageRequest(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     content_md: str = Field(default="", max_length=MAX_PAGE_CHARS)
     parent_page_id: str | None = None
-    position: int = 0
+    # Bounded like its siblings above: the column is a 32-bit int, and an
+    # out-of-range value belongs in a 422 from the schema rather than a
+    # DataError surfacing as a 500.
+    position: int = Field(default=0, ge=0, le=1_000_000)
 
 
 class UpdateWikiPageContentRequest(BaseModel):

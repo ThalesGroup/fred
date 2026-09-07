@@ -25,11 +25,15 @@ export type DiffOp = "same" | "added" | "removed";
  *
  * The table is O(lines × lines): a page allowed 100 000 characters can be tens
  * of thousands of lines, and 12 000 a side is already ~144 million cells —
- * enough to freeze or kill the tab of the person deciding. Two thousand lines
- * a side is far beyond any page a team writes by hand, and the fallback below
+ * enough to freeze or kill the tab of the person deciding.
+ *
+ * 250 000 cells is 500 lines a side, beyond any page a team writes by hand and
+ * cheap enough to run eagerly — which it does: every pending approval card in
+ * a thread computes its diff on render, because the summary line shows the
+ * added/removed counts before anyone opens the dialog. The fallback below
  * still shows the whole change, just without pairing.
  */
-const MAX_DIFF_CELLS = 4_000_000;
+const MAX_DIFF_CELLS = 250_000;
 
 export interface DiffLine {
   op: DiffOp;
