@@ -792,6 +792,32 @@ uploading.
 - `Shift+Enter` → newline
 - `onInterrupt` — called when the user clicks the stop button during
   streaming (replaces the send button while `isStreaming`)
+- Paste carrying files — listened on the **document**, not the textarea
+  (`ManagedChatPage/usePastedFiles.ts`), because a paste event only reaches
+  the focused element and its ancestors: a composer-level handler missed every
+  Ctrl+V made with the focus elsewhere on the page. Page-wide like drop, gated
+  the same way (`attach_files` exposed), same upload-warning and ingestion
+  path. `core/utils/clipboardFiles.ts` decides what to keep: real text next to
+  the files wins, because Word and Excel put a rendered PNG in the clipboard
+  alongside the copied cells; the paths a file manager leaves in `text/plain`
+  are not real text, nor are the marker lines Nautilus puts in front of them.
+  Files the browser names generically (`image.png` for every screenshot) are
+  renamed by paste time — session attachments are resolved by name downstream,
+  so two pastes must not share one. No format is filtered on the way in: the
+  extension is kept, or derived from the mime type when the clipboard gives no
+  name, because fast ingestion dispatches on the extension alone
+  (`IngestionController._get_fast_text_processor`) — a format Fred has no
+  processor for must fail there, with the same 400 as the same file picked
+  from disk. A multi-file batch (paste, drop or picker) registers every chip
+  before the first ingestion starts and ingests concurrently —
+  `useChatAttachments.addFiles` used to go one file at a time, which hid file
+  N behind file N-1's ingestion. Browser limit, not ours: Firefox hands the
+  page only the first file of a multi-file copy (Mozilla bug 864052, open
+  since 2013, parity gap with Chrome and Safari, which expose them all).
+  Nothing in the page can recover the others — drag & drop or the picker are
+  the multi-file paths there. Every paste logs `types=… files=… attached=…`
+  at debug level (hidden in Chromium DevTools unless *Verbose* is on) to tell
+  this apart from a composer bug.
 
 ### 8.4 Props
 

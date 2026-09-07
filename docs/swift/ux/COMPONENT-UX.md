@@ -78,6 +78,34 @@ _(none)_
 
 ---
 
+### `Select`
+
+**Location:** `src/rework/components/shared/molecules/Select/Select.tsx`
+**Status:** `Functional`
+
+Portaled listbox with virtual focus (DOM focus stays on the trigger,
+`aria-activedescendant` tracks the highlighted option).
+
+**Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
+the same token `TextInput` uses, so a `Select` and a text field placed in one
+toolbar match. It previously used `--outline-muted`: identical in the light
+theme (both resolve to `cold-grey-80`) but dimmer in the dark one
+(`cold-grey-20` against `cold-grey-30`), so the two controls disagreed only for
+dark-theme users. `--outline-muted` remains correct for containers and
+dividers; form controls take `--outline-retreat`.
+
+**Naming the trigger.** A visible `label` names it through `htmlFor`. Where a
+toolbar has no room for one, pass `ariaLabel` instead — without either, the
+button falls back to its own content and a screen reader announces the current
+value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
+over `label`, so pass one or the other.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
 ### `SearchInput`
 
 **Location:** `src/rework/components/shared/molecules/SearchInput/SearchInput.tsx`
@@ -209,19 +237,17 @@ sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface
   `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
   and bleed full width (negative horizontal margins cancel the popover padding).
 
-- **Composer sub-menu container (2026-08-03)** — the composer's anchored sub-menus now reuse
-  `MenuPopover` as their container instead of a bespoke `.pickerMenu` surface, so menus and
-  sub-menus in the composer are all the same component (mirrors `EnumSelectRow`). Each consumer
-  keeps only a positioning anchor (absolute placement) and passes its picker content as a single
-  `groups` entry; a `pickerSurface` className adds internal scroll for tall content. Applied to
-  `ComposerControlSlot` (prompt library) and `DocumentScopeControl` (document/library picker).
+- **Composer sub-menu container** — the composer's anchored sub-menus reused `MenuPopover`
+  as their container, each consumer keeping only a positioning anchor and a `pickerSurface`
+  className for internal scroll. Both consumers (document scope, then the prompt library)
+  have since moved into side panels, so the composer no longer anchors any sub-menu and the
+  `pickerSurface` surface was deleted 2026-09-04.
 
-- **Pickers stop below the session top bar (2026-08-05, #2245)** — `usePickerMenuMaxHeight`
-  clamped the upward-growing pickers against the viewport top, so once the session top bar
-  landed (#2214/#2218) an expanded document tree slid under it and got clipped. The hook now
-  honors an optional boundary element marked `data-picker-top-boundary` (measured from its
-  bottom edge, tracked with a `ResizeObserver` while open); `ManagedChatPage` marks its
-  `.topBar`. Pages without a marked boundary keep the viewport-top clamp.
+- **Pickers stop below the session top bar** — `usePickerMenuMaxHeight` clamped the
+  upward-growing pickers against a boundary element so an expanded tree could not slide
+  under the session top bar. Both of its consumers have since moved into side panels
+  (document scope, then the prompt library), so the hook and the
+  `data-picker-top-boundary` marker were deleted 2026-09-04.
 
 ---
 
@@ -330,26 +356,85 @@ agents) so the decision is informed at the point it is made.
   monospace on a light background. May be too visually heavy for secondary UI. Consider
   lowercase with a subtler pill, or icon-only at narrow widths.
 
-- **Reasoning preview length** — `ReasoningBlock` clamps the streaming preview to 2 lines.
-  Validate that 2 lines is the right budget for long model-native reasoning, or whether the
-  card should grow while streaming and clamp only once the block closes.
-
 #### Resolved
 
-- **Reasoning rendered as a tool step (2026-07-30, #2172)** — the trace was one flat list of
+- **Consecutive reasoning rows read as the same row twice (2026-09-04, #2565)** — closes the
+  "reasoning preview length" open issue above. Reasoning models restate the task from scratch
+  at every round: in session `fausse-situation-thales-espagne`, two model-native blocks of one
+  turn shared **533 identical leading characters** and differed only after them. The 2-line
+  clamp showed roughly the first 150 — i.e. exactly the repeated part — so two genuinely
+  distinct blocks (distinct `thought_id`, rank and `duration_ms`) rendered as visual
+  duplicates. Dropping the phase label had removed the last thing telling them apart.
+
+  Two changes, both needed. `traceRows()` trims each reasoning row of the leading run of
+  **complete sentences** the previous row already carried (`stripRepeatedPreamble`), compared
+  against that row's *full* text, so the rows tile the whole reasoning with nothing lost
+  between them. Whole sentences only: blocks that merely open on the same few words share no
+  sentence and are left alone — a character-level trim rendered `demandé un document nommé…`
+  on this very session. And the clamp went from 2 lines to 3: with the repeat removed, the
+  lines that survive are the block's own content, so the budget buys reasoning instead of a
+  preamble. The full markdown still lives in `TraceDetailDrawer`.
+
+  Not a duplicate-row bug: nothing in the data was duplicated, and `groupTraceEntries` still
+  has no thought-level dedup to match its `call_id` one. If true duplicates ever appear, the
+  tell is a React duplicate-key warning on `thought:<id>` — the keys collide, the texts here
+  did not.
+
+- **Reasoning and tools shown in an order that never happened (2026-09-04, #2565)** — the
+  two-lane split below put every reasoning entry above every tool step, so a turn that
+  reasoned, called a tool, reasoned again and called another was displayed as all the
+  thinking then all the doing. `splitTraceEntries()` is replaced by `traceRows()`, which
+  returns one chronological list (entries already arrive in rank order, and a thought keeps
+  the rank of its `thought_start`) with each row tagged `reasoning` or `step`. `ThoughtTrace`
+  renders that single list, choosing `ReasoningRow` or `TraceEntryRow` per row.
+
+  Ordering alone was not enough: the runtime kept one model-native reasoning block open for
+  the whole turn, so every round's thinking collapsed into one entry ranked before the first
+  tool. It now closes that block at each tool round — see `RUNTIME-EXECUTION-CONTRACT.md`
+  §8.72. Turns stored before that date keep their single block and their old rendering.
+
+  `traceSummary()` deliberately classifies entries itself rather than calling `traceRows()`: the
+  header needs lanes and durations, never display text, and it runs on every streamed delta —
+  flattening markdown and diffing preambles there would put that cost on the per-token path for
+  nothing. `ThoughtTrace` memoizes its own fold on `messages` for the same reason, and computes
+  `traceRows()` only when the trace is expanded: `toThreadMessages` rebuilds every exchange's
+  `traceMessages` array on each SSE frame, so an ungated memo re-flattened the markdown of the
+  WHOLE conversation's collapsed history on every token (measured at ~0.036 ms per KB of
+  reasoning text, so ~3.5 ms per frame on a long conversation — main-thread time competing with
+  React's own render). What survives that gate — a turn that streamed in this session stays
+  open, by design — is covered by a `WeakMap` cache of the flattened preview text keyed on the
+  message object: `upsertOne` rebuilds a streaming block as a new object each delta, so the live
+  block misses the cache and every settled one hits (measured 0.035 ms → 0.001 ms per block).
+
+  Three consequences worth knowing. The grouping card behind the tool rows is gone: rows of
+  both kinds now sit directly in `.body` as one flat timeline, so the rail's end trimming
+  moved there too — each row publishes where its own marker sits via `--trace-marker-y`
+  (50% for a one-line tool row, the first text line for a reasoning row) rather than each
+  component hardcoding it. `traceSummary()` now sums the reasoning blocks instead of taking
+  the longest, since they no longer overlap. And `TraceEntryRow` no longer receives thought
+  entries at all, so its per-phase pill branch was dead code and was removed — the badge
+  survives only in `TraceDetailDrawer`.
+
+  A grouping background behind *consecutive* tool rows may come back; it was deliberately
+  left out here rather than guessed at.
+
+- **Reasoning rendered as a tool step (2026-07-30, #2172 — lane split superseded 2026-09-04)** — the trace was one flat list of
   look-alike rows, so the model-native reasoning block sat as row #1 of the tool pile and
   pulsed there for the whole turn (it is opened at the first reasoning token and closed only
   at the first answer delta, so it holds the lowest rank throughout — it read as a tool stuck
-  in "running"). The trace is now split into two lanes by `traceUtils.splitTraceEntries()`:
-  a reasoning lane rendered by `ReasoningBlock`, and a numbered tool-step lane rendered by
-  `TraceEntryRow`. Both lanes are chrome-free (no card border, no fill, no chips) and are
-  threaded by a single 1px timeline rail so the turn still reads as a process unfolding.
+  in "running"). Reasoning stopped being a tool row: it gained its own renderer, with no step
+  number and no status dot. That much still holds. The two-lane split it originally shipped
+  with does not — see the 2026-09-04 entry above. Both kinds of row remain chrome-free (no
+  card border, no fill, no chips), threaded by a single 1px timeline rail so the turn reads
+  as a process unfolding.
 
 - **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
   sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
-  replaces `thoughtSummaryLabel()` and returns structured data — reasoning wall-clock (max,
-  not sum: the model-native block brackets the tool calls), tool count, tool latency, running
-  flag — which the component formats through i18n as e.g. "Reasoning 16.4s · 4 tools".
+  replaces `thoughtSummaryLabel()` and returns structured data — reasoning wall-clock, tool
+  count, tool latency, running flag — which the component formats through i18n as e.g.
+  "Reasoning 16.4s · 4 tools". The wall-clock was the max of the blocks, not their sum,
+  because one model-native block bracketed the tool calls; since 2026-09-04 the blocks are
+  disjoint and it is their sum.
 
 - **Collapse behaviour (2026-07-30, #2172)** — `expanded` was initialised `true` and never
   collapsed; `done` only drove the pulse animation, despite a comment claiming otherwise. The
@@ -362,18 +447,22 @@ agents) so the decision is informed at the point it is made.
 - **Chevron legibility (2026-07-30)** — the `›` character is replaced by the `Icon` atom
   (`expand_more` / `expand_less`).
 
-- **Timeline guideline alignment (2026-07-30)** — the guideline moved into `.entries` and is
-  positioned off the step-number column width, and `TraceEntryRow` always renders the number
-  slot (empty for unnumbered notes) so every status dot sits on the same vertical line.
+- **Timeline guideline alignment (2026-07-30)** — the guideline is positioned off the
+  step-number column width, and `TraceEntryRow` always renders the number slot (empty for
+  unnumbered notes) so every status dot sits on the same vertical line. It lived on the
+  `.entries` card until that card was dropped on 2026-09-04; it is now `.body`'s own
+  `--trace-rail-x`.
 
 - **i18n (2026-07-30)** — the trace surface was hardcoded English inside a translated app.
-  Its static strings now live under `rework.chatTrace.*` (en + fr), including the reasoning
-  phase labels. Tool labels themselves stay English — they are generated by
-  `humanizeToolName()` from backend tool names (see #1774).
+  Its static strings now live under `rework.chatTrace.*` (en + fr). The `phase.*` keys were
+  removed on 2026-09-04 with the label they fed. Tool labels themselves stay English — they
+  are generated by `humanizeToolName()` from backend tool names (see #1774).
 
-- **Label chip style — partially (2026-06-18)** — thought rows now use subtle per-phase
-  tinted pills (see `TraceEntryRow`) rather than the flat uppercase label; reasoning detail
-  opens in the overlay drawer with markdown rendering instead of raw JSON.
+- **Label chip style — partially (2026-06-18)** — thought rows use subtle per-phase tinted
+  pills rather than the flat uppercase label; reasoning detail opens in the overlay drawer
+  with markdown rendering instead of raw JSON. Since 2026-09-04 the pill survives only in
+  `TraceDetailDrawer`: a reasoning row shows the reasoning itself, not a name for the kind
+  of reasoning it is.
 
 - **Repeated content-free "Done" rows (2026-07-22)** — every tool call previously produced
   two trace rows: a "Tool use" phase thought (title "Calling `<tool>`", secondary text always
@@ -385,30 +474,46 @@ agents) so the decision is informed at the point it is made.
 
 ---
 
-### `ReasoningBlock`
+### `ReasoningRow`
 
-**Location:** `src/rework/components/shared/molecules/ThoughtTrace/ReasoningBlock/ReasoningBlock.tsx`
+**Location:** `src/rework/components/shared/molecules/ThoughtTrace/ReasoningRow/ReasoningRow.tsx`
 **Status:** `Functional`
 
-The reasoning lane of a trace (#2172): one line per reasoning entry — sparkle marker on the
-timeline rail, phase label in small caps, duration, and a 2-line clamped preview of the
-streaming text. Clicking opens the existing `TraceDetailDrawer` for the full markdown.
+One reasoning entry, sequenced in the trace where it happened (#2172, reordered #2565): a
+`settings` marker on the timeline rail, a 3-line clamp of the block's text, and the duration
+trailing right.
+Clicking opens `TraceDetailDrawer` for the rendered markdown.
 
-Deliberately not a `TraceEntryRow`: reasoning is not a tool step. Three weight decisions,
-all from developer review of the first cut, which was judged visually too heavy:
+The text is supplied by `traceRows()`, not derived here: it is trimmed of the sentences the
+previous reasoning row already showed, which only the caller walking the sequence can know.
+It is clamped to 3 lines — see the 2026-09-04 entry under `ThoughtTrace`.
+
+Deliberately not a `TraceEntryRow`: reasoning is not a tool step, so it gets no step number
+and no status dot. Successive rounds of weight-trimming, each from developer review:
 
 - **No card chrome** — the first version had a bordered, filled card. Removed: the trace is
   secondary UI and must stay lighter than the answer next to it.
-- **No phase pill** — the phase renders as plain small-caps retreat text, not the tinted
-  `phaseBadge` chip (the chip survives in `TraceDetailDrawer`, where it is the header).
-- **One label, not three** — a model-native block used to show a phase chip, the backend
-  title ("Model reasoning") and a "Model" chip. The title and chip are dropped for
-  `source="model_native"` (they say nothing the phase doesn't); authored titles are kept,
-  since an author wrote them.
+- **No phase label (2026-09-04)** — the phase first shrank from a tinted `phaseBadge` chip to
+  plain small-caps text, then went entirely. It named the kind of reasoning where the row can
+  simply show the reasoning; with the model-native title already dropped, a header carrying
+  only a category label was pure weight. The chip survives in `TraceDetailDrawer`, where it
+  is the header and has room to mean something.
+- **One label, not three** — a model-native block used to show a phase chip, the backend title
+  ("Model reasoning") and a "Model" chip. The title and chip are dropped for
+  `source="model_native"`; authored titles are kept, since an author wrote them.
 
-The marker aligns on `--trace-rail-x`, the rail geometry `ThoughtTrace` sets on `.body` and
-cascades to both lanes — so the rail threads the reasoning marker and every step dot with no
-per-component magic numbers.
+The row is named by its own text (title, preview, conclusion) rather than a fixed "Open the
+full reasoning" label — a turn holds one row per ReAct round, so a static label would announce
+them all identically and the reasoning would never reach assistive tech. The generic label
+remains only for a block that has streamed nothing yet. The name is capped near the three
+clamped lines the row actually shows: the thread is an `aria-live` region, so an unbounded name
+would have a screen reader read a whole reasoning block aloud, re-announced on every delta.
+
+The marker rides the first line of text rather than the row's centre, so a two-line preview
+does not drag it off the rail. Two variables carry that geometry, both set by `ThoughtTrace`
+on `.body`: `--trace-rail-x` (where the rail runs) and `--trace-line-h` (one line of row
+text). The row publishes its resulting marker position back as `--trace-marker-y`, which is
+how `ThoughtTrace` trims the rail when a reasoning row opens or closes the sequence.
 
 ---
 
@@ -455,14 +560,17 @@ per-component magic numbers.
 - **Row layout (2026-07-30)** — the two-row grid is replaced by a single flex line
   `[n] ● label · discriminator … latency`, with latency trailing right. The second grid row
   (which started at column 4 and skipped the dot/index columns) is gone, and with it the
-  primary-text-truncation question for thought entries: reasoning text now lives in
-  `ReasoningBlock`, not in this row.
+  primary-text-truncation question for thought entries: reasoning text lives in
+  `ReasoningRow`, not in this row.
 
-- **Per-phase colour coding (2026-06-18, RUNTIME-05 follow-up)** — thought rows now render
-  the phase as a subtle tinted pill (`.phaseBadge[data-phase=...]`): planning→tertiary,
-  tool_use→secondary, observation→primary, reflection→warning, synthesis→success
-  (each with its M3 `--on-*` text pairing). Non-thought rows keep the plain uppercase label.
-  Clicking a row opens the shared page-level detail drawer (state lifted via `traceDrawerContext`).
+- **Per-phase colour coding (2026-06-18, RUNTIME-05 follow-up; removed here 2026-09-04)** —
+  thought rows rendered the phase as a subtle tinted pill (`.phaseBadge[data-phase=...]`):
+  planning→tertiary, tool_use→secondary, observation→primary, reflection→warning,
+  synthesis→success. The branch is gone from this row: since the trace became one
+  chronological list, thought entries are routed to `ReasoningRow` and never reach here, so
+  the pill was unreachable code. It lives on in `TraceDetailDrawer`, which still owns
+  `phaseBadge.module.css`. Clicking a row opens the shared page-level detail drawer (state
+  lifted via `traceDrawerContext`).
 
 ---
 
@@ -714,6 +822,37 @@ _(none yet)_
 
 ---
 
+### `IconButton` count badge (2026-09-04)
+
+**Location:** `src/rework/components/shared/atoms/IconButton/`
+
+**Status:** `Functional`
+
+`badgeCount` puts an M3 *large badge* on the button's top-right corner. Nothing
+renders below 1 — a "0" pill is noise, not information — and counts above 999
+show as `999+`, M3's three-digit cap.
+
+Spec mapped onto existing tokens, no invented values: 16px min box
+(`--spacing-m`), `--radius-full`, 4px side padding (`--spacing-2xs`), Label
+Small (`--font-label-small`, already the 11px M3 asks for), and
+`line-height: 1` so the digit sits centred rather than low in the pill.
+
+**One deliberate divergence from M3:** the badge is `--primary` / `--on-primary`,
+not the `error` / `on-error` M3 specifies. M3 colors badges as notification
+signals; this one is a neutral count (attachments in a conversation), and a red
+pill would read as something to fix.
+
+The badge renders in a wrapper *beside* the `<button>`, not inside it: `.btn` is
+`overflow: hidden` to clip its state layer to the circle, so a nested badge
+would be cut off. The wrapper only appears when a badge does, so every other
+call site keeps rendering a bare `<button>`.
+
+It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
+otherwise a screen reader announces the button with no number, or reads a bare
+digit after the name.
+
+---
+
 ### `Chip` atom + composer consolidation (`ManagedChatPage`, 2026-08-03)
 
 **Location:** `src/rework/components/shared/atoms/Chip/`,
@@ -788,33 +927,140 @@ itself owns only `aria-invalid` and its send gating.
 
 ---
 
-### Prompt library → insert into composer (`ContextPromptPicker`, 2026-08-03)
+### `ChatSidePanel` (2026-09-04)
 
-**Location:** `src/rework/components/shared/molecules/ContextPromptPicker/`,
+**Location:** `src/rework/components/shared/molecules/ChatSidePanel/`
+
+**Status:** `Functional`
+
+The one shell every chat side panel wears. Three panels — document scope,
+session attachments, prompt library — had drifted into three slightly different
+`InlineDrawer` configurations (two of them had independently grown the same
+"insets minus the top one" body rule). The shell fixes the treatment once:
+
+`layout="push"` so it reflows the conversation instead of covering it,
+`floating` (inset card, `outline-muted` border, `--radius-m`, soft shadow;
+12px from the page edges and the conversation, 8px on the right where the
+launcher rail sits — a gap to a neighbouring control is tighter than a gap to
+the page edge),
+`background: --surface-container-high`, `compactHeader` (a 12px/8px title band
+rather than the drawer's roomier 16px/12px — these panels sit in a narrow column
+beside the conversation; the settings and admin drawers keep the default),
+`flushBody` plus a body that carries
+the insets the drawer's own padding would double up (`0 16px 16px` — the header
+already leaves the top gap) and a `--spacing-s` column gap, and drag-to-resize
+with a persisted width (`persistKey`, unique per panel; `width` seeds the
+first-ever value only).
+
+**Open/close speed (2026-09-04).** These panels run at `--duration-short-3`
+(150ms) through `InlineDrawer`'s `duration` prop, against the 250ms default a
+capability viewer keeps. Note this is deliberately *faster* than M3 recommends
+for a panel (300–400ms) — a designer call: they are a quick detour from the
+conversation, not a context switch. The prop moved the drawer's hardcoded
+`250ms ease-out` onto the `--duration-*` / `--easing-*` tokens on the way.
+
+**The capability viewers wear the same card (2026-09-04).** `CapabilitySidePanelHost`
+passes the same `floating` + `surface-container-high` as this shell, so the
+right-hand column keeps one height, one corner radius and one surface whichever
+panel is showing. They are not on `ChatSidePanel` itself: a viewer needs
+`hideHeader`/`flushBody` for panes that own their header (`ownsHeader`), which
+this shell does not expose.
+
+One content-shaped option: `fill` caps the body at the drawer height so a child
+owns the scrolling and whatever sits above it stays pinned — the prompt panel's
+list under its space picker, the attachments list under its upload warning.
+Without it the content grows and the drawer scrolls as a whole, which is what
+the document-scope tree wants.
+
+Note for panel authors: the panel background is `--surface-container-high`, so
+a row's hover must be a translucent state layer (`--state-on-surface-hover`),
+never that same surface token — painting it makes hover disappear.
+
+A new chat panel should mount `ChatSidePanel`, not `InlineDrawer` directly, and
+take a `kind` in `ManagedChatPage`'s `activePushDrawer` union so it shares the
+single push-drawer slot.
+
+---
+
+### Prompt library → insert into composer (`PromptSelectionChatPanel`, 2026-09-04)
+
+**Location:** `src/rework/components/shared/molecules/PromptSelectionChatPanel/`,
+`src/rework/components/shared/utils/promptFilter.ts`,
 `src/rework/features/capabilities/ComposerControlSlot.tsx`,
 `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
 
 **Status:** `Functional`
 
-Picking a prompt in the composer's `Prompts` row now **inserts the prompt's content into the
-chat input** instead of attaching it as a session-context chip.
+The composer's add menu carries a **Prompt library** row (`edit_note`) that opens
+a right-side panel. It replaces the anchored sub-menu that listed every prompt
+flat, with no search, no category filter, and no way to reach the caller's
+personal prompts from a team chat. `ContextPromptPicker` and the
+`usePickerMenuMaxHeight` hook that positioned it are deleted.
 
-- `ContextPromptPicker` went from a multi-select toggle (checkboxes, `selectedIds`/`onChange`) to
-  a one-shot action list (`onSelect(prompt)`, `role="menu"`/`menuitem`). Picking a row fetches the
-  full prompt (`GetTeamPrompt` — the `text` lives on the record, not the `ContextPromptSummary`),
-  appends it to the draft (`\n\n`-separated when the draft is non-empty), and closes the actions
-  popover. Scope resolves the owning team: `personal` → the user's personal team, `team` → the
-  chat team.
-- `RichInputField` now resizes the textarea on any external value change (not just clear), so
-  inserted (and voice-transcribed) text grows the box instead of being clipped at one row.
-- The context-prompt **chip** UI was removed: `ContextPromptChips` (molecule + test) is deleted,
-  and the composer no longer renders attached-prompt pills. The backend session-context channel
-  (`contextPromptIds` → `context_prompt_text`, PROMPT-05) is left in place but is now **dormant**
-  — nothing in the composer writes to it. Fully retiring it (store + runtime contract) is a
-  separate change, not done here.
-- Picker rows were simplified to name + description (+ score stars): the leading icon and the
-  usage count were removed. The picker's `MenuPopover` uses an 8px padding for this instance via
-  the `pickerSurface` className.
+**Panel.** A `ChatSidePanel` (`fill`), sharing `ManagedChatPage`'s single
+push-drawer slot so it never stacks with the attachments, capability or
+document-scope panels. The shell supplies the header (title + close), the
+surface and the insets. Body, top to bottom: a `ButtonGroup` picking the space,
+a `SearchInput` and a category `Select` grouped together at 8px — both narrow
+the same list, so they sit tighter than the body's 12px between blocks — then
+the list of outlined tiles. Only the list scrolls.
+
+The three controls run one tier below the app default, the panel being a narrow
+column: `xs` for the search field and the select, `2xs` for the space picker —
+`ButtonGroup`'s ladder has no `xs`, and `2xs` keeps it the same 8px shorter than
+the fields that it already was. The drawer opens at 340px rather than the 480px
+default; that only seeds the first-ever width, a dragged one persists.
+
+**Two spaces, two queries.** `GET /teams/{id}/prompts/context` returns personal
+**or** team prompts depending on the id passed, never both — deliberately (a
+backend test asserts a team call never exposes the caller's personal prompts).
+So the panel issues a second call against the personal space
+(`activeTeam.id`), and every query is skipped while the panel is closed: it is
+mounted for every chat but most sessions never open it. Removing the composer's
+old always-on prompt query is part of that — the chat no longer fetches prompts
+on session load.
+
+In a personal chat the space picker is hidden: the team side would have nothing
+to show, and the chat's own team id *is* the personal space.
+
+**Categories are team-owned** (migration `8ca7cafc292f`), so they are fetched
+per space and the active category resets when the space changes. The counts come
+from the whole space, not the searched subset, so a number does not shift as the
+user types. The control is hidden when a space has no category. The search +
+category predicate is `promptFilter.ts`, shared with the team prompts page and
+unit-tested on its own.
+
+**A dropdown, not chips (2026-09-04).** The panel opened with the same
+`FilterChips` row the team prompts page uses. That row is right on a full-width
+page and wrong in a narrow column, where it wrapped and ate the height the
+prompt list needs. It is now one unlabelled `Select` defaulting to "every
+category", with each option's count folded into its label — a menu row has no
+second column for a count, and the number is what makes an empty category
+obvious before picking it. `FilterChips` is unchanged and still serves
+`PromptsPage`.
+
+Two consequences worth knowing: a dropdown has no toggle-off, so clearing the
+filter means picking "Toutes" rather than clicking the active chip again; and
+"every category" travels as a sentinel value, not `null`, because the menu
+derives each option's DOM id from its value.
+
+**Insert.** Picking a row fetches the full record (`GetTeamPrompt` — `text`
+lives there, not on `ContextPromptSummary`) and appends it to the draft,
+`\n\n`-separated when the draft is non-empty. Scope resolves the owning team:
+`personal` → the user's personal team, `team` → the chat team. Three details
+worth keeping:
+
+- The panel closes **only once the insert resolves**. A failed fetch (or an
+  empty record, which raises rather than passing silently) keeps the panel open
+  behind the existing error toast, so the user does not lose their place.
+- The draft is updated **functionally**. The `input` read before the await is
+  stale by the time it resolves, so typing or sending during the fetch would
+  otherwise be clobbered or resurrected.
+- A second pick is ignored while one insert is in flight.
+
+The session-context channel (`contextPromptIds` → `context_prompt_text`,
+PROMPT-05) remains dormant: nothing in the composer writes to it. Retiring it
+(store + runtime contract) is still a separate change.
 
 ---
 
@@ -909,7 +1155,7 @@ The composer's `document_scope` control (the resource/library picker) moved out 
 inline popover into a full-height right-side push panel (#2259).
 
 - The `document_scope` row in the "tune" popover is now a **launcher**: clicking it closes the
-  tune menu and opens `DocumentScopePanel` — an `InlineDrawer layout="push"` sharing
+  tune menu and opens `DocumentScopePanel` — a `ChatSidePanel` (see below) sharing
   `ManagedChatPage`'s single push-drawer slot (`activePushDrawer`), so it never stacks with the
   attachments / capability panels. The old inline `MenuPopover` + `usePickerMenuMaxHeight` anchor
   in `DocumentScopeControl` is gone; the row just computes the current-selection summary and calls
@@ -953,9 +1199,81 @@ inline popover into a full-height right-side push panel (#2259).
 
 #### Open UX issues
 
-_(none — layout and scroll behaviour resolved 2026-05-18)_
+_(none)_
 
 #### Resolved
+
+- **The agent's turn streamed below the fold (2026-09-04, #2566)** — the container scrolled but
+  nothing drove it past a one-shot jump per user turn, so trace rows and then the answer grew off
+  screen while the viewport stayed put. Full autoscroll is not the fix either: pinning the view to
+  the bottom moves the line being read.
+
+  `useChatAutoScroll` now owns this container's scroll position outright, in three phases. **Send /
+  conversation opened** → jump to the bottom before paint. **Work** (trace rows, no answer text) →
+  follow the bottom. **Answer** → keep following, then freeze once the answer has filled
+  `ANSWER_FOLLOW_FRACTION` (3/4) of the viewport, which leaves its first line a quarter of the way
+  down.
+
+  Following is animated, not written outright. A single `scrollTop` write per content change is a
+  series of small jumps, one per streamed batch; a requestAnimationFrame loop closing a share of the
+  remaining distance each frame (`nextFollowTop`) catches up fast when a whole tool row lands and
+  barely moves for a token, so the two do not read as different behaviours. Native
+  `behavior: "smooth"` is not usable here — each call restarts its own animation and there is one
+  call per batch. The loop re-checks intent every frame through a ref, not through the closure it
+  started with — it runs uninterrupted for as long as content keeps arriving, so a loop begun in the
+  work phase went on deciding as if the turn were still working and the answer's freeze never came.
+  It stops once settled rather than burning a frame per token.
+  `prefers-reduced-motion` gets the position without the journey, and the per-turn jump stays
+  instant and cancels any animation in flight.
+
+  That stop needs no DOM anchor and no spacer: the view is at the bottom when the answer starts, so
+  the content grown since the last trace-only height *is* the answer's height on screen. The
+  trace-only height is sampled continuously during the work phase rather than read when the answer
+  phase opens — the latter already includes the first batch, and an answer arriving in one chunk
+  would leave a budget of zero.
+
+  Reader override is read from the container's `scroll` events, not sniffed from wheel/touch/key
+  gestures: gestures miss scrollbar drags, keyboard scrolling and middle-click, and they fire for
+  nested scrollers (wide tables, code blocks) that never moved this view. `scroll` does not bubble
+  from an element, so only this container's own movement is seen — and scrolling back down re-arms
+  following for free.
+
+  Neither distance nor direction decides it alone, because each has a case the other covers.
+  Distance alone is a race: the follow write and the browser's scroll event are a frame apart, so
+  content landing in between makes a perfectly-followed view measure as far from the bottom, which
+  would give up following for the rest of the turn with nothing left to re-arm it. Direction alone
+  misses content being *removed*: answering a HITL prompt takes it out of the thread, the page
+  shortens, and the browser clamps `scrollTop` downward with no reader involved — which read as a
+  scroll-up and killed the resume's autoscroll. So: at the bottom is following whatever moved the
+  view there; away from it, only an upward move is the reader.
+
+  A turn paused on a HITL gate counts as live, not finished. `waitResponse` goes false while the
+  gate is open, and treating that as idle stranded the reader above a prompt they had to act on,
+  with the resume then having nowhere to scroll back from.
+
+  One more signal is needed because `hasAnswerText` only accumulates: a tool round *after* the model
+  has written text would otherwise leave the turn stuck in the answer phase, with its new trace rows
+  eating the freeze budget. A rise in the turn's trace-row count drops the anchor and resumes
+  following — which also covers a HITL resume, since that adds no user message and so leaves the key
+  unchanged.
+
+  `ChatMessagesArea` lost its `useLayoutEffect`/`turnKey` bottom-jump in the same change; it is
+  presentation only now. Two owners on one scroll container cannot be reasoned about, and the hook
+  is the one that also has to decide when *not* to move.
+
+- **Trace no longer collapses under the reader (2026-09-04, #2566)** — `ThoughtTrace` collapsed
+  itself on `done`, contracting the layout by tens of pixels at the exact moment the reader started
+  on the answer, every turn. `resolveTraceExpanded` takes a fourth input: a block that watched its
+  own turn stream stays open. Captured at mount rather than latched over time — `done` briefly goes
+  false on the *previous* turn during the pre-flight between `waitResponse` flipping and the new user
+  message landing, and a running latch would pin that history block open for good. History blocks
+  still mount collapsed, so opening a long conversation is unchanged.
+
+- **Streaming auto-scroll with user override (2026-05-18 — removed since, superseded 2026-09-04)** —
+  described a `useLayoutEffect` scrolling to bottom on every render during streaming, suspended
+  within 120px of the bottom. No such code was present by 2026-09-04: only a one-shot per-turn jump
+  remained. Kept as the record of a behaviour that was lost somewhere between the two dates, and is
+  now provided by `useChatAutoScroll` above.
 
 - **Scroll container promoted to `.chatColumn` (2026-05-18)** — `overflow-y: auto` was on `.area`
   (an inner element), which caused the scrollbar to stop at the top of the input field instead of
@@ -1287,6 +1605,66 @@ row and making the list unreadable. Two changes:
 
 ---
 
+### `TeamAgentsPage` list search + sort
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/`
+**Status:** `Functional`
+
+A `SearchInput` (`size="small"`, capped at 320px) sits at the right of the page
+toolbar, after the create button — the same placement and component as the team
+prompts page, so the two team list pages read alike. It filters the already
+loaded list client-side: local `useState`, no debounce, no request. The list is
+fetched whole, so no query parameter and no control-plane change is involved.
+
+The predicate lives in `agentFilter.ts` rather than in the page: a
+case-insensitive substring match against the three fields `AgentCard` actually
+renders — `display_name`, `role`, `description` — joined per instance so a query
+cannot match across a field boundary. An empty or whitespace-only query returns
+everything, so the raw input value can be passed straight through. It is a pure
+function with its own unit test, matching how `toolPackLogic` is tested in this
+directory; `TeamAgentsPage.tsx` is an RTK Query container with no test of its
+own.
+
+Composition and states:
+
+- The search narrows what is left **after** the suspension filter (a suspended
+  agent stays hidden from members without `can_update_agents`).
+- A query matching nothing shows a dedicated message, never
+  `TeamAgentEmptyState` — that state means "this team has no agents yet" and is
+  driven by the unfiltered list. Guarding the message on a non-empty query keeps
+  the no-query behaviour untouched.
+- The toolbar (and so the field) is driven by the unfiltered list, so a search
+  that empties the grid never removes the field the user needs to correct it.
+- The memo sits above the page's early returns: a hook placed after them renders
+  a different hook count when a query errors. Note `eslint.config.mjs` registers
+  `eslint-plugin-react-hooks` but enables none of its rules, so lint will not
+  catch a regression here.
+
+Wording is deployment-configurable: the placeholder interpolates
+`agentsNicknamePlural`, since a deployment renames agents (e.g. "Lumis").
+
+**Sort.** A `Select` (`size="small"`, `compact`, no label, `min-width: 200px`
+so the control does not resize as the picked option changes length) sits after
+the search field, offering Alphabetical (default), Recently created and Recently updated —
+`display_name`, `created_at`, `updated_at`, the three orderings available
+without touching the API. `sortAgents` (`agentSort.ts`, unit-tested like the
+filter) applies after the search so the visible list is always sorted, and:
+
+- copies before sorting — the list is RTK Query state, frozen by immer in dev,
+  so an in-place sort throws at runtime;
+- puts an agent with a null or unparseable date last in either date order,
+  rather than letting `NaN` scatter it;
+- compares names with `localeCompare` at base sensitivity, so an accented name
+  files next to its unaccented form instead of after `Z`;
+- returns 0 for ties, leaving `Array.sort`'s stability to preserve the incoming
+  order.
+
+The control carries no visible label, so it is named with `Select`'s
+`ariaLabel` prop — otherwise a screen reader announces the current value with
+no hint that it is the sort control.
+
+---
+
 ### `AgentCard`
 
 **Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
@@ -1328,9 +1706,8 @@ the team's `joining_mode`, gated on `!team.is_member`:
 
 | `joining_mode` | Footer content |
 | --- | --- |
-| `open` | "Join" button (`person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only`, team is `public`, at least one admin has an email | "Join" button (`mail` icon) - opens the user's mail client on a `mailto:` prefilled for the team admins (#2453, see below) |
-| `invite_only`, any other case | No button; muted label (`on-surface-retreat`) |
+| `open` | "Join" button (`small`, `outlined`, `person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
+| `invite_only` | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable |
 | already a member | Nothing renders in the footer's join slot |
 
 The former lock icon next to the team name (driven by the retired
@@ -1343,52 +1720,10 @@ system to route requests to team admins was never built) and `closed` (a
 second muted label, indistinguishable in practice from `invite_only`) were
 dropped from the enum entirely; see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §29.
 
-**Ask for an invitation (#2453, 2026-08-27).** A public invite-only team is
-discoverable but not joinable, and the muted label alone left the visitor with
-no next step. The card restores the pre-TEAM-09 escape hatch: a `mailto:`
-addressed to every team admin whose `UserSummary.email` resolved, prefilled
-with the subject, the caller's identity, and two links: the team's agents page
-for context (what `main` sent) plus a deep link to its members page, where the
-recipients - the admins - actually add the sender by hand. The wording is the
-pre-TEAM-09 one (`rework.teamCard.invitationMail.*`) plus that second line, and
-now lives in the locale files instead of hardcoded French as it did then.
-
-The button reuses the `join` label - it is the same intent, and a second,
-longer label wrapped the card's footer onto two lines; the `mail` icon and the
-draft that opens are what distinguish it from the instant `open` join.
-
-Two guards decide whether the button replaces the label:
-
-- **public only.** A private team keeps the label: the UI does not offer a
-  non-member a private team's admin addresses. This is a product rule about
-  what the card *proposes*, not a disclosure guarantee - `GET /teams` puts
-  `admins` (email included) in the payload for every team it returns, and
-  `MarketplaceTeams` records that private teams reach the client at all when
-  authorization is disabled. Withholding them from the wire is a server-side
-  question, still open. `TeamCard` checks `visibility` itself rather than
-  trusting `MarketplaceTeams`' filter: it is a shared component, and the check
-  is `=== "public"` so a payload with no `visibility` fails closed (#2433).
-- **a reachable address.** `admins` falls back to a bare `UserSummary(id=...)`
-  when the Keycloak lookup returns nothing, so an admin list can render with no
-  email at all. With no recipient there is nothing to open, so the label stays
-  rather than producing an empty `mailto:`.
-
-Mechanics worth keeping: the draft opens with `window.open(..., "_blank",
-"noopener,noreferrer")` rather than a `location.href` assignment, so a webmail
-registered as the `mailto:` handler opens beside the app instead of replacing
-it (a native client takes over the throwaway tab and the browser drops it);
-`noopener` makes `window.open` return `null` by spec, so there is nothing to
-test for a fallback - the click is the user gesture popup blockers key off.
-Recipients are comma-separated (RFC 6068) and
-percent-encoded, since the addresses come from a directory sync and nothing
-guarantees they are URL-safe; `URLSearchParams`' `+` is rewritten to `%20` or
-mail clients render it literally in the subject; the team link prepends the
-router basename (`normalizeBasename`, shared with `buildDocumentViewerPath`)
-because a mailed URL inherits nothing from the router; and the identity line
-degrades to whichever of `name` / `preferred_username` Keycloak returned.
-
-No server-side request flow is involved: this is a client-side mail draft, the
-same as before TEAM-09. Nothing routes an invitation request through the API.
+An invite-only team offers no in-app join path: the card shows only the muted
+label. A `mailto:`-to-admins escape hatch existed briefly (#2453) and was
+removed — a non-member could not be given a team's admin addresses, and no
+server-side request flow was ever built to replace it.
 
 **Footer layout.** The card is a fixed 290px, so the admin avatars and the join
 button compete for one line: a team with five admins pushed the button past the
@@ -2180,12 +2515,11 @@ now share one consistent header pattern instead of diverging per page:
 | `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
 | `SelfTestPage` | title only |
 | `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
-| `MigrationPage` (Platform data) | title, breadcrumb (Kea cutover link) |
+| `MigrationPage` (Platform data) | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
 | `AdminTeamsPage` | title only (new — page previously had no page-level header) |
 | `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
 | `TeamSettingsParameters` | title only (new) |
 | `TeamSettingsRouting` | title only (new) |
-| `KeaMigrationPage` (temporary, unlisted) | title only — hardcoded French string kept as-is; this page has no i18n at all and is slated for deletion with the Kea cutover, so it was wrapped for visual consistency without doing a full i18n pass |
 
 Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
@@ -3626,21 +3960,52 @@ agent-health controls.
 
 ---
 
-### Capability side-panel launcher rail (2026-08-28)
+### Chat launcher rail (2026-08-28, generalised 2026-09-04)
 
-**Location:** `src/rework/features/capabilities/CapabilitySidePanelHost.tsx`,
+**Location:** `src/rework/features/capabilities/ChatLauncherRail.tsx`,
 `src/rework/features/capabilities/<id>/plugin.ts`
 
 **Status:** `Functional`
 
 The launcher rail on the chat page's right edge, one small icon button per side panel
-a session's active capabilities declare. **Since 2026-09-01 it is a page-root in-flow
-column** — extracted into `CapabilityLauncherRail` (a flex sibling of `.pageBody`, not
-inside it), `flex-shrink: 0`, full page height, 12px top/right/bottom margin — so it
-reserves its own space at the far right and reflows the chat body left, rather than
-floating over it as an absolutely-positioned overlay. Opening a panel retires the whole
-rail (returns `null`), so the body-side push drawer takes the full width. Earlier
-behaviour (#2459):
+the conversation can open. **Since 2026-09-01 it is a page-root in-flow column** — a
+flex sibling of `.pageBody`, not inside it — `flex-shrink: 0`, full page height, 12px
+top/right/bottom margin, so it reserves its own space at the far right and reflows the
+chat body left rather than floating over it.
+
+**Two sources feed it (2026-09-04).** It was `CapabilityLauncherRail`, built only from
+`sidePanelsForCapabilities()`. It now also takes a `launchers` array of first-party
+descriptors (`key`, `label`, `icon`, optional `badgeCount`, `onOpen`) that the page
+owns, rendered **above** the capability-derived ones — session attachments is the first,
+and a future native panel plugs in the same way. The rename followed: the old name
+would have lied about what the rail renders.
+
+A first-party launcher may carry a count, shown through `IconButton`'s `badgeCount`
+(M3 large badge — see `IconButton` below), and reads as selected while its panel is
+the one showing.
+
+`footerLaunchers` is the same descriptor pushed to the rail's foot (`margin-top: auto`)
+— for tooling rather than conversation content. The raw-debug panel is the first: it
+was an admin-only `build` button in the chat header opening an overlay drawer, and is
+now a rail-footer launcher opening a `ChatSidePanel` like the rest, inside the single
+push-drawer slot so it never stacks with another panel.
+
+**The rail outlives an open panel (2026-09-04).** It used to return `null` the moment a
+capability viewer opened, so the body-side drawer took the full width and reaching
+another launcher meant closing the open one first. Now it keeps its own in-flow column
+beside the viewer, exactly as it already did for the attachments, prompt-library and
+document-scope panels — which also closes the hole the previous change opened, where
+losing the attachments' top-bar trigger left its files unreachable while a viewer was up.
+
+The open panel's launcher reads as selected through `IconButton`'s M3 filled `tonal`
+variant plus `aria-pressed`, and clicking it closes the panel — the launcher is both the
+way in and the way out. Clicking a different launcher switches viewers directly.
+
+The trade-off accepted here: a viewer is ~48px narrower, the rail keeping its column.
+One behavioural side effect worth knowing — the early return used to unmount every
+`useHasContent` hook while a viewer was open; they now stay mounted.
+
+Earlier behaviour (#2459):
 
 - **A launcher appears only once its panel has something to show.** The rail used to
   render one button per DECLARED panel, so activating `ppt_filler` + `writable_document`

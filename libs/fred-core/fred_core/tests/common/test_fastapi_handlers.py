@@ -64,6 +64,57 @@ def test_authorization_error_handler_humanizes_generic_resource_action() -> None
     assert response.json() == {"detail": "You are not allowed to read global document."}
 
 
+def test_authorization_error_handler_does_not_label_a_team_subject_as_a_user(
+    caplog,
+) -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/capability")
+    async def denied() -> None:
+        raise AuthorizationError(
+            user_id="team-1",
+            action="can_use",
+            resource=Resource.CAPABILITY,
+            subject_type=Resource.TEAM,
+            subject_id="team-1",
+        )
+
+    with caplog.at_level(logging.WARNING):
+        response = TestClient(app, raise_server_exceptions=False).get("/capability")
+
+    assert response.status_code == 403
+    assert "Authorization denied for team team-1 (no user actor)" in caplog.text
+    assert "Authorization denied for user team-1" not in caplog.text
+
+
+def test_authorization_error_handler_distinguishes_actor_from_team_subject(
+    caplog,
+) -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/capability")
+    async def denied() -> None:
+        raise AuthorizationError(
+            user_id="alice",
+            action="can_use",
+            resource=Resource.CAPABILITY,
+            actor_uid="alice",
+            subject_type=Resource.TEAM,
+            subject_id="team-1",
+        )
+
+    with caplog.at_level(logging.WARNING):
+        response = TestClient(app, raise_server_exceptions=False).get("/capability")
+
+    assert response.status_code == 403
+    assert (
+        "Authorization denied for user alice (checked subject team team-1)"
+        in caplog.text
+    )
+
+
 def test_generic_exception_handler_returns_internal_server_error(caplog) -> None:
     app = FastAPI()
     register_exception_handlers(app)

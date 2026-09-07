@@ -32,7 +32,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
-from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+from fred_runtime.react.react_runtime import (
+    _GENERIC_TOOL_FAILURE_MESSAGE,
+    _TransportBackedReActExecutor,
+    _user_facing_tool_error_text,
+)
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
@@ -131,6 +135,99 @@ def _ok_result(call_id: str, text: str) -> ToolMessage:
             blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
         ),
     )
+
+
+def _raw_status_error_result(call_id: str, text: str) -> ToolMessage:
+    """The shape a raised, uncaught tool exception takes today: LangGraph's
+    own default `ToolNode` template, not Fred's `"Tool error:\\n"`
+    convention — e.g. a built-in Workspace or MCP tool failure."""
+    return ToolMessage(
+        content=f"Error: {text}\n Please fix your mistakes.",
+        tool_call_id=call_id,
+        name="summarize_document",
+        status="error",
+    )
+
+
+def _contradictory_result(call_id: str, text: str) -> ToolMessage:
+    """`status="error"` with a present artifact whose `is_error` is `False` —
+    the case a fallback-ternary classification would misclassify as success
+    by never consulting `status`."""
+    return ToolMessage(
+        content=text,
+        tool_call_id=call_id,
+        name="summarize_document",
+        status="error",
+        artifact=ToolInvocationResult(
+            tool_ref="summarize_document",
+            is_error=False,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+        ),
+    )
+
+
+def _content_divergent_error_result(
+    call_id: str, safe_text: str, sensitive_content: str
+) -> ToolMessage:
+    """A typed `is_error=True` artifact with safe blocks, paired with a
+    `content` field independently set to a different, sensitive string —
+    the divergence `_resolve_runtime_provider_tool` can produce."""
+    return ToolMessage(
+        content=sensitive_content,
+        tool_call_id=call_id,
+        name="summarize_document",
+        status="error",
+        artifact=ToolInvocationResult(
+            tool_ref="summarize_document",
+            is_error=True,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=safe_text),),
+        ),
+    )
+
+
+def _blocks_empty_error_result(call_id: str, real_message: str) -> ToolMessage:
+    """The shape a runtime-provider tool without populated `blocks` returns
+    today (ppt_filler, html_artifact, writable_document): the real message
+    lives only in `content`, and the `is_error=True` artifact has no blocks."""
+    return ToolMessage(
+        content=real_message,
+        tool_call_id=call_id,
+        name="ppt_filler",
+        status="error",
+        artifact=ToolInvocationResult(tool_ref="ppt_filler", is_error=True),
+    )
+
+
+def test_typed_error_artifact_is_rendered_via_render_tool_result() -> None:
+    """Trusted case: text comes from `render_tool_result(artifact)`, with only
+    Fred's own presentation prefix removed — never from `message.content`."""
+    artifact = ToolInvocationResult(
+        tool_ref="summarize_document",
+        is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text="boom"),),
+    )
+    assert _user_facing_tool_error_text(artifact) == "boom"
+
+
+def test_untyped_failure_without_artifact_is_the_generic_message() -> None:
+    assert _user_facing_tool_error_text(None) == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+def test_untyped_failure_with_non_erroring_artifact_is_the_generic_message() -> None:
+    artifact = ToolInvocationResult(
+        tool_ref="summarize_document",
+        is_error=False,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text="boom"),),
+    )
+    assert _user_facing_tool_error_text(artifact) == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+def test_typed_error_artifact_with_no_blocks_falls_back_to_generic_message() -> None:
+    """An `is_error=True` artifact with no `blocks` renders to an empty
+    string via `render_tool_result` — must fall back to the generic
+    message, not surface that empty string."""
+    artifact = ToolInvocationResult(tool_ref="ppt_filler", is_error=True)
+    assert _user_facing_tool_error_text(artifact) == _GENERIC_TOOL_FAILURE_MESSAGE
 
 
 def _final(collected: list[object]) -> FinalRuntimeEvent:
@@ -259,3 +356,216 @@ async def test_success_then_wholly_failed_round_surfaces_error() -> None:
     collected = await _run_stream(events)
 
     assert _final(collected).content == "boom"
+
+
+@pytest.mark.asyncio
+async def test_raw_status_error_with_no_artifact_still_surfaces_as_final() -> None:
+    """The untyped shape (`status="error"`, `artifact=None`) still engages
+    whole-round suppression, but its raw content must never reach either
+    user-facing event — both collapse to the bounded generic message."""
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        (
+            "updates",
+            {"tools": {"messages": [_raw_status_error_result("c1", "boom")]}},
+        ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [AIMessage(content="I published it successfully!")]
+                }
+            },
+        ),
+    ]
+
+    collected = await _run_stream(events)
+
+    assert _final(collected).content == _GENERIC_TOOL_FAILURE_MESSAGE
+    errored = [
+        e
+        for e in collected
+        if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
+    ]
+    assert errored and errored[0].is_error is True
+    assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_status_error_with_non_erroring_artifact_still_classified_as_error() -> (
+    None
+):
+    """`status="error"` with a present artifact whose `is_error` is `False`
+    must still classify as an error (true OR, not a fallback ternary), and
+    both user-facing events must show the generic message, not raw content."""
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        (
+            "updates",
+            {"tools": {"messages": [_contradictory_result("c1", "boom")]}},
+        ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [AIMessage(content="I published it successfully!")]
+                }
+            },
+        ),
+    ]
+
+    collected = await _run_stream(events)
+
+    assert _final(collected).content == _GENERIC_TOOL_FAILURE_MESSAGE
+    errored = [
+        e
+        for e in collected
+        if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
+    ]
+    assert errored and errored[0].is_error is True
+    assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_partial_round_raw_status_error_keeps_synthesis() -> None:
+    """Partial-success semantics hold for the untyped shape too: a raw
+    `status="error"` call alongside a successful typed sibling must not
+    discard the LLM's synthesis."""
+
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1", "c2")]}}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        _raw_status_error_result("c1", "boom"),
+                        _ok_result("c2", "summary two"),
+                    ]
+                }
+            },
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="Voici la synthèse.")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    assert _final(collected).content == "Voici la synthèse."
+    errored = [
+        e
+        for e in collected
+        if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
+    ]
+    assert errored and errored[0].is_error is True
+    assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_untyped_status_error_never_leaks_secret_or_langgraph_instruction() -> (
+    None
+):
+    """A distinctive secret/token/path embedded in an untyped, untrusted
+    failure's raw content must never reach either user-facing event — only
+    the bounded generic message may."""
+
+    secret_repr = "ValueError('sk-live-SECRET-TOKEN at /etc/shadow')"
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        (
+            "updates",
+            {"tools": {"messages": [_raw_status_error_result("c1", secret_repr)]}},
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="Done, no issues!")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    final = _final(collected)
+    errored = [
+        e
+        for e in collected
+        if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
+    ]
+    assert errored and errored[0].is_error is True
+    for leaked in (
+        "sk-live-SECRET-TOKEN",
+        "/etc/shadow",
+        "ValueError",
+        "Please fix your mistakes",
+    ):
+        assert leaked not in final.content
+        assert leaked not in errored[0].content
+    assert final.content == _GENERIC_TOOL_FAILURE_MESSAGE
+    assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_typed_error_ignores_divergent_message_content() -> None:
+    """A typed `is_error=True` artifact with safe rendered blocks must be
+    shown even when `message.content` independently carries a different,
+    sensitive string — the shape `_resolve_runtime_provider_tool` can produce."""
+
+    sensitive = "sk-live-SECRET-TOKEN /etc/shadow"
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        _content_divergent_error_result(
+                            "c1", "safe Fred error text", sensitive
+                        )
+                    ]
+                }
+            },
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="I handled it fine!")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    final = _final(collected)
+    errored = [
+        e
+        for e in collected
+        if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
+    ]
+    assert errored and errored[0].is_error is True
+    assert final.content == "safe Fred error text"
+    assert errored[0].content == "safe Fred error text"
+    assert sensitive not in final.content
+    assert sensitive not in errored[0].content
+
+
+@pytest.mark.asyncio
+async def test_typed_error_with_empty_blocks_shows_generic_message_not_empty() -> None:
+    """An is_error=True artifact with no blocks must not surface an empty
+    string, and must not fall back to the real `message.content` either —
+    it degrades to the bounded generic message."""
+
+    real_message = "Could not fetch the PPT template 'X' after 3s [TimeoutError]."
+    events = [
+        ("updates", {"agent": {"messages": [_tool_calls_message("c1")]}}),
+        (
+            "updates",
+            {"tools": {"messages": [_blocks_empty_error_result("c1", real_message)]}},
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="Done!")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    final = _final(collected)
+    errored = [
+        e
+        for e in collected
+        if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
+    ]
+    assert errored and errored[0].is_error is True
+    assert final.content == _GENERIC_TOOL_FAILURE_MESSAGE
+    assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
+    assert final.content != ""
+    assert errored[0].content != real_message

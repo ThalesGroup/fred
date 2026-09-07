@@ -39,17 +39,29 @@ import logging
 import shutil
 import subprocess  # nosec: controlled command arguments, shell=False
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Each conversion is a full LibreOffice process (~220 MB RSS). A private profile per
+# call means they no longer serialize on the shared one, so bound them here or a burst
+# of agent turns fans out to the default executor's thread count and OOMs the pod.
+# Dedicated executor rather than a module-level asyncio.Semaphore: it is loop-agnostic,
+# so it survives callers that run their own event loop.
+MAX_CONCURRENT_CONVERSIONS = 4
+_conversion_executor = ThreadPoolExecutor(
+    max_workers=MAX_CONCURRENT_CONVERSIONS, thread_name_prefix="pptx2pdf"
+)
 
 # LibreOffice can occasionally hang (font server, first-run profile init). A bounded
 # timeout keeps a stuck conversion from stalling an async agent turn indefinitely.
 DEFAULT_PPTX_PDF_TIMEOUT_SECONDS = 60.0
 
-# Same export filter the Knowledge Flow processor has used in production: embed standard
-# fonts and pin the PDF version so the rendered deck is faithful across viewers.
-_PDF_EXPORT_FILTER = "pdf:writer_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"
+# Impress' own PDF filter - a .pptx exported through Writer's filter makes LibreOffice
+# exit 0 and write nothing, which reads here as "conversion unavailable". Options embed
+# standard fonts and pin the PDF version so the deck is faithful across viewers.
+_PDF_EXPORT_FILTER = "pdf:impress_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"
 
 
 def convert_pptx_file_to_pdf(
@@ -64,6 +76,7 @@ def convert_pptx_file_to_pdf(
     slide renderer) that already own a temp directory.
     """
     pdf_path = pptx_path.with_suffix(".pdf")
+    pdf_path.unlink(missing_ok=True)
     soffice_path = shutil.which("soffice")
     if not soffice_path:
         logger.error(
@@ -72,23 +85,31 @@ def convert_pptx_file_to_pdf(
         return None
 
     try:
-        subprocess.run(  # nosec: controlled command arguments, shell=False
-            [
-                soffice_path,
-                "--headless",
-                "--nologo",
-                "--nofirststartwizard",
-                "--convert-to",
-                _PDF_EXPORT_FILTER,
-                "--outdir",
-                str(pptx_path.parent),
-                str(pptx_path),
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=timeout_seconds,
-        )
+        # A private profile per conversion. LibreOffice's default profile is
+        # single-instance: concurrent headless conversions sharing it, or a profile
+        # left in a bad state, make soffice exit 0 and write nothing. Costs ~1s of
+        # first-run init, which is noise next to the surrounding agent turn.
+        with tempfile.TemporaryDirectory(
+            prefix="soffice-profile-", ignore_cleanup_errors=True
+        ) as profile_dir:
+            subprocess.run(  # nosec: controlled command arguments, shell=False
+                [
+                    soffice_path,
+                    f"-env:UserInstallation={Path(profile_dir).as_uri()}",
+                    "--headless",
+                    "--nologo",
+                    "--nofirststartwizard",
+                    "--convert-to",
+                    _PDF_EXPORT_FILTER,
+                    "--outdir",
+                    str(pptx_path.parent),
+                    str(pptx_path),
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout_seconds,
+            )
     except subprocess.TimeoutExpired:
         logger.error(
             "[PPTX2PDF] LibreOffice conversion timed out after %.0fs.", timeout_seconds
@@ -139,7 +160,8 @@ async def convert_pptx_bytes_to_pdf(
             return pdf_path.read_bytes()
 
     try:
-        return await asyncio.to_thread(_run)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_conversion_executor, _run)
     except (
         Exception
     ):  # pragma: no cover - defensive: never let conversion break the caller

@@ -254,7 +254,10 @@ _FILL_INSTRUCTIONS = (
 class _PptFillerMiddleware(AgentMiddleware):
     """Carries the fill tools, bound to the instance's typed stored config,
     and overlays the fill instructions on the system prompt while a template
-    is configured (mirrors `_McpInstructionsMiddleware`)."""
+    is configured. Unlike an MCP server's static `agent_instructions` (#2455,
+    delivered inline in the static prompt), this fragment is genuinely
+    per-turn conditional — only present while a template is configured — so
+    it stays a per-model-call middleware overlay."""
 
     def __init__(self, ctx: CapabilityContext[PptFillerConfig, EmptyModel]) -> None:
         super().__init__()

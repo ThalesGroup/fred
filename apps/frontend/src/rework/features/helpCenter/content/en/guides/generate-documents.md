@@ -22,8 +22,8 @@ To use it:
 2. Use an agent that has it.
 3. Describe what you want, then refine through successive iterations.
 
-The produced document appears in the conversation and lands among the
-[resources](/help/en/features/resources), with the **Generated** origin.
+The produced document stays in the conversation panel, where you can download
+it as Word or Markdown.
 
 ## Fill a PowerPoint template
 

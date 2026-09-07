@@ -22,55 +22,27 @@ is the plain catalog server id now (#1988, supersedes the `mcp:<id>` bypass),
 so it is an ordinary `capability` object in the FGA type and is scoped here
 like any other.
 
-`_team_subject_and_context`/`usable_capability_ids` are re-exported from
-`fred_core.security.rebac.capability_authz` (2026-08-03, RSK-B follow-up to
-#2191) rather than defined here: fred-runtime's `model_routing/authz.py`
-needs the exact same team-subject query for its own `can_use` check and used
-to keep an independent, field-for-field-identical copy of both — moved into
-`fred-core` (both packages already depend on it) so there is exactly one
-copy. `can_use_capability` stays here — control-plane-only, no fred-runtime
-caller.
+Every team-subject `can_use` query lives in
+`fred_core.security.rebac.capability_authz` and is re-exported here: the
+control-plane, fred-runtime and first-party application backends all need the
+identical subject and contextual edges, and fred-core is the one package they
+all depend on. What stays in this module is the catalog-shaped filtering the
+control plane alone performs on the answer.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Iterable, Sequence
 
-from fred_core import CapabilityPermission
-from fred_core.common import TeamId
-from fred_core.security.models import Resource
 from fred_core.security.rebac.capability_authz import (
-    team_capability_subject_and_context as _team_subject_and_context,
+    can_team_use_capability as can_team_use_capability,
 )
 from fred_core.security.rebac.capability_authz import (
     usable_capability_ids as usable_capability_ids,
 )
-from fred_core.security.rebac.rebac_engine import RebacEngine, RebacReference
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 
-__all__ = ["usable_capability_ids"]
-
-logger = logging.getLogger(__name__)
-
-
-async def can_use_capability(
-    rebac: RebacEngine, team_id: TeamId, capability_id: str
-) -> bool:
-    """`Check(team:{id}, can_use, capability:{id})` (agent save / session prep).
-
-    Every capability — including MCP-backed ones (#1988) — is gated by this
-    check. The noop engine returns True, so ReBAC-disabled deployments allow
-    everything.
-    """
-
-    team_ref, context = _team_subject_and_context(str(team_id))
-    return await rebac.has_permission(
-        team_ref,
-        CapabilityPermission.CAN_USE,
-        RebacReference(type=Resource.CAPABILITY, id=capability_id),
-        contextual_relations=context,
-    )
+__all__ = ["can_team_use_capability", "usable_capability_ids"]
 
 
 def filter_entries_by_usable(

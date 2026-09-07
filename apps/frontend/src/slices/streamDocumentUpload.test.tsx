@@ -58,35 +58,79 @@ describe("streamUploadOrProcessDocument", () => {
     ]);
 
     const discovered: string[] = [];
-    const tasks = await streamUploadOrProcessDocument(new File(["x"], "a.pdf"), "process", { tags: ["lib"] }, (t) =>
+    const tasks = await streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process", { tags: ["lib"] }, (t) =>
       discovered.push(t.taskId),
     );
 
-    expect(tasks).toEqual([{ taskId: "t-1", documentUid: "doc-1" }]);
+    expect(tasks).toEqual([{ taskId: "t-1", documentUid: "doc-1", filename: "a.pdf" }]);
     expect(discovered).toEqual(["t-1"]); // callback fired once, on first sighting
   });
 
   it("discovers multiple distinct tasks in stream order, deduped", async () => {
     stubFetch([
-      JSON.stringify({ task_id: "t-1", document_uid: "doc-1" }),
-      JSON.stringify({ task_id: "t-2", document_uid: "doc-2" }),
-      JSON.stringify({ task_id: "t-1", document_uid: "doc-1" }), // repeat, ignored
+      JSON.stringify({ task_id: "t-1", document_uid: "doc-1", filename: "a.pdf" }),
+      JSON.stringify({ task_id: "t-2", document_uid: "doc-2", filename: "b.pdf" }),
+      JSON.stringify({ task_id: "t-1", document_uid: "doc-1", filename: "a.pdf" }), // repeat, ignored
     ]);
 
     const discovered: ScheduledTask[] = [];
-    const tasks = await streamUploadOrProcessDocument(new File(["x"], "a"), "process", {}, (t) => discovered.push(t));
+    const tasks = await streamUploadOrProcessDocument(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.pdf")],
+      "process",
+      {},
+      (t) => discovered.push(t),
+    );
 
     expect(tasks.map((t) => t.taskId)).toEqual(["t-1", "t-2"]);
     expect(discovered.map((t) => t.taskId)).toEqual(["t-1", "t-2"]);
     expect(discovered[0].documentUid).toBe("doc-1");
+    expect(discovered.map((t) => t.filename)).toEqual(["a.pdf", "b.pdf"]);
   });
 
   it("returns [] and never calls back when no line carries a task_id", async () => {
     stubFetch([JSON.stringify({ step: "prep", status: "success", filename: "a" })]);
     const discovered: ScheduledTask[] = [];
-    const tasks = await streamUploadOrProcessDocument(new File(["x"], "a"), "upload", {}, (t) => discovered.push(t));
+    const tasks = await streamUploadOrProcessDocument([new File(["x"], "a")], "upload", {}, (t) => discovered.push(t));
     expect(tasks).toEqual([]);
     expect(discovered).toEqual([]);
+  });
+
+  it("calls onFileResolved only on the terminal 'finished' line, not an earlier 'success' one", async () => {
+    // The no-scheduler process path (and upload-only mode) emits an
+    // intermediate "success" line for the upload-prep step before the file is
+    // actually processed — onFileResolved must not fire until "finished",
+    // or the caller (scheduleFiles) could consider the batch done while a
+    // file is still mid-processing (a real bug an external review caught).
+    stubFetch([
+      JSON.stringify({ step: "upload preparation", status: "success", filename: "a.pdf" }),
+      JSON.stringify({ step: "processing", status: "success", filename: "a.pdf" }),
+      JSON.stringify({ step: "finished", status: "finished", filename: "a.pdf" }),
+      JSON.stringify({ step: "upload preparation", status: "success", filename: "b.pdf" }),
+      JSON.stringify({ step: "finished", status: "finished", filename: "b.pdf" }),
+    ]);
+
+    const resolved: string[] = [];
+    await streamUploadOrProcessDocument(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.pdf")],
+      "upload",
+      {},
+      undefined,
+      undefined,
+      (filename) => resolved.push(filename),
+    );
+
+    expect(resolved).toEqual(["a.pdf", "b.pdf"]);
+  });
+
+  it("does not call onFileResolved for a filename that already has a task_id", async () => {
+    stubFetch([JSON.stringify({ task_id: "t-1", document_uid: "doc-1", filename: "a.pdf" })]);
+
+    const resolved: string[] = [];
+    await streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process", {}, undefined, undefined, (filename) =>
+      resolved.push(filename),
+    );
+
+    expect(resolved).toEqual([]);
   });
 
   it("rejects with the backend's error when the file fails before any task_id exists", async () => {
@@ -102,9 +146,154 @@ describe("streamUploadOrProcessDocument", () => {
       }),
     ]);
 
-    await expect(streamUploadOrProcessDocument(new File(["x"], "data.json"), "process", {})).rejects.toThrow(
+    await expect(streamUploadOrProcessDocument([new File(["x"], "data.json")], "process", {})).rejects.toThrow(
       "No input processor configured for extension '.json' in pipeline 'profile-fast'",
     );
+  });
+
+  it("attributes a failure to the file named on its own progress line, in upload-only mode where neither file ever gets a task_id", async () => {
+    // Upload-only mode never emits a task_id at all — a.pdf's plain "success"
+    // line (no task_id) must still count as resolved, so b.json's failure is
+    // reported per file via onFileFailed rather than rejecting the whole batch.
+    stubFetch([
+      JSON.stringify({ step: "upload preparation", status: "success", filename: "a.pdf" }),
+      JSON.stringify({
+        step: "upload preparation",
+        status: "failed",
+        filename: "b.json",
+        error: "No input processor configured for extension '.json' in pipeline 'profile-fast'",
+      }),
+    ]);
+
+    const failed: { filename: string; message: string }[] = [];
+    const tasks = await streamUploadOrProcessDocument(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.json")],
+      "upload",
+      {},
+      undefined,
+      (filename, message) => failed.push({ filename, message }),
+    );
+
+    expect(tasks).toEqual([]);
+    expect(failed).toEqual([
+      { filename: "b.json", message: "No input processor configured for extension '.json' in pipeline 'profile-fast'" },
+    ]);
+  });
+
+  it("reports a failure that arrives after an earlier success line for the same filename (no task_id either time)", async () => {
+    // e.g. per-file task creation silently fails (still emits a plain success
+    // line) and the batch's later scheduler submission then fails too, with a
+    // second, terminal "failed" line for the same file. The later status must
+    // win — an early success line must not permanently suppress it.
+    stubFetch([
+      JSON.stringify({ step: "upload preparation", status: "success", filename: "a.pdf" }),
+      JSON.stringify({ step: "queued for processing", status: "failed", filename: "a.pdf", error: "scheduler down" }),
+    ]);
+
+    const failed: { filename: string; message: string }[] = [];
+    const resolved: string[] = [];
+    await expect(
+      streamUploadOrProcessDocument(
+        [new File(["x"], "a.pdf")],
+        "process",
+        {},
+        undefined,
+        (filename, message) => failed.push({ filename, message }),
+        (filename) => resolved.push(filename),
+      ),
+    ).rejects.toThrow("scheduler down");
+
+    expect(failed).toEqual([{ filename: "a.pdf", message: "scheduler down" }]);
+    expect(resolved).toEqual([]); // never reached "finished" — must not be reported resolved
+  });
+
+  it("ignores the batch-level 'done' summary line for per-file attribution (it carries no filename)", async () => {
+    // The stream's final line is `{step: "done", status, error}` with no
+    // filename — it must not be misattributed to files[0] when the batch has
+    // a mix of outcomes, or a genuinely successful first file would get
+    // flipped to "failed" by this filename-less status: "failed" summary.
+    stubFetch([
+      JSON.stringify({ step: "upload preparation", status: "success", filename: "a.pdf" }),
+      JSON.stringify({ step: "upload preparation", status: "failed", filename: "b.json", error: "bad extension" }),
+      JSON.stringify({ step: "done", status: "failed" }),
+    ]);
+
+    const failed: { filename: string; message: string }[] = [];
+    const tasks = await streamUploadOrProcessDocument(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.json")],
+      "upload",
+      {},
+      undefined,
+      (filename, message) => failed.push({ filename, message }),
+    );
+
+    expect(tasks).toEqual([]);
+    expect(failed).toEqual([{ filename: "b.json", message: "bad extension" }]);
+  });
+
+  it("rejects with the first failure but still reports every failed file when none of them resolves", async () => {
+    // Both files fail before either resolves — the promise must still reject
+    // (nothing in the batch succeeded), but b.json's failure must not vanish
+    // behind a.json's just because only one message can be thrown.
+    stubFetch([
+      JSON.stringify({
+        step: "upload preparation",
+        status: "failed",
+        filename: "a.json",
+        error: "unsupported extension a",
+      }),
+      JSON.stringify({
+        step: "upload preparation",
+        status: "failed",
+        filename: "b.json",
+        error: "unsupported extension b",
+      }),
+    ]);
+
+    const failed: { filename: string; message: string }[] = [];
+    await expect(
+      streamUploadOrProcessDocument(
+        [new File(["x"], "a.json"), new File(["x"], "b.json")],
+        "upload",
+        {},
+        undefined,
+        (filename, message) => failed.push({ filename, message }),
+      ),
+    ).rejects.toThrow("unsupported extension a");
+
+    expect(failed).toEqual([
+      { filename: "a.json", message: "unsupported extension a" },
+      { filename: "b.json", message: "unsupported extension b" },
+    ]);
+  });
+
+  it("reports a per-file failure via onFileFailed instead of swallowing it when another file in the batch succeeds", async () => {
+    // b.json fails before it ever gets a task_id, but a.pdf succeeds — the
+    // promise must not throw (the batch as a whole produced a task), and the
+    // caller must still learn about b.json's failure instead of it vanishing.
+    stubFetch([
+      JSON.stringify({ step: "prep", status: "success", filename: "a.pdf", document_uid: "doc-1", task_id: "t-1" }),
+      JSON.stringify({
+        step: "upload preparation",
+        status: "failed",
+        filename: "b.json",
+        error: "No input processor configured for extension '.json' in pipeline 'profile-fast'",
+      }),
+    ]);
+
+    const failed: { filename: string; message: string }[] = [];
+    const tasks = await streamUploadOrProcessDocument(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.json")],
+      "process",
+      {},
+      undefined,
+      (filename, message) => failed.push({ filename, message }),
+    );
+
+    expect(tasks).toEqual([{ taskId: "t-1", documentUid: "doc-1", filename: "a.pdf" }]);
+    expect(failed).toEqual([
+      { filename: "b.json", message: "No input processor configured for extension '.json' in pipeline 'profile-fast'" },
+    ]);
   });
 
   it("does not reject on a later failure once a task_id was already discovered", async () => {
@@ -121,8 +310,16 @@ describe("streamUploadOrProcessDocument", () => {
       }),
     ]);
 
-    const tasks = await streamUploadOrProcessDocument(new File(["x"], "a.pdf"), "process", {});
-    expect(tasks).toEqual([{ taskId: "t-1", documentUid: "doc-1" }]);
+    const onFileFailed = vi.fn();
+    const tasks = await streamUploadOrProcessDocument(
+      [new File(["x"], "a.pdf")],
+      "process",
+      {},
+      undefined,
+      onFileFailed,
+    );
+    expect(tasks).toEqual([{ taskId: "t-1", documentUid: "doc-1", filename: "a.pdf" }]);
+    expect(onFileFailed).not.toHaveBeenCalled();
   });
 });
 
@@ -136,7 +333,7 @@ describe("multipart filename pinning", () => {
     // temp storage under the missing subdirectories. The part filename must be
     // pinned to the leaf name.
     stubFetch([]);
-    await streamUploadOrProcessDocument(new File(["x"], "data/sub/a.csv"), "process", {});
+    await streamUploadOrProcessDocument([new File(["x"], "data/sub/a.csv")], "process", {});
 
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     const body = fetchMock.mock.calls[0][1].body as FormData;

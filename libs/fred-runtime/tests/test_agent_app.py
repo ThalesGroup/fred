@@ -4650,17 +4650,19 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
 def test_capability_block_delivers_mcp_agent_instructions_for_active_server() -> None:
     """
     Ensure `_build_capability_block` delivers an active MCP server's catalog
-    `agent_instructions` as a prompt-fragment middleware.
+    `agent_instructions` as an `McpPromptGroup`.
 
     Why this exists:
     - #1978 moved `agent_instructions` delivery off `_apply_runtime_tuning`
-      (which no longer touches the system prompt for MCP at all) and onto each
-      MCP server's own capability `_McpInstructionsMiddleware` — assembled by
-      `_build_capability_block` from the agent's selected capabilities. #1988
-      dropped the `mcp:` id prefix: the capability id IS the catalog server
-      id (`server.id`). The instructions must stay enforced even when an
-      operator overrides `prompts.system`, since they are delivered as a
-      separate middleware layer, not folded into `system_prompt_template`.
+      (which no longer touches the system prompt for MCP at all) and onto
+      each MCP server's own capability, assembled by `_build_capability_block`
+      from the agent's selected capabilities. #1988 dropped the `mcp:` id
+      prefix: the capability id IS the catalog server id (`server.id`). #2455
+      moved delivery again, off a per-model-call middleware fragment and onto
+      `block.mcp_prompt_groups`, inlined into the static ReAct tool-prompt
+      suffix — the instructions must stay enforced even when an operator
+      overrides `prompts.system`, since they are never folded into
+      `system_prompt_template` itself.
 
     How to use it:
     - run in the default offline fred-runtime test suite
@@ -4670,7 +4672,6 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     """
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
-    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
     from fred_sdk.contracts.capability import TeamScopePolicy
     from fred_sdk.contracts.models import (
         AgentTuning,
@@ -4719,11 +4720,7 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     )
 
     assert block is not None
-    fragments = [
-        mw._fragment
-        for mw in block.middleware
-        if isinstance(mw, _McpInstructionsMiddleware)
-    ]
+    fragments = [group.agent_instructions for group in block.mcp_prompt_groups]
     assert fragments == ["Always cite retrieved claims."]
 
 
@@ -4746,7 +4743,6 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     """
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
-    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
@@ -4795,12 +4791,11 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
         agent_instance_id=None,
     )
 
-    fragments = [
-        mw._fragment
-        for mw in (block.middleware if block is not None else ())
-        if isinstance(mw, _McpInstructionsMiddleware)
+    server_ids = [
+        group.server_id
+        for group in (block.mcp_prompt_groups if block is not None else ())
     ]
-    assert fragments == []
+    assert server_ids == ["mcp-storage"]
 
 
 def test_build_capability_block_for_graph_agent_returns_tools() -> None:
@@ -5315,30 +5310,33 @@ def test_build_capability_block_ignores_stale_selection_for_capability_unsupport
     assert block is None
 
 
-def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name() -> (
-    None
-):
+def test_capability_block_orders_mcp_prompt_groups_by_server_id() -> None:
     """
-    Ensure two selected MCP servers with `agent_instructions` yield middleware
-    with DISTINCT `.name`s.
+    Ensure `block.mcp_prompt_groups` comes back id-sorted, not in selection
+    order.
 
     Why this exists:
-    - `create_agent` rejects a middleware list with duplicate `.name`s
-      ("Please remove duplicate middleware instances."). `AgentMiddleware.name`
-      defaults to the class name, so before the per-server `.name` override two
-      `_McpInstructionsMiddleware` instances collided and blew up executor
-      build for any agent selecting >1 MCP server with `agent_instructions`.
-    - guards the fix: `.name` keys on the catalog server id.
+    - `build_runtime_tool_prompt_suffix` (#2455) renders each group's `Tools
+      for {title}:` header in `mcp_prompt_groups` iteration order, with no
+      sort of its own — it trusts the caller. `_build_capability_block`
+      inherits `build_capability_agent_block`'s `sorted(capability id)` rule
+      (RFC §5.3: "a UI reorder must not change behavior"), and since an MCP
+      server's capability id IS its catalog server id (#1988), that's the
+      same guarantee this test pins.
+    - superseded assertion: before #2455 moved `agent_instructions` delivery
+      off a per-model-call middleware fragment, this test guarded
+      `_McpInstructionsMiddleware` instances against `create_agent`'s
+      duplicate-`.name` rejection — a hazard specific to that mechanism and
+      structurally impossible now that it no longer exists.
 
     How to use it:
     - run in the default offline fred-runtime test suite
 
     Example:
-    - `pytest tests/test_agent_app.py::test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name -q`
+    - `pytest tests/test_agent_app.py::test_capability_block_orders_mcp_prompt_groups_by_server_id -q`
     """
     from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
-    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
@@ -5377,7 +5375,10 @@ def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name()
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
-        selected_capability_ids=["mcp-search", "mcp-storage"],
+        # Reverse-alphabetical selection order, on purpose: the assertion
+        # below only holds if the block sorts by id rather than preserving
+        # this order.
+        selected_capability_ids=["mcp-storage", "mcp-search"],
     )
 
     block = _build_capability_block(
@@ -5392,12 +5393,8 @@ def test_capability_block_gives_each_mcp_instructions_middleware_a_unique_name()
     )
 
     assert block is not None
-    names = [
-        mw.name for mw in block.middleware if isinstance(mw, _McpInstructionsMiddleware)
-    ]
-    assert names == ["McpInstructions[mcp-search]", "McpInstructions[mcp-storage]"]
-    # The invariant create_agent enforces: no duplicate middleware names.
-    assert len(set(names)) == len(names)
+    server_ids = [group.server_id for group in block.mcp_prompt_groups]
+    assert server_ids == ["mcp-search", "mcp-storage"]
 
 
 def test_build_mcp_capability_id_and_team_scope_come_from_the_catalog_server() -> None:

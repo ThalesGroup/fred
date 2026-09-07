@@ -20,6 +20,7 @@ from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
 from control_plane_backend.config.models import Configuration
+from control_plane_backend.platform_prompt.store import PlatformPromptStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.routing_policy.store import (
@@ -63,6 +64,7 @@ class ProductServiceDependencies:
     get_team_capability_settings_store: Callable[[], TeamCapabilitySettingsStore]
     get_team_routing_policy_store: Callable[[], TeamRoutingPolicyStore]
     get_platform_model_binding_store: Callable[[], PlatformModelBindingStore]
+    get_platform_prompt_store: Callable[[], PlatformPromptStore]
     get_model_reasoning_store: Callable[[], ModelReasoningStore]
     get_session_metadata_store: Callable[[], SessionMetadataStore]
     get_team_metadata_store: Callable[[], TeamMetadataStore]
@@ -102,6 +104,7 @@ def build_product_service_dependencies(
         get_team_capability_settings_store=container.get_team_capability_settings_store,
         get_team_routing_policy_store=container.get_team_routing_policy_store,
         get_platform_model_binding_store=container.get_platform_model_binding_store,
+        get_platform_prompt_store=container.get_platform_prompt_store,
         get_model_reasoning_store=container.get_model_reasoning_store,
         get_session_metadata_store=container.get_session_metadata_store,
         get_team_metadata_store=container.get_team_metadata_store,

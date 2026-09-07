@@ -32,6 +32,7 @@ from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.tabular.artifacts import (
+    FAST_INGEST_SOURCE_TAG,
     TabularArtifactV1,
     TabularTableArtifactV1,
     build_default_query_alias,
@@ -358,6 +359,11 @@ class TabularService:
         requested_uids = list(dict.fromkeys(document_uids))
 
         missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
+        if missing_uids:
+            owned = await self._resolve_owned_attachment_datasets(user, missing_uids)
+            for document_uid, dataset in owned.items():
+                datasets_by_uid[document_uid] = [dataset]
+            missing_uids = [document_uid for document_uid in missing_uids if document_uid not in owned]
         if missing_uids:
             permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
             forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
@@ -845,7 +851,23 @@ class TabularService:
         )
 
         if isinstance(authorized_document_ref, RebacDisabledResult):
-            visible_documents = await self.metadata_store.get_all_metadata({})
+            # P1 (codex review): fast-ingest attachments (ATTACH-TAB-01) are
+            # deliberately session-scoped and were never meant to depend on
+            # ReBAC being enabled for that isolation — they carry no ReBAC
+            # tuple at all, by design, and are authorized purely by ownership
+            # metadata (`_resolve_owned_attachment_dataset` below). This
+            # unfiltered "ReBAC disabled -> show everything" listing predates
+            # that document class; without excluding it, a ReBAC-disabled
+            # deployment would enumerate every user's session-scoped
+            # attachments to every other user, bypassing the ownership check
+            # entirely instead of merely being unable to use it. `source_tag`
+            # alone is not enough: it is an operator-configured string
+            # (`document_sources`) nothing reserves against a real corpus
+            # source also named "fast_ingest" -- exclude only when the
+            # document is ALSO untagged, the same "genuinely an attachment"
+            # test used everywhere else in this file, so a same-named tagged
+            # corpus document stays visible.
+            visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
         elif is_service_agent(user):
             # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
             # the evaluation worker holds no per-user document relations by design, so the
@@ -950,6 +972,10 @@ class TabularService:
         if document_uid in dataset_by_uid:
             return dataset_by_uid[document_uid]
 
+        owned = await self._resolve_owned_attachment_dataset(user, document_uid)
+        if owned is not None:
+            return owned
+
         if not await self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid):
             raise PermissionError(f"Not authorized to read dataset '{document_uid}'")
         raise FileNotFoundError(f"Tabular dataset '{document_uid}' was not found")
@@ -986,6 +1012,11 @@ class TabularService:
 
         missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
         if missing_uids:
+            owned = await self._resolve_owned_attachment_datasets(user, missing_uids)
+            for document_uid, dataset in owned.items():
+                datasets_by_uid[document_uid] = [dataset]
+            missing_uids = [document_uid for document_uid in missing_uids if document_uid not in owned]
+        if missing_uids:
             permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
             forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
             if forbidden_uids:
@@ -994,6 +1025,97 @@ class TabularService:
             raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
 
         return [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
+
+    async def _resolve_owned_attachment_dataset(self, user: KeycloakUser, document_uid: str) -> ResolvedDataset | None:
+        """
+        Authorize one session-scoped chat-attachment dataset without ReBAC.
+
+        Why this exists:
+        - Fast-ingested attachments carry no ReBAC tuple by design — ownership
+          is proven the same way `_authorize_fast_ingest_delete`
+          (`ingestion_controller.py`) already proves it for deletion: an
+          equality check against ownership metadata, not a ReBAC lookup,
+          which can never resolve for an untagged document.
+        - One indexed `get_metadata_by_uid` lookup, not a catalog scan — see
+          DESIGN.md "Session-Scoped Attachment Datasets" for why this is
+          deliberately not folded into `_resolve_authorized_datasets`.
+
+        How to use:
+        - Call only for a uid the caller explicitly named and that the
+          ReBAC-authorized set didn't already resolve (`describe_documents`,
+          `_select_query_datasets`, `_get_dataset_or_raise`). Returns `None`
+          for anything that isn't a `tabular_v1` attachment owned by `user`
+          — including a document that simply doesn't exist, or exists but is
+          a corpus document, so the caller's existing ReBAC-based 403/404
+          decision still applies.
+        """
+
+        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
+        if metadata is None:
+            return None
+        return self._as_owned_attachment_dataset(metadata, user=user)
+
+    @staticmethod
+    def _as_owned_attachment_dataset(metadata: DocumentMetadata, *, user: KeycloakUser) -> ResolvedDataset | None:
+        """
+        Apply the ATTACH-TAB-01 ownership check to one already-fetched
+        metadata row. Shared by the single-uid and batch resolvers so both
+        apply identical source_tag/uploaded_by/tags/artifact checks.
+        """
+
+        if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
+            return None
+        if metadata.identity.uploaded_by != user.uid:
+            return None
+        # `source_tag` is an operator-configured, client-suppliable string
+        # (`document_sources`) — nothing reserves "fast_ingest" against an
+        # operator naming a real corpus source the same way. A genuine
+        # attachment is always tagless by construction
+        # (`_build_attachment_tabular_dataset`); requiring that here too
+        # means a same-named corpus document (which normal ingestion always
+        # tags) can never be misidentified as an owned attachment.
+        if metadata.tags.tag_ids:
+            return None
+        artifact = read_tabular_artifact(metadata)
+        if artifact is None:
+            return None
+        return ResolvedDataset(
+            metadata=metadata,
+            artifact=artifact,
+            query_alias=build_default_query_alias(metadata.document_uid, metadata.document_name),
+        )
+
+    async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str]) -> dict[str, ResolvedDataset]:
+        """
+        Batch form of `_resolve_owned_attachment_dataset` for the uids a
+        caller's ReBAC-authorized set didn't already resolve.
+
+        How to use:
+        - Pass a caller's `missing_uids`; the result contains only the ones
+          that resolved. Every batch call site (`describe_documents`,
+          `_select_query_datasets`) shares this instead of re-implementing
+          the fetch-and-filter, so `_get_dataset_or_raise`'s single-uid
+          equivalent stays the only other caller of the per-uid primitive.
+
+        One `get_metadata_by_uids` call, not one concurrent
+        `get_metadata_by_uid` per uid: `dataset_uids` is an unbounded
+        caller-supplied list (`TabularQueryRequest`, `TabularSearchRequest`),
+        so fanning out a real lookup per uid would open as many concurrent
+        metadata-store round trips as the caller cared to request. The
+        store's batch method chunks internally (`_BULK_UPDATE_CHUNK_SIZE` for
+        Postgres), so this stays bounded regardless of how many uids are
+        requested.
+        """
+
+        if not document_uids:
+            return {}
+        rows = await self.metadata_store.get_metadata_by_uids(document_uids)
+        resolved: dict[str, ResolvedDataset] = {}
+        for metadata in rows:
+            dataset = self._as_owned_attachment_dataset(metadata, user=user)
+            if dataset is not None:
+                resolved[metadata.document_uid] = dataset
+        return resolved
 
     async def _resolve_scope_tag_ids(
         self,

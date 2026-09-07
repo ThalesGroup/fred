@@ -1,0 +1,37 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* In-flow at the page root, to the right of the chat body: it reserves its own
+   column (reflowing the body left) rather than floating over it. Launchers
+   stack from the top, first-party ones above the capability-derived ones. */
+.rail {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: var(--spacing-s) var(--spacing-s) var(--spacing-s) 0;
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-low);
+  padding: var(--spacing-xs);
+}
+
+/* Footer group: tooling sits at the rail's bottom, away from the content
+   panels, and stays there however many launchers the top holds. */
+.railFooter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin-top: auto;
+}

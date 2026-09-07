@@ -56,7 +56,12 @@ from fred_runtime.react.react_runtime import (
     _CompiledReActAgent,
     _TransportBackedReActExecutor,
 )
-from fred_runtime.react.react_tool_binding import ReActToolBinder
+from fred_runtime.react.react_tool_binding import (
+    ReActToolBinder,
+)
+from fred_runtime.react.react_tool_binding import (
+    tabular_tools_bound as _tabular_tools_bound,
+)
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 
 _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
@@ -125,7 +130,6 @@ class DeepAgentRuntime(ReActRuntime):
         system_prompt = _compose_system_prompt(
             system_prompt,
             binding=binding,
-            definition=self.definition,
             agent_id=self.definition.agent_id,
             tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
             runtime_suffixes=(
@@ -133,6 +137,7 @@ class DeepAgentRuntime(ReActRuntime):
                     filesystem_tools_enabled=filesystem_tools_enabled
                 ),
             ),
+            tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,

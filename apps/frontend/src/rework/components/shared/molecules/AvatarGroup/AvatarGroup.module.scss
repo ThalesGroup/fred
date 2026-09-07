@@ -2,7 +2,6 @@
   display: flex;
   flex-direction: row-reverse;
   justify-content: flex-end;
-  gap: var(--spacing-2xs);
 
   > * {
     /* A fixed-size circle: shrinking it as a flex item renders an ellipse

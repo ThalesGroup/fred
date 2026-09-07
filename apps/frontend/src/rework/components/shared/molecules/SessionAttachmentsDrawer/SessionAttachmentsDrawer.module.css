@@ -1,9 +1,7 @@
-.uploadWarning {
-  margin-bottom: var(--spacing-xs);
-}
-
+/* The scrolling half of the body: the upload warning above it stays pinned. */
 .list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-2xs);
   min-height: 0;
@@ -14,19 +12,35 @@
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-xs);
-  cursor: pointer;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-s);
   background: var(--surface-container-low);
   padding: var(--spacing-xs);
-  width: 100%;
   color: var(--on-surface);
-  text-align: left;
 }
 
+/* Translucent state layer: the panel background is surface-container-high, so
+   painting that colour would dissolve the row instead of highlighting it. */
 .row:hover {
   border-color: var(--outline-muted);
-  background: var(--surface-container-high);
+  background: var(--state-on-surface-hover);
+}
+
+/* Opens the preview: fills the row up to the action buttons so the whole line
+ * stays clickable, minus the controls that must not live inside a button. */
+.rowPreview {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .rowIcon {

@@ -9,8 +9,8 @@
   display: flex;
   position: relative;
   /* Row so the launcher rail reserves its own column to the right of the body:
-     [ pageBody (flex:1) ][ rail ]. Overlay drawers (trace / debug) are fixed, so
-     they don't participate. */
+     [ pageBody (flex:1) ][ rail ]. The trace drawer is a fixed overlay, so it
+     doesn't participate. */
   flex-direction: row;
   background: var(--surface-main);
   height: 100%;
@@ -19,9 +19,10 @@
 }
 
 /* ── Page body — [ left stack (flex) ][ push drawer ] ────────────────────── */
-/* The flex row a push drawer (attachments / capability / document-scope) reflows
-   against: opening one takes layout space on the right, shifting the whole left
-   stack — header included — left, so the drawer spans the full page height. */
+/* The flex row a push drawer (attachments, capability viewer, document scope,
+   prompt library, debug) reflows against: opening one takes layout space on the
+   right, shifting the whole left stack — header included — left, so the drawer
+   spans the full page height. */
 .pageBody {
   display: flex;
   flex: 1 1 0;
@@ -193,44 +194,6 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   user-select: none;
-}
-
-.topBarActions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.conversationFilesButton {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: var(--on-surface);
-}
-
-.conversationFilesButton:hover {
-  color: var(--primary);
-}
-
-.conversationFilesLabel {
-  font: var(--font-label-medium);
-}
-
-.conversationFilesBadge {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 999px;
-  background: var(--primary);
-  padding: 0 var(--spacing-2xs);
-  min-width: 1rem;
-  min-height: 1rem;
-  color: var(--on-primary);
-  font: var(--font-label-small);
 }
 
 /* ── Single scroll container — flexes to fill the space between the in-flow

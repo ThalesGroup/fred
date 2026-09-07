@@ -5,7 +5,7 @@ from fred_sdk import (
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
 _EXPECTED_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
-_EXPECTED_FALLBACK_RULE = "If you are unsure the Mermaid will parse, do not return Mermaid, return a simpler Markdown list or table instead."
+_EXPECTED_FALLBACK_RULE = "If you are unsure the diagram will parse, return a Markdown list or table instead of Mermaid."
 
 
 def test_global_base_prompt_markdown_bundles_mermaid_contract() -> None:
@@ -113,20 +113,18 @@ def test_mermaid_contract_forbids_nested_fences_and_fragile_subgraphs() -> None:
         path_parts=("resources", "prompts", "mermaid_output_contract.md"),
     )
 
-    assert "do not include the opening or closing backticks themselves" in contract
-    assert "Never nest a Mermaid fence inside another Mermaid fence" in contract
+    # Each assertion pins one failure mode seen in real rendering errors. The
+    # wording tracks the contract, so update these together — what must not
+    # change is that every rule below is still stated somewhere in the file.
+    assert "echo the fence's own opening/closing backticks inside its body" in contract
+    assert "never nest a `mermaid` fence inside another" in contract
+    assert "wrap it in a four-backtick fence" in contract
+    assert "use inline code or a `text` fence labeled as non-rendered" in contract
     assert (
-        "Never wrap a Mermaid fence inside a four-backtick Markdown fence" in contract
+        "The fence body starts directly with `flowchart TD` or `graph TD`" in contract
     )
-    assert "use a `text` fence and label it as non-rendered" in contract
-    assert (
-        "The first non-empty line inside every Mermaid fence must be `flowchart TD` or `graph TD`"
-        in contract
-    )
-    assert "Never start a Mermaid diagram directly with backticks" in contract
-    assert (
-        "The response contains no four-backtick fence around Mermaid content"
-        in contract
-    )
-    assert "Do not write subgraph titles with node-label syntax" in contract
+    assert "never with backticks, `subgraph`, a node, or an edge" in contract
+    assert "there is no four-backtick wrapping" in contract
+    # `subgraph ID["Title"]` parses as node-label syntax and is fragile here.
+    assert "do not write subgraph titles with node-label syntax" in contract
     assert 'subgraph SUBGRAPH_ID["Title"]' in contract

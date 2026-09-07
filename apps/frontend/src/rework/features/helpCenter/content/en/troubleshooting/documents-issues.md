@@ -30,6 +30,6 @@ it stays there for a very long time, or if the document reports an **error**:
 
 ## The format isn't accepted
 
-Common formats work (PDF, text, PowerPoint, Excel, CSV, Markdown). An unusual
-format may be rejected: in that case, convert the document to a common format
-before uploading.
+Common formats work (PDF, text, Word, PowerPoint, Excel, CSV, Markdown), and so
+do images and audio files. An unusual format may be rejected: in that case,
+convert the document to a common format before uploading.

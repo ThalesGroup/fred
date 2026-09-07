@@ -13,10 +13,11 @@ conventions qui font gagner du temps à tout le monde.
 ## Cadrer les rôles
 
 Attribuez les [rôles](/help/fr/getting-started/join-create-team) selon les
-responsabilités : **Administrateurs** pour ceux qui gèrent membres et réglages,
-**Éditeurs** pour ceux qui créent agents et prompts, **Analystes** et
-**Membres** pour l'usage au quotidien. Trop d'administrateurs dilue la
-responsabilité ; trop peu crée des goulots.
+responsabilités : **Admins** pour ceux qui gèrent membres et réglages,
+**Éditeurs** pour ceux qui créent agents et prompts, **Analystes** pour ceux
+qui créent et lancent les campagnes d'évaluation d'agents et gèrent les corpus
+d'évaluation, et **Membres** pour l'usage au quotidien. Trop d'administrateurs
+dilue la responsabilité ; trop peu crée des goulots.
 
 ## Partager des prompts de référence
 

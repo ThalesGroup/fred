@@ -62,6 +62,13 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [
     () => ({ unwrap: async () => ({ text: "" }) }),
   ],
+  // Read by the prompt-selection panel the page mounts; it is closed here, so
+  // the queries are skipped and only their shape matters.
+  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({
+    data: [],
+    isLoading: false,
+  }),
+  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({ data: [] }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({ canAdministerAdmins: false }),
@@ -96,8 +103,8 @@ vi.mock("@shared/atoms/IconButton/IconButton", () => ({ default: () => null }));
 vi.mock("@shared/molecules/TokenUsageBadge/TokenUsageBadge", () => ({ TokenUsageBadge: () => null }));
 vi.mock("../../../features/capabilities/CapabilitySidePanelHost", () => ({
   CapabilitySidePanelHost: () => null,
-  CapabilityLauncherRail: () => null,
 }));
+vi.mock("../../../features/capabilities/ChatLauncherRail", () => ({ ChatLauncherRail: () => null }));
 vi.mock("../../../features/capabilities/ComposerControlSlot", () => ({ ComposerControlSlot: () => null }));
 vi.mock("../../../features/capabilities/ComposerOptionChips", () => ({
   COMPOSER_CHIP_WIDGETS: new Set<string>(),
@@ -119,7 +126,6 @@ describe("ManagedChatPage chat-input policy wiring", () => {
       capabilityIds: [],
       chatControls: [],
       commitTitle: noop,
-      contextPrompts: [],
       deletePersistedAttachment: noop,
       handleAbort: noop,
       handleAddAttachments: noop,

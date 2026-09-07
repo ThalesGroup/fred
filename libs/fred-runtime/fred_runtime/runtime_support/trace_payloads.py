@@ -40,6 +40,8 @@ from typing import Any
 from weakref import WeakKeyDictionary
 
 from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.utils.function_calling import convert_to_openai_tool
+from pydantic import BaseModel
 
 # Fred's normalized usage keys (`normalize_token_usage`) mapped onto the names
 # Langfuse recognizes. `input`/`output`/`total` are the canonical trio it uses
@@ -209,13 +211,19 @@ _JSON_SCHEMA_CACHE: MutableMapping[type, str | None] = WeakKeyDictionary()
 
 
 def _render_schema(args_schema: object) -> str | None:
-    """Render one argument schema to its JSON text, or None if it will not render."""
+    """Render one argument schema as the provider receives it, or None if it will not render."""
 
     render = getattr(args_schema, "model_json_schema", None)
     if not callable(render):
         return None
     try:
-        rendered = render()
+        if isinstance(args_schema, type) and issubclass(args_schema, BaseModel):
+            # The same conversion `bind_tools` applies. The raw pydantic schema
+            # repeats the tool's whole docstring as its own `description` and
+            # adds a `title` per field; the provider never sees either.
+            rendered = convert_to_openai_tool(args_schema)["function"].get("parameters")
+        else:
+            rendered = render()
     except Exception:
         # A schema that will not render must not break the turn: tracing is
         # never allowed to fail the request it is observing.

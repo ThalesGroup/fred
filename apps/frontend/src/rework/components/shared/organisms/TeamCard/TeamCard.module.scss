@@ -5,11 +5,12 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 290px;
-  /* Fills whatever height the row gives it (flex `align-items: stretch` on
-   * the parent list, and — when wrapped for navigation — the flex Link
-   * wrapper), so cards in the same row line up on their footer regardless of
-   * description length. */
-  height: 100%;
+  /* No explicit height: as a flex item the card stretches to the row's tallest
+   * (the list sets `align-items: stretch`, and the navigable-card Link wrapper
+   * is itself a stretching flex box), so cards in a row share a height and
+   * their footers line up regardless of description length. An explicit
+   * `height: 100%` would opt out of that stretch and fall back to content
+   * height — the cause of the uneven rows it was meant to prevent. */
   /* No overflow: hidden here — an admin-avatar tooltip in the footer must be
    * able to escape the card bounds. */
 }
@@ -109,6 +110,6 @@
    * the same footer slot must stay flush with the card's padding edge, so
    * it can't be solved with footer padding/gap. */
   margin-right: var(--spacing-xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
 }

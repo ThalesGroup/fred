@@ -27,8 +27,8 @@ How to use:
   and feed the returned path to the existing DOCX / PPTX processor. The caller
   owns ``out_dir`` lifecycle (typically a ``tempfile.TemporaryDirectory``).
 
-This mirrors the LibreOffice pattern already used by the PPTX slide renderer
-(``convert_pptx_to_pdf``).
+This mirrors the LibreOffice pattern of ``fred_core.conversion``
+(``convert_pptx_file_to_pdf``).
 """
 
 from __future__ import annotations

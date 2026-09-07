@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, RebacDisabledResult
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents.document_structures import (
@@ -24,6 +24,7 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
+    FAST_INGEST_SOURCE_TAG,
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
     read_tabular_artifact,
@@ -33,11 +34,11 @@ from knowledge_flow_backend.features.tabular.structures import TabularQueryReque
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 
-def _user() -> KeycloakUser:
+def _user(uid: str = "u-1") -> KeycloakUser:
     return KeycloakUser(
-        uid="u-1",
-        username="tester",
-        email="tester@example.com",
+        uid=uid,
+        username=uid,
+        email=f"{uid}@example.com",
         roles=["admin"],
     )
 
@@ -78,6 +79,38 @@ async def _ingest_csv(
         tag_names=tag_names,
     )
     processed_metadata = processor.process(str(csv_path), metadata)
+    await MetadataService().save_document_metadata(_user(), processed_metadata)
+    return processed_metadata
+
+
+def _attachment_metadata(*, document_uid: str, file_name: str, uploaded_by: str) -> DocumentMetadata:
+    """Metadata shaped like a fast-ingested chat attachment: no tags (so no
+    ReBAC tuple gets created — see `_persist_metadata_and_follow_up`), marked
+    with the same `source_tag` the vector chunks carry."""
+    metadata = DocumentMetadata(
+        identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=[], tag_names=[]),
+    )
+    metadata.identity.uploaded_by = uploaded_by
+    return metadata
+
+
+async def _ingest_attachment_csv(
+    *,
+    tmp_path: Path,
+    document_uid: str,
+    file_name: str,
+    content: str,
+    uploaded_by: str,
+) -> DocumentMetadata:
+    csv_path = tmp_path / file_name
+    csv_path.write_text(content, encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _attachment_metadata(document_uid=document_uid, file_name=file_name, uploaded_by=uploaded_by)
+    processed_metadata = processor.process(str(csv_path), metadata, emit_pointer_chunk=False)
     await MetadataService().save_document_metadata(_user(), processed_metadata)
     return processed_metadata
 
@@ -136,6 +169,25 @@ class _FakeRebac:
         return resource_id in self.readable_document_uids
 
 
+class _FakeRebacDisabled:
+    """Simulates a ReBAC-disabled deployment: `lookup_user_resources` returns
+    the marker `RebacDisabledResult()` rather than a real resource list.
+    `has_user_permission` intentionally answers `True` unconditionally here —
+    the adversarial case for the fix under test: even if the "forbidden vs.
+    not found" fallback in `describe_documents`/`_select_query_datasets`
+    also treats a disabled ReBAC as permit-all, it must never be reachable
+    for a fast-ingest attachment a non-owner explicitly names, because the
+    ownership check ahead of it is what actually decides access, not this."""
+
+    async def lookup_user_resources(self, user, permission):
+        del user, permission
+        return RebacDisabledResult()
+
+    async def has_user_permission(self, user, permission, resource_id):
+        del user, permission, resource_id
+        return True
+
+
 class _FakeTagService:
     """
     Minimal tag service stub used to emulate team/personal tabular scope.
@@ -191,6 +243,7 @@ class _TrackingMetadataStore(BaseMetadataStore):
         self._delegate = delegate
         self.get_all_metadata_calls = 0
         self.get_metadata_by_uids_calls: list[list[str]] = []
+        self.get_metadata_by_uid_calls: list[str] = []
 
     async def get_all_metadata(self, filters: dict, session=None):
         self.get_all_metadata_calls += 1
@@ -201,6 +254,7 @@ class _TrackingMetadataStore(BaseMetadataStore):
         return await self._delegate.get_metadata_by_uids(document_uids, session=session)
 
     async def get_metadata_by_uid(self, document_uid: str, session=None) -> DocumentMetadata | None:
+        self.get_metadata_by_uid_calls.append(document_uid)
         return await self._delegate.get_metadata_by_uid(document_uid, session=session)
 
     async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
@@ -669,6 +723,281 @@ async def test_tabular_service_rejects_explicit_dataset_requests_without_rebac_a
 
 
 @pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_authorizes_the_uploader_without_rebac(tmp_path, metadata_store):
+    """
+    ATTACH-TAB-01: a fast-ingested attachment carries no ReBAC tuple by
+    design, so its uploader must still be authorized via ownership metadata
+    — the same equality check `is_own_session_chunk` already applies to its
+    vector chunks (DESIGN.md, "Session-Scoped Attachment Datasets").
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+        uploaded_by="u-1",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())  # no ReBAC access to anything
+
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
+    assert dataset is not None
+    assert dataset.metadata.document_uid == "doc-attachment"
+
+
+@pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_denies_a_different_user(tmp_path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+        uploaded_by="someone-else",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())
+
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
+    assert dataset is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_ignores_a_tagged_document_even_with_the_fast_ingest_source_tag(tmp_path, metadata_store):
+    """
+    Hardening: `source_tag` is an operator-configured, client-suppliable
+    string with nothing reserving "fast_ingest" against an operator naming a
+    real corpus source the same way. A genuine attachment is always tagless
+    by construction, so a same-named but tagged document — even one owned by
+    the caller — must never be authorized through this fallback.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="sales.csv", document_uid="doc-collision", title="sales.csv"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    metadata.identity.uploaded_by = "u-1"
+    processed = TabularProcessor().process(str(csv_path), metadata, emit_pointer_chunk=False)
+    await MetadataService().save_document_metadata(_user(), processed)
+
+    service = TabularService()
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-collision")
+    assert dataset is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_owned_attachment_dataset_ignores_corpus_documents(tmp_path, metadata_store):
+    # A tagged corpus document is never authorized through this fallback,
+    # even for its own uploader — it must go through ReBAC like any other
+    # corpus document.
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-corpus",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    service = TabularService()
+    dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-corpus")
+    assert dataset is None
+
+
+@pytest.mark.asyncio
+async def test_query_read_authorizes_an_owned_attachment_dataset_with_no_rebac_tuple(tmp_path, metadata_store):
+    """
+    End-to-end: `query_read` on an explicitly requested attachment dataset
+    succeeds via ownership metadata alone — the exact case a fail-closed
+    ReBAC check could never resolve for an untagged document, now handled
+    without minting any ReBAC tuple.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    metadata = await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\nLyon,20\n",
+        uploaded_by="u-1",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())
+    dataset = await service._resolve_owned_attachment_dataset(_user(), metadata.document_uid)
+    assert dataset is not None
+
+    response = await service.query_read(
+        _user(),
+        request=TabularQueryRequest(
+            sql=f"SELECT COUNT(*) AS n FROM {dataset.query_alias}",
+            dataset_uids=[metadata.document_uid],
+        ),
+    )
+    assert response.rows == [{"n": 2}]
+
+
+@pytest.mark.asyncio
+async def test_rebac_disabled_listing_excludes_fast_ingest_attachments(tmp_path, metadata_store):
+    """
+    P1 (codex review): the ReBAC-disabled branch of `_resolve_authorized_datasets`
+    lists every metadata record unconditionally (`get_all_metadata({})`) —
+    a deliberate "no authorization enforced" mode for corpus documents, predating
+    ATTACH-TAB-01. Fast-ingest attachments are session-scoped by design and were
+    never meant to depend on ReBAC being enabled for that isolation (they carry
+    no ReBAC tuple at all, ever); without excluding them here, a ReBAC-disabled
+    deployment would enumerate every user's session-scoped attachment to every
+    other user via `list_documents`/`list_datasets`.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    corpus_metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-corpus",
+        file_name="quarterly.csv",
+        content="city,amount\nParis,10\n",
+    )
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-alice-attachment",
+        file_name="sales.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+
+    # A completely different user, in a ReBAC-disabled deployment: the corpus
+    # document is visible (that mode's whole point), Alice's attachment must not be.
+    datasets = await service.list_datasets(_user("bob"))
+    visible_uids = {dataset.document_uid for dataset in datasets}
+    assert corpus_metadata.document_uid in visible_uids
+    assert "doc-alice-attachment" not in visible_uids
+
+
+@pytest.mark.asyncio
+async def test_rebac_disabled_listing_keeps_a_tagged_corpus_document_with_a_colliding_source_tag(tmp_path, metadata_store):
+    """
+    `source_tag` alone was checked here, not tags -- but `source_tag` is an
+    operator-configured, client-suppliable string (`document_sources`) with
+    nothing reserving "fast_ingest" against a real corpus source named the
+    same way (the same collision every other attachment-classification check
+    in this module already guards against). Excluding on source_tag alone
+    would have hidden a genuine tagged corpus document from a ReBAC-disabled
+    deployment's listing, contradicting that mode's whole point.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "quarterly.csv"
+    csv_path.write_text("city,amount\nParis,10\n", encoding="utf-8")
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="quarterly.csv", document_uid="doc-tagged-colliding", title="quarterly.csv"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=["team-tag"]),
+    )
+    processed = TabularProcessor().process(str(csv_path), metadata)
+    await MetadataService().save_document_metadata(_user(), processed)
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+
+    datasets = await service.list_datasets(_user("bob"))
+    visible_uids = {dataset.document_uid for dataset in datasets}
+    assert "doc-tagged-colliding" in visible_uids
+
+
+@pytest.mark.asyncio
+async def test_rebac_disabled_still_denies_non_owner_explicit_attachment_query(tmp_path, metadata_store):
+    """
+    Closes the loop on the fix above: even with ReBAC fully disabled AND
+    `has_user_permission` answering `True` unconditionally (the worst case,
+    see `_FakeRebacDisabled`), a non-owner explicitly naming another user's
+    attachment uid in `query_read` must still be refused — the ownership
+    check (`_resolve_owned_attachment_dataset`), not ReBAC, is what actually
+    decides access for this document class, and that check never depends on
+    whether ReBAC itself is enabled.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    metadata = await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-alice-attachment",
+        file_name="sales.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+
+    # `has_user_permission` answers True unconditionally in this fake (see its
+    # docstring), so the caller is never flagged "forbidden" — it falls
+    # through to "not found" instead. Either way, the point under test is
+    # that mallory never gets alice's data back.
+    with pytest.raises(FileNotFoundError, match="doc-alice-attachment"):
+        await service.query_read(
+            _user("mallory"),
+            request=TabularQueryRequest(
+                sql="SELECT 1",
+                dataset_uids=[metadata.document_uid],
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_rebac_disabled_owner_can_still_query_their_own_attachment(tmp_path, metadata_store):
+    """The ownership fallback still works for the real owner even when ReBAC
+    is disabled — the fix above only removes attachments from blind
+    enumeration, it does not break explicit-uid access to one's own data."""
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    metadata = await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-alice-attachment",
+        file_name="sales.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebacDisabled()
+    dataset = await service._resolve_owned_attachment_dataset(_user("alice"), metadata.document_uid)
+    assert dataset is not None
+
+    response = await service.query_read(
+        _user("alice"),
+        request=TabularQueryRequest(
+            sql=f"SELECT COUNT(*) AS n FROM {dataset.query_alias}",
+            dataset_uids=[metadata.document_uid],
+        ),
+    )
+    assert response.rows == [{"n": 1}]
+
+
+@pytest.mark.asyncio
 async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_lookup(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
@@ -698,6 +1027,45 @@ async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_
     assert [dataset.document_uid for dataset in datasets] == ["doc-visible"]
     assert tracking_store.get_all_metadata_calls == 0
     assert tracking_store.get_metadata_by_uids_calls == [["doc-visible"]]
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_resolves_owned_attachments_with_one_batch_lookup(tmp_path, metadata_store):
+    """
+    The ownership fallback used to run one concurrent
+    `get_metadata_by_uid` per requested uid — an unbounded caller-supplied
+    list (`dataset_uids`/`document_uids`) fanned out that many concurrent
+    metadata-store round trips at once. It must resolve through a single
+    batch `get_metadata_by_uids` call instead (chunked internally by the
+    store, so it stays bounded regardless of how many uids are requested).
+    """
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment-a",
+        file_name="a.csv",
+        content="city,amount\nParis,10\n",
+        uploaded_by="alice",
+    )
+    await _ingest_attachment_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-attachment-b",
+        file_name="b.csv",
+        content="city,amount\nLyon,20\n",
+        uploaded_by="alice",
+    )
+
+    service = TabularService()
+    tracking_store = _TrackingMetadataStore(metadata_store)
+    service.metadata_store = tracking_store
+    # Attachments carry no ReBAC tuple by design, so an empty readable set
+    # still forces every uid through the ownership fallback being tested.
+    service.rebac = _FakeRebac(set())
+
+    schemas = await service.describe_documents(_user("alice"), ["doc-attachment-a", "doc-attachment-b"])
+
+    assert {schema.document_uid for schema in schemas} == {"doc-attachment-a", "doc-attachment-b"}
+    assert tracking_store.get_metadata_by_uid_calls == []
+    assert tracking_store.get_metadata_by_uids_calls == [["doc-attachment-a", "doc-attachment-b"]]
 
 
 @pytest.mark.asyncio
@@ -1161,6 +1529,36 @@ def test_tabular_processor_emits_dataset_pointer_chunk_when_enabled(tmp_path):
     assert "Paris" not in text
     assert "Lyon" not in text
     assert "Sample values" not in text
+
+
+def test_tabular_processor_skips_pointer_chunk_when_disabled_per_call(tmp_path):
+    """
+    Verify `emit_pointer_chunk=False` overrides an enabled deployment config.
+
+    Why this exists:
+    - `flat_metadata_from` (used by `_emit_pointer_chunk`) carries no
+      `scope`/`user_id` fields, so a pointer chunk for a session-scoped chat
+      attachment would be visible to every user's search regardless of the
+      deployment's `pointer_chunks_enabled` setting (DESIGN.md,
+      "Session-Scoped Attachment Datasets"). The per-call override is what
+      the attachment ingestion path relies on to prevent that leak.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    processor.tabular_config.pointer_chunks_enabled = True
+    fake_vector_store = _FakeVectorStore()
+    processor.vector_store = fake_vector_store
+
+    metadata = _metadata(document_uid="doc-attachment", file_name="sales.csv")
+    processed_metadata = processor.process(str(csv_path), metadata, emit_pointer_chunk=False)
+
+    assert fake_vector_store.added_documents == []
+    artifact = read_tabular_artifact(processed_metadata)
+    assert artifact is not None
+    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
+    assert ProcessingStage.VECTORIZED not in processed_metadata.processing.stages
 
 
 def test_tabular_processor_pointer_chunk_failure_is_non_fatal(tmp_path, caplog):

@@ -720,6 +720,28 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings`, method: "DELETE" }),
     }),
+    getPlatformPromptControlPlaneV1AdminPlatformPromptGet: build.query<
+      GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse,
+      GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/prompt` }),
+    }),
+    putPlatformPromptControlPlaneV1AdminPlatformPromptPut: build.mutation<
+      PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiResponse,
+      PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/prompt`,
+        method: "PUT",
+        body: queryArg.setPlatformPromptRequest,
+      }),
+    }),
+    getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: build.query<
+      GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse,
+      GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -1210,22 +1232,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/import-export/reset`, method: "POST" }),
     }),
-    resetPlatformRebacControlPlaneV1ImportExportResetRebacPost: build.mutation<
-      ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiResponse,
-      ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiArg
-    >({
-      query: () => ({ url: `/control-plane/v1/import-export/reset-rebac`, method: "POST" }),
-    }),
-    keaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost: build.mutation<
-      KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiResponse,
-      KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kea-migration/dry-run`,
-        method: "POST",
-        body: queryArg.bodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost,
-      }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -1670,6 +1676,17 @@ export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutAp
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg = void;
+export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg = void;
+export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
+  setPlatformPromptRequest: SetPlatformPromptRequest;
+};
+export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
+  /** status 200 Successful Response */ PlatformInstructions;
+export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -2039,14 +2056,6 @@ export type PlatformStatsControlPlaneV1ImportExportStatsGetApiArg = void;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse =
   /** status 202 Successful Response */ ResetLaunchResponse;
 export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg = void;
-export type ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiResponse =
-  /** status 202 Successful Response */ ResetLaunchResponse;
-export type ResetPlatformRebacControlPlaneV1ImportExportResetRebacPostApiArg = void;
-export type KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiResponse =
-  /** status 200 Successful Response */ KeaDryRunResponse;
-export type KeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostApiArg = {
-  bodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost: BodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost;
-};
 export type HealthResponse = {
   status?: "ok";
   service?: "control-plane";
@@ -2853,6 +2862,7 @@ export type ManagedAgentRuntimeBinding = {
   };
   reasoning_enabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
+  platform_prompt?: string | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -3122,6 +3132,26 @@ export type PlatformModelBinding = {
 };
 export type SetPlatformModelBindingRequest = {
   binding: ModelBinding;
+};
+export type PlatformPrompt = {
+  /** The platform prompt text currently in force. When `is_default` is true this is the pod-shipped default (the `platform_prompt` field of the pod's `config/platform_prompt.json`), which is what agents actually receive until an admin saves something; when it is false this is the saved value, and an empty string then means an admin deliberately suppressed the block. */
+  text: string;
+  /** True when no row has ever been saved, i.e. `text` is the pod's default rather than an admin's own. The admin UI uses this to say 'this is the default, save to adopt it' rather than presenting it as a stored value — and to keep Save enabled on an untouched default, since adopting it verbatim is a real state change. */
+  is_default: boolean;
+  /** True when `is_default` is true AND no runtime pod could be reached to report its default, so `text` is empty for lack of an answer rather than because the default is empty. The UI must say so instead of showing a blank editor that looks like a real default. Always false when a row exists — the stored value needs no pod. */
+  source_unavailable?: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetPlatformPromptRequest = {
+  /** Replaces the stored platform prompt wholesale. Saving an empty string is meaningful and supported: it suppresses the block for every agent, and does NOT restore the pod-shipped default. */
+  text: string;
+};
+export type PlatformInstructions = {
+  /** Markdown rendered verbatim as the second block of every agent's system prompt, immediately under the platform prompt. Empty when `source_unavailable` is true. */
+  text: string;
+  /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
+  source_unavailable?: boolean;
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -3444,7 +3474,6 @@ export type ImportLaunchResponse = {
 export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
   file: string;
   label?: string | null;
-  realm_file?: string | null;
 };
 export type TeamStats = {
   team_id: string;
@@ -3466,33 +3495,6 @@ export type PlatformStats = {
 };
 export type ResetLaunchResponse = {
   task_id: string;
-};
-export type KeaUserResolutionView = {
-  kea_sub: string;
-  kea_username: string;
-  outcome: string;
-  swift_sub: string | null;
-};
-export type KeaDryRunResponse = {
-  source_platform: string;
-  agents_mapped: number;
-  agents_ignored: number;
-  agents_gap: number;
-  agents_gap_templates: string[];
-  teams_total: number;
-  teams_orphan_dropped: string[];
-  teams_admin_less: string[];
-  users_matched: KeaUserResolutionView[];
-  users_relinked: KeaUserResolutionView[];
-  users_pending: KeaUserResolutionView[];
-  team_member_grants_ready: number;
-  team_member_grants_pending: number;
-  platform_role_grants_ready: number;
-  summary_lines: string[];
-};
-export type BodyKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPost = {
-  file: string;
-  realm_file?: string | null;
 };
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
@@ -3615,6 +3617,11 @@ export const {
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation,
+  useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
+  useLazyGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
+  usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
+  useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,
@@ -3695,6 +3702,4 @@ export const {
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useLazyPlatformStatsControlPlaneV1ImportExportStatsGetQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation,
-  useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation,
-  useKeaMigrationDryRunControlPlaneV1KeaMigrationDryRunPostMutation,
 } = injectedRtkApi;

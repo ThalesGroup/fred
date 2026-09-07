@@ -19,9 +19,9 @@ les bonnes personnes. Voir [Les concepts clés](/help/fr/getting-started/concept
 
 ## Quelle est la différence entre un template et un agent ?
 
-Un **template** est un modèle fourni par la plateforme ; l'**agent** (ou
-instance) est la version concrète que votre équipe crée et configure à partir de
-ce template. Voir [Les agents](/help/fr/features/agents).
+Un **template** est un modèle fourni par la plateforme ; l'**agent** est la
+version concrète que votre équipe crée et configure à partir de ce template.
+Voir [Les agents](/help/fr/features/agents).
 
 ## Pourquoi mon agent n'utilise-t-il pas mes documents ?
 

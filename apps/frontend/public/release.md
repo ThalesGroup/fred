@@ -1,3 +1,52 @@
+**v2.2.0** — 2026-09-04
+
+- **Summary**
+
+  Attach a CSV to a conversation and the agent queries it as real data, with
+  exact SQL, instead of reading a truncated preview. Teams can be granted hosted
+  applications, shipped as their own container images and shown inside Fred. And
+  admins gain a platform-wide prompt that opens the instructions of every agent.
+
+- **Features**
+
+  - A CSV attached to the chat becomes a dataset the agent queries in SQL, scoped to your conversation, instead of a truncated text preview (#2420)
+  - Teams can be granted hosted applications - built and deployed as their own container images, shown inside Fred, with no rebuild of Fred to ship one (#2491)
+  - Admins can set a platform-wide prompt that opens the instructions of every agent on the platform (#2455, #2412)
+  - Paste a screenshot or a file into the chat composer to attach it to the conversation (#2515)
+  - A team admin can rename their own team (#2516)
+
+- **Improvements**
+
+  - The team agents list has a search field and can be ordered by name, newest, or last updated (#2538)
+  - The top-agents chart labels each series with the team the agent belongs to, so same-named agents no longer read alike (#2507)
+  - Picking a folder in the document picker shows its files as selected, and one can be unticked to scope a turn to the rest (#2510)
+  - Agents carry a smaller system prompt, leaving more room for the conversation (#2455, #2412)
+  - An invite-only team in the marketplace shows its state instead of a button mailing its admins (#2537)
+
+- **Security**
+
+  - A non-member could list and read any public team's shared files, through the file browser and through an agent's filesystem tools; that now requires real membership (#2113)
+  - Routine dependency updates: js-yaml, browserslist, fast-uri, @humanfs/node (frontend) (#2488, #2503, #2505)
+
+- **Bug Fixes**
+
+  - Asking an agent to fill a slide deck returned the deck with no preview, and PPTX slides were missing their images after ingestion (#2546)
+  - Ticking one document in the composer picker still let the agent list and read the whole corpus (#2510)
+  - An agent could not read a file attached to the conversation, though it could summarize and extract from that same file (#2495)
+  - A conversation could fail to pick back up once an agent had used a tool (#2504)
+  - The Sources panel listed entries with no readable content after a document-similarity search (#2504)
+  - The agent form said a template offered no capabilities when the team had simply not been granted any (#2504)
+  - A personal space showed a generic tile instead of your avatar in the side panel header (#2486)
+
+- **Deployment note**
+
+  The platform prompt adds one control-plane migration, applied on startup. The
+  public-team file fix is computed from existing memberships - nothing to write.
+  Hosted applications are opt-in: one must be registered in the control plane and
+  in the frontend gateway before a team can be granted it. A CSV attachment is
+  queryable only by an agent that has the tabular tools enabled. The fred-agents
+  image now ships LibreOffice, required by the slide-deck preview.
+
 **v2.1.39** — 2026-09-01
 
 - **Summary**

@@ -238,7 +238,11 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         # LOGGING: Show the delete operation
         logger.info(f"[SEARCH] Deleting vectors for document_uid: {document_uid} from collection '{self.collection_name}'")
-        self._collection.delete(where={DOC_UID_FIELD: document_uid})
+        try:
+            self._collection.delete(where={DOC_UID_FIELD: document_uid})
+        except Exception:
+            logger.exception("[SEARCH] Failed to delete vectors for document_uid=%s", document_uid)
+            raise RuntimeError("Failed to delete vectors from ChromaDB.")
         logger.debug("[SEARCH] Delete operation sent to ChromaDB.")
 
     def get_document_chunk_count(self, *, document_uid: str) -> int:
@@ -438,7 +442,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             return out
         except Exception:
             logger.exception("[SEARCH] Failed to fetch chunks for document_uid=%s", document_uid)
-            return []
+            raise RuntimeError("Failed to fetch chunks from ChromaDB.")
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         """

@@ -58,6 +58,57 @@ function spinner(): SVGElement | null {
   return container.querySelector('svg[role="status"]');
 }
 
+function badge(): HTMLElement | null {
+  // The badge is the only aria-hidden span the button renders.
+  return container.querySelector('span[aria-hidden="true"]');
+}
+
+describe("IconButton badge", () => {
+  const base = { variant: "icon", size: "small", icon: { category: "outlined", type: "attach_file" } } as const;
+
+  it("renders no badge and no wrapper when badgeCount is omitted", () => {
+    // Every existing call site must keep rendering a bare <button>.
+    render(<IconButton {...base} aria-label="Attachments" />);
+
+    expect(badge()).toBeNull();
+    expect(container.firstElementChild?.tagName).toBe("BUTTON");
+  });
+
+  it("renders no badge at zero", () => {
+    // An empty conversation gets a plain button, not a "0" pill.
+    render(<IconButton {...base} aria-label="Attachments" badgeCount={0} />);
+
+    expect(badge()).toBeNull();
+  });
+
+  it("shows the count from one upward", () => {
+    render(<IconButton {...base} aria-label="Attachments" badgeCount={1} />);
+
+    expect(badge()?.textContent).toBe("1");
+  });
+
+  it("caps the label at 999+", () => {
+    render(<IconButton {...base} aria-label="Attachments" badgeCount={1000} />);
+
+    expect(badge()?.textContent).toBe("999+");
+  });
+
+  it("shows 999 itself unabbreviated", () => {
+    render(<IconButton {...base} aria-label="Attachments" badgeCount={999} />);
+
+    expect(badge()?.textContent).toBe("999");
+  });
+
+  it("keeps the badge out of the accessible name", () => {
+    // aria-hidden: the caller's label carries the count, so a screen reader
+    // does not read a bare digit after the button name.
+    render(<IconButton {...base} aria-label="Attachments (3)" badgeCount={3} />);
+
+    expect(badge()?.getAttribute("aria-hidden")).toBe("true");
+    expect(button().getAttribute("aria-label")).toBe("Attachments (3)");
+  });
+});
+
 describe("IconButton loading state", () => {
   it("shows the icon, not a spinner, and stays enabled when loading is omitted/false", () => {
     render(

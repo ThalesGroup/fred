@@ -1,7 +1,7 @@
 ---
 title: Lenteurs et limites
 order: 40
-description: Tailles maximales, quotas de stockage, temps de traitement.
+description: Quotas de stockage, taille des fichiers, temps de traitement.
 icon: schedule
 ---
 
@@ -14,11 +14,13 @@ l'approche de la limite, un dépôt peut être refusé. Consultez la consommatio
 sur la page [Ressources](/help/fr/features/resources), allégez le corpus
 (doublons, versions périmées) ou demandez un ajustement à un administrateur.
 
-## Tailles de fichiers
+## Taille des fichiers
 
-Les dépôts de documents et les pièces jointes de conversation sont soumis à des
-**tailles maximales**. Un fichier trop volumineux est refusé : scindez-le ou
-réduisez-le.
+Il n'existe pas aujourd'hui de plafond de taille strict par fichier — l'indication
+affichée dans la fenêtre de dépôt est informative, pas une limite appliquée. Ce
+qui **est** appliqué, c'est le **quota de stockage** global de l'équipe pour ses
+documents (voir ci-dessus) ; un fichier très volumineux pèse simplement plus
+lourd dedans. Ce quota ne s'applique pas aux pièces jointes de conversation.
 
 ## Temps de traitement
 

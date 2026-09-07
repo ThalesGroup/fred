@@ -26,3 +26,12 @@ def personal_team_id(user_uid: str) -> TeamId:
 def is_personal_team_id(team_id: str | None) -> bool:
     """Return True if team_id is a personal-space ID (i.e. 'personal-<uuid>')."""
     return bool(team_id and team_id.startswith("personal-"))
+
+
+def is_personal_team_ref(team_id: str | None) -> bool:
+    """Return True for a personal space or the reserved ``personal`` alias.
+
+    Routes accept the alias in place of the caller's own personal team id, so
+    anything refusing personal spaces must refuse both spellings.
+    """
+    return team_id == "personal" or is_personal_team_id(team_id)

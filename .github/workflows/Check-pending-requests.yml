@@ -4,6 +4,13 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# A pull request only needs its newest commit checked, so a push supersedes the
+# run it interrupts. A base-branch commit groups by sha instead: it keeps its own
+# run and its own verdict, and never waits behind the commit before it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
@@ -23,6 +30,7 @@ jobs:
       fred-runtime: ${{ steps.changes.outputs.fred-runtime }}
       fred-agents: ${{ steps.changes.outputs.fred-agents }}
       platform-ops: ${{ steps.changes.outputs.platform-ops }}
+      html-artifact: ${{ steps.changes.outputs.html-artifact }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,47 +81,42 @@ jobs:
           - sast
           # - detect-secret # todo: baseline not working, fix it and re enable this check
           - type-check
+        # The ${{ }} wrapper is what makes should-run a real boolean: an
+        # unwrapped expression stays a string, and every non-empty string is
+        # true to `if:`. Conditions mirror each module's path dependencies.
         include:
-          # Knowledge flow backend runs when knowledge-flow or fred-core changes
           - directory: apps/knowledge-flow-backend
-            condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
-          # Fred core runs when fred-core changes
+            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - directory: libs/fred-core
-            condition: needs.detect-changes.outputs.fred-core == 'true'
-          # Control plane backend runs when control-plane or fred-core changes
+            should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
           - directory: apps/control-plane-backend
-            condition: needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true'
-          # Fred SDK runs when fred-sdk changes
+            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
           - directory: libs/fred-sdk
-            condition: needs.detect-changes.outputs.fred-sdk == 'true'
-          # Fred Runtime runs when fred-runtime or fred-sdk changes
+            should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - directory: libs/fred-runtime
-            condition: needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
-          # Fred Agents runs when fred-agents, fred-runtime, or fred-sdk changes
+            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - directory: apps/fred-agents
-            condition: needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
-          # Platform-ops capability runs when it, fred-runtime, or fred-sdk changes
+            should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - directory: libs/fred-capability-platform-ops
-            condition: needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
-          # HTML-artifact capability runs when it, fred-runtime, or fred-sdk changes
+            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - directory: libs/fred-capability-html-artifact
-            condition: needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
+            should-run: ${{ needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
     name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
 
     steps:
       - uses: actions/checkout@v4
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python environment
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.directory }}
 
       - name: Run ${{ matrix.check }}
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: |
           cd ${{ matrix.directory }}/
           make ${{ matrix.check }}
@@ -142,32 +145,32 @@ jobs:
             directory: apps/control-plane-backend
             unit-target: test
             needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
           - name: fred-sdk
             directory: libs/fred-sdk
             unit-target: test
             needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - name: fred-runtime
             directory: libs/fred-runtime
             unit-target: test
             needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - name: fred-agents
             directory: apps/fred-agents
             unit-target: test
             needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - name: fred-capability-platform-ops
             directory: libs/fred-capability-platform-ops
             unit-target: test
             needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - name: fred-capability-html-artifact
             directory: libs/fred-capability-html-artifact
             unit-target: test
             needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
     name: Backend Tests - ${{ matrix.name }}
 
     steps:
@@ -434,44 +437,44 @@ jobs:
             backend-directory: libs/fred-runtime
             make-target: update-runtime-api
             slice-path: apps/frontend/src/slices/runtime/runtimeOpenApi.ts
-            condition: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: knowledge-flow
             backend-directory: apps/knowledge-flow-backend
             make-target: update-knowledge-flow-api
             slice-path: apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts
-            condition: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: control-plane
             backend-directory: apps/control-plane-backend
             make-target: update-control-plane-api
             slice-path: apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts
-            condition: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
+            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
     name: OpenAPI Drift - ${{ matrix.name }}
 
     steps:
       - name: Checkout code
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Node.js
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: actions/setup-node@v4
         with:
           node-version: "22.13.0"
 
       - name: Setup backend dependencies
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.backend-directory }}
 
       - name: Backup current slice
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: cp -f ${{ matrix.slice-path }} /tmp/openapi-backup.ts 2>/dev/null || true
 
       - name: Regenerate OpenAPI slice
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: |
           cd apps/frontend/
           make ${{ matrix.make-target }}
@@ -479,7 +482,7 @@ jobs:
           UV: uv
 
       - name: Check for drift
-        if: ${{ matrix.condition }}
+        if: ${{ matrix.should-run }}
         run: |
           if ! diff -q /tmp/openapi-backup.ts ${{ matrix.slice-path }} > /dev/null 2>&1; then
             echo "--- diff (committed vs freshly generated) ---"
