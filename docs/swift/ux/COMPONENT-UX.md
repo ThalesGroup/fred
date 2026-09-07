@@ -197,12 +197,13 @@ reports through the toast provider either way — a silent clipboard failure wou
 success. On a successful copy the icon becomes a check for two seconds; a refused clipboard leaves
 it unchanged, so the icon never claims a copy that did not happen.
 
-An ordered list's numbers are drawn in `primary`, a bullet's dash in the muted marker colour. That
-distinction cannot come from the highlight tags: lezer gives both the same `ListMark` node, and a
-contextual `styleTags` selector does not override the parser's own non-contextual rule for it. A
-small `ViewPlugin` reads the syntax tree instead and decorates the marks whose grandparent is an
-`OrderedList`. The decoration wraps the highlighter's span rather than replacing it, so the CSS has
-to reach the nested `.marker` child — a rule on `.orderedMarker` alone paints nothing.
+Both list markers — a bullet's dash and an ordered item's number — are drawn in `primary`; the
+other syntax marks (`#`, `>`, `*`, backticks) stay in the muted marker colour. lezer gives both
+list markers the same `ListMark` node, so one non-contextual `styleTags` override on that node
+carries them out of the marker rule together. Note that a *contextual* selector cannot do this: a
+`"OrderedList/.../ListMark"` form does not override the parser's own rule for a node, only the
+whole-node form does — worth knowing before trying to colour the two list markers differently,
+which would need a `ViewPlugin` reading the syntax tree.
 
 `PlatformPromptPage` still edits its prompt in a plain `TextArea` — not yet migrated.
 

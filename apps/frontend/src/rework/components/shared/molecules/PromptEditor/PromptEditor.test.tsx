@@ -151,25 +151,19 @@ describe("PromptEditor", () => {
     expect(itemSpan).toBeUndefined();
   });
 
-  // lezer gives both kinds of list the same ListMark node, so this only works
-  // through the contextual "OrderedList/ListMark" re-tagging — and it has to
-  // win over the parser's own non-contextual rule for that node.
-  it("sets an ordered list's numbers apart from a bullet's dash", () => {
-    render({ value: "1. first\n2. second\n\n- a dash\n" });
+  // Re-tagging ListMark takes both list markers out of the muted `.marker` rule
+  // without touching the other syntax marks, which keep it.
+  it("colours both list markers apart from the other syntax marks", () => {
+    render({ value: "# Heading\n\n1. first\n\n- a dash\n\n> quoted\n" });
+    const classOf = (mark: string) =>
+      Array.from(container.querySelectorAll(".cm-content span")).find((s) => s.textContent === mark)?.className ?? "";
 
-    // The decoration wraps the highlighter's span rather than replacing it, so
-    // what decides the colour is the painted span having an `orderedMarker`
-    // ANCESTOR — asserting the class exists somewhere would pass even when the
-    // nested `.marker` child still paints the number.
-    const painted = (mark: string) =>
-      Array.from(container.querySelectorAll<HTMLElement>(".cm-content span")).find(
-        (s) => s.textContent === mark && s.className.includes("marker") && s.children.length === 0,
-      );
-    const underOrderedMarker = (mark: string) => !!painted(mark)?.closest("[class*='orderedMarker']");
-
-    expect(underOrderedMarker("1.")).toBe(true);
-    expect(underOrderedMarker("2.")).toBe(true);
-    expect(underOrderedMarker("-")).toBe(false);
+    expect(classOf("1.")).toContain("listMarker");
+    expect(classOf("-")).toContain("listMarker");
+    expect(classOf("#")).toContain("marker");
+    expect(classOf("#")).not.toContain("listMarker");
+    expect(classOf(">")).toContain("marker");
+    expect(classOf(">")).not.toContain("listMarker");
   });
 
   it("shows an error under the field", () => {

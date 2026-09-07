@@ -172,20 +172,17 @@
   color: var(--on-surface-retreat);
 }
 
-/* List bullets, heading hashes, and the other syntax marks. One step back from
-   the prose, not two: at `on-surface-muted` the dashes of a bullet list were
-   hard to make out against the field. */
+/* Heading hashes, quote carets, emphasis and code marks. One step back from the
+   prose, not two: at `on-surface-muted` they were hard to make out against the
+   field. List markers are re-tagged out of this rule — see `.listMarker`. */
 .marker {
   color: var(--on-surface-retreat);
 }
 
-/* An ordered list's numbers, which a bullet's dash does not get: unlike a
-   dash, they carry meaning the author is reading back.
-   The decoration wraps the highlighter's own span rather than replacing it, so
-   the number is painted by a `.marker` child — the descendant selector is what
-   actually reaches it, and it outranks `.marker` alone whatever the order. */
-.orderedMarker,
-.orderedMarker .marker {
+/* Both list markers. They carry structure the author reads back, unlike the
+   `#`/`>`/`*` marks above, which only announce a formatting they already see
+   applied to the text next to them. */
+.listMarker {
   color: var(--primary);
 }
 
