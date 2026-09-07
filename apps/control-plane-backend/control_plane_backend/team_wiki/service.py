@@ -801,6 +801,20 @@ async def propose_wiki_edit(
         if page.current_revision_id
         else None
     )
+    # A proposal that would change nothing is refused rather than stored.
+    # Field evidence, 2026-09-07: asked to MOVE two pages, an agent used the
+    # only write tool it had and re-proposed each page's existing text
+    # byte-for-byte. Both published, both changed nothing, and the agent read
+    # "published" as "moved" — then told the user a hierarchy that did not
+    # exist. Refusing here is what turns that silent no-op into a dead end.
+    if current is not None and current.content_md == request.content_md:
+        raise WikiRequestError(
+            "This proposal is identical to the page as it stands, so it would "
+            "change nothing. Note that content is the only thing an agent can "
+            "change: a page cannot be moved, renamed or deleted this way.",
+            http_status=409,
+        )
+
     proposal = await store.create_proposal(
         team_id=team_id,
         page_id=page.page_id,

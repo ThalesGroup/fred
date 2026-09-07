@@ -3594,6 +3594,14 @@ that already has a revision is refused exactly like a stale one: a caller cannot
 opt out of the check by leaving the field off. It is absent only when creating
 the rules page for the first time.
 
+**A proposal identical to the page it targets is refused** (2026-09-07,
+WIKI-05, 409). Field evidence: asked to MOVE two pages, an agent used the only
+write tool it has and re-proposed each page's existing text byte-for-byte. Both
+published, both changed nothing, and the agent read "published" as "moved" —
+then told the user a hierarchy that did not exist. A write that cannot change
+anything is now a dead end rather than a silent success, and the refusal says
+that content is the only thing an agent can change.
+
 **Two pages under one parent cannot share a title** (2026-09-07, WIKI-05).
 An agent addresses a page by its path — its titles from the root — so two
 namesakes under one parent would give two pages the same address. Refused with

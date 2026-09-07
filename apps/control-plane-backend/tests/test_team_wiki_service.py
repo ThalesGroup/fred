@@ -233,6 +233,31 @@ async def test_a_move_next_to_a_namesake_is_refused(gate: _RecordingGate) -> Non
     assert refused.value.http_status == 409
 
 
+@pytest.mark.asyncio
+async def test_a_proposal_that_changes_nothing_is_refused(gate: _RecordingGate) -> None:
+    """Field evidence, 2026-09-07: asked to MOVE two pages, an agent used the
+    only write tool it had and re-proposed each page's existing text
+    byte-for-byte. Both published, both changed nothing, and the agent read
+    "published" as "moved" — then reported a hierarchy that did not exist."""
+
+    store = _Store()
+    page = _titled("p1", "Espagne")
+    store.pages.append(page)
+    store.revisions["rev-p1"] = _revision("rev-p1", "p1")
+
+    with pytest.raises(wiki_service.WikiRequestError) as refused:
+        await wiki_service.propose_wiki_edit(
+            _user(),
+            TEAM,
+            ProposeEditRequest(slug="p1", content_md="body"),
+            _deps(store),
+        )
+
+    assert refused.value.http_status == 409
+    assert "cannot be moved" in str(refused.value)
+    assert store.proposals == []
+
+
 # ── authorization gates ──────────────────────────────────────────────────────
 
 

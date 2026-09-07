@@ -391,6 +391,41 @@ def test_only_publishing_is_gated_for_approval() -> None:
     assert specs[0].require is True
 
 
+def test_publishing_an_edit_says_the_page_did_not_move() -> None:
+    """Field evidence, 2026-09-07: asked to MOVE two pages, an agent re-proposed
+    each page's existing text, published both, and reported the move done — a
+    bare "Published" was all it had to go on. The result names what changed."""
+
+    port = _FakePort(pages=(_page("s1", "S"),))
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_propose_edit", {"path": "S", "content_md": "new"}, turn)
+    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
+
+    assert "text was replaced" in message.content
+    assert "unchanged" in message.content
+
+
+def test_publishing_a_new_page_says_it_was_created() -> None:
+    port = _FakePort(pages=(_page("s1", "S"),))
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_propose_page", {"title": "T", "content_md": "x"}, turn)
+    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-1"}, turn)
+
+    assert "created" in message.content
+    assert "text was replaced" not in message.content
+
+
+def test_the_write_prompt_refuses_moving_and_orders_parent_before_child() -> None:
+    """Both failures the field trace showed: an agent that thought editing a
+    page would move it, and one that named a parent it had not published."""
+
+    port = _FakePort(pages=(_page("s1", "S"),), rules="r")
+    block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=True)._compose())
+
+    assert "editing its text will not move it" in block
+    assert "publish the parent" in block
+
+
 def test_proposing_says_plainly_that_nothing_is_written_yet() -> None:
     """The model has to know its work is not done, or it reports the change as
     made — which is exactly what happened before the write path existed."""

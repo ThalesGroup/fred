@@ -308,9 +308,17 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
                 "or wiki_propose_page, then call wiki_publish_proposal, which "
                 "asks the user to approve it. Read a page before proposing an "
                 "edit — your text replaces it whole, so it must be the complete "
-                "page as it should end up. You cannot delete, rename or move a "
-                "page, and you can never change the rules page. Say a page was "
-                "written only after a publish call has come back successful."
+                "page as it should end up. Say a page was written only after a "
+                "publish call has come back successful."
+                "\nContent is the ONLY thing you can change. You cannot move, "
+                "rename or delete a page, and editing its text will not move "
+                "it — if the user asks for any of those, say plainly that you "
+                "cannot and that an editor does it from the Wiki screen. You "
+                "can never change the rules page."
+                "\nA new page can only sit under a page that already exists, "
+                "so to build a parent and its children, publish the parent "
+                "first and propose the children after — naming a parent you "
+                "have not published yet will not find it."
             )
         else:
             parts.append(
@@ -423,6 +431,9 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # way to act on a page it has read will otherwise call this again, and
         # again — six identical calls in one turn, in the field.
         already_read: set[str] = set()
+        # What each prepared proposal would do, so publishing can say what it
+        # actually changed instead of only that it succeeded.
+        proposal_kind: dict[str, str] = {}
         # The tree, fetched at most once per turn and shared by every tool that
         # has to turn a path into a page. Dropped after a publish, which is the
         # only thing here that can add or rename one.
@@ -610,6 +621,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
+            proposal_kind[proposal.proposal_id] = "edit"
             text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
@@ -651,6 +663,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
+            proposal_kind[proposal.proposal_id] = "page"
             text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
@@ -685,9 +698,18 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 tree = None
             published = next((p for p in await _tree() if p.slug == slug), None)
             where = f" '{_page_path(await _tree(), published)}'" if published else ""
+            # Named for what it did, not just that it worked. An agent that
+            # tried to MOVE a page through an edit read a bare "Published" as
+            # confirmation of the move, and told the user so.
+            did = (
+                "Its text was replaced; where it sits in the tree is unchanged"
+                if proposal_kind.get(proposal_id) == "edit"
+                else "It was created"
+            )
             text = (
-                f"Published. The page{where} is live and carries the review "
-                "mark every agent-written page gets until an editor clears it."
+                f"Published. The page{where} is live. {did}. It carries the "
+                "review mark every agent-written page gets until an editor "
+                "clears it."
             )
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
