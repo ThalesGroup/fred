@@ -38,6 +38,10 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 
+GENERIC_TOOL_FAILURE_MESSAGE = (
+    "This step failed unexpectedly and could not be completed."
+)
+
 
 def render_tool_result(result: ToolInvocationResult) -> str:
     """
@@ -107,25 +111,28 @@ def stringify_tool_output(value: object) -> str:
 def normalize_runtime_provider_artifact(
     artifact: object,
 ) -> ToolInvocationResult | None:
-    """
-    Parse one optional runtime-provider artifact into the Fred tool result model.
-
-    Why this exists:
-    - runtime provider tools can return `(content, artifact)` tuples
-    - provider-tool wrappers still want one typed Fred artifact shape
-
-    How to use:
-    - pass the second element of a provider-tool tuple result
-
-    Example:
-    - `artifact = normalize_runtime_provider_artifact(raw_result[1])`
-    """
+    """Normalize a provider artifact and remove provider-controlled error detail.
+    Error blocks, sources, and UI parts never cross this trust boundary."""
 
     if artifact is None:
         return None
-    if isinstance(artifact, ToolInvocationResult):
-        return artifact
-    return ToolInvocationResult.model_validate(artifact)
+    result = (
+        artifact
+        if isinstance(artifact, ToolInvocationResult)
+        else ToolInvocationResult.model_validate(artifact)
+    )
+    if not result.is_error:
+        return result
+    return ToolInvocationResult(
+        tool_ref=result.tool_ref,
+        blocks=(
+            ToolContentBlock(
+                kind=ToolContentKind.TEXT,
+                text=GENERIC_TOOL_FAILURE_MESSAGE,
+            ),
+        ),
+        is_error=True,
+    )
 
 
 def _render_fallback_tool_block(block: ToolContentBlock) -> str:

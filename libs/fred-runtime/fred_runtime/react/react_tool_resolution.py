@@ -524,9 +524,13 @@ class ReActRuntimeToolResolver:
         ) -> tuple[str, ToolInvocationResult | None]:
             raw_result = await runtime_tool.ainvoke(payload)
             if isinstance(raw_result, ToolInvocationResult):
-                return (render_tool_result(raw_result), raw_result)
+                artifact = normalize_runtime_provider_artifact(raw_result)
+                assert artifact is not None
+                return (render_tool_result(artifact), artifact)
             if isinstance(raw_result, tuple) and len(raw_result) == 2:
                 artifact = normalize_runtime_provider_artifact(raw_result[1])
+                if artifact is not None and artifact.is_error:
+                    return (render_tool_result(artifact), artifact)
                 rendered_content = stringify_tool_output(raw_result[0]).strip()
                 if rendered_content:
                     return (rendered_content, artifact)
