@@ -80,6 +80,10 @@
   }
 }
 
+/* A fixed 48px, not a min-height: the "New page" button is hidden for a member
+   and while a draft is open, and a header that changed height as it came and
+   went would shift the whole tree under it. Vertical centring replaces the
+   vertical padding — the button is 32px and would not fit inside it. */
 .railHeader {
   display: flex;
   flex-shrink: 0;
@@ -87,8 +91,9 @@
   gap: var(--spacing-2xs);
   border-right: 1px solid var(--outline-muted);
   border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-m);
+  padding: 0 var(--spacing-xs) 0 var(--spacing-m);
   width: 100%;
+  height: 48px;
 }
 
 .railTitle {
