@@ -258,12 +258,6 @@ applications:
     extraEnvVars:
       - name: FRONTEND_THEME_URL
         value: "http://minio.data.svc.cluster.local:9000/fred-themes/acme-1.0.zip"
-      - name: FRONTEND_THEME_S3_ACCESS_KEY
-        valueFrom:
-          secretKeyRef: { name: fred-theme-s3, key: accessKey }
-      - name: FRONTEND_THEME_S3_SECRET_KEY
-        valueFrom:
-          secretKeyRef: { name: fred-theme-s3, key: secretKey }
     # Only under readOnlyRootFilesystem: gives the overlay a writable home.
     extraVolumes:
       - name: theme
@@ -273,10 +267,33 @@ applications:
         mountPath: /var/lib/fred/theme
 ```
 
-`deploy/local/k3d/values-local.yaml` carries the same wiring against the k3d
-seaweedfs, with the keys inlined as that file does for every other local
-credential. `make theme-container-smoke` exercises the whole path against a
-locally built image.
+**Prefer a prefix your store serves anonymously.** Every byte of the archive is
+about to be served unauthenticated by nginx to every browser, so a credential
+guarding the fetch protects nothing, and one fewer secret is one fewer thing to
+rotate. Grant read on that one prefix and `FRONTEND_THEME_URL` is the whole
+configuration. A presigned URL works the same way, until it expires.
+
+When the store insists on authentication, add the two key variables and point
+them at a Secret the deployment already has rather than minting one for the
+theme:
+
+```yaml
+- name: FRONTEND_THEME_S3_ACCESS_KEY
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: S3_ACCESS_KEY, optional: true }
+- name: FRONTEND_THEME_S3_SECRET_KEY
+  valueFrom:
+    secretKeyRef: { name: fred-secrets, key: S3_SECRET_KEY, optional: true }
+```
+
+`optional: true` matters: without it a missing Secret leaves the pod unschedulable,
+which is a hard failure for what is only branding. With it the fetch degrades to
+anonymous and the baked assets are served.
+
+`deploy/local/k3d/values-local.yaml` carries this shape against the k3d
+seaweedfs, reusing the stack chart's own `fred-secrets`.
+`make theme-container-smoke` exercises the whole path against a locally built
+image.
 
 ## Chat UI
 
