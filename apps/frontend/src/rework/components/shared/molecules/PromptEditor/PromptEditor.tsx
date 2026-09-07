@@ -22,9 +22,17 @@
 
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
-import { EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import { Annotation, Compartment, EditorState, RangeSetBuilder, Transaction } from "@codemirror/state";
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  keymap,
+  placeholder as placeholderExtension,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -53,6 +61,45 @@ export const PROMPT_EDITOR_ROWS = 15;
 // text dropped on a disabled field still edits the document and reports a
 // change the form believes it has locked.
 const editStateFor = (disabled: boolean) => [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)];
+
+// A bullet's dash and an ordered item's number are the same `ListMark` node, so
+// no highlight tag tells them apart — and a contextual `styleTags` selector
+// cannot override the parser's own non-contextual rule for that node (every
+// "OrderedList/.../ListMark" form is ignored). Reading the tree is what is left.
+const orderedMarkDecoration = Decoration.mark({ class: styles.orderedMarker });
+
+function orderedListNumberMarks(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const tree = syntaxTree(view.state);
+  for (const { from, to } of view.visibleRanges) {
+    tree.iterate({
+      from,
+      to,
+      enter: (node) => {
+        // ListMark -> ListItem -> OrderedList
+        if (node.name === "ListMark" && node.node.parent?.parent?.name === "OrderedList") {
+          builder.add(node.from, node.to, orderedMarkDecoration);
+        }
+      },
+    });
+  }
+  return builder.finish();
+}
+
+const orderedListNumbers = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = orderedListNumberMarks(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = orderedListNumberMarks(update.view);
+      }
+    }
+  },
+  { decorations: (plugin) => plugin.decorations },
+);
 
 // Marks a document change this component made to adopt an incoming `value`, so
 // it is not echoed back to the parent as if the user had typed it.
@@ -116,6 +163,7 @@ export function PromptEditor({
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           markdown(),
+          orderedListNumbers,
           EditorView.lineWrapping,
           syntaxHighlighting(promptHighlighting),
           placeholderRef.current.of(placeholder ? placeholderExtension(placeholder) : []),

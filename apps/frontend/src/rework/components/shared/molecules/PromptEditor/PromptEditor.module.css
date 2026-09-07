@@ -179,6 +179,16 @@
   color: var(--on-surface-retreat);
 }
 
+/* An ordered list's numbers, which a bullet's dash does not get: unlike a
+   dash, they carry meaning the author is reading back.
+   The decoration wraps the highlighter's own span rather than replacing it, so
+   the number is painted by a `.marker` child — the descendant selector is what
+   actually reaches it, and it outranks `.marker` alone whatever the order. */
+.orderedMarker,
+.orderedMarker .marker {
+  color: var(--primary);
+}
+
 .comment {
   color: var(--on-surface-muted);
   font-style: italic;

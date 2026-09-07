@@ -151,6 +151,27 @@ describe("PromptEditor", () => {
     expect(itemSpan).toBeUndefined();
   });
 
+  // lezer gives both kinds of list the same ListMark node, so this only works
+  // through the contextual "OrderedList/ListMark" re-tagging — and it has to
+  // win over the parser's own non-contextual rule for that node.
+  it("sets an ordered list's numbers apart from a bullet's dash", () => {
+    render({ value: "1. first\n2. second\n\n- a dash\n" });
+
+    // The decoration wraps the highlighter's span rather than replacing it, so
+    // what decides the colour is the painted span having an `orderedMarker`
+    // ANCESTOR — asserting the class exists somewhere would pass even when the
+    // nested `.marker` child still paints the number.
+    const painted = (mark: string) =>
+      Array.from(container.querySelectorAll<HTMLElement>(".cm-content span")).find(
+        (s) => s.textContent === mark && s.className.includes("marker") && s.children.length === 0,
+      );
+    const underOrderedMarker = (mark: string) => !!painted(mark)?.closest("[class*='orderedMarker']");
+
+    expect(underOrderedMarker("1.")).toBe(true);
+    expect(underOrderedMarker("2.")).toBe(true);
+    expect(underOrderedMarker("-")).toBe(false);
+  });
+
   it("shows an error under the field", () => {
     render({ error: "Too long" });
     expect(container.textContent).toContain("Too long");
