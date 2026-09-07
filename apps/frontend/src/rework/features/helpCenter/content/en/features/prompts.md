@@ -21,10 +21,9 @@ and reorganize them your way. On creation, a team starts with a **starter kit**
 
 ## Creating and viewing a prompt
 
-A prompt has a title, a body, optionally an emoji and tags to find it again.
-From its card, you can **view** it and **copy** it in one click. A counter shows
-how many times it has been used — a handy signal for spotting the prompts that
-pull their weight.
+A prompt has a title and a body. Click its card to **view** it, then **copy**
+it from within that view. A counter shows how many times it has been used —
+a handy signal for spotting the prompts that pull their weight.
 
 ![TODO: screenshot — the prompt library and a card](assets/prompts-library.png)
 

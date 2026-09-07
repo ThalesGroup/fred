@@ -482,7 +482,6 @@ export const {
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
-  useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation: useResetPlatformRebacMutation,
   // Admin capabilities dashboard (CAPAB-01 / #1981).
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
   // Team-scoped native applications catalog.

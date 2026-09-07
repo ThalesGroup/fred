@@ -7,12 +7,12 @@ icon: groups
 
 # Administering your team
 
-Team settings are available to its **administrators** from the **Settings**
-page. They gather everything that governs how the team works.
+The **Settings** page gathers everything that governs how the team works.
+Each section's access depends on your role.
 
 ## Members
 
-Invite people, change their **role** (Administrator, Editor, Analyst, Member),
+Invite people, change their **role** (Admin, Editor, Analyst, Member),
 or remove them. The role determines what each person can do (see
 [roles](/help/en/getting-started/join-create-team)).
 
@@ -20,20 +20,16 @@ or remove them. The role determines what each person can do (see
 
 ## Settings
 
-Describe the team's purpose to help other users place it, and set its
-marketplace visibility and joining mode.
+Describe the team's purpose to help other users place it, set its marketplace
+visibility and joining mode, and set the **retention** delay after which
+deleted conversations are permanently erased (hidden immediately, then purged
+at the end of the delay — left empty, erasure is immediate).
 
 ## Model routing
 
 **Routing** picks the model profile used by the team's managed chat agents. You
 can set a default profile and rules per operation. Left empty, the team uses the
 deployment's default profile.
-
-## Retention
-
-**Retention** sets the delay after which deleted conversations are permanently
-erased. They're hidden immediately, then purged at the end of the delay. Left
-empty, erasure is immediate.
 
 ## Evaluations
 

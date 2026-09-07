@@ -11,22 +11,29 @@ Comment savoir si un agent répond bien — et s'il s'améliore quand vous ajust
 sa configuration ? Les **évaluations** apportent une réponse mesurée plutôt
 qu'une impression.
 
-## Lancer une campagne
+## Créer une évaluation
 
 Depuis les [réglages de l'équipe](/help/fr/features/teams), section
-**Évaluations**, créez une campagne pour l'agent visé. Une campagne exécute une
-série de cas et mesure les réponses de l'agent.
+**Évaluations**, créez une **évaluation** : donnez-lui un nom et ses cas. C'est
+une définition réutilisable et versionnée — la créer ne lance encore aucune
+exécution.
 
-## Lire un rapport
+## La lancer sur un agent
 
-À l'issue de la campagne, un **rapport** récapitule les résultats. Parcourez-le
-pour repérer les cas où l'agent déçoit et comprendre pourquoi.
+Une fois l'évaluation créée, déclenchez une **exécution** sur l'agent visé.
+L'exécution parcourt chaque cas et mesure les réponses de l'agent.
+
+## Lire les résultats
+
+Une fois l'exécution terminée, elle affiche pour chaque cas son résultat
+(réussi, échoué, ignoré). Parcourez-les pour repérer les cas où l'agent déçoit
+et comprendre pourquoi.
 
 ## Itérer
 
-Servez-vous du rapport pour ajuster l'agent — instructions, prompts
-attachés, corpus documentaire — puis relancez une campagne pour vérifier que la
-qualité progresse. C'est ce cycle **mesurer → ajuster → remesurer** qui fait
+Servez-vous des résultats pour ajuster l'agent — instructions, prompts
+attachés, corpus documentaire — puis relancez une exécution pour vérifier que
+la qualité progresse. C'est ce cycle **mesurer → ajuster → remesurer** qui fait
 avancer un agent.
 
 > L'évaluation est particulièrement utile avant de partager largement un agent,

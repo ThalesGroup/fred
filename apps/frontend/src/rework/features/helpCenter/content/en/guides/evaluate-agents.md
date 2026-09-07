@@ -11,21 +11,26 @@ How do you know an agent answers well — and whether it improves when you adjus
 its configuration? **Evaluations** give a measured answer rather than an
 impression.
 
-## Run a campaign
+## Create an evaluation
 
 From the [team settings](/help/en/features/teams), **Evaluations** section,
-create a campaign for the target agent. A campaign runs a series of cases and
-measures the agent's answers.
+create an **evaluation**: give it a name and its cases. This is a reusable,
+versioned definition — creating it does not run anything yet.
 
-## Read a report
+## Run it against an agent
 
-At the end of the campaign, a **report** summarizes the results. Go through it to
-spot the cases where the agent falls short and understand why.
+Once the evaluation exists, trigger a **run** against the target agent. The
+run executes each case and measures the agent's answers.
+
+## Read the results
+
+Once the run finishes, it shows each case's pass/failed/skipped result. Go
+through them to spot the cases where the agent falls short and understand why.
 
 ## Iterate
 
-Use the report to adjust the agent — system prompt, attached prompts,
-document corpus — then run another campaign to check that quality is improving.
+Use the results to adjust the agent — system prompt, attached prompts,
+document corpus — then trigger another run to check that quality is improving.
 This **measure → adjust → re-measure** cycle is what moves an agent forward.
 
 > Evaluation is especially useful before sharing an agent widely, or after a

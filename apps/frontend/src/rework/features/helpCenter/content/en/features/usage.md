@@ -17,7 +17,12 @@ activity and spot what weighs.
 - **By model**: the split across the models used.
 - **Your personal share**, distinct from the team total.
 
+The team-wide breakdown (consumption over time, by agent, by model) requires
+an **Admin**, **Editor**, or **Analyst** role. Plain members see only their
+own personal share.
+
 ![TODO: screenshot — the usage tracking page](assets/usage-overview.png)
 
-Document **storage** tracking, meanwhile, lives on the
-[Resources](/help/en/features/resources) page.
+Document **storage** tracking mainly lives on the
+[Resources](/help/en/features/resources) page, and a storage quota chart is
+also shown here for those with an elevated role.

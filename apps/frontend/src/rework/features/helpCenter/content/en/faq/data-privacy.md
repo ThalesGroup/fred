@@ -24,7 +24,14 @@ delay is set, erasure is immediate.
 
 The documents you upload serve to answer your questions within your team: they
 are prepared so agents can refer to them and show you the passages they used.
-They stay within the team's scope.
+Access to them stays within the team's scope — that's about who among your
+colleagues can see them.
+
+To generate an answer, the relevant excerpts are sent to the language model
+configured for your team, which may be an external provider (see
+[Which models are used?](/help/en/faq/ai-answers)). Which provider is used is
+set by your deployment's [model routing](/help/en/features/teams) — check with
+your platform administrator for the specifics that apply to you.
 
 ## Export and compliance
 

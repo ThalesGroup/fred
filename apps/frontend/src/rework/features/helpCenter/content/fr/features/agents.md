@@ -40,9 +40,11 @@ points :
 - **Dupliquer** : repartez d'un agent existant pour en créer une variante, sans
   tout refaire.
 - **Suspendre** : il arrive qu'un agent soit mis en pause — le plus souvent
-  lorsqu'une capacité dont il a besoin a été désactivée pour l'équipe. Il reste
-  visible, mais ne peut plus être utilisé tant que ce n'est pas rétabli.
+  lorsqu'une capacité dont il a besoin a été désactivée pour l'équipe, mais
+  aussi quand l'accès de l'équipe à cette capacité a été retiré ou que sa
+  configuration n'est plus valide. Il reste visible, mais ne peut plus être
+  utilisé tant que ce n'est pas corrigé.
 - **Supprimer** : retirez définitivement un agent dont vous n'avez plus besoin.
 
-> Créer et modifier des agents demande le rôle **Éditeur** ou
-> **Administrateur** (voir [les rôles](/help/fr/getting-started/join-create-team)).
+> Créer et modifier des agents demande le rôle **Éditeur** ou **Admin** (voir
+> [les rôles](/help/fr/getting-started/join-create-team)).

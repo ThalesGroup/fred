@@ -340,29 +340,27 @@ async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
     Resolve every Keycloak username in the realm to its `sub`, in one pass.
 
     Why this function exists:
-    - the kea->swift migration (`import_export/kea_reconciliation.py`) resolves
-      potentially thousands of distinct usernames per run; one Admin API call
-      per username does not scale to a cutover-size realm (~2000 users). This
-      reuses the same paginated sweep `list_users` already relies on
+    - the users.json declarative provisioning phase
+      (`import_export/importer.py::UserSubResolver`) can resolve many distinct
+      usernames per bundle; one Admin API call per username does not scale.
+      This reuses the same paginated sweep `list_users` already relies on
       (`_fetch_all_users`) so the whole realm is listed once, then every
       username resolves against an in-memory dict instead of a network call.
 
     How to use it:
-    - call once per migration run; the caller (`KeaUserResolver`) treats the
+    - call once per import run; the caller (`UserSubResolver`) treats the
       result as the authoritative snapshot of the target realm for the whole
-      run — a username missing from it is unresolved (PENDING), never looked
-      up individually
+      run — a username missing from it is unresolved, never looked up
+      individually
     - raises `KeycloakM2MUserOperationDisabledError` when Keycloak M2M is
       disabled — a disabled admin client used to come back as `{}`, the exact
-      same shape as a real bulk sweep that genuinely found zero users, so a
-      cutover-scale kea run with M2M misconfigured silently resolved every
-      single identity to PENDING with nothing in the report pointing at the
-      real cause (KEA CUTOVER 2026, 2026-07-28: caught only by a manual
-      identity spot-check, not by the tooling). Raising here instead reuses
-      the same domain error and HTTP 503 mapping `create_user` already raises
-      for the identical disabled-M2M case (`users/api.py`'s
+      same shape as a real bulk sweep that genuinely found zero users, which
+      would silently resolve every identity as unresolved with nothing
+      pointing at the real cause. Raising here instead reuses the same domain
+      error and HTTP 503 mapping `create_user` already raises for the
+      identical disabled-M2M case (`users/api.py`'s
       `register_exception_handlers`), and — same as any other bulk-sweep
-      failure below — `KeaUserResolver.create()` is called before the
+      failure below — `UserSubResolver.create()` is called before the
       Postgres transaction opens, so this aborts the import before any write
     - a real Keycloak/network failure raises and is left to propagate — never
       swallowed into an empty snapshot

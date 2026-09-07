@@ -1,24 +1,27 @@
-"""Kea→Swift import service (MIGR-05).
+"""Swift-native platform import service.
 
-Reads a KBundle and writes the migrated data into the swift control-plane DB.
-Emits MigrationTaskEvent progress events so the frontend SSE stream stays live.
+Reads a KBundle (a swift-native configuration snapshot) and writes it into the
+swift control-plane DB. Emits MigrationTaskEvent progress events so the
+frontend SSE stream stays live.
 
-All three write phases (agents, tags, metadata) share a single SQLAlchemy
-transaction opened against the same AsyncEngine.  Any failure rolls back
-everything atomically — no partial state is left behind.
+All write phases (agents, tags, metadata, team metadata, team routing policy)
+share a single SQLAlchemy transaction opened against the same AsyncEngine.
+Any failure rolls back everything atomically — no partial state is left
+behind.
 
 Scope (current snapshot):
-- Agents   → agent_instance rows (MAPPED only; IGNORED silently skipped; GAP warned)
+- Agents   → agent_instance rows, imported verbatim (idempotent skip-if-present)
 - Tags     → tag rows (preserving tag_id, owner_id, doc JSON)
 - Metadata → metadata rows (preserving document_uid and doc JSON;
-             content/vectors already in S3+OpenSearch via MIGR-06)
+             content/vectors are not transported by this import — see
+             `_reset_transported_stages`)
 - Team metadata → team_metadata rows (branding + per-team retention, CTRLP-12;
-             swift-native snapshots only, idempotent skip-if-present)
+             idempotent skip-if-present)
 - Users    → two-phase declarative provisioning (AUTHZ-07 Part 8 §40.2,
-             `PLATFORM-IMPORT-RFC.md` §6, reconciliation fix AUTHZ-07 Step 2)
-             from the top-level `users.json` bundle entry, run outside the DB
-             transaction above (after it, so role grants may reference teams
-             the same bundle just created).
+             `CONTROL-PLANE-PRODUCT-CONTRACT.md` §27) from the top-level
+             `users.json` bundle entry, run outside the DB transaction above
+             (after it, so role grants may reference teams the same bundle
+             just created).
              Phase 1 (identity) creates a Keycloak user for any bundle entry
              that has no existing identity AND carries a `password` — an
              entry with no `password` is assumed to already exist and is
@@ -50,30 +53,11 @@ Scope (current snapshot):
              `BundleProvisioningError` and abort the users phase — a
              declared-valid bundle never ends in a silently incomplete
              `succeeded` task.
-- MCP servers      → SKIP (re-seeded by deployment on swift)
-- Resources → kea `chat-context` resources become swift prompt-library rows in
-             the author's personal space (`personal-{author}`), front-matter
-             stripped; other kea resource kinds (`prompt`, `template`) are
-             skipped with a warning (kea path only)
-- OpenFGA tuples → restored with role transformation (MIGR-05.04, kea path
-             only): kea team roles map to the swift model
-             (owner → team_admin + team_editor, manager → team_editor,
-             member → team_member — mapping approved 2026-07-24), the kea
-             shared personal team (`team:personal`) is dropped (swift
-             self-heals per-user `personal-{uid}` spaces), `resource#parent`
-             tuples are dropped (resources become prompt rows, which have no
-             OpenFGA object), and agent/tag/document/organization tuples
-             replay 1:1. Assumes UUID-keyed subjects (MIGR-04 preserves subs);
-             non-UUID user subjects are dropped and counted.
-
-Pre-conditions handled outside this module (MIGR-04 / MIGR-06):
-- Keycloak users already present with the same UUIDs
-- MinIO binaries and embeddings already mirrored
+- MCP servers → SKIP (re-seeded by deployment)
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -102,46 +86,11 @@ from fred_core.tasks.models import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
-from openfga_sdk.exceptions import (
-    ApiAttributeError,
-    ApiException,
-    ApiKeyError,
-    ApiValueError,
-    AuthenticationError,
-    FgaValidationException,
-    ForbiddenException,
-    NotFoundException,
-    RateLimitExceededError,
-    ServiceException,
-    UnauthorizedException,
-    ValidationException,
-)
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from control_plane_backend.agent_instances.store import (
-    AgentInstanceRecord,
-    AgentInstanceStore,
-)
-from control_plane_backend.config.models import ManagedAgentTuning
-from control_plane_backend.import_export.agent_map import (
-    AgentMapOutcome,
-    classify_agent,
-)
 from control_plane_backend.import_export.bundle import KBundle
-from control_plane_backend.import_export.kea_reconciliation import (  # KEA CUTOVER 2026 — delete with kea_reconciliation.py
-    KeaReconciliationReport,
-    KeaUserResolver,
-    build_kea_reconciliation_plan,
-    kea_username_by_sub,
-    resolve_agent_team_index,
-    resolve_creator_index,
-    resolve_resource_authors,
-    resolve_tag_owner_ids,
-)
 from control_plane_backend.import_export.schemas import BundleUserEntry
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
-from control_plane_backend.models.prompt_models import PromptRow
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.service import (
@@ -160,7 +109,7 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import CreateUserRequest
-from control_plane_backend.users.service import create_user
+from control_plane_backend.users.service import create_user, find_user_subs_bulk
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +130,7 @@ _LEGACY_JOINING_MODES: dict[str, str] = {
     "closed": "invite_only",
 }
 
-# Canonical contract — swift-native baseline (PLATFORM-IMPORT-RFC.md):
+# Canonical contract — swift-native baseline (CONTROL-PLANE-PRODUCT-CONTRACT.md):
 # vectors/SQL indexes are never transported by this import (products are
 # rebuilt on the target, MIGR-07), so a restored document must not carry
 # forward the source's stale DONE claim for them. PREVIEW_READY is left
@@ -211,7 +160,7 @@ class BundleProvisioningError(Exception):
     """A `users.json` bundle cannot be fully reconciled (AUTHZ-07 Step 2).
 
     Why this type exists:
-    - `PLATFORM-IMPORT-RFC.md` §6's fail-closed rule: a declared-valid
+    - `CONTROL-PLANE-PRODUCT-CONTRACT.md` §27's fail-closed rule: a declared-valid
       bundle must never produce a silently incomplete `succeeded` import.
       Every one of the conditions below now aborts the whole users phase
       (and thus the import — `import_export/api.py`'s background-task
@@ -228,31 +177,19 @@ class BundleProvisioningError(Exception):
     """
 
 
-class OpenFgaConvergenceError(Exception):
-    """An OpenFGA write could not be applied after the bounded local retry.
-
-    Why this type exists:
-    - a mid-run OpenFGA outage must end the task `failed`, never `succeeded`
-      with a partial tuple set silently missing — see `_retry_openfga_write`.
-    - message-only, mirroring `BundleProvisioningError` above: `MigrationReport`
-      stays frozen for `MigrationResult`/OpenAPI stability (see its own
-      docstring), so the phase and replay-safety statement live in the message,
-      not a new report field.
-
-    How to use it:
-    - raised by `_retry_openfga_write` naming the phase and stating that
-      re-running the same import is safe (OpenFGA writes are idempotent,
-      `on_duplicate_writes=IGNORE`, so already-applied tuples are skipped, not
-      duplicated, on the next attempt).
-    """
-
-
 @dataclass
 class MigrationReport:
     import_id: str
+    # Always "swift" since the kea-import path was removed — kept on the
+    # dataclass/OpenAPI contract (MigrationResult, fred_core.tasks.models)
+    # rather than dropped, to avoid a cross-backend contract change for a
+    # cosmetic field.
     source_platform: str
     agents_imported: int = 0
     agents_skipped: int = 0
+    # Always 0 now — only the removed kea agent-classification phase ever
+    # produced a GAP outcome. Same API-stability rationale as source_platform
+    # above.
     agents_gap: int = 0
     tags_imported: int = 0
     tags_skipped: int = 0
@@ -281,32 +218,17 @@ class MigrationReport:
     team_roles_granted: int = 0
     team_roles_skipped: int = 0
     platform_roles_granted: int = 0
-    # Kea-path counters (MIGR-05.04 / chat-context prompts). Internal-only for
-    # now: surfaced through the summary line and `warnings`, deliberately NOT
-    # projected onto `MigrationResult` (fred_core.tasks.models) — extending
-    # that public contract means an OpenAPI + generated-client regeneration,
-    # tracked as a follow-up rather than smuggled into this change.
-    prompts_imported: int = 0
-    prompts_skipped: int = 0
-    # Same "internal-only, surfaced via summary/warnings" contract as
-    # prompts_imported/_skipped above — extending MigrationResult's public
-    # shape is a separate OpenAPI + generated-client change, not smuggled in.
     routing_policies_imported: int = 0
     routing_policies_skipped: int = 0
-    tuples_written: int = 0
-    tuples_dropped: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
 # `MigrationResult.warnings` ends up in a `pg_notify` payload (fred_core.tasks.bus),
-# capped at ~8000 bytes by Postgres for the WHOLE event — the same failure class that
-# crashed a real 1008-user rehearsal run (2026-07-25, see format_usernames_for_warning
-# above). That fix only bounded the PENDING/RELINKED name lists; a cutover-scale bundle
-# can still accumulate one warning line per skipped agent/resource/prompt, OR carry a
-# single very long line from an uncapped join elsewhere (unnamed-team IDs, unknown
-# tuple shapes) — a line-count cap alone doesn't bound either case, only a byte budget
-# does. Half the Postgres NOTIFY limit, leaving headroom for the rest of the event's
-# fields and JSON overhead.
+# capped at ~8000 bytes by Postgres for the WHOLE event — a bundle with many skipped
+# entries can accumulate one warning line each, or carry a single very long line from
+# an uncapped join (unnamed-team IDs, unknown tuple shapes) — a line-count cap alone
+# doesn't bound either case, only a byte budget does. Half the Postgres NOTIFY limit,
+# leaving headroom for the rest of the event's fields and JSON overhead.
 _MAX_WARNINGS_BYTES = 4000
 
 
@@ -367,8 +289,8 @@ def _utcnow() -> datetime:
 def _coerce_dt(value: Any) -> datetime | None:
     """Accept an ISO-8601 string, a datetime, or None — return a datetime/None.
 
-    Swift-native snapshots serialize timestamps as ISO strings; kea snapshots may
-    already carry datetimes or None. This normalises both for ORM TIMESTAMP columns.
+    Snapshots serialize timestamps as ISO strings; this normalises them for
+    ORM TIMESTAMP columns.
     """
     if value is None or isinstance(value, datetime):
         return value
@@ -380,135 +302,13 @@ def _coerce_dt(value: Any) -> datetime | None:
     return None
 
 
-def _build_agent_team_index(tuples: list[dict[str, Any]]) -> dict[str, str]:
-    """Return agent_id → team_id from OpenFGA owner tuples.
-
-    user:UID  owner agent:AID  →  personal-{UID}
-    team:TID  owner agent:AID  →  {TID}
-    """
-    index: dict[str, str] = {}
-    for t in tuples:
-        obj: str = t.get("object", "")
-        user: str = t.get("user", "")
-        if t.get("relation") != "owner" or not obj.startswith("agent:"):
-            continue
-        agent_id = obj.removeprefix("agent:")
-        if user.startswith("team:"):
-            index[agent_id] = user.removeprefix("team:")
-        elif user.startswith("user:"):
-            index[agent_id] = f"personal-{user.removeprefix('user:')}"
-    return index
-
-
-def _build_agent_creator_index(tuples: list[dict[str, Any]]) -> dict[str, str]:
-    """Return agent_id → creating user's uid, from user-owner tuples.
-
-    Only personal agents carry a `user:UID owner agent:AID` tuple; team-owned
-    agents have a team subject and keep `created_by=None` (kea does not record
-    which member created them).
-    """
-    index: dict[str, str] = {}
-    for t in tuples:
-        obj: str = t.get("object", "")
-        user: str = t.get("user", "")
-        if t.get("relation") != "owner" or not obj.startswith("agent:"):
-            continue
-        if user.startswith("user:"):
-            index[obj.removeprefix("agent:")] = user.removeprefix("user:")
-    return index
-
-
-# Kea system-prompt tuning keys, in precedence order: v2 agents declare
-# `system_prompt_template`; v1 agents declare dotted `prompts.system`.
-_KEA_SYSTEM_PROMPT_KEYS = ("system_prompt_template", "prompts.system")
-
-
-def _extract_kea_capability_selection(tuning_src: dict[str, Any]) -> list[str] | None:
-    """Return the kea agent's active capability ids, or ``None`` if unknown.
-
-    Since #1988, a kea ``MCPServerRef.id`` (`agentic_backend.core.agents.
-    agent_spec.MCPServerRef`) IS the swift capability id verbatim (no ``mcp:``
-    prefix) — no lookup table needed. ``payload_json.tuning.mcp_servers``
-    absent means we have no source signal, so the caller should leave
-    ``selected_capability_ids=None`` (inherit the swift template default).
-    Present (even ``[]``) is the agent's resolved kea-side selection and is
-    returned as an explicit list, ``[]`` included — ``None`` and ``[]`` are
-    different states on the swift side (`ManagedAgentTuning.
-    selected_capability_ids`, config/models.py).
-
-    Deliberately NOT translated (one-shot migration, kea only ever exercised
-    the knowledge-flow-doc-search and tabular MCP servers in practice):
-    per-server `require_tools`/`params` (e.g. document-library scoping), and
-    any builtin/REST-only tool a v1 agent (e.g. Rico) called outside the MCP
-    trio — neither has a swift capability-config equivalent to map to.
-    """
-    mcp_servers = tuning_src.get("mcp_servers")
-    if not isinstance(mcp_servers, list):
-        return None
-    ids: list[str] = []
-    for ref in mcp_servers:
-        if not isinstance(ref, dict):
-            continue
-        server_id = ref.get("id")
-        if isinstance(server_id, str) and server_id.strip() and server_id not in ids:
-            ids.append(server_id)
-    return ids
-
-
-def _extract_kea_prompts(tuning_src: dict[str, Any]) -> tuple[str | None, list[str]]:
-    """Return (system prompt text, other customized kea prompt field keys).
-
-    The kea per-agent prompt lives in `payload_json.tuning.fields[].default`.
-    Only the system prompt has a swift landing field (`tuning.values
-    ["prompts.system"]`); v1 secondary per-node prompts
-    (`prompts.generate_answer`, `prompts.self_check`, …) do not — they are
-    returned separately so the caller can warn instead of dropping silently.
-    """
-    system: str | None = None
-    secondary: list[str] = []
-    for spec in tuning_src.get("fields") or []:
-        if not isinstance(spec, dict):
-            continue
-        key = spec.get("key")
-        default = spec.get("default")
-        if not (isinstance(default, str) and default.strip()):
-            continue
-        if key in _KEA_SYSTEM_PROMPT_KEYS:
-            if system is None:
-                system = default
-        elif spec.get("type") == "prompt":
-            secondary.append(str(key))
-    return system, secondary
-
-
-# Kea library tags carry prompt/template/chat-context libraries. Their content
-# migrates into the swift prompt library (personal spaces), so importing the
-# library tags themselves would only create orphaned folders.
-_KEA_LIBRARY_TAG_TYPES = frozenset({"chat-context", "prompt", "template"})
-
-
-def _strip_front_matter(content: str) -> str:
-    """Return the body of a kea resource `content` blob.
-
-    Kea stores the raw authored string: a YAML header (`version:`, `kind:`,
-    `name:`, …), a `---` separator line, then the actual prompt body. Swift's
-    prompt `text` is sent to the model as-is, so only the body is migrated —
-    `name`/`description`/`labels` already travel as structured fields.
-    """
-    _, sep, body = content.partition("\n---\n")
-    return body.strip() if sep else content.strip()
-
-
 _STEP_LABELS: dict[str, str] = {
-    "classify": "Classifying agents",
     "agents": "Importing agents",
-    "resources": "Importing prompts",
     "tags": "Importing tags",
     "metadata": "Importing documents",
     "team_metadata": "Importing team settings",
     "team_routing_policy": "Importing team routing policies",
     "users": "Provisioning users",
-    "tuples": "Restoring permissions",
 }
 
 
@@ -518,95 +318,6 @@ _STEP_LABELS: dict[str, str] = {
 # instead of emitting on every single item; the caller must still emit the last
 # index unconditionally so the progress bar reaches 100%.
 _EMIT_EVERY = 25
-
-# OpenFGA tuple writes batched via RebacEngine.add_relations (bounded concurrent
-# gather per chunk) instead of one sequential network round-trip per tuple — a
-# cutover-scale bundle (~2000 users x 52 teams) can carry thousands of tuples.
-_TUPLE_WRITE_CHUNK_SIZE = 20
-
-# Bounded local retry around every OpenFGA write in this module (no retry logic
-# exists in `RebacEngine`/`RebacEngine.add_relations` itself — a first failure in
-# a `asyncio.gather` chunk aborts immediately). 3 attempts, doubling backoff —
-# enough to ride out a transient blip without turning a genuine outage into a
-# long-hanging request.
-_OPENFGA_WRITE_ATTEMPTS = 3
-_OPENFGA_RETRY_BASE_DELAY_SECONDS = 0.5
-
-
-def _is_transient_openfga_error(exc: Exception) -> bool:
-    """True when retrying the same OpenFGA write might succeed.
-
-    Deliberately conservative: an exception type this function doesn't
-    recognize is treated as non-transient (fail fast, honest error) rather
-    than retried blindly — retrying a structurally wrong write (bad shape,
-    unauthorized client, unknown store) only delays an honest failure.
-    """
-    if isinstance(
-        exc,
-        (
-            ValidationException,
-            ForbiddenException,
-            NotFoundException,
-            UnauthorizedException,
-            AuthenticationError,
-            FgaValidationException,
-            ApiValueError,
-            ApiAttributeError,
-            ApiKeyError,
-        ),
-    ):
-        return False
-    if isinstance(exc, (ServiceException, RateLimitExceededError)):
-        return True
-    if isinstance(exc, ApiException):
-        return exc.status is None or exc.status >= 500
-    return isinstance(exc, (OSError, asyncio.TimeoutError))
-
-
-async def _retry_openfga_write(
-    write: Callable[[], Awaitable[Any]],
-    *,
-    phase: str,
-) -> None:
-    """Bounded retry around one OpenFGA write — transient errors only.
-
-    A non-transient error, or the last attempt of a transient one, raises
-    `OpenFgaConvergenceError` naming `phase` and stating that a re-import is
-    safe — never silently swallowed, never retried forever.
-    """
-    last_exc: Exception | None = None
-    for attempt in range(1, _OPENFGA_WRITE_ATTEMPTS + 1):
-        try:
-            await write()
-            return
-        except Exception as exc:  # noqa: BLE001 — classified just below
-            last_exc = exc
-            if (
-                not _is_transient_openfga_error(exc)
-                or attempt == _OPENFGA_WRITE_ATTEMPTS
-            ):
-                raise OpenFgaConvergenceError(
-                    f"{phase}: OpenFGA write failed after {attempt} attempt(s): "
-                    f"{exc}. Re-running this import is safe — OpenFGA writes "
-                    "are idempotent (on_duplicate_writes=IGNORE), so "
-                    "already-applied relations are skipped, not duplicated, "
-                    "on the next attempt."
-                ) from exc
-            await asyncio.sleep(_OPENFGA_RETRY_BASE_DELAY_SECONDS * 2 ** (attempt - 1))
-    # Unreachable — the loop above always either returns or raises.
-    raise AssertionError("unreachable") from last_exc
-
-
-async def _write_relations_with_retry(
-    rebac: RebacEngine,
-    chunk: list[Relation],
-    *,
-    actor_uid: str | None,
-    phase: str,
-) -> None:
-    await _retry_openfga_write(
-        lambda: rebac.add_relations(chunk, actor_uid=actor_uid), phase=phase
-    )
 
 
 async def _emit(
@@ -705,19 +416,6 @@ async def _grant_platform_role(
     )
 
 
-async def _grant_platform_role_with_retry(
-    rebac: RebacEngine,
-    user_sub: str,
-    relation: RelationType,
-    *,
-    actor_uid: str | None = None,
-) -> None:
-    await _retry_openfga_write(
-        lambda: _grant_platform_role(rebac, user_sub, relation, actor_uid=actor_uid),
-        phase="openfga_platform_roles",
-    )
-
-
 async def _grant_team_role_via_import(
     rebac: RebacEngine,
     user_sub: str,
@@ -770,9 +468,53 @@ async def _grant_team_role_via_import(
     invalidate_team_relations_cache(team_id)
 
 
+class UserSubResolver:
+    """Resolves a bundle-declared `username` to its Keycloak `sub` (AUTHZ-07
+    Part 8 §40.2 users.json provisioning), against one bulk snapshot of the
+    realm taken at construction time.
+
+    One instance per import run, shared by every call site in the users.json
+    phase — deliberately no per-username fallback lookup, which would put one
+    Admin API call per user back on the hot path for a bundle declaring many.
+    """
+
+    def __init__(self, prefetched: dict[str, str] | None = None) -> None:
+        self._prefetched: dict[str, str] = dict(prefetched or {})
+
+    @classmethod
+    async def create(
+        cls, user_deps: UserServiceDependencies | None
+    ) -> "UserSubResolver":
+        """Build a resolver with the target realm's users prefetched in bulk.
+
+        A real bulk-sweep failure (Keycloak down, network error, or Keycloak
+        M2M disabled — `find_user_subs_bulk` raises rather than returning
+        `{}`) propagates from here, aborting the import before any write.
+        """
+        prefetched = (
+            await find_user_subs_bulk(user_deps) if user_deps is not None else {}
+        )
+        return cls(prefetched)
+
+    async def find_sub(self, username: str) -> str | None:
+        """Resolve one username to its sub — a pure dict lookup against the
+        bulk-prefetched snapshot. Never makes a Keycloak call itself."""
+        return self._prefetched.get(username)
+
+    def remember(self, username: str, sub: str) -> None:
+        """Record an identity resolvable with zero further I/O this run.
+
+        Called right after `_provision_bundle_identities` creates a Keycloak
+        user — without this, `find_sub` would see the new username missing
+        from the bulk-prefetched snapshot and treat it as unresolved, even
+        though this same run just created it.
+        """
+        self._prefetched[username] = sub
+
+
 async def _provision_bundle_identities(
     bundle_users: list[BundleUserEntry],
-    resolver: KeaUserResolver,
+    resolver: UserSubResolver,
     user_deps: UserServiceDependencies,
     platform_admin: KeycloakUser,
     report: MigrationReport,
@@ -791,7 +533,7 @@ async def _provision_bundle_identities(
     precondition of importing a bundle that creates identities.
 
     Resolution goes through the shared `resolver` (bulk-prefetched once per
-    run, see `KeaUserResolver`) instead of a bare `find_user_sub_by_username`
+    run, see `UserSubResolver`) instead of a bare `find_user_sub_by_username`
     call, and a newly created identity is immediately `remember`ed so
     `_resolve_bundle_usernames` right below never re-resolves it over the
     network.
@@ -848,7 +590,7 @@ def _validate_bundle_role_names(bundle_users: list[BundleUserEntry]) -> None:
 
 async def _resolve_bundle_usernames(
     bundle_users: list[BundleUserEntry],
-    resolver: KeaUserResolver,
+    resolver: UserSubResolver,
 ) -> dict[str, str]:
     """Resolve each unique `username` in the bundle to a Keycloak `sub` once.
 
@@ -922,7 +664,7 @@ def _effective_team_relations(
     entry: BundleUserEntry,
 ) -> dict[str, set[UserTeamRelation]]:
     """Resolve the exact set of direct team-role tuples one bundle entry
-    requests (AUTHZ-07 Step 2 / `PLATFORM-IMPORT-RFC.md` §6 `teams`/
+    requests (AUTHZ-07 Step 2 / `CONTROL-PLANE-PRODUCT-CONTRACT.md` §27 `teams`/
     `team_roles` semantics).
 
     - A team name in `entry.team_roles` requests exactly the named
@@ -1075,7 +817,7 @@ async def _apply_bundle_user_roles(
 async def _run_users_phase(
     *,
     bundle_users: list[BundleUserEntry],
-    resolver: KeaUserResolver,
+    resolver: UserSubResolver,
     platform_admin: KeycloakUser,
     user_deps: UserServiceDependencies,
     team_deps: TeamServiceDependencies,
@@ -1156,7 +898,6 @@ async def run_import(
     task_id: str,
     task_service: TaskService,
     engine: AsyncEngine,
-    agent_instance_store: AgentInstanceStore,
     platform_admin: KeycloakUser | None = None,
     user_deps: UserServiceDependencies | None = None,
     team_deps: TeamServiceDependencies | None = None,
@@ -1178,7 +919,6 @@ async def run_import(
             task_id=task_id,
             task_service=task_service,
             engine=engine,
-            agent_instance_store=agent_instance_store,
             platform_admin=platform_admin,
             user_deps=user_deps,
             team_deps=team_deps,
@@ -1205,222 +945,47 @@ async def _run_import_body(
     task_id: str,
     task_service: TaskService,
     engine: AsyncEngine,
-    agent_instance_store: AgentInstanceStore,
     platform_admin: KeycloakUser | None = None,
     user_deps: UserServiceDependencies | None = None,
     team_deps: TeamServiceDependencies | None = None,
     product_deps: ProductServiceDependencies | None = None,
     rebac: RebacEngine | None = None,
 ) -> MigrationReport:
-    # The tuple-restore phase (kea path, MIGR-05.04) needs a ReBAC engine even
-    # when the bundle has no users.json; fall back to team_deps' engine so
-    # existing call sites keep working.
+    # Phase 4bis-2 (organization structural relation) needs a ReBAC engine
+    # even when the bundle has no users.json; fall back to team_deps' engine
+    # so existing call sites keep working.
     if rebac is None and team_deps is not None:
         rebac = team_deps.rebac
-    source_platform = bundle.manifest.source_platform
     report = MigrationReport(
         import_id=import_id,
-        source_platform=source_platform,
-    )
-    is_swift_native = source_platform == "swift"
-
-    # Swift-native snapshots carry full agent_instance rows and team_id directly,
-    # so they bypass the kea classification / agent_map translation entirely.
-    raw_native_agents: list[dict[str, Any]] = (
-        list(bundle.iter_table("agent_instance")) if is_swift_native else []
+        source_platform=bundle.manifest.source_platform,
     )
 
-    tuples = bundle.openfga_tuples()
-    agent_team_index = _build_agent_team_index(tuples)
-    agent_creator_index = _build_agent_creator_index(tuples)
-
-    # ── KEA CUTOVER 2026 — identity reconciliation setup (kea_reconciliation.py) ──
-    # See that module's docstring for why: real users authenticate via a Thales SSO
-    # broker (OneAccess), bridged into both kea's and swift's Keycloak independently —
-    # the `sub` is not assumed stable across the two, only the username is. Every
-    # `kea_*` variable below is a no-op ({}) for a swift-native snapshot, which never
-    # needs any of this.
-    kea_realm_for_reconciliation = None if is_swift_native else bundle.keycloak_realm()
-    kea_username_index = (
-        {} if is_swift_native else kea_username_by_sub(kea_realm_for_reconciliation)
-    )
-    kea_resolver = await KeaUserResolver.create(user_deps)
-    kea_report = KeaReconciliationReport()
-    if not is_swift_native:
-        agent_team_index = await resolve_agent_team_index(
-            agent_team_index, kea_username_index, kea_resolver, kea_report
-        )
-        agent_creator_index = await resolve_creator_index(
-            agent_creator_index, kea_username_index, kea_resolver, kea_report
-        )
-    # ── END KEA CUTOVER 2026 (setup) ───────────────────────────────────────────
-
-    # ── Phase 1: classify agents (no DB writes) — kea snapshots only ──────────
-    raw_agents = [] if is_swift_native else list(bundle.iter_table("agent"))
-    await _emit(
-        task_service, task_id, TaskState.running, "classify", 0, len(raw_agents), 0
-    )
-
-    to_create_agents: list[AgentInstanceRecord] = []
-
-    for row in raw_agents:
-        agent_id: str = row["id"]
-        payload: dict[str, Any] = row.get("payload_json") or {}
-        if payload.get("type") == "leader":
-            # Legacy kea leader rows — kea's own store ignores them on load.
-            report.agents_skipped += 1
-            continue
-        result = classify_agent(payload)
-
-        if result.outcome == AgentMapOutcome.IGNORED:
-            report.agents_skipped += 1
-            continue
-
-        if result.outcome == AgentMapOutcome.GAP:
-            kea_ref = result.kea_template or "<unknown>"
-            report.agents_gap += 1
-            report.warnings.append(
-                f"agent {agent_id}: no swift template for '{kea_ref}' (GAP — "
-                "add to KEA_TO_SWIFT_TEMPLATE in agent_map.py before cutover)"
-            )
-            continue
-
-        team_id_str = agent_team_index.get(agent_id)
-        if team_id_str is None:
-            report.warnings.append(
-                f"agent {agent_id}: no OpenFGA owner tuple found — skipped"
-            )
-            report.agents_skipped += 1
-            continue
-
-        template_id = result.swift_template_id or ""
-        runtime_part, _, agent_part = template_id.partition(":")
-        display_name: str = row.get("name") or payload.get("name") or agent_id
-
-        # MIGR-05.11 — carry the kea agent's real tuning, not a placeholder.
-        tuning_src: dict[str, Any] = payload.get("tuning") or {}
-        role = str(tuning_src.get("role") or "").strip() or display_name
-        description = str(tuning_src.get("description") or "").strip() or display_name
-        tag_list = [t for t in (tuning_src.get("tags") or []) if isinstance(t, str)]
-        system_prompt, secondary_prompt_keys = _extract_kea_prompts(tuning_src)
-        values: dict[str, Any] = {}
-        if system_prompt:
-            # `prompts.system` is the tuning key every fred-agents ReAct
-            # template declares; the runtime overlays it onto the template's
-            # system_prompt_template (fred_runtime/app/agent_app.py). This is
-            # what keeps the kea agent's customized behaviour. Deliberately
-            # not mirrored into a prompt-library row: `prompt_refs_json` has
-            # no consumer today, and kea never had these prompts in a library.
-            values["prompts.system"] = system_prompt
-        if secondary_prompt_keys:
-            report.warnings.append(
-                f"agent {agent_id}: kea prompt field(s) "
-                f"{', '.join(sorted(secondary_prompt_keys))} have no swift "
-                "equivalent — only the system prompt was migrated"
-            )
-        tuning = ManagedAgentTuning(
-            role=role,
-            description=description,
-            tags=tag_list,
-            values=values,
-            selected_capability_ids=_extract_kea_capability_selection(tuning_src),
-        )
-
-        to_create_agents.append(
-            AgentInstanceRecord(
-                agent_instance_id=agent_id,
-                team_id=TeamId(team_id_str),
-                template_id=template_id,
-                source_runtime_id=runtime_part,
-                source_agent_id=agent_part,
-                display_name=display_name,
-                description=description[:500],
-                enabled=bool(payload.get("enabled", True)),
-                created_by=agent_creator_index.get(agent_id),
-                tuning=tuning,
-            )
-        )
-
-    # Table file names differ per producer: kea bundles carry main's literal
-    # Postgres table names (`migration/snapshot.py::EXPORT_TABLES` on the main
-    # branch — the team table is `teammetadata`, one word); swift-native
-    # bundles carry `exporter.py`'s names (`team_metadata`).
-    team_table = "team_metadata" if is_swift_native else "teammetadata"
+    raw_native_agents = list(bundle.iter_table("agent_instance"))
     raw_tags = list(bundle.iter_table("tag"))
-    if not is_swift_native:
-        # Kea library tags (prompt/template/chat-context folders) are not
-        # migrated: their content lands in the swift prompt library (personal
-        # spaces), so importing them would only create orphaned folders.
-        library_tags = [t for t in raw_tags if t.get("type") in _KEA_LIBRARY_TAG_TYPES]
-        if library_tags:
-            report.warnings.append(
-                f"{len(library_tags)} kea library tag(s) "
-                "(prompt/template/chat-context) not migrated — their contents "
-                "move to personal prompt spaces"
-            )
-            raw_tags = [
-                t for t in raw_tags if t.get("type") not in _KEA_LIBRARY_TAG_TYPES
-            ]
-        # KEA CUTOVER 2026 — resolve personal tag ownership (see setup block above).
-        raw_tags = await resolve_tag_owner_ids(
-            raw_tags, kea_username_index, kea_resolver, kea_report
-        )
-    # Kea chat-context resources become personal prompt-library rows; swift
-    # bundles never carry a resource table.
-    raw_resources = [] if is_swift_native else list(bundle.iter_table("resource"))
-    if not is_swift_native:
-        # KEA CUTOVER 2026 — resolve personal chat-context authorship (see setup
-        # block above).
-        raw_resources = await resolve_resource_authors(
-            raw_resources, kea_username_index, kea_resolver, kea_report
-        )
     raw_metadata = list(bundle.iter_table("metadata"))
-    # Per-team branding + retention (CTRLP-12). Kea's `teammetadata` rows carry
-    # `is_private` instead of `joining_mode` and may lack `name` — both handled
-    # by `_import_team_metadata`'s fallbacks below. Swift-native bundles use
-    # their raw `team_metadata` rows as-is; the kea path replaces this with
-    # `plan.team_metadata` below (merged + orphan-dropped).
-    raw_team_metadata = list(bundle.iter_table(team_table)) if is_swift_native else []
-    # Routing policy never existed in a kea bundle (`EXPORT_TABLES` has no
-    # equivalent table) — `iter_table` already returns empty for a missing
-    # file, so no `is_swift_native` gate is needed here.
+    raw_team_metadata = list(bundle.iter_table("team_metadata"))
     raw_team_routing_policy = list(bundle.iter_table("team_routing_policy"))
 
-    # ── KEA CUTOVER 2026 — team merge, OpenFGA tuple restore, and platform-role
-    # resolution, all BEFORE the Postgres transaction opens: `build_kea_reconciliation_plan`
-    # is the single source of truth shared with the dry-run preview
-    # (`kea_migration_api.py`) — same sequencing, same (bulk-prefetched)
-    # `kea_resolver`, no independent recomputation. None of this depends on
-    # anything the transaction below writes (team ids are bundle-derived
-    # Keycloak group ids, never Postgres-generated), so a Keycloak failure
-    # aborts the whole import before any Postgres row is written this run.
-    resolved_relations: list[Relation] = []
-    realm_grants: list[tuple[str, RelationType]] = []
-    if not is_swift_native:
-        plan = await build_kea_reconciliation_plan(bundle, kea_resolver, kea_report)
-        raw_team_metadata = plan.team_metadata
-        resolved_relations = plan.resolved_relations
-        realm_grants = plan.realm_platform_grants
-        report.tuples_dropped = plan.tuples_dropped_total
-        report.warnings.extend(plan.warnings)
-    # ── END KEA CUTOVER 2026 (pre-transaction resolution) ──────────────────────
+    # users.json's Keycloak bulk-resolve sweep runs before the Postgres
+    # transaction opens below — a broken Keycloak Admin M2M client must abort
+    # the import before any row is written, matching this module's "no partial
+    # state" guarantee, not after Phases 2-4 already committed.
+    demo_users = bundle.demo_users()
+    user_resolver: UserSubResolver | None = None
+    if demo_users:
+        if platform_admin is None or user_deps is None or team_deps is None:
+            raise ValueError(
+                "bundle contains users.json but run_import was not given "
+                "platform_admin/user_deps/team_deps"
+            )
+        user_resolver = await UserSubResolver.create(user_deps)
 
     # ── Phases 2–4: all writes in a single atomic transaction ─────────────────
     session_factory = make_session_factory(engine)
     async with session_factory() as session:
         async with session.begin():
-            # --- agents (kea: mapped records / swift: native rows) ---
-            async def _import_agent(
-                record: AgentInstanceRecord, s: AsyncSession
-            ) -> bool:
-                if (
-                    await agent_instance_store.get(record.agent_instance_id, session=s)
-                    is not None
-                ):
-                    return False
-                await agent_instance_store.create(record, session=s)
-                return True
-
+            # --- agents ---
             async def _import_agent_native(
                 row: dict[str, Any], s: AsyncSession
             ) -> bool:
@@ -1446,24 +1011,14 @@ async def _run_import_body(
                 )
                 return True
 
-            if is_swift_native:
-                ai, as_ = await _run_phase(
-                    task_service=task_service,
-                    task_id=task_id,
-                    step_id="agents",
-                    items=raw_native_agents,
-                    import_fn=_import_agent_native,
-                    session=session,
-                )
-            else:
-                ai, as_ = await _run_phase(
-                    task_service=task_service,
-                    task_id=task_id,
-                    step_id="agents",
-                    items=to_create_agents,
-                    import_fn=_import_agent,
-                    session=session,
-                )
+            ai, as_ = await _run_phase(
+                task_service=task_service,
+                task_id=task_id,
+                step_id="agents",
+                items=raw_native_agents,
+                import_fn=_import_agent_native,
+                session=session,
+            )
             report.agents_imported += ai
             report.agents_skipped += as_
 
@@ -1493,76 +1048,6 @@ async def _run_import_body(
                 step_id="tags",
                 items=raw_tags,
                 import_fn=_import_tag,
-                session=session,
-            )
-
-            # --- kea chat-context resources → personal prompt rows ---
-            async def _import_resource(row: dict[str, Any], s: AsyncSession) -> bool:
-                resource_id = row["resource_id"]
-                kind = row.get("resource_type")
-                doc: dict[str, Any] = row.get("doc") or {}
-                if kind != "chat-context":
-                    report.warnings.append(
-                        f"resource {resource_id}: kea kind '{kind}' has no "
-                        "swift equivalent — skipped"
-                    )
-                    return False
-                author = row.get("author") or doc.get("author")
-                if not author:
-                    report.warnings.append(
-                        f"resource {resource_id}: no author — cannot place in "
-                        "a personal space, skipped"
-                    )
-                    return False
-                if await s.get(PromptRow, resource_id) is not None:
-                    return False
-                text = _strip_front_matter(str(doc.get("content") or ""))
-                if not text:
-                    report.warnings.append(
-                        f"resource {resource_id}: empty content — skipped"
-                    )
-                    return False
-                # Chat contexts migrate into the author's personal space only
-                # (decision 2026-07-24); kea library sharing is dropped.
-                team_id = f"personal-{author}"
-                name = str(
-                    row.get("resource_name")
-                    or doc.get("name")
-                    or f"Imported context {resource_id[:8]}"
-                )[:255]
-                collision = await s.execute(
-                    select(PromptRow.prompt_id).where(
-                        PromptRow.team_id == team_id, PromptRow.name == name
-                    )
-                )
-                if collision.first() is not None:
-                    name = f"{name[:240]} ({resource_id[:8]})"
-                description = doc.get("description")
-                prompt_row = PromptRow(
-                    prompt_id=resource_id,
-                    team_id=team_id,
-                    name=name,
-                    description=str(description)[:500] if description else None,
-                    tags=[t for t in (doc.get("labels") or []) if isinstance(t, str)],
-                    text=text,
-                    created_by=str(author),
-                    version=1,
-                )
-                created_at = _coerce_dt(row.get("created_at"))
-                updated_at = _coerce_dt(row.get("updated_at"))
-                if created_at is not None:
-                    prompt_row.created_at = created_at
-                if updated_at is not None:
-                    prompt_row.updated_at = updated_at
-                s.add(prompt_row)
-                return True
-
-            report.prompts_imported, report.prompts_skipped = await _run_phase(
-                task_service=task_service,
-                task_id=task_id,
-                step_id="resources",
-                items=raw_resources,
-                import_fn=_import_resource,
                 session=session,
             )
 
@@ -1705,56 +1190,16 @@ async def _run_import_body(
                 session=session,
             )
 
-    # ── Phase 4bis: OpenFGA tuple restore, kea path only (MIGR-05.04) ─────────
-    # Outside the DB transaction: OpenFGA is a separate store with its own
-    # idempotence (`add_relation` ignores duplicates), so a partial tuple
-    # replay is safely re-runnable. Replaces the former "ops bulk-copy" plan,
-    # which would have pushed kea relation names (`owner`/`manager`/`member`
-    # on team objects) that no longer exist in the swift model. Relations were
-    # already fully resolved above, before the transaction — this is the write
-    # only.
-    if resolved_relations:
-        if rebac is None or not rebac.enabled:
-            report.warnings.append(
-                f"{len(resolved_relations)} OpenFGA relation(s) NOT restored: "
-                "ReBAC engine unavailable or disabled — re-run the import "
-                "with ReBAC enabled before cutover"
-            )
-        else:
-            total = len(resolved_relations)
-            await _emit(task_service, task_id, TaskState.running, "tuples", 0, total, 0)
-            actor_uid = platform_admin.uid if platform_admin else None
-            for start in range(0, total, _TUPLE_WRITE_CHUNK_SIZE):
-                chunk = resolved_relations[start : start + _TUPLE_WRITE_CHUNK_SIZE]
-                await _write_relations_with_retry(
-                    rebac, chunk, actor_uid=actor_uid, phase="openfga_tuples"
-                )
-                report.tuples_written += len(chunk)
-                processed = start + len(chunk)
-                await _emit(
-                    task_service,
-                    task_id,
-                    TaskState.running,
-                    "tuples",
-                    processed,
-                    total,
-                    0,
-                )
-
-    # ── Phase 4bis-2: organization structural relation, every snapshot kind ───
+    # ── Phase 4bis: organization structural relation ──────────────────────────
     # (#2065) `_import_team_metadata` above writes `TeamMetadataRow`s directly
     # via raw ORM inserts, bypassing `teams.service.create_team` (which now
     # writes the `organization -> team` structural edge itself) entirely — so
     # every team present in this bundle's team_metadata table, whether just
     # inserted or already-existing/skipped, must be (re-)reconciled here.
     # `ensure_team_organization_relations` is the bulk, idempotent, read-then-
-    # write cold-path primitive (never called from a request path): for a kea
-    # bundle whose phase above already replayed this same edge 1:1 from the
-    # original tuples, this costs one extra bulk Read and zero extra writes;
-    # for a swift-native bundle (which never restores raw OpenFGA tuples at
-    # all), this is what actually establishes the edge, possibly for the
-    # first time. Also serves as the repair path when this import is a
-    # re-run over already-imported (skipped) team rows.
+    # write cold-path primitive (never called from a request path). Also
+    # serves as the repair path when this import is a re-run over
+    # already-imported (skipped) team rows.
     team_metadata_ids = [row["id"] for row in raw_team_metadata]
     if team_metadata_ids:
         if rebac is None or not rebac.enabled:
@@ -1768,42 +1213,23 @@ async def _run_import_body(
         else:
             await rebac.ensure_team_organization_relations(team_metadata_ids)
 
-    # ── Phase 4ter: platform roles from the realm export, kea path only ───────
-    # Kea platform roles are Keycloak realm roles per user — never tuples, so
-    # the tuple phase above cannot restore them. They only travel in a FULL
-    # realm export (`kc export --users`); a partial-export yields nothing here
-    # and the grants then come from `users.json` (or manual bootstrap). Grants
-    # were already fully resolved above, before the transaction — this is the
-    # write only.
-    if realm_grants:
-        if rebac is None or not rebac.enabled:
-            report.warnings.append(
-                f"{len(realm_grants)} platform role(s) from the realm "
-                "export NOT granted: ReBAC engine unavailable or disabled"
-            )
-        else:
-            actor_uid = platform_admin.uid if platform_admin else None
-            for sub, relation in realm_grants:
-                await _grant_platform_role_with_retry(
-                    rebac, sub, relation, actor_uid=actor_uid
-                )
-                report.platform_roles_granted += 1
-
     # ── Phase 5: users.json declarative provisioning (AUTHZ-07 §40.2) ─────────
     # Outside the atomic transaction above: this phase calls full team/ReBAC
     # service functions (their own transactions/OpenFGA writes), not raw ORM
     # inserts on `session`. Runs last so team-role grants may reference teams
-    # the team_metadata phase or this same phase just created.
-    demo_users = bundle.demo_users()
+    # the team_metadata phase or this same phase just created. `user_resolver`
+    # was already built (or the missing-dependency error already raised)
+    # before the transaction opened above.
     if demo_users:
-        if platform_admin is None or user_deps is None or team_deps is None:
-            raise ValueError(
-                "bundle contains users.json but run_import was not given "
-                "platform_admin/user_deps/team_deps"
-            )
+        assert (
+            platform_admin is not None
+            and user_deps is not None
+            and team_deps is not None
+        )
+        assert user_resolver is not None
         await _run_users_phase(
             bundle_users=demo_users,
-            resolver=kea_resolver,
+            resolver=user_resolver,
             platform_admin=platform_admin,
             user_deps=user_deps,
             team_deps=team_deps,
@@ -1813,17 +1239,16 @@ async def _run_import_body(
         )
 
     # ── Phase 6: capability compatibility sweeps (GitHub #2004 item 3) ────────
-    # Imported agent rows are written directly (kea rows via a bare
-    # `ManagedAgentTuning(...)`, swift-native rows via the bundle's raw
-    # `tuning_json`), never through `enroll_agent_instance` /
-    # `_apply_capability_selection`. Both paths can persist
+    # Imported agent rows are written directly via the bundle's raw
+    # `tuning_json`, never through `enroll_agent_instance` /
+    # `_apply_capability_selection`. That path can persist
     # `selected_capability_ids=None` — the exact sentinel #1980 already closed
     # for the live enroll/update path, which the runtime still trusts as
     # "activate every template default" with no ReBAC check. Re-running the
     # same two sweeps used at CAPAB-01/CTRLP-14 deploy time, scoped to just the
     # teams this import touched, closes the gap for every import instead of
     # relying on an operator to remember a manual follow-up.
-    imported_team_ids: set[TeamId] = {record.team_id for record in to_create_agents} | {
+    imported_team_ids: set[TeamId] = {
         TeamId(row["team_id"]) for row in raw_native_agents
     }
     if product_deps is not None and imported_team_ids:
@@ -1841,19 +1266,6 @@ async def _run_import_body(
             materialize_summary.materialized,
             len(imported_team_ids),
         )
-
-    # KEA CUTOVER 2026 — fold the reconciliation report's human-readable summary into
-    # the ordinary warnings list, so it shows up wherever MigrationReport already does
-    # (task events, the existing migration UI) with no OpenAPI/contract change. The
-    # dedicated /admin/kea-migration dry-run endpoint returns the structured
-    # `KeaReconciliationReport` directly instead — see kea_migration_api.py. Swift-
-    # native snapshots never touch any of this — nothing to summarize. Must run before
-    # the "Non-DB warnings" log below (not after) — every kea_report-populating phase
-    # (identity resolution, team_member derivation, admin-less check, platform grants)
-    # has already completed by this point, and the log line is otherwise the one place
-    # an operator watching stdout would see these lines at all.
-    if not is_swift_native:
-        report.warnings.extend(kea_report.summary_lines())
 
     # ── Non-DB warnings ───────────────────────────────────────────────────────
     if report.warnings:
@@ -1876,14 +1288,8 @@ async def _run_import_body(
                     if report.agents_skipped
                     else None,
                     f"{report.agents_gap} gaps" if report.agents_gap else None,
-                    f"{report.prompts_imported} prompts"
-                    if report.prompts_imported
-                    else None,
                     f"{report.tags_imported} tags" if report.tags_imported else None,
                     f"{report.docs_imported} docs" if report.docs_imported else None,
-                    f"{report.tuples_written} permissions restored"
-                    if report.tuples_written
-                    else None,
                     f"{report.teams_imported} teams" if report.teams_imported else None,
                     f"{report.routing_policies_imported} routing policies"
                     if report.routing_policies_imported
