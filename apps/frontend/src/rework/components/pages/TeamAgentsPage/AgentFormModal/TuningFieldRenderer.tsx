@@ -16,6 +16,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
+import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
@@ -179,6 +180,15 @@ export function TuningFieldRenderer({
       );
     }
 
+    // Clearing the field WHILE EDITING must not re-trigger the auto-picker: the
+    // auto-open (pickerExplicit === null && empty) is only meant for the initial
+    // empty state. Once the user has emptied it themselves, lock into write mode
+    // — they can still reopen the library from the button above.
+    const handleMultilineChange = (next: string) => {
+      onChange(field.key, next);
+      if (next.trim() === "") setPickerExplicit(false);
+    };
+
     return (
       <div className={styles.promptFieldWrapper}>
         {hasLibrary && (
@@ -195,23 +205,29 @@ export function TuningFieldRenderer({
             </Button>
           </div>
         )}
-        <TextArea
-          label={label}
-          value={String(fieldValue)}
-          rows={field.ui?.max_lines ?? 4}
-          placeholder={field.ui?.placeholder ?? undefined}
-          onChange={(e) => {
-            onChange(field.key, e.target.value);
-            // Clearing the field WHILE EDITING must not re-trigger the
-            // auto-picker: the auto-open (pickerExplicit === null && empty) is
-            // only meant for the initial empty state. Once the user has emptied
-            // it themselves, lock into write mode — they can still reopen the
-            // library from the "pick from library" button above.
-            if (e.target.value.trim() === "") setPickerExplicit(false);
-          }}
-          disabled={disabled || isLoadingDetail}
-          error={error}
-        />
+        {isPromptField ? (
+          <PromptEditor
+            label={label}
+            value={String(fieldValue)}
+            // A manifest asking for a taller field is honoured; one asking for
+            // a shorter one is not — a prompt is unreadable in six lines.
+            rows={Math.max(field.ui?.max_lines ?? 0, 12)}
+            placeholder={field.ui?.placeholder ?? undefined}
+            onChange={handleMultilineChange}
+            disabled={disabled || isLoadingDetail}
+            error={error}
+          />
+        ) : (
+          <TextArea
+            label={label}
+            value={String(fieldValue)}
+            rows={field.ui?.max_lines ?? 4}
+            placeholder={field.ui?.placeholder ?? undefined}
+            onChange={(e) => handleMultilineChange(e.target.value)}
+            disabled={disabled || isLoadingDetail}
+            error={error}
+          />
+        )}
       </div>
     );
   }

@@ -156,6 +156,40 @@ _(none)_
 
 ---
 
+### `PromptEditor`
+
+**Location:** `src/rework/components/shared/molecules/PromptEditor/PromptEditor.tsx`
+**Status:** `Functional`
+
+The editing surface for anything an LLM reads as a prompt: the agent form's
+`type: "prompt"` tuning fields (`TuningFieldRenderer`) and the team prompt library's
+create/edit modal (`PromptsPage`). Replaces a plain `TextArea` of six lines with a
+CodeMirror document in markdown mode, 12 lines by default and resizable. A manifest's
+`ui.max_lines` can only grow the field, never shrink it below 12.
+
+Markdown mode also colours inline HTML/XML tags, so one configuration serves both prompt
+styles in use — markdown prose and tag-structured prompts (`<instructions>`, for Mistral-family
+models). There is no language selector and no preview: the raw text is the only representation,
+and it round-trips byte for byte. That is the reason this is **not** built on MDXEditor
+(`writable_document`, wiki), whose MDX parser reads a bare tag as a JSX node and either throws
+or reformats the text on the way back through its Lexical AST — unacceptable for a string a
+model reads literally.
+
+The syntax palette is defined as CSS classes on semantic tokens rather than colours in JS, so
+the theme follows light/dark with no branch in the component. It deliberately uses only the
+neutral roles plus `primary`/`secondary`/`tertiary`: the feedback roles (`error`, `success`,
+`warning`, `info`) carry a status meaning that markdown structure does not have. The editor is
+the one place in a form that leaves `--font-family-base` for `--font-family-mono`, added for it.
+
+Chrome (label, border, focus ring, error state) mirrors the `TextArea` atom so a prompt field
+does not read as a foreign widget next to the other fields. The editing surface
+is a `contenteditable`, not a form control, so it is named with `aria-labelledby` rather than a
+`<label for>`.
+
+`PlatformPromptPage` still edits its prompt in a plain `TextArea` — not yet migrated.
+
+---
+
 ### `PromptPicker`
 
 **Location:** `src/rework/components/shared/molecules/PromptPicker/PromptPicker.tsx`

@@ -1,0 +1,181 @@
+/* Chrome deliberately mirrors the TextArea atom (border, focus ring, error
+   state, label and information row) so a prompt field sits in a form without
+   looking like a foreign widget. Only the editing surface itself differs. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.host {
+  --input-outline: transparent;
+  --input-border: var(--outline-retreat);
+  display: flex;
+  outline: 2px solid var(--input-outline);
+  border: 1px solid var(--input-border);
+  border-radius: var(--spacing-xs);
+  background-color: var(--surface-container-lowest);
+  /* A definite height, not min-height: the editor inside sizes itself against
+     it, and dragging the resize handle rewrites it. A longer prompt scrolls
+     rather than pushing the form's buttons out of reach. */
+  height: calc(var(--prompt-editor-rows) * 1.5em + 2 * var(--spacing-s));
+  max-height: 60vh;
+  overflow: hidden;
+  resize: vertical;
+  /* Carries the editor's own type size so the `em` below is one text line, not
+     one line of the surrounding form. */
+  font-size: 0.8125rem;
+}
+
+.editor:not(.error):not(.disabled) .host:hover {
+  border-color: var(--outline);
+}
+
+.editor:not(.error) .host:has(:global(.cm-editor.cm-focused)) {
+  --input-outline: var(--primary);
+  border-color: transparent;
+}
+
+.editor.error .host {
+  --input-border: var(--error);
+}
+
+.editor.error .host:has(:global(.cm-editor.cm-focused)) {
+  --input-outline: var(--error);
+}
+
+.editor.disabled .host {
+  background-color: var(--state-surface-main-disabled);
+}
+
+/* CodeMirror's own chrome. Scoped under .host, so nothing leaks out of the
+   component even though the class names themselves are global. */
+.host :global(.cm-editor) {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.host :global(.cm-editor.cm-focused) {
+  /* The focus ring is drawn on .host, one element out. */
+  outline: none;
+}
+
+.host :global(.cm-scroller) {
+  overflow-y: auto;
+  line-height: 1.5;
+  /* The one place the form leaves the base font: tags and indentation only
+     line up in a monospace cut. */
+  font-family: var(--font-family-mono);
+}
+
+.host :global(.cm-content) {
+  padding: var(--spacing-s);
+  color: var(--on-surface);
+  caret-color: var(--on-surface);
+}
+
+.host :global(.cm-line) {
+  padding: 0;
+}
+
+.host :global(.cm-placeholder) {
+  color: var(--on-surface-retreat);
+}
+
+.editor.disabled .host :global(.cm-content) {
+  color: var(--on-surface-retreat);
+}
+
+/* A translucent layer, not a container colour: the selection sits behind the
+   syntax palette and must not repaint the text under it. */
+.host :global(.cm-selectionBackground),
+.host :global(.cm-content ::selection) {
+  background-color: var(--state-primary-selected);
+}
+
+/* Syntax palette. Restricted to the neutral roles plus primary/secondary/
+   tertiary: the feedback roles (error, success, warning, info) carry a status
+   meaning that markdown structure does not have. */
+
+.heading {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.strong {
+  color: var(--on-surface);
+  font-weight: 600;
+}
+
+.emphasis {
+  color: var(--on-surface);
+  font-style: italic;
+}
+
+.link {
+  color: var(--secondary);
+  text-decoration: underline;
+}
+
+.code {
+  color: var(--secondary);
+}
+
+.quote {
+  color: var(--on-surface-retreat);
+  font-style: italic;
+}
+
+/* Tag names and angle brackets — the Mistral-style `<instructions>` case. */
+.tag {
+  color: var(--tertiary);
+}
+
+.attribute {
+  color: var(--secondary);
+}
+
+.value {
+  color: var(--on-surface-retreat);
+}
+
+/* List bullets, heading hashes, and the other syntax marks: present but never
+   competing with the prose they wrap. */
+.marker {
+  color: var(--on-surface-muted);
+}
+
+.comment {
+  color: var(--on-surface-muted);
+  font-style: italic;
+}
+
+.label {
+  --label-color: var(--on-surface-retreat);
+  padding-left: var(--spacing-xs);
+  color: var(--label-color);
+  font: var(--font-label-large);
+}
+
+.editor:focus-within .label {
+  --label-color: var(--on-surface);
+}
+
+.editor.error .label,
+.editor.error .information {
+  color: var(--error);
+}
+
+.editor.disabled .label,
+.editor.disabled .information {
+  color: var(--on-surface-retreat);
+}
+
+.information {
+  padding: 0 var(--spacing-xs);
+  min-height: 1.25rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
