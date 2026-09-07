@@ -3044,6 +3044,11 @@
         "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
       },
       "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
+    },
+    "promptEditor": {
+      "copy": "Copier le prompt",
+      "copied": "Prompt copié dans le presse-papier",
+      "copyFailed": "Impossible de copier le prompt"
     }
   },
   "runtime": {

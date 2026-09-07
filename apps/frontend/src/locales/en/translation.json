@@ -3044,6 +3044,11 @@
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
       "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
+    },
+    "promptEditor": {
+      "copy": "Copy the prompt",
+      "copied": "Prompt copied to the clipboard",
+      "copyFailed": "Could not copy the prompt"
     }
   },
   "runtime": {

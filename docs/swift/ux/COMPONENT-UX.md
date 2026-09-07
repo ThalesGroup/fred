@@ -182,9 +182,17 @@ neutral roles plus `primary`/`secondary`/`tertiary`: the feedback roles (`error`
 the one place in a form that leaves `--font-family-base` for `--font-family-mono`, added for it.
 
 Chrome (label, border, focus ring, error state) mirrors the `TextArea` atom so a prompt field
-does not read as a foreign widget next to the other fields. The editing surface
-is a `contenteditable`, not a form control, so it is named with `aria-labelledby` rather than a
-`<label for>`.
+does not read as a foreign widget next to the other fields. The editing surface is a `contenteditable`,
+not a form control, so it is named with `aria-labelledby` rather than a `<label for>`, and
+`disabled` sets `EditorState.readOnly` alongside `EditorView.editable` — the drop handler gates on
+the former alone, so `editable` by itself still let a drop edit a locked field. Spell-checking is
+turned back on (CodeMirror defaults it off); `autocorrect`/`autocapitalize` stay off, since they
+rewrite what is typed and a prompt's tags must survive verbatim.
+
+A copy button fades in over the top-right corner on hover, and on focus so it is reachable without
+a pointer. It copies the live CodeMirror document rather than the last `value` the parent rendered,
+and reports through the toast provider either way — a silent clipboard failure would look
+identical to success.
 
 `PlatformPromptPage` still edits its prompt in a plain `TextArea` — not yet migrated.
 

@@ -26,7 +26,11 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { type CSSProperties, useEffect, useId, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./PromptEditor.module.css";
 
 export interface PromptEditorProps {
@@ -84,6 +88,8 @@ export function PromptEditor({
   error,
   rows = PROMPT_EDITOR_ROWS,
 }: PromptEditorProps) {
+  const { t } = useTranslation();
+  const { showSuccess, showError } = useToast();
   const labelId = useId();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -172,13 +178,38 @@ export function PromptEditor({
     });
   }, [placeholder]);
 
+  // Copies the document, not the `value` prop: the two are the same except in
+  // the tick between a keystroke and the parent re-rendering with it.
+  const handleCopy = async () => {
+    const text = viewRef.current?.state.doc.toString() ?? value;
+    const ok = await writeRichClipboard("", text);
+    if (ok) showSuccess({ summary: t("rework.promptEditor.copied") });
+    else showError({ summary: t("rework.promptEditor.copyFailed") });
+  };
+
   return (
     <div className={`${styles.editor} ${disabled ? styles.disabled : ""} ${!disabled && error ? styles.error : ""}`}>
       <span className={styles.label} id={labelId}>
         {required ? `${label} *` : label}
       </span>
 
-      <div ref={hostRef} className={styles.host} style={{ "--prompt-editor-rows": rows } as CSSProperties} />
+      <div className={styles.field}>
+        <div ref={hostRef} className={styles.host} style={{ "--prompt-editor-rows": rows } as CSSProperties} />
+
+        {/* Nothing to copy from an empty field, so the control stays out of the
+            way until there is a prompt. */}
+        {value.trim() !== "" && (
+          <div className={styles.copyButton}>
+            <IconButton
+              variant="tonal"
+              size="medium"
+              icon={{ category: "outlined", type: "content_copy" }}
+              aria-label={t("rework.promptEditor.copy")}
+              onClick={handleCopy}
+            />
+          </div>
+        )}
+      </div>
 
       {error && <span className={styles.information}>{error}</span>}
     </div>

@@ -8,6 +8,35 @@
   gap: var(--spacing-2xs);
 }
 
+/* Anchors the copy button over the editor without putting a sibling inside
+   `.host`, which CodeMirror owns and writes into. */
+.field {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+}
+
+/* Revealed on hover, and on focus so it is reachable without a pointer —
+   `opacity` rather than `display`, which would drop it out of the tab order. */
+.copyButton {
+  position: absolute;
+  top: var(--spacing-2xs);
+  right: var(--spacing-2xs);
+  opacity: 0;
+  transition: opacity var(--duration-short-3) var(--easing-standard);
+}
+
+.field:hover .copyButton,
+.copyButton:focus-within {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copyButton {
+    transition: none;
+  }
+}
+
 .host {
   --input-outline: transparent;
   --input-border: var(--outline-retreat);

@@ -26,6 +26,19 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+}));
+
+const showSuccess = vi.fn();
+const showError = vi.fn();
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess, showError }),
+}));
+
+const writeRichClipboard = vi.hoisted(() => vi.fn(async () => true));
+vi.mock("@rework/utils/clipboardUtils", () => ({ writeRichClipboard }));
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -38,6 +51,8 @@ function render(props: Partial<Parameters<typeof PromptEditor>[0]> = {}) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  writeRichClipboard.mockResolvedValue(true);
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -162,6 +177,43 @@ describe("PromptEditor", () => {
 
     render({ value: "text", disabled: false });
     expect(view?.state.readOnly).toBe(false);
+  });
+
+  const copyButton = () => container.querySelector<HTMLButtonElement>('button[aria-label="rework.promptEditor.copy"]');
+
+  it("offers no copy button while the field is empty", () => {
+    render({ value: "   " });
+    expect(copyButton()).toBeNull();
+  });
+
+  it("copies the live document and confirms with a toast", async () => {
+    render({ value: "hello" });
+
+    // Copy what the editor holds, not the last value the parent rendered.
+    const view = EditorView.findFromDOM(container.querySelector(".cm-editor") as HTMLElement);
+    act(() => {
+      view?.dispatch({ changes: { from: 5, insert: " world" } });
+    });
+
+    await act(async () => {
+      copyButton()!.click();
+    });
+
+    expect(writeRichClipboard).toHaveBeenCalledWith("", "hello world");
+    expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.promptEditor.copied" });
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed copy instead of claiming success", async () => {
+    writeRichClipboard.mockResolvedValue(false);
+    render({ value: "hello" });
+
+    await act(async () => {
+      copyButton()!.click();
+    });
+
+    expect(showError).toHaveBeenCalledWith({ summary: "rework.promptEditor.copyFailed" });
+    expect(showSuccess).not.toHaveBeenCalled();
   });
 
   // A prompt is prose; the textarea this replaced had the browser's checker.
