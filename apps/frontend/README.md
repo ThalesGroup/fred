@@ -244,16 +244,39 @@ Behaviour to keep in mind:
   same name, restart the pods; pointing the URL at a new name rolls them.
 - nginx does not listen until the fetch returns, so it gives up after ~16s to
   stay inside the default liveness window: an unreachable store costs a warning,
-  not a crashloop. Add the startup probe from the example values for a store
-  that is reachable but slow.
+  not a crashloop. A store that is reachable but slow needs a `startupProbe`,
+  which holds the liveness probe off while the archive downloads.
 
 The archive is unpacked into `/var/lib/fred/theme`, outside the web root, and
-nginx tries it before the baked file for the three surfaces above. Helm wiring
-(the URL and the key from a Secret through `extraEnvVars`, plus an `emptyDir`
-for a pod with a read-only root filesystem) is in
-`deploy/charts/custom-values-examples/frontend-theme.yaml`.
-`make theme-container-smoke` exercises the whole path against a locally built
-image.
+nginx tries it before the baked file for the three surfaces above.
+
+Helm wiring is values only, no chart template change:
+
+```yaml
+applications:
+  frontend:
+    extraEnvVars:
+      - name: FRONTEND_THEME_URL
+        value: "http://minio.data.svc.cluster.local:9000/fred-themes/acme-1.0.zip"
+      - name: FRONTEND_THEME_S3_ACCESS_KEY
+        valueFrom:
+          secretKeyRef: { name: fred-theme-s3, key: accessKey }
+      - name: FRONTEND_THEME_S3_SECRET_KEY
+        valueFrom:
+          secretKeyRef: { name: fred-theme-s3, key: secretKey }
+    # Only under readOnlyRootFilesystem: gives the overlay a writable home.
+    extraVolumes:
+      - name: theme
+        emptyDir: { sizeLimit: 256Mi }
+    extraVolumeMounts:
+      - name: theme
+        mountPath: /var/lib/fred/theme
+```
+
+`deploy/local/k3d/values-local.yaml` carries the same wiring against the k3d
+seaweedfs, with the keys inlined as that file does for every other local
+credential. `make theme-container-smoke` exercises the whole path against a
+locally built image.
 
 ## Chat UI
 
