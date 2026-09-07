@@ -22,7 +22,7 @@ from control_plane_backend.team_wiki.service import (
     _child_depth_under,
     _is_descendant,
     _subtree_height,
-    slugify,
+    _unique_slug,
 )
 from control_plane_backend.team_wiki.store import WikiPageRecord, WikiRevisionRecord
 from fred_core import KeycloakUser
@@ -34,14 +34,26 @@ TEAM = TeamId("team-a")
 # ── pure helpers ─────────────────────────────────────────────────────────────
 
 
-def test_slugify_folds_accents_instead_of_dropping_the_words() -> None:
-    # Dropping non-ASCII would turn this into "d-quipe"; folding keeps the word.
-    assert slugify("Décisions d'équipe") == "decisions-d-equipe"
+@pytest.mark.asyncio
+async def test_a_slug_says_nothing_about_the_title_it_was_minted_for() -> None:
+    """A rename never changes the slug — it is the URL, and nothing maps an old
+    one to a page. A slug derived from the first title therefore outlives it:
+    "Les Shinigamis" kept the URL `sous-page-11`, and a model handed that pair
+    read it as one name and called back with a slug that did not exist."""
+
+    store = cast(Any, _Store())
+    slug = await _unique_slug(store, TEAM)
+
+    assert "shinigami" not in slug
+    assert slug.isalnum() and len(slug) == 8
 
 
-def test_slugify_never_returns_an_empty_slug() -> None:
-    assert slugify("!!!") == "page"
-    assert slugify("") == "page"
+@pytest.mark.asyncio
+async def test_a_slug_never_collides_with_one_the_team_already_has() -> None:
+    store = cast(Any, _Store())
+    slugs = {await _unique_slug(store, TEAM) for _ in range(50)}
+
+    assert len(slugs) == 50
 
 
 def _page(

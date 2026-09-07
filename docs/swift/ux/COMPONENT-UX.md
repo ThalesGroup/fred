@@ -4076,7 +4076,17 @@ tree, the article, and the version history when it is open. The layout is
 
 **The slug is in the URL**, so a wiki page is deep-linkable and the browser's
 back button walks the pages. A rename does not change the slug, so links
-survive it.
+survive it — nothing here maps an old slug to a page, so re-minting one would
+be a hard 404 for every link already shared.
+
+**The slug is opaque** (2026-09-07): eight random hex characters, minted at
+creation and never derived from the title. Because a rename cannot change it, a
+title-derived slug outlives the title it was named for — a page renamed to "Les
+Shinigamis" kept the URL `sous-page-11`. That mismatch misleads every reader,
+and it misled a model too: handed `Les Shinigamis — sous-page-11` in its index,
+it read the pair as one name and called back with a slug that did not exist. An
+identifier that never claimed to mean anything cannot go stale. Pages created
+before this keep the slugs they have; changing them would break their links.
 
 **Every editor-only control is absent, not disabled**, for a member — except
 the version history, which is deliberately open to everyone: the endpoint is

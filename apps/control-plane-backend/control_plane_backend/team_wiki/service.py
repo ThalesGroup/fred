@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import re
-import unicodedata
+import secrets
 
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
@@ -113,31 +112,24 @@ class WikiConflictError(Exception):
         self.current_content_md = current_content_md
 
 
-def slugify(title: str) -> str:
-    """A URL- and tool-friendly slug for a page title.
+async def _unique_slug(store: TeamWikiStore, team_id: TeamId) -> str:
+    """A fresh opaque identifier for a page's URL, free in this team.
 
-    Accents are folded rather than dropped so a French title keeps its words:
-    "Décisions d'équipe" becomes "decisions-d-equipe", not "d-quipe".
+    Deliberately NOT derived from the title. A slug minted from the first
+    title outlives it — renaming does not change it, because the slug is the
+    URL and nothing here maps an old one to a page — so a page renamed to "Les
+    Shinigamis" kept the URL `sous-page-11`. That mismatch misleads every
+    reader of it, and a model given `Les Shinigamis — sous-page-11` in its
+    index read the pair as one name and called back with a slug that did not
+    exist. An identifier that never claimed to mean anything cannot go stale.
     """
 
-    folded = unicodedata.normalize("NFKD", title)
-    ascii_only = folded.encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
-    return slug[:150] or "page"
-
-
-async def _unique_slug(store: TeamWikiStore, team_id: TeamId, title: str) -> str:
-    """`slugify(title)`, suffixed until it is free in this team."""
-
-    base = slugify(title)
     taken = {page.slug for page in await store.list_pages(team_id)}
-    if base not in taken:
-        return base
-    for n in range(2, 1000):
-        candidate = f"{base}-{n}"
+    for _ in range(100):
+        candidate = secrets.token_hex(4)
         if candidate not in taken:
             return candidate
-    raise WikiRequestError("Too many pages with a similar title.", http_status=409)
+    raise WikiRequestError("Could not allocate a page identifier.", http_status=500)
 
 
 def _summary(page: WikiPageRecord) -> WikiPageSummary:
@@ -372,7 +364,7 @@ async def create_wiki_page(
                 http_status=400,
             )
 
-    slug = await _unique_slug(store, team_id, request.title)
+    slug = await _unique_slug(store, team_id)
     try:
         created = await store.create_page(
             team_id=team_id,
@@ -835,7 +827,7 @@ async def publish_wiki_proposal(
             await store.reparent_proposal(
                 team_id=team_id, revision_id=proposal_id, parent_page_id=parent_id
             )
-        slug = await _unique_slug(store, team_id, proposal.proposed_title)
+        slug = await _unique_slug(store, team_id)
     try:
         page = await store.publish_proposal(
             team_id=team_id,

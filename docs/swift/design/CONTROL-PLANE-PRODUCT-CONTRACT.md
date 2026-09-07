@@ -3594,6 +3594,11 @@ that already has a revision is refused exactly like a stale one: a caller cannot
 opt out of the check by leaving the field off. It is absent only when creating
 the rules page for the first time.
 
+**A page's slug is an opaque identifier** (2026-09-07), eight random hex
+characters minted at creation. It is the page's URL and a rename never changes
+it — nothing maps an old slug to a page — so deriving it from the title would
+guarantee it goes stale on the first rename. Existing rows keep their slugs.
+
 **The rules page is an ordinary page at a reserved slug**, `kind="rules"`. That
 is what makes it unique per team: `(team_id, slug)` is already constrained, so
 no partial index is needed, and the page inherits history, attribution and
