@@ -45,7 +45,8 @@ Une réponse d'agent peut contenir plusieurs éléments :
 - **Le texte** de la réponse.
 - **Des sources** : lorsque l'agent s'appuie sur vos documents, il indique les
   passages utilisés — vérifiez-les pour vous assurer de la pertinence.
-- **La trace des outils** : le détail des étapes que l'agent a suivies (une
+- **La trace** : le détail des étapes que l'agent a suivies, dans l'ordre — son
+  propre raisonnement (« Réflexion en cours… ») ainsi que les actions des outils (une
   recherche documentaire, un calcul…).
 - **Des documents produits** : certains agents génèrent des fichiers (un
   document rédigé, un tableau, une présentation).

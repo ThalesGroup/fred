@@ -23,9 +23,9 @@ Each team shows its joining mode:
 
 ![TODO: screenshot — the team marketplace](assets/join-marketplace.png)
 
-> A team can also be **hidden** from the marketplace: it then appears only to
-> its members. If you're looking for a team without finding it, ask one of its
-> members to invite you.
+> A team can also be set to **Private**: it then appears only to its members,
+> not on the marketplace. If you're looking for a team without finding it, ask
+> one of its members to invite you.
 
 ## Creating a team
 
@@ -34,22 +34,21 @@ administrator, and the team starts with a **starter kit**: a few prompt
 categories and sample prompts so you don't begin from a blank page. You then
 grow all of it freely.
 
-You choose at creation:
-
-- its **visibility** — whether it appears on the marketplace for everyone, or
-  not;
-- its **joining mode** — open to all or invite only.
+A new team starts **Private** — invisible on the marketplace — with its
+**joining mode** locked to **Manual only**. Make the team **Public** to open
+it up: only then can you choose its joining mode (**Open** or **Invite
+only**).
 
 ## Roles
 
 Within a team, each member has a role that defines their permissions:
 
-| Role              | Can do                                         |
-| ----------------- | ---------------------------------------------- |
-| **Administrator** | Manage members, their roles, and team settings |
-| **Editor**        | Create and edit agents, prompts, and resources |
-| **Analyst**       | Create and run evaluation campaigns            |
-| **Member**        | Use the team's agents and prompts              |
+| Role        | Can do                                         |
+| ----------- | ---------------------------------------------- |
+| **Admin**   | Manage members, their roles, and team settings |
+| **Editor**  | Create and edit agents, prompts, and resources |
+| **Analyst** | Create and run evaluation campaigns            |
+| **Member**  | Use the team's agents and prompts              |
 
 Roles are **cumulative**, and the exact detail of each permission is in
 [Roles & permissions](/help/en/features/roles). An administrator can, at any

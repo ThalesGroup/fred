@@ -27,10 +27,16 @@ La connexion utilise votre compte d'organisation. En cas d'échec :
 
 ## Je n'ai pas accès à une action
 
-Beaucoup d'actions dépendent de votre **rôle** dans l'équipe. Créer un agent ou
-un prompt demande le rôle **Éditeur** ou **Administrateur** ; gérer les membres
-demande **Administrateur**. Demandez à un administrateur de l'équipe d'ajuster
-votre rôle si nécessaire.
+Beaucoup d'actions dépendent de votre **rôle** dans l'équipe. Les rôles d'équipe
+sont **Admin**, **Éditeur**, **Analyste** et **Membre**, et leurs
+permissions ne se recoupent pas : Admin et Éditeur sont deux
+autorisations distinctes et indépendantes, pas les échelons d'une même échelle.
+
+Créer un agent ou un prompt demande le rôle **Éditeur** — le rôle
+**Admin** seul ne donne pas ce droit, car Admin et Éditeur
+sont des permissions séparées. Gérer les membres demande **Admin**.
+Il faut cumuler les deux rôles pour faire les deux. Demandez à un
+admin de l'équipe d'ajuster votre rôle si nécessaire.
 
 Les surfaces d'**administration de la plateforme** sont, elles, réservées aux
 administrateurs de la plateforme — c'est normal de ne pas les voir.

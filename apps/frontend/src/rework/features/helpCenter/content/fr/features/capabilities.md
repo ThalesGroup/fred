@@ -40,12 +40,18 @@ Les packs sont regroupés en **sections** selon ce qu'ils apportent :
   - **Pièces jointes à une conversation** : l'agent peut exploiter les fichiers
     que vous déposez dans une conversation — sans accéder au reste des
     ressources de l'équipe.
+  - **Lecture de documents** : en plus de la recherche, l'agent peut lire le
+    texte exact d'un document et en extraire tous les éléments correspondant à
+    une demande, sans rien omettre. Voir « Comment votre agent lit les
+    documents » plus loin sur cette page.
 - **Production de documents**
   - **Générer un document Word** : l'agent rédige un document texte que vous
     pouvez télécharger. Voir le guide
     [Produire des documents](/help/fr/guides/generate-documents).
   - **Remplir un document PowerPoint** : à partir d'un modèle `.pptx`, l'agent
     remplit une présentation finalisée.
+  - **Générer une page web (HTML/CSS)** : l'agent produit une page HTML/CSS
+    statique, restituée dans un aperçu à côté du chat.
 - **Intelligence et orchestration**
   - **Raisonnement** : l'agent prend le temps de réfléchir par étapes avant de
     répondre, pour les questions plus complexes.
@@ -55,6 +61,34 @@ Les packs sont regroupés en **sections** selon ce qu'ils apportent :
 Activer un pack enclenche automatiquement toutes les capacités qu'il contient
 et qui sont **disponibles pour votre équipe** (voir juste en dessous). Vous
 n'avez pas à activer chaque élément à la main.
+
+## Comment votre agent lit les documents
+
+Trois packs différents touchent aux documents de votre équipe, et il est utile
+de savoir ce que chacun apporte réellement. Vous ne choisissez jamais entre eux
+vous-même dans une conversation — l'agent choisit automatiquement selon votre
+demande — mais comprendre la différence aide à activer le bon pack et à faire
+confiance à la réponse.
+
+- **Recherche** (dans _Accès aux ressources de l'équipe_) : trouve les
+  passages les plus pertinents dans vos documents et répond à partir d'eux.
+  Rapide, et le bon réflexe par défaut pour « que sait l'équipe sur X ».
+- **Lecture mot à mot** (dans _Lecture de documents_) : lit le texte exact
+  d'un document, dans l'ordre, quand vous avez besoin du libellé précis d'un
+  passage — « que dit exactement la section 4.3, mot pour mot ».
+- **Extraction** (dans _Lecture de documents_) : parcourt un document entier
+  et liste tout ce qui correspond à votre demande, sans rien omettre —
+  « liste toutes les échéances de ce contrat ». C'est l'option la plus lente,
+  la plus exhaustive, et celle qui coûte le plus à exécuter.
+- **Résumé** (dans _Accès aux ressources de l'équipe_ et _Pièces jointes à une
+  conversation_) : un aperçu court et lisible. Volontairement non exhaustif —
+  des détails sont omis à dessein pour rester bref.
+
+> **Astuce.** Si une demande exige de **ne rien omettre** — « liste tout… »,
+> « chacun des… », « sans en oublier aucun… » —, assurez-vous que **Lecture de
+> documents** est activé, pas seulement **Accès aux ressources de l'équipe**.
+> La recherche seule ne remonte que les passages qu'elle juge les plus
+> pertinents, et peut manquer des éléments jugés moins prioritaires.
 
 ## Savoir en un coup d'œil : les trois états
 

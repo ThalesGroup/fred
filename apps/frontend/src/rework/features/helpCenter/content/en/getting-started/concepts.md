@@ -19,7 +19,7 @@ team and is visible only to its members. Your
 you as its only member.
 
 Within a team, each person has a **role** that determines what they can do:
-Administrator, Editor, Analyst, or Member (see
+Admin, Editor, Analyst, or Member (see
 [Join or create a team](/help/en/getting-started/join-create-team)).
 
 ## Agent

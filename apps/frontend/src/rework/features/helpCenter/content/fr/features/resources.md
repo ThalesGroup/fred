@@ -26,8 +26,9 @@ Commencez par créer une bibliothèque, puis ajoutez vos documents à l'intérie
 > Un document déposé en dehors d'une bibliothèque ne pourra pas être exploité
 > par vos agents : pensez toujours à le placer dans une bibliothèque.
 
-Les formats habituels sont acceptés : PDF, documents texte, présentations
-(PowerPoint), tableurs (Excel, CSV), Markdown.
+Les formats habituels sont acceptés : PDF, documents texte, fichiers Word et
+OpenDocument, présentations (PowerPoint), tableurs (Excel, CSV), Markdown. Les
+images et les fichiers audio sont également pris en charge.
 
 ## Ce qui se passe après le dépôt
 
@@ -47,8 +48,8 @@ Depuis le corpus, vous pouvez :
 
 - **Renommer** un document ou une bibliothèque.
 - **Prévisualiser** un document sans quitter la page.
-- **Mettre un document de côté** pour que vos agents cessent d'en tenir compte,
-  sans le supprimer.
+- **Exclure de la recherche** pour que vos agents cessent d'en tenir compte,
+  sans le supprimer — vous pouvez l'**inclure** à nouveau à tout moment.
 - **Supprimer** un document ou une bibliothèque complète.
 
 ## L'espace de stockage

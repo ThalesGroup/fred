@@ -170,8 +170,6 @@ async def run_export(engine: AsyncEngine) -> bytes:
             "team_metadata": len(team_metadata),
             "team_routing_policy": len(team_routing_policy),
         },
-        "tuple_count": 0,
-        "realm_exported": False,
         # Every exported document's binary is expected to already be mirrored
         # into the target's object store (MIGR-06) — this import never
         # transports content, only declares what it assumes is there.

@@ -24,8 +24,8 @@ Chaque équipe affiche son mode d'adhésion :
 
 ![TODO: capture — la marketplace des équipes](assets/join-marketplace.png)
 
-> Une équipe peut aussi être **non visible** sur la marketplace : elle
-> n'apparaît alors que pour ses membres. Si vous cherchez une équipe sans la
+> Une équipe peut aussi être réglée sur **Privée** : elle n'apparaît alors que
+> pour ses membres, pas sur la marketplace. Si vous cherchez une équipe sans la
 > trouver, demandez à un de ses membres de vous inviter.
 
 ## Créer une équipe
@@ -35,21 +35,21 @@ vous en devenez administrateur et l'équipe démarre avec un **kit de départ** 
 quelques catégories de prompts et des prompts d'exemple pour ne pas partir
 d'une page blanche. Vous faites ensuite évoluer tout cela librement.
 
-Vous choisissez à la création :
-
-- sa **visibilité** — apparaît-elle sur la marketplace pour tous, ou non ;
-- son **mode d'adhésion** — ouverte à tous ou sur invitation.
+Une nouvelle équipe démarre **Privée** — invisible sur la marketplace — avec
+son **mode d'adhésion** verrouillé sur **Ajout manuel**. Passez l'équipe en
+**Publique** pour l'ouvrir : c'est seulement à partir de là que vous pouvez
+choisir son mode d'adhésion (**Ouverte** ou **Sur invitation**).
 
 ## Les rôles
 
 Au sein d'une équipe, chaque membre a un rôle qui définit ses droits :
 
-| Rôle               | Peut faire                                              |
-| ------------------ | ------------------------------------------------------- |
-| **Administrateur** | Gérer les membres, leurs rôles et les réglages d'équipe |
-| **Éditeur**        | Créer et modifier agents, prompts et ressources         |
-| **Analyste**       | Créer et lancer des campagnes d'évaluation              |
-| **Membre**         | Utiliser les agents et prompts de l'équipe              |
+| Rôle         | Peut faire                                              |
+| ------------ | ------------------------------------------------------- |
+| **Admin**    | Gérer les membres, leurs rôles et les réglages d'équipe |
+| **Éditeur**  | Créer et modifier agents, prompts et ressources         |
+| **Analyste** | Créer et lancer des campagnes d'évaluation              |
+| **Membre**   | Utiliser les agents et prompts de l'équipe              |
 
 Les rôles sont **cumulables** et le détail exact de chaque droit est en
 [Rôles et droits](/help/fr/features/roles). Un administrateur peut à tout moment

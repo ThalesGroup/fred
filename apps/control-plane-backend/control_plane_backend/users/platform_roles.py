@@ -16,9 +16,8 @@
 
 Model: root-managed admins, delegated observers. Any `platform_admin` may
 grant/revoke `platform_observer`; granting and revoking `platform_admin` is
-reserved to the bootstrap root — the uid in `platformbootstrap.completed_by`,
-the same durable anchor `POST /reset-rebac` already preserves. The root
-itself is unrevocable, for every caller including itself.
+reserved to the bootstrap root — the uid in `platformbootstrap.completed_by`.
+The root itself is unrevocable, for every caller including itself.
 
 Direct tuples only: schema.fga defines `platform_observer: [user] or
 platform_admin`, so any expanded read (`lookup_subjects` — OpenFGA ListUsers)

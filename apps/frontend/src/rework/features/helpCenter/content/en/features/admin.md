@@ -21,9 +21,13 @@ see.
 ## What's there
 
 - **Teams**: the overview of the platform's teams.
+- **Platform roles**: who holds platform-wide administrator or observer
+  rights.
 - **Analytics**: usage indicators at the platform scale.
 - **Features**: the feature catalog, their default and per-team
   activation.
+- **Platform global prompt**: the shared instructions prepended to every
+  agent's system prompt.
 - **Activity**: running tasks and processing history.
 - **Self-test**: checks that the platform is working correctly.
 - **Corpus audit**: checking and repairing the document base.
