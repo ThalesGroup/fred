@@ -508,7 +508,6 @@ export default function PromptsPage() {
               label={t("rework.teams.prompts.form.text")}
               required
               value={form.text}
-              rows={12}
               onChange={(text) => setForm((f) => ({ ...f, text }))}
             />
           </div>

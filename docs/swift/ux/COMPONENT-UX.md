@@ -164,8 +164,8 @@ _(none)_
 The editing surface for anything an LLM reads as a prompt: the agent form's
 `type: "prompt"` tuning fields (`TuningFieldRenderer`) and the team prompt library's
 create/edit modal (`PromptsPage`). Replaces a plain `TextArea` of six lines with a
-CodeMirror document in markdown mode, 12 lines by default and resizable. A manifest's
-`ui.max_lines` can only grow the field, never shrink it below 12.
+CodeMirror document in markdown mode, `PROMPT_EDITOR_ROWS` (15) lines by default and resizable.
+A manifest's `ui.max_lines` can only grow the field, never shrink it below that floor.
 
 Markdown mode also colours inline HTML/XML tags, so one configuration serves both prompt
 styles in use — markdown prose and tag-structured prompts (`<instructions>`, for Mistral-family

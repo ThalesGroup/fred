@@ -41,6 +41,9 @@ export interface PromptEditorProps {
   rows?: number;
 }
 
+/** Height a prompt field gets unless a caller asks for more. */
+export const PROMPT_EDITOR_ROWS = 15;
+
 // Marks a document change this component made to adopt an incoming `value`, so
 // it is not echoed back to the parent as if the user had typed it.
 const externalSync = Annotation.define<boolean>();
@@ -70,7 +73,7 @@ export function PromptEditor({
   disabled = false,
   required = false,
   error,
-  rows = 12,
+  rows = PROMPT_EDITOR_ROWS,
 }: PromptEditorProps) {
   const labelId = useId();
   const hostRef = useRef<HTMLDivElement | null>(null);

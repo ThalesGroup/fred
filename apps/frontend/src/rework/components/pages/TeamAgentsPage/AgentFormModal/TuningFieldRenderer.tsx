@@ -16,7 +16,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
-import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
+import { PromptEditor, PROMPT_EDITOR_ROWS } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
@@ -211,7 +211,7 @@ export function TuningFieldRenderer({
             value={String(fieldValue)}
             // A manifest asking for a taller field is honoured; one asking for
             // a shorter one is not — a prompt is unreadable in six lines.
-            rows={Math.max(field.ui?.max_lines ?? 0, 12)}
+            rows={Math.max(field.ui?.max_lines ?? 0, PROMPT_EDITOR_ROWS)}
             placeholder={field.ui?.placeholder ?? undefined}
             onChange={handleMultilineChange}
             disabled={disabled || isLoadingDetail}

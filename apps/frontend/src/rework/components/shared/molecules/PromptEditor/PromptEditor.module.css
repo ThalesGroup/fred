@@ -141,10 +141,11 @@
   color: var(--on-surface-retreat);
 }
 
-/* List bullets, heading hashes, and the other syntax marks: present but never
-   competing with the prose they wrap. */
+/* List bullets, heading hashes, and the other syntax marks. One step back from
+   the prose, not two: at `on-surface-muted` the dashes of a bullet list were
+   hard to make out against the field. */
 .marker {
-  color: var(--on-surface-muted);
+  color: var(--on-surface-retreat);
 }
 
 .comment {

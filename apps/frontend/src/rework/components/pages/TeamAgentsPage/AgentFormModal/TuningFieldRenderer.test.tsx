@@ -52,6 +52,7 @@ vi.mock("@shared/molecules/PromptPicker/PromptPicker", () => ({
 // Stand in for the CodeMirror editor with a textarea: what is under test here
 // is which of the two modes the field shows, not how the editor renders.
 vi.mock("@shared/molecules/PromptEditor/PromptEditor", () => ({
+  PROMPT_EDITOR_ROWS: 15,
   PromptEditor: ({ value, onChange }: { value: string; onChange: (next: string) => void }) => (
     <textarea data-testid="prompt-editor" value={value} onChange={(e) => onChange(e.target.value)} />
   ),
