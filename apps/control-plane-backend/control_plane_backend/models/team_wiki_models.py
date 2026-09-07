@@ -59,7 +59,9 @@ class TeamWikiPageRow(Base):
             "uq_team_wiki_pages_sibling_title",
             "team_id",
             text("COALESCE(parent_page_id, '')"),
-            text("lower(btrim(regexp_replace(title, '[ \\t\\n\\r\\f\\v]+', ' ', 'g')))"),
+            text(
+                "lower(btrim(regexp_replace(title, '[ \\t\\n\\r\\f\\v]+', ' ', 'g')))"
+            ),
             unique=True,
         ).ddl_if(dialect="postgresql"),
     )
