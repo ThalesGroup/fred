@@ -48,18 +48,17 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.capability.hitl import HitlSpec
-from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
     ToolInvocationResult,
 )
+from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.contracts.runtime import (
     WIKI_RULES_MAX_CHARS,
     TeamWikiPort,
     WikiPageRef,
 )
-from pydantic import BaseModel
 from langchain.agents.middleware.types import (
     AgentMiddleware,
     ModelRequest,
@@ -67,6 +66,7 @@ from langchain.agents.middleware.types import (
 )
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool, tool
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,17 @@ _REREAD_NOTE = (
 )
 
 
+# Appended to a 404 from a slug-addressed tool. The model reaches one by
+# building a slug out of a title instead of copying the index's; naming where
+# the real one is turns a dead end into a one-step recovery.
+_SLUG_HINT = (
+    "Look the page up in the index in your instructions and use the slug "
+    'written there after "slug:", exactly as it appears.'
+)
+
+
 def _wiki_tool_failure(
-    *, action: str, exc: Exception, elapsed_s: float
+    *, action: str, exc: Exception, elapsed_s: float, hint: str | None = None
 ) -> tuple[str, ToolInvocationResult]:
     """Turn a wiki tool-call failure into an actionable message plus an
     ``is_error=True`` artifact (same doctrine as `platform_postgres`).
@@ -143,6 +152,10 @@ def _wiki_tool_failure(
     # status alone would have the model guess.
     detail = f" ({raw})" if raw and not timed_out else ""
     message = f"Could not {action}: {cause}{detail}."
+    # Only on the failure this can actually fix — a wrong slug is recoverable
+    # in one step if the model is told where the right one is.
+    if hint and status_code == 404:
+        message = f"{message} {hint}"
     # `blocks` carries the same diagnostic as `content` (CAPAB-02): a Graph
     # agent's plain-dict invocation keeps only the artifact half.
     return message, ToolInvocationResult(
@@ -153,10 +166,16 @@ def _wiki_tool_failure(
 
 
 def _format_index(pages: Sequence[WikiPageRef]) -> str:
-    """The page list as an indented tree of `title — slug` lines.
+    """The page list as an indented tree of `title (slug: <slug>)` lines.
 
     Slugs are in it on purpose: the model calls `wiki_read_page` by slug, and
     an index that only names titles would have it guess the identifier.
+
+    Field evidence, 2026-09-07: the line used to read `Les Shinigamis —
+    sous-page-11`, and a model asked about shinigamis called `wiki_read_page`
+    with `les-shinigamis-sous-page-11` — it had slugified the whole line.
+    Slugs are themselves lowercase and hyphenated, so a dash cannot separate
+    one from a title. The label is what makes the boundary unguessable.
     """
 
     if not pages:
@@ -169,7 +188,7 @@ def _format_index(pages: Sequence[WikiPageRef]) -> str:
         parent_depth = depth_by_slug.get(page.parent_slug or "", -1)
         depth = parent_depth + 1 if page.parent_slug else 0
         depth_by_slug[page.slug] = depth
-        line = f"{'  ' * depth}- {page.title} — {page.slug}"
+        line = f"{'  ' * depth}- {page.title} (slug: {page.slug})"
         if used + len(line) + 1 > INDEX_MAX_CHARS:
             omitted = len(pages) - len(lines)
             break
@@ -227,8 +246,10 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         parts.append(
             "The team's own knowledge base. Prefer it over your own assumptions "
             "for anything about how this team works, and cite the page you used. "
-            "Read a page with wiki_read_page before relying on it — the index "
-            "below carries titles only."
+            "The index below lists each page with the slug to read it by; pass "
+            "that slug to wiki_read_page exactly as written, never one built "
+            "from the title. Read a page before relying on it — a title is not "
+            "evidence of what a page says."
         )
         # Field evidence, 2026-09-07: asked to add a fact to a page, an agent
         # read it, found no way to write, and answered "Mise à jour appliquée"
@@ -399,8 +420,11 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         async def wiki_read_page(slug: str) -> tuple[str, ToolInvocationResult]:
             """Read one wiki page's full text, by the slug the index gives you.
 
-            Use this before relying on anything the wiki says — the index in
-            your instructions carries titles only, and a title is not evidence.
+            Pass the slug exactly as the index writes it after "slug:". Do not
+            build one from the page's title, and do not join the two.
+
+            Use this before relying on anything the wiki says — a title in the
+            index is not evidence of what the page contains.
             You get the whole page unless the text ends with an explicit cut
             marker; no marker means nothing was withheld, so do not call this
             again hoping for more. When the answer comes from a page, name that
@@ -419,6 +443,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     action=f"read the wiki page '{slug}'",
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
+                    hint=_SLUG_HINT,
                 )
             body = page.content_md.strip() or "(this page is empty)"
             text = f"# {page.title}\n\n{body}"
@@ -472,6 +497,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     action=f"propose an edit to '{slug}'",
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
+                    hint=_SLUG_HINT,
                 )
             text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             return text, ToolInvocationResult(

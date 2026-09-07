@@ -157,10 +157,22 @@ def test_index_shows_the_hierarchy_and_the_slug_to_call_back_with() -> None:
     )
     text = _call(port, "wiki_list_pages", {}).content
 
-    assert "- Onboarding — onboarding" in text
+    assert "- Onboarding (slug: onboarding)" in text
     # Indented under its parent: an index that flattens the tree describes a
     # different wiki than the one the team sees.
-    assert "  - Tooling — tooling" in text
+    assert "  - Tooling (slug: tooling)" in text
+
+
+def test_the_index_keeps_the_slug_separable_from_the_title() -> None:
+    """Field evidence, 2026-09-07: written `Les Shinigamis — sous-page-11`, a
+    model called `wiki_read_page` with `les-shinigamis-sous-page-11`. Slugs are
+    themselves hyphenated, so a dash cannot mark where the title ends."""
+
+    port = _FakePort(pages=(_page("sous-page-11", "Les Shinigamis"),))
+    text = _call(port, "wiki_list_pages", {}).content
+
+    assert "Les Shinigamis (slug: sous-page-11)" in text
+    assert "Les Shinigamis — sous-page-11" not in text
 
 
 def test_an_empty_wiki_says_so_rather_than_returning_nothing() -> None:
@@ -195,6 +207,19 @@ def test_an_unknown_slug_is_an_error_not_an_empty_page() -> None:
 
     assert message.artifact.is_error is True
     assert "no such wiki page" in message.content
+    # A wrong slug is the one 404 the model can fix by itself, so the message
+    # says where the right one is instead of ending the road.
+    assert 'after "slug:"' in message.content
+
+
+def test_only_a_missing_page_gets_the_slug_hint() -> None:
+    """A refusal or an outage is not a slug problem, and telling the model to
+    check the index would send it round a loop it cannot win."""
+
+    port = _FakePort(raises=TeamWikiPortError("nope", status_code=403))
+    message = _call(port, "wiki_read_page", {"slug": "x"})
+
+    assert 'after "slug:"' not in message.content
 
 
 def test_a_long_page_comes_back_cut_and_says_so() -> None:
@@ -217,8 +242,13 @@ def test_the_prompt_block_carries_the_rules_and_the_index() -> None:
     block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=False)._compose())
 
     assert "Never guess." in block
-    assert "- Onboarding — onboarding" in block
+    assert "- Onboarding (slug: onboarding)" in block
     assert "never act against them" in block
+    # The block used to tell the model the index carried titles only, which
+    # stopped being true when slugs went into it — and a model that believes
+    # it has no slug builds one out of the title.
+    assert "titles only" not in block
+    assert "exactly as written" in block
 
 
 def test_the_prompt_block_is_fetched_once_per_turn() -> None:

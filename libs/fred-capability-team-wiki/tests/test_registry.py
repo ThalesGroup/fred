@@ -24,11 +24,10 @@ from __future__ import annotations
 
 from importlib.metadata import EntryPoint
 
-from fred_capability_team_wiki.wiki.capability import TeamWikiCapability
-from fred_capability_team_wiki.wiki.capability import TeamWikiConfig
-from fred_sdk.contracts.capability import EmptyModel
+from fred_capability_team_wiki.wiki.capability import TeamWikiCapability, TeamWikiConfig
 from fred_runtime.capabilities import CapabilityRegistry
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
+from fred_sdk.contracts.capability import EmptyModel
 
 # Must match the [project.entry-points."fred.capabilities"] declaration in
 # pyproject.toml — installing the package IS the registration.
